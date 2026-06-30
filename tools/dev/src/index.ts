@@ -322,6 +322,7 @@ async function runLoggedCommand(request: {
   const child = spawn(request.command, request.args, {
     cwd: request.cwd,
     env: request.env,
+    shell: false,
     stdio: ["ignore", request.logFd, request.logFd],
     windowsHide: process.platform === "win32",
     windowsVerbatimArguments: request.windowsVerbatimArguments,

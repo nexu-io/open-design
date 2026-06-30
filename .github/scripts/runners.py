@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 GITHUB_HOSTED = ["ubuntu-24.04"]
+WINDOWS_HOSTED = ["windows-latest"]
 CONTABO_CONTROL = ["self-hosted", "Linux", "X64", "od-persistent-ci", "od-ci-hot-poc"]
 BLACKSMITH_4V = ["blacksmith-4vcpu-ubuntu-2404"]
 
@@ -21,26 +22,34 @@ def normalize_mode(raw_mode):
     return "default"
 
 
-def resolve_profiles(mode):
-    hosted_or_blacksmith = BLACKSMITH_4V if mode == "performance" else GITHUB_HOSTED
-    blacksmith_default = GITHUB_HOSTED if mode == "economic" else BLACKSMITH_4V
-    contabo_control = CONTABO_CONTROL if mode == "default" else GITHUB_HOSTED
+def resolve_contract(mode):
+    general_medium = BLACKSMITH_4V if mode == "performance" else GITHUB_HOSTED
+    hot_path = GITHUB_HOSTED if mode == "economic" else BLACKSMITH_4V
+    control = CONTABO_CONTROL if mode == "default" else GITHUB_HOSTED
 
     return {
-        "mode": mode,
-        "github_hosted": GITHUB_HOSTED,
-        "contabo_control": contabo_control,
-        "hosted_or_blacksmith": hosted_or_blacksmith,
-        "blacksmith_default": blacksmith_default,
+        "runs_on": {
+            "control": control,
+            "general_medium": general_medium,
+            "workspace_unit": GITHUB_HOSTED,
+            "windows_tools": WINDOWS_HOSTED,
+            "js_hot": hot_path,
+            "ui_hot": hot_path,
+            "visual_hot": hot_path,
+        },
+        "decision": {
+            "schema_version": 1,
+            "mode": mode,
+        },
     }
 
 
 def main():
-    profiles = resolve_profiles(normalize_mode(os.environ.get("OD_CI_RUNNER_MODE")))
+    contract = resolve_contract(normalize_mode(os.environ.get("OD_CI_RUNNER_MODE")))
     output_path = os.environ.get("GITHUB_OUTPUT")
     lines = [
         f"{key}={value if isinstance(value, str) else compact_json(value)}"
-        for key, value in profiles.items()
+        for key, value in contract.items()
     ]
 
     if output_path:

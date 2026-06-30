@@ -20,7 +20,7 @@ test('opencode json stream emits text and usage events', () => {
   );
 
   assert.deepEqual(events, [
-    { type: 'status', label: 'running' },
+    { type: 'status', label: 'running', sessionId: 'ses-1' },
     { type: 'text_delta', delta: 'hello' },
     {
       type: 'usage',
@@ -33,6 +33,22 @@ test('opencode json stream emits text and usage events', () => {
       },
       costUsd: 0,
     },
+  ]);
+});
+
+test('opencode step_start surfaces the session id as the status sessionId (capture-style resume handle)', () => {
+  const { events, handler } = collectEvents('opencode');
+  handler.feed('{"type":"step_start","sessionID":"ses_4af9c2","part":{"type":"step-start"}}\n');
+  assert.deepEqual(events, [
+    { type: 'status', label: 'running', sessionId: 'ses_4af9c2' },
+  ]);
+});
+
+test('opencode step_start without a session id reports a null sessionId (no spurious capture)', () => {
+  const { events, handler } = collectEvents('opencode');
+  handler.feed('{"type":"step_start","part":{"type":"step-start"}}\n');
+  assert.deepEqual(events, [
+    { type: 'status', label: 'running', sessionId: null },
   ]);
 });
 
@@ -1112,6 +1128,24 @@ test('codex json stream emits status text and usage events', () => {
     { type: 'status', label: 'thinking' },
     { type: 'text_delta', delta: 'hello' },
     { type: 'usage', usage: { input_tokens: 12, output_tokens: 3, cached_read_tokens: 4 } },
+  ]);
+});
+
+test('codex thread.started surfaces the thread id as the status sessionId (capture-style resume handle)', () => {
+  const { events, handler } = collectEvents('codex');
+  handler.feed(
+    JSON.stringify({ type: 'thread.started', thread_id: '019eef4f-7409-7c82-bebe-30504eed3959' }) + '\n',
+  );
+  assert.deepEqual(events, [
+    { type: 'status', label: 'initializing', sessionId: '019eef4f-7409-7c82-bebe-30504eed3959' },
+  ]);
+});
+
+test('codex thread.started without a thread id reports a null sessionId (no spurious capture)', () => {
+  const { events, handler } = collectEvents('codex');
+  handler.feed(JSON.stringify({ type: 'thread.started' }) + '\n');
+  assert.deepEqual(events, [
+    { type: 'status', label: 'initializing', sessionId: null },
   ]);
 });
 

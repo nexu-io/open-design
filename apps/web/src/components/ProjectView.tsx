@@ -64,6 +64,7 @@ import {
 import {
   anonymizeArtifactId,
   artifactKindToTracking,
+  projectKindFromMetadataToTracking,
   projectKindToTracking,
 } from '@open-design/contracts/analytics';
 import type {
@@ -77,6 +78,7 @@ import {
   trackArtifactHeaderClick,
   trackComposerBarClick,
   trackDesignSystemApplyResult,
+  trackDesignSystemEnrichClick,
   trackPageView,
   trackRunCreated,
   trackRunFinished,
@@ -132,6 +134,7 @@ import {
 import {
   createConversation,
   deleteConversation as deleteConversationApi,
+  duplicatePluginAsProject,
   fetchAppliedPluginSnapshot,
   getTemplate,
   installGeneratedPluginFolder,
@@ -186,6 +189,7 @@ import { AvatarMenu } from './AvatarMenu';
 import { EntrySettingsMenu } from './EntrySettingsMenu';
 import { HandoffButton } from './HandoffButton';
 import { Icon } from './Icon';
+import { localizePluginTitle } from './plugins-home/localization';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
@@ -243,6 +247,10 @@ type ProjectChatSendMeta = ChatSendMeta & {
    *  this send (e.g. 'resume_continue' from the resumable-failure Continue
    *  action). Behavior never depends on it; it only shapes PostHog props. */
   entryFrom?: ChatAnalyticsEntryFrom;
+  /** Marks this send as the AI-optimize (deep enrichment) run so the daemon
+   *  can emit design_system_enrich_result + flag the DS as ai_refined on
+   *  success (tracking spec C14/C15). Daemon mode only. */
+  dsEnrichment?: boolean;
 };
 
 export function mergeSavedPreviewComment(current: PreviewComment[], saved: PreviewComment): PreviewComment[] {
@@ -1203,13 +1211,6 @@ export function ProjectView({
   // last name we persisted so re-renders during streaming don't spawn
   // duplicate writes.
   const savedArtifactRef = useRef<string | null>(null);
-  // Pending Write tool invocations: tool_use_id -> destination basename.
-  // When the matching tool_result lands we refresh the file list and open
-  // the file as a tab once. Keying off the tool_use_id (rather than
-  // diffing the file list at end-of-turn) lets us auto-open the moment
-  // the agent's Write actually completes, without the previous synthetic
-  // "live" tab that was causing flicker against manual opens.
-  const pendingWritesRef = useRef<Map<string, string>>(new Map());
   // Track which conversation the current messages belong to, so we can
   // correctly gate new-conversation creation even during async loads.
   const messagesConversationIdRef = useRef<string | null>(null);
@@ -1460,7 +1461,6 @@ export function ProjectView({
     setAudioVoiceOptionsError(null);
     setArtifact(null);
     savedArtifactRef.current = null;
-    pendingWritesRef.current.clear();
     (async () => {
       try {
         const list = await listConversations(project.id);
@@ -1564,7 +1564,6 @@ export function ProjectView({
     streamingConversationIdRef.current = null;
     setStreamingConversationId(null);
     savedArtifactRef.current = null;
-    pendingWritesRef.current.clear();
     if (messagesConversationIdRef.current !== activeConversationId) {
       messagesConversationIdRef.current = null;
     }
@@ -1582,7 +1581,6 @@ export function ProjectView({
         setArtifact(null);
         setError(null);
         savedArtifactRef.current = null;
-        pendingWritesRef.current.clear();
         messagesConversationIdRef.current = activeConversationId;
         setMessagesConversationId(activeConversationId);
         setFailedMessagesConversationId(null);
@@ -1595,7 +1593,6 @@ export function ProjectView({
         setArtifact(null);
         setError(message);
         savedArtifactRef.current = null;
-        pendingWritesRef.current.clear();
         messagesConversationIdRef.current = null;
         setMessagesConversationId(null);
         setFailedMessagesConversationId(activeConversationId);
@@ -3186,7 +3183,6 @@ export function ProjectView({
                   endedAt: prev.endedAt ?? Date.now(),
                 }),
                 true,
-                { telemetryFinalized: true },
               );
               void (async () => {
                 const preTurn = message.preTurnFileNames;
@@ -3231,16 +3227,24 @@ export function ProjectView({
                 }
                 const diff = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                 const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
+                const traceObjectFiles = mergeRecoveredTraceObjectFile(
+                  computeTraceObjectFiles(
+                    beforeFileNames,
+                    nextFiles,
+                    extractTouchedFilePathsFromEvents(
+                      needsFullReplay ? replayedEvents : message.events,
+                    ),
+                  ) ?? [],
+                  recoveredExistingArtifact,
+                );
                 const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
                 if (producedHtmlToOpen) requestOpenFile(producedHtmlToOpen);
-                if (produced.length > 0) {
-                  updateMessageById(
-                    message.id,
-                    (prev) => ({ ...prev, producedFiles: produced }),
-                    true,
-                    { telemetryFinalized: true },
-                  );
-                }
+                updateMessageById(
+                  message.id,
+                  (prev) => ({ ...prev, producedFiles: produced, traceObjectFiles }),
+                  true,
+                  { telemetryFinalized: true },
+                );
                 await auditDesignSystemWorkspaceAfterRun(message.id);
               })();
               onProjectsRefresh();
@@ -3938,6 +3942,15 @@ export function ProjectView({
       // agent finishes and surface anything new (e.g. a generated .pptx)
       // as download chips on the assistant message.
       const beforeFileNames = new Set(preTurnFileNames);
+      // Pending Write/Edit tool invocations for this run: tool_use_id -> path.
+      // Keeping this local prevents a superseded stream's late tool_result from
+      // consuming a replacement run's colliding tool id.
+      const pendingWrites = new Map<string, string>();
+      const traceTouchedFilePaths = new Set<string>();
+      const clearTraceTouchedFilePaths = () => {
+        pendingWrites.clear();
+        traceTouchedFilePaths.clear();
+      };
 
       const parser = createArtifactParser();
       let parsedArtifact: Artifact | null = null;
@@ -4003,23 +4016,23 @@ export function ProjectView({
             return next;
           });
         }
-        if (ev.kind === 'tool_use' && ((ev.name === 'Write' || ev.name === 'write') || ev.name === 'Edit')) {
-          const input = ev.input as { file_path?: unknown; filePath?: unknown } | null;
-          const filePath = input?.file_path ?? input?.filePath;
+        if (ev.kind === 'tool_use' && isFileWriteToolName(ev.name)) {
+          const filePath = extractFileWriteToolPath(ev.input);
           if (typeof filePath === 'string' && filePath.length > 0) {
             // Preserve the full path so decideAutoOpenAfterWrite can do a
             // path-suffix match against the project's relative file paths.
             // Reducing to a basename here would lose the segment alignment
             // we need to disambiguate same-basename collisions across the
             // project tree and outside it.
-            pendingWritesRef.current.set(ev.id, filePath);
+            pendingWrites.set(ev.id, filePath);
           }
         }
         if (ev.kind === 'tool_result') {
-          const filePath = pendingWritesRef.current.get(ev.toolUseId);
+          const filePath = pendingWrites.get(ev.toolUseId);
           if (filePath) {
-            pendingWritesRef.current.delete(ev.toolUseId);
+            pendingWrites.delete(ev.toolUseId);
             if (!ev.isError) {
+              traceTouchedFilePaths.add(filePath);
               // Refresh first so FileWorkspace's file list (and the tab
               // body) sees the new content before we ask it to focus.
               // Only auto-open if the file actually landed in the project's
@@ -4142,6 +4155,7 @@ export function ProjectView({
           if (!runMayFinalize) {
             textBuffer.cancel();
             cancelSendTextBuffer();
+            clearTraceTouchedFilePaths();
             return;
           }
           textBuffer.flush();
@@ -4193,6 +4207,7 @@ export function ProjectView({
             if (ownsCurrentRun) updateConversationLatestRun('failed', endedAt);
             void refreshProjectFiles();
             onProjectsRefresh();
+            clearTraceTouchedFilePaths();
             return;
           }
           const endedAt = Date.now();
@@ -4219,44 +4234,53 @@ export function ProjectView({
           // and attach the new files to the assistant message as download
           // chips.
           void (async () => {
-            let nextFiles = await refreshProjectFiles();
-            const finalText = streamedText || fullText;
-            const artifactToPersist = parsedArtifact?.html
-              ? parsedArtifact
-              : artifactFromStandaloneHtml(finalText);
-            if (artifactToPersist?.html) {
-              const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
-              const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
-                artifactHtml: resolvePersistedArtifactHtml({
-                  artifactHtml: artifactToPersist.html,
-                  identifier: artifactToPersist.identifier,
-                  sourceText: finalText,
-                }),
-                producedFiles: producedBeforeFallback,
-                readProjectHtml,
-              });
-              if (sameTurnHtmlWrite) {
-                savedArtifactRef.current = sameTurnHtmlWrite.name;
-                requestOpenFile(sameTurnHtmlWrite.name);
-              } else {
-                await persistArtifact(artifactToPersist, nextFiles, finalText);
-                nextFiles = await refreshProjectFiles();
+            try {
+              let nextFiles = await refreshProjectFiles();
+              const finalText = streamedText || fullText;
+              const artifactToPersist = parsedArtifact?.html
+                ? parsedArtifact
+                : artifactFromStandaloneHtml(finalText);
+              if (artifactToPersist?.html) {
+                const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
+                  artifactHtml: resolvePersistedArtifactHtml({
+                    artifactHtml: artifactToPersist.html,
+                    identifier: artifactToPersist.identifier,
+                    sourceText: finalText,
+                  }),
+                  producedFiles: producedBeforeFallback,
+                  readProjectHtml,
+                });
+                if (sameTurnHtmlWrite) {
+                  savedArtifactRef.current = sameTurnHtmlWrite.name;
+                  requestOpenFile(sameTurnHtmlWrite.name);
+                } else {
+                  await persistArtifact(artifactToPersist, nextFiles, finalText);
+                  nextFiles = await refreshProjectFiles();
+                }
               }
+              const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+              const traceObjectFiles = computeTraceObjectFiles(
+                beforeFileNames,
+                nextFiles,
+                traceTouchedFilePaths,
+              ) ?? [];
+              const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
+              if (producedHtmlToOpen) requestOpenFile(producedHtmlToOpen);
+              setMessages((curr) => {
+                const updated = curr.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, producedFiles: produced, traceObjectFiles }
+                    : m,
+                );
+                const finalized = updated.find((m) => m.id === assistantId);
+                if (finalized) persistMessage(finalized, { telemetryFinalized: true });
+                return updated;
+              });
+              await auditDesignSystemWorkspaceAfterRun(assistantId);
+            } finally {
+              clearTraceTouchedFilePaths();
             }
-            const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
-            const producedHtmlToOpen = selectAutoOpenProducedHtml(produced);
-            if (producedHtmlToOpen) requestOpenFile(producedHtmlToOpen);
-            setMessages((curr) => {
-              const updated = curr.map((m) =>
-                m.id === assistantId
-                  ? { ...m, producedFiles: produced }
-                  : m,
-              );
-              const finalized = updated.find((m) => m.id === assistantId);
-              if (finalized) persistMessage(finalized, { telemetryFinalized: true });
-              return updated;
-            });
-            await auditDesignSystemWorkspaceAfterRun(assistantId);
           })();
           onProjectsRefresh();
         },
@@ -4301,6 +4325,7 @@ export function ProjectView({
             return curr;
           });
           void refreshProjectFiles();
+          clearTraceTouchedFilePaths();
         },
       };
 
@@ -4358,6 +4383,7 @@ export function ProjectView({
           ...(sessionTurn
             ? { turnIndex: sessionTurn.turnIndex, isFirstRun: sessionTurn.isFirstRun }
             : {}),
+          ...(meta?.dsEnrichment ? { dsEnrichment: true } : {}),
           hasExistingArtifact,
           // This branch only runs in daemon (local-execution) mode, so the
           // runtime is the bundled AMR cloud agent or a local coding CLI —
@@ -4423,6 +4449,7 @@ export function ProjectView({
             if (isTerminalRunStatus(runStatus)) {
               clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);
               scheduleConversationMessageRefresh(runConversationId);
+              if (runStatus !== 'succeeded') clearTraceTouchedFilePaths();
             }
           },
           onRunEventId: (lastRunEventId) => {
@@ -5680,6 +5707,13 @@ export function ProjectView({
       // surfaces. `target_project_kind` derives from
       // `project.metadata.kind`.
       const target =
+        // NOTE: `target_project_kind` uses the narrower
+        // `TrackingDesignSystemApplyTargetKind` enum, which intentionally does
+        // NOT carry the prototype subtypes (wireframe/mobile) or `document`.
+        // Derive the coarse kind here (subtypes collapse back to `prototype`)
+        // so a Home-created Wireframe/Mobile/Document project never emits a
+        // value outside this field's schema. The fine-grained split only
+        // belongs on `project_kind` (create/run events).
         (projectKindToTracking(project.metadata?.kind ?? null, project.metadata?.videoModel) ?? 'unknown') as TrackingDesignSystemApplyTargetKind;
       const picked = nextId
         ? designSystems.find((d) => d.id === nextId)
@@ -6072,7 +6106,9 @@ export function ProjectView({
     autoSendAttachmentsRef.current = isAutoSend ? readAutoSendAttachments(project.id) : [];
   }
   const brandEnrichmentEligibleForProject =
-    projectIsProgrammaticBrandExtraction && !autoSendFirstMessageRef.current;
+    config.mode === 'daemon' &&
+    projectIsProgrammaticBrandExtraction &&
+    !autoSendFirstMessageRef.current;
   const [initialDraft, setInitialDraft] = useState<
     { projectId: string; value: string } | undefined
   >(
@@ -6121,9 +6157,16 @@ export function ProjectView({
   // skill bundle, refining the SAME registered design system in place. Shared by
   // the chat "Continue" affordance and the ready-toast "AI Optimize" nudge.
   const handleBrandEnrichment = useCallback(() => {
-    if (brandEnrichmentStarting) return;
+    if (brandEnrichmentStarting || config.mode !== 'daemon') return;
     const system = designSystemProject ?? activeDesignSystemSummary;
     const skillIds = installedBrandEnrichmentSkillIds(skills);
+    trackDesignSystemEnrichClick(analytics.track, {
+      page_name: 'design_system_project',
+      area: 'design_system_enrich',
+      element: 'ai_optimize',
+      design_system_id: projectDesignSystemId ?? undefined,
+      project_kind: 'design_system',
+    });
     setBrandEnrichmentStarting(true);
     void handleSend(
       buildBrandEnrichmentPrompt(brandEnrichmentPromptSeed || brandEnrichmentPromptSeedCache, {
@@ -6134,16 +6177,19 @@ export function ProjectView({
       }),
       [],
       [],
-      skillIds.length > 0 ? { skillIds } : undefined,
+      { ...(skillIds.length > 0 ? { skillIds } : {}), dsEnrichment: true },
     ).finally(() => setBrandEnrichmentStarting(false));
   }, [
     activeDesignSystemSummary,
+    analytics,
     brandEnrichmentPromptSeed,
     brandEnrichmentPromptSeedCache,
     brandEnrichmentStarting,
+    config.mode,
     designSystemProject,
     handleSend,
     currentProject.metadata,
+    projectDesignSystemId,
     projectFiles,
     skills,
   ]);
@@ -6272,6 +6318,30 @@ export function ProjectView({
     const record = plugins.find((plugin) => plugin.id === normalizedId);
     if (record) setContextPluginDetails(record);
   }, []);
+  const handleDuplicateContextPlugin = useCallback(async (record: InstalledPluginRecord) => {
+    try {
+      const result = await duplicatePluginAsProject(record.id, {
+        name: localizePluginTitle(locale, record),
+      });
+      setContextPluginDetails(null);
+      navigate({
+        kind: 'project',
+        projectId: result.projectId,
+        conversationId: result.conversationId,
+        fileName: result.relPath,
+      });
+    } catch {
+      setProjectActionsToast({
+        message: t('pluginCard.duplicateFailed'),
+        details: null,
+        tone: 'error',
+        ttlMs: 3000,
+      });
+    }
+  }, [locale, t]);
+  const handleOpenContextDesignSystemDetails = useCallback((system: DesignSystemSummary) => {
+    setContextDesignSystemDetails(system);
+  }, []);
   const chatDesignSystemSummary = useMemo(() => {
     if (activeDesignSystemSummary) return activeDesignSystemSummary;
     const designSystemName = activePluginSnapshot?.inputs?.designSystem;
@@ -6395,54 +6465,56 @@ export function ProjectView({
   // CLI / agent selector lives below the chat conversation (composer footer),
   // not in the top-right header.
   const executionControls = (
-    <AvatarMenu
-      config={config}
-      agents={agents}
-      daemonLive={daemonLive}
-      onModeChange={onModeChange}
-      onOpen={() => {
-        trackComposerBarClick(analytics.track, {
-          page_name: 'chat_panel',
-          area: 'chat_composer',
-          element: 'agent_selector_open',
-          ...(project?.id ? { project_id: project.id } : {}),
-        });
-      }}
-      onAgentChange={(id) => {
-        trackComposerBarClick(analytics.track, {
-          page_name: 'chat_panel',
-          area: 'chat_composer',
-          element: 'agent_select',
-          agent_id: id,
-          ...(project?.id ? { project_id: project.id } : {}),
-        });
-        onAgentChange(id);
-      }}
-      onAgentModelChange={(agentId, choice) => {
-        trackComposerBarClick(analytics.track, {
-          page_name: 'chat_panel',
-          area: 'chat_composer',
-          element: 'agent_model_select',
-          agent_id: agentId,
-          ...(choice?.model ? { model_id: choice.model } : {}),
-          ...(project?.id ? { project_id: project.id } : {}),
-        });
-        onAgentModelChange(agentId, choice);
-      }}
-      onApiModelChange={(model) => {
-        trackComposerBarClick(analytics.track, {
-          page_name: 'chat_panel',
-          area: 'chat_composer',
-          element: 'agent_model_select',
-          model_id: model,
-          ...(project?.id ? { project_id: project.id } : {}),
-        });
-        onApiModelChange?.(model);
-      }}
-      onOpenSettings={onOpenSettings}
-      onRefreshAgents={onRefreshAgents}
-      placement="up"
-    />
+    <>
+      <AvatarMenu
+        config={config}
+        agents={agents}
+        daemonLive={daemonLive}
+        onModeChange={onModeChange}
+        onOpen={() => {
+          trackComposerBarClick(analytics.track, {
+            page_name: 'chat_panel',
+            area: 'chat_composer',
+            element: 'agent_selector_open',
+            ...(project?.id ? { project_id: project.id } : {}),
+          });
+        }}
+        onAgentChange={(id) => {
+          trackComposerBarClick(analytics.track, {
+            page_name: 'chat_panel',
+            area: 'chat_composer',
+            element: 'agent_select',
+            agent_id: id,
+            ...(project?.id ? { project_id: project.id } : {}),
+          });
+          onAgentChange(id);
+        }}
+        onAgentModelChange={(agentId, choice) => {
+          trackComposerBarClick(analytics.track, {
+            page_name: 'chat_panel',
+            area: 'chat_composer',
+            element: 'agent_model_select',
+            agent_id: agentId,
+            ...(choice?.model ? { model_id: choice.model } : {}),
+            ...(project?.id ? { project_id: project.id } : {}),
+          });
+          onAgentModelChange(agentId, choice);
+        }}
+        onApiModelChange={(model) => {
+          trackComposerBarClick(analytics.track, {
+            page_name: 'chat_panel',
+            area: 'chat_composer',
+            element: 'agent_model_select',
+            model_id: model,
+            ...(project?.id ? { project_id: project.id } : {}),
+          });
+          onApiModelChange?.(model);
+        }}
+        onOpenSettings={onOpenSettings}
+        onRefreshAgents={onRefreshAgents}
+        placement="up"
+      />
+    </>
   );
 
   return (
@@ -6485,7 +6557,7 @@ export function ProjectView({
               projectId={project.id}
               sessionMode={activeSessionMode}
               onSessionModeChange={handleActiveConversationSessionModeChange}
-              projectKindForTracking={projectKindToTracking(currentProject.metadata?.kind, currentProject.metadata?.videoModel)}
+              projectKindForTracking={projectKindFromMetadataToTracking(currentProject.metadata)}
               projectFiles={projectFiles}
               activeProjectFileName={activeProjectFileName}
               hasActiveDesignSystem={!!projectDesignSystemId}
@@ -6508,7 +6580,7 @@ export function ProjectView({
               onSendQueuedNow={sendQueuedChatSendNow}
               onRequestOpenFile={requestOpenFile}
               onRequestPluginDetails={handleOpenContextPluginDetails}
-              onRequestDesignSystemDetails={setContextDesignSystemDetails}
+              onRequestDesignSystemDetails={handleOpenContextDesignSystemDetails}
               onRequestPluginFolderAgentAction={handlePluginFolderAgentAction}
               activePluginActionPaths={activePluginActionPaths}
               hiddenPluginActionPaths={hiddenAssistantPluginActionPaths}
@@ -6657,7 +6729,7 @@ export function ProjectView({
         ) : null}
         <FileWorkspace
           projectId={project.id}
-          projectKind={projectKindToTracking(currentProject.metadata?.kind, currentProject.metadata?.videoModel) ?? 'prototype'}
+          projectKind={projectKindFromMetadataToTracking(currentProject.metadata) ?? 'prototype'}
           rootDirName={(() => {
             const baseDir = currentProject.metadata?.baseDir;
             return typeof baseDir === 'string'
@@ -6782,6 +6854,7 @@ export function ProjectView({
           record={contextPluginDetails}
           onClose={() => setContextPluginDetails(null)}
           onUse={() => setContextPluginDetails(null)}
+          onDuplicate={(record) => void handleDuplicateContextPlugin(record)}
           isApplying={false}
           hideUseAction
         />
@@ -6789,6 +6862,7 @@ export function ProjectView({
       {contextDesignSystemDetails ? (
         <DesignSystemPreviewModal
           system={contextDesignSystemDetails}
+          initialViewId="kit"
           onClose={() => setContextDesignSystemDetails(null)}
         />
       ) : null}
@@ -7304,6 +7378,76 @@ export function computeProducedFiles(
   return filterImplicitProducedFiles(next.filter((f) => !set.has(f.name)));
 }
 
+export function computeTraceObjectFiles(
+  beforeNames: ReadonlySet<string> | readonly string[] | undefined,
+  next: readonly ProjectFile[],
+  touchedPaths: Iterable<string> = [],
+): ProjectFile[] | undefined {
+  if (!beforeNames) return undefined;
+  const set = beforeNames instanceof Set ? beforeNames : new Set(beforeNames);
+  const byName = new Map<string, ProjectFile>();
+  for (const file of filterImplicitProducedFiles(next.filter((f) => !set.has(f.name)))) {
+    byName.set(file.name, { ...file, traceObjectReason: 'new' });
+  }
+  for (const rawPath of touchedPaths) {
+    const file = findTouchedProjectFile(rawPath, next);
+    if (!file) continue;
+    byName.set(file.name, {
+      ...file,
+      traceObjectReason: set.has(file.name) ? 'modified' : 'new',
+    });
+  }
+  return [...byName.values()];
+}
+
+function findTouchedProjectFile(rawPath: string, files: readonly ProjectFile[]): ProjectFile | null {
+  const normalized = normalizeComparableFilePath(rawPath);
+  if (!normalized) return null;
+  const hasPathSeparator = normalized.includes('/');
+  const basename = normalized.split('/').pop() ?? normalized;
+  const normalizedFiles = files.map((file) => ({
+    file,
+    candidates: [
+      normalizeComparableFilePath(file.path ?? ''),
+      normalizeComparableFilePath(file.name),
+    ].filter(Boolean),
+  }));
+
+  const matches = (predicate: (candidate: string) => boolean): ProjectFile[] => {
+    const matched: ProjectFile[] = [];
+    for (const { file, candidates } of normalizedFiles) {
+      if (candidates.some(predicate)) matched.push(file);
+    }
+    return matched;
+  };
+
+  const exact = matches((candidate) => candidate === normalized);
+  if (exact.length === 1) return exact[0]!;
+  if (exact.length > 1) return null;
+
+  const suffix = matches((candidate) =>
+    candidate.includes('/') &&
+    (candidate.endsWith(`/${normalized}`) || normalized.endsWith(`/${candidate}`)),
+  );
+  if (suffix.length === 1) return suffix[0]!;
+  if (suffix.length > 1) return null;
+
+  if (hasPathSeparator) return null;
+
+  const basenameMatches = normalizedFiles.filter(({ candidates }) =>
+    candidates.some((candidate) => candidate.split('/').pop() === basename),
+  );
+  return basenameMatches.length === 1 ? basenameMatches[0]!.file : null;
+}
+
+function normalizeComparableFilePath(value: string): string {
+  return value
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((part) => part && part !== '.')
+    .join('/');
+}
+
 // Reattach with a recovered (on-disk) artifact must still include any
 // other files the turn produced before the artifact write — replacing
 // the diff with a single file was the regression noted on PR #2383.
@@ -7356,6 +7500,68 @@ function normalizeHtmlForRecoveredArtifactComparison(value: string | null | unde
     .replace(/^\uFEFF/, '')
     .replace(/\r\n?/g, '\n')
     .trim();
+}
+
+export function mergeRecoveredTraceObjectFile(
+  files: readonly ProjectFile[],
+  recovered: ProjectFile | null,
+): ProjectFile[] {
+  const out = [...files];
+  if (!recovered) return out;
+  const existing = out.findIndex((file) => file.name === recovered.name);
+  const tagged = { ...recovered, traceObjectReason: 'recovered' as const };
+  if (existing >= 0) {
+    out[existing] = { ...out[existing]!, traceObjectReason: out[existing]!.traceObjectReason ?? 'recovered' };
+    return out;
+  }
+  return [...out, tagged];
+}
+
+export function extractTouchedFilePathsFromEvents(events: ChatMessage['events']): string[] {
+  if (!Array.isArray(events)) return [];
+  const pending = new Map<string, string>();
+  const touched: string[] = [];
+  for (const event of events) {
+    if (!event || typeof event !== 'object') continue;
+    const rec = event as Record<string, unknown>;
+    if (rec.kind === 'tool_use' && isFileWriteToolName(rec.name)) {
+      const filePath = extractFileWriteToolPath(rec.input);
+      if (typeof rec.id === 'string' && typeof filePath === 'string' && filePath) {
+        pending.set(rec.id, filePath);
+      }
+    }
+    if (rec.kind === 'tool_result') {
+      const toolUseId = typeof rec.toolUseId === 'string'
+        ? rec.toolUseId
+        : typeof rec.tool_use_id === 'string'
+          ? rec.tool_use_id
+          : '';
+      const filePath = pending.get(toolUseId);
+      if (!filePath) continue;
+      pending.delete(toolUseId);
+      if (rec.isError !== true) touched.push(filePath);
+    }
+  }
+  return touched;
+}
+
+function isFileWriteToolName(value: unknown): boolean {
+  return (
+    value === 'Write'
+    || value === 'write'
+    || value === 'create_file'
+    || value === 'Edit'
+    || value === 'str_replace_edit'
+    || value === 'MultiEdit'
+    || value === 'multi_edit'
+  );
+}
+
+function extractFileWriteToolPath(input: unknown): string | null {
+  if (!input || typeof input !== 'object') return null;
+  const rec = input as Record<string, unknown>;
+  const filePath = rec.file_path ?? rec.filePath ?? rec.path;
+  return typeof filePath === 'string' && filePath ? filePath : null;
 }
 
 export function clearStreamingConversationMarker(

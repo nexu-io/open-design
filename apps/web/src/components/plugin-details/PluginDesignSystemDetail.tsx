@@ -37,6 +37,7 @@ interface Props {
   record: InstalledPluginRecord;
   onClose: () => void;
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
+  onDuplicate?: (record: InstalledPluginRecord) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
   // Analytics — forwarded to PreviewModal's share popover.
@@ -72,6 +73,7 @@ export function PluginDesignSystemDetail({
   record,
   onClose,
   onUse,
+  onDuplicate,
   isApplying,
   hideUseAction,
   onSharePopoverItemClick,
@@ -190,7 +192,7 @@ export function PluginDesignSystemDetail({
             busy: !!isApplying,
             busyLabel: 'Applying…',
             testId: `plugin-details-use-${record.id}`,
-            menu: buildPluginUseMenu(record, onUse, t),
+            menu: buildPluginUseMenu(record, onUse, t, onDuplicate),
           }}
       headerExtras={<PluginShareMenu record={record} variant="inline" />}
       onSharePopoverItemClick={onSharePopoverItemClick}

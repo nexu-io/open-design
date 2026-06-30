@@ -26,6 +26,7 @@ interface Props {
   record: InstalledPluginRecord;
   onClose: () => void;
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
+  onDuplicate?: (record: InstalledPluginRecord) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
 }
@@ -34,6 +35,7 @@ export function PluginScenarioDetail({
   record,
   onClose,
   onUse,
+  onDuplicate,
   isApplying,
   hideUseAction,
 }: Props) {
@@ -42,7 +44,7 @@ export function PluginScenarioDetail({
   // The text/scenario fallback modal gets the same split "Use plugin /
   // Replicate this content" affordance as the HTML/design/media variants, so a
   // scenario plugin with an `od.useCase.query` still offers use-with-query.
-  const useMenu = buildPluginUseMenu(record, onUse, t);
+  const useMenu = buildPluginUseMenu(record, onUse, t, onDuplicate);
   const [useMenuOpen, setUseMenuOpen] = useState(false);
   const useMenuRef = useRef<HTMLDivElement | null>(null);
 

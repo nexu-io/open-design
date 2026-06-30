@@ -1,0 +1,1492 @@
+---
+/*
+ * /enterprise/ — Workspace for Teams contact-sales page.
+ *
+ * Reached from the desktop client's top-right "Workspace for Teams" chip
+ * (apps/web EntryShell) and exists to validate demand for a team / workspace
+ * edition. Left column: pitch + perks; right column: a lead form that POSTs to
+ * the `/contact-sales` Pages Function, which fans the lead out to Feishu.
+ *
+ * Light Atelier Zero styling in lockstep with the rest of the marketing site
+ * (the reference screenshot was dark; we keep the same two-column layout but
+ * on the site's own light theme). en / zh / zh-tw authored; other locales fall
+ * back to en. Localized routes are produced by `[locale]/enterprise/`.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { localeFromPath, localePath } from '../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+
+type TeamSizeOption = { value: string; label: string };
+
+type EnterpriseCopy = {
+  metaTitle: string;
+  metaDescription: string;
+  h1: string;
+  lead: string;
+  perks: string[];
+  logosTitle: string;
+  demosTitle: string;
+  demosLead: string;
+  incentiveTitle: string;
+  incentiveBody: string;
+  formHeading: string;
+  nameLabel: string;
+  namePlaceholder: string;
+  emailLabel: string;
+  emailPlaceholder: string;
+  companyLabel: string;
+  companyPlaceholder: string;
+  teamSizeLabel: string;
+  teamSizePlaceholder: string;
+  teamSizeOptions: TeamSizeOption[];
+  budgetLabel: string;
+  budgetHint: string;
+  budgetPlaceholder: string;
+  budgetOptions: TeamSizeOption[];
+  useCaseLabel: string;
+  useCaseHint: string;
+  useCaseError: string;
+  useCaseOptions: TeamSizeOption[];
+  roleLabel: string;
+  rolePlaceholder: string;
+  messageLabel: string;
+  messagePlaceholder: string;
+  discordLabel: string;
+  discordLinkText: string;
+  submitLabel: string;
+  submittingLabel: string;
+  successTitle: string;
+  successBody: string;
+  errorMessage: string;
+  privacyNote: string;
+  optional: string;
+  requiredError: string;
+  emailError: string;
+};
+
+const COPY = {
+  en: {
+    metaTitle: 'Workspace for Teams — Open Design',
+    metaDescription:
+      'Bring Open Design to your whole team: a shared workspace, shared design systems, and priority onboarding. Tell us what your team needs and we will be in touch.',
+    h1: 'Workspace for Teams',
+    lead: 'Tell us about your team and what you are trying to build. We are exploring a team edition of Open Design — a shared workspace, shared design systems, and hands-on onboarding — and want to hear from you.',
+    perks: [
+      'A shared workspace for your whole team',
+      'Share design systems, projects, skills, and templates',
+      'Centralized billing and organization admin',
+    ],
+    logosTitle: 'Teams already building with Open Design',
+    demosTitle: 'See what teams ship',
+    demosLead: 'From a single prompt to a finished artifact — here is the kind of work your team can ship together.',
+    incentiveTitle: 'Get early access',
+    incentiveBody:
+      'Submit this form to claim priority access to the Workspace for Teams beta — plus free testing credits for your team.',
+    formHeading: 'Talk to us',
+    nameLabel: 'Name',
+    namePlaceholder: 'Your name',
+    emailLabel: 'Work email',
+    emailPlaceholder: 'you@company.com',
+    companyLabel: 'Company',
+    companyPlaceholder: 'Company name',
+    teamSizeLabel: 'Team size',
+    teamSizePlaceholder: 'Select team size',
+    teamSizeOptions: [
+      { value: '1-10', label: '1–10' },
+      { value: '11-50', label: '11–50' },
+      { value: '51-200', label: '51–200' },
+      { value: '200+', label: '200+' },
+    ],
+    budgetLabel: 'Monthly budget',
+    budgetHint: 'per team, on design tools',
+    budgetPlaceholder: 'Select a range',
+    budgetOptions: [
+      { value: 'lt_50', label: 'Under $50 / mo' },
+      { value: 'usd_50_200', label: '$50 – $200 / mo' },
+      { value: 'usd_200_1k', label: '$200 – $1,000 / mo' },
+      { value: 'usd_1k_5k', label: '$1,000 – $5,000 / mo' },
+      { value: 'usd_5k_plus', label: '$5,000+ / mo' },
+      { value: 'unsure', label: 'Not sure yet' },
+    ],
+    useCaseLabel: 'What will you use it for?',
+    useCaseHint: 'select all that apply',
+    useCaseError: 'Please pick at least one.',
+    useCaseOptions: [
+      { value: 'product_design', label: 'Product & app design' },
+      { value: 'design_system', label: 'Design system' },
+      { value: 'prototype', label: 'Prototype / app UI' },
+      { value: 'marketing', label: 'Marketing & landing pages' },
+      { value: 'deck', label: 'Presentation / deck' },
+      { value: 'dashboards', label: 'Dashboards / internal tools' },
+      { value: 'other', label: 'Something else' },
+    ],
+    roleLabel: 'Role',
+    rolePlaceholder: 'Your role',
+    messageLabel: 'How can we help?',
+    messagePlaceholder: "We're considering Open Design for our team. We'd like to know…",
+    discordLabel: 'Join our Discord to talk through Workspace edition perks with the team.',
+    discordLinkText: 'Join the chat',
+    submitLabel: 'Submit request',
+    submittingLabel: 'Submitting…',
+    successTitle: 'Thanks — we got it.',
+    successBody: "Your request is in. We'll reach out at the email you gave us.",
+    errorMessage: 'Something went wrong. Please try again, or email us at support@refly.ai.',
+    privacyNote: 'We only use this to contact you about Open Design for teams. No spam.',
+    optional: 'optional',
+    requiredError: 'This field is required.',
+    emailError: 'Enter a valid work email.',
+  },
+  zh: {
+    metaTitle: 'Workspace 团队版 — Open Design',
+    metaDescription:
+      '把 Open Design 带给整个团队:共享的工作空间、共享的设计系统,以及优先的上手引导。告诉我们你的团队诉求,我们会尽快联系你。',
+    h1: 'Workspace 团队版',
+    lead: '告诉我们你的团队,以及你们想做的事。我们正在探索 Open Design 的团队版——共享的工作空间、共享的设计系统、手把手的上手引导——很想听听你的想法。',
+    perks: [
+      '面向整个团队的共享工作空间',
+      '共享设计系统、项目、技能与模板',
+      '统一的组织账单与成员管理',
+    ],
+    logosTitle: '正在使用 Open Design 的团队',
+    demosTitle: '看看团队能做出什么',
+    demosLead: '从一句话到成品交付物——这些就是你的团队可以一起做出来的东西。',
+    incentiveTitle: '抢先体验',
+    incentiveBody:
+      '提交申请即可优先获得 Workspace 团队版内测资格,以及一份团队专属的免费测试额度。',
+    formHeading: '联系我们',
+    nameLabel: '姓名',
+    namePlaceholder: '请输入您的姓名',
+    emailLabel: '工作邮箱',
+    emailPlaceholder: 'you@company.com',
+    companyLabel: '公司',
+    companyPlaceholder: '请输入公司名称',
+    teamSizeLabel: '团队规模',
+    teamSizePlaceholder: '请选择团队规模',
+    teamSizeOptions: [
+      { value: '1-10', label: '1–10 人' },
+      { value: '11-50', label: '11–50 人' },
+      { value: '51-200', label: '51–200 人' },
+      { value: '200+', label: '200 人以上' },
+    ],
+    budgetLabel: '每月预算',
+    budgetHint: '每个团队在设计工具上的投入',
+    budgetPlaceholder: '请选择金额区间',
+    budgetOptions: [
+      { value: 'lt_50', label: '$50 以下 / 月' },
+      { value: 'usd_50_200', label: '$50 – $200 / 月' },
+      { value: 'usd_200_1k', label: '$200 – $1,000 / 月' },
+      { value: 'usd_1k_5k', label: '$1,000 – $5,000 / 月' },
+      { value: 'usd_5k_plus', label: '$5,000 以上 / 月' },
+      { value: 'unsure', label: '还不确定' },
+    ],
+    useCaseLabel: '你们主要用它做什么?',
+    useCaseHint: '可多选',
+    useCaseError: '请至少选择一项。',
+    useCaseOptions: [
+      { value: 'product_design', label: '产品 / 应用设计' },
+      { value: 'design_system', label: '设计系统' },
+      { value: 'prototype', label: '原型 / 应用界面' },
+      { value: 'marketing', label: '营销 / 落地页' },
+      { value: 'deck', label: '演示 / Deck' },
+      { value: 'dashboards', label: '仪表盘 / 内部工具' },
+      { value: 'other', label: '其他' },
+    ],
+    roleLabel: '职位',
+    rolePlaceholder: '请输入您的职位',
+    messageLabel: '我们能提供什么帮助?',
+    messagePlaceholder: '我正在考虑为团队引入 Open Design,我想了解……',
+    discordLabel: '欢迎加入 Discord 群聊,和团队一起讨论 Workspace 版本的权益。',
+    discordLinkText: '加入群聊',
+    submitLabel: '提交申请',
+    submittingLabel: '提交中……',
+    successTitle: '收到,谢谢你!',
+    successBody: '你的申请已提交,我们会通过你填写的邮箱与你联系。',
+    errorMessage: '提交失败,请重试,或发邮件给我们:support@refly.ai。',
+    privacyNote: '我们只会用它就 Open Design 团队版与你联系,不会发垃圾信息。',
+    optional: '选填',
+    requiredError: '此项必填。',
+    emailError: '请输入有效的工作邮箱。',
+  },
+  'zh-tw': {
+    metaTitle: 'Workspace 團隊版 — Open Design',
+    metaDescription:
+      '把 Open Design 帶給整個團隊:共享的工作空間、共享的設計系統,以及優先的上手引導。告訴我們你的團隊訴求,我們會盡快聯絡你。',
+    h1: 'Workspace 團隊版',
+    lead: '告訴我們你的團隊,以及你們想做的事。我們正在探索 Open Design 的團隊版——共享的工作空間、共享的設計系統、手把手的上手引導——很想聽聽你的想法。',
+    perks: [
+      '面向整個團隊的共享工作空間',
+      '共享設計系統、專案、技能與範本',
+      '統一的組織帳單與成員管理',
+    ],
+    logosTitle: '正在使用 Open Design 的團隊',
+    demosTitle: '看看團隊能做出什麼',
+    demosLead: '從一句話到成品交付物——這些就是你的團隊可以一起做出來的東西。',
+    incentiveTitle: '搶先體驗',
+    incentiveBody:
+      '提交申請即可優先取得 Workspace 團隊版內測資格,以及一份團隊專屬的免費測試額度。',
+    formHeading: '聯絡我們',
+    nameLabel: '姓名',
+    namePlaceholder: '請輸入您的姓名',
+    emailLabel: '工作信箱',
+    emailPlaceholder: 'you@company.com',
+    companyLabel: '公司',
+    companyPlaceholder: '請輸入公司名稱',
+    teamSizeLabel: '團隊規模',
+    teamSizePlaceholder: '請選擇團隊規模',
+    teamSizeOptions: [
+      { value: '1-10', label: '1–10 人' },
+      { value: '11-50', label: '11–50 人' },
+      { value: '51-200', label: '51–200 人' },
+      { value: '200+', label: '200 人以上' },
+    ],
+    budgetLabel: '每月預算',
+    budgetHint: '每個團隊在設計工具上的投入',
+    budgetPlaceholder: '請選擇金額區間',
+    budgetOptions: [
+      { value: 'lt_50', label: '$50 以下 / 月' },
+      { value: 'usd_50_200', label: '$50 – $200 / 月' },
+      { value: 'usd_200_1k', label: '$200 – $1,000 / 月' },
+      { value: 'usd_1k_5k', label: '$1,000 – $5,000 / 月' },
+      { value: 'usd_5k_plus', label: '$5,000 以上 / 月' },
+      { value: 'unsure', label: '還不確定' },
+    ],
+    useCaseLabel: '你們主要用它做什麼?',
+    useCaseHint: '可多選',
+    useCaseError: '請至少選擇一項。',
+    useCaseOptions: [
+      { value: 'product_design', label: '產品 / 應用設計' },
+      { value: 'design_system', label: '設計系統' },
+      { value: 'prototype', label: '原型 / 應用介面' },
+      { value: 'marketing', label: '行銷 / 落地頁' },
+      { value: 'deck', label: '簡報 / Deck' },
+      { value: 'dashboards', label: '儀表板 / 內部工具' },
+      { value: 'other', label: '其他' },
+    ],
+    roleLabel: '職位',
+    rolePlaceholder: '請輸入您的職位',
+    messageLabel: '我們能提供什麼幫助?',
+    messagePlaceholder: '我正在考慮為團隊引入 Open Design,我想了解……',
+    discordLabel: '歡迎加入 Discord 群聊,和團隊一起討論 Workspace 版本的權益。',
+    discordLinkText: '加入群聊',
+    submitLabel: '提交申請',
+    submittingLabel: '提交中……',
+    successTitle: '收到,謝謝你!',
+    successBody: '你的申請已提交,我們會透過你填寫的信箱與你聯絡。',
+    errorMessage: '提交失敗,請重試,或寄信給我們:support@refly.ai。',
+    privacyNote: '我們只會用它就 Open Design 團隊版與你聯絡,不會發垃圾訊息。',
+    optional: '選填',
+    requiredError: '此項必填。',
+    emailError: '請輸入有效的工作信箱。',
+  },
+} satisfies Record<string, EnterpriseCopy>;
+
+const c = COPY[locale as keyof typeof COPY] ?? COPY.en;
+
+const DISCORD_URL = 'https://discord.gg/egq3p2Wx8';
+
+// Social-proof logo wall. Monochrome brand marks pulled at render time from the
+// Simple Icons CDN (`cdn.simpleicons.org/<slug>/<hex>`) — no committed assets,
+// and the single grey tint keeps the wall on-brand with the muted Atelier Zero
+// palette (it warms to full ink on hover). Every slug below is verified to
+// resolve on the CDN (Canva / Tencent / Figma are absent or unwanted here, so
+// the set leans on design- and product-forward brands that do resolve). Kept
+// dense (12 marks) so the wall reads full rather than sparse.
+const LOGO_TINT = '8c8c8c';
+const LOGOS: { name: string; slug: string }[] = [
+  { name: 'Google', slug: 'google' },
+  { name: 'Apple', slug: 'apple' },
+  { name: 'Xiaomi', slug: 'xiaomi' },
+  { name: 'ByteDance', slug: 'bytedance' },
+  { name: 'Spotify', slug: 'spotify' },
+  { name: 'Shopify', slug: 'shopify' },
+  { name: 'Notion', slug: 'notion' },
+  { name: 'Stripe', slug: 'stripe' },
+  { name: 'Framer', slug: 'framer' },
+  { name: 'Linear', slug: 'linear' },
+  { name: 'Vercel', slug: 'vercel' },
+  { name: 'Airbnb', slug: 'airbnb' },
+];
+const logoSrc = (slug: string) => `https://cdn.simpleicons.org/${slug}/${LOGO_TINT}`;
+
+// Use-case demos — the homepage Labs showcase, lifted wholesale: the painting
+// stage (`/lab-stage-art.webp`) with a magnifying mode Dock that swaps a
+// floating artifact card / looping video in place. CSS lives in the shared
+// `globals.css` (`.lab-stage` / `.lab-dock` / `.lab-artifact`); the interaction
+// is driven by the ported `enhanceLabDock` / `enhanceLabSwitch` enhancers in
+// the inline script below (mirrors `app/pages/index.astro`). Only 图片 / 视频
+// are localized, matching the homepage; the rest keep their English labels.
+const demoHref = (path: string) => localePath(locale, path);
+const imageLabel = locale === 'zh' ? '图片' : locale === 'zh-tw' ? '圖片' : 'Image';
+const videoLabel = locale === 'zh' ? '视频' : locale === 'zh-tw' ? '影片' : 'Video';
+const DEMO_DOCK: {
+  label: string;
+  href: string;
+  preview?: string;
+  video?: string;
+  wide?: boolean;
+}[] = [
+  { label: 'Prototype', href: demoHref('/plugins/templates/prototype/'), preview: '/lab-cards/prototype.webp?v=5' },
+  { label: 'Live Artifact', href: demoHref('/plugins/templates/live-artifact/'), preview: '/lab-cards/live-artifact.webp?v=3' },
+  { label: 'Slides', href: demoHref('/plugins/templates/deck/'), preview: '/lab-cards/slides.png?v=5' },
+  { label: imageLabel, href: demoHref('/plugins/templates/image/'), preview: '/lab-cards/quest.webp?v=1', wide: true },
+  { label: 'HyperFrames', href: demoHref('/plugins/templates/hyperframes/'), video: '/lab-hyperframes.mp4' },
+  { label: videoLabel, href: demoHref('/plugins/templates/video/'), video: '/lab-video.mp4' },
+];
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'ContactPage',
+  name: c.metaTitle,
+  description: c.metaDescription,
+  url: new URL('/enterprise/', Astro.site).toString(),
+};
+---
+
+<Layout title={c.metaTitle} description={c.metaDescription} active="enterprise" jsonLd={jsonLd}>
+  <section class="ent-page" data-od-id="enterprise">
+    <div class="ent-intro">
+      <h1 class="ent-h1">{c.h1}</h1>
+      <p class="ent-lead">{c.lead}</p>
+      <ul class="ent-perks">
+        {c.perks.map((perk) => (
+          <li class="ent-perk">
+            <span class="ent-perk__tick" aria-hidden="true">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none">
+                <path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <span>{perk}</span>
+          </li>
+        ))}
+      </ul>
+
+      {/* Discord community nudge — a friendly invite card (not a form field),
+          the whole card links to the server. */}
+      <a class="ent-discord" href={DISCORD_URL} target="_blank" rel="noopener noreferrer">
+        <span class="ent-discord__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19.27 5.33A16.6 16.6 0 0 0 15.1 4l-.2.4a14.5 14.5 0 0 1 3.7 1.19 12.7 12.7 0 0 0-10.95 0A14.6 14.6 0 0 1 11.36 4.4L11.16 4a16.6 16.6 0 0 0-4.18 1.33C4.1 9.61 3.32 13.78 3.71 17.9a16.7 16.7 0 0 0 5.06 2.56l.4-.56a9.8 9.8 0 0 1-1.6-.77l.39-.31a11.9 11.9 0 0 0 10.17 0l.4.31a9.8 9.8 0 0 1-1.61.77l.4.56a16.7 16.7 0 0 0 5.07-2.56c.46-4.78-.79-8.92-3.51-12.57ZM9.55 15.42c-.99 0-1.8-.92-1.8-2.05 0-1.12.8-2.04 1.8-2.04 1 0 1.82.93 1.8 2.04 0 1.13-.8 2.05-1.8 2.05Zm4.91 0c-.99 0-1.8-.92-1.8-2.05 0-1.12.8-2.04 1.8-2.04 1 0 1.82.93 1.8 2.04 0 1.13-.8 2.05-1.8 2.05Z"/></svg>
+        </span>
+        <span class="ent-discord__text">{c.discordLabel}</span>
+        <span class="ent-discord__cta">
+          {c.discordLinkText}
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" aria-hidden="true"><path d="M5 3h8v8M13 3 3.5 12.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        </span>
+      </a>
+
+      <div class="ent-logos">
+        <span class="ent-logos__title">{c.logosTitle}</span>
+        <div class="ent-logos__grid">
+          {LOGOS.map((logo) => (
+            <span class="ent-logos__item">
+              <img
+                class="ent-logos__img"
+                src={logoSrc(logo.slug)}
+                alt={logo.name}
+                width="88"
+                height="26"
+                loading="lazy"
+                decoding="async"
+              />
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    <div class="ent-card">
+      <div class="ent-incentive">
+        <span class="ent-incentive__badge" aria-hidden="true">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M8 1.5l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.3 4.3 13.3l.7-4.3-3.1-3 4.3-.6z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" /></svg>
+        </span>
+        <div class="ent-incentive__text">
+          <span class="ent-incentive__title">{c.incentiveTitle}</span>
+          <span class="ent-incentive__body">{c.incentiveBody}</span>
+        </div>
+      </div>
+      <h2 class="ent-form-heading">{c.formHeading}</h2>
+      <form class="ent-form" id="ent-form" novalidate>
+        <div class="ent-field">
+          <label class="ent-label" for="ent-name">{c.nameLabel} <span class="ent-req">*</span></label>
+          <input class="ent-input" id="ent-name" name="name" type="text" required autocomplete="name" placeholder={c.namePlaceholder} />
+          <p class="ent-field-error" id="ent-name-error" role="alert" hidden>{c.requiredError}</p>
+        </div>
+
+        <div class="ent-field">
+          <label class="ent-label" for="ent-email">{c.emailLabel} <span class="ent-req">*</span></label>
+          <input class="ent-input" id="ent-email" name="email" type="email" required autocomplete="email" placeholder={c.emailPlaceholder} />
+          <p class="ent-field-error" id="ent-email-error" role="alert" hidden>{c.emailError}</p>
+        </div>
+
+        <div class="ent-row">
+          <div class="ent-field">
+            <label class="ent-label" for="ent-company">{c.companyLabel} <span class="ent-req">*</span></label>
+            <input class="ent-input" id="ent-company" name="company" type="text" required autocomplete="organization" placeholder={c.companyPlaceholder} />
+            <p class="ent-field-error" id="ent-company-error" role="alert" hidden>{c.requiredError}</p>
+          </div>
+          <div class="ent-field">
+            <span class="ent-label" id="ent-team-size-label">{c.teamSizeLabel} <span class="ent-req">*</span></span>
+            <div class="ent-cselect" data-cselect>
+              <select class="ent-cselect__native" id="ent-team-size" name="teamSize" required tabindex="-1" aria-hidden="true">
+                <option value="" disabled selected>{c.teamSizePlaceholder}</option>
+                {c.teamSizeOptions.map((opt) => (
+                  <option value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <button type="button" class="ent-cselect__trigger" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ent-team-size-label">
+                <span class="ent-cselect__value is-placeholder" data-placeholder>{c.teamSizePlaceholder}</span>
+                <span class="ent-select-chevron" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                </span>
+              </button>
+              <ul class="ent-cselect__menu" role="listbox" aria-label={c.teamSizeLabel} hidden>
+                {c.teamSizeOptions.map((opt) => (
+                  <li class="ent-cselect__opt" role="option" data-value={opt.value} aria-selected="false" tabindex="-1">{opt.label}</li>
+                ))}
+              </ul>
+            </div>
+            <p class="ent-field-error" id="ent-team-size-error" role="alert" hidden>{c.requiredError}</p>
+          </div>
+        </div>
+
+        <div class="ent-field">
+          <span class="ent-label" id="ent-budget-label">{c.budgetLabel} <span class="ent-req">*</span> <span class="ent-optional">({c.budgetHint})</span></span>
+          <div class="ent-cselect" data-cselect>
+            <select class="ent-cselect__native" id="ent-budget" name="budget" required tabindex="-1" aria-hidden="true">
+              <option value="" disabled selected>{c.budgetPlaceholder}</option>
+              {c.budgetOptions.map((opt) => (
+                <option value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <button type="button" class="ent-cselect__trigger" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ent-budget-label">
+              <span class="ent-cselect__value is-placeholder" data-placeholder>{c.budgetPlaceholder}</span>
+              <span class="ent-select-chevron" aria-hidden="true">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+              </span>
+            </button>
+            <ul class="ent-cselect__menu" role="listbox" aria-label={c.budgetLabel} hidden>
+              {c.budgetOptions.map((opt) => (
+                <li class="ent-cselect__opt" role="option" data-value={opt.value} aria-selected="false" tabindex="-1">{opt.label}</li>
+              ))}
+            </ul>
+          </div>
+          <p class="ent-field-error" id="ent-budget-error" role="alert" hidden>{c.requiredError}</p>
+        </div>
+
+        <div class="ent-field">
+          <span class="ent-label">{c.useCaseLabel} <span class="ent-req">*</span> <span class="ent-optional">({c.useCaseHint})</span></span>
+          <div class="ent-chips" role="group" aria-label={c.useCaseLabel}>
+            {c.useCaseOptions.map((opt) => (
+              <button type="button" class="ent-chip" data-value={opt.value} aria-pressed="false">{opt.label}</button>
+            ))}
+          </div>
+          <p class="ent-field-error" id="ent-use-case-error" role="alert" hidden>{c.useCaseError}</p>
+        </div>
+
+        <div class="ent-field">
+          <label class="ent-label" for="ent-role">{c.roleLabel} <span class="ent-optional">({c.optional})</span></label>
+          <input class="ent-input" id="ent-role" name="role" type="text" autocomplete="organization-title" placeholder={c.rolePlaceholder} />
+        </div>
+
+        <div class="ent-field">
+          <label class="ent-label" for="ent-message">{c.messageLabel} <span class="ent-optional">({c.optional})</span></label>
+          <textarea class="ent-input ent-textarea" id="ent-message" name="message" rows="4" placeholder={c.messagePlaceholder}></textarea>
+        </div>
+
+        <button class="btn btn-primary ent-submit" type="submit" data-default-label={c.submitLabel} data-submitting-label={c.submittingLabel}>
+          {c.submitLabel}
+        </button>
+
+        <p class="ent-privacy">{c.privacyNote}</p>
+        <p class="ent-error" id="ent-error" role="alert" hidden>{c.errorMessage}</p>
+      </form>
+
+      <div class="ent-success" id="ent-success" hidden>
+        <span class="ent-success__tick" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        </span>
+        <h2 class="ent-success__title">{c.successTitle}</h2>
+        <p class="ent-success__body">{c.successBody}</p>
+      </div>
+    </div>
+  </section>
+
+  {/* Use-case showcase — the homepage Labs stage lifted wholesale: a painting
+      canvas with a magnifying mode Dock that swaps the floating artifact card /
+      looping video in place. Full-bleed `.lab-stage` (its centering math reads
+      50% of the enclosing `.sub-main.container` content box, same as the
+      homepage `.labs > .container`), so it must stay an unconstrained block. */}
+  <section class="ent-demos" id="labs" data-od-id="demos">
+    <div class="ent-demos__head">
+      <span class="ent-demos__title">{c.demosTitle}</span>
+      <p class="ent-demos__lead">{c.demosLead}</p>
+    </div>
+    <div class="lab-stage">
+      {/* Floating artifact card, layered over the painting; the dock swaps its
+          src and toggles `.is-visible` (see `enhanceLabSwitch`). */}
+      <img class="lab-artifact" data-lab-artifact alt="" decoding="async" />
+      {/* Video mode: the HyperFrames / 视频 tiles play this looping clip
+          instead of a still card. */}
+      <video
+        class="lab-artifact lab-artifact-video"
+        data-lab-video
+        muted
+        loop
+        playsinline
+        preload="metadata"
+        aria-hidden="true"
+      ></video>
+      {/* macOS-style magnifying Dock — proximity magnify + click/auto-cycle
+          preview swap, driven by the enhancers in the inline script. */}
+      <div class="lab-dock" data-lab-dock>
+        {DEMO_DOCK.map((item) => (
+          <a
+            class={item.wide ? 'lab-dock-item active' : 'lab-dock-item'}
+            href={item.href}
+            data-dock-item
+            data-preview-src={item.video ? undefined : item.preview}
+            data-preview-video={item.video}
+            data-preview-wide={item.wide ? '' : undefined}
+            data-preview-title={item.label}
+            aria-label={item.label}
+          >
+            <span class="lab-dock-icon" aria-hidden="true"></span>
+            <span class="lab-dock-label">{item.label}</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <script is:inline>
+    (() => {
+      const form = document.getElementById('ent-form');
+      if (!form) return;
+      const errorEl = document.getElementById('ent-error');
+      const successEl = document.getElementById('ent-success');
+      const submitBtn = form.querySelector('.ent-submit');
+      const defaultLabel = submitBtn?.getAttribute('data-default-label') || 'Submit';
+      const submittingLabel = submitBtn?.getAttribute('data-submitting-label') || defaultLabel;
+      const useCaseError = document.getElementById('ent-use-case-error');
+      const chips = Array.from(form.querySelectorAll('.ent-chip'));
+
+      // Custom selects — a fully styled dropdown so we don't render the OS-native
+      // popup. The real <select> stays in the DOM (hidden) as the form value and
+      // validation source of truth; the listbox below just drives it and fires a
+      // `change` so the existing per-field validation clears on pick.
+      form.querySelectorAll('[data-cselect]').forEach((root) => {
+        const native = root.querySelector('.ent-cselect__native');
+        const trigger = root.querySelector('.ent-cselect__trigger');
+        const valueEl = root.querySelector('.ent-cselect__value');
+        const menu = root.querySelector('.ent-cselect__menu');
+        const opts = Array.from(menu.querySelectorAll('.ent-cselect__opt'));
+        if (!native || !trigger || !valueEl || !menu) return;
+
+        const close = () => {
+          menu.hidden = true;
+          trigger.setAttribute('aria-expanded', 'false');
+        };
+        const open = () => {
+          menu.hidden = false;
+          trigger.setAttribute('aria-expanded', 'true');
+          const current = opts.find((o) => o.getAttribute('aria-selected') === 'true');
+          (current || opts[0])?.focus();
+        };
+        const pick = (opt) => {
+          native.value = opt.getAttribute('data-value');
+          valueEl.textContent = opt.textContent;
+          valueEl.classList.remove('is-placeholder');
+          opts.forEach((o) => o.setAttribute('aria-selected', o === opt ? 'true' : 'false'));
+          native.dispatchEvent(new Event('change', { bubbles: true }));
+          close();
+          trigger.focus();
+        };
+
+        trigger.addEventListener('click', () => (menu.hidden ? open() : close()));
+        trigger.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            open();
+          }
+        });
+        opts.forEach((opt, i) => {
+          opt.addEventListener('click', () => pick(opt));
+          opt.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              pick(opt);
+            } else if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              (opts[i + 1] || opts[0]).focus();
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              (opts[i - 1] || opts[opts.length - 1]).focus();
+            } else if (e.key === 'Escape' || e.key === 'Tab') {
+              close();
+              if (e.key === 'Escape') trigger.focus();
+            }
+          });
+        });
+        document.addEventListener('click', (e) => {
+          if (!root.contains(e.target)) close();
+        });
+      });
+
+      // Inline validation — the form is `novalidate`, so we never trigger the
+      // browser's native validation bubble; we show our own styled messages.
+      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const fieldInput = (id) => document.getElementById('ent-' + id);
+      const fieldErr = (id) => document.getElementById('ent-' + id + '-error');
+      const setInvalid = (id, bad) => {
+        const input = fieldInput(id);
+        const err = fieldErr(id);
+        if (input) input.classList.toggle('is-invalid', bad);
+        if (err) err.hidden = !bad;
+      };
+      const validateField = (id) => {
+        const input = fieldInput(id);
+        if (!input) return true;
+        const bad = id === 'email'
+          ? !EMAIL_RE.test(input.value.trim())
+          : input.value.trim() === '';
+        setInvalid(id, bad);
+        return !bad;
+      };
+      ['name', 'email', 'company'].forEach((id) => {
+        const input = fieldInput(id);
+        if (input) input.addEventListener('input', () => setInvalid(id, false));
+      });
+      ['team-size', 'budget'].forEach((id) => {
+        const sel = fieldInput(id);
+        if (sel) sel.addEventListener('change', () => setInvalid(id, false));
+      });
+
+      chips.forEach((chip) => {
+        chip.addEventListener('click', () => {
+          const pressed = chip.getAttribute('aria-pressed') === 'true';
+          chip.setAttribute('aria-pressed', pressed ? 'false' : 'true');
+          if (useCaseError) useCaseError.hidden = true;
+        });
+      });
+
+      // Lightweight analytics wrapper around the shared PostHog delegate
+      // (window.__odTrack, installed by sub-page-layout). page_name matches the
+      // server-derived pageNameFromPath('/enterprise/') = 'enterprise'.
+      const track = (name, props) => {
+        try {
+          if (typeof window.__odTrack === 'function') {
+            window.__odTrack(name, Object.assign(
+              { page_name: 'enterprise', locale: (document.documentElement.lang || 'en').toLowerCase() },
+              props || {},
+            ));
+          }
+        } catch (e) {}
+      };
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (errorEl) errorEl.hidden = true;
+        if (useCaseError) useCaseError.hidden = true;
+
+        let firstInvalid = null;
+        const invalidFields = [];
+        ['name', 'email', 'company', 'team-size', 'budget'].forEach((id) => {
+          if (!validateField(id)) {
+            invalidFields.push(id);
+            if (!firstInvalid) firstInvalid = fieldInput(id);
+          }
+        });
+
+        const useCases = chips
+          .filter((chip) => chip.getAttribute('aria-pressed') === 'true')
+          .map((chip) => chip.getAttribute('data-value'));
+        if (useCases.length === 0) {
+          invalidFields.push('use-case');
+          if (useCaseError) useCaseError.hidden = false;
+          if (!firstInvalid) firstInvalid = chips[0];
+        }
+
+        if (firstInvalid) {
+          // Validation blocked the submit — record which fields so we can see
+          // where the funnel leaks.
+          track('lead_submit_invalid', { missing: invalidFields.join(',') });
+          // A custom-select's real <select> is hidden, so focus its trigger.
+          const focusTarget = firstInvalid.classList?.contains('ent-cselect__native')
+            ? firstInvalid.parentElement.querySelector('.ent-cselect__trigger')
+            : firstInvalid;
+          if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
+          return;
+        }
+
+        const data = new FormData(form);
+        const payload = {
+          source: 'enterprise',
+          name: String(data.get('name') || '').trim(),
+          email: String(data.get('email') || '').trim(),
+          company: String(data.get('company') || '').trim(),
+          teamSize: String(data.get('teamSize') || '').trim(),
+          budget: String(data.get('budget') || '').trim(),
+          useCases,
+          role: String(data.get('role') || '').trim(),
+          message: String(data.get('message') || '').trim(),
+          locale: document.documentElement.lang || 'en',
+          pageUrl: location.href,
+        };
+
+        const leadProps = {
+          team_size: payload.teamSize,
+          budget: payload.budget,
+          use_case_count: useCases.length,
+        };
+        track('lead_submit_attempt', leadProps);
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = submittingLabel;
+        }
+
+        try {
+          const res = await fetch('/contact-sales', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) throw new Error('request_failed');
+          track('lead_submit_success', leadProps);
+          form.hidden = true;
+          if (successEl) {
+            successEl.hidden = false;
+            successEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        } catch (err) {
+          track('lead_submit_failed', Object.assign({ reason: 'request_failed' }, leadProps));
+          if (errorEl) errorEl.hidden = false;
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = defaultLabel;
+          }
+        }
+      });
+    })();
+
+    /* Labs showcase — ported wholesale from `app/pages/index.astro` so the
+       enterprise demo band behaves exactly like the homepage: a magnifying
+       mode Dock that swaps the floating artifact card / looping video in place,
+       auto-cycling while on screen and pausing on hover. Self-contained IIFE so
+       it runs independently of the lead form above. */
+    (() => {
+      const labPrefersWebm = (() => {
+        try {
+          const v = document.createElement('video');
+          return !!(v.canPlayType && v.canPlayType('video/webm; codecs="vp9"'));
+        } catch (e) {
+          return false;
+        }
+      })();
+      const labClipSrc = (src) =>
+        labPrefersWebm && /\.mp4$/i.test(src || '') ? src.replace(/\.mp4$/i, '.webm') : src;
+
+      // Proximity-magnify dock (macOS-style) + lazy prefetch of the video clips.
+      const enhanceLabDock = () => {
+        const dock = document.querySelector('[data-lab-dock]');
+        if (!dock) return;
+        (function prefetchLabVideos() {
+          const srcs = Array.from(dock.querySelectorAll('[data-preview-video]'))
+            .map((el) => el.getAttribute('data-preview-video'))
+            .filter(Boolean)
+            .map(labClipSrc);
+          if (srcs.length === 0) return;
+          let done = false;
+          const run = () => {
+            if (done) return;
+            done = true;
+            srcs.forEach((src) => { try { fetch(src).catch(() => {}); } catch (e) {} });
+          };
+          if ('IntersectionObserver' in window) {
+            const io = new IntersectionObserver((entries) => {
+              if (entries.some((entry) => entry.isIntersecting)) {
+                io.disconnect();
+                run();
+              }
+            }, { rootMargin: '0px 0px 100% 0px' });
+            io.observe(dock);
+          } else if ('requestIdleCallback' in window) {
+            requestIdleCallback(run, { timeout: 4000 });
+          } else {
+            setTimeout(run, 2500);
+          }
+        })();
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const items = Array.from(dock.querySelectorAll('[data-dock-item]'));
+        if (items.length === 0) return;
+        const MAX = 1.08;
+        const DIST = 104;
+        let ticking = false;
+        const apply = (cursorX) => {
+          const dockLeft = dock.getBoundingClientRect().left;
+          const x = cursorX - dockLeft;
+          for (const it of items) {
+            const center = it.offsetLeft + it.offsetWidth / 2;
+            const t = Math.max(0, 1 - Math.abs(x - center) / DIST);
+            const lift = it.classList.contains('active') ? 'translateY(-20px) ' : '';
+            it.style.transform = `${lift}scale(${(1 + (MAX - 1) * t).toFixed(3)})`;
+          }
+        };
+        dock.addEventListener('mousemove', (event) => {
+          if (ticking) return;
+          ticking = true;
+          requestAnimationFrame(() => {
+            apply(event.clientX);
+            ticking = false;
+          });
+        }, { passive: true });
+        dock.addEventListener('mouseleave', () => {
+          for (const it of items) it.style.transform = '';
+        });
+      };
+
+      // The painting is the background; each dock tile floats its artifact
+      // (`data-preview-src`) or plays its clip (`data-preview-video`) centered
+      // over it. Auto-cycles 1→6 (10s each) while the stage is on screen.
+      const enhanceLabSwitch = () => {
+        const stage = document.querySelector('.lab-stage');
+        const dock = document.querySelector('[data-lab-dock]');
+        const artifact = document.querySelector('[data-lab-artifact]');
+        const video = document.querySelector('[data-lab-video]');
+        if (!stage || !dock || !artifact) return;
+        const items = Array.from(dock.querySelectorAll('[data-dock-item]'));
+        if (items.length === 0) return;
+        const isBare = (src) => !src || src.indexOf('lab-stage-art') !== -1;
+
+        for (const it of items) {
+          const src = it.getAttribute('data-preview-src');
+          if (!isBare(src)) {
+            const pre = new Image();
+            pre.src = src;
+          }
+        }
+
+        const show = (it) => {
+          const src = it.getAttribute('data-preview-src');
+          const vsrc = it.getAttribute('data-preview-video');
+          items.forEach((x) => x.classList.toggle('active', x === it));
+          if (vsrc && video) {
+            artifact.classList.remove('is-visible');
+            const clip = labClipSrc(vsrc);
+            if (video.getAttribute('src') !== clip) video.setAttribute('src', clip);
+            video.classList.add('is-visible');
+            try {
+              video.currentTime = 0;
+              const pr = video.play();
+              if (pr && pr.catch) pr.catch(() => {});
+            } catch (_) {}
+            return;
+          }
+          if (video) {
+            video.classList.remove('is-visible');
+            try { video.pause(); } catch (_) {}
+          }
+          if (isBare(src)) {
+            artifact.classList.remove('is-visible');
+            return;
+          }
+          artifact.classList.toggle('is-wide', it.hasAttribute('data-preview-wide'));
+          artifact.setAttribute('src', src);
+          artifact.classList.add('is-visible');
+        };
+
+        const INTERVAL = 10000;
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        let idx = 0;
+        let timer = null;
+        const stop = () => {
+          if (timer) {
+            clearInterval(timer);
+            timer = null;
+          }
+        };
+        const start = () => {
+          if (reduceMotion) return;
+          stop();
+          timer = setInterval(() => {
+            idx = (idx + 1) % items.length;
+            show(items[idx]);
+          }, INTERVAL);
+        };
+
+        for (const it of items) {
+          it.addEventListener('click', (event) => {
+            event.preventDefault();
+            idx = items.indexOf(it);
+            show(it);
+            start();
+            // A real user pick (not the auto-cycle) — which use-case demo drew
+            // interest. Uses the shared PostHog delegate directly (this enhancer
+            // lives in its own IIFE, separate from the form's `track`).
+            try {
+              if (typeof window.__odTrack === 'function') {
+                window.__odTrack('demo_click', {
+                  page_name: 'enterprise',
+                  locale: (document.documentElement.lang || 'en').toLowerCase(),
+                  demo: it.getAttribute('data-preview-title') || '',
+                });
+              }
+            } catch (e) {}
+          });
+        }
+
+        show(items[0]);
+        if (!reduceMotion) {
+          stage.addEventListener('mouseenter', stop);
+          stage.addEventListener('mouseleave', start);
+          const io = new IntersectionObserver((entries) => {
+            for (const e of entries) {
+              if (e.isIntersecting) {
+                idx = 0;
+                show(items[0]);
+                start();
+              } else {
+                stop();
+              }
+            }
+          }, { threshold: 0.3 });
+          io.observe(stage);
+        }
+      };
+
+      enhanceLabDock();
+      enhanceLabSwitch();
+    })();
+  </script>
+
+  <style>
+    .ent-page {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 64px;
+      align-items: start;
+      max-width: 1080px;
+    }
+    .ent-h1 {
+      margin: 0;
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      color: var(--ink, #262626);
+    }
+    .ent-lead {
+      margin: 18px 0 0;
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--ink-soft, #434343);
+    }
+    .ent-perks {
+      list-style: none;
+      margin: 32px 0 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .ent-perk {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--ink-soft, #434343);
+    }
+    .ent-perk__tick {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      margin-top: 1px;
+      border-radius: 999px;
+      background: color-mix(in oklab, var(--bone), var(--coral) 22%);
+      color: var(--olive, #218c00);
+    }
+
+    /* ---------- social-proof logo wall ---------- */
+    .ent-logos {
+      margin-top: 40px;
+      padding-top: 28px;
+      border-top: 1px solid var(--line-soft, #f0f0f0);
+    }
+    .ent-logos__title {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-faint, #8c8c8c);
+      margin-bottom: 20px;
+    }
+    .ent-logos__grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 26px 16px;
+    }
+    .ent-logos__item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 34px;
+    }
+    .ent-logos__img {
+      max-height: 30px;
+      max-width: 100%;
+      width: auto;
+      object-fit: contain;
+      opacity: 0.75;
+      transition: opacity 0.16s ease, filter 0.16s ease;
+    }
+    .ent-logos__item:hover .ent-logos__img {
+      opacity: 1;
+      filter: brightness(0.7);
+    }
+
+    /* ---------- use-case demos (homepage Labs stage, full-bleed below the
+       form). `.ent-demos` stays an unconstrained block so the `.lab-stage`
+       full-bleed centering math reads the `.sub-main.container` content box
+       (same reference the homepage `.labs > .container` gives it). Only the
+       heading is constrained + centered. */
+    .ent-demos {
+      margin: 72px 0 24px;
+      padding-top: 48px;
+      border-top: 1px solid var(--line-soft, #f0f0f0);
+    }
+    .ent-demos__head {
+      text-align: center;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+    .ent-demos__title {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-faint, #8c8c8c);
+    }
+    .ent-demos__lead {
+      margin: 12px 0 0;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--ink-soft, #434343);
+    }
+    /* Pull the stage's own 40px top margin down a touch so it sits closer to
+       the heading than it does on the homepage (no labs-head there). */
+    .ent-demos .lab-stage {
+      margin-top: 24px;
+    }
+
+    /* ---------- form card ---------- */
+    .ent-card {
+      background: var(--bone, #fff);
+      border: 1px solid var(--line, #d9d9d9);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: var(--shadow, 0 30px 60px -30px rgba(38, 38, 38, 0.16));
+    }
+    .ent-form-heading {
+      margin: 0 0 22px;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--ink, #262626);
+    }
+
+    /* ---------- early-access incentive ---------- */
+    .ent-incentive {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 22px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid color-mix(in oklab, var(--line), var(--olive) 32%);
+      background: color-mix(in oklab, var(--bone), var(--coral) 12%);
+    }
+    .ent-incentive__badge {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      margin-top: 1px;
+      border-radius: 999px;
+      background: color-mix(in oklab, var(--bone), var(--coral) 26%);
+      color: var(--olive, #218c00);
+    }
+    .ent-incentive__text {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .ent-incentive__title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink, #262626);
+    }
+    .ent-incentive__body {
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--ink-soft, #434343);
+    }
+
+    /* ---------- Discord opt-in ---------- */
+    /* Left-column Discord invite — a friendly nudge card (not a form field),
+       sits between the perks list and the logo wall. The whole card links to
+       the server. */
+    .ent-discord {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 24px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid var(--line, #d9d9d9);
+      background: var(--bone, #fff);
+      text-decoration: none;
+      transition: border-color 0.16s ease, background 0.16s ease,
+        transform 0.16s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.16s ease;
+    }
+    .ent-discord:hover {
+      border-color: color-mix(in oklab, var(--line), #5865f2 55%);
+      background: color-mix(in oklab, var(--bone), #5865f2 6%);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px -14px rgba(88, 101, 242, 0.55);
+    }
+    .ent-discord__icon {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: #5865f2;
+      color: #fff;
+    }
+    .ent-discord__text {
+      flex: 1 1 auto;
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: var(--ink-soft, #434343);
+    }
+    .ent-discord__cta {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      color: #5865f2;
+    }
+    .ent-form {
+      flex-direction: column;
+      gap: 18px;
+    }
+    /* `:not([hidden])` so toggling the `hidden` attr in JS actually hides the
+       node — a bare `display: flex` would override the UA `[hidden]` rule. */
+    .ent-form:not([hidden]) {
+      display: flex;
+    }
+    .ent-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    .ent-field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+    .ent-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink, #262626);
+    }
+    .ent-req {
+      color: var(--olive, #218c00);
+    }
+    .ent-optional {
+      font-weight: 400;
+      color: var(--ink-faint, #8c8c8c);
+    }
+    .ent-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .ent-chip {
+      font-family: var(--body);
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1;
+      color: var(--ink-soft, #434343);
+      background: var(--paper, #fafafa);
+      border: 1px solid var(--line, #d9d9d9);
+      border-radius: 999px;
+      padding: 9px 14px;
+      cursor: pointer;
+      transition: color 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+      white-space: nowrap;
+    }
+    .ent-chip:hover {
+      border-color: var(--line-hover, #bfbfbf);
+    }
+    .ent-chip[aria-pressed='true'] {
+      color: var(--olive, #218c00);
+      background: color-mix(in oklab, var(--bone), var(--coral) 18%);
+      border-color: color-mix(in oklab, var(--line), var(--olive) 45%);
+    }
+    .ent-field-error {
+      margin: 2px 0 0;
+      font-size: 12px;
+      line-height: 1.4;
+      color: #c0392b;
+    }
+    .ent-input {
+      width: 100%;
+      font-family: var(--body);
+      font-size: 15px;
+      color: var(--ink, #262626);
+      background: var(--paper, #fafafa);
+      border: 1px solid var(--line, #d9d9d9);
+      border-radius: 10px;
+      padding: 11px 14px;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+      appearance: none;
+    }
+    .ent-input::placeholder {
+      color: var(--ink-faint, #8c8c8c);
+    }
+    .ent-input:hover {
+      border-color: var(--line-hover, #bfbfbf);
+    }
+    .ent-input:focus {
+      outline: none;
+      background: var(--bone, #fff);
+      border-color: var(--olive, #218c00);
+      box-shadow: 0 0 0 3px color-mix(in oklab, var(--bone), var(--coral) 26%);
+    }
+    .ent-input.is-invalid {
+      border-color: #c0392b;
+      background: var(--bone, #fff);
+    }
+    .ent-input.is-invalid:focus {
+      border-color: #c0392b;
+      box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.14);
+    }
+    .ent-textarea {
+      resize: vertical;
+      min-height: 96px;
+      line-height: 1.5;
+    }
+    /* ---------- custom select (no native popup) ---------- */
+    .ent-cselect {
+      position: relative;
+    }
+    /* The real <select> stays in the DOM as form value + validation source, but
+       is fully hidden so the OS-native dropdown never appears. */
+    .ent-cselect__native {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .ent-cselect__trigger {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-family: var(--body);
+      font-size: 15px;
+      color: var(--ink, #262626);
+      text-align: left;
+      background: var(--paper, #fafafa);
+      border: 1px solid var(--line, #d9d9d9);
+      border-radius: 10px;
+      padding: 11px 14px;
+      cursor: pointer;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+    }
+    .ent-cselect__trigger:hover {
+      border-color: var(--line-hover, #bfbfbf);
+    }
+    .ent-cselect__trigger:focus-visible,
+    .ent-cselect__trigger[aria-expanded='true'] {
+      outline: none;
+      background: var(--bone, #fff);
+      border-color: var(--olive, #218c00);
+      box-shadow: 0 0 0 3px color-mix(in oklab, var(--bone), var(--coral) 26%);
+    }
+    .ent-cselect__native.is-invalid ~ .ent-cselect__trigger {
+      border-color: #c0392b;
+      background: var(--bone, #fff);
+    }
+    .ent-cselect__native.is-invalid ~ .ent-cselect__trigger:focus-visible,
+    .ent-cselect__native.is-invalid ~ .ent-cselect__trigger[aria-expanded='true'] {
+      border-color: #c0392b;
+      box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.14);
+    }
+    .ent-cselect__value {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ent-cselect__value.is-placeholder {
+      color: var(--ink-faint, #8c8c8c);
+    }
+    .ent-cselect .ent-select-chevron {
+      flex: 0 0 auto;
+      display: inline-flex;
+      pointer-events: none;
+      color: var(--ink-mute, #595959);
+      transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .ent-cselect__trigger[aria-expanded='true'] .ent-select-chevron {
+      transform: rotate(180deg);
+    }
+    .ent-cselect__menu {
+      position: absolute;
+      z-index: 30;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      margin: 0;
+      padding: 6px;
+      list-style: none;
+      background: var(--bone, #fff);
+      border: 1px solid var(--line, #d9d9d9);
+      border-radius: 12px;
+      box-shadow: 0 20px 40px -20px rgba(38, 38, 38, 0.28);
+      max-height: 264px;
+      overflow-y: auto;
+    }
+    .ent-cselect__menu[hidden] {
+      display: none;
+    }
+    .ent-cselect__opt {
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.4;
+      color: var(--ink-soft, #434343);
+      cursor: pointer;
+      transition: background 0.12s ease, color 0.12s ease;
+    }
+    .ent-cselect__opt:hover,
+    .ent-cselect__opt:focus-visible {
+      outline: none;
+      background: var(--paper, #fafafa);
+      color: var(--ink, #262626);
+    }
+    .ent-cselect__opt[aria-selected='true'] {
+      color: var(--olive, #218c00);
+      font-weight: 600;
+      background: color-mix(in oklab, var(--bone), var(--coral) 14%);
+    }
+    .ent-submit {
+      margin-top: 4px;
+      width: 100%;
+      justify-content: center;
+    }
+    .ent-submit:disabled {
+      opacity: 0.6;
+      cursor: progress;
+    }
+    .ent-privacy {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--ink-faint, #8c8c8c);
+      text-align: center;
+    }
+    .ent-error {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #c0392b;
+      text-align: center;
+    }
+
+    /* ---------- success ---------- */
+    .ent-success {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 12px;
+      padding: 28px 8px;
+    }
+    .ent-success:not([hidden]) {
+      display: flex;
+    }
+    .ent-success__tick {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 52px;
+      height: 52px;
+      border-radius: 999px;
+      background: color-mix(in oklab, var(--bone), var(--coral) 22%);
+      color: var(--olive, #218c00);
+    }
+    .ent-success__title {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--ink, #262626);
+    }
+    .ent-success__body {
+      margin: 0;
+      max-width: 320px;
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--ink-soft, #434343);
+    }
+
+    @media (max-width: 880px) {
+      .ent-page {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+      .ent-h1 {
+        font-size: 32px;
+      }
+      .ent-lead {
+        font-size: 16px;
+      }
+      .ent-demos {
+        margin-top: 56px;
+        padding-top: 40px;
+      }
+    }
+    @media (max-width: 480px) {
+      .ent-row {
+        grid-template-columns: 1fr;
+      }
+      .ent-logos__grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 22px 12px;
+      }
+      .ent-card {
+        padding: 24px;
+      }
+    }
+  </style>
+</Layout>

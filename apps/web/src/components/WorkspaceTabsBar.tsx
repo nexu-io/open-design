@@ -418,6 +418,8 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const hoverTimerRef = useRef<number | null>(null);
+  const previousOnboardingCompletedRef = useRef(onboardingCompleted);
+  const resetEntryToHomeAfterOnboardingRef = useRef(false);
   const dragSuppressClickRef = useRef(false);
   const draggingTabIdRef = useRef<string | null>(null);
   const dragHapticTargetRef = useRef<string | null>(null);
@@ -492,6 +494,13 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
     setState((current) => syncStateToRoute(current, route));
   }, [route]);
 
+  useEffect(() => {
+    if (!previousOnboardingCompletedRef.current && onboardingCompleted) {
+      resetEntryToHomeAfterOnboardingRef.current = true;
+    }
+    previousOnboardingCompletedRef.current = onboardingCompleted;
+  }, [onboardingCompleted]);
+
   // Auto-close the Welcome tab once onboarding ends: rewrite any entry tab
   // still parked on the 'onboarding' view back to 'home'. This catches every
   // finish path uniformly — last-step Continue and any future route that
@@ -503,20 +512,29 @@ export function WorkspaceTabsBar({ route, projects, onboardingCompleted = false 
     // should keep the "Onboarding" tab label, not flip to "Home". The rewrite
     // still fires the moment they navigate away (onboardingActive turns false).
     if (onboardingActive) return;
+    const resetDesignSystemsEntry =
+      resetEntryToHomeAfterOnboardingRef.current && route.kind === 'project';
+    if (resetDesignSystemsEntry) {
+      resetEntryToHomeAfterOnboardingRef.current = false;
+    }
     setState((current) => {
-      if (!current.tabs.some((tab) => tab.kind === 'entry' && tab.view === 'onboarding')) {
+      if (!current.tabs.some((tab) =>
+        tab.kind === 'entry' &&
+        (tab.view === 'onboarding' || (resetDesignSystemsEntry && tab.view === 'design-systems')),
+      )) {
         return current;
       }
       return normalizeTabsState({
         ...current,
         tabs: current.tabs.map((tab) =>
-          tab.kind === 'entry' && tab.view === 'onboarding'
+          tab.kind === 'entry' &&
+          (tab.view === 'onboarding' || (resetDesignSystemsEntry && tab.view === 'design-systems'))
             ? { ...tab, view: 'home' }
             : tab,
         ),
       });
     });
-  }, [onboardingCompleted, onboardingActive]);
+  }, [onboardingCompleted, onboardingActive, route.kind]);
 
   // Close the Search-tabs popover whenever onboarding becomes active. The
   // trigger button is hidden during onboarding, so a popover left open across

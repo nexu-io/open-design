@@ -2230,6 +2230,85 @@
   border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
 }
 
+.home-hero__plugin-preset-actions {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 108px;
+  z-index: 5;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 180ms var(--ease-out);
+}
+
+.home-hero__plugin-preset-cell:hover .home-hero__plugin-preset-actions,
+.home-hero__plugin-preset-cell:focus-within .home-hero__plugin-preset-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.home-hero__plugin-preset-action {
+  appearance: none;
+  min-width: 0;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid rgba(17, 17, 17, 0.12);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  transition:
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
+}
+
+.home-hero__plugin-preset-action--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-panel);
+}
+
+.home-hero__plugin-preset-action:hover:not(:disabled),
+.home-hero__plugin-preset-action:focus-visible {
+  outline: none;
+  background: white;
+  border-color: rgba(17, 17, 17, 0.18);
+}
+
+.home-hero__plugin-preset-action--primary:hover:not(:disabled),
+.home-hero__plugin-preset-action--primary:focus-visible {
+  background: color-mix(in srgb, var(--accent) 88%, #fff);
+  border-color: color-mix(in srgb, var(--accent) 88%, #fff);
+}
+
+.home-hero__plugin-preset-action:disabled {
+  opacity: 0.58;
+  cursor: progress;
+}
+
+.home-hero__plugin-preset-action span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .home-hero__plugin-preset-check {
   position: absolute;
   top: 7px;
@@ -2962,6 +3041,13 @@
 .home-hero__template-option .home-hero__footer-select-label.is-preview {
   color: var(--text-muted);
   font-style: italic;
+}
+@media (hover: none) {
+  .home-hero__plugin-preset-actions {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .home-hero__template-card .home-hero__scenario-art-svg {

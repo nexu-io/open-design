@@ -43,14 +43,23 @@ let cachedToolchainHome: string | null = null;
 let cachedToolchainDirs: string[] | null = null;
 let cachedToolchainDirsAt = 0;
 
-function userToolchainDirs() {
+// Resolve the home directory detection should search, honoring the sandbox /
+// `OD_AGENT_HOME` override. `hasOverride` lets callers scope strictly to the
+// override home (skipping real-machine system locations) so sandboxed
+// detection runs and tests stay deterministic instead of reaching the host.
+function resolveDetectionHome(): { home: string; hasOverride: boolean } {
   const sandboxRuntime = resolveSandboxRuntimeConfigFromEnv(
     process.env,
     RUNTIME_PROJECT_ROOT,
   );
   const homeOverride =
     sandboxRuntime?.roots.agentHomeDir ?? process.env.OD_AGENT_HOME;
-  const home = homeOverride || homedir();
+  return { home: homeOverride || homedir(), hasOverride: Boolean(homeOverride) };
+}
+
+function userToolchainDirs() {
+  const { home, hasOverride } = resolveDetectionHome();
+  const homeOverride = hasOverride ? home : undefined;
   const now = Date.now();
   if (
     cachedToolchainHome === home &&
@@ -258,6 +267,47 @@ function packagedBuiltInExecutable(
   }
 }
 
+// The official OpenAI Codex desktop app (bundle id `com.openai.codex`) ships
+// the `codex` CLI *inside* its macOS application bundle at
+// `Codex.app/Contents/Resources/codex` and does NOT add it to PATH unless the
+// user explicitly runs the app's "Install command line tool" action. Users who
+// installed Codex only through the app therefore see a "not installed" agent
+// card even though a healthy native `codex` binary exists on disk, because
+// neither PATH nor the user-toolchain search dirs cover the app bundle. Probe
+// the well-known bundle locations so app-only installs are detected. This is a
+// last-resort fallback that ranks below PATH, so an explicit `npm i -g` /
+// Homebrew / version-manager install always wins.
+function codexAppBundleExecutable(def: RuntimeAgentDef): string | null {
+  if (def?.id !== 'codex') return null;
+  for (const candidate of codexAppBundleCandidates()) {
+    const resolved = executableFilePath(candidate);
+    if (resolved) return resolved;
+  }
+  return null;
+}
+
+// Exported for tests: the no-override `/Applications` branch can't be exercised
+// through `resolveAgentExecutable` deterministically (it would depend on the
+// host actually having `/Applications/Codex.app`), so tests assert the built
+// candidate list directly to catch a path typo or ordering regression in the
+// common real-world install case.
+export function codexAppBundleCandidates(): string[] {
+  // The Codex app bundle is a macOS-only concept; other platforms have no
+  // analogous standalone install of the `codex` CLI to probe for here.
+  if (process.platform !== 'darwin') return [];
+  const { home, hasOverride } = resolveDetectionHome();
+  const bundleSuffix = ['Codex.app', 'Contents', 'Resources', 'codex'];
+  // User-scoped install (~/Applications). Honors the override home so
+  // sandboxed detection runs and tests stay deterministic.
+  const candidates = [path.join(home, 'Applications', ...bundleSuffix)];
+  // System-wide /Applications install. Skip it under an override home for the
+  // same isolation reason `userToolchainDirs` skips Homebrew/system bins.
+  if (!hasOverride) {
+    candidates.unshift(path.join('/Applications', ...bundleSuffix));
+  }
+  return candidates;
+}
+
 export function resolveAgentExecutable(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
@@ -294,9 +344,11 @@ export function inspectAgentExecutableResolution(
     }
   }
   const builtInPath = packagedBuiltInExecutable(def, configuredEnv);
+  const appBundlePath = codexAppBundleExecutable(def);
   return {
     configuredOverridePath,
     pathResolvedPath,
-    selectedPath: configuredOverridePath || builtInPath || pathResolvedPath,
+    selectedPath:
+      configuredOverridePath || builtInPath || pathResolvedPath || appBundlePath,
   };
 }

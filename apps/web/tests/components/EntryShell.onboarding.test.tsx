@@ -327,7 +327,15 @@ describe('EntryShell settings menu', () => {
     expect(screen.getByText('Appearance')).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Join Discord/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /1.2k online/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /Follow @OpenDesignHQ on X/i })).toBeTruthy();
+    expect(
+      screen.getByRole('menuitem', { name: /Follow @OpenDesignHQ on X/i }).getAttribute('href'),
+    ).toBe('https://x.com/OpenDesignHQ');
+    expect(
+      screen.getByRole('menuitem', { name: /Follow Open Design on Threads/i }).getAttribute('href'),
+    ).toBe('https://www.threads.com/@opendesign.ai');
+    expect(
+      screen.getByRole('menuitem', { name: /Open Design on YouTube/i }).getAttribute('href'),
+    ).toBe('https://www.youtube.com/@Open-Design-ai');
 
     fireEvent.click(screen.getByTestId('entry-settings-open-details'));
 
@@ -810,7 +818,9 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       area: 'onboarding',
       result: 'completed',
       exit_step_name: 'design_system',
-      completion_type: 'completed_without_design_system',
+      // This flow clicks "Build a design system" at the final step, so the
+      // completion records the with-DS fork (C2 — tracking spec §3.1).
+      completion_type: 'completed_with_design_system',
       runtime_type: 'amr_cloud',
       has_about_you: true,
       has_design_system_request: false,

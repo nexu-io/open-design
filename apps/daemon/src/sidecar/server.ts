@@ -11,6 +11,8 @@ import {
   type DesktopExportArtifactResult,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
+  type DesktopRenderSlidesInput,
+  type DesktopRenderSlidesResult,
   type MintImportTokenResult,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
@@ -128,6 +130,18 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
       return await requestJsonIpc<DesktopExportPdfResult>(
         desktopIpc,
         { input, type: SIDECAR_MESSAGES.EXPORT_PDF },
+        { timeoutMs: 600_000 },
+      );
+    },
+    desktopSlideRenderer: async (input: DesktopRenderSlidesInput): Promise<DesktopRenderSlidesResult> => {
+      const desktopIpc = resolveAppIpcPath({
+        app: APP_KEYS.DESKTOP,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        namespace: runtime.namespace,
+      });
+      return await requestJsonIpc<DesktopRenderSlidesResult>(
+        desktopIpc,
+        { input, type: SIDECAR_MESSAGES.RENDER_SLIDES },
         { timeoutMs: 600_000 },
       );
     },

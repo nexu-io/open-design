@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { Express, Response } from 'express';
@@ -1945,6 +1946,67 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     res.setHeader('Content-Security-Policy', projectPreviewCsp);
   }
 
+  // Lets a browser (or the desktop export window, which shares the same Chromium
+  // session/cache as the web UI) reuse already-downloaded fonts/CSS/images
+  // across loads instead of re-fetching them every time — covers, live preview,
+  // and screenshot export all hit /raw/. The ETag/Last-Modified are derived from
+  // the file's size+mtime, so any agent rewrite changes them and busts the cache
+  // immediately; `no-cache` means "always revalidate" (never serve stale without
+  // asking), so a 304 only happens when the bytes are genuinely unchanged.
+  function setRawRevalidationHeaders(res: Response, meta: { size: number; mtime: number }): string {
+    const mtime = Math.floor(meta.mtime);
+    const etag = `W/"${meta.size.toString(16)}-${mtime.toString(16)}"`;
+    res.setHeader('ETag', etag);
+    res.setHeader('Last-Modified', new Date(mtime).toUTCString());
+    res.setHeader('Cache-Control', 'no-cache');
+    return etag;
+  }
+
+  function rawRequestIsFresh(req: any, etag: string, mtimeMs: number): boolean {
+    // If-None-Match is authoritative when present (RFC 9110 §13.1.3): freshness
+    // is decided solely by whether the ETag matches — do NOT fall through to
+    // If-Modified-Since. Otherwise a same-second rewrite (ETag changes
+    // immediately, but Last-Modified is identical at HTTP-date second
+    // granularity) would 304 stale-but-changed bytes when a client sends both a
+    // non-matching ETag and the current If-Modified-Since.
+    const ifNoneMatch = req.headers['if-none-match'];
+    if (typeof ifNoneMatch === 'string') {
+      return ifNoneMatch.split(',').some((tag) => tag.trim() === etag);
+    }
+    const ifModifiedSince = req.headers['if-modified-since'];
+    if (typeof ifModifiedSince === 'string') {
+      const since = Date.parse(ifModifiedSince);
+      // Last-Modified is second-resolution, so compare at second granularity.
+      if (Number.isFinite(since) && Math.floor(mtimeMs / 1000) * 1000 <= since) return true;
+    }
+    return false;
+  }
+
+  // RFC 9110 §13.1.5: a Range request with If-Range may only be served as 206
+  // when the If-Range validator still matches the current representation; if it
+  // doesn't (the file changed), the range must be ignored and the full current
+  // file returned, so a resumed download can't splice stale + fresh bytes.
+  //
+  // §13.1.5 also requires the entity-tag form to use a STRONG validator. Our
+  // ETag is weak (`W/"size-mtime"` — size+mtime is not byte-exact), so an
+  // entity-tag If-Range can never authorize partial content: a same-size rewrite
+  // or mtime-granularity collision could otherwise splice stale + fresh bytes
+  // under a matching weak tag. We therefore reject ALL entity-tag If-Range values
+  // (weak ones explicitly; a strong `"…"` never equals our weak ETag anyway) and
+  // honor only the date form.
+  function ifRangeAllowsPartial(req: any, _etag: string, mtimeMs: number): boolean {
+    const ifRange = req.headers['if-range'];
+    if (typeof ifRange !== 'string' || ifRange.length === 0) return true; // no If-Range → honor Range
+    const value = ifRange.trim();
+    // Any entity-tag (weak `W/"…"` or strong `"…"`) → not a strong match against
+    // our weak validator → fall back to the full 200.
+    if (value.startsWith('"') || value.startsWith('W/')) return false;
+    // Date form: honor the range only if the file has NOT changed since (its
+    // current Last-Modified is at/before the If-Range date).
+    const since = Date.parse(value);
+    return Number.isFinite(since) && Math.floor(mtimeMs / 1000) * 1000 <= since;
+  }
+
   async function sendProjectFile(
     req: any,
     res: Response,
@@ -1953,6 +2015,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     metadata?: unknown,
     beforeSend?: (mime: string) => void,
     transformFile?: (file: { mime: string; buffer: Buffer }) => Buffer | string | Promise<Buffer | string>,
+    revalidate = false,
   ) {
     const meta = await resolveProjectFilePath(
       PROJECTS_DIR,
@@ -1962,7 +2025,25 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     );
     beforeSend?.(meta.mime);
 
-    if (meta.mime.startsWith('video/') || meta.mime.startsWith('audio/')) {
+    const isStreamed = meta.mime.startsWith('video/') || meta.mime.startsWith('audio/');
+    // A transform (the Vite dev-entry -> dist/index.html substitution, or preview
+    // bridge injection) can replace the response bytes — but only for HTML. For
+    // HTML the source file's mtime/size is NOT a valid validator, so its ETag is
+    // computed from the actual sent bytes after the transform. Everything else
+    // (assets, fonts, images, streamed media — where the transform is a no-op)
+    // keeps the fast mtime ETag with an early 304.
+    const willSubstitute =
+      !isStreamed && !!transformFile && /^text\/html(?:;|$)/i.test(meta.mime);
+
+    let currentEtag: string | null = null;
+    if (revalidate && !willSubstitute) {
+      currentEtag = setRawRevalidationHeaders(res, meta);
+      if (rawRequestIsFresh(req, currentEtag, meta.mtime)) {
+        return res.status(304).end();
+      }
+    }
+
+    if (isStreamed) {
       res.setHeader('Accept-Ranges', 'bytes');
       res.setHeader('Content-Type', meta.mime);
 
@@ -1971,7 +2052,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         return res.status(200).end();
       }
 
-      const range = parseByteRange(req.headers.range, meta.size);
+      // Honor Range only when If-Range still matches the current file — otherwise
+      // a resumed download after a rewrite would splice stale + fresh bytes.
+      const range =
+        currentEtag === null || ifRangeAllowsPartial(req, currentEtag, meta.mtime)
+          ? parseByteRange(req.headers.range, meta.size)
+          : null;
 
       if (range === 'unsatisfiable') {
         res.setHeader('Content-Range', `bytes */${meta.size}`);
@@ -2007,7 +2093,23 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
 
     const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, metadata);
-    res.type(file.mime).send(transformFile ? await transformFile(file) : file.buffer);
+    const body = transformFile ? await transformFile(file) : file.buffer;
+    if (revalidate && willSubstitute) {
+      // Validator from the ACTUAL response bytes, so a change to the substituted
+      // content (e.g. dist/index.html) busts the cache even when the source
+      // file's mtime is unchanged.
+      const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
+      const etag = `W/"${createHash('sha1').update(buf).digest('hex').slice(0, 16)}"`;
+      res.setHeader('ETag', etag);
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Last-Modified', new Date(Math.floor(meta.mtime)).toUTCString());
+      const ifNoneMatch = req.headers['if-none-match'];
+      if (typeof ifNoneMatch === 'string' && ifNoneMatch.split(',').some((tag) => tag.trim() === etag)) {
+        return res.status(304).end();
+      }
+      return res.type(file.mime).send(buf);
+    }
+    res.type(file.mime).send(body);
   }
 
   function previewFilePathForProject(project: any, queryFile: unknown): string {
@@ -2338,6 +2440,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           }
           return transformed;
         },
+        true, // revalidate: emit ETag/Last-Modified so covers/preview/export reuse cached assets
       );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;

@@ -20,7 +20,7 @@ import type {
   AudioVoiceOption,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
-import { projectKindToTracking } from '@open-design/contracts/analytics';
+import { projectKindFromMetadataToTracking } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackCommunityGalleryClick,
@@ -37,6 +37,7 @@ import {
 import {
   applyPlugin,
   createProject,
+  duplicatePluginAsProject,
   listPlugins,
   patchProject,
   renderPluginBriefTemplate,
@@ -74,6 +75,7 @@ import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { consumePendingHomeChip, HOME_CHIP_INTENT_EVENT } from '../runtime/home-intent';
 import { navigate } from '../router';
+import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import {
   buildHomeMediaComposer,
   homeMediaSurfaceForChipId,
@@ -205,7 +207,7 @@ interface Props {
   designSystems?: DesignSystemSummary[];
   defaultDesignSystemId?: string | null;
   onSubmit: (payload: PluginLoopSubmit) => Promise<boolean> | boolean | void;
-  onOpenProject: (id: string) => void;
+  onOpenProject: (id: string, fileName?: string) => void;
   onViewAllProjects: () => void;
   onDeleteProject?: (id: string) => Promise<boolean | void> | boolean | void;
   onRenameProject?: (id: string, name: string) => void;
@@ -264,6 +266,7 @@ export function HomeView({
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [pluginsLoading, setPluginsLoading] = useState(true);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
+  const [pendingDuplicatePluginId, setPendingDuplicatePluginId] = useState<string | null>(null);
   const [pendingChipId, setPendingChipId] = useState<string | null>(null);
   const [pendingAuthoringChipId, setPendingAuthoringChipId] = useState<string | null>(null);
   const [pendingAuthoringPrompt, setPendingAuthoringPrompt] = useState(PLUGIN_AUTHORING_PROMPT);
@@ -1096,6 +1099,21 @@ export function HomeView({
     focusPromptAtEnd();
   }
 
+  async function duplicateExamplePlugin(record: InstalledPluginRecord) {
+    setError(null);
+    setPendingDuplicatePluginId(record.id);
+    try {
+      const result = await duplicatePluginAsProject(record.id, {
+        name: localizePluginTitle(locale, record),
+      });
+      onOpenProject(result.projectId, result.relPath);
+    } catch {
+      setError(t('pluginCard.duplicateFailed'));
+    } finally {
+      setPendingDuplicatePluginId(null);
+    }
+  }
+
   // "…or start a blank project": create an empty project directly — no dialog,
   // no design system, template, prompt, or plugin — and enter it.
   async function startBlankProject() {
@@ -1261,6 +1279,59 @@ export function HomeView({
   }
 
   function clearActivePlugin() {
+    if (active?.explicitPick && active.chipId) {
+      const chip = findChip(active.chipId);
+      const action = chip?.action;
+      if (
+        chip &&
+        (
+          action?.kind === 'apply-scenario' ||
+          action?.kind === 'apply-figma-migration'
+        )
+      ) {
+        const record = plugins.find((p) => p.id === action.pluginId);
+        if (record) {
+          const mediaSurface = homeMediaSurfaceForChipId(chip.id);
+          setPromptEditedByUser(prompt.trim().length > 0);
+          if (mediaSurface) {
+            const composer = buildHomeMediaComposer(
+              mediaSurface,
+              promptTemplates,
+              action.inputs,
+              elevenLabsVoices,
+              {
+                elevenLabsVoiceWarning,
+                elevenLabsVoicesLoading,
+                imageModels: composerImageModels,
+              },
+            );
+            void usePlugin(record, undefined, {
+              projectKind: composer.projectKind,
+              chipId: chip.id,
+              inputs: composer.inputs,
+              inputFields: composer.fields,
+              queryTemplate: composer.queryTemplate,
+              mediaSurface,
+              projectMetadata: metadataForHomeMediaComposer(mediaSurface, composer.inputs, promptTemplates),
+              editableInputNames: composer.editableFieldNames,
+              preserveInputFields: true,
+              suppressPromptUpdate: true,
+              deferApply: true,
+            });
+            return;
+          }
+          void usePlugin(record, undefined, {
+            projectKind: action.projectKind,
+            chipId: chip.id,
+            inputs: action.inputs,
+            projectMetadata: action.projectMetadata ?? null,
+            suppressPromptUpdate: true,
+            deferApply: true,
+          });
+          return;
+        }
+      }
+    }
     activePluginApplyRequestRef.current += 1;
     setActive(null);
     setFallbackProjectKind(null);
@@ -1490,6 +1561,7 @@ export function HomeView({
         // Brands merged into Design systems: brand extraction now starts from
         // the unified design-system create wizard (which carries the
         // "start from a brand" picker), rather than a separate Brand Kit tab.
+        setPendingDesignSystemCreateEntry('home_card');
         navigate({ kind: 'design-system-create' });
         return;
       }
@@ -1547,6 +1619,7 @@ export function HomeView({
   function submitScenario(scenario: PlaceholderScenario) {
     if (sending) return;
     setError(null);
+    if (pluginsLoading) return;
     const chip = scenario.chipId ? findChip(scenario.chipId) : null;
     const action = chip?.action ?? null;
     const record =
@@ -1554,13 +1627,13 @@ export function HomeView({
         ? plugins.find((plugin) => plugin.id === action.pluginId) ?? null
         : null;
     // When the user already picked this template (the carousel-over-a-selected-
-    // template case), its binding is live — reuse it instead of re-applying,
+    // template case), its binding is live -- reuse it instead of re-applying,
     // which would reset the resolved snapshot and re-fire chip analytics.
     const alreadyBound = Boolean(chip && active?.chipId === chip.id && !active.explicitPick);
     if (chip && record && !alreadyBound) {
       pickChip(chip);
     } else if (!chip || !record) {
-      // Template unavailable (bundle missing / catalog still loading) — fall
+      // Template unavailable (bundle missing / catalog still loading) -- fall
       // back to a free-form create from the line alone rather than dead-ending.
       setActive(null);
     }
@@ -1823,6 +1896,8 @@ export function HomeView({
         }
         onPickPlugin={(record, nextPrompt) => addPluginContext(record, nextPrompt)}
         onPickExamplePlugin={useExamplePlugin}
+        onDuplicateExamplePlugin={duplicateExamplePlugin}
+        pendingDuplicatePluginId={pendingDuplicatePluginId}
         onPickSkill={useSkill}
         onPickMcp={useMcpServer}
         onPickConnector={useConnector}
@@ -1859,7 +1934,7 @@ export function HomeView({
           // before navigation so the event isn't lost when the host
           // re-renders into the project view.
           const project = projects.find((p) => p.id === id);
-          const projectKind = projectKindToTracking(project?.metadata?.kind, project?.metadata?.videoModel);
+          const projectKind = projectKindFromMetadataToTracking(project?.metadata);
           trackRecentProjectsClick(analytics.track, {
             page_name: 'home',
             area: 'recent_projects',
@@ -1889,7 +1964,9 @@ export function HomeView({
           loading={pluginsLoading}
           activePluginId={active?.record.id ?? null}
           pendingApplyId={pendingApplyId}
+          pendingDuplicateId={pendingDuplicatePluginId}
           onUse={(record, action) => void routePluginUse(record, action)}
+          onDuplicate={(record) => void duplicateExamplePlugin(record)}
           onOpenDetails={handleCommunityOpenDetails}
           onBrowseRegistry={onBrowseRegistry}
           preferDefaultFacet={false}
@@ -1925,6 +2002,10 @@ export function HomeView({
                 plugin_type: record.marketplaceTrust ?? 'official',
               });
               void routePluginUse(record, action);
+            }}
+            onDuplicate={(record) => {
+              setDetailsRecord(null);
+              void duplicateExamplePlugin(record);
             }}
             isApplying={pendingApplyId === detailsRecord.id}
             onSharePopoverItemClick={(item) =>

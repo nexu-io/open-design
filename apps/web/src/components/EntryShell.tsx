@@ -66,8 +66,9 @@ import type {
   TrackingCliProviderId,
 } from '@open-design/contracts/analytics';
 import { agentIdToTracking } from '@open-design/contracts/analytics';
-import { useT } from '../i18n';
+import { useT, useI18n } from '../i18n';
 import { navigate, useRoute } from '../router';
+import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import type {
   AgentInfo,
   ApiProtocol,
@@ -111,6 +112,7 @@ import { AgentIcon } from './AgentIcon';
 import { LanguageMenu } from './LanguageMenu';
 import { IntegrationsView, type IntegrationTab } from './IntegrationsView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
+import { enterpriseUrl } from './enterpriseUrl';
 import {
   EntrySettingsMenu,
   type EntrySettingsSection,
@@ -179,7 +181,7 @@ function writeStoredRailOpen(open: boolean): void {
 }
 
 const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
-const X_URL = 'https://x.com/nexudotio';
+const X_URL = 'https://x.com/OpenDesignHQ';
 const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
@@ -361,7 +363,7 @@ interface Props {
   ) => Promise<ImportClaudeDesignOutcome | void> | ImportClaudeDesignOutcome | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
-  onOpenProject: (id: string) => Promise<boolean> | boolean | void;
+  onOpenProject: (id: string, fileName?: string) => Promise<boolean> | boolean | void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => Promise<boolean | void> | boolean | void;
   onRenameProject: (id: string, name: string) => void;
@@ -478,6 +480,7 @@ export function EntryShell({
   onCompleteOnboarding,
 }: Props) {
   const t = useT();
+  const { locale: uiLocale } = useI18n();
   const discordPresence = useDiscordPresence();
   // Each entry sub-view (home / projects / design-systems) is its own
   // URL now, so the browser back/forward buttons work and a deep link
@@ -709,6 +712,7 @@ export function EntryShell({
             onThemeChange={onThemeChange}
             onGoBuild={() => {
               onCompleteOnboarding();
+              setPendingDesignSystemCreateEntry('onboarding');
               navigate({ kind: 'design-system-create' });
             }}
           />
@@ -773,6 +777,32 @@ export function EntryShell({
             </button>
             <div className="entry-main__topbar-chips entry-main__topbar-chips--icon-only">
               <GithubStarBadge />
+              <a
+                className="entry-workspace-chip od-tooltip"
+                href={enterpriseUrl(uiLocale)}
+                target="_blank"
+                rel="noreferrer noopener"
+                onClick={() => {
+                  trackHomeToolbarClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'toolbar',
+                    element: 'workspace_teams',
+                  });
+                }}
+                data-tooltip={t('entry.workspaceTeamsTitle')}
+                data-tooltip-placement="bottom"
+                aria-label={t('entry.workspaceTeamsAria')}
+                data-testid="entry-workspace-teams"
+              >
+                <Icon
+                  name="sparkles"
+                  size={14}
+                  className="entry-workspace-chip__icon"
+                />
+                <span className="entry-workspace-chip__label">
+                  {t('entry.workspaceTeamsLabel')}
+                </span>
+              </a>
               <a
                 className="entry-discord-badge od-tooltip"
                 href={DISCORD_URL}
@@ -1704,7 +1734,7 @@ function OnboardingView({
       return;
     }
     if (isLastStep) {
-      await runOnboardingCompletion();
+      await runOnboardingCompletion('completed_without_design_system');
       onFinish();
       return;
     }
@@ -1749,7 +1779,13 @@ function OnboardingView({
   // final picks even on a fast click before React commits the latest state.
   // Callers pick the destination: home (`onFinish`) or the design-system
   // create flow (`onGoBuild`).
-  async function runOnboardingCompletion(): Promise<void> {
+  // `completionType` distinguishes the final-step fork (C2, tracking spec §3.1):
+  // 'completed_with_design_system' when the user chose "Build a design system",
+  // 'completed_without_design_system' when they went straight Home. Lets the
+  // funnel measure how many users skip DS creation at onboarding.
+  async function runOnboardingCompletion(
+    completionType: TrackingOnboardingCompletionType,
+  ): Promise<void> {
     emitAboutYouSubmit();
     void persistOnboardingProfileToMemory();
     const newsletterEmail = profileRef.current.email;
@@ -1760,19 +1796,19 @@ function OnboardingView({
       await submitNewsletterEmail(newsletterEmail);
     }
     emitOnboardingClick('continue', 'continue');
-    emitOnboardingComplete('completed', 'completed_without_design_system');
+    emitOnboardingComplete('completed', completionType);
     clearOnboardingSessionId();
   }
 
   async function handleFinishToHome(): Promise<void> {
     if (newsletterSubmitting) return;
-    await runOnboardingCompletion();
+    await runOnboardingCompletion('completed_without_design_system');
     onFinish();
   }
 
   async function handleFinishToBuild(): Promise<void> {
     if (newsletterSubmitting) return;
-    await runOnboardingCompletion();
+    await runOnboardingCompletion('completed_with_design_system');
     onGoBuild();
   }
 

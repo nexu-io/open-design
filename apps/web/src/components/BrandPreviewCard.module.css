@@ -99,7 +99,7 @@
 .previewHeadSticky {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 4;
   align-items: center;
   flex-wrap: nowrap;
   width: 100%;

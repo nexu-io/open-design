@@ -26,6 +26,7 @@ interface Props {
   exampleStem?: string | null;
   onClose: () => void;
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
+  onDuplicate?: (record: InstalledPluginRecord) => void;
   isApplying?: boolean;
   hideUseAction?: boolean;
   // Analytics — forwarded to PreviewModal's share popover.
@@ -37,6 +38,7 @@ export function PluginExampleDetail({
   exampleStem,
   onClose,
   onUse,
+  onDuplicate,
   isApplying,
   hideUseAction,
   onSharePopoverItemClick,
@@ -154,7 +156,7 @@ export function PluginExampleDetail({
             busy: !!isApplying,
             busyLabel: 'Applying…',
             testId: `plugin-details-use-${record.id}`,
-            menu: buildPluginUseMenu(record, onUse, t),
+            menu: buildPluginUseMenu(record, onUse, t, onDuplicate),
           }}
       hideSidebarToggle
       onSharePopoverItemClick={onSharePopoverItemClick}
