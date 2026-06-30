@@ -5,6 +5,7 @@ import {
   configureVisualPage,
   gotoVisualHome,
   gotoVisualWorkspace,
+  mockSignedInVelaAccount,
   prepareVisualAvatarMenu,
   prepareVisualWorkspaceFileList,
   prepareVisualWorkspacePreview,
@@ -68,6 +69,31 @@ test('[P2] captures the topbar execution switcher surface', async ({ page }) => 
     'visual-topbar-execution-switcher-popover',
     page.getByTestId('inline-model-switcher-popover'),
   );
+});
+
+test('[P1] captures the topbar Open Design account balance surface', async ({ page }) => {
+  test.setTimeout(60_000);
+
+  await configureVisualPage(page, {
+    agents: [VISUAL_AMR_AGENT, ...VISUAL_CLI_AGENTS],
+    config: {
+      agentId: 'amr',
+      agentModels: { amr: { model: 'deepseek-v4-flash', reasoning: 'default' } },
+      agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } },
+    },
+  });
+  await mockSignedInVelaAccount(page);
+  await gotoVisualHome(page);
+
+  await page.getByTestId('inline-model-switcher-chip').click();
+  const popover = page.getByTestId('inline-model-switcher-popover');
+  await expect(popover).toBeVisible();
+  await expect(popover.locator('.inline-switcher__account')).toContainText('Open Design');
+  await expect(popover.locator('.inline-switcher__account')).toContainText('plus');
+  await expect(popover.locator('.inline-switcher__account')).toContainText('$247.51');
+  await expect(page.getByTestId('inline-model-switcher-account-upgrade')).toBeVisible();
+
+  await captureVisual(page, 'visual-topbar-open-design-account');
 });
 
 test('[P2] captures the topbar local CLI model dropdown surface', async ({ page }) => {
@@ -153,7 +179,9 @@ test('[P2] captures the avatar menu surface', async ({ page }) => {
   await captureVisualTarget(page, 'visual-avatar-menu-panel', menu);
 });
 
-test('[P1] Avatar menu exposes the AMR account wallet entry for the active AMR agent', async ({ page }) => {
+test('[P1] Avatar menu surfaces the signed-in plan/balance and upgrade entry', async ({ page }) => {
+  test.setTimeout(60_000);
+
   await configureVisualPage(page, {
     agents: [VISUAL_AMR_AGENT, ...VISUAL_CLI_AGENTS],
     config: {
@@ -163,17 +191,21 @@ test('[P1] Avatar menu exposes the AMR account wallet entry for the active AMR a
       agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } },
     },
   });
+  await mockSignedInVelaAccount(page);
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
   const menu = await prepareVisualAvatarMenu(page);
-  const amrAccount = menu.locator('.avatar-amr-account-link');
-  await expect(amrAccount).toContainText('AMR account');
-  await expect(amrAccount).toContainText('Balance & recharge');
-  await expect(amrAccount).toHaveAttribute(
+  const row = menu.locator('.avatar-amr-row');
+  await expect(row).toContainText('Open Design');
+  await expect(row).toContainText('Plus');
+  await expect(row).toContainText('$247.51');
+  await expect(row.locator('.avatar-amr-row__upgrade')).toHaveAttribute(
     'href',
-    'https://vela.powerformer.net/wallet?source=open_design',
+    /view=plans/,
   );
+
+  await captureVisual(page, 'visual-avatar-open-design-account');
 });
 
 test('[P2] captures the avatar local agent list surface', async ({ page }) => {

@@ -166,7 +166,11 @@ export type TrackingAmrEntrySource =
   | 'chat_error_switch_retry_card'
   | 'generation_preview_authorize_retry'
   | 'generation_preview_recharge'
-  | 'generation_preview_switch_retry_card';
+  | 'generation_preview_switch_retry_card'
+  | 'settings_amr_upgrade'
+  | 'inline_amr_upgrade'
+  | 'avatar_amr_upgrade'
+  | 'avatar_amr_agent_card';
 
 export interface AmrEntryAttribution {
   entryId: string;

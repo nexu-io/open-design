@@ -28,7 +28,7 @@ test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
     page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /Sign in to Open Design Cloud|登录 Open Design 云端/i }),
+    page.getByRole('button', { name: /Sign in to Open Design|登录 Open Design/i }),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: /Local coding agent|本地 Coding Agent/i }),

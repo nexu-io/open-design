@@ -128,7 +128,7 @@ test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and ke
   await gotoProject(page, amr.projectId);
   await sendPrompt(page, 'AMR insufficient balance recovery smoke');
 
-  const topUp = page.getByRole('button', { name: /Top up AMR|前往充值|前往儲值/i }).first();
+  const topUp = page.getByRole('button', { name: /Top up|充值|儲值/i }).first();
   const retry = page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first();
   await expect(topUp).toBeVisible({ timeout: 15_000 });
   await expect(retry).toBeVisible();
@@ -299,7 +299,7 @@ test('[P0] @critical AMR model catalog invalid-key failures route to authorizati
   const authorizeAndRetry = page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first();
   await expect(authorizeAndRetry).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Switch to AMR & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to Open Design & retry/i })).toHaveCount(0);
 
   await authorizeAndRetry.click();
   await expect.poll(() => loginRequested, { timeout: 10_000 }).toBe(true);
@@ -388,7 +388,7 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
   await expect(settings.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
   await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-amr-switch@example.com');
   await expect(settings.locator('.agent-card-amr-profile-badge')).toContainText(/test/i);
-  await expect(settings.getByRole('link', { name: /AMR Console|控制台/i })).toBeVisible();
+  await expect(settings.getByRole('link', { name: /Console|控制台/i })).toBeVisible();
 
   await settings.getByRole('combobox', { name: 'Model', exact: true }).click();
   let modelPopover = page.getByTestId('settings-agent-model-popover-amr');
@@ -399,13 +399,13 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
 
   await settings.getByTestId('settings-agent-select-codex').click();
   await expect(settings.getByTestId('settings-agent-select-codex')).toHaveAttribute('aria-pressed', 'true');
-  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('Open Design AMR');
+  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('Open Design');
 
   await settings.getByTestId('settings-agent-select-amr').click();
   await expect(settings.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
   await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-amr-switch@example.com');
   await expect(settings.locator('.agent-card-amr-profile-badge')).toContainText(/test/i);
-  const amrConsole = settings.getByRole('link', { name: /AMR Console|控制台/i });
+  const amrConsole = settings.getByRole('link', { name: /Console|控制台/i });
   await expect(amrConsole).toBeVisible();
   await expect(amrConsole).toHaveAttribute('href', /source=open_design/);
 
@@ -550,7 +550,7 @@ test('[P0] upstream outages keep Retry available without promoting AMR', async (
 
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/Generation service unavailable|model provider is temporarily unavailable/i).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to AMR & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to Open Design & retry/i })).toHaveCount(0);
   await expect(page.getByText(/Model call failed/i)).toHaveCount(0);
 });
 
@@ -633,7 +633,7 @@ test('[P0] antigravity rate limits offer terminal model switching without promot
   const launchTerminal = page.getByRole('button', { name: /Switch model in terminal/i }).first();
   await expect(launchTerminal).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to AMR & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to Open Design & retry/i })).toHaveCount(0);
 
   await launchTerminal.click();
 

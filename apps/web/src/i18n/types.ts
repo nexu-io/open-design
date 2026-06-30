@@ -318,6 +318,9 @@ export interface Dict {
   'settings.amrCancelSignIn': string;
   'settings.amrAccountStatus': string;
   'settings.amrConsole': string;
+  'settings.amrBalance': string;
+  'settings.amrPlan': string;
+  'settings.amrUpgrade': string;
   'settings.amrLoginErrorCompact': string;
   'settings.apiSection': string;
   'settings.quickFillProvider': string;

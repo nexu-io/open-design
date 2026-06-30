@@ -1,0 +1,27 @@
+/* Shared Open Design plan nameplate (free / plus / pro / max). Defined as a
+   GLOBAL class rather than a CSS Module: this dev setup's CSS-Module HMR is
+   unreliable for this surface (the badge intermittently dropped its styles and
+   rendered as plain text), and the three existing per-surface badges that this
+   replaces were all global classes that worked reliably. Color follows the
+   active brand theme (`--accent`), one consistent style across all tiers. */
+.plan-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  text-transform: capitalize;
+  color: var(--accent-strong);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.plan-badge--sm {
+  padding: 1px 7px;
+  font-size: 9px;
+}
+.plan-badge--md {
+  padding: 2px 9px;
+  font-size: 11px;
+}

@@ -101,7 +101,7 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
   await gotoProject(page, projectId);
 
   const settings = await openSettingsDialog(page);
-  await expect(settings.getByRole('button', { name: /Open Design AMR/i }).first()).toHaveAttribute('aria-pressed', 'true');
+  await expect(settings.getByRole('button', { name: /Open Design/i }).first()).toHaveAttribute('aria-pressed', 'true');
   await expect(settings.getByRole('button', { name: /^Sign out$/i })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(settings).toHaveCount(0);
@@ -110,7 +110,7 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
     if (!response.ok) throw new Error(`logout failed: ${response.status}`);
   });
   const reopenedSettings = await openSettingsDialog(page);
-  await expect(reopenedSettings.getByRole('button', { name: /Open Design AMR/i }).first()).toHaveAttribute('aria-pressed', 'true');
+  await expect(reopenedSettings.getByRole('button', { name: /Open Design/i }).first()).toHaveAttribute('aria-pressed', 'true');
   await expect(reopenedSettings.getByRole('button', { name: /^Authorize$|^Sign in$/i })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(reopenedSettings).toHaveCount(0);

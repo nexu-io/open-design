@@ -1013,6 +1013,10 @@
 .amr-auth-anchor {
   position: relative;
   display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-left: 1px solid var(--border-soft);
 }
 .amr-coachmark {
   position: absolute;
@@ -1366,36 +1370,40 @@
   font-weight: 800;
   line-height: 1.2;
 }
-.agent-card-amr-wallet {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 2px 8px;
-  max-width: 100%;
-  margin-top: 5px;
+.agent-card-amr-meta-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin-top: 4px;
+}
+.agent-card-amr-meta-row .agent-card-amr-balance {
+  margin-top: 0;
+}
+.agent-card-amr-balance {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.agent-card-amr-balance-label {
   color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.25;
+  font-weight: 500;
 }
-.agent-card-amr-wallet__label {
-  color: var(--text-soft);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.agent-card-amr-wallet__value {
-  min-width: 0;
-  color: var(--text);
-  font-weight: 750;
+.agent-card-amr-balance-value {
+  color: var(--text-strong);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .agent-card-amr-wallet__meta {
-  grid-column: 1 / -1;
   min-width: 0;
+  margin-top: 2px;
   color: var(--text-soft);
   font-size: 10.5px;
   font-weight: 500;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1424,6 +1432,59 @@
   cursor: default;
   opacity: 0.62;
 }
+.agent-card-amr-upgrade {
+  appearance: none;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--accent) 38%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent);
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  /* `:not(:disabled)` raises specificity above the global
+     `button:hover:not(:disabled)` reset (primitives.css), which would
+     otherwise paint this filled CTA with a pale `--bg-subtle` on hover. */
+  .agent-card-amr-upgrade:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: transparent;
+    color: #fff;
+    box-shadow:
+      0 3px 10px color-mix(in srgb, var(--accent) 42%, transparent),
+      inset 0 1px 0 color-mix(in srgb, #fff 24%, transparent);
+  }
+}
+.agent-card-amr-upgrade:active {
+  transform: scale(0.97);
+}
+.agent-card-amr-upgrade:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-card-amr-upgrade {
+    transition: background-color 160ms ease;
+  }
+  .agent-card-amr-upgrade:active {
+    transform: none;
+  }
+}
 .agent-card-model-summary {
   display: flex;
   align-items: baseline;
@@ -1448,14 +1509,11 @@
   text-overflow: ellipsis;
 }
 .agent-card-amr-auth {
-  align-self: stretch;
   flex: 0 1 auto;
-  min-width: 112px;
   max-width: 280px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-left: 1px solid var(--border-soft);
 }
 .agent-card-amr-auth--placeholder {
   visibility: hidden;
@@ -1466,8 +1524,8 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  gap: 6px;
-  padding: 0 10px;
+  gap: 8px;
+  padding: 0;
 }
 .agent-card-amr-auth .amr-account-control__status {
   display: inline-flex;

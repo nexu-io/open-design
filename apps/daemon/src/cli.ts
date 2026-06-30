@@ -636,21 +636,43 @@ Options:
   switch (sub) {
     case 'status': {
       const query = flags.refresh ? '?refresh=1' : '';
-      const resp = await fetch(`${base}/api/integrations/vela/wallet${query}`);
-      if (!resp.ok) return structuredHttpFailure(resp);
-      const snapshot = await resp.json();
-      if (flags.json) return process.stdout.write(JSON.stringify(snapshot, null, 2) + '\n');
-      const account = snapshot?.user?.email ?? snapshot?.user?.id ?? '-';
+      const statusResp = await fetch(`${base}/api/integrations/vela/status`);
+      if (!statusResp.ok) return structuredHttpFailure(statusResp);
+      const status = await statusResp.json();
+      let wallet = null;
+      if (status?.loggedIn && (!status?.account?.balanceUsd || flags.refresh)) {
+        const walletResp = await fetch(`${base}/api/integrations/vela/wallet${query}`);
+        if (walletResp.ok) wallet = await walletResp.json();
+        else if (flags.refresh && !status?.account?.balanceUsd) return structuredHttpFailure(walletResp);
+      }
+      const merged = {
+        ...status,
+        user: status?.user ?? wallet?.user ?? null,
+        account:
+          status?.loggedIn && wallet?.status === 'available'
+            ? {
+                ...(status?.account ?? {}),
+                balanceUsd: status?.account?.balanceUsd ?? wallet.balanceUsd,
+              }
+            : status?.account,
+        wallet,
+      };
+      if (flags.json) return process.stdout.write(JSON.stringify(merged, null, 2) + '\n');
+      const account = merged?.user?.email ?? merged?.user?.id ?? '-';
       console.log(`AMR account\t${account}`);
-      if (snapshot?.status === 'available') {
-        console.log(`Wallet balance\t$${snapshot.balanceUsd}`);
-        console.log(`Updated\t${snapshot.updatedAt ?? snapshot.fetchedAt ?? '-'}`);
-        console.log(`Source\t${snapshot.source ?? '-'}`);
+      console.log(`Profile\t${merged?.profile ?? '-'}`);
+      if (merged?.account?.plan) console.log(`Plan\t${merged.account.plan}`);
+      if (merged?.account?.balanceUsd) {
+        console.log(`Wallet balance\t$${merged.account.balanceUsd}`);
+        if (wallet?.updatedAt || wallet?.fetchedAt) {
+          console.log(`Updated\t${wallet.updatedAt ?? wallet.fetchedAt}`);
+        }
+        console.log(`Source\t${wallet?.source ?? 'status_account'}`);
         return;
       }
       console.log(`Wallet balance\tunavailable`);
-      console.log(`Status\t${snapshot?.status ?? 'unknown'}`);
-      if (snapshot?.error?.message) console.log(`Reason\t${snapshot.error.message}`);
+      console.log(`Status\t${wallet?.status ?? (merged?.loggedIn ? 'logged_in' : 'signed_out')}`);
+      if (wallet?.error?.message) console.log(`Reason\t${wallet.error.message}`);
       return;
     }
     default:

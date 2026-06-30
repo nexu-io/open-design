@@ -45,6 +45,10 @@ const ENTRY_PAGE_BY_SOURCE: Record<TrackingAmrEntrySource, TrackingPageName> = {
   generation_preview_authorize_retry: 'file_manager',
   generation_preview_recharge: 'file_manager',
   generation_preview_switch_retry_card: 'file_manager',
+  settings_amr_upgrade: 'settings',
+  inline_amr_upgrade: 'chat_panel',
+  avatar_amr_upgrade: 'chat_panel',
+  avatar_amr_agent_card: 'chat_panel',
 };
 
 const ONBOARDING_PROFILE_SYNC_SOURCES: readonly TrackingAmrEntrySource[] = [

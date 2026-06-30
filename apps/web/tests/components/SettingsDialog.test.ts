@@ -295,6 +295,27 @@ describe('SettingsDialog custom model picker state', () => {
 });
 
 describe('SettingsDialog AMR wallet display state', () => {
+  it('keeps the last balance visible while a refresh is pending', () => {
+    expect(
+      amrWalletValueLabel({
+        balance: '$0.10',
+        loadingLabel: 'Loading',
+        ready: false,
+        snapshot: {
+          status: 'available',
+          profile: 'local',
+          user: { id: 'user-1', email: 'amr@example.com' },
+          balanceUsd: '0.1000',
+          updatedAt: '2026-06-23T06:05:18.782Z',
+          fetchedAt: '2026-06-23T06:05:19.000Z',
+          stale: false,
+          source: 'daemon_cache',
+        },
+        unavailableLabel: 'Balance temporarily unavailable',
+      }),
+    ).toBe('$0.10');
+  });
+
   it('shows re-auth guidance when the daemon reports missing or rejected wallet credentials', () => {
     expect(
       amrWalletValueLabel({
