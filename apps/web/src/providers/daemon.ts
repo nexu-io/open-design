@@ -490,9 +490,20 @@ async function consumeDaemonRun({
       let buf = '';
       let sawStreamProgress = false;
 
-      try {
       while (true) {
-        const { value, done } = await reader.read();
+        let readResult: ReadableStreamReadResult<Uint8Array>;
+        try {
+          readResult = await reader.read();
+        } catch (err) {
+          // Only catch reader.read() failures — a broken SSE connection
+          // (tab backgrounded, proxy idle timeout, network drop). Parsing
+          // and handler invocations stay OUTSIDE this catch so local
+          // processing bugs surface through the existing outer error path.
+          if ((err as Error).name === 'AbortError') throw err;
+          try { reader.cancel(); } catch {}
+          break;
+        }
+        const { value, done } = readResult;
         if (done) break;
         buf += decoder.decode(value, { stream: true });
         let idx: number;
@@ -570,15 +581,6 @@ async function consumeDaemonRun({
             onRunStatus?.(endStatus);
           }
         }
-      }
-      } catch (err) {
-        // Stream broke mid-read (tab backgrounded, proxy idle timeout, etc.).
-        // Don't let the error escape — treat as a normal stream end so the
-        // reconnection for-loop resumes from lastEventId. The daemon keeps
-        // the run alive independent of the SSE connection (runs.ts), so we
-        // can always reattach.
-        if ((err as Error).name === 'AbortError') throw err;
-        try { reader.cancel(); } catch {}
       }
       reconnects = sawStreamProgress ? 0 : reconnects + 1;
     }
