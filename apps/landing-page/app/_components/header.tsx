@@ -87,6 +87,7 @@ export interface HeaderProps {
     | 'solution'
     | 'agent'
     | 'plugins'
+    | 'pricing'
     | 'library'
     | 'skills'
     | 'systems'
@@ -343,6 +344,19 @@ export function Header({
                   </a>
                 </li>
               </ul>
+            </li>
+
+            {/* Pricing — localized page. The plan numbers it renders stay in
+                sync with the vela commerce app at runtime (see
+                app/_lib/pricing.ts); the card copy mirrors vela's subscription
+                modal (see app/_lib/pricing-content.ts). */}
+            <li>
+              <a
+                href={href('/pricing/')}
+                className={active === 'pricing' ? 'is-active' : undefined}
+              >
+                {productMenuCopy.pricing}
+              </a>
             </li>
 
             {/* Resources — a category label (Blog / Tutorials / Compare), not
