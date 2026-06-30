@@ -490,6 +490,7 @@ async function consumeDaemonRun({
       let buf = '';
       let sawStreamProgress = false;
 
+      try {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -569,6 +570,15 @@ async function consumeDaemonRun({
             onRunStatus?.(endStatus);
           }
         }
+      }
+      } catch (err) {
+        // Stream broke mid-read (tab backgrounded, proxy idle timeout, etc.).
+        // Don't let the error escape — treat as a normal stream end so the
+        // reconnection for-loop resumes from lastEventId. The daemon keeps
+        // the run alive independent of the SSE connection (runs.ts), so we
+        // can always reattach.
+        if ((err as Error).name === 'AbortError') throw err;
+        try { reader.cancel(); } catch {}
       }
       reconnects = sawStreamProgress ? 0 : reconnects + 1;
     }
