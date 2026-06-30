@@ -303,7 +303,10 @@ export function AvatarMenu({
     const baseUrl = config.baseUrl?.trim() ?? '';
     const apiKey = config.apiKey?.trim() ?? '';
     if (credentialSource === 'deployment' && apiProtocol !== 'openai') return;
-    if (credentialSource !== 'deployment' && (!baseUrl || !apiKey)) return;
+    if (
+      credentialSource !== 'deployment' &&
+      (!baseUrl || (apiProtocol !== 'aihubmix' && !apiKey))
+    ) return;
     let cancelled = false;
     const request = credentialSource === 'deployment'
       ? { protocol: 'openai' as const, credentialSource: 'deployment' as const }

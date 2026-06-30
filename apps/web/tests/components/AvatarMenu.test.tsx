@@ -141,6 +141,54 @@ describe('AvatarMenu', () => {
     expect(onOpenSettings).toHaveBeenCalledWith('execution');
   });
 
+  it('fetches AIHubMix models without an API key', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/provider/models') {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            kind: 'success',
+            latencyMs: 1,
+            models: [{ id: 'aihubmix-qwen', label: 'AIHubMix Qwen' }],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('{}', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderMenu({
+      config: {
+        ...baseConfig,
+        mode: 'api',
+        apiProtocol: 'aihubmix',
+        baseUrl: 'https://aihubmix.com/v1',
+        apiProviderBaseUrl: 'https://aihubmix.com/v1',
+        apiKey: '',
+        model: 'aihubmix-qwen',
+      },
+    });
+
+    openMenu();
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/provider/models',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            protocol: 'aihubmix',
+            credentialSource: 'user',
+            baseUrl: 'https://aihubmix.com/v1',
+            apiKey: '',
+          }),
+        }),
+      );
+    });
+  });
+
   it('pins Open Design to the top of the CLI picker', async () => {
     const amrAgent: AgentInfo = {
       id: 'amr',
