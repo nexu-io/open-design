@@ -24,6 +24,7 @@ vi.mock('../../src/providers/registry', () => ({
   fetchDesignSystemShowcase: fetchDesignSystemShowcaseMock,
   fetchProjectFileText: vi.fn(async () => null),
   openExternalUrl: vi.fn(),
+  projectHasFile: vi.fn(async () => false),
   projectRawUrl: (projectId: string, filePath: string) => `/raw/${projectId}/${filePath}`,
 }));
 
