@@ -23,6 +23,7 @@ type ProjectDisplayStatus =
   | 'not_started'
   | 'queued'
   | 'running'
+  | 'awaiting_input'
   | 'succeeded'
   | 'failed'
   | 'canceled';
@@ -33,6 +34,7 @@ type ProjectDisplayStatus =
 | `not_started` | Not started | No run | The project exists and has no run history. |
 | `queued` | Queued | `queued` | A run exists and is waiting to start. |
 | `running` | Running | `running`, `starting` | A run is currently executing. |
+| `awaiting_input` | Needs input | `succeeded` + unanswered structured question | The latest relevant run finished, but the project is waiting on user input to continue. |
 | `succeeded` | Completed | `succeeded` | The latest relevant run completed successfully. |
 | `failed` | Failed | `failed` | The latest relevant run failed. |
 | `canceled` | Canceled | `canceled`, `cancelled` | The latest relevant run was canceled. |
@@ -63,6 +65,20 @@ function normalizeRunStatus(status: RunStatus): ProjectDisplayStatus {
   if (status === 'cancelled') return 'canceled';
   return status;
 }
+
+function composeProjectDisplayStatus(
+  baseStatus: ProjectStatusInfo,
+  awaitingInputProjects: Set<string>,
+  projectId: string,
+): ProjectStatusInfo {
+  if (baseStatus.value === 'succeeded' && awaitingInputProjects.has(projectId)) {
+    return { ...baseStatus, value: 'awaiting_input' };
+  }
+  return {
+    ...baseStatus,
+    value: normalizeRunStatus(baseStatus.value),
+  };
+}
 ```
 
 ## UI guidance
@@ -73,6 +89,7 @@ Examples:
 
 - `Running · just now`
 - `Queued · 1 minute ago`
+- `Needs input · 2 minutes ago`
 - `Completed · 6 minutes ago`
 - `Failed · 36 minutes ago`
 - `Canceled · 3 hours ago`
@@ -82,6 +99,7 @@ Use stronger visual treatment for active and error states:
 
 - `running`: primary or accent indicator.
 - `queued`: neutral pending indicator.
+- `awaiting_input`: warning / needs-attention indicator.
 - `failed`: error indicator.
 - `canceled`: muted neutral indicator.
 - `succeeded`: subtle success indicator.
@@ -89,6 +107,6 @@ Use stronger visual treatment for active and error states:
 
 ## Rationale
 
-Project status represents the user's project-level mental model. Users need to know whether a project is waiting, actively running, completed, failed, canceled, or untouched.
+Project status represents the user's project-level mental model. Users need to know whether a project is waiting, actively running, blocked on their input, completed, failed, canceled, or untouched.
 
-Using `running` as the primary active label keeps the UI aligned with the underlying run model and covers generation, editing, repair, analysis, export, and future run types.
+Keeping `queued` separate from `running` preserves the difference between waiting-to-start and actively-executing work. `awaiting_input` keeps post-run question forms visible without pretending the run is still active.
