@@ -1783,6 +1783,56 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     vi.unstubAllGlobals();
   });
 
+  it('pins Open Design to the top of the installed CLI list', () => {
+    const claudeAgent: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: true,
+      version: '2.1.196',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: false,
+            profile: 'local',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('{}', { status: 200 });
+    }));
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { agents: [availableAgents[0]!, claudeAgent, amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*3 installed/i }));
+
+    expect(
+      screen
+        .getAllByTestId(/^settings-agent-card-/)
+        .map((card) => card.getAttribute('data-testid')),
+    ).toEqual([
+      'settings-agent-card-amr',
+      'settings-agent-card-codex',
+      'settings-agent-card-claude',
+    ]);
+  });
+
   it('lets users switch to Local CLI, select an installed agent, and autosave', async () => {
     const installed = availableAgents[0]!;
     const unavailable: AgentInfo = {
@@ -2600,7 +2650,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(screen.queryByText(/^vela$/i)).toBeNull();
   });
 
-  it('refreshes the Settings AMR wallet fallback balance for old Vela CLI status payloads', async () => {
+  it('shows the Settings AMR wallet fallback balance for old Vela CLI status payloads', async () => {
     let walletCalls = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
@@ -2632,7 +2682,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
             status: 'available',
             profile: 'local',
             user: { id: 'user-1', email: 'signed-in@example.com' },
-            balanceUsd: walletCalls === 1 ? '1.0000' : '2.0000',
+            balanceUsd: '1.0000',
             updatedAt: '2026-06-29T08:00:00.000Z',
             fetchedAt: '2026-06-29T08:00:01.000Z',
             stale: false,
@@ -2653,9 +2703,9 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
     expect(await screen.findByText('$1.00')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh AMR wallet balance' }));
-    expect(await screen.findByText('$2.00')).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/wallet?refresh=1', {
+    expect(screen.queryByRole('button', { name: 'Refresh AMR wallet balance' })).toBeNull();
+    expect(walletCalls).toBe(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/wallet', {
       cache: 'no-store',
     });
   });

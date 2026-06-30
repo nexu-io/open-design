@@ -8,6 +8,7 @@ import { useT } from '../i18n';
 import { AgentIcon } from './AgentIcon';
 import { PlanBadge } from './PlanBadge';
 import { RemixIcon } from './RemixIcon';
+import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
 import { SearchableModelSelect } from './modelOptions';
 import type { AgentInfo, AppConfig, ExecMode, ProviderModelOption } from '../types';
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
@@ -24,7 +25,6 @@ import {
 } from '../providers/daemon';
 import { isMacPlatform } from '../utils/platform';
 import {
-  amrConsoleUrlForProfile,
   amrPlansUrlForProfile,
 } from '../runtime/amr-guidance';
 
@@ -171,11 +171,9 @@ export function AvatarMenu({
     [agents, config.agentId],
   );
 
-  // Pin Open Design (amr) to the top of the code-agent list; keep every other
-  // agent in its original daemon-provided order (Array.sort is stable).
-  const installedAgents = agents
-    .filter((a) => a.available)
-    .sort((a, b) => Number(b.id === 'amr') - Number(a.id === 'amr'));
+  const installedAgents = orderAgentsWithOpenDesignFirst(
+    agents.filter((a) => a.available),
+  );
   const amrAvailable = installedAgents.some((a) => a.id === 'amr');
   const amrProfile = config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE;
 
@@ -226,22 +224,9 @@ export function AvatarMenu({
         : null)
     : null;
   const amrResolvedProfile = amrAccount?.profile ?? amrProfile;
-  const amrConsoleUrl = amrConsoleUrlForProfile(amrResolvedProfile);
   const amrCanUpgrade =
     !!amrAccount?.loggedIn && canUpgradeVelaPlan(amrAccount.account?.plan);
   const amrPlansUrl = amrPlansUrlForProfile(amrResolvedProfile);
-  const handleAmrConsoleClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
-    const attribution = recordAmrEntry(analytics.track, 'avatar_amr_console', new Date(), {
-      metricsConsent: config.telemetry?.metrics === true,
-    });
-    const deviceId = amrHandoffDeviceId({
-      metricsConsent: config.telemetry?.metrics === true,
-      resolvedDeviceId: getResolvedDeviceId(),
-      installationId: config.installationId,
-    });
-    event.currentTarget.href = attributedAmrUrl(amrConsoleUrl, attribution, deviceId);
-    setOpen(false);
-  };
   const handleAmrUpgradeClick = (event: ReactMouseEvent<HTMLAnchorElement>) => {
     const attribution = recordAmrEntry(analytics.track, 'avatar_amr_upgrade', new Date(), {
       metricsConsent: config.telemetry?.metrics === true,
@@ -477,19 +462,6 @@ export function AvatarMenu({
                           ) : null}
                         </span>
                       </button>
-                      {amrAccount?.loggedIn ? (
-                        <a
-                          className="avatar-amr-row__console"
-                          href={amrConsoleUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label={t('avatar.amrConsole')}
-                          title={t('avatar.amrConsoleMeta')}
-                          onClick={handleAmrConsoleClick}
-                        >
-                          <RemixIcon name="wallet-3-line" size={14} />
-                        </a>
-                      ) : null}
                       {amrCanUpgrade ? (
                         <a
                           className="avatar-amr-row__upgrade"
