@@ -7,6 +7,7 @@ import {
   deriveComposioCredentialState,
   configForManualOrbitRun,
   isOrbitRunDisabled,
+  isProviderModelDiscoveryUnsupported,
   isValidApiBaseUrl,
   mergeProviderModelOptions,
   providerModelsCacheKey,
@@ -254,6 +255,27 @@ describe('SettingsDialog provider model fetch helpers', () => {
         'ollama',
       ),
     ).toBe(false);
+    expect(
+      canFetchProviderModels(
+        {
+          apiKey: 'sk-mimo',
+          baseUrl: 'https://token-plan-cn.xiaomimimo.com/anthropic',
+        },
+        'anthropic',
+      ),
+    ).toBe(false);
+    expect(
+      isProviderModelDiscoveryUnsupported(
+        'openai',
+        'https://token-plan-cn.xiaomimimo.com/v1',
+      ),
+    ).toBe(true);
+    expect(
+      isProviderModelDiscoveryUnsupported(
+        'anthropic',
+        'https://token-plan-cn.xiaomimimo.com/anthropic',
+      ),
+    ).toBe(true);
   });
 
   it('merges fetched provider models before static suggestions without duplicates', () => {
