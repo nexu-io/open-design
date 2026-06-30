@@ -1,0 +1,48 @@
+{
+  "template_type": "architecture",
+  "style": 6,
+  "width": 1120,
+  "height": 700,
+  "style_overrides": {
+    "title_align": "center"
+  },
+  "title": "System Architecture",
+  "subtitle": "Claude official style with warm structure, restrained hierarchy, and deployment clarity",
+  "containers": [
+    { "x": 44, "y": 118, "width": 1032, "height": 110, "label": "", "side_label": "Interface Layer", "side_label_x": 28, "side_label_anchor": "start", "subtitle": "", "stroke": "#ded8cf", "fill": "none" },
+    { "x": 44, "y": 262, "width": 1032, "height": 154, "label": "", "side_label": "Core Layer", "side_label_x": 28, "side_label_anchor": "start", "subtitle": "", "stroke": "#ded8cf", "fill": "none" },
+    { "x": 44, "y": 450, "width": 1032, "height": 178, "label": "", "side_label": "Foundation Layer", "side_label_x": 28, "side_label_anchor": "start", "subtitle": "", "stroke": "#ded8cf", "fill": "none" }
+  ],
+  "nodes": [
+    { "id": "entry", "kind": "rect", "x": 82, "y": 146, "width": 170, "height": 54, "label": "Client Surface", "type_label": "ENTRY", "fill": "#e9f1fb", "stroke": "#8c6f5a", "flat": true },
+    { "id": "gateway", "kind": "double_rect", "x": 340, "y": 142, "width": 196, "height": 62, "label": "Gateway", "type_label": "ROUTER", "fill": "#f7ecda", "stroke": "#d97757" },
+    { "id": "planner", "kind": "rect", "x": 144, "y": 306, "width": 188, "height": 60, "label": "Task Planner", "type_label": "ORCHESTRATION", "fill": "#f7ecda", "stroke": "#d0b893", "flat": true },
+    { "id": "runtime", "kind": "double_rect", "x": 430, "y": 298, "width": 244, "height": 76, "label": "Model Runtime", "type_label": "INFERENCE", "fill": "#c8e4db", "stroke": "#8c6f5a" },
+    { "id": "guard", "kind": "rect", "x": 782, "y": 306, "width": 200, "height": 60, "label": "Policy Guardrails", "type_label": "SAFETY", "fill": "#efe8de", "stroke": "#d0c3b3", "flat": true },
+    { "id": "memory", "kind": "cylinder", "x": 96, "y": 494, "width": 154, "height": 92, "label": "Memory Store", "sublabel": "context + recall", "fill": "#e5e8df", "stroke": "#7b8b5c" },
+    { "id": "tools", "kind": "rect", "x": 382, "y": 510, "width": 184, "height": 60, "label": "Tool Runtime", "type_label": "ACTION", "fill": "#f7ecda", "stroke": "#d0b893", "flat": true },
+    { "id": "obs", "kind": "rect", "x": 688, "y": 510, "width": 184, "height": 60, "label": "Observability", "type_label": "OPS", "fill": "#efe8de", "stroke": "#d0c3b3", "flat": true },
+    { "id": "registry", "kind": "rect", "x": 906, "y": 510, "width": 138, "height": 60, "label": "Registry", "type_label": "ROLL OUT", "fill": "#efe8de", "stroke": "#d0c3b3", "flat": true }
+  ],
+  "arrows": [
+    { "source": "entry", "target": "gateway", "source_port": "right", "target_port": "left", "flow": "read" },
+    { "source": "gateway", "target": "planner", "source_port": "bottom", "target_port": "top", "flow": "control", "label": "decompose", "route_points": [[370,224], [370,336], [332,336]] },
+    { "source": "gateway", "target": "runtime", "source_port": "bottom", "target_port": "top", "flow": "read", "route_points": [[438,224], [552,224], [552,298]] },
+    { "source": "runtime", "target": "guard", "source_port": "right", "target_port": "left", "flow": "data" },
+    { "source": "runtime", "target": "memory", "source_port": "bottom", "target_port": "top", "flow": "write", "dashed": true, "route_points": [[606,432], [218,432], [218,494]] },
+    { "source": "runtime", "target": "tools", "source_port": "bottom", "target_port": "top", "flow": "read" },
+    { "source": "runtime", "target": "obs", "source_port": "bottom", "target_port": "top", "flow": "feedback", "dashed": true, "route_points": [[730,432], [780,432], [780,510]] },
+    { "source": "obs", "target": "registry", "source_port": "right", "target_port": "left", "flow": "control" }
+  ],
+  "legend": [
+    { "flow": "read", "label": "Primary request path" },
+    { "flow": "control", "label": "Planning / rollout control" },
+    { "flow": "write", "label": "Memory writeback" },
+    { "flow": "feedback", "label": "Operational telemetry" }
+  ],
+  "legend_position": "bottom-right",
+  "legend_box": true,
+  "legend_box_fill": "#fffaf3",
+  "legend_y": 596,
+  "footer": ""
+}

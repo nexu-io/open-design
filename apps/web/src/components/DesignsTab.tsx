@@ -551,6 +551,24 @@ export function DesignsTab({
 							}}
 						/>
 					</div>
+					{onNewProject ? (
+						<button
+							type="button"
+							className="designs-refresh-button designs-new-project-button"
+							data-testid="designs-new-project"
+							onClick={() => {
+								trackProjectsListControlsClick(analytics.track, {
+									page_name: "projects",
+									area: "list_controls",
+									element: "create_project",
+								});
+								onNewProject();
+							}}
+						>
+							<Icon name="plus" size={13} />
+							<span>{t("entry.navNewProject")}</span>
+						</button>
+					) : null}
 					{onRefresh ? (
 						<button
 							type="button"
@@ -671,6 +689,7 @@ export function DesignsTab({
 								<button
 									type="button"
 									className="primary designs-empty-cta"
+									data-testid="designs-empty-new-project"
 									onClick={() => {
 										trackProjectsListControlsClick(analytics.track, {
 											page_name: "projects",

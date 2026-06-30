@@ -1,0 +1,151 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-document",
+  "title": "Document / PDF (default scenario)",
+  "version": "0.1.0",
+  "description": "Default scenario plugin for docs, reports, resumes, one-pagers, PDFs, and structured written artifacts.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-document",
+  "tags": [
+    "scenario",
+    "first-party",
+    "document",
+    "docs",
+    "pdf",
+    "report",
+    "resume"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "document",
+    "mode": "document",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./assets/template.html"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./assets/template.html",
+        "./references/structures.md",
+        "./references/checklist.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create a polished {{documentType}} for {{audience}} about {{topic}}. Format target: {{format}}. Tone: {{tone}}. Use {{designSystem}} for typography and spacing. Build from `assets/template.html` and `references/structures.md`, with print/PDF-friendly layout and export-safe hierarchy.",
+        "zh-CN": "为 {{audience}} 创建一份精致的 {{documentType}}，主题是 {{topic}}。格式目标：{{format}}。语气：{{tone}}。使用 {{designSystem}} 作为字体和间距方向。基于 `assets/template.html` 和 `references/structures.md` 生成，版式要适合打印/PDF 导出，层级稳定。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./assets/template.html",
+          "title": "Document seed"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "documentType",
+        "label": "Document type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "report",
+          "resume",
+          "one-pager",
+          "proposal",
+          "documentation page",
+          "PDF handout"
+        ],
+        "default": "report"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "quarterly product review",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "executives, hiring managers, customers",
+        "default": "readers"
+      },
+      {
+        "name": "format",
+        "label": "Format",
+        "type": "select",
+        "options": [
+          "single-page PDF",
+          "multi-section web doc",
+          "print-friendly report",
+          "resume page"
+        ],
+        "default": "single-page PDF"
+      },
+      {
+        "name": "tone",
+        "label": "Tone",
+        "type": "select",
+        "options": [
+          "concise and professional",
+          "editorial",
+          "executive",
+          "technical",
+          "warm and personal"
+        ],
+        "default": "concise and professional"
+      },
+      {
+        "name": "designSystem",
+        "label": "Design system",
+        "type": "string",
+        "placeholder": "active design system or document editorial",
+        "default": "document editorial system"
+      }
+    ]
+  }
+}

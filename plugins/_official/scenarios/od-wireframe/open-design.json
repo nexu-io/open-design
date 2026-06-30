@@ -1,0 +1,135 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-wireframe",
+  "title": "Wireframe (default scenario)",
+  "version": "0.1.0",
+  "description": "Default scenario plugin for lo-fi wireframes, greybox screens, annotated flows, and structure-first product concepts.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-wireframe",
+  "tags": [
+    "scenario",
+    "first-party",
+    "wireframe",
+    "greybox",
+    "product",
+    "prototype"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "wireframe",
+    "mode": "wireframe",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./assets/template.html"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./assets/template.html",
+        "./references/layouts.md",
+        "./references/checklist.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create a lo-fi wireframe for {{audience}} covering {{screenFlow}}. Platform: {{platform}}. Fidelity: {{fidelity}}. Use {{designSystem}} only for spacing/type rhythm, not final visual styling. Build an HTML wireframe from `assets/template.html` and the patterns in `references/layouts.md`; keep it greybox, annotated, and structure-first.",
+        "zh-CN": "为 {{audience}} 创建一套低保真线框图，覆盖 {{screenFlow}}。平台：{{platform}}。保真度：{{fidelity}}。{{designSystem}} 只用于间距和字体节奏，不做最终视觉风格。基于 `assets/template.html` 和 `references/layouts.md` 的模式生成 HTML 线框图；保持灰盒、带注释、结构优先。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./assets/template.html",
+          "title": "Wireframe seed"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "screenFlow",
+        "label": "Screen flow",
+        "type": "string",
+        "required": true,
+        "placeholder": "onboarding, dashboard, settings, checkout",
+        "default": "the user's requested product flow"
+      },
+      {
+        "name": "platform",
+        "label": "Platform",
+        "type": "select",
+        "required": true,
+        "options": [
+          "desktop web",
+          "mobile web",
+          "responsive web",
+          "tablet"
+        ],
+        "default": "responsive web"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "product team and stakeholders",
+        "default": "product team and stakeholders"
+      },
+      {
+        "name": "fidelity",
+        "label": "Fidelity",
+        "type": "select",
+        "required": true,
+        "options": [
+          "low-fidelity",
+          "annotated greybox",
+          "clickable wireframe"
+        ],
+        "default": "annotated greybox"
+      },
+      {
+        "name": "designSystem",
+        "label": "Design system",
+        "type": "string",
+        "placeholder": "active design system or neutral wireframe",
+        "default": "neutral wireframe system"
+      }
+    ]
+  }
+}

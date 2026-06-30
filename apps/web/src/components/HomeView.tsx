@@ -286,7 +286,7 @@ export function HomeView({
     text: string;
     chipId: string | null;
   } | null>(null);
-  const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
+  const sessionMode: ChatSessionMode = 'design';
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
@@ -576,20 +576,14 @@ export function HomeView({
     if (seed && seed.files.length > 0) stageFiles(seed.files);
   }, [isActive]);
 
-  const activeContextItemCount = useMemo(
-    () =>
-      active
-        ? active.result?.contextItems?.length ??
-          estimatePluginContextItemCount(active.record)
-        : 0,
-    [active],
-  );
   // Inline-backed contexts are already represented in the composer as `@mention`
   // pills, so they must NOT also drive the active context row — otherwise
   // selecting only an inline-mentioned connector mounts an empty row (count
-  // label, no visible children) above the editor. Context-only `Use` selections
+  // label, no visible children) above the editor. A type-chip's default plugin
+  // can also carry hidden skill/craft context; that context is not rendered as a
+  // chip, so it must not mount the row either. Context-only `Use` selections
   // have no inline representation, so they are the only ones the row should
-  // surface (and count).
+  // surface (and count), together with staged files.
   const contextItemCount = useMemo(() => {
     const contextOnlyPlugins = selectedPluginContexts.filter(
       (item) => !item.inlineBacked,
@@ -601,14 +595,12 @@ export function HomeView({
       (item) => !item.inlineBacked,
     ).length;
     return (
-      activeContextItemCount +
       contextOnlyPlugins +
       contextOnlyMcp +
       contextOnlyConnectors +
       stagedFiles.length
     );
   }, [
-    activeContextItemCount,
     selectedConnectorContexts,
     selectedMcpContexts,
     selectedPluginContexts,
@@ -1142,14 +1134,24 @@ export function HomeView({
   function handlePromptChange(nextPrompt: string) {
     setPrompt(nextPrompt);
     setPromptEditedByUser(true);
-    if (!active?.queryTemplate) return;
+    if (!active?.queryTemplate) {
+      if (active) {
+        const derivedActive = deriveSuppressedPromptInputsFromPrompt(active, nextPrompt);
+        if (derivedActive !== active) setActive(derivedActive);
+      }
+      return;
+    }
     const extracted = extractPluginInputsFromPrompt(
       active.queryTemplate,
       nextPrompt,
       active.inputFields,
       { allowPrefix: active.queryTemplateAllowsPrefix === true },
     );
-    if (!extracted) return;
+    if (!extracted) {
+      const derivedActive = deriveSuppressedPromptInputsFromPrompt(active, nextPrompt);
+      if (derivedActive !== active) setActive(derivedActive);
+      return;
+    }
     const nextInputs = { ...active.inputs, ...extracted };
     const normalizedInputs = active.mediaSurface
       ? normalizeHomeMediaInputs(active.mediaSurface, nextInputs, promptTemplates, elevenLabsVoices, composerImageModels)
@@ -1674,7 +1676,10 @@ export function HomeView({
       area: 'chat_composer',
       element: 'send_button',
     });
-    let submittedActive = active;
+    let submittedActive = active
+      ? deriveSuppressedPromptInputsFromPrompt(active, trimmed)
+      : active;
+    if (submittedActive !== active) setActive(submittedActive);
     if (submittedActive && !submittedActive.inputsValid) {
       const missing = missingRequiredInputs(
         submittedActive.inputFields,
@@ -1714,7 +1719,7 @@ export function HomeView({
       // fields (`subject`/`style`/`aspect`/`mediaKind` stay), so the
       // od-media-generation apply still validates.
       const submittedPluginInputs = submittedActive
-        ? stripArtifactFooterInputs(submittedApplyInputs)
+        ? stripArtifactFooterInputs(submittedApplyInputs, submittedActive)
         : defaultInputs;
       const activeInputsChangedForSubmit = submittedActive
         ? !inputsEqual(submittedActive.result?.appliedPlugin?.inputs ?? submittedActive.inputs, submittedPluginInputs)
@@ -1773,9 +1778,9 @@ export function HomeView({
             submittedActive?.projectMetadata ?? fallbackProjectMetadata ?? null,
           );
       // Scenario plugins (chips / preset cards) and explicit skill picks are
-      // mutually exclusive routing sources. In Design mode, free-form prompts
-      // route through the default design router; in Ask mode they stay plain
-      // chat conversations with no hidden router plugin.
+      // mutually exclusive routing sources. Home now keeps the composer in
+      // Design mode, so free-form prompts route through the default design
+      // router instead of exposing an Ask/Design toggle in the input footer.
       const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
       const routedPluginId =
         sessionMode === 'design'
@@ -1920,8 +1925,6 @@ export function HomeView({
         }}
         onExamplePromptStatusChange={handleExamplePromptStatusChange}
         onStartBlankProject={startBlankProject}
-        sessionMode={sessionMode}
-        onSessionModeChange={setSessionMode}
         executionSwitcher={executionSwitcher}
       />
 
@@ -2204,13 +2207,25 @@ const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
   'voice',
 ]);
 
+const LEGACY_ARTIFACT_FIELD_STRIP_PLUGIN_IDS = new Set([
+  'example-web-prototype',
+  'example-simple-deck',
+]);
+
 // The prototype/deck footer no longer exposes these settings, so any plugin
 // default for them must NOT be seeded into the Home composer's inputs — that
 // would forward a prefilled value (e.g. `fidelity: high-fidelity`) to the run
 // instead of leaving it "unknown" for the first-turn discovery flow to ask.
 function stripArtifactFooterInputs(
   inputs: Record<string, unknown>,
+  active: ActivePlugin,
 ): Record<string, unknown> {
+  if (
+    !active.mediaSurface &&
+    !LEGACY_ARTIFACT_FIELD_STRIP_PLUGIN_IDS.has(active.record.id)
+  ) {
+    return inputs;
+  }
   if (!Object.keys(inputs).some((key) => ARTIFACT_FOOTER_FIELD_NAMES.has(key))) {
     return inputs;
   }
@@ -2330,17 +2345,109 @@ function withHomeDesignSystemDefault(
   };
 }
 
-function estimatePluginContextItemCount(
-  record: InstalledPluginRecord,
-): number {
-  const context = record.manifest?.od?.context;
-  if (!context) return 0;
-  const assetCount = context.assets?.length ?? 0;
-  const mcpCount = context.mcp?.length ?? 0;
-  const claudePluginCount = context.claudePlugins?.length ?? 0;
-  const atomCount = context.atoms?.length ?? 0;
-  const craftCount = context.craft?.length ?? 0;
-  return assetCount + mcpCount + claudePluginCount + atomCount + craftCount;
+function deriveSuppressedPromptInputsFromPrompt(
+  active: ActivePlugin,
+  prompt: string,
+): ActivePlugin {
+  if (!active.suppressPromptSync || active.mediaSurface || !active.chipId) return active;
+  const trimmed = prompt.trim();
+  if (!trimmed) return active;
+  const defaults = promptDerivedInputsForChip(active.chipId, trimmed);
+  if (!defaults) return active;
+
+  let changed = false;
+  const nextInputs: Record<string, unknown> = { ...active.inputs };
+  for (const field of active.inputFields) {
+    const nextValue = defaults[field.name];
+    if (nextValue === undefined) continue;
+    if (PROMPT_DERIVED_INPUT_NAMES.has(field.name)) {
+      if (nextInputs[field.name] !== nextValue) {
+        nextInputs[field.name] = nextValue;
+        changed = true;
+      }
+      continue;
+    }
+    if (!hasPluginInputValue(nextInputs[field.name])) {
+      nextInputs[field.name] = nextValue;
+      changed = true;
+    }
+  }
+  if (!changed) return active;
+
+  return {
+    ...active,
+    inputs: nextInputs,
+    inputsValid: pluginInputsAreValid(active.inputFields, nextInputs),
+    result: inputsEqual(active.result?.appliedPlugin?.inputs, nextInputs) ? active.result : null,
+    projectMetadata: homeCreateProjectMetadata(active.projectKind, nextInputs, active.projectMetadata),
+  };
+}
+
+const PROMPT_DERIVED_INPUT_NAMES = new Set([
+  'content',
+  'prompt',
+  'screenFlow',
+  'systemContext',
+  'topic',
+]);
+
+function promptDerivedInputsForChip(
+  chipId: string,
+  prompt: string,
+): Record<string, string> | null {
+  switch (chipId) {
+    case 'wireframe':
+      return {
+        screenFlow: prompt,
+        platform: 'responsive web',
+        audience: 'product team and stakeholders',
+        fidelity: 'annotated greybox',
+        designSystem: 'the active project design system',
+      };
+    case 'mobile':
+      return {
+        screenFlow: prompt,
+        platformTargets: 'iOS and Android',
+        audience: 'mobile product users',
+        deviceFrame: 'iPhone-style frame',
+        designSystem: 'the active project design system',
+      };
+    case 'document':
+      return {
+        documentType: 'report',
+        topic: prompt,
+        audience: 'readers',
+        format: 'single-page PDF',
+        tone: 'concise and professional',
+        designSystem: 'document editorial system',
+        prompt,
+      };
+    case 'social-card':
+      return {
+        platform: 'multi-platform',
+        layout: 'single post card',
+        content: prompt,
+        audience: 'social feed viewers',
+        palette: 'restrained platform-appropriate palette',
+        designSystem: 'the active project design system',
+        prompt,
+      };
+    case 'diagram':
+      return {
+        diagramType: 'architecture diagram',
+        systemContext: prompt,
+        audience: 'engineering and product readers',
+        detailLevel: 'product doc',
+        visualStyle: 'clean product-doc',
+        prompt,
+      };
+    default:
+      return null;
+  }
+}
+
+function hasPluginInputValue(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== '';
 }
 
 function hydratePluginInputs(

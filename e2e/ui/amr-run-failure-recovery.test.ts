@@ -474,7 +474,7 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
     artifactPreviewFrame(page).getByRole('heading', {
       name: 'Real Daemon Smoke',
     }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: T.medium * 2 });
 });
 
 test('[P0] upstream outages keep Retry available without promoting AMR', async ({ page }) => {

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400">
+  <defs>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .title { font-size: 24px; font-weight: 700; fill: #1e293b; }
+    .period-label { font-size: 12px; font-weight: 500; fill: #475569; }
+    .task-label { font-size: 13px; font-weight: 500; fill: #1e293b; }
+    .milestone-label { font-size: 12px; font-weight: 600; fill: #1e293b; }
+  </style>
+  <rect width="1200" height="400" fill="#ffffff"/>
+  <text x="600" y="50" text-anchor="middle" class="title">{{TITLE}}</text>
+  <!-- TIME_AXIS -->
+  <!-- TASKS -->
+  <!-- MILESTONES -->
+</svg>

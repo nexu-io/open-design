@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 700">
+  <defs>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .title { font-size: 24px; font-weight: 700; fill: #1e293b; }
+    .entity-name { font-size: 15px; font-weight: 700; fill: #1e293b; }
+    .attribute { font-size: 12px; font-weight: 400; fill: #475569; }
+    .primary-key { font-size: 12px; font-weight: 600; fill: #1e293b; text-decoration: underline; }
+    .relationship { font-size: 12px; font-weight: 500; fill: #64748b; }
+    .cardinality { font-size: 11px; font-weight: 400; fill: #64748b; }
+  </style>
+  <rect width="960" height="700" fill="#ffffff"/>
+  <text x="480" y="60" text-anchor="middle" class="title">{{TITLE}}</text>
+  <!-- ENTITIES -->
+  <!-- RELATIONSHIPS -->
+  <!-- CARDINALITY -->
+</svg>

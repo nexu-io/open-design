@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
 
 vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
   PlaceholderCarousel: () => null,
@@ -18,6 +19,58 @@ import { homeHeroPromptText, setHomeHeroPrompt } from '../helpers/home-hero-lexi
 const MEDIA_PLUGIN = pluginRecord('od-media-generation', 'Media generation');
 const PROTOTYPE_PLUGIN = pluginRecord('example-web-prototype', 'Web prototype');
 const HYPERFRAMES_PLUGIN = pluginRecord('example-hyperframes', 'HyperFrames');
+const WIREFRAME_PLUGIN = pluginRecord('od-wireframe', 'Wireframe', {
+  useCaseQuery: 'Create a wireframe for {{screenFlow}}.',
+  inputs: [
+    { name: 'screenFlow', type: 'string', required: true, default: 'the user requested flow' },
+    { name: 'platform', type: 'select', required: true, default: 'responsive web' },
+    { name: 'audience', type: 'string', required: true, default: 'product team and stakeholders' },
+    { name: 'fidelity', type: 'select', required: true, default: 'annotated greybox' },
+    { name: 'designSystem', type: 'string', default: 'the active project design system' },
+  ],
+});
+const MOBILE_APP_PLUGIN = pluginRecord('od-mobile-app', 'Mobile app', {
+  useCaseQuery: 'Create mobile app screens for {{screenFlow}}.',
+  inputs: [
+    { name: 'screenFlow', type: 'string', required: true, default: 'the user requested flow' },
+    { name: 'platformTargets', type: 'string', required: true, default: 'iOS and Android' },
+    { name: 'audience', type: 'string', required: true, default: 'mobile product users' },
+    { name: 'deviceFrame', type: 'string', default: 'iPhone-style frame' },
+    { name: 'designSystem', type: 'string', default: 'the active project design system' },
+  ],
+});
+const DOCUMENT_PLUGIN = pluginRecord('od-document', 'Document', {
+  useCaseQuery: 'Create a document about {{topic}}.',
+  inputs: [
+    { name: 'documentType', type: 'string', required: true, default: 'report' },
+    { name: 'topic', type: 'string', required: true, default: 'the user requested topic' },
+    { name: 'audience', type: 'string', required: true, default: 'readers' },
+    { name: 'format', type: 'string', default: 'single-page PDF' },
+    { name: 'tone', type: 'string', default: 'concise and professional' },
+    { name: 'designSystem', type: 'string', default: 'document editorial system' },
+  ],
+});
+const SOCIAL_CARD_PLUGIN = pluginRecord('od-social-card', 'Social card', {
+  useCaseQuery: 'Create a social card for {{content}}.',
+  inputs: [
+    { name: 'platform', type: 'select', required: true, default: 'multi-platform' },
+    { name: 'layout', type: 'select', required: true, default: 'single post card' },
+    { name: 'content', type: 'string', required: true, default: 'the user social brief' },
+    { name: 'audience', type: 'string', required: true, default: 'social feed viewers' },
+    { name: 'palette', type: 'string', default: 'restrained platform-appropriate palette' },
+    { name: 'designSystem', type: 'string', default: 'the active project design system' },
+  ],
+});
+const DIAGRAM_PLUGIN = pluginRecord('od-technical-diagram', 'Technical diagram', {
+  useCaseQuery: 'Create a diagram for {{systemContext}}.',
+  inputs: [
+    { name: 'diagramType', type: 'select', required: true, default: 'architecture diagram' },
+    { name: 'systemContext', type: 'string', required: true, default: 'the user system brief' },
+    { name: 'audience', type: 'string', required: true, default: 'engineering and product readers' },
+    { name: 'detailLevel', type: 'select', default: 'product doc' },
+    { name: 'visualStyle', type: 'select', default: 'clean product-doc' },
+  ],
+});
 
 const PROMPT_TEMPLATES: PromptTemplateSummary[] = [
   {
@@ -72,6 +125,7 @@ describe('HomeView media composer options', () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
         conversationMode: 'design',
+        pluginId: DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
       }));
     });
   });
@@ -393,6 +447,78 @@ describe('HomeView media composer options', () => {
     expect(snapshotInputs).toHaveProperty('subject');
   });
 
+  it.each([
+    {
+      chipId: 'wireframe',
+      pluginId: 'od-wireframe',
+      prompt: 'Sketch a checkout onboarding wireframe for a mobile-first SaaS.',
+      expectedInputs: {
+        screenFlow: 'Sketch a checkout onboarding wireframe for a mobile-first SaaS.',
+        platform: 'responsive web',
+        audience: 'product team and stakeholders',
+        fidelity: 'annotated greybox',
+      },
+      expectedMetadata: {
+        kind: 'prototype',
+        intent: 'wireframe',
+        fidelity: 'wireframe',
+      },
+    },
+    {
+      chipId: 'social-card',
+      pluginId: 'od-social-card',
+      prompt: 'Design a punchy X opinion card about one big typographic statement.',
+      expectedInputs: {
+        platform: 'multi-platform',
+        layout: 'single post card',
+        content: 'Design a punchy X opinion card about one big typographic statement.',
+        audience: 'social feed viewers',
+      },
+      expectedMetadata: {
+        kind: 'image',
+        intent: 'social-card',
+        artifactType: 'social-card',
+      },
+    },
+    {
+      chipId: 'diagram',
+      pluginId: 'od-technical-diagram',
+      prompt: 'Draw a RAG pipeline diagram with retriever, reranker, and answer synthesis.',
+      expectedInputs: {
+        diagramType: 'architecture diagram',
+        systemContext: 'Draw a RAG pipeline diagram with retriever, reranker, and answer synthesis.',
+        audience: 'engineering and product readers',
+      },
+      expectedMetadata: {
+        kind: 'image',
+        intent: 'diagram',
+        artifactType: 'diagram',
+      },
+    },
+  ])('submits $chipId through its dedicated scenario plugin', async ({
+    chipId,
+    pluginId,
+    prompt,
+    expectedInputs,
+    expectedMetadata,
+  }) => {
+    stubFetch();
+    const onSubmit = vi.fn();
+    renderHome({ onSubmit });
+
+    await clickHomeRailChip(chipId);
+    await waitFor(() => expect(document.querySelector('.home-hero__active')).toBeNull());
+    await setHomePrompt(prompt);
+    await submitHome();
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    const [payload] = onSubmit.mock.calls[0] as [Record<string, unknown>];
+    expect(payload.pluginId).toBe(pluginId);
+    expect(payload.appliedPluginSnapshotId).toBe(`snap-${pluginId}`);
+    expect(payload.pluginInputs).toMatchObject(expectedInputs);
+    expect(payload.projectMetadata).toMatchObject(expectedMetadata);
+  });
+
   it('submits HyperFrames as a video project with the hyperframes-html model', async () => {
     stubFetch();
     const onSubmit = vi.fn();
@@ -461,7 +587,18 @@ function stubFetch(options: { elevenLabsVoices?: Array<{ voiceId: string; name: 
   });
   const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
     if (typeof url === 'string' && url === '/api/plugins') {
-      return json({ plugins: [MEDIA_PLUGIN, PROTOTYPE_PLUGIN, HYPERFRAMES_PLUGIN] });
+      return json({
+        plugins: [
+          MEDIA_PLUGIN,
+          PROTOTYPE_PLUGIN,
+          HYPERFRAMES_PLUGIN,
+          WIREFRAME_PLUGIN,
+          MOBILE_APP_PLUGIN,
+          DOCUMENT_PLUGIN,
+          SOCIAL_CARD_PLUGIN,
+          DIAGRAM_PLUGIN,
+        ],
+      });
     }
     if (typeof url === 'string' && url === '/api/mcp/servers') {
       return json({ servers: [], templates: [] });
@@ -475,7 +612,8 @@ function stubFetch(options: { elevenLabsVoices?: Array<{ voiceId: string; name: 
           return json({ error: 'missing_inputs', fields: ['subject'] }, 422);
         }
       }
-      return json(applyResult(pluginId));
+      const body = JSON.parse(String(init?.body ?? '{}')) as { inputs?: Record<string, unknown> };
+      return json(applyResult(pluginId, body.inputs ?? {}));
     }
     if (typeof url === 'string' && url === '/api/media/providers/elevenlabs/voices?limit=100') {
       if (options.elevenLabsVoiceError) {
@@ -575,7 +713,14 @@ async function chooseOption(name: string, value: string, label = value) {
   fireEvent.click(option);
 }
 
-function pluginRecord(id: string, title: string) {
+function pluginRecord(
+  id: string,
+  title: string,
+  options: {
+    useCaseQuery?: string;
+    inputs?: Array<Record<string, unknown>>;
+  } = {},
+) {
   return {
     id,
     title,
@@ -595,8 +740,8 @@ function pluginRecord(id: string, title: string) {
       od: {
         kind: 'scenario',
         taskKind: 'new-generation',
-        useCase: { query: 'Create media.' },
-        inputs: [],
+        useCase: { query: options.useCaseQuery ?? 'Create media.' },
+        inputs: options.inputs ?? [],
       },
     },
   };
@@ -621,7 +766,7 @@ function designSystem(
   };
 }
 
-function applyResult(pluginId: string) {
+function applyResult(pluginId: string, inputs: Record<string, unknown> = {}) {
   return {
     query: 'Create media.',
     contextItems: [],
@@ -637,7 +782,7 @@ function applyResult(pluginId: string) {
       pluginId,
       pluginVersion: '0.1.0',
       manifestSourceDigest: 'a'.repeat(64),
-      inputs: {},
+      inputs,
       resolvedContext: { items: [] },
       capabilitiesGranted: ['prompt:inject'],
       capabilitiesRequired: ['prompt:inject'],

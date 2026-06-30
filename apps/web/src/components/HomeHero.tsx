@@ -8,7 +8,9 @@
 // without owning their data lifecycles.
 
 import {
+  Suspense,
   forwardRef,
+  lazy,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -23,7 +25,6 @@ import type {
   RefObject,
 } from 'react';
 import type {
-  ChatSessionMode,
   ConnectorDetail,
   DesignSystemSummary,
   InputFieldSpec,
@@ -94,6 +95,15 @@ import {
   PLACEHOLDER_SCENARIO_DEFS,
   type PlaceholderScenario,
 } from './home-hero/placeholderScenarios';
+import {
+  type LocalTemplatePreset,
+} from './home-hero/local-template-presets';
+
+const TemplatePreview = lazy(() =>
+  import('./home-hero/TemplatePreview').then((module) => ({
+    default: module.TemplatePreview,
+  })),
+);
 
 export interface HomeHeroSubmitHandler {
   (): void;
@@ -131,8 +141,6 @@ interface Props {
   // showing: the host seeds the prompt with `scenario.text`, binds the
   // scenario's template, and creates the project -- one-click "just start".
   onSubmitScenario?: (scenario: PlaceholderScenario) => void;
-  sessionMode?: ChatSessionMode;
-  onSessionModeChange?: (mode: ChatSessionMode) => void;
   activePluginTitle: string | null;
   // True when the active plugin chip shows a user-picked plugin (Community card
   // or example-prompt preset) rather than a task-type chip's default plugin —
@@ -638,8 +646,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // that left the rail showing fewer types than Community; the empty case is
   // now handled by the full-catalog fallback in `filteredExamplePlugins`.)
   const activeSubChips = useMemo(
-    () => subChipsForChip(activeChipId, pluginOptions),
-    [activeChipId, pluginOptions],
+    () => subChipsForChip(activeChipId, pluginOptions, locale),
+    [activeChipId, locale, pluginOptions],
   );
   // When a sub-category pill is active, show the SAME set the Community section
   // shows for that sub-category — every matching plugin from the full install
@@ -657,6 +665,29 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       applyFacetSelection(pool, { category: activeChipId, subcategory: selectedSubcategory }),
     );
   }, [activeExamplePlugins, activeChipId, selectedSubcategory, pluginOptions]);
+
+  const [activeLocalTemplatePresets, setActiveLocalTemplatePresets] = useState<
+    LocalTemplatePreset[]
+  >([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (activeChipId !== 'social-card' && activeChipId !== 'diagram') {
+      setActiveLocalTemplatePresets([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+    void import('./home-hero/local-template-presets').then((module) => {
+      if (cancelled) return;
+      setActiveLocalTemplatePresets(
+        module.localTemplatePresetsForChip(activeChipId, locale, selectedSubcategory),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChipId, locale, selectedSubcategory]);
 
   // First-run guide, beat 1: pulse the Prototype chip for brand-new users.
   // The settle delay lets the hero finish its entrance before the sheen.
@@ -681,10 +712,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   }, [firstRunGuide]);
 
   const activePromptExamples = useMemo(
-    () => activeChipId && activeExamplePlugins.length === 0
-      ? homeHeroChipPromptExamples(activeChipId, locale)
+    () => activeChipId && activeExamplePlugins.length === 0 && activeLocalTemplatePresets.length === 0
+      ? homeHeroChipPromptExamples(activeChipId, locale, selectedSubcategory)
       : [],
-    [activeChipId, activeExamplePlugins.length, locale],
+    [activeChipId, activeExamplePlugins.length, activeLocalTemplatePresets.length, locale, selectedSubcategory],
   );
 
   // Beat 2: once the picked chip's example cards render, pulse the first
@@ -696,7 +727,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     // Either card surface counts: plugin preset tiles, or the static
     // prompt-example fallback a presetless chip renders instead.
     const hasExampleCards =
-      filteredExamplePlugins.length > 0 || activePromptExamples.length > 0;
+      filteredExamplePlugins.length > 0 ||
+      activeLocalTemplatePresets.length > 0 ||
+      activePromptExamples.length > 0;
     if (!activeChipId || !hasExampleCards) return;
     const arm = window.setTimeout(() => {
       setGuidePulseFirstPreset(true);
@@ -707,7 +740,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       window.clearTimeout(arm);
       window.clearTimeout(disarm);
     };
-  }, [firstRunGuide, activeChipId, filteredExamplePlugins.length, activePromptExamples.length]);
+  }, [
+    firstRunGuide,
+    activeChipId,
+    filteredExamplePlugins.length,
+    activeLocalTemplatePresets.length,
+    activePromptExamples.length,
+  ]);
   const authoringLayoutActive =
     activeChipId === 'create-plugin' || pendingChipId === 'create-plugin';
   const promptMaxHeight = authoringLayoutActive
@@ -1005,6 +1044,34 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     });
     onPromptChange(example);
     editorRef.current?.setText(example);
+    setSelectedIndex(0);
+    requestAnimationFrame(() => editorRef.current?.focus());
+    triggerSendAttention();
+  }
+
+  function useLocalTemplatePreset(preset: LocalTemplatePreset) {
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: 'example_prompt',
+      chip_id: preset.chipId,
+      subcategory: preset.subcategorySlug,
+    });
+    setSelectedPromptExample({
+      label: preset.title,
+      promptText: preset.promptText,
+    });
+    onExamplePromptStatusChange?.({
+      title: preset.title,
+      artifactType: preset.chipId,
+      brief: {
+        ...briefForChipId(preset.chipId),
+        template: preset.title,
+        subtype: preset.subcategorySlug,
+      },
+    });
+    onPromptChange(preset.promptText);
+    editorRef.current?.setText(preset.promptText);
     setSelectedIndex(0);
     requestAnimationFrame(() => editorRef.current?.focus());
     triggerSendAttention();
@@ -1597,6 +1664,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               pickDisabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
               labelFor={(id) => homeHeroChipLabel(id, t)}
               descriptionFor={(id) => homeHeroChipDescription(id, t)}
+              searchTextFor={(id) => homeHeroChipSearchText(id, locale, pluginOptions)}
               onPick={handlePickTaskChip}
               onClear={() => {
                 // Drop any lingering hover-preview too: when the rail card was
@@ -1781,6 +1849,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           onDuplicate={onDuplicateExamplePlugin}
           pulseFirstPreset={guidePulseFirstPreset}
         />
+      ) : activeLocalTemplatePresets.length > 0 ? (
+        <LocalTemplatePresets
+          presets={activeLocalTemplatePresets}
+          onPick={useLocalTemplatePreset}
+          pulseFirstPreset={guidePulseFirstPreset}
+        />
       ) : activePromptExamples.length > 0 ? (
         <div
           className="home-hero__prompt-examples"
@@ -1842,6 +1916,73 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     </section>
   );
 });
+
+function LocalTemplatePresets({
+  onPick,
+  presets,
+  pulseFirstPreset = false,
+}: {
+  onPick: (preset: LocalTemplatePreset) => void;
+  presets: LocalTemplatePreset[];
+  pulseFirstPreset?: boolean;
+}) {
+  const { t } = useI18n();
+  const edgeScroll = useEdgeAutoScroll(presets.length);
+  return (
+    <div
+      className="home-hero__prompt-examples home-hero__plugin-presets-wrap"
+      data-testid="home-hero-local-template-presets"
+    >
+      <div className="home-hero__prompt-examples-title">
+        {t('homeHero.templateExamples')}
+      </div>
+      <div className="home-hero__rail-scroller">
+        <div
+          ref={edgeScroll.scrollRef}
+          className="home-hero__plugin-presets home-hero__local-presets"
+          role="list"
+        >
+          {presets.map((preset, index) => (
+            <span key={preset.id} className="home-hero__plugin-preset-cell" role="listitem">
+              <button
+                type="button"
+                className={`home-hero__plugin-preset home-hero__local-preset${pulseFirstPreset && index === 0 ? ' home-hero__attention-sheen' : ''}`}
+                data-testid="home-hero-local-template-preset"
+                data-template-preset-id={preset.id}
+                data-template-variant={`${preset.preview.kind}-${preset.preview.layout}`}
+                data-template-palette={preset.preview.palette}
+                onClick={() => onPick(preset)}
+              >
+                <span className="home-hero__plugin-preset-preview home-hero__local-preset-preview" aria-hidden>
+                  <Suspense fallback={<TemplatePreviewFallback preset={preset} />}>
+                    <TemplatePreview preset={preset} />
+                  </Suspense>
+                </span>
+                <span className="home-hero__plugin-preset-title">
+                  <span>{preset.title}</span>
+                  <span>{preset.description}</span>
+                </span>
+              </button>
+            </span>
+          ))}
+        </div>
+        <EdgeScrollZones {...edgeScroll} />
+      </div>
+    </div>
+  );
+}
+
+function TemplatePreviewFallback({ preset }: { preset: LocalTemplatePreset }) {
+  return (
+    <span
+      className={`tpl-preview tpl-preview--${preset.preview.kind}`}
+      data-layout={preset.preview.layout}
+      data-palette={preset.preview.palette}
+    >
+      <span className="tpl-preview__fallback" />
+    </span>
+  );
+}
 
 function PluginPromptPresets({
   activePluginId,
@@ -2971,6 +3112,41 @@ function SubTypeRow({
 }) {
   const t = useT();
   const allActive = selectedSlug === null;
+  const [expanded, setExpanded] = useState(false);
+
+  const primaryChips = subChips.filter((sub) => !sub.overflow);
+  const overflowChips = subChips.filter((sub) => sub.overflow);
+  const hasOverflow = overflowChips.length > 0;
+  // Auto-reveal the overflow set whenever the active sub-type lives inside it,
+  // so the selected pill is always visible (e.g. after a programmatic pick).
+  const selectedIsOverflow = overflowChips.some((sub) => sub.slug === selectedSlug);
+  const showOverflow = expanded || selectedIsOverflow;
+  const visibleChips = showOverflow ? subChips : primaryChips;
+
+  const renderChip = (sub: HomeHeroSubChip) => {
+    const isActive = sub.slug === selectedSlug;
+    const cls = ['home-hero__subtype-chip'];
+    if (isActive) cls.push('is-active');
+    return (
+      <button
+        key={sub.slug}
+        type="button"
+        className={cls.join(' ')}
+        data-sub-chip-id={sub.slug}
+        data-testid={`home-hero-subtype-${sub.slug}`}
+        onClick={() => onPickSubChip(sub)}
+        disabled={pluginsLoading}
+        role="tab"
+        aria-selected={isActive}
+      >
+        <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
+        <span className="home-hero__subtype-chip-label">
+          {subChipLabel(sub, t)}
+        </span>
+      </button>
+    );
+  };
+
   return (
     <div
       className="home-hero__subtype-row"
@@ -2990,31 +3166,34 @@ function SubTypeRow({
       >
         <span className="home-hero__subtype-chip-label">{t('common.all')}</span>
       </button>
-      {subChips.map((sub) => {
-        const isActive = sub.slug === selectedSlug;
-        const cls = ['home-hero__subtype-chip'];
-        if (isActive) cls.push('is-active');
-        return (
-          <button
-            key={sub.slug}
-            type="button"
-            className={cls.join(' ')}
-            data-sub-chip-id={sub.slug}
-            data-testid={`home-hero-subtype-${sub.slug}`}
-            onClick={() => onPickSubChip(sub)}
-            disabled={pluginsLoading}
-            role="tab"
-            aria-selected={isActive}
-          >
-            <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
-            <span className="home-hero__subtype-chip-label">
-              {pluginSubfacetLabel(sub.slug, sub.label, t)}
-            </span>
-          </button>
-        );
-      })}
+      {visibleChips.map(renderChip)}
+      {hasOverflow ? (
+        <button
+          type="button"
+          className={`home-hero__subtype-chip home-hero__subtype-more${showOverflow ? ' is-open' : ''}`}
+          data-testid="home-hero-subtype-more"
+          onClick={() => setExpanded((open) => !open)}
+          disabled={pluginsLoading || selectedIsOverflow}
+          aria-expanded={showOverflow}
+          aria-label={showOverflow ? t('homeHero.subTypeLess') : t('homeHero.subTypeMore')}
+          title={showOverflow ? t('homeHero.subTypeLess') : t('homeHero.subTypeMore')}
+        >
+          <Icon
+            name="more-horizontal"
+            size={14}
+            className="home-hero__subtype-chip-icon"
+          />
+          <span className="home-hero__subtype-chip-label">
+            {showOverflow ? t('homeHero.subTypeLess') : t('homeHero.subTypeMore')}
+          </span>
+        </button>
+      ) : null}
     </div>
   );
+}
+
+function subChipLabel(sub: HomeHeroSubChip, t: ReturnType<typeof useT>): string {
+  return pluginSubfacetLabel(sub.slug, sub.label, t);
 }
 
 interface ShortcutsMenuProps {
@@ -3153,6 +3332,8 @@ function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): st
     case 'mobile': return t('homeHero.chip.mobileDesc');
     case 'deck': return t('homeHero.chip.deckDesc');
     case 'document': return t('homeHero.chip.documentDesc');
+    case 'social-card': return t('homeHero.chip.socialCardDesc');
+    case 'diagram': return t('homeHero.chip.diagramDesc');
     case 'image': return t('homeHero.chip.imageDesc');
     case 'video': return t('homeHero.chip.videoDesc');
     case 'audio': return t('homeHero.chip.audioDesc');
@@ -3172,6 +3353,8 @@ function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): stri
     case 'mobile': return t('homeHero.chip.mobileNext');
     case 'deck': return t('homeHero.chip.deckNext');
     case 'document': return t('homeHero.chip.documentNext');
+    case 'social-card': return t('homeHero.chip.socialCardNext');
+    case 'diagram': return t('homeHero.chip.diagramNext');
     case 'image': return t('homeHero.chip.imageNext');
     case 'video': return t('homeHero.chip.videoNext');
     case 'audio': return t('homeHero.chip.audioNext');
@@ -3193,6 +3376,39 @@ function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): stri
 // example card's selected state is keyed on the active plugin id, never shows
 // up pre-selected when a media mode is entered.
 const EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS = new Set<string>(['od-media-generation']);
+
+function homeHeroChipSearchText(
+  chipId: string,
+  locale: Locale,
+  plugins: InstalledPluginRecord[],
+): string {
+  const subChips = subChipsForChip(chipId, plugins, locale);
+  const subLabels = subChips.map((sub) => `${sub.label} ${sub.slug}`);
+  const promptTexts = homeHeroChipPromptExamples(chipId, locale).concat(
+    ...subChips.map((sub) =>
+      homeHeroChipPromptExamples(chipId, locale, sub.slug),
+    ),
+  );
+  return [
+    ...subLabels,
+    ...promptTexts,
+    localTemplatePresetSearchText(chipId, locale),
+  ].join(' ');
+}
+
+function localTemplatePresetSearchText(chipId: string, locale: Locale): string {
+  if (chipId === 'social-card') {
+    return locale === 'zh-CN' || locale === 'zh-TW'
+      ? '社交卡片 海报 小红书 微信 朋友圈 公众号 X Twitter Threads LinkedIn Instagram YouTube Reddit Product Hunt 信息图 金句 数据卡 轮播 封面'
+      : 'social card poster x twitter threads linkedin instagram youtube reddit product hunt wechat rednote carousel quote metric data card thumbnail story cover';
+  }
+  if (chipId === 'diagram') {
+    return locale === 'zh-CN' || locale === 'zh-TW'
+      ? '图表 架构图 流程图 时序图 状态机 矩阵 RAG agent loop 数据流 系统架构 技术图'
+      : 'diagram architecture flowchart sequence state machine matrix rag agent loop data flow system architecture technical graph';
+  }
+  return '';
+}
 
 export function homeHeroExamplePluginsForChip(
   chipId: string,
@@ -4293,6 +4509,212 @@ const HOME_PROMPT_EXAMPLES: Record<Locale, Record<string, string[]>> = {
   },
 };
 
+const LOCAL_SCENARIO_PROMPT_EXAMPLES: Record<
+  string,
+  Record<string, { en: string[]; zh: string[] }>
+> = {
+  'social-card': {
+    default: {
+      en: [
+        'Turn this product note into a four-card social carousel with a sharp hook, one idea per card, editorial hierarchy, and export-ready 4:5 frames',
+        'Create a launch announcement card set for X, Threads, LinkedIn, and Instagram story with platform-specific crops and consistent visual language',
+        'Make a WeChat cover pair: 21:9 hero cover plus 1:1 share card, using the same headline, visual system, and restrained editorial layout',
+        'Convert this tutorial into shareable social cards with a cover, three steps, a key takeaway, and a final CTA card',
+      ],
+      zh: [
+        '把这段产品笔记做成 4 张社媒轮播卡片：第一张强 hook，每张一个观点，信息层级清晰，输出 4:5 画板',
+        '做一套新品发布社媒卡片，覆盖 X、Threads、LinkedIn 和 Instagram story，不同裁切但视觉系统一致',
+        '生成公众号封面对：21:9 头图 + 1:1 分享卡，标题、配色和版式风格保持统一',
+        '把这份教程拆成可分享的社媒卡片：封面、三个步骤、关键结论和结尾 CTA',
+      ],
+    },
+    'x-twitter-card': {
+      en: [
+        'Create an X launch card with a punchy one-line claim, product screenshot frame, proof point, and compact CTA for a 16:9 timeline image',
+        'Turn this thread outline into four X cards: hook, insight, evidence, and takeaway, with bold type and minimal decoration',
+        'Design a founder-update X card that shows one metric, one lesson, and one next step in a crisp editorial layout',
+        'Make a quote card for X from this paragraph with a strong pull quote, source attribution, and a quiet brand footer',
+      ],
+      zh: [
+        '做一张 X 发布卡片：一句强主张、产品截图框、可信数据点和紧凑 CTA，适合 16:9 时间线图',
+        '把这条 thread 大纲拆成 4 张 X 卡片：hook、洞察、证据、结论，字体强但装饰克制',
+        '设计一张 founder update 卡片，突出一个指标、一个经验和下一步行动',
+        '从这段话里提炼一张 X 引用卡：大号金句、来源署名和低调品牌 footer',
+      ],
+    },
+    'threads-card': {
+      en: [
+        'Create a Threads carousel that feels conversational: short lines, soft pacing, screenshots where useful, and a final reply prompt',
+        'Turn this opinion into a Threads visual post with a provocative opener, two supporting cards, and a calm conclusion',
+        'Design a maker diary card set for Threads with progress, blocker, decision, and next build step',
+        'Make a community question card for Threads with a clear prompt, lightweight context, and reply-friendly visual framing',
+      ],
+      zh: [
+        '做一套 Threads 轮播，语气像对话：短句、节奏轻、必要时放截图，最后引导评论回复',
+        '把这个观点做成 Threads 视觉帖：有争议的开头、两张论证卡和一个克制结论',
+        '设计一套 maker diary 卡片：进展、卡点、决策、下一步构建计划',
+        '做一张 Threads 社群提问卡：问题明确、背景轻量、视觉上适合引发回复',
+      ],
+    },
+    'xiaohongshu-carousel': {
+      en: [
+        'Create a Xiaohongshu 3:4 carousel from this article: cover, three value cards, comparison card, and save-worthy checklist',
+        'Make a Rednote product review carousel with Swiss grid, KPI card, before-after card, and final recommendation',
+        'Turn these travel notes into Xiaohongshu cards with editorial image-led cover, route map card, tips card, and budget summary',
+        'Create a tutorial carousel for Xiaohongshu with numbered steps, screenshot frames, common mistakes, and a final summary card',
+      ],
+      zh: [
+        '把这篇文章做成小红书 3:4 图文：封面、三张价值点、对比卡和一张值得收藏的 checklist',
+        '做一套小红书产品测评图文，瑞士网格风，包含 KPI 卡、前后对比卡和最终推荐结论',
+        '把旅行笔记做成小红书卡片：图片主导封面、路线地图、避坑提示和预算汇总',
+        '做一套小红书教程拆页：编号步骤、截图包壳、常见错误和最后总结卡',
+      ],
+    },
+    'wechat-cover': {
+      en: [
+        'Create a WeChat article cover pair: 21:9 header and 1:1 share card with matching typography, image treatment, and title hierarchy',
+        'Turn this longform essay into a WeChat cover with an editorial headline, calm visual metaphor, and readable mobile crop',
+        'Design a WeChat report cover pair for a data article with one key number, subtitle, and restrained chart texture',
+        'Make a WeChat tutorial cover pair that previews the outcome, tool stack, and three-step promise without visual clutter',
+      ],
+      zh: [
+        '做一套公众号封面对：21:9 头图 + 1:1 分享卡，字体、图像处理和标题层级一致',
+        '把这篇长文做成公众号头图：编辑部式标题、克制视觉隐喻，并兼顾手机裁切可读性',
+        '为数据文章设计公众号封面对，突出一个核心数字、副标题和轻量图表纹理',
+        '做一套教程型公众号封面，预告最终效果、工具栈和三步承诺，但画面不要拥挤',
+      ],
+    },
+    'linkedin-card': {
+      en: [
+        'Design a LinkedIn thought-leadership card with a strong claim, supporting statistic, and understated professional layout',
+        'Create a company milestone card for LinkedIn with one metric, team context, product screenshot, and hiring-friendly CTA',
+        'Turn this case study into a three-card LinkedIn carousel: problem, intervention, result',
+        'Make a B2B insight card for LinkedIn with chart-like structure, concise copy, and executive-readable hierarchy',
+      ],
+      zh: [
+        '设计一张 LinkedIn 观点卡：强主张、支撑数据和专业克制的版式',
+        '做一张 LinkedIn 公司里程碑卡：一个核心指标、团队背景、产品截图和招聘/合作 CTA',
+        '把这个案例拆成三张 LinkedIn 轮播：问题、动作、结果',
+        '做一张 B2B 洞察卡，用图表化结构、短文案和适合管理层快速阅读的层级',
+      ],
+    },
+    'instagram-story': {
+      en: [
+        'Create a 9:16 Instagram story sequence with opening hook, product reveal, benefit card, and swipe-up style CTA',
+        'Make a behind-the-scenes story card set with photo-first layouts, short captions, and one consistent accent color',
+        'Design a countdown story for a product drop with day marker, detail crop, benefit tease, and launch reminder',
+        'Turn this event recap into vertical story cards: location, quote, highlight metric, and final link prompt',
+      ],
+      zh: [
+        '做一套 9:16 Instagram story：开场 hook、产品揭示、卖点卡和 swipe-up 风格 CTA',
+        '做一组幕后花絮 story 卡片：图片优先、短 caption、一个统一强调色',
+        '为新品开售设计倒计时 story：日期标记、局部特写、卖点预告和发布提醒',
+        '把活动复盘做成竖屏 story：地点、引用、亮点数据和最终链接引导',
+      ],
+    },
+  },
+  diagram: {
+    default: {
+      en: [
+        'Draw a polished technical diagram from this system description with semantic nodes, labeled arrows, swim lanes, legend, and SVG-first output',
+        'Create an architecture diagram that explains request flow, services, data stores, async queues, observability, and failure paths',
+        'Turn this product workflow into a clean flow chart with decision points, handoffs, states, and a reader-friendly visual hierarchy',
+        'Make an AI agent diagram showing user input, planner, tools, memory, model calls, evaluation loop, and final response',
+      ],
+      zh: [
+        '根据这段系统说明画一张高质量技术图：语义节点、带标签箭头、泳道、图例，并优先输出可编辑 SVG',
+        '画一张架构图，解释请求流、服务、数据存储、异步队列、可观测性和失败路径',
+        '把这个产品流程转成清晰流程图，包含决策点、交接、状态和易读的信息层级',
+        '画一张 AI agent 图：用户输入、planner、工具、记忆、模型调用、评估循环和最终响应',
+      ],
+    },
+    'architecture-diagram': {
+      en: [
+        'Draw a microservices architecture diagram with edge layer, application services, event infrastructure, data stores, and observability lane',
+        'Create a system architecture map for this app with client, API gateway, auth, workers, database, cache, object storage, and monitoring',
+        'Turn this backend design into a cloud deployment diagram with regions, ingress, queues, services, storage, secrets, and rollback path',
+        'Make a product-doc friendly architecture diagram with numbered layers, short node labels, semantic arrows, and bottom-right legend',
+      ],
+      zh: [
+        '画一张微服务架构图，包含 edge 层、应用服务、事件基础设施、数据存储和可观测性泳道',
+        '为这个应用画系统架构图：客户端、API gateway、认证、worker、数据库、缓存、对象存储和监控',
+        '把这份后端设计转成云部署图，包含 region、入口、队列、服务、存储、密钥和回滚路径',
+        '做一张适合产品文档的架构图：分层编号、节点短标签、语义箭头和右下角图例',
+      ],
+    },
+    'workflow-diagram': {
+      en: [
+        'Create a workflow diagram for this approval process with roles, states, decision branches, notifications, and timeout handling',
+        'Draw a user journey flow chart from signup to activation, including drop-off risks, system actions, and success criteria',
+        'Turn this operations SOP into a swim-lane workflow with owner lanes, triggers, handoffs, exceptions, and final outputs',
+        'Make a tool-call workflow diagram showing prompt, routing, retrieval, generation, validation, retry, and response formatting',
+      ],
+      zh: [
+        '为这个审批流程画工作流图，包含角色、状态、决策分支、通知和超时处理',
+        '画一张从注册到激活的用户旅程流程图，标出流失风险、系统动作和成功标准',
+        '把这份运营 SOP 转成泳道流程图：负责人泳道、触发条件、交接、异常和最终产出',
+        '画一张工具调用流程图：prompt、路由、检索、生成、校验、重试和响应格式化',
+      ],
+    },
+    'rag-agent-diagram': {
+      en: [
+        'Draw a RAG architecture diagram with ingestion, chunking, embeddings, vector store, retriever, reranker, model, citations, and feedback loop',
+        'Create a multi-agent collaboration diagram with coordinator, specialist agents, shared memory, tool calls, synthesis, and review loop',
+        'Make an agent memory diagram comparing working, episodic, semantic, procedural, and long-term memory around a central agent core',
+        'Turn this AI workflow into a tool-call sequence diagram with model decisions, tool inputs, tool outputs, and guardrail checks',
+      ],
+      zh: [
+        '画一张 RAG 架构图：采集、切块、embedding、向量库、retriever、reranker、模型、引用和反馈循环',
+        '做一张多 agent 协作图：协调者、专家 agents、共享记忆、工具调用、综合输出和 review loop',
+        '画一张 agent 记忆类型图，围绕中央 agent core 对比 working、episodic、semantic、procedural 和长期记忆',
+        '把这个 AI workflow 转成工具调用时序图，包含模型决策、工具输入、工具输出和 guardrail 检查',
+      ],
+    },
+    'uml-diagram': {
+      en: [
+        'Create a UML component diagram for this service boundary with interfaces, dependencies, adapters, and external systems',
+        'Draw a UML sequence diagram for this checkout flow with user, frontend, API, payment provider, database, and notification service',
+        'Make a UML class diagram from these domain models with relationships, cardinality, key methods, and aggregate boundaries',
+        'Turn this deployment plan into a UML deployment diagram with nodes, artifacts, network links, and runtime responsibilities',
+      ],
+      zh: [
+        '为这个服务边界画 UML 组件图，包含接口、依赖、adapter 和外部系统',
+        '画一张 checkout 流程 UML 时序图，包含用户、前端、API、支付服务、数据库和通知服务',
+        '根据这些领域模型画 UML 类图，包含关系、基数、关键方法和聚合边界',
+        '把部署计划转成 UML deployment 图，包含节点、artifact、网络连接和运行时职责',
+      ],
+    },
+    'data-flow-diagram': {
+      en: [
+        'Draw a data-flow diagram for this analytics pipeline with sources, transforms, warehouse, semantic layer, dashboards, and quality checks',
+        'Create a privacy-aware data map showing collection points, processors, storage, retention, access controls, and deletion path',
+        'Turn this event tracking plan into a data lineage diagram from UI event to ingestion, stream processing, warehouse, and report',
+        'Make a system data-flow chart that labels read, write, async, cache, and audit paths with distinct arrow styles',
+      ],
+      zh: [
+        '为这个分析链路画数据流图，包含数据源、转换、数仓、语义层、看板和质量检查',
+        '画一张隐私友好的数据地图：采集点、处理方、存储、保留周期、访问控制和删除路径',
+        '把这份埋点方案转成数据血缘图，从 UI 事件到采集、流处理、数仓和报表',
+        '做一张系统数据流图，用不同箭头样式标注 read、write、async、cache 和 audit 路径',
+      ],
+    },
+    'comparison-diagram': {
+      en: [
+        'Create a comparison diagram that contrasts current vs proposed architecture with shared components, removed complexity, and migration steps',
+        'Draw a before-after process diagram showing bottlenecks, simplified path, expected gains, and remaining risks',
+        'Make a decision matrix diagram comparing three technical options by cost, latency, reliability, effort, and lock-in',
+        'Turn this tradeoff analysis into a visual map with options, constraints, recommendation, and next validation step',
+      ],
+      zh: [
+        '做一张现状 vs 方案架构对比图，标出复用组件、删掉的复杂度和迁移步骤',
+        '画一张流程前后对比图，展示瓶颈、简化路径、预期收益和剩余风险',
+        '做一个技术选型决策矩阵，对比三个方案的成本、延迟、可靠性、工作量和锁定风险',
+        '把这份 tradeoff 分析转成可视化图：候选方案、约束、推荐结论和下一步验证',
+      ],
+    },
+  },
+};
+
 export const HOME_PROMPT_EXAMPLE_CHIP_IDS = [
   'prototype',
   'deck',
@@ -4309,7 +4731,18 @@ export function homeHeroChipPromptExamplesForLocale(chipId: string, locale: Loca
   return HOME_PROMPT_EXAMPLES[locale]?.[chipId] ?? HOME_PROMPT_EXAMPLES.en[chipId] ?? [];
 }
 
-function homeHeroChipPromptExamples(chipId: string, locale: Locale): string[] {
+function homeHeroChipPromptExamples(
+  chipId: string,
+  locale: Locale,
+  subcategorySlug: string | null = null,
+): string[] {
+  const local = LOCAL_SCENARIO_PROMPT_EXAMPLES[chipId];
+  if (local) {
+    const bucket = (subcategorySlug ? local[subcategorySlug] : undefined) ?? local.default;
+    if (!bucket) return [];
+    const promptLocale = locale === 'zh-CN' || locale === 'zh-TW' ? 'zh' : 'en';
+    return bucket[promptLocale] ?? bucket.en;
+  }
   return homeHeroChipPromptExamplesForLocale(chipId, locale);
 }
 
@@ -4324,6 +4757,10 @@ function briefForChipId(chipId: string): Record<string, string> {
       return { artifact_type: 'mobile app prototype', audience: 'product evaluators', platform: 'iOS & Android' };
     case 'document':
       return { artifact_type: 'document (resume / report / PDF)', audience: 'readers' };
+    case 'social-card':
+      return { artifact_type: 'social card / carousel', audience: 'social feed viewers', format: 'platform-ready static cards' };
+    case 'diagram':
+      return { artifact_type: 'technical diagram', audience: 'engineering and product readers', format: 'editable SVG / PNG' };
     case 'deck':
       return { artifact_type: 'pitch deck / presentation', audience: 'decision makers', slide_count: '10-15 pages' };
     case 'image':

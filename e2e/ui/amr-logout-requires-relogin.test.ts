@@ -114,16 +114,6 @@ test('[P0] after local Sign out, AMR runs require re-login and Settings keeps AM
   await expect(reopenedSettings.getByRole('button', { name: /^Authorize$|^Sign in$/i })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(reopenedSettings).toHaveCount(0);
-  const reloginConfig = {
-    ...config,
-    agentCliEnv: {
-      amr: { VELA_BIN: reloginVelaBin },
-    },
-  };
-  await putAppConfig(page, reloginConfig);
-  await page.evaluate((next) => {
-    window.localStorage.setItem('open-design:config', JSON.stringify(next));
-  }, reloginConfig);
   await gotoProject(page, projectId);
   await sendPrompt(page, 'AMR logout should require relogin');
 

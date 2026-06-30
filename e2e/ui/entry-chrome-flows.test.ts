@@ -92,6 +92,7 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(page.locator('.entry-brand')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
   await expect(page.getByTestId('home-hero-plus-trigger')).toBeVisible();
+  await expect(page.getByTestId('session-mode-trigger')).toHaveCount(0);
   // Empty input can still run the active placeholder-carousel suggestion.
   await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
   await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();

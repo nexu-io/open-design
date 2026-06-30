@@ -313,6 +313,7 @@ interface Props {
   integrationInitialTab?: IntegrationTab;
   composioConfigLoading?: boolean;
   skillsLoading?: boolean;
+  newProjectLoading?: boolean;
   designSystemsLoading?: boolean;
   projectsLoading?: boolean;
   // Execution / model-switching context. Threaded down from `App` so the
@@ -445,6 +446,7 @@ export function EntryShell({
   integrationInitialTab = 'mcp',
   composioConfigLoading = false,
   skillsLoading = false,
+  newProjectLoading = skillsLoading,
   designSystemsLoading = false,
   projectsLoading = false,
   config,
@@ -994,7 +996,7 @@ export function EntryShell({
         mediaProviders={config.mediaProviders}
         connectors={connectors}
         connectorsLoading={connectorsLoading}
-        loading={skillsLoading}
+        loading={newProjectLoading}
         onCreate={handleCreate}
         onImportClaudeDesign={onImportClaudeDesign}
         {...(onImportFolder ? { onImportFolder } : {})}

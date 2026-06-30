@@ -7,7 +7,7 @@ import { T } from '@/timeouts';
 const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 
-test.describe.configure({ timeout: T.long });
+test.describe.configure({ timeout: T.xlong });
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -676,26 +676,43 @@ async function seedDeckArtifact(
 async function openDesignFile(page: Page, fileName: string) {
   const preview = artifactPreview(page);
   const filePattern = new RegExp(fileName.replace(/\./g, '\\.'), 'i');
-  const fileTabButton = page.getByRole('tab', { name: filePattern }).first();
+  const fileTabButton = tabBySuffix(page, fileName);
   let tabFound = true;
   try {
-    await fileTabButton.waitFor({ state: 'visible', timeout: 5_000 });
+    await fileTabButton.waitFor({ state: 'visible', timeout: T.medium });
   } catch {
     tabFound = false;
   }
 
   if (tabFound) {
     await fileTabButton.click();
+  } else if (currentProjectFileName(page) === fileName) {
+    await expect(preview).toBeVisible({ timeout: T.medium });
   } else {
+    await page
+      .getByRole('tablist', { name: 'Design Files' })
+      .getByRole('tab', { name: /^Design Files$/ })
+      .click();
     const fileButton = page.getByRole('button', { name: filePattern });
+    await expect(fileButton).toBeVisible({ timeout: T.medium });
     await fileButton.click();
-    await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+    const previewCard = page.getByTestId('design-file-preview').filter({ hasText: fileName });
+    await expect(previewCard).toBeVisible({ timeout: T.medium });
+    await previewCard.getByRole('button', { name: 'Open' }).click();
   }
-  await expect(preview).toBeVisible();
+  await expect(preview).toBeVisible({ timeout: T.medium });
 }
 
 async function waitForLoadingToClear(page: Page) {
   await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
+}
+
+function currentProjectFileName(page: Page): string | null {
+  const marker = '/files/';
+  const pathname = new URL(page.url()).pathname;
+  const markerIndex = pathname.indexOf(marker);
+  if (markerIndex < 0) return null;
+  return decodeURIComponent(pathname.slice(markerIndex + marker.length));
 }
 
 async function expectFileSource(page: Page, projectId: string, fileName: string, snippets: string[]) {

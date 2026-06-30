@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Document</title>
+  <style>
+    :root { --ink:#141414; --muted:#666; --line:#ddd; --paper:#fff; --soft:#f6f6f3; --accent:#0f766e; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: ui-serif, Georgia, "Times New Roman", serif; color: var(--ink); background: #ececea; }
+    .page { width: min(860px, calc(100vw - 32px)); min-height: 1120px; margin: 32px auto; padding: 64px 72px; background: var(--paper); box-shadow: 0 20px 70px rgba(15, 23, 42, .14); }
+    header { border-bottom: 2px solid var(--ink); padding-bottom: 24px; margin-bottom: 32px; }
+    .eyebrow { color: var(--accent); font: 700 12px/1.2 ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; }
+    h1 { margin: 10px 0 0; font-size: 44px; line-height: 1.02; letter-spacing: 0; }
+    h2 { margin: 34px 0 10px; font: 760 16px/1.2 ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .06em; }
+    p { font-size: 17px; line-height: 1.62; }
+    .callout { margin: 24px 0; padding: 18px 20px; border-left: 4px solid var(--accent); background: var(--soft); font-family: ui-sans-serif, system-ui, sans-serif; }
+    .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 24px; font: 13px/1.4 ui-sans-serif, system-ui, sans-serif; color: var(--muted); }
+    @media print { body { background: white; } .page { width: auto; min-height: 0; margin: 0; box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <article class="page">
+    <header>
+      <div class="eyebrow">Document</div>
+      <h1>Clear document title</h1>
+      <div class="meta"><span>Audience</span><span>Version</span><span>Date</span></div>
+    </header>
+    <section>
+      <h2>Summary</h2>
+      <p>Replace this with a concise, specific executive summary.</p>
+      <div class="callout">Key takeaway or recommendation.</div>
+      <h2>Details</h2>
+      <p>Use sections, tables, and callouts only when they improve reading.</p>
+    </section>
+  </article>
+</body>
+</html>

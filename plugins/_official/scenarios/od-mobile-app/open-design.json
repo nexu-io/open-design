@@ -1,0 +1,130 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-mobile-app",
+  "title": "Mobile app (default scenario)",
+  "version": "0.1.0",
+  "description": "Default scenario plugin for native-feeling iOS and Android app screens, mobile flows, and app prototypes.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-mobile-app",
+  "tags": [
+    "scenario",
+    "first-party",
+    "mobile",
+    "ios",
+    "android",
+    "prototype"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "mobile-app",
+    "mode": "mobile",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./assets/template.html"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./assets/template.html",
+        "./references/patterns.md",
+        "./references/checklist.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create a mobile app prototype for {{audience}} covering {{screenFlow}}. Platform target: {{platformTargets}}. Device frame: {{deviceFrame}}. Use {{designSystem}} as the product styling direction. Build a responsive HTML app preview from `assets/template.html` and the mobile patterns in `references/patterns.md`.",
+        "zh-CN": "为 {{audience}} 创建一套移动 App 原型，覆盖 {{screenFlow}}。平台目标：{{platformTargets}}。设备框架：{{deviceFrame}}。产品视觉方向使用 {{designSystem}}。基于 `assets/template.html` 和 `references/patterns.md` 的移动端模式生成响应式 HTML App 预览。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./assets/template.html",
+          "title": "Mobile app seed"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "screenFlow",
+        "label": "Screen flow",
+        "type": "string",
+        "required": true,
+        "placeholder": "onboarding, feed, detail, checkout",
+        "default": "the user's requested mobile flow"
+      },
+      {
+        "name": "platformTargets",
+        "label": "Platform targets",
+        "type": "string",
+        "required": true,
+        "placeholder": "iOS and Android",
+        "default": "iOS and Android"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "mobile product users",
+        "default": "mobile product users"
+      },
+      {
+        "name": "deviceFrame",
+        "label": "Device frame",
+        "type": "select",
+        "options": [
+          "iPhone-style frame",
+          "Android-style frame",
+          "side-by-side iOS and Android",
+          "responsive mobile web"
+        ],
+        "default": "iPhone-style frame"
+      },
+      {
+        "name": "designSystem",
+        "label": "Design system",
+        "type": "string",
+        "placeholder": "active design system or mobile-native",
+        "default": "the active project design system"
+      }
+    ]
+  }
+}

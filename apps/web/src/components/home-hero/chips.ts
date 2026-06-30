@@ -123,15 +123,16 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     group: 'create',
     description: 'Lo-fi screens & flows',
     hint: 'Sketch lo-fi screens and flows to validate structure before visual design.',
-    // Wireframe reuses the battle-tested web-prototype seed but stamps a
-    // lo-fi fidelity so the agent stays in structural/greybox territory
-    // instead of jumping to high-fidelity styling.
+    // Wireframe owns its own scenario plugin: a greybox seed template, layout
+    // references, and checklist keep the path structure-first instead of
+    // drifting into the high-fidelity prototype lane.
     action: {
       kind: 'apply-scenario',
-      pluginId: 'example-web-prototype',
+      pluginId: 'od-wireframe',
       projectKind: 'prototype',
       projectMetadata: {
         kind: 'prototype',
+        intent: 'wireframe',
         fidelity: 'wireframe',
       },
     },
@@ -143,14 +144,15 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     group: 'create',
     description: 'iOS & Android screens',
     hint: 'Lay out mobile screens for iOS and Android.',
-    // Mobile reuses the web-prototype seed but records mobile platform
-    // targets so the agent frames screens for handheld viewports.
+    // Mobile app owns a handheld-screen scenario plugin instead of borrowing
+    // the desktop web-prototype defaults.
     action: {
       kind: 'apply-scenario',
-      pluginId: 'example-web-prototype',
+      pluginId: 'od-mobile-app',
       projectKind: 'prototype',
       projectMetadata: {
         kind: 'prototype',
+        intent: 'mobile-app',
         platform: 'auto',
         platformTargets: ['mobile-ios', 'mobile-android'],
       },
@@ -185,13 +187,11 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     group: 'create',
     description: 'Resumes, reports & PDFs',
     hint: 'Draft a polished document — resume, report, or PDF — you can export.',
-    // Documents (resumes / reports / PDFs) route through the generic
-    // od-new-generation scenario under the `other` kind; there is no
-    // dedicated bundled document seed yet, so the agent composes the
-    // document layout from the brief.
+    // Documents / PDFs use a print-friendly scenario plugin with document
+    // structures and export checks instead of the generic catch-all router.
     action: {
       kind: 'apply-scenario',
-      pluginId: 'od-new-generation',
+      pluginId: 'od-document',
       projectKind: 'other',
       projectMetadata: {
         kind: 'other',
@@ -199,6 +199,42 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
         // `other` so `project_kind` reports `document` (matches the task_chip).
         // No product behavior keys off `intent: 'document'`.
         intent: 'document',
+      },
+    },
+  },
+  {
+    id: 'social-card',
+    label: 'Social card',
+    icon: 'share',
+    group: 'create',
+    description: 'Shareable post cards',
+    hint: 'Create platform-ready social cards, carousels, covers, and post visuals.',
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'od-social-card',
+      projectKind: 'image',
+      projectMetadata: {
+        kind: 'image',
+        intent: 'social-card',
+        artifactType: 'social-card',
+      },
+    },
+  },
+  {
+    id: 'diagram',
+    label: 'Diagram',
+    icon: 'draw',
+    group: 'create',
+    description: 'Architecture & flow charts',
+    hint: 'Draw polished technical diagrams, architecture maps, UML, and workflow charts.',
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'od-technical-diagram',
+      projectKind: 'image',
+      projectMetadata: {
+        kind: 'image',
+        intent: 'diagram',
+        artifactType: 'diagram',
       },
     },
   },
@@ -338,6 +374,8 @@ export const CREATE_RAIL_ORDER = [
   'wireframe',
   'mobile',
   'document',
+  'social-card',
+  'diagram',
   'hyperframes',
   'live-artifact',
   'image',

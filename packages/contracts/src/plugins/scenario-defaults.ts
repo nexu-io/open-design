@@ -41,6 +41,11 @@ export type DefaultScenarioPluginId =
   | 'od-new-generation'
   | 'od-media-generation'
   | 'od-plugin-authoring'
+  | 'od-wireframe'
+  | 'od-mobile-app'
+  | 'od-document'
+  | 'od-social-card'
+  | 'od-technical-diagram'
   | 'od-figma-migration'
   | 'od-code-migration'
   | 'od-tune-collab'
@@ -83,9 +88,28 @@ export function defaultScenarioPluginIdForKind(
 }
 
 export function defaultScenarioPluginIdForProjectMetadata(
-  metadata: Pick<ProjectMetadata, 'kind' | 'intent'> | null | undefined,
+  metadata:
+    | Pick<ProjectMetadata, 'kind' | 'intent' | 'fidelity' | 'platform' | 'platformTargets'>
+    | null
+    | undefined,
 ): DefaultScenarioPluginId | null {
   if (metadata?.intent === 'live-artifact') return 'example-live-artifact';
+  if (metadata?.intent === 'wireframe') return 'od-wireframe';
+  if (metadata?.intent === 'mobile-app') return 'od-mobile-app';
+  if (metadata?.intent === 'document') return 'od-document';
+  if (metadata?.intent === 'social-card') return 'od-social-card';
+  if (metadata?.intent === 'diagram') return 'od-technical-diagram';
+  if (metadata?.kind === 'prototype' && metadata.fidelity === 'wireframe') return 'od-wireframe';
+  if (
+    metadata?.kind === 'prototype' &&
+    (metadata.platform === 'mobile-ios' ||
+      metadata.platform === 'mobile-android' ||
+      metadata.platformTargets?.some((target) => (
+        target === 'mobile-ios' || target === 'mobile-android'
+      )))
+  ) {
+    return 'od-mobile-app';
+  }
   return defaultScenarioPluginIdForKind(metadata?.kind);
 }
 

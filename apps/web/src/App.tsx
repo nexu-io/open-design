@@ -425,6 +425,7 @@ function AppInner() {
   // view picks the right flag for whichever tab the user is currently on.
   const [agentsLoading, setAgentsLoading] = useState(true);
   const [skillsLoading, setSkillsLoading] = useState(true);
+  const [functionalSkillsLoading, setFunctionalSkillsLoading] = useState(true);
   const [dsLoading, setDsLoading] = useState(true);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [promptTemplatesLoading, setPromptTemplatesLoading] = useState(true);
@@ -769,6 +770,7 @@ function AppInner() {
         // No daemon — clear every loading flag so empty states render
         // instead of the entry view sitting on indefinite spinners.
         setAgentsLoading(false);
+        setFunctionalSkillsLoading(false);
         setSkillsLoading(false);
         setDsLoading(false);
         setProjectsLoading(false);
@@ -831,6 +833,7 @@ function AppInner() {
         if (cancelled) return;
         setSkills(list);
         functionalReady = true;
+        setFunctionalSkillsLoading(false);
         maybeClearLoading();
       });
 
@@ -2237,6 +2240,7 @@ function AppInner() {
         onRefreshAgents={refreshAgents}
         onThemeChange={handleThemeChange}
         skillsLoading={skillsLoading}
+        newProjectLoading={functionalSkillsLoading}
         designSystemsLoading={dsLoading}
         projectsLoading={projectsLoading}
         promptTemplatesLoading={promptTemplatesLoading}

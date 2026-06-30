@@ -136,7 +136,9 @@ async function gotoEntryHome(page: Page) {
 
 async function openNewProjectModal(page: Page) {
   await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
+  await page.getByTestId('entry-nav-projects').click();
+  await expect(page).toHaveURL(/\/projects$/);
+  await page.getByTestId('designs-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
 }

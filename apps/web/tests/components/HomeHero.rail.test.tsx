@@ -489,6 +489,41 @@ describe('HomeHero intent rail', () => {
   });
 
   it('specialised category chips route to their bundled scenario plugin', () => {
+    expect(findChip('wireframe')?.action).toMatchObject({
+      kind: 'apply-scenario',
+      pluginId: 'od-wireframe',
+      projectKind: 'prototype',
+      projectMetadata: { kind: 'prototype', intent: 'wireframe', fidelity: 'wireframe' },
+    });
+    expect(findChip('mobile')?.action).toMatchObject({
+      kind: 'apply-scenario',
+      pluginId: 'od-mobile-app',
+      projectKind: 'prototype',
+      projectMetadata: {
+        kind: 'prototype',
+        intent: 'mobile-app',
+        platformTargets: ['mobile-ios', 'mobile-android'],
+      },
+    });
+    expect(findChip('document')?.action).toMatchObject({
+      kind: 'apply-scenario',
+      pluginId: 'od-document',
+      projectKind: 'other',
+      projectMetadata: { kind: 'other', intent: 'document' },
+    });
+    expect(findChip('social-card')?.action).toMatchObject({
+      kind: 'apply-scenario',
+      pluginId: 'od-social-card',
+      projectKind: 'image',
+      projectMetadata: { kind: 'image', intent: 'social-card', artifactType: 'social-card' },
+    });
+    expect(findChip('diagram')?.action).toMatchObject({
+      kind: 'apply-scenario',
+      pluginId: 'od-technical-diagram',
+      projectKind: 'image',
+      projectMetadata: { kind: 'image', intent: 'diagram', artifactType: 'diagram' },
+    });
+
     // HyperFrames is the motion-graphics specialisation of Video,
     // surfaced as a separate chip so users can target it directly
     // instead of routing through the generic Video chip.

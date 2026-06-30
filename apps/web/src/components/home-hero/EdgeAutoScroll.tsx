@@ -75,9 +75,13 @@ export function useEdgeAutoScroll(contentKey?: unknown): EdgeAutoScroll {
     if (!el) return;
     const updateEdges = () => {
       const maxScroll = el.scrollWidth - el.clientWidth;
-      setEdges({
+      const next = {
         left: el.scrollLeft > 1,
         right: el.scrollLeft < maxScroll - 1,
+      };
+      setEdges((prev) => {
+        if (prev.left === next.left && prev.right === next.right) return prev;
+        return next;
       });
     };
     updateEdges();

@@ -968,6 +968,7 @@ export interface Dict {
   'homeHero.run': string;
   'homeHero.typeSomethingToRun': string;
   'homeHero.promptExamples': string;
+  'homeHero.templateExamples': string;
   'homeHero.footer.designSystem': string;
   'homeHero.footer.autoDesignSystem': string;
   'homeHero.footer.autoDesignSystemSummary': string;
@@ -981,6 +982,8 @@ export interface Dict {
   'homeHero.moreShortcuts': string;
   'homeHero.railAria': string;
   'homeHero.subTypeAria': string;
+  'homeHero.subTypeMore': string;
+  'homeHero.subTypeLess': string;
   'homeHero.confirmReplaceTitle': string;
   'homeHero.confirmReplaceBody': string;
   'homeHero.confirmReplace': string;
@@ -1006,11 +1009,15 @@ export interface Dict {
   'homeHero.chip.wireframe': string;
   'homeHero.chip.mobile': string;
   'homeHero.chip.document': string;
+  'homeHero.chip.socialCard': string;
+  'homeHero.chip.diagram': string;
   'homeHero.chip.prototypeDesc': string;
   'homeHero.chip.wireframeDesc': string;
   'homeHero.chip.mobileDesc': string;
   'homeHero.chip.deckDesc': string;
   'homeHero.chip.documentDesc': string;
+  'homeHero.chip.socialCardDesc': string;
+  'homeHero.chip.diagramDesc': string;
   'homeHero.chip.imageDesc': string;
   'homeHero.chip.videoDesc': string;
   'homeHero.chip.audioDesc': string;
@@ -1022,6 +1029,8 @@ export interface Dict {
   'homeHero.chip.mobileNext': string;
   'homeHero.chip.deckNext': string;
   'homeHero.chip.documentNext': string;
+  'homeHero.chip.socialCardNext': string;
+  'homeHero.chip.diagramNext': string;
   'homeHero.chip.imageNext': string;
   'homeHero.chip.videoNext': string;
   'homeHero.chip.audioNext': string;

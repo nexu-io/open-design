@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 
 export type FakeVelaOptions = {
   assistantText?: string;
+  authFailFlagPath?: string;
   endpoints?: VelaEndpoints;
   failAuthAtPrompt?: boolean;
   failBalanceAtPrompt?: boolean;
@@ -93,6 +94,7 @@ import { argv, stdin, stdout, stderr, env, exit } from 'node:process';
 const ASSISTANT_TEXT = ${JSON.stringify(options.assistantText ?? DEFAULT_ASSISTANT_TEXT)};
 const SESSION_ID = env.FAKE_VELA_SESSION_ID || 'fake-amr-session-1';
 const AUTH_FAIL = ${options.failAuthAtPrompt === true ? 'true' : 'false'};
+const AUTH_FAIL_FLAG_PATH = ${JSON.stringify(options.authFailFlagPath ?? '')};
 const BALANCE_FAIL = ${options.failBalanceAtPrompt === true ? 'true' : 'false'};
 const MODEL_LIST_INVALID_API_KEY = ${options.failModelListInvalidApiKey === true ? 'true' : 'false'};
 const REQUIRE_LOGIN = ${options.requireLoginConfig === false ? 'false' : 'true'};
@@ -125,6 +127,9 @@ function hasRuntimeKey() {
   const profile = currentProfile();
   const cfg = readLoginConfig();
   return Boolean(cfg && cfg.profiles && cfg.profiles[profile] && cfg.profiles[profile].runtimeKey);
+}
+function shouldFailAuth() {
+  return AUTH_FAIL || (AUTH_FAIL_FLAG_PATH && existsSync(AUTH_FAIL_FLAG_PATH));
 }
 
 if (argv[2] === 'login') {
@@ -221,7 +226,7 @@ function handle(msg) {
       writeError(id, 'session/set_model must be called before session/prompt');
       return;
     }
-    if (AUTH_FAIL) {
+    if (shouldFailAuth()) {
       writeError(id, 'Your authentication token has expired. Please sign in again.');
       return;
     }

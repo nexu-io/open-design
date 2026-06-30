@@ -5,8 +5,8 @@
 //     title AND a one-line description.
 //   - The rail leads with the slide deck ("Slides") per the curated create
 //     order.
-//   - The finer-grained scenarios (wireframe / mobile / document) exist and
-//     route to a working scenario plugin.
+//   - The finer-grained scenarios (wireframe / mobile / document / social /
+//     diagram) exist and route to a working scenario plugin.
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -87,21 +87,40 @@ describe('HomeHero scenario cards', () => {
 
   it('adds the finer-grained scenarios as create cards routed to a scenario plugin', () => {
     renderHero();
-    for (const id of ['wireframe', 'mobile', 'document']) {
+    for (const id of ['wireframe', 'mobile', 'document', 'social-card', 'diagram']) {
       const card = screen.getByTestId(`home-hero-rail-${id}`);
       const tabs = screen.getByTestId('home-hero-type-tabs');
       expect(tabs.contains(card)).toBe(true);
       expect(findChip(id)?.action.kind).toBe('apply-scenario');
     }
-    // Wireframe reuses the web-prototype seed at lo-fi fidelity.
     expect(findChip('wireframe')?.action).toMatchObject({
-      pluginId: 'example-web-prototype',
+      pluginId: 'od-wireframe',
       projectKind: 'prototype',
-      projectMetadata: { kind: 'prototype', fidelity: 'wireframe' },
+      projectMetadata: { kind: 'prototype', intent: 'wireframe', fidelity: 'wireframe' },
+    });
+    expect(findChip('mobile')?.action).toMatchObject({
+      pluginId: 'od-mobile-app',
+      projectKind: 'prototype',
+      projectMetadata: {
+        kind: 'prototype',
+        intent: 'mobile-app',
+        platformTargets: ['mobile-ios', 'mobile-android'],
+      },
     });
     expect(findChip('document')?.action).toMatchObject({
-      pluginId: 'od-new-generation',
+      pluginId: 'od-document',
       projectKind: 'other',
+      projectMetadata: { kind: 'other', intent: 'document' },
+    });
+    expect(findChip('social-card')?.action).toMatchObject({
+      pluginId: 'od-social-card',
+      projectKind: 'image',
+      projectMetadata: { kind: 'image', intent: 'social-card' },
+    });
+    expect(findChip('diagram')?.action).toMatchObject({
+      pluginId: 'od-technical-diagram',
+      projectKind: 'image',
+      projectMetadata: { kind: 'image', intent: 'diagram' },
     });
   });
 

@@ -48,6 +48,44 @@ describe('defaultScenarioPluginIdForKind', () => {
     expect(defaultScenarioPluginIdForProjectMetadata(undefined)).toBeNull();
   });
 
+  it('routes Home scenario intents to their dedicated bundled plugins', () => {
+    expect(defaultScenarioPluginIdForProjectMetadata({
+      kind: 'prototype',
+      intent: 'wireframe',
+    })).toBe('od-wireframe');
+    expect(defaultScenarioPluginIdForProjectMetadata({
+      kind: 'prototype',
+      intent: 'mobile-app',
+    })).toBe('od-mobile-app');
+    expect(defaultScenarioPluginIdForProjectMetadata({
+      kind: 'other',
+      intent: 'document',
+    })).toBe('od-document');
+    expect(defaultScenarioPluginIdForProjectMetadata({
+      kind: 'image',
+      intent: 'social-card',
+    })).toBe('od-social-card');
+    expect(defaultScenarioPluginIdForProjectMetadata({
+      kind: 'image',
+      intent: 'diagram',
+    })).toBe('od-technical-diagram');
+  });
+
+  it('routes legacy prototype discriminators to wireframe and mobile scenarios', () => {
+    expect(defaultScenarioPluginIdForProjectMetadata({
+      kind: 'prototype',
+      fidelity: 'wireframe',
+    })).toBe('od-wireframe');
+    expect(defaultScenarioPluginIdForProjectMetadata({
+      kind: 'prototype',
+      platform: 'mobile-ios',
+    })).toBe('od-mobile-app');
+    expect(defaultScenarioPluginIdForProjectMetadata({
+      kind: 'prototype',
+      platformTargets: ['mobile-ios', 'mobile-android'],
+    })).toBe('od-mobile-app');
+  });
+
   it('exposes the hidden free-form Home fallback plugin separately from kind defaults', () => {
     expect(DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID).toBe('od-default');
     expect(DEFAULT_SCENARIO_PLUGIN_BY_KIND.other).toBe('od-new-generation');

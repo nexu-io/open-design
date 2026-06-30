@@ -1,0 +1,64 @@
+{
+  "template_type": "architecture",
+  "style": 3,
+  "width": 1120,
+  "height": 760,
+  "title": "Microservices Architecture",
+  "subtitle": "Blueprint style with tiered zones, service groups, and deployment pathways",
+  "blueprint_title_block": {
+    "title": "AI MICROSERVICES",
+    "subtitle": "SYSTEM ARCHITECTURE",
+    "center_caption": "BLUEPRINT STYLE 3",
+    "left_caption": "REV: 1.0",
+    "right_caption": "DWG: ARCH-001",
+    "width": 220,
+    "height": 76,
+    "x": 868,
+    "y": 664
+  },
+  "containers": [
+    { "x": 40, "y": 96, "width": 1040, "height": 94, "label": "EDGE", "header_prefix": "01", "subtitle": "", "stroke": "#0ea5e9", "fill": "none" },
+    { "x": 40, "y": 224, "width": 1040, "height": 152, "label": "APPLICATION SERVICES", "header_prefix": "02", "subtitle": "", "stroke": "#0ea5e9", "fill": "none" },
+    { "x": 40, "y": 410, "width": 1040, "height": 150, "label": "DATA + EVENT INFRA", "header_prefix": "03", "subtitle": "", "stroke": "#0ea5e9", "fill": "none" },
+    { "x": 40, "y": 590, "width": 1040, "height": 100, "label": "OBSERVABILITY", "header_prefix": "04", "subtitle": "", "stroke": "#0ea5e9", "fill": "none" }
+  ],
+  "nodes": [
+    { "id": "clients", "kind": "rect", "x": 80, "y": 120, "width": 160, "height": 54, "label": "Client Apps", "type_label": "TRAFFIC", "fill": "#0b3b5e", "stroke": "#67e8f9", "flat": true },
+    { "id": "gateway", "kind": "double_rect", "x": 314, "y": 116, "width": 184, "height": 62, "label": "API Gateway", "type_label": "EDGE", "fill": "#0b3b5e", "stroke": "#67e8f9" },
+    { "id": "auth", "kind": "rect", "x": 572, "y": 120, "width": 164, "height": 54, "label": "Auth / Policy", "type_label": "GUARD", "fill": "#0b3b5e", "stroke": "#67e8f9", "flat": true },
+    { "id": "svc-a", "kind": "rect", "x": 110, "y": 270, "width": 176, "height": 60, "label": "Order Service", "type_label": "SERVICE", "fill": "#0b3b5e", "stroke": "#67e8f9", "flat": true },
+    { "id": "svc-b", "kind": "rect", "x": 356, "y": 270, "width": 176, "height": 60, "label": "Catalog Service", "type_label": "SERVICE", "fill": "#0b3b5e", "stroke": "#67e8f9", "flat": true },
+    { "id": "svc-c", "kind": "rect", "x": 602, "y": 270, "width": 176, "height": 60, "label": "Billing Service", "type_label": "SERVICE", "fill": "#0b3b5e", "stroke": "#67e8f9", "flat": true },
+    { "id": "bus", "kind": "double_rect", "x": 848, "y": 262, "width": 166, "height": 76, "label": "Event Router", "type_label": "STREAM", "fill": "#0b3b5e", "stroke": "#fde047" },
+    { "id": "pg", "kind": "cylinder", "x": 116, "y": 446, "width": 144, "height": 90, "label": "Postgres", "sublabel": "orders", "fill": "#0b3b5e", "stroke": "#67e8f9" },
+    { "id": "cache", "kind": "rect", "x": 370, "y": 456, "width": 144, "height": 70, "label": "Redis Cache", "type_label": "LOW LATENCY", "fill": "#0b3b5e", "stroke": "#67e8f9", "flat": true },
+    { "id": "warehouse", "kind": "cylinder", "x": 624, "y": 446, "width": 154, "height": 90, "label": "Warehouse", "sublabel": "analytics", "fill": "#0b3b5e", "stroke": "#67e8f9" },
+    { "id": "metrics", "kind": "rect", "x": 94, "y": 620, "width": 188, "height": 44, "label": "Metrics / Traces", "type_label": "OPS", "fill": "#0b3b5e", "stroke": "#67e8f9", "flat": true }
+  ],
+  "arrows": [
+    { "source": "clients", "target": "gateway", "source_port": "right", "target_port": "left", "flow": "read" },
+    { "source": "gateway", "target": "auth", "source_port": "right", "target_port": "left", "flow": "control" },
+    { "source": "gateway", "target": "svc-a", "source_port": "bottom", "target_port": "top", "flow": "read", "label": "route" },
+    { "source": "gateway", "target": "svc-b", "source_port": "bottom", "target_port": "top", "flow": "read", "corridor_x": [444] },
+    { "source": "gateway", "target": "svc-c", "source_port": "bottom", "target_port": "top", "flow": "read", "corridor_x": [688] },
+    { "source": "svc-a", "target": "pg", "source_port": "bottom", "target_port": "top", "flow": "read" },
+    { "source": "svc-b", "target": "cache", "source_port": "bottom", "target_port": "top", "flow": "read" },
+    { "source": "svc-c", "target": "warehouse", "source_port": "bottom", "target_port": "top", "flow": "data" },
+    { "source": "svc-a", "target": "bus", "source_port": "right", "target_port": "left", "flow": "feedback", "dashed": true, "route_points": [[286,300], [286,246], [818,246], [818,300]] },
+    { "source": "svc-b", "target": "bus", "source_port": "right", "target_port": "left", "flow": "feedback", "dashed": true, "route_points": [[532,300], [532,246], [824,246], [824,300]] },
+    { "source": "svc-c", "target": "bus", "source_port": "right", "target_port": "left", "flow": "feedback", "dashed": true, "route_points": [[778,300], [812,300]] },
+    { "source": "bus", "target": "metrics", "source_port": "bottom", "target_port": "top", "flow": "control", "label": "events", "route_points": [[942, 620], [188, 620]], "label_dx": 8 }
+  ],
+  "legend": [
+    { "flow": "read", "label": "Primary request flow" },
+    { "flow": "control", "label": "Control routing" },
+    { "flow": "data", "label": "Analytics path" },
+    { "flow": "feedback", "label": "Event stream" }
+  ],
+  "legend_position": "bottom-right",
+  "legend_box": true,
+  "legend_box_fill": "#0b3552",
+  "legend_x": 760,
+  "legend_y": 572,
+  "footer": ""
+}

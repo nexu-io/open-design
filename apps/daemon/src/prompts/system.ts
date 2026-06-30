@@ -147,6 +147,7 @@ function formatElevenLabsVoiceOptionsErrorForPrompt(
 type ProjectMetadata = {
   kind?: string;
   intent?: string | null;
+  artifactType?: string | null;
   fidelity?: string | null;
   speakerNotes?: boolean | null;
   slideCount?: string | null;
@@ -1231,6 +1232,16 @@ function renderMetadataBlock(
     }
   }
   if (metadata.kind === 'image') {
+    if (metadata.intent === 'social-card') {
+      lines.push('- **intent**: social-card — the user chose the Social card template. Build platform-ready static card artifacts, not a generic image prompt.');
+      lines.push('- **social-card output contract**: create polished, export-ready HTML/SVG card layouts that can render to PNG. Prefer concrete canvases such as Xiaohongshu/Rednote 1080×1440, WeChat 21:9 + 1:1 cover pairs, X/Threads timeline cards, LinkedIn cards, or 9:16 story frames according to the selected prompt. Use real layout systems: Editorial magazine or Swiss grid, strong type hierarchy, safe margins, platform crop awareness, and no placeholder/lorem ipsum. You MAY emit `<artifact type="text/html">...</artifact>` for the card set; do not default to `media generate` unless the user explicitly asks for AI image rendering.');
+      return lines.join('\n');
+    }
+    if (metadata.intent === 'diagram') {
+      lines.push('- **intent**: diagram — the user chose the Diagram template. Build a technical diagram/chart artifact, not a generic image prompt.');
+      lines.push('- **diagram output contract**: create an editable, publication-quality SVG-first diagram with semantic nodes, labeled arrows, legends, and clear visual hierarchy. Match the requested type: architecture, workflow, RAG/Agent, UML, data flow, or comparison. Prefer direct SVG inside `<artifact type="text/html">...</artifact>` or a standalone SVG artifact; include export-friendly dimensions and avoid raster-only AI image prompts unless the user explicitly asks.');
+      return lines.join('\n');
+    }
     lines.push(
       `- **imageModel**: ${metadata.imageModel ?? '(unknown — ask: which image model/provider to use)'}`,
     );

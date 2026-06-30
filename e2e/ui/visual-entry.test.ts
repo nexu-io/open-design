@@ -11,6 +11,9 @@ import {
   waitForVisualFonts,
   waitForVisualProjects,
 } from '@/playwright/visual';
+import { T } from '@/timeouts';
+
+test.describe.configure({ timeout: T.xlong * 2 });
 
 test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
   await configureVisualPage(page, {

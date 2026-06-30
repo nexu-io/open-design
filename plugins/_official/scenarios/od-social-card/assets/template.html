@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en" data-theme="editorial">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Social Card Scenario</title>
+  <style>
+    :root {
+      --ink: #15110c;
+      --muted: #756a5c;
+      --paper: #f3efe7;
+      --panel: #fbf8f1;
+      --line: rgba(40, 32, 23, 0.14);
+      --accent: #b9472f;
+      --blue: #002fa7;
+      --green: #1f6f4a;
+      --gold: #d4a04a;
+      --shadow: 0 24px 70px rgba(25, 20, 15, 0.18);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 34px;
+      color: var(--ink);
+      background:
+        linear-gradient(120deg, rgba(255,255,255,.44), rgba(255,255,255,0) 34%),
+        #e9e3d6;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .board {
+      width: min(1180px, calc(100vw - 68px));
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 330px 1fr;
+      gap: 24px;
+      align-items: stretch;
+    }
+
+    .poster {
+      position: relative;
+      overflow: hidden;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .poster.xhs {
+      width: 330px;
+      aspect-ratio: 3 / 4;
+      padding: 24px;
+    }
+
+    .photo {
+      position: absolute;
+      inset: 0;
+      opacity: .9;
+    }
+
+    .photo img,
+    .media-bg {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo img {
+      display: block;
+    }
+
+    .photo::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(to bottom, rgba(20,16,10,.05), rgba(20,16,10,.58)),
+        linear-gradient(to right, rgba(243,239,231,.8), rgba(243,239,231,.12) 54%, rgba(0,0,0,.18));
+    }
+
+    .tag {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .tag::before {
+      content: "";
+      width: 32px;
+      height: 1px;
+      background: currentColor;
+    }
+
+    h1 {
+      position: relative;
+      margin: 78px 0 0;
+      max-width: 236px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 48px;
+      line-height: .94;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+
+    .deckline {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      bottom: 24px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+      align-items: end;
+      color: #fbf8f1;
+    }
+
+    .deckline p {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.45;
+      font-weight: 520;
+    }
+
+    .page {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      letter-spacing: .12em;
+    }
+
+    .stack {
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      gap: 24px;
+      min-width: 0;
+    }
+
+    .swiss {
+      min-height: 235px;
+      padding: 28px 32px;
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 28px;
+      background: #fff;
+      border-radius: 0;
+    }
+
+    .swiss::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(0,47,167,.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,47,167,.08) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: linear-gradient(to bottom, #000, transparent 82%);
+    }
+
+    .metric {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-width: 0;
+    }
+
+    .eyebrow {
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .metric strong {
+      margin-top: 14px;
+      color: var(--blue);
+      font-size: 72px;
+      line-height: .82;
+      font-weight: 300;
+      letter-spacing: 0;
+    }
+
+    .metric p {
+      margin: 14px 0 0;
+      color: #333;
+      font-size: 18px;
+      line-height: 1.25;
+      font-weight: 650;
+    }
+
+    .bars {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      align-items: end;
+      gap: 12px;
+      padding-top: 32px;
+      border-bottom: 2px solid #101010;
+    }
+
+    .bars i {
+      display: block;
+      background: #d9e0f4;
+      border: 1px solid #111;
+    }
+
+    .bars i:nth-child(1) { height: 44%; }
+    .bars i:nth-child(2) { height: 58%; }
+    .bars i:nth-child(3) { height: 52%; }
+    .bars i:nth-child(4) { height: 92%; background: var(--blue); }
+    .bars i:nth-child(5) { height: 70%; }
+
+    .wechat-pair {
+      display: grid;
+      grid-template-columns: 1fr 210px;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .wide,
+    .square {
+      position: relative;
+      overflow: hidden;
+      background: #111;
+      color: #f6efe4;
+      border: 1px solid rgba(255,255,255,.16);
+      box-shadow: var(--shadow);
+    }
+
+    .wide {
+      aspect-ratio: 21 / 9;
+      padding: 34px 42px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+
+    .media-bg {
+      position: absolute;
+      inset: 0;
+      opacity: .9;
+    }
+
+    .wide::after,
+    .square::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(0,0,0,.68), rgba(0,0,0,.18));
+    }
+
+    .wide h2,
+    .square h2,
+    .wide .meta,
+    .square .meta {
+      position: relative;
+      z-index: 1;
+      margin: 0;
+    }
+
+    .wide h2 {
+      width: min(72%, 560px);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 42px;
+      line-height: .98;
+      font-weight: 500;
+    }
+
+    .meta {
+      margin-top: 16px;
+      color: rgba(246,239,228,.76);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .square {
+      width: 210px;
+      aspect-ratio: 1;
+      padding: 24px;
+      display: grid;
+      align-items: end;
+    }
+
+    .square h2 {
+      font-size: 30px;
+      line-height: 1;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    @media (max-width: 900px) {
+      body { padding: 18px; }
+      .board { width: min(520px, calc(100vw - 36px)); grid-template-columns: 1fr; }
+      .poster.xhs { width: 100%; }
+      .swiss, .wechat-pair { grid-template-columns: 1fr; }
+      .square { width: min(260px, 100%); }
+    }
+  </style>
+</head>
+<body>
+  <main class="board" aria-label="Social card template preview">
+    <!-- Export: Rednote/Xiaohongshu 1080x1440 frame -->
+    <section class="poster xhs">
+      <div class="photo"><img src="screenshot-backgrounds/style-a/forest-ink.webp" alt=""></div>
+      <div class="tag">Editorial Rednote</div>
+      <h1>Design notes that feel collected, not generated.</h1>
+      <div class="deckline">
+        <p>Image-led cover, one sharp hook, and a quiet magazine hierarchy for mobile feeds.</p>
+        <span class="page">01/06</span>
+      </div>
+    </section>
+
+    <section class="stack">
+      <!-- Export: LinkedIn/X 1600x900 data card -->
+      <article class="poster swiss">
+        <div class="metric">
+          <div class="eyebrow">Swiss Product Review</div>
+          <strong>4.8x</strong>
+          <p>One metric, one proof shape, one sentence. No filler decoration.</p>
+        </div>
+        <div class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      </article>
+
+      <div class="wechat-pair">
+        <!-- Export: WeChat 2100x900 main cover -->
+        <article class="wide">
+          <img class="media-bg" src="screenshot-backgrounds/style-b/ikb-dot-gradient.webp" alt="">
+          <div class="meta">WeChat 21:9 cover</div>
+          <h2>One essay, two crops, one visual system.</h2>
+        </article>
+        <!-- Export: WeChat 1080x1080 share cover -->
+        <article class="square">
+          <img class="media-bg" src="screenshot-backgrounds/style-b/ikb-dot-gradient.webp" alt="">
+          <div>
+            <div class="meta">1:1 share</div>
+            <h2>Two crops, one system.</h2>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

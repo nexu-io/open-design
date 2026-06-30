@@ -125,6 +125,11 @@ export type TrackingProjectKind =
   // splits out of generic `other` and matches its task_chip.
   | 'document'
   | 'image'
+  // `social_card` and `diagram` are `image`-kind projects with a more specific
+  // Home template intent. They still use the image artifact/storage pipeline,
+  // but analytics and project surfaces should line up with the selected chip.
+  | 'social_card'
+  | 'diagram'
   | 'video'
   // `hyperframes` is a `video` project rendered by the local HyperFrames
   // HTML→MP4 engine (`videoModel === 'hyperframes-html'`). The product
@@ -3449,7 +3454,9 @@ export function projectKindToTracking(
       // metadata field. Precedence (a prototype matching several): live_artifact
       // > wireframe > mobile, then plain prototype.
       if (hints?.intent === 'live-artifact') return 'live_artifact';
+      if (hints?.intent === 'wireframe') return 'wireframe';
       if (hints?.fidelity === 'wireframe') return 'wireframe';
+      if (hints?.intent === 'mobile-app') return 'mobile';
       if (isMobileSurface(hints)) return 'mobile';
       return 'prototype';
     case 'deck':
@@ -3461,6 +3468,8 @@ export function projectKindToTracking(
       // tag `intent: 'document'` so they split out of catch-all `other`.
       return hints?.intent === 'document' ? 'document' : 'other';
     case 'image':
+      if (hints?.intent === 'social-card') return 'social_card';
+      if (hints?.intent === 'diagram') return 'diagram';
       return 'image';
     case 'video':
       // HyperFrames rides on the `video` kind; the local-render engine is the

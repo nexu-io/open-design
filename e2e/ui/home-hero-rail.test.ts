@@ -437,6 +437,68 @@ test('[P1] home left rail expands and collapses from the shell controls', async 
   await expect(expand).toHaveAttribute('aria-expanded', 'false');
 });
 
+test('[P1] home left rail plus creates a blank project without opening the modal', async ({ page }) => {
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+    const body = route.request().postDataJSON() as {
+      id: string;
+      name?: string;
+      skillId?: string | null;
+      designSystemId?: string | null;
+      metadata?: Record<string, unknown>;
+      pendingPrompt?: string;
+      pluginId?: string;
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        project: {
+          id: body.id,
+          name: body.name ?? 'Untitled',
+          skillId: body.skillId ?? null,
+          designSystemId: body.designSystemId ?? null,
+          metadata: body.metadata ?? {},
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+        conversationId: 'rail-blank-conversation',
+      }),
+    });
+  });
+
+  await gotoEntryHome(page);
+
+  await page.getByTestId('entry-rail-toggle').click();
+  const projectRequestPromise = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname === '/api/projects' && request.method() === 'POST';
+  });
+  await page.getByTestId('entry-nav-new-project').click();
+
+  const request = await projectRequestPromise;
+  const body = request.postDataJSON() as {
+    id: string;
+    name?: string;
+    skillId?: string | null;
+    designSystemId?: string | null;
+    metadata?: Record<string, unknown>;
+    pendingPrompt?: string;
+    pluginId?: string;
+  };
+  expect(body.name).toBe('Untitled');
+  expect(body.skillId).toBeNull();
+  expect(body.designSystemId).toBeNull();
+  expect(body.metadata).toEqual({ kind: 'other' });
+  expect(body.pendingPrompt).toBeUndefined();
+  expect(body.pluginId).toBeUndefined();
+  await expect(page.getByTestId('new-project-modal')).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`/projects/${body.id}`));
+});
+
 test('[P1] home composer plus menu exposes attachment, connector, plugin, and MCP entries', async ({ page }) => {
   await gotoEntryHome(page);
 

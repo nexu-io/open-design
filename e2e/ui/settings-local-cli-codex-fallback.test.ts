@@ -2,13 +2,14 @@ import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 const LOCALE_KEY = 'open-design:locale';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 
-test.describe.configure({ timeout: 30_000 });
+test.describe.configure({ timeout: T.xlong * 2 });
 
 type AppConfigSeed = Record<string, unknown>;
 
@@ -65,14 +66,18 @@ function baseConfig(overrides: Partial<AppConfigSeed> = {}): AppConfigSeed {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium }).catch(() => {});
 }
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible()) {
+  const privacyDialogVisible = await privacyDialog
+    .waitFor({ state: 'visible', timeout: T.short })
+    .then(() => true)
+    .catch(() => false);
+  if (privacyDialogVisible) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
   await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
@@ -191,7 +196,7 @@ async function openLocalCliSettings(
 
 test.describe('Settings Local CLI Codex fallback UX', () => {
   test('[P0] @critical shows fallback repair actions and can replace the saved path with the detected Codex binary', async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(T.xlong * 2);
     const configuredPath = '/bad/codex';
     const detectedPath = '/usr/local/bin/codex';
     let lastRequest: Record<string, unknown> | null = null;
@@ -256,7 +261,7 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
   });
 
   test('[P0] can clear an unusable custom Codex path after a fallback_failed test result', async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(T.xlong * 2);
     const configuredPath = '/Applications/Codex.app/Contents/Resources/codex';
     const detectedPath = '/opt/homebrew/bin/codex';
 

@@ -1,0 +1,45 @@
+{
+  "template_type": "agent",
+  "style": 5,
+  "width": 1160,
+  "height": 720,
+  "title": "Multi-Agent Collaboration",
+  "subtitle": "Glassmorphism style with coordinator, specialists, shared memory, and delivery loop",
+  "containers": [
+    { "x": 42, "y": 108, "width": 1076, "height": 150, "label": "MISSION CONTROL", "subtitle": "", "stroke": "rgba(255,255,255,0.2)", "fill": "rgba(255,255,255,0.05)" },
+    { "x": 42, "y": 290, "width": 1076, "height": 204, "label": "SPECIALIST AGENTS", "subtitle": "", "stroke": "rgba(255,255,255,0.2)", "fill": "rgba(255,255,255,0.05)" },
+    { "x": 42, "y": 526, "width": 1076, "height": 138, "label": "SYNTHESIS", "subtitle": "", "stroke": "rgba(255,255,255,0.2)", "fill": "rgba(255,255,255,0.05)" }
+  ],
+  "nodes": [
+    { "id": "request", "kind": "speech", "x": 78, "y": 142, "width": 148, "height": 66, "label": "User brief", "fill": "rgba(255,255,255,0.12)", "stroke": "rgba(255,255,255,0.35)", "flat": true },
+    { "id": "coord", "kind": "double_rect", "x": 416, "y": 136, "width": 220, "height": 78, "label": "Coordinator Agent", "type_label": "ORCHESTRATOR", "fill": "rgba(255,255,255,0.12)", "stroke": "#c084fc" },
+    { "id": "research", "kind": "rect", "x": 112, "y": 344, "width": 206, "height": 74, "label": "Research Agent", "type_label": "SPECIALIST", "fill": "rgba(255,255,255,0.12)", "stroke": "#60a5fa" },
+    { "id": "coding", "kind": "terminal", "x": 478, "y": 332, "width": 198, "height": 108, "label": "Coding Agent", "fill": "#0f172a", "stroke": "rgba(255,255,255,0.24)", "header_fill": "rgba(255,255,255,0.12)" },
+    { "id": "review", "kind": "rect", "x": 826, "y": 344, "width": 206, "height": 74, "label": "Review Agent", "type_label": "SPECIALIST", "fill": "rgba(255,255,255,0.12)", "stroke": "#34d399" },
+    { "id": "memory", "kind": "cylinder", "x": 158, "y": 560, "width": 168, "height": 92, "label": "Shared Memory", "sublabel": "facts + plans", "fill": "rgba(255,255,255,0.08)", "stroke": "#34d399" },
+    { "id": "merge", "kind": "double_rect", "x": 472, "y": 566, "width": 210, "height": 74, "label": "Synthesis Engine", "type_label": "MERGE", "fill": "rgba(255,255,255,0.12)", "stroke": "#c084fc" },
+    { "id": "response", "kind": "speech", "x": 884, "y": 568, "width": 166, "height": 70, "label": "Final response", "fill": "rgba(255,255,255,0.12)", "stroke": "#f59e0b", "flat": true }
+  ],
+  "arrows": [
+    { "source": "request", "target": "coord", "source_port": "right", "target_port": "left", "flow": "read" },
+    { "source": "coord", "target": "research", "source_port": "bottom", "target_port": "top", "flow": "control", "label": "delegate" },
+    { "source": "coord", "target": "coding", "source_port": "bottom", "target_port": "top", "flow": "control", "corridor_x": [590] },
+    { "source": "coord", "target": "review", "source_port": "bottom", "target_port": "top", "flow": "control", "corridor_x": [910] },
+    { "source": "research", "target": "memory", "source_port": "bottom", "target_port": "top", "flow": "write", "dashed": true },
+    { "source": "coding", "target": "memory", "source_port": "bottom", "target_port": "top", "flow": "write", "dashed": true, "corridor_x": [560] },
+    { "source": "review", "target": "memory", "source_port": "bottom", "target_port": "top", "flow": "write", "dashed": true, "corridor_x": [930], "route_points": [[929, 470], [242, 470]] },
+    { "source": "memory", "target": "merge", "source_port": "right", "target_port": "left", "flow": "read", "label": "shared context" },
+    { "source": "merge", "target": "response", "source_port": "right", "target_port": "left", "flow": "feedback" }
+  ],
+  "legend": [
+    { "flow": "read", "label": "Input / retrieval" },
+    { "flow": "control", "label": "Delegation" },
+    { "flow": "write", "label": "Shared memory write" },
+    { "flow": "feedback", "label": "Synthesis output" }
+  ],
+  "legend_position": "bottom-left",
+  "legend_y": 604,
+  "legend_box": true,
+  "legend_box_fill": "rgba(15,23,42,0.68)",
+  "footer": ""
+}

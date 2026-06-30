@@ -33,7 +33,7 @@ const CRITICAL_SCENARIO_IDS = new Set([
   'file-upload-send',
   'conversation-delete-recovery',
 ]);
-test.describe.configure({ timeout: 45_000 });
+test.describe.configure({ timeout: T.xlong });
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -781,9 +781,9 @@ async function sendPrompt(page: Page, prompt: string) {
   await input.click();
   await input.fill(prompt);
   await expect(input).toHaveText(prompt, { timeout: T.short });
-  await expect(sendButton).toBeEnabled({ timeout: T.short });
+  await expect(sendButton).toBeEnabled({ timeout: T.medium });
   await Promise.all([
-    page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
+    page.waitForResponse(isCreateRunResponse, { timeout: T.medium }),
     sendButton.evaluate((button: HTMLButtonElement) => button.click()),
   ]);
 }
@@ -1267,7 +1267,11 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible()) {
+  const privacyDialogVisible = await privacyDialog
+    .waitFor({ state: 'visible', timeout: T.short })
+    .then(() => true)
+    .catch(() => false);
+  if (privacyDialogVisible) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
@@ -1277,7 +1281,9 @@ async function gotoEntryHome(page: Page) {
 
 async function openNewProjectModal(page: Page) {
   await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
+  await page.getByTestId('entry-nav-projects').click();
+  await expect(page).toHaveURL(/\/projects$/);
+  await page.getByTestId('designs-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
 }

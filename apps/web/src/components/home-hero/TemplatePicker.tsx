@@ -29,6 +29,7 @@ interface Props {
   // Localized label / description for a chip id (reuses HomeHero's chip copy).
   labelFor: (chipId: string) => string;
   descriptionFor: (chipId: string) => string;
+  searchTextFor?: (chipId: string) => string;
   onPick: (chip: HomeHeroChip) => void;
   onClear: () => void;
 }
@@ -41,6 +42,7 @@ export function TemplatePicker({
   pickDisabled = false,
   labelFor,
   descriptionFor,
+  searchTextFor = () => '',
   onPick,
   onClear,
 }: Props) {
@@ -59,9 +61,9 @@ export function TemplatePicker({
     const q = query.trim().toLowerCase();
     if (q.length === 0) return templates;
     return templates.filter((chip) =>
-      `${labelFor(chip.id)} ${descriptionFor(chip.id)}`.toLowerCase().includes(q),
+      `${labelFor(chip.id)} ${descriptionFor(chip.id)} ${searchTextFor(chip.id)}`.toLowerCase().includes(q),
     );
-  }, [query, templates, labelFor, descriptionFor]);
+  }, [query, templates, labelFor, descriptionFor, searchTextFor]);
 
   useEffect(() => {
     if (open) {

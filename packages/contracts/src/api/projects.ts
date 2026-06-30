@@ -96,7 +96,12 @@ export interface ProjectMetadata {
   // projects from the Home `document` card — an analytics-only discriminator
   // (no product behavior keys off it) so a created `other`-kind project reports
   // `project_kind: 'document'` instead of generic `other`.
-  intent?: 'live-artifact' | 'document';
+  // `wireframe`, `mobile-app`, `document`, `social-card`, and `diagram` are
+  // Home scenario chips that bind dedicated skill/template plugins after
+  // project creation instead of falling through to the generic new-generation
+  // or media router.
+  intent?: 'live-artifact' | 'wireframe' | 'mobile-app' | 'document' | 'social-card' | 'diagram';
+  artifactType?: 'social-card' | 'diagram';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   slideCount?: string;

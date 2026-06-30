@@ -1,0 +1,181 @@
+{
+  "template_type": "memory",
+  "style": 4,
+  "width": 1120,
+  "height": 760,
+  "title": "Agent Memory Types",
+  "subtitle": "Five memory systems an AI agent can use — characteristics, storage backends, and persistence",
+  "containers": [
+    {
+      "x": 18,
+      "y": 32,
+      "width": 1084,
+      "height": 696,
+      "label": "",
+      "subtitle": "",
+      "stroke": "#e5e7eb",
+      "fill": "none",
+      "rx": 6
+    }
+  ],
+  "nodes": [
+    {
+      "id": "sensory",
+      "kind": "rect",
+      "x": 56,
+      "y": 118,
+      "width": 266,
+      "height": 106,
+      "label": "Raw input, very short-lived",
+      "sublabel": "\"Current image / audio\"",
+      "type_label": "SENSORY MEMORY",
+      "fill": "#ffffff",
+      "stroke": "#e5e7eb",
+      "flat": true,
+      "tags": [
+        { "label": "RAM / context", "fill": "#eff6ff", "stroke": "#bfdbfe", "text_fill": "#3b82f6" }
+      ]
+    },
+    {
+      "id": "working",
+      "kind": "rect",
+      "x": 56,
+      "y": 308,
+      "width": 266,
+      "height": 106,
+      "label": "Active context, session-scoped",
+      "sublabel": "\"Current conversation\"",
+      "type_label": "WORKING MEMORY",
+      "fill": "#ffffff",
+      "stroke": "#e5e7eb",
+      "flat": true,
+      "tags": [
+        { "label": "Context Window", "fill": "#eff6ff", "stroke": "#bfdbfe", "text_fill": "#3b82f6" }
+      ]
+    },
+    {
+      "id": "episodic",
+      "kind": "rect",
+      "x": 56,
+      "y": 498,
+      "width": 266,
+      "height": 106,
+      "label": "Past interactions, retrievable",
+      "sublabel": "\"Last week's chat summary\"",
+      "type_label": "EPISODIC MEMORY",
+      "fill": "#ffffff",
+      "stroke": "#e5e7eb",
+      "flat": true,
+      "tags": [
+        { "label": "Vector DB + timestamp", "fill": "#eff6ff", "stroke": "#bfdbfe", "text_fill": "#3b82f6" }
+      ]
+    },
+    {
+      "id": "agent",
+      "kind": "hexagon",
+      "x": 492,
+      "y": 324,
+      "width": 118,
+      "height": 90,
+      "label": "Agent",
+      "sublabel": "LLM + Planner",
+      "type_label": "CORE",
+      "fill": "#ffffff",
+      "stroke": "#3b82f6",
+      "stroke_width": 1.6,
+      "flat": true
+    },
+    {
+      "id": "semantic",
+      "kind": "rect",
+      "x": 810,
+      "y": 218,
+      "width": 266,
+      "height": 106,
+      "label": "Facts & knowledge, long-term",
+      "sublabel": "\"User prefers Python\"",
+      "type_label": "SEMANTIC MEMORY",
+      "fill": "#ffffff",
+      "stroke": "#e5e7eb",
+      "flat": true,
+      "tags": [
+        { "label": "Vector DB + Graph DB", "fill": "#eff6ff", "stroke": "#bfdbfe", "text_fill": "#3b82f6" }
+      ]
+    },
+    {
+      "id": "procedural",
+      "kind": "rect",
+      "x": 810,
+      "y": 408,
+      "width": 266,
+      "height": 106,
+      "label": "Skills & how-to, persistent",
+      "sublabel": "\"How to call Stripe API\"",
+      "type_label": "PROCEDURAL MEMORY",
+      "fill": "#ffffff",
+      "stroke": "#e5e7eb",
+      "flat": true,
+      "tags": [
+        { "label": "Code store / fine-tune", "fill": "#eff6ff", "stroke": "#bfdbfe", "text_fill": "#3b82f6" }
+      ]
+    }
+  ],
+  "arrows": [
+    {
+      "source": "agent",
+      "target": "sensory",
+      "source_port": "left",
+      "target_port": "right",
+      "flow": "read",
+      "label": "read/write",
+      "route_points": [[432, 360], [386, 360], [386, 172], [322, 172]],
+      "label_dx": -18,
+      "label_dy": -8
+    },
+    {
+      "source": "agent",
+      "target": "working",
+      "source_port": "left",
+      "target_port": "right",
+      "flow": "read",
+      "label": "read/write",
+      "route_points": [[432, 369], [404, 369], [322, 360]],
+      "label_dx": -6,
+      "label_dy": -6
+    },
+    {
+      "source": "agent",
+      "target": "episodic",
+      "source_port": "left",
+      "target_port": "right",
+      "flow": "read",
+      "label": "read/write",
+      "route_points": [[432, 394], [386, 430], [386, 552], [322, 552]],
+      "label_dx": -18,
+      "label_dy": -6
+    },
+    {
+      "source": "agent",
+      "target": "semantic",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "read",
+      "label": "read/write",
+      "route_points": [[668, 360], [726, 360], [726, 271], [810, 271]],
+      "label_dx": 10,
+      "label_dy": -8
+    },
+    {
+      "source": "agent",
+      "target": "procedural",
+      "source_port": "right",
+      "target_port": "left",
+      "flow": "read",
+      "label": "read/write",
+      "route_points": [[668, 388], [740, 404], [810, 461]],
+      "label_dx": 8,
+      "label_dy": -8
+    }
+  ],
+  "footer": ""
+}

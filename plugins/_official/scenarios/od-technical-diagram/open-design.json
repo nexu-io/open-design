@@ -1,0 +1,170 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-technical-diagram",
+  "title": "Technical diagram (default scenario)",
+  "version": "0.2.0",
+  "description": "Default scenario plugin for architecture diagrams, workflow charts, RAG/agent diagrams, UML, data-flow maps, timelines, mind maps, and comparison diagrams, upgraded with fireworks-tech-graph templates and style samples.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-technical-diagram",
+  "tags": [
+    "scenario",
+    "first-party",
+    "diagram",
+    "architecture",
+    "workflow",
+    "uml",
+    "data-flow",
+    "infographic"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "technical-diagram",
+    "mode": "diagram",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./assets/template.html"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./assets/template.html",
+        "./assets/samples/sample-style1-flat.png",
+        "./assets/samples/sample-style3-blueprint.png",
+        "./assets/samples/sample-style6-claude.png",
+        "./assets/samples/sample-style8-dark-luxury.png",
+        "./templates/architecture.svg",
+        "./templates/agent-architecture.svg",
+        "./templates/data-flow.svg",
+        "./templates/flowchart.svg",
+        "./templates/sequence.svg",
+        "./templates/state-machine.svg",
+        "./templates/timeline.svg",
+        "./templates/comparison-matrix.svg",
+        "./references/patterns.md",
+        "./references/style-diagram-matrix.md",
+        "./references/svg-layout-best-practices.md",
+        "./references/icons.md",
+        "./references/checklist.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create a polished {{diagramType}} for {{audience}} explaining {{systemContext}}. Detail level: {{detailLevel}}. Visual style: {{visualStyle}}. Read `assets/template.html`, route through `references/patterns.md`, then use the closest fireworks template under `templates/` plus the matching `references/style-*.md` guide. Build an editable SVG/HTML diagram with semantic nodes, labeled arrows, clear grouping, and a legend when needed; validate SVG syntax and visual collisions.",
+        "zh-CN": "为 {{audience}} 创建一张高质量 {{diagramType}}，解释 {{systemContext}}。细节层级：{{detailLevel}}。视觉风格：{{visualStyle}}。先读 `assets/template.html`，按 `references/patterns.md` 路由，再使用 `templates/` 下最接近的 fireworks 模板和匹配的 `references/style-*.md` 风格指南。生成可编辑 SVG/HTML 图，包含语义节点、带标签箭头、清晰分组和必要图例；检查 SVG 语法与视觉碰撞。",
+        "zh-TW": "為 {{audience}} 建立一張高品質 {{diagramType}}，解釋 {{systemContext}}。細節層級：{{detailLevel}}。視覺風格：{{visualStyle}}。先讀 `assets/template.html`，按 `references/patterns.md` 路由，再使用 `templates/` 下最接近的 fireworks 範本和匹配的 `references/style-*.md` 風格指南。生成可編輯 SVG/HTML 圖，包含語義節點、帶標籤箭頭、清晰分組和必要圖例；檢查 SVG 語法與視覺碰撞。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./assets/template.html",
+          "title": "Diagram seed"
+        },
+        {
+          "path": "./templates/architecture.svg",
+          "title": "Architecture SVG starter"
+        },
+        {
+          "path": "./templates/agent-architecture.svg",
+          "title": "Agent architecture SVG starter"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "diagramType",
+        "label": "Diagram type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "architecture diagram",
+          "workflow diagram",
+          "RAG / agent diagram",
+          "UML diagram",
+          "data-flow diagram",
+          "comparison diagram",
+          "infographic"
+        ],
+        "default": "architecture diagram"
+      },
+      {
+        "name": "systemContext",
+        "label": "System context",
+        "type": "string",
+        "required": true,
+        "placeholder": "request flow, product workflow, data pipeline",
+        "default": "the user's system or workflow brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "engineering and product readers",
+        "default": "engineering and product readers"
+      },
+      {
+        "name": "detailLevel",
+        "label": "Detail level",
+        "type": "select",
+        "options": [
+          "executive overview",
+          "product doc",
+          "engineering handoff",
+          "implementation detail"
+        ],
+        "default": "product doc"
+      },
+      {
+        "name": "visualStyle",
+        "label": "Visual style",
+        "type": "select",
+        "options": [
+          "clean product-doc",
+          "blueprint",
+          "dark terminal",
+          "warm editorial",
+          "minimal Notion"
+        ],
+        "default": "clean product-doc"
+      }
+    ]
+  }
+}

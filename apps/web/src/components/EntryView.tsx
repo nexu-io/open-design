@@ -86,6 +86,7 @@ interface Props {
   // the New project modal renders an empty state until they arrive (fast
   // fetch), which keeps the prop surface narrower.
   skillsLoading?: boolean;
+  newProjectLoading?: boolean;
   designSystemsLoading?: boolean;
   projectsLoading?: boolean;
   promptTemplatesLoading?: boolean;
@@ -242,6 +243,7 @@ export function EntryView({
   onRefreshAgents,
   onThemeChange,
   skillsLoading = false,
+  newProjectLoading = skillsLoading,
   designSystemsLoading = false,
   projectsLoading = false,
   promptTemplatesLoading: _promptTemplatesLoading = false,
@@ -343,6 +345,7 @@ export function EntryView({
       {...(integrationInitialTab ? { integrationInitialTab } : {})}
       composioConfigLoading={composioConfigLoading}
       skillsLoading={skillsLoading}
+      newProjectLoading={newProjectLoading}
       designSystemsLoading={designSystemsLoading}
       projectsLoading={projectsLoading}
       config={config}

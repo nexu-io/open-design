@@ -1,0 +1,40 @@
+{
+  "template_type": "architecture",
+  "style": 7,
+  "width": 1100,
+  "height": 680,
+  "title": "API Integration Flow",
+  "subtitle": "OpenAI-style clean integration diagram with precise control and response stages",
+  "containers": [
+    { "x": 40, "y": 118, "width": 1020, "height": 104, "label": "ENTRY", "subtitle": "", "stroke": "#e2e8f0", "fill": "none" },
+    { "x": 40, "y": 252, "width": 1020, "height": 154, "label": "MODEL + TOOLS", "subtitle": "", "stroke": "#e2e8f0", "fill": "none" },
+    { "x": 40, "y": 438, "width": 1020, "height": 154, "label": "DELIVERY", "subtitle": "", "stroke": "#e2e8f0", "fill": "none" }
+  ],
+  "nodes": [
+    { "id": "app", "kind": "rect", "x": 90, "y": 146, "width": 176, "height": 56, "label": "Application", "type_label": "CLIENT", "fill": "#ffffff", "stroke": "#dce5e3", "flat": true },
+    { "id": "sdk", "kind": "double_rect", "x": 350, "y": 142, "width": 196, "height": 64, "label": "OpenAI SDK Layer", "type_label": "SDK", "fill": "#ffffff", "stroke": "#10a37f" },
+    { "id": "prompt", "kind": "rect", "x": 114, "y": 300, "width": 188, "height": 60, "label": "Prompt Builder", "type_label": "INPUT", "fill": "#ffffff", "stroke": "#dce5e3", "flat": true },
+    { "id": "model", "kind": "double_rect", "x": 418, "y": 292, "width": 236, "height": 76, "label": "Model Runtime", "type_label": "REASONING", "fill": "#ffffff", "stroke": "#10a37f" },
+    { "id": "tools", "kind": "rect", "x": 782, "y": 300, "width": 188, "height": 60, "label": "Tool Calls", "type_label": "ACTIONS", "fill": "#ffffff", "stroke": "#dce5e3", "flat": true },
+    { "id": "formatter", "kind": "rect", "x": 148, "y": 486, "width": 198, "height": 60, "label": "Response Formatter", "type_label": "OUTPUT", "fill": "#ffffff", "stroke": "#dce5e3", "flat": true },
+    { "id": "obs", "kind": "rect", "x": 470, "y": 486, "width": 176, "height": 60, "label": "Observability", "type_label": "METRICS", "fill": "#ffffff", "stroke": "#dce5e3", "flat": true },
+    { "id": "release", "kind": "rect", "x": 770, "y": 486, "width": 176, "height": 60, "label": "Release Control", "type_label": "CONFIG", "fill": "#ffffff", "stroke": "#dce5e3", "flat": true }
+  ],
+  "arrows": [
+    { "source": "app", "target": "sdk", "source_port": "right", "target_port": "left", "flow": "control" },
+    { "source": "sdk", "target": "prompt", "source_port": "bottom", "target_port": "top", "flow": "read", "label": "prepare", "route_points": [[370,232], [236,232], [236,300]] },
+    { "source": "sdk", "target": "model", "source_port": "bottom", "target_port": "top", "flow": "control", "corridor_x": [520] },
+    { "source": "model", "target": "tools", "source_port": "right", "target_port": "left", "flow": "read", "label": "tool use" },
+    { "source": "model", "target": "formatter", "source_port": "bottom", "target_port": "top", "flow": "control", "corridor_x": [278] },
+    { "source": "model", "target": "obs", "source_port": "bottom", "target_port": "top", "flow": "feedback", "dashed": true },
+    { "source": "obs", "target": "release", "source_port": "right", "target_port": "left", "flow": "control" }
+  ],
+  "legend": [
+    { "flow": "control", "label": "Primary integration path" },
+    { "flow": "read", "label": "Prompt / tool context" },
+    { "flow": "feedback", "label": "Operational feedback" }
+  ],
+  "legend_position": "bottom-left",
+  "legend_y": 612,
+  "footer": ""
+}

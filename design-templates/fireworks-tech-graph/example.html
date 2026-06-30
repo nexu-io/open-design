@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fireworks Tech Graph</title>
+  <style>
+    :root {
+      --ink: #15191f;
+      --muted: #687385;
+      --paper: #f7f4ee;
+      --panel: #ffffff;
+      --line: rgba(27, 24, 21, .16);
+      --accent: #e8623d;
+      --blue: #2a6df4;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(27,24,21,.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(27,24,21,.06) 1px, transparent 1px),
+        var(--paper);
+      background-size: 28px 28px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .gallery {
+      width: min(1180px, calc(100vw - 56px));
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1.12fr .88fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .hero,
+    .card {
+      background: rgba(255,255,255,.94);
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 70px rgba(24,32,47,.14);
+    }
+
+    .hero {
+      padding: 26px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .kicker {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 760px;
+      margin: 4px 0 0;
+      font-size: clamp(34px, 5vw, 64px);
+      line-height: .94;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      max-width: 720px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.5;
+      font-weight: 580;
+    }
+
+    .sample {
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid var(--line);
+    }
+
+    .sample img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      object-position: center;
+    }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      overflow: hidden;
+    }
+
+    .card img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 11;
+      object-fit: cover;
+      object-position: center;
+    }
+
+    .card figcaption {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .card b { color: var(--ink); }
+
+    @media (max-width: 900px) {
+      body { padding: 16px; }
+      .gallery { width: min(620px, calc(100vw - 32px)); grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="gallery">
+    <section class="hero">
+      <div>
+        <div class="kicker">SVG-first technical diagrams</div>
+        <h1>Eight styles, one disciplined diagram grammar.</h1>
+      </div>
+      <p>Architecture, workflow, RAG/agent, UML, timeline, mind map, comparison, and data-flow diagrams with semantic nodes, labeled arrows, legends, and export-ready SVG.</p>
+      <figure class="sample">
+        <img src="assets/samples/sample-style1-flat.png" alt="Flat icon technical diagram sample">
+      </figure>
+    </section>
+
+    <section class="matrix" aria-label="Fireworks style samples">
+      <figure class="card">
+        <img src="assets/samples/sample-style2-dark.png" alt="Dark terminal technical diagram sample">
+        <figcaption><b>Dark Terminal</b><span>tool calls</span></figcaption>
+      </figure>
+      <figure class="card">
+        <img src="assets/samples/sample-style3-blueprint.png" alt="Blueprint technical diagram sample">
+        <figcaption><b>Blueprint</b><span>microservices</span></figcaption>
+      </figure>
+      <figure class="card">
+        <img src="assets/samples/sample-style6-claude.png" alt="Claude official technical diagram sample">
+        <figcaption><b>Claude Official</b><span>system stack</span></figcaption>
+      </figure>
+      <figure class="card">
+        <img src="assets/samples/sample-style8-dark-luxury.png" alt="Dark luxury technical diagram sample">
+        <figcaption><b>Dark Luxury</b><span>premium graph</span></figcaption>
+      </figure>
+    </section>
+  </main>
+</body>
+</html>

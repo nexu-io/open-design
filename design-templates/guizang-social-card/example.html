@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guizang Social Card</title>
+  <style>
+    :root {
+      --ink: #17130d;
+      --muted: #766b5a;
+      --paper: #efe9dc;
+      --panel: #fbf8f1;
+      --line: rgba(40,32,23,.14);
+      --accent: #b9472f;
+      --blue: #002fa7;
+      --gold: #d4a04a;
+      --shadow: 0 26px 80px rgba(25, 20, 15, .18);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 30px;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 18% 12%, rgba(185,71,47,.13), transparent 32%),
+        radial-gradient(circle at 90% 28%, rgba(0,47,167,.11), transparent 30%),
+        var(--paper);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .showcase {
+      width: min(1160px, calc(100vw - 60px));
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 330px 1fr;
+      gap: 22px;
+    }
+
+    .poster {
+      position: relative;
+      overflow: hidden;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .xhs {
+      width: 330px;
+      aspect-ratio: 3 / 4;
+      padding: 24px;
+    }
+
+    .media-bg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .xhs .media-bg {
+      opacity: .9;
+    }
+
+    .xhs::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(251,248,241,.1), rgba(25,19,13,.62));
+    }
+
+    .label {
+      position: relative;
+      z-index: 1;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 860;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      position: relative;
+      z-index: 1;
+      margin: 86px 0 0;
+      max-width: 245px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 50px;
+      line-height: .94;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+
+    .xhs p {
+      position: absolute;
+      z-index: 1;
+      left: 24px;
+      right: 24px;
+      bottom: 24px;
+      margin: 0;
+      color: #fbf8f1;
+      font-size: 15px;
+      line-height: 1.45;
+      font-weight: 560;
+    }
+
+    .stack {
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      gap: 22px;
+      min-width: 0;
+    }
+
+    .swiss {
+      min-height: 238px;
+      padding: 30px 34px;
+      display: grid;
+      grid-template-columns: .95fr 1.05fr;
+      gap: 30px;
+      background: #fff;
+    }
+
+    .swiss .media-bg {
+      opacity: .4;
+      mix-blend-mode: multiply;
+    }
+
+    .copy,
+    .proof {
+      position: relative;
+      z-index: 1;
+    }
+
+    .copy strong {
+      display: block;
+      color: var(--blue);
+      font-size: 72px;
+      line-height: .82;
+      font-weight: 300;
+      letter-spacing: 0;
+    }
+
+    .copy h2 {
+      margin: 18px 0 0;
+      font-size: 25px;
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .proof {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      align-content: end;
+    }
+
+    .tile {
+      min-height: 78px;
+      padding: 12px;
+      background: rgba(255,255,255,.8);
+      border: 1px solid #111;
+      color: #111;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .tile.accent {
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .pair {
+      display: grid;
+      grid-template-columns: 1fr 210px;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .wide,
+    .square {
+      position: relative;
+      overflow: hidden;
+      color: #f6edda;
+      background: #111;
+      box-shadow: var(--shadow);
+    }
+
+    .wide {
+      aspect-ratio: 21 / 9;
+      padding: 34px 42px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+
+    .wide .media-bg,
+    .square .media-bg {
+      opacity: .92;
+      filter: saturate(.9) contrast(1.05);
+    }
+
+    .wide::after,
+    .square::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(0,0,0,.72), rgba(0,0,0,.18));
+    }
+
+    .wide h2,
+    .wide .meta,
+    .square h2,
+    .square .meta {
+      position: relative;
+      z-index: 1;
+      margin: 0;
+    }
+
+    .wide h2 {
+      width: min(70%, 560px);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 42px;
+      line-height: .98;
+      font-weight: 500;
+    }
+
+    .meta {
+      margin-bottom: 12px;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .square {
+      width: 210px;
+      aspect-ratio: 1;
+      padding: 22px;
+      display: grid;
+      align-items: end;
+    }
+
+    .square h2 {
+      font-size: 30px;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    @media (max-width: 900px) {
+      body { padding: 16px; }
+      .showcase { width: min(520px, calc(100vw - 32px)); grid-template-columns: 1fr; }
+      .xhs { width: 100%; }
+      .swiss, .pair { grid-template-columns: 1fr; }
+      .square { width: min(260px, 100%); }
+    }
+  </style>
+</head>
+<body>
+  <main class="showcase">
+    <section class="poster xhs">
+      <img class="media-bg" src="assets/screenshot-backgrounds/style-a/monocle-classic.webp" alt="">
+      <div class="label">Editorial Rednote · 1080x1440</div>
+      <h1>让图文像一本被认真编辑过的杂志。</h1>
+      <p>图片作为证据层，标题承担观点，页脚只保留必要上下文。</p>
+    </section>
+
+    <section class="stack">
+      <article class="poster swiss">
+        <img class="media-bg" src="assets/screenshot-backgrounds/style-b/lemon-grid.webp" alt="">
+        <div class="copy">
+          <div class="label">Swiss review card</div>
+          <strong>7.2x</strong>
+          <h2>用网格和一个指标讲清产品价值。</h2>
+        </div>
+        <div class="proof" aria-hidden="true">
+          <div class="tile">KPI</div>
+          <div class="tile accent">Proof</div>
+          <div class="tile">Before</div>
+          <div class="tile">After</div>
+        </div>
+      </article>
+
+      <div class="pair">
+        <article class="wide">
+          <img class="media-bg" src="assets/screenshot-backgrounds/style-a/kraft-paper.webp" alt="">
+          <div class="meta">WeChat cover · 21:9</div>
+          <h2>同一篇文章，两种裁切，一个视觉系统。</h2>
+        </article>
+        <article class="square">
+          <img class="media-bg" src="assets/screenshot-backgrounds/style-a/kraft-paper.webp" alt="">
+          <div>
+            <div class="meta">Share · 1:1</div>
+            <h2>两种裁切，一个系统。</h2>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

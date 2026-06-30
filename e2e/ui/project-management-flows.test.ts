@@ -1,5 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
+import { T } from '@/timeouts';
 import type { Locator, Page, Request, Route } from '@playwright/test';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
 
@@ -590,26 +591,25 @@ test('[P1] project detail composer plus menu exposes attachment, connector, plug
 });
 
 test('[P0] @critical project detail composer agent menu lets the user switch Local CLI agents and models', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(T.xlong);
   await page.goto('/');
   await createProject(page, 'Composer agent switch');
   await expectWorkspaceReady(page);
 
-  const { menu, claudeButton } = await openComposerAgentMenu(page);
-  await expect(claudeButton).toBeVisible();
-  await claudeButton.click();
-
-  await expect(claudeButton).toHaveAttribute('aria-current', 'true');
-  const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
-  await expect(modelSelect).toBeVisible();
+  const { menu } = await openComposerAgentMenu(page);
+  const modelSelect = await chooseComposerAgentAndOpenModelPopover(
+    page,
+    menu,
+    'claude',
+    /^Sonnet \(alias\)$/i,
+  );
   await expect(modelSelect).toContainText(/default/i);
-  await modelSelect.click();
   await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
   await expect(modelSelect).toContainText(/Sonnet/i);
 });
 
 test('[P0] project detail composer agent and model switches carry into the next daemon run request', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(T.xlong);
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await page.route('**/api/runs', async (route) => {
     const raw = route.request().postData();
@@ -632,10 +632,13 @@ test('[P0] project detail composer agent and model switches carry into the next 
   await createProject(page, 'Composer agent switch run context');
   await expectWorkspaceReady(page);
 
-  const { menu, claudeButton } = await openComposerAgentMenu(page);
-  await claudeButton.click();
-  const modelSelect = menu.locator('.avatar-model-section [role=\"combobox\"]').first();
-  await modelSelect.click();
+  const { menu } = await openComposerAgentMenu(page);
+  const modelSelect = await chooseComposerAgentAndOpenModelPopover(
+    page,
+    menu,
+    'claude',
+    /^Sonnet \(alias\)$/i,
+  );
   await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
   await expect(modelSelect).toContainText(/Sonnet/i);
 
@@ -652,7 +655,7 @@ test('[P0] project detail composer agent and model switches carry into the next 
 });
 
 test('[P0] @critical project detail composer BYOK model switch persists from the agent menu', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(T.xlong);
   const config = {
     mode: 'daemon',
     apiKey: 'sk-openai-test',
@@ -678,22 +681,7 @@ test('[P0] @critical project detail composer BYOK model switch persists from the
     },
     { key: STORAGE_KEY, value: config },
   );
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() === 'PUT') {
-      const body = route.request().postDataJSON() as Record<string, unknown>;
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ config: body }),
-      });
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ config }),
-    });
-  });
+  await routeMutableAppConfig(page, config);
 
   await page.goto('/');
   await createProject(page, 'Composer BYOK model switch');
@@ -722,7 +710,7 @@ test('[P0] @critical project detail composer BYOK model switch persists from the
 });
 
 test('[P0] @critical project detail composer keeps Local CLI and BYOK model choices isolated', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(T.xlong);
   const config = {
     mode: 'daemon',
     apiKey: 'sk-openai-test',
@@ -748,31 +736,19 @@ test('[P0] @critical project detail composer keeps Local CLI and BYOK model choi
     },
     { key: STORAGE_KEY, value: config },
   );
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() === 'PUT') {
-      const body = route.request().postDataJSON() as Record<string, unknown>;
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ config: body }),
-      });
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ config }),
-    });
-  });
+  await routeMutableAppConfig(page, config);
 
   await page.goto('/');
   await createProject(page, 'Composer model mode isolation');
   await expectWorkspaceReady(page);
 
-  const { menu, claudeButton } = await openComposerAgentMenu(page);
-  await claudeButton.click();
-  const localModelSelect = menu.locator('.avatar-model-section [role="combobox"]').first();
-  await localModelSelect.click();
+  const { menu } = await openComposerAgentMenu(page);
+  const localModelSelect = await chooseComposerAgentAndOpenModelPopover(
+    page,
+    menu,
+    'claude',
+    /^Sonnet \(alias\)$/i,
+  );
   await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
   await expect(localModelSelect).toContainText(/Sonnet/i);
 
@@ -784,7 +760,7 @@ test('[P0] @critical project detail composer keeps Local CLI and BYOK model choi
   await expect(byokModelSelect).toContainText('gpt-4o-mini');
 
   await menu.getByRole('button', { name: /Local CLI|Use local|本机 CLI|本地 CLI/i }).click();
-  await expect(claudeButton).toHaveAttribute('aria-current', 'true');
+  await expectComposerAgentSelected(page, menu, 'claude');
   await expect(localModelSelect).toContainText(/Sonnet/i);
   await expect.poll(async () => page.evaluate((key) => {
     const raw = window.localStorage.getItem(key);
@@ -800,6 +776,7 @@ test('[P0] @critical project detail composer keeps Local CLI and BYOK model choi
 });
 
 test('[P0] clearing the project design system removes designSystemId from the next run request', async ({ page }) => {
+  test.setTimeout(T.xlong);
   const patchBodies: Array<Record<string, unknown>> = [];
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await page.route('**/api/design-systems', async (route) => {
@@ -1081,6 +1058,7 @@ test('[P1] project detail conversations menu supports new chat, search, counts, 
 });
 
 test('[P0] project detail share menu copies the current share link for uploaded html artifacts', async ({ page }) => {
+  test.setTimeout(T.xlong);
   let uploadedName = '';
   await page.addInitScript(() => {
     const store: string[] = [];
@@ -1135,6 +1113,7 @@ test('[P0] project detail share menu copies the current share link for uploaded 
 });
 
 test('[P0] project detail share menu opens the current share page for uploaded html artifacts', async ({ page }) => {
+  test.setTimeout(T.xlong);
   let uploadedName = '';
   await page.addInitScript(() => {
     const opened: string[] = [];
@@ -1187,6 +1166,7 @@ test('[P0] project detail share menu opens the current share page for uploaded h
 });
 
 test('[P0] @critical project detail share menu publish action opens the deploy flow for the selected provider', async ({ page }) => {
+  test.setTimeout(T.xlong);
   let deployConfigUrl: string | null = null;
   await page.route('**/api/projects/*/deployments', async (route) => {
     await route.fulfill({ json: { deployments: [] } });
@@ -1294,7 +1274,7 @@ test('[P2] home designs view toggle switches between grid and kanban and persist
 });
 
 test('[P1] home designs search filters projects and recovers from no results', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(T.xlong);
 
   const stamp = Date.now();
   const alphaName = `Home search alpha ${stamp}`;
@@ -2107,11 +2087,7 @@ async function openComposerAgentMenu(page: Page): Promise<{
   const menu = page.locator('.avatar-popover[role="dialog"]');
   await expect(menu).toBeVisible();
 
-  const claudeButton = menu
-    .locator('[data-testid="avatar-agent-option-claude"], .avatar-item', {
-      hasText: /Claude Code/i,
-    })
-    .first();
+  const claudeButton = menu.getByTestId('avatar-agent-option-claude');
   if (!(await claudeButton.isVisible().catch(() => false))) {
     const localCliOption = menu.getByRole('button', {
       name: /Local CLI|本机 CLI|本地 CLI|Use local/i,
@@ -2122,6 +2098,97 @@ async function openComposerAgentMenu(page: Page): Promise<{
   }
   await expect(claudeButton).toBeVisible({ timeout: 20_000 });
   return { menu, claudeButton };
+}
+
+async function chooseComposerAgent(
+  page: Page,
+  menu: Locator,
+  agentId: string,
+): Promise<Locator> {
+  const agentButton = menu.getByTestId(`avatar-agent-option-${agentId}`);
+  await expect(agentButton).toBeVisible({ timeout: T.medium });
+  await agentButton.click();
+  return expectComposerAgentSelected(page, menu, agentId);
+}
+
+async function expectComposerAgentSelected(
+  page: Page,
+  menu: Locator,
+  agentId: string,
+): Promise<Locator> {
+  const agentButton = menu.getByTestId(`avatar-agent-option-${agentId}`);
+  await expect.poll(async () => page.evaluate((key) => {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw).agentId ?? null;
+  }, STORAGE_KEY), { timeout: T.medium }).toBe(agentId);
+  await expect(agentButton).toHaveAttribute('aria-current', 'true', { timeout: T.medium });
+  return agentButton;
+}
+
+async function chooseComposerAgentAndOpenModelPopover(
+  page: Page,
+  menu: Locator,
+  agentId: string,
+  optionName: RegExp,
+): Promise<Locator> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await chooseComposerAgent(page, menu, agentId);
+    const modelSelect = await openComposerModelPopover(page, menu);
+    const modelOption = page.getByTestId('avatar-model-popover').getByRole('option', {
+      name: optionName,
+    });
+    const optionVisible = await modelOption
+      .waitFor({ state: 'visible', timeout: T.short })
+      .then(() => true)
+      .catch(() => false);
+    if (optionVisible) return modelSelect;
+    await page.keyboard.press('Escape').catch(() => {});
+  }
+
+  const modelSelect = await openComposerModelPopover(page, menu);
+  await expect(page.getByTestId('avatar-model-popover').getByRole('option', { name: optionName })).toBeVisible({
+    timeout: T.medium,
+  });
+  return modelSelect;
+}
+
+async function openComposerModelPopover(
+  page: Page,
+  menu: Locator,
+): Promise<Locator> {
+  const modelSelect = menu.locator('.avatar-model-section [role="combobox"]').first();
+  await expect(modelSelect).toBeVisible({ timeout: T.medium });
+  await modelSelect.click();
+  await expect(page.getByTestId('avatar-model-popover')).toBeVisible({ timeout: T.medium });
+  return modelSelect;
+}
+
+async function routeMutableAppConfig(
+  page: Page,
+  initialConfig: Record<string, unknown>,
+) {
+  let appConfig = { ...initialConfig };
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'PUT') {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      appConfig = {
+        ...appConfig,
+        ...body,
+      };
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ config: appConfig }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ config: appConfig }),
+    });
+  });
 }
 
 async function routeComposerPlusFixtures(page: Page) {

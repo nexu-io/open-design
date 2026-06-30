@@ -108,6 +108,36 @@ function DocumentArt() {
   );
 }
 
+function SocialCardArt() {
+  // Social feed card: stacked post tiles with an accent content block.
+  return (
+    <Frame>
+      <rect x="17" y="6" width="30" height="22" rx="3" fill={SURFACE} stroke={INK} strokeWidth="2" strokeOpacity="0.45" />
+      <rect x="9" y="13" width="34" height="23" rx="4" fill={SURFACE} stroke={INK} strokeWidth="2" />
+      <rect x="14" y="18" width="12" height="6" rx="1.5" fill={ACCENT} />
+      <line x1="14" y1="29" x2="37" y2="29" stroke={INK} strokeWidth="2" />
+      <line x1="31" y1="18" x2="38" y2="18" stroke={INK} strokeWidth="2" />
+      <line x1="31" y1="23" x2="38" y2="23" stroke={INK} strokeWidth="2" />
+    </Frame>
+  );
+}
+
+function DiagramArt() {
+  // Technical diagram: three semantic nodes connected by routed arrows.
+  return (
+    <Frame>
+      <rect x="7" y="8" width="16" height="10" rx="2.5" stroke={INK} strokeWidth="2" />
+      <rect x="37" y="8" width="16" height="10" rx="2.5" stroke={INK} strokeWidth="2" />
+      <rect x="22" y="25" width="16" height="10" rx="2.5" stroke={ACCENT} strokeWidth="2" />
+      <path d="M23 13 H34" stroke={INK} strokeWidth="2" />
+      <path d="M34 13 L31 10 M34 13 L31 16" stroke={INK} strokeWidth="2" />
+      <path d="M15 18 V24 H22" stroke={INK} strokeWidth="2" />
+      <path d="M45 18 V24 H38" stroke={INK} strokeWidth="2" />
+      <circle cx="30" cy="30" r="1.8" fill={ACCENT} />
+    </Frame>
+  );
+}
+
 function BrandKitArt() {
   // Style tile: a row of color swatches (one accent) over two type lines.
   return (
@@ -190,6 +220,8 @@ const ART_BY_CHIP: Record<string, () => ReactElement> = {
   mobile: MobileArt,
   deck: DeckArt,
   document: DocumentArt,
+  'social-card': SocialCardArt,
+  diagram: DiagramArt,
   'create-brand-kit': BrandKitArt,
   hyperframes: HyperFramesArt,
   'live-artifact': LiveArtifactArt,

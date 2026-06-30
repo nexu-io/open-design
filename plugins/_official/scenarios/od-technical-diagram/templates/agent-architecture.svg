@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 700">
+  <defs>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#7c3aed"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#059669"/>
+    </marker>
+    <marker id="arrowOrange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ea580c"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .title { font-size: 24px; font-weight: 700; fill: #1e293b; }
+    .node-label { font-size: 16px; font-weight: 600; fill: #1e293b; }
+    .sub-label { font-size: 13px; font-weight: 400; fill: #64748b; }
+    .arrow-label { font-size: 12px; font-weight: 400; fill: #475569; }
+  </style>
+  <rect width="960" height="700" fill="#ffffff"/>
+  <text x="480" y="60" text-anchor="middle" class="title">{{TITLE}}</text>
+  <!-- NODES -->
+  <!-- ARROWS -->
+  <!-- LEGEND -->
+</svg>

@@ -1,0 +1,182 @@
+{
+  "template_type": "agent",
+  "style": 2,
+  "width": 1200,
+  "height": 700,
+  "window_controls": true,
+  "meta_center": "AGENT TOOL CALL EXECUTION FLOW · v1.0",
+  "meta_right": "style-2-dark-terminal",
+  "meta_fill": "#64748b",
+  "title": "Tool Call Flow",
+  "subtitle": "Dark terminal style with semantic action, retrieval, and execution paths",
+  "containers": [
+    {
+      "x": 36,
+      "y": 96,
+      "width": 1128,
+      "height": 142,
+      "label": "REQUEST PATH",
+      "subtitle": "",
+      "stroke": "#334155",
+      "fill": "rgba(15,23,42,0.18)"
+    },
+    {
+      "x": 36,
+      "y": 280,
+      "width": 1128,
+      "height": 202,
+      "label": "TOOLING FABRIC",
+      "subtitle": "",
+      "stroke": "#334155",
+      "fill": "rgba(15,23,42,0.18)"
+    },
+    {
+      "x": 36,
+      "y": 522,
+      "width": 1128,
+      "height": 126,
+      "label": "KNOWLEDGE + RESPONSE",
+      "subtitle": "",
+      "stroke": "#334155",
+      "fill": "rgba(15,23,42,0.18)"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "query",
+      "kind": "speech",
+      "x": 64,
+      "y": 126,
+      "width": 132,
+      "height": 62,
+      "label": "User query",
+      "fill": "#0f172a",
+      "stroke": "#38bdf8",
+      "flat": true
+    },
+    {
+      "id": "planner",
+      "kind": "double_rect",
+      "x": 292,
+      "y": 122,
+      "width": 188,
+      "height": 66,
+      "label": "Retrieve chunks",
+      "fill": "#111827",
+      "stroke": "#a855f7",
+      "glow": "purple"
+    },
+    {
+      "id": "answer",
+      "kind": "rect",
+      "x": 570,
+      "y": 122,
+      "width": 208,
+      "height": 66,
+      "label": "Generate answer",
+      "fill": "#111827",
+      "stroke": "#f97316"
+    },
+    {
+      "id": "kb",
+      "kind": "cylinder",
+      "x": 948,
+      "y": 104,
+      "width": 158,
+      "height": 122,
+      "label": "Knowledge base",
+      "sublabel": "embeddings",
+      "fill": "#0f172a",
+      "stroke": "#38bdf8",
+      "glow": "blue"
+    },
+    {
+      "id": "agent",
+      "kind": "bot",
+      "x": 380,
+      "y": 316,
+      "width": 138,
+      "height": 118,
+      "label": "Agent",
+      "sublabel": "planner + tool policy",
+      "accent_fill": "#34d399"
+    },
+    {
+      "id": "terminal",
+      "kind": "terminal",
+      "x": 676,
+      "y": 334,
+      "width": 178,
+      "height": 108,
+      "label": "Terminal",
+      "fill": "#111111",
+      "stroke": "#475569",
+      "header_fill": "#222222"
+    },
+    {
+      "id": "docs",
+      "kind": "folder",
+      "x": 962,
+      "y": 350,
+      "width": 168,
+      "height": 96,
+      "label": "Source documents",
+      "fill": "#3f2a00",
+      "stroke": "#f59e0b",
+      "line_stroke": "#fcd34d"
+    },
+    {
+      "id": "reply",
+      "kind": "speech",
+      "x": 250,
+      "y": 560,
+      "width": 172,
+      "height": 64,
+      "label": "Grounded answer",
+      "fill": "#0f172a",
+      "stroke": "#34d399",
+      "flat": true,
+      "glow": "green"
+    }
+  ],
+  "arrows": [
+    { "source": "query", "target": "planner", "source_port": "right", "target_port": "left", "flow": "read" },
+    { "source": "planner", "target": "answer", "source_port": "right", "target_port": "left", "flow": "data" },
+    { "source": "planner", "target": "kb", "source_port": "right", "target_port": "left", "flow": "control", "route_points": [[520, 96], [918, 96], [918, 165]] },
+    { "source": "kb", "target": "answer", "source_port": "left", "target_port": "right", "flow": "control" },
+    { "source": "query", "target": "agent", "source_port": "bottom", "target_port": "top", "flow": "read" },
+    { "source": "agent", "target": "terminal", "source_port": "right", "target_port": "left", "flow": "read" },
+    { "source": "terminal", "target": "docs", "source_port": "right", "target_port": "left", "flow": "read", "label": "pdfgrep / rga", "label_dx": -8 },
+    {
+      "source": "docs",
+      "target": "kb",
+      "source_port": "top",
+      "target_port": "bottom",
+      "flow": "feedback",
+      "label": "embed",
+      "corridor_x": [1090],
+      "label_dx": 18,
+      "label_dy": -12
+    },
+    { "source": "agent", "target": "reply", "source_port": "bottom", "target_port": "top", "flow": "read", "route_points": [[320, 544], [320, 560]] },
+    {
+      "source": "terminal",
+      "target": "agent",
+      "source_port": "bottom",
+      "target_port": "bottom",
+      "flow": "control",
+      "route_points": [[760, 464], [760, 488], [456, 488], [456, 434]]
+    }
+  ],
+  "legend": [
+    { "flow": "read", "label": "Agent / tool path" },
+    { "flow": "control", "label": "Planner / retrieval path" },
+    { "flow": "data", "label": "Answer synthesis" },
+    { "flow": "feedback", "label": "Embedding update" }
+  ],
+  "legend_position": "bottom-right",
+  "legend_box": true,
+  "legend_box_fill": "rgba(15,23,42,0.72)",
+  "legend_y": 604,
+  "footer": "Agent loop iterates until grounded context is ready"
+}

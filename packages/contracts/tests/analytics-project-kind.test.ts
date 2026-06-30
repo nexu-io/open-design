@@ -45,6 +45,8 @@ describe('projectKindToTracking', () => {
       projectKindToTracking('prototype', null, { platformTargets: ['mobile-ios', 'mobile-android'] }),
     ).toBe('mobile');
     expect(projectKindToTracking('prototype', null, { intent: 'live-artifact' })).toBe('live_artifact');
+    expect(projectKindToTracking('prototype', null, { intent: 'wireframe' })).toBe('wireframe');
+    expect(projectKindToTracking('prototype', null, { intent: 'mobile-app' })).toBe('mobile');
     // A bare prototype (no discriminators) stays prototype.
     expect(projectKindToTracking('prototype', null, {})).toBe('prototype');
     expect(projectKindToTracking('prototype', null, { platform: 'web-desktop' })).toBe('prototype');
@@ -72,6 +74,15 @@ describe('projectKindToTracking', () => {
     expect(projectKindToTracking('deck', null, { intent: 'document' })).toBe('slide_deck');
   });
 
+  it('splits social cards and diagrams out of generic image via intent', () => {
+    expect(projectKindToTracking('image', null, { intent: 'social-card' })).toBe('social_card');
+    expect(projectKindToTracking('image', null, { intent: 'diagram' })).toBe('diagram');
+    expect(projectKindToTracking('image', null, {})).toBe('image');
+    // The discriminators are scoped to image projects.
+    expect(projectKindToTracking('other', null, { intent: 'social-card' })).toBe('other');
+    expect(projectKindToTracking('deck', null, { intent: 'diagram' })).toBe('slide_deck');
+  });
+
   it('derives the fine kind straight from a metadata object', () => {
     expect(
       projectKindFromMetadataToTracking({ kind: 'prototype', fidelity: 'wireframe' }),
@@ -85,7 +96,17 @@ describe('projectKindToTracking', () => {
     expect(
       projectKindFromMetadataToTracking({ kind: 'prototype', intent: 'live-artifact' }),
     ).toBe('live_artifact');
+    expect(projectKindFromMetadataToTracking({ kind: 'prototype', intent: 'wireframe' })).toBe(
+      'wireframe',
+    );
+    expect(projectKindFromMetadataToTracking({ kind: 'prototype', intent: 'mobile-app' })).toBe(
+      'mobile',
+    );
     expect(projectKindFromMetadataToTracking({ kind: 'other', intent: 'document' })).toBe('document');
+    expect(projectKindFromMetadataToTracking({ kind: 'image', intent: 'social-card' })).toBe(
+      'social_card',
+    );
+    expect(projectKindFromMetadataToTracking({ kind: 'image', intent: 'diagram' })).toBe('diagram');
     expect(projectKindFromMetadataToTracking({ kind: 'video', videoModel: 'hyperframes-html' })).toBe(
       'hyperframes',
     );

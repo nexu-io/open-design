@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Technical Diagram Scenario</title>
+  <style>
+    :root {
+      --ink: #18202f;
+      --muted: #687385;
+      --paper: #f5f2ec;
+      --panel: #ffffff;
+      --line: #2f3747;
+      --soft: #eef2f7;
+      --accent: #e8623d;
+      --blue: #2a6df4;
+      --green: #10a37f;
+      --shadow: 0 24px 70px rgba(24, 32, 47, .14);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 32px;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(47,55,71,.055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(47,55,71,.055) 1px, transparent 1px),
+        var(--paper);
+      background-size: 28px 28px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .shell {
+      width: min(1180px, calc(100vw - 64px));
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 22px;
+      align-items: stretch;
+    }
+
+    .board {
+      padding: 28px;
+      background: rgba(255,255,255,.92);
+      border: 1px solid rgba(47,55,71,.16);
+      box-shadow: var(--shadow);
+    }
+
+    .head {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .kicker {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 5px 0 0;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .legend {
+      display: grid;
+      gap: 8px;
+      min-width: 180px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .legend span {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .legend i {
+      width: 24px;
+      height: 3px;
+      border-radius: 99px;
+      background: var(--line);
+    }
+
+    .legend span:nth-child(2) i { background: var(--accent); }
+    .legend span:nth-child(3) i { background: var(--green); }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fbfaf7;
+      border: 1px solid rgba(47,55,71,.12);
+    }
+
+    .band {
+      fill: rgba(232, 98, 61, .045);
+      stroke: rgba(47,55,71,.28);
+      stroke-width: 1.4;
+      stroke-dasharray: 8 8;
+    }
+
+    .band-label {
+      fill: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .node {
+      fill: #fff;
+      stroke: var(--line);
+      stroke-width: 2;
+    }
+
+    .node.accent {
+      fill: #fff4ef;
+      stroke: var(--accent);
+    }
+
+    .node.store {
+      fill: #eff8f5;
+      stroke: var(--green);
+    }
+
+    .edge {
+      fill: none;
+      stroke: var(--line);
+      stroke-width: 2.3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      marker-end: url(#arrow);
+    }
+
+    .edge.accent {
+      stroke: var(--accent);
+      marker-end: url(#arrow-accent);
+    }
+
+    .edge.read {
+      stroke: var(--green);
+      stroke-dasharray: 6 7;
+      marker-end: url(#arrow-read);
+    }
+
+    text {
+      fill: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      font-size: 15px;
+      font-weight: 760;
+    }
+
+    .label {
+      fill: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .samples {
+      display: grid;
+      gap: 14px;
+    }
+
+    .sample {
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid rgba(47,55,71,.16);
+      box-shadow: 0 14px 34px rgba(24, 32, 47, .12);
+    }
+
+    .sample img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      object-position: center;
+    }
+
+    .sample figcaption {
+      padding: 9px 11px 11px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    @media (max-width: 920px) {
+      body { padding: 18px; }
+      .shell { width: min(680px, calc(100vw - 36px)); grid-template-columns: 1fr; }
+      .head { flex-direction: column; }
+      .samples { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell" aria-label="Technical diagram template preview">
+    <section class="board">
+      <div class="head">
+        <div>
+          <div class="kicker">Fireworks Tech Graph</div>
+          <h1>Agent memory architecture</h1>
+        </div>
+        <div class="legend" aria-label="Arrow legend">
+          <span><i></i>request/control</span>
+          <span><i></i>write path</span>
+          <span><i></i>read path</span>
+        </div>
+      </div>
+
+      <!-- Export: editable SVG diagram, 1920px PNG recommended -->
+      <svg viewBox="0 0 980 560" role="img" aria-label="Agent memory architecture diagram">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+            <path d="M0,0 L10,4 L0,8 Z" fill="#2f3747"></path>
+          </marker>
+          <marker id="arrow-accent" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+            <path d="M0,0 L10,4 L0,8 Z" fill="#e8623d"></path>
+          </marker>
+          <marker id="arrow-read" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+            <path d="M0,0 L10,4 L0,8 Z" fill="#10a37f"></path>
+          </marker>
+        </defs>
+
+        <rect class="band" x="42" y="54" width="896" height="102" rx="18"></rect>
+        <text class="band-label" x="64" y="86">01 // Input layer</text>
+        <rect class="node" x="104" y="104" width="170" height="44" rx="12"></rect>
+        <text x="189" y="132" text-anchor="middle">User brief</text>
+        <rect class="node" x="408" y="104" width="170" height="44" rx="12"></rect>
+        <text x="493" y="132" text-anchor="middle">Prompt router</text>
+        <rect class="node" x="704" y="104" width="170" height="44" rx="12"></rect>
+        <text x="789" y="132" text-anchor="middle">Task plan</text>
+
+        <rect class="band" x="42" y="204" width="896" height="148" rx="18"></rect>
+        <text class="band-label" x="64" y="236">02 // Agent core</text>
+        <rect class="node accent" x="180" y="268" width="170" height="54" rx="14"></rect>
+        <text x="265" y="301" text-anchor="middle">Planner</text>
+        <rect class="node accent" x="408" y="254" width="170" height="82" rx="18"></rect>
+        <text x="493" y="290" text-anchor="middle">LLM loop</text>
+        <text class="label" x="493" y="313" text-anchor="middle">reason -> act -> check</text>
+        <rect class="node accent" x="636" y="268" width="170" height="54" rx="14"></rect>
+        <text x="721" y="301" text-anchor="middle">Tool runtime</text>
+
+        <rect class="band" x="42" y="400" width="896" height="104" rx="18"></rect>
+        <text class="band-label" x="64" y="432">03 // Memory + evidence</text>
+        <rect class="node store" x="150" y="448" width="170" height="42" rx="21"></rect>
+        <text x="235" y="474" text-anchor="middle">Working memory</text>
+        <rect class="node store" x="406" y="448" width="170" height="42" rx="21"></rect>
+        <text x="491" y="474" text-anchor="middle">Vector store</text>
+        <rect class="node store" x="662" y="448" width="170" height="42" rx="21"></rect>
+        <text x="747" y="474" text-anchor="middle">Source files</text>
+
+        <path class="edge" d="M274 126H408"></path>
+        <text class="label" x="336" y="115" text-anchor="middle">normalize</text>
+        <path class="edge" d="M578 126H704"></path>
+        <text class="label" x="641" y="115" text-anchor="middle">scope</text>
+        <path class="edge" d="M493 148V254"></path>
+        <text class="label" x="516" y="205">dispatch</text>
+        <path class="edge accent" d="M350 295H408"></path>
+        <path class="edge accent" d="M578 295H636"></path>
+        <path class="edge read" d="M235 448C260 378 330 335 408 308"></path>
+        <path class="edge read" d="M491 448V336"></path>
+        <path class="edge read" d="M747 448C720 382 675 344 578 306"></path>
+      </svg>
+    </section>
+
+    <aside class="samples" aria-label="Bundled visual style samples">
+      <figure class="sample">
+        <img src="samples/sample-style1-flat.png" alt="Flat icon diagram sample">
+        <figcaption>Style 1 · Flat Icon</figcaption>
+      </figure>
+      <figure class="sample">
+        <img src="samples/sample-style3-blueprint.png" alt="Blueprint diagram sample">
+        <figcaption>Style 3 · Blueprint</figcaption>
+      </figure>
+      <figure class="sample">
+        <img src="samples/sample-style6-claude.png" alt="Claude official style diagram sample">
+        <figcaption>Style 6 · Claude Official</figcaption>
+      </figure>
+      <figure class="sample">
+        <img src="samples/sample-style8-dark-luxury.png" alt="Dark luxury diagram sample">
+        <figcaption>Style 8 · Dark Luxury</figcaption>
+      </figure>
+    </aside>
+  </main>
+</body>
+</html>

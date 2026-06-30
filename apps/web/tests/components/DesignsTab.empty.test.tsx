@@ -57,8 +57,8 @@ describe('DesignsTab empty state', () => {
     expect(screen.getByText('No projects yet.')).toBeTruthy();
 
 
-    // Verify CTA Button is present
-    const ctaButton = screen.getByRole('button', { name: 'New project' });
+    // Verify empty-state CTA Button is present
+    const ctaButton = screen.getByTestId('designs-empty-new-project');
     expect(ctaButton).toBeTruthy();
 
     // Verify clicking the CTA Button invokes the onNewProject callback
