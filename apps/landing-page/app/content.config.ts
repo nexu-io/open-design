@@ -124,6 +124,7 @@ const blog = defineCollection({
       readingTime: z.number().int().positive(),
       summary: z.string(),
       author: z.string().optional(),
+      socialImage: z.string().optional(),
       ctaKind: z.enum(['download-app', 'event-register']).optional(),
       ctaHref: z.string().url().optional(),
       ctaTitle: z.string().min(1).optional(),
