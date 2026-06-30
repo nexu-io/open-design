@@ -2207,7 +2207,7 @@ function OnboardingView({
         aria-label={t('settings.welcomeTitle')}
       >
         <div className="onboarding-cloud__topbar">
-          <LanguageMenu compact />
+          <LanguageMenu compact placement="down" align="end" />
           <button
             type="button"
             className="onboarding-cloud__theme"

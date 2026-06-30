@@ -417,8 +417,6 @@
 }
 .lang-menu-popover {
   position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
   z-index: 50;
   min-width: 180px;
   width: max-content;
@@ -430,6 +428,18 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+}
+.lang-menu-popover--up {
+  bottom: calc(100% + 6px);
+}
+.lang-menu-popover--down {
+  top: calc(100% + 6px);
+}
+.lang-menu-popover--align-start {
+  left: 0;
+}
+.lang-menu-popover--align-end {
+  right: 0;
 }
 .lang-menu-item {
   display: grid;
