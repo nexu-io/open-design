@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "deploy": "pnpm dlx wrangler deploy",
-    "dev": "pnpm dlx wrangler dev",
+    "deploy": "corepack pnpm dlx wrangler deploy",
+    "dev": "corepack pnpm dlx wrangler dev",
     "test": "vitest run -c vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

@@ -26,9 +26,9 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "daemon": "pnpm run build && node dist/cli.js --no-open",
-    "dev": "pnpm run build && node dist/cli.js --no-open",
-    "start": "pnpm run build && node dist/cli.js",
+    "daemon": "corepack pnpm run build && node dist/cli.js --no-open",
+    "dev": "corepack pnpm run build && node dist/cli.js --no-open",
+    "start": "corepack pnpm run build && node dist/cli.js",
     "test": "vitest run -c vitest.config.ts",
     "typecheck": "corepack pnpm --filter @open-design/contracts build && corepack pnpm --filter @open-design/registry-protocol build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
