@@ -63,6 +63,7 @@ import {
   amrLoginStatusEventReason,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
+import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
 import { normalizeAgentModelChoice } from './agentModelSelection';
 import { SearchableModelSelect } from './modelOptions';
 import {
@@ -382,7 +383,7 @@ export function InlineModelSwitcher({
   }, [refreshAmrStatus, startAmrPolling, stopAmrPolling]);
 
   const installedAgents = useMemo(
-    () => agents.filter((a) => a.available),
+    () => orderAgentsWithOpenDesignFirst(agents.filter((a) => a.available)),
     [agents],
   );
   const currentAgent = useMemo(

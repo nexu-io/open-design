@@ -41,6 +41,7 @@ import { AgentIcon } from './AgentIcon';
 import { AgentDiagnosticRow } from './AgentDiagnosticRow';
 import { AmrLoginPill } from './AmrLoginPill';
 import { PlanBadge } from './PlanBadge';
+import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
 import {
   AMR_LOGIN_STATUS_EVENT,
   amrLoginStatusEventReason,
@@ -2932,7 +2933,9 @@ export function SettingsDialog({
     about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
   };
   const activeHeader = sectionHeader[activeSection];
-  const installedAgents = agents.filter((a) => a.available);
+  const installedAgents = orderAgentsWithOpenDesignFirst(
+    agents.filter((a) => a.available),
+  );
   const unavailableAgents = agents.filter((a) => !a.available);
   const initialAgentScanRunning = agentsLoading && agents.length === 0;
   const agentModelOptionLabel = (
@@ -3849,27 +3852,6 @@ export function SettingsDialog({
                                               </span>
                                             </span>
                                           ) : null}
-                                          <button
-                                            type="button"
-                                            className="agent-card-amr-wallet-refresh"
-                                            title={t('settings.amrWalletRefreshTitle')}
-                                            aria-label={t('settings.amrWalletRefreshTitle')}
-                                            disabled={!amrWalletReady && !amrCardBalanceLabel}
-                                            onClick={(event) => {
-                                              event.stopPropagation();
-                                              void refreshAmrWalletSnapshot({ refresh: true });
-                                            }}
-                                          >
-                                            <Icon
-                                              name={!amrWalletReady && !amrCardBalanceLabel ? 'spinner' : 'refresh'}
-                                              size={13}
-                                              className={
-                                                !amrWalletReady && !amrCardBalanceLabel
-                                                  ? 'icon-spin'
-                                                  : undefined
-                                              }
-                                            />
-                                          </button>
                                         </div>
                                       ) : null}
                                       {!active && modelSummary ? (

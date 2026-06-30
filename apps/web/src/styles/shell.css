@@ -1145,11 +1145,11 @@
   gap: 8px;
 }
 .avatar-amr-row.active {
-  background: var(--accent-tint);
+  background: color-mix(in srgb, var(--bg-subtle) 82%, var(--accent-tint));
   color: var(--text-strong);
 }
 .avatar-amr-row.active:hover {
-  background: var(--accent-tint);
+  background: color-mix(in srgb, var(--bg-panel) 74%, var(--accent-tint));
 }
 .avatar-amr-row__select {
   flex: 1 1 auto;
@@ -1259,21 +1259,6 @@
   .avatar-amr-row__upgrade:active {
     transform: none;
   }
-}
-.avatar-amr-row__console {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  text-decoration: none;
-}
-.avatar-amr-row__console:hover {
-  color: var(--accent-strong);
-  background: var(--bg-subtle);
 }
 .avatar-item {
   display: flex;
