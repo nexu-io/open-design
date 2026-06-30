@@ -108,6 +108,8 @@ export type SolutionPageCopy = {
 export type SolutionPageKey =
   // Solution → Tools (`/solutions/ai-<x>-generator/`)
   | 'aiWireframeGenerator'
+  | 'aiUiGenerator'
+  | 'designToCode'
   | 'prototype'
   | 'dashboard'
   | 'slides'
