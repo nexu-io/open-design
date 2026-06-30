@@ -45,6 +45,14 @@ const ROLE_HREFS = [
   '/solutions/marketing/',
 ] as const;
 
+// Solution → Tools. AI generator pages, paired positionally with the localized
+// `toolItems` tuple (Wireframe → UI → Design-to-code).
+const TOOL_HREFS = [
+  '/solutions/ai-wireframe-generator/',
+  '/solutions/ai-ui-generator/',
+  '/solutions/design-to-code/',
+] as const;
+
 // Agent column — AMR (the design Agent) heads the dropdown in the markup,
 // followed by the coding agents with a dedicated long-form design page
 // upstream. Routes stay in lockstep with main's /agents/ hub.
@@ -242,6 +250,18 @@ export function Header({
                 className='nav-dropdown nav-dropdown-solution'
                 aria-label={productMenuCopy.solution}
               >
+                <li className='nav-dropdown-group'>
+                  <span className='nav-dropdown-group-label'>
+                    {productMenuCopy.tools}
+                  </span>
+                </li>
+                {productMenuCopy.toolItems.map((name, index) => (
+                  <li key={name}>
+                    <a href={href(TOOL_HREFS[index]!)}>
+                      <span className='dropdown-name'>{name}</span>
+                    </a>
+                  </li>
+                ))}
                 <li className='nav-dropdown-group'>
                   <span className='nav-dropdown-group-label'>
                     {productMenuCopy.useCases}
