@@ -2025,22 +2025,22 @@
   color: var(--text-strong);
 }
 
-/* Two secondary links ("local CLI" or "your own key") on one row. */
 .onboarding-cloud__alts {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
   margin-top: 22px;
 }
 
 .onboarding-cloud__alts .onboarding-cloud__secondary {
   margin-top: 0;
+  white-space: nowrap;
 }
 
 .onboarding-cloud__alts-or {
   color: var(--text-muted);
   font-size: 14px;
+  line-height: 1;
 }
 
 .onboarding-cloud__error {
