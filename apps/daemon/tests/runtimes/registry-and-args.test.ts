@@ -11,6 +11,11 @@ test('AGENT_DEFS ids are unique', () => {
   assert.deepEqual(dupes, [], `duplicate agent ids: ${JSON.stringify(dupes)}`);
 });
 
+test('Cline stays after Codex so it does not become the implicit default', () => {
+  const ids = AGENT_DEFS.map((a) => a.id);
+  assert.ok(ids.indexOf('cline') > ids.indexOf('codex'));
+});
+
 test('local agent profiles inherit a base adapter and can pin the default model', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-local-agent-profiles-'));
   try {
