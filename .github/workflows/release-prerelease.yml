@@ -215,6 +215,7 @@ jobs:
     runs-on: macos-14
     env:
       GH_TOKEN: ${{ github.token }}
+      RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -561,6 +562,7 @@ jobs:
     runs-on: macos-15-intel
     env:
       GH_TOKEN: ${{ github.token }}
+      RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -793,6 +795,7 @@ jobs:
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -1036,6 +1039,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -1127,6 +1131,7 @@ jobs:
       linux_url: ${{ steps.outputs.outputs.linux_x64_appImage_url }}
     env:
       GH_TOKEN: ${{ github.token }}
+      RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
       GITHUB_SHA: ${{ needs.metadata.outputs.commit }}
       BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
       BRANCH_NAME: ${{ needs.metadata.outputs.branch }}

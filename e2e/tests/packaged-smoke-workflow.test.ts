@@ -952,6 +952,37 @@ describe("packaged smoke workflow", () => {
     expectWindowsUpdaterSmokeContract(releaseStableWorkflow, "stable");
   });
 
+  it("[P2] prerelease publishes github.commit so its changelog has a baseline", async () => {
+    // The Feishu release card computes its changelog as `git log <previous>..<current>`,
+    // where <previous> is read from prerelease/latest/metadata.json's `.github.commit`
+    // (notify-release-feishu.yml). That field is written by githubInfo() from the
+    // RELEASE_COMMIT env. release-beta sets RELEASE_COMMIT on every build + publish job,
+    // but release-prerelease historically set it on none, so every prerelease published an
+    // empty github.commit and the card could never diff against the prior prerelease
+    // ("首个 Prerelease 包"). Require RELEASE_COMMIT on the prerelease build + publish jobs
+    // so the per-platform manifests and the final metadata.json carry the built commit and
+    // stay mutually consistent (publish-metadata rejects a manifest whose commit disagrees).
+    const [prereleaseWorkflow, betaWorkflow] = await Promise.all([
+      readFile(releasePrereleaseWorkflowPath, "utf8"),
+      readFile(releaseBetaWorkflowPath, "utf8"),
+    ]);
+
+    const releaseCommitEnv = "RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}";
+    // Beta is the working reference that already populates the commit.
+    expect(betaWorkflow).toContain(releaseCommitEnv);
+
+    const jobBounds: Array<[string, string]> = [
+      ["  build_mac:", "  build_mac_intel:"],
+      ["  build_mac_intel:", "  build_win:"],
+      ["  build_win:", "  build_linux:"],
+      ["  build_linux:", "  publish:"],
+      ["  publish:", "  cleanup_partial_release_assets:"],
+    ];
+    for (const [start, end] of jobBounds) {
+      expect(sectionBetween(prereleaseWorkflow, start, end)).toContain(releaseCommitEnv);
+    }
+  });
+
   it("[P2] keeps counted release workflow calls on a consistent ref and output contract", async () => {
     const [previewWorkflow, prereleaseWorkflow, previewScript] = await Promise.all([
       readFile(releasePreviewWorkflowPath, "utf8"),
