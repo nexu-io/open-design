@@ -29,6 +29,7 @@ const bakePreviewsAutomergeWorkflowPath = join(
   "bake-plugin-previews-automerge.yml",
 );
 const bakePreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
+const finalizeReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "finalize-release.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
 const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta-s.yml");
@@ -384,6 +385,53 @@ describe("packaged smoke workflow", () => {
       "(github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out')",
     );
     expect(feishuStep).not.toContain("'cancelled'");
+  });
+
+  it("[P2] gates the finalize-release follow-up as a trusted workflow_run consumer", async () => {
+    const workflow = await readFile(finalizeReleaseWorkflowPath, "utf8");
+
+    // Reacts to release-stable completing (not release: published — release-stable promotes its
+    // own draft with GITHUB_TOKEN, which cannot trigger workflows), plus a manual backfill.
+    expect(workflow).toContain('workflows: ["release-stable"]');
+    expect(workflow).toContain("types: [completed]");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("github.event_name == 'workflow_dispatch'");
+    expect(workflow).toContain("github.event.workflow_run.conclusion == 'success'");
+
+    // It mints the privileged release App token for label deletion, branch push, PR + merge-queue.
+    expect(workflow).toContain("actions/create-github-app-token");
+    expect(workflow).toContain("secrets.RELEASE_BOT_APP_ID");
+
+    // The shipped version is resolved from the LATEST published release (release-stable marks it
+    // --latest) or the dispatch tag — NEVER from workflow_run.head_branch, which can be the
+    // dispatch ref rather than the built release branch when release-stable runs with a `ref` input.
+    expect(workflow).toContain("gh release view --repo nexu-io/open-design --json tagName,isDraft,isPrerelease");
+    expect(workflow).not.toContain("github.event.workflow_run.head_branch");
+    expect(workflow).not.toContain("HEAD_BRANCH");
+
+    // Only a published (draft=false), non-prerelease, open-design-vX.Y.Z release finalizes; a
+    // dry-run completion (latest stays the previous, already-finalized stable) must no-op.
+    expect(workflow).toContain("isDraft");
+    expect(workflow).toContain("isPrerelease");
+    expect(workflow).toContain("^[0-9]+\\.[0-9]+\\.[0-9]+$");
+    expect(workflow).toContain('echo "skip=true"');
+    expect(workflow).toContain("steps.ver.outputs.skip != 'true'");
+
+    // Idempotent forward-only bump of the synchronized manifests (patch, not the next minor that
+    // cut-release owns); independently-versioned packages are skipped via npm pkg set version.
+    expect(workflow).toContain("sort -V");
+    expect(workflow).toContain("npm pkg set version");
+    expect(workflow).toContain("changed=true");
+
+    // The bump PR needs one core-maintainer approval (code-owned manifests + require_code_owner_review
+    // on main), so finalize requests that review and arms the merge queue pinned to the pushed SHA.
+    expect(workflow).toContain("--add-reviewer nexu-io/core-maintainers");
+    expect(workflow).toContain("--squash --auto --match-head-commit");
+    expect(workflow).toContain("head_sha=$(git rev-parse HEAD)");
+
+    // The shipped release's backport label is cleaned up (tolerant of an already-deleted label).
+    expect(workflow).toContain('label="backport release/v$VERSION"');
+    expect(workflow).toContain("gh label delete");
   });
 
   it("[P2] keeps the backport patch-equivalence gate whitespace-sensitive", async () => {
