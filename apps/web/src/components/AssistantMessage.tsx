@@ -33,13 +33,16 @@ import {
   type QuestionForm,
 } from "../artifacts/question-form";
 import {
+  hasOdCard,
   splitOnOdCards,
   stripTrailingOpenOdCard,
   type OdCard,
+  type OdCardBrandBrowserAssist,
 } from "@open-design/contracts";
 import { OdCardView, type BrandBrowserAssistConfirm } from "./OdCard";
 import { parseSubmittedAnswers } from "./QuestionForm";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
+import { BRAND_BROWSER_TAB_ID } from "../runtime/brand-browser-bridge";
 import {
   getPluginFolderCandidates,
   type PluginFolderCandidate,
@@ -68,6 +71,7 @@ import type {
   ChatMessageFeedbackRating,
   ChatMessageFeedbackReasonCode,
   ProjectFile,
+  ProjectMetadata,
   SkillSummary,
 } from "../types";
 
@@ -102,6 +106,47 @@ function buildActionNotice(message: string, url?: string): ActionNotice {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isBrandExtractionNextStepVariant(variant: NextStepActionsVariant): boolean {
+  return (
+    variant === 'brand-extraction' ||
+    variant === 'brand-extraction-incomplete' ||
+    variant === 'brand-programmatic-incomplete'
+  );
+}
+
+function textNeedsBrandBrowserAssistFallback(content: string): boolean {
+  if (!content.trim() || hasOdCard(content)) return false;
+  return (
+    /browser assist card|browser assist/i.test(content) ||
+    /浏览器辅助卡片|瀏覽器輔助卡片/.test(content) ||
+    /More\s*>\s*Download Page/i.test(content) ||
+    /More\s*>\s*(下载页面|下載頁面)/.test(content)
+  );
+}
+
+function buildBrandBrowserAssistFallbackCard({
+  content,
+  metadata,
+  nextStepVariant,
+}: {
+  content: string;
+  metadata?: ProjectMetadata;
+  nextStepVariant: NextStepActionsVariant;
+}): OdCardBrandBrowserAssist | null {
+  if (!isBrandExtractionNextStepVariant(nextStepVariant)) return null;
+  if (!textNeedsBrandBrowserAssistFallback(content)) return null;
+  const brandId = metadata?.brandId?.trim();
+  if (!brandId) return null;
+  const url = metadata?.brandSourceUrl?.trim();
+  return {
+    kind: 'brand-browser-assist',
+    brandId,
+    browserTabId: BRAND_BROWSER_TAB_ID,
+    ...(url ? { url } : {}),
+    reason: 'Browser',
+  };
 }
 
 function ActionNoticeView({ notice }: { notice: ActionNotice | null }) {
@@ -275,11 +320,12 @@ interface Props {
   projectKind?: TrackingProjectKind | null;
   conversationId?: string | null;
   projectFiles?: ProjectFile[];
+  projectMetadata?: ProjectMetadata;
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
-  // Client-side confirm for a <od-card type="brand-browser-assist"> button: read
-  // the unblocked browser DOM and re-extract the brand. Excluded from the memo
-  // comparison (routed through ChatPane's stable callbacks ref).
+  // Client-side action for a <od-card type="brand-browser-assist"> button: open
+  // or focus the Browser tab so the user can clear verification. Excluded from
+  // the memo comparison (routed through ChatPane's stable callbacks ref).
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   onRequestPluginFolderAgentAction?: (
     relativePath: string,
@@ -323,8 +369,14 @@ interface Props {
   onNextStepPromptAction?: (prompt: string) => void;
   onNextStepAiOptimize?: () => void;
   nextStepAiOptimizeBusy?: boolean;
+  onNextStepContinueExtraction?: () => void;
+  nextStepContinueExtractionBusy?: boolean;
+  onNextStepContinueAiExtraction?: () => void;
+  nextStepContinueAiExtractionBusy?: boolean;
   onNextStepCreateDesign?: () => void;
   nextStepCreateDesignBusy?: boolean;
+  onNextStepCreateDesignSystem?: () => void;
+  nextStepCreateDesignSystemBusy?: boolean;
   onPickSkill?: (skillId: string) => void;
   onArtifactDownload?: (fileName: string) => void;
   nextStepSkills?: SkillSummary[];
@@ -351,6 +403,7 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'projectKind',
   'conversationId',
   'projectFiles',
+  'projectMetadata',
   'projectFileNames',
   'onRequestOpenFile',
   'onRequestPluginFolderAgentAction',
@@ -363,6 +416,11 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'shareToOpenDesignBusy',
   'suppressDirectionForms',
   'hasDesignSystemContext',
+  'nextStepAiOptimizeBusy',
+  'nextStepContinueExtractionBusy',
+  'nextStepContinueAiExtractionBusy',
+  'nextStepCreateDesignBusy',
+  'nextStepCreateDesignSystemBusy',
   // Memoized + stable from ChatPane; compared so a late skill-list load
   // refreshes the featured next-step rows' `@skill` hover detail and the
   // More → Design toolbox global resources.
@@ -409,6 +467,7 @@ function AssistantMessageImpl({
   projectKind = null,
   conversationId = null,
   projectFiles = [],
+  projectMetadata,
   projectFileNames,
   onRequestOpenFile,
   onBrandBrowserAssistConfirm,
@@ -432,8 +491,14 @@ function AssistantMessageImpl({
   onNextStepPromptAction,
   onNextStepAiOptimize,
   nextStepAiOptimizeBusy,
+  onNextStepContinueExtraction,
+  nextStepContinueExtractionBusy,
+  onNextStepContinueAiExtraction,
+  nextStepContinueAiExtractionBusy,
   onNextStepCreateDesign,
   nextStepCreateDesignBusy,
+  onNextStepCreateDesignSystem,
+  nextStepCreateDesignSystemBusy,
   onPickSkill,
   onArtifactDownload,
   nextStepSkills,
@@ -441,7 +506,12 @@ function AssistantMessageImpl({
   nextStepVariant = 'default',
 }: Props) {
   const t = useT();
-  const events = message.events ?? [];
+  const events =
+    (message.events?.length ?? 0) > 0
+      ? message.events!
+      : message.content.trim()
+        ? ([{ kind: "text", text: message.content }] satisfies AgentEvent[])
+        : [];
   const displayEvents = useMemo(() => dedupeToolUsesById(events), [events]);
   // ChatPane renders the canonical TodoWrite card as a standalone chat row, so
   // we strip TodoWrite tool-groups out of the per-message flow to avoid the
@@ -569,10 +639,38 @@ function AssistantMessageImpl({
   const hasEmptyResponse = events.some(
     (e) => e.kind === "status" && e.label === "empty_response"
   );
+  const isBrandBrowserAssistMessage =
+    isBrandExtractionNextStepVariant(nextStepVariant) &&
+    (message.content.includes('<od-card type="brand-browser-assist"') ||
+      textNeedsBrandBrowserAssistFallback(message.content));
+  const brandBrowserAssistFallbackCard = useMemo(
+    () =>
+      streaming
+        ? null
+        : buildBrandBrowserAssistFallbackCard({
+            content: message.content,
+            metadata: projectMetadata,
+            nextStepVariant,
+          }),
+    [message.content, nextStepVariant, projectMetadata, streaming],
+  );
   const unfinishedTodos = streaming ? [] : unfinishedTodosFromEvents(events);
   const runSucceeded =
     !streaming &&
-    (message.runStatus === "succeeded" || (!message.runStatus && !!message.endedAt));
+    (
+      message.runStatus === "succeeded" ||
+      (!message.runStatus && !!message.endedAt) ||
+      isBrandBrowserAssistMessage
+    );
+  const runTerminal =
+    !streaming &&
+    (
+      message.runStatus === "succeeded" ||
+      message.runStatus === "failed" ||
+      message.runStatus === "canceled" ||
+      (!message.runStatus && !!message.endedAt) ||
+      isBrandBrowserAssistMessage
+    );
   const canContinueTodos =
     !streaming &&
     !!isLast &&
@@ -601,17 +699,39 @@ function AssistantMessageImpl({
   const canShowOpenDesignSubmission = !!onShareToOpenDesign && showFeedback && runSucceeded;
   const showOpenDesignSubmission =
     canShowOpenDesignSubmission && (!!isLast || shareToOpenDesignBusy);
-  // "Next step" only makes sense once there is a deliverable to act on. Anchor
-  // the whole card (toolbox cascade + Share + Contribute) on a previewable HTML
-  // artifact — produced this turn or earlier in the project. A pure
-  // clarifying-questions / summary turn that emitted no HTML must not surface
-  // the card (issue: card appeared after a question-only turn with no artifact).
+  const effectiveNextStepVariant: NextStepActionsVariant =
+    nextStepVariant === 'brand-extraction' && (!runSucceeded || !nextStepArtifactName)
+      ? 'brand-programmatic-incomplete'
+      : nextStepVariant === 'default' && (!runSucceeded || !nextStepArtifactName)
+        ? 'project-incomplete'
+        : nextStepVariant;
+  const hasNextStepPrimary =
+    effectiveNextStepVariant === 'brand-extraction'
+      ? !!onNextStepAiOptimize || !!onNextStepCreateDesign || !!onNextStepContinueExtraction
+      : effectiveNextStepVariant === 'brand-extraction-incomplete' ||
+          effectiveNextStepVariant === 'brand-programmatic-incomplete'
+        ? !!onNextStepContinueExtraction || !!onNextStepContinueAiExtraction
+        : effectiveNextStepVariant === 'brand-ai-incomplete'
+          ? !!onNextStepContinueAiExtraction
+        : effectiveNextStepVariant === 'design-system'
+          ? !!onNextStepPromptAction
+          : effectiveNextStepVariant === 'project-incomplete'
+            ? !!onNextStepPromptAction ||
+              !!onToolboxAction ||
+              !!onNextStepCreateDesignSystem ||
+              (!!nextStepArtifactName && (!!onArtifactShare || !!onArtifactDownload))
+            : !!onToolboxAction ||
+              !!onNextStepCreateDesignSystem ||
+              (!!nextStepArtifactName && (!!onArtifactShare || !!onArtifactDownload));
+  // Terminal turns should leave the user with an actionable path, including
+  // canceled/failed/no-artifact turns. Artifact-backed cards still wire Share
+  // and Download to the chosen file; incomplete cards fall back to composer
+  // prompts or toolbox actions.
   const showNextStepActions =
     !streaming &&
     !!projectId &&
-    runSucceeded &&
-    !!nextStepArtifactName &&
-    ((!!isLast && !!onToolboxAction) || showOpenDesignSubmission);
+    runTerminal &&
+    ((!!isLast && hasNextStepPrimary) || showOpenDesignSubmission);
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
   // flips to "Working". The elapsed clock stays anchored to the persisted run
@@ -711,6 +831,19 @@ function AssistantMessageImpl({
           }
           return null;
         })}
+        {brandBrowserAssistFallbackCard ? (
+          <OdCardView
+            card={brandBrowserAssistFallbackCard}
+            onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
+            instanceScope={[
+              projectId ?? "no-project",
+              conversationId ?? "no-conversation",
+              message.runId ?? "no-run",
+              message.id,
+              "brand-browser-assist-fallback",
+            ].join(":")}
+          />
+        ) : null}
         {fileOps.length > 0 ? (
           <FileOpsSummary
             entries={fileOps}
@@ -823,15 +956,21 @@ function AssistantMessageImpl({
             onPromptAction={isLast ? onNextStepPromptAction : undefined}
             onAiOptimize={isLast ? onNextStepAiOptimize : undefined}
             aiOptimizeBusy={Boolean(isLast && nextStepAiOptimizeBusy)}
+            onContinueExtraction={isLast ? onNextStepContinueExtraction : undefined}
+            continueExtractionBusy={Boolean(isLast && nextStepContinueExtractionBusy)}
+            onContinueAiExtraction={isLast ? onNextStepContinueAiExtraction : undefined}
+            continueAiExtractionBusy={Boolean(isLast && nextStepContinueAiExtractionBusy)}
             onCreateDesign={isLast ? onNextStepCreateDesign : undefined}
             createDesignBusy={Boolean(isLast && nextStepCreateDesignBusy)}
+            onCreateDesignSystem={isLast ? onNextStepCreateDesignSystem : undefined}
+            createDesignSystemBusy={Boolean(isLast && nextStepCreateDesignSystemBusy)}
             onPickSkill={isLast ? onPickSkill : undefined}
             onDownload={isLast && nextStepArtifactName ? onArtifactDownload : undefined}
             skills={isLast ? nextStepSkills : undefined}
             toolboxSkillNames={isLast ? toolboxSkillNames : undefined}
             onShareToOpenDesign={showOpenDesignSubmission ? onShareToOpenDesign : undefined}
             shareToOpenDesignBusy={shareToOpenDesignBusy}
-            variant={nextStepVariant}
+            variant={effectiveNextStepVariant}
           />
         ) : null}
       </div>

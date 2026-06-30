@@ -11,12 +11,16 @@
 // guide the user there.
 //
 // We poll `/api/brands` while the backing project is a brand-extraction project
-// and stop the moment it reaches a terminal state. The prompt stays visible
-// until the user dismisses or acts on it; that manual action sets a
-// sessionStorage flag so a later visit does not nag again.
+// and stop when it reaches `ready` or the bounded polling window expires. A
+// failed extraction may be retried against the same brand id, so `failed` keeps
+// watching for a later ready transition. The ready prompt stays visible until
+// the user dismisses or acts on it; that manual action sets a sessionStorage
+// flag so a later visit does not nag again. Browser assist is deliberately not
+// session-latched: when anti-bot extraction remains blocked, the recovery entry
+// needs to stay discoverable.
 
 import { useCallback, useEffect, useState } from 'react';
-import type { ProjectMetadata } from '@open-design/contracts';
+import type { BrandMeta, BrandStatus, ProjectMetadata } from '@open-design/contracts';
 import { fetchBrands } from './brands';
 
 const POLL_INTERVAL_MS = 5000;
@@ -24,15 +28,14 @@ const POLL_INTERVAL_MS = 5000;
 const MAX_POLLS = 300;
 // When programmatic extraction is still running this long with no result, offer
 // the browser-assisted fallback (alongside the immediate offer when an anti-bot
-// wall is detected). ~60s per the product decision.
-const ASSIST_TIMEOUT_MS = 60_000;
+// wall is detected). 30s: past that, the deterministic harvest is almost
+// certainly stuck (unreachable origin / anti-bot wall / a tab that never
+// loaded), so surface the next step instead of leaving the user waiting. Mirrors
+// the daemon-side stall checkpoint that posts the "needs a hand" transcript card.
+const ASSIST_TIMEOUT_MS = 30_000;
 
 function shownStorageKey(brandId: string): string {
   return `od:brand-ready-prompt:${brandId}`;
-}
-
-function assistStorageKey(brandId: string): string {
-  return `od:brand-browser-assist:${brandId}`;
 }
 
 function readFlag(key: string): boolean {
@@ -60,12 +63,16 @@ function markShown(brandId: string): void {
   writeFlag(shownStorageKey(brandId));
 }
 
-function assistAlreadyShown(brandId: string): boolean {
-  return readFlag(assistStorageKey(brandId));
+function finiteTimestamp(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-function markAssistShown(brandId: string): void {
-  writeFlag(assistStorageKey(brandId));
+function extractionAttemptStallBaseline(meta: BrandMeta): { key: string; startedAt: number | null } {
+  const startedAt = finiteTimestamp(meta.extractionStartedAt);
+  return {
+    key: `${meta.extractionAttemptId ?? ''}:${startedAt ?? ''}`,
+    startedAt,
+  };
 }
 
 export interface BrandReadyPromptState {
@@ -86,6 +93,8 @@ export interface BrandBrowserAssistState {
 }
 
 export interface UseBrandReadyPrompt {
+  /** Current lifecycle for the backing brand. Null while the first poll is pending. */
+  status: BrandStatus | null;
   /** Current ready state for the brand, even if the user dismissed the prompt. */
   ready: BrandReadyPromptState | null;
   prompt: BrandReadyPromptState | null;
@@ -100,7 +109,7 @@ export interface UseBrandReadyPrompt {
  * Watch a project's metadata; when it is a brand-extraction project whose brand
  * has reached `ready`, expose a one-shot ready prompt. While it is still
  * extracting, also expose a one-shot browser-assist signal when an anti-bot wall
- * is detected or extraction stalls past ~60s. No-op for every other project.
+ * is detected or extraction stalls past the timeout. No-op for every other project.
  */
 export function useBrandReadyPrompt(
   metadata: ProjectMetadata | null | undefined,
@@ -109,11 +118,13 @@ export function useBrandReadyPrompt(
     metadata?.importedFrom === 'brand-extraction' ? metadata?.brandId ?? null : null;
   const [ready, setReady] = useState<BrandReadyPromptState | null>(null);
   const [prompt, setPrompt] = useState<BrandReadyPromptState | null>(null);
+  const [status, setStatus] = useState<BrandStatus | null>(null);
   const [browserAssist, setBrowserAssist] = useState<BrandBrowserAssistState | null>(null);
 
   useEffect(() => {
     setReady(null);
     setPrompt(null);
+    setStatus(null);
     setBrowserAssist(null);
     if (!brandId) return undefined;
     const suppressPrompt = alreadyShown(brandId);
@@ -121,7 +132,9 @@ export function useBrandReadyPrompt(
     let cancelled = false;
     let timer: number | undefined;
     let polls = 0;
-    const startedAt = Date.now();
+    let assistBaselineAt = Date.now();
+    let lastExtractionKey: string | null = null;
+    let lastStatus: BrandStatus | null = null;
 
     const check = async (): Promise<void> => {
       polls += 1;
@@ -129,6 +142,17 @@ export function useBrandReadyPrompt(
       if (cancelled) return;
       const summary = brands.find((b) => b.meta.id === brandId);
       const status = summary?.meta.status;
+      setStatus(status ?? null);
+      if (status === 'extracting' && summary) {
+        const baseline = extractionAttemptStallBaseline(summary.meta);
+        if (lastStatus !== 'extracting' || baseline.key !== lastExtractionKey) {
+          assistBaselineAt = baseline.startedAt ?? Date.now();
+          lastExtractionKey = baseline.key;
+        }
+      } else {
+        lastExtractionKey = null;
+      }
+      lastStatus = status ?? null;
       const designSystemId = summary?.meta.designSystemId;
       if (status === 'ready' && designSystemId) {
         const next = { designSystemId, brandName: summary?.brand?.name ?? null };
@@ -136,22 +160,34 @@ export function useBrandReadyPrompt(
         if (!suppressPrompt) setPrompt(next);
         return; // terminal — stop polling
       }
-      if (status === 'failed') return; // terminal — no prompt
 
-      // Offer the browser-assisted fallback once, when an anti-bot wall is hit
-      // or extraction stalls past the timeout. Keep polling afterwards so a
-      // later `ready` (the user solved it) still fires the success prompt.
+      // Offer the browser-assisted fallback once for real browser-only cases:
+      // explicit anti-bot metadata, recognisable challenge/captcha failures, or
+      // a still-running extraction that has crossed the stall timeout. Do not
+      // treat every failed source URL as browser-assist recoverable; ordinary
+      // thin/offline failures should keep the regular retry/agent next steps.
       const blocked = summary?.meta.blocked === true;
-      const stalled = status === 'extracting' && Date.now() - startedAt >= ASSIST_TIMEOUT_MS;
-      if ((blocked || stalled) && !assistAlreadyShown(brandId)) {
-        markAssistShown(brandId);
+      const stoppedByUser = /stopped by the user|you stopped/i.test(summary?.meta.error ?? '');
+      const antiBotFailureText = [
+        summary?.meta.blockedReason,
+        summary?.meta.error,
+      ].filter(Boolean).join(' ');
+      const failedWithAntiBotSignal =
+        status === 'failed' &&
+        !stoppedByUser &&
+        /cloudflare|captcha|challenge|turnstile|anti[- ]?bot|bot check|access denied|verify/i.test(
+          antiBotFailureText,
+        );
+      const stalled = status === 'extracting' && Date.now() - assistBaselineAt >= ASSIST_TIMEOUT_MS;
+      if (blocked || failedWithAntiBotSignal || stalled) {
         setBrowserAssist({
           brandId,
           sourceUrl: summary?.meta.sourceUrl ?? '',
-          reason: summary?.meta.blockedReason ?? (blocked ? 'Cloudflare' : 'timeout'),
+          reason:
+            summary?.meta.blockedReason ??
+            (blocked || failedWithAntiBotSignal ? 'Cloudflare' : 'timeout'),
         });
       }
-
       if (polls >= MAX_POLLS) return;
       timer = window.setTimeout(() => void check(), POLL_INTERVAL_MS);
     };
@@ -171,6 +207,7 @@ export function useBrandReadyPrompt(
   const dismissBrowserAssist = useCallback(() => setBrowserAssist(null), []);
 
   return {
+    status,
     ready,
     prompt,
     dismiss,

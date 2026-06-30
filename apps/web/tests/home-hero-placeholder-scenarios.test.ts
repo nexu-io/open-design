@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { findChip } from '../src/components/home-hero/chips';
 import {
   advanceTypewriter,
+  buildPlaceholderScenarios,
   DEFAULT_TYPEWRITER_TIMING,
   initialTypewriterState,
   PLACEHOLDER_BASE_HINT_KEY,
@@ -25,9 +26,8 @@ describe('PLACEHOLDER_SCENARIO_DEFS bindings', () => {
   });
 
   it('only binds create templates that actually render a carousel', () => {
-    // The composer filters scenarios by the selected chip; a scenario pointing
-    // at a media/live-artifact template (no scenarios → no carousel) would be
-    // unreachable once that template is picked. Lock the supported set.
+    // These are the templates with hand-curated carousel lines. Other templates
+    // can still render a carousel through prompt-example or label fallbacks.
     const SUPPORTED = new Set(['document', 'deck', 'prototype', 'wireframe', 'mobile', 'hyperframes']);
     const used = new Set(PLACEHOLDER_SCENARIO_DEFS.map((d) => d.chipId));
     for (const chipId of used) {
@@ -53,6 +53,48 @@ describe('PLACEHOLDER_SCENARIO_DEFS bindings', () => {
       expect(en[def.textKey]?.trim().length, `en[${def.textKey}]`).toBeGreaterThan(0);
     }
     expect(en[PLACEHOLDER_BASE_HINT_KEY]?.trim().length, 'en[base hint]').toBeGreaterThan(0);
+  });
+});
+
+describe('buildPlaceholderScenarios', () => {
+  it('uses prompt examples as selected-chip carousel scenarios when no curated scenario exists', () => {
+    const scenarios = buildPlaceholderScenarios({
+      activeChipId: 'audio',
+      resolveTextKey: (key) => en[key],
+      examplesForChip: (chipId) => (
+        chipId === 'audio'
+          ? ['Generate a product startup sound']
+          : []
+      ),
+    });
+
+    expect(scenarios).toEqual([
+      {
+        id: 'audio-prompt-example-1',
+        chipId: 'audio',
+        text: 'Generate a product startup sound',
+      },
+    ]);
+  });
+
+  it('creates a submittable selected-chip fallback when neither curated scenarios nor prompt examples exist', () => {
+    const scenarios = buildPlaceholderScenarios({
+      activeChipId: 'live-artifact',
+      resolveTextKey: (key) => en[key],
+      fallbackForChip: (chipId) => (
+        chipId === 'live-artifact'
+          ? 'Create a Live artifact: Data-backed live dashboards'
+          : null
+      ),
+    });
+
+    expect(scenarios).toEqual([
+      {
+        id: 'live-artifact-fallback',
+        chipId: 'live-artifact',
+        text: 'Create a Live artifact: Data-backed live dashboards',
+      },
+    ]);
   });
 });
 

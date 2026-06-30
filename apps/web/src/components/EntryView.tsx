@@ -75,6 +75,8 @@ interface Props {
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
+  onSkillsRefresh?: () => Promise<void> | void;
+  onSkillsChanged?: (affectedSkillId?: string) => void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
   // Quick theme switch invoked from the avatar-popover dropdown so the
   // user can flip light/dark/system without opening the full Settings
@@ -112,6 +114,7 @@ interface Props {
   onOpenProject: (id: string) => Promise<boolean> | boolean | void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
+  onDuplicateProject?: (id: string) => Promise<void> | void;
   onRenameProject: (id: string, name: string) => void;
   onProjectsRefresh?: () => Promise<void> | void;
   onChangeDefaultDesignSystem: (id: string) => void;
@@ -239,6 +242,8 @@ export function EntryView({
   onApiProtocolChange,
   onApiModelChange,
   onConfigPersist,
+  onSkillsRefresh,
+  onSkillsChanged,
   onRefreshAgents,
   onThemeChange,
   skillsLoading = false,
@@ -253,6 +258,7 @@ export function EntryView({
   onOpenProject,
   onOpenLiveArtifact,
   onDeleteProject,
+  onDuplicateProject,
   onRenameProject,
   onProjectsRefresh,
   onChangeDefaultDesignSystem,
@@ -357,6 +363,8 @@ export function EntryView({
       onApiProtocolChange={onApiProtocolChange}
       onApiModelChange={onApiModelChange}
       onConfigPersist={onConfigPersist}
+      onSkillsRefresh={onSkillsRefresh}
+      onSkillsChanged={onSkillsChanged}
       onRefreshAgents={onRefreshAgents}
       onThemeChange={onThemeChange}
       onCreateProject={onCreateProject}
@@ -367,6 +375,7 @@ export function EntryView({
       onOpenProject={onOpenProject}
       onOpenLiveArtifact={onOpenLiveArtifact}
       onDeleteProject={onDeleteProject}
+      onDuplicateProject={onDuplicateProject}
       onRenameProject={onRenameProject}
       onProjectsRefresh={onProjectsRefresh}
       onChangeDefaultDesignSystem={onChangeDefaultDesignSystem}

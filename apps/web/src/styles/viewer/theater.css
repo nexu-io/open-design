@@ -341,8 +341,8 @@
   overflow: visible;
 }
 .assistant-copy-button:hover {
-  background: var(--bg-subtle);
-  border-color: var(--border);
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  border-color: transparent;
   color: var(--text-strong);
 }
 .assistant-copy-button:disabled {
@@ -379,8 +379,8 @@
   overflow: visible;
 }
 .assistant-feedback-button:hover {
-  background: var(--bg-subtle);
-  border-color: var(--border);
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  border-color: transparent;
   color: var(--text-strong);
 }
 .assistant-feedback-button[data-selected="true"] {

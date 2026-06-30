@@ -1273,9 +1273,18 @@
   }
 }
 
-.lightboxImg {
+.lightboxStage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
   max-width: min(1100px, 92vw);
   max-height: 86vh;
+}
+
+.lightboxImg {
+  max-width: 100%;
+  max-height: calc(86vh - 44px);
   object-fit: contain;
   border-radius: var(--radius);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
@@ -1312,6 +1321,96 @@
 
 .lightboxClose:hover {
   background: rgba(255, 255, 255, 0.26);
+}
+
+.lightboxNav {
+  position: fixed;
+  top: 50%;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    background-color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out),
+    transform var(--dur-quick) var(--ease-out);
+}
+
+.lightboxNav:hover {
+  border-color: rgba(255, 255, 255, 0.36);
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.lightboxNavPrev {
+  left: 28px;
+}
+
+.lightboxNavNext {
+  right: 28px;
+}
+
+.lightboxNavPrev:hover {
+  transform: translateY(-50%) translateX(-2px);
+}
+
+.lightboxNavNext:hover {
+  transform: translateY(-50%) translateX(2px);
+}
+
+.lightboxInfo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 600;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+
+.lightboxCaption {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lightboxCount {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.7);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .lightbox {
+    padding: 24px;
+  }
+
+  .lightboxStage {
+    max-width: 100%;
+  }
+
+  .lightboxNav {
+    width: 40px;
+    height: 40px;
+  }
+
+  .lightboxNavPrev {
+    left: 12px;
+  }
+
+  .lightboxNavNext {
+    right: 12px;
+  }
 }
 
 /* HTML asset preview overlay. */
@@ -1542,6 +1641,19 @@
   gap: 8px;
   padding: 10px 11px;
   border-radius: var(--radius);
+}
+
+.compact .logoStage {
+  min-height: 96px;
+  padding: 16px;
+}
+
+.compact .logoStageImg {
+  max-height: 56px;
+}
+
+.compact .logoNotes {
+  font-size: 11px;
 }
 
 .compact .description {

@@ -84,6 +84,20 @@ export type PrefetchResult = {
 
 export type PrefetchProgress = (step: string, detail?: string) => void;
 
+/** Per-fetch deadline, also abortable by the caller's signal (a user Stop on the
+ *  programmatic pass) so an in-flight request tears down promptly instead of
+ *  running out its full timeout. */
+function fetchDeadline(signal?: AbortSignal | null): AbortSignal {
+  const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+function throwIfPrefetchAborted(signal?: AbortSignal | null): void {
+  if (!signal?.aborted) return;
+  if (typeof signal.throwIfAborted === "function") signal.throwIfAborted();
+  throw signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError");
+}
+
 async function fetchText(
   url: string,
   cap: number,
@@ -93,13 +107,15 @@ async function fetchText(
      *  that body is signal (it routes us into the blocked-mode pipeline),
      *  not an error. */
     allowHttpError?: boolean;
+    /** Caller cancellation (user Stop) layered onto the per-fetch timeout. */
+    signal?: AbortSignal;
   },
 ): Promise<{ text: string; finalUrl: string; contentType: string; ok: boolean } | null> {
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml,text/css,*/*" },
       redirect: "follow",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: fetchDeadline(opts?.signal),
     });
     if (!res.ok && !opts?.allowHttpError) return null;
     const buf = Buffer.from(await res.arrayBuffer());
@@ -123,6 +139,7 @@ async function fetchText(
 async function fetchBinary(
   url: string,
   referer?: string,
+  signal?: AbortSignal,
 ): Promise<{ buf: Buffer; contentType: string } | null> {
   const attempt = async (): Promise<{ buf: Buffer; contentType: string } | null> => {
     try {
@@ -136,7 +153,7 @@ async function fetchBinary(
           ...(referer ? { Referer: referer } : {}),
         },
         redirect: "follow",
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        signal: fetchDeadline(signal),
       });
       if (!res.ok) return null;
       const buf = Buffer.from(await res.arrayBuffer());
@@ -156,16 +173,48 @@ async function fetchBinary(
 
 const CHALLENGE_TITLE_RE =
   /just a moment|attention required|access denied|verifying you are human|checking your browser|security check|please verify|are you a robot|ddos[- ]guard|captcha/i;
-const CHALLENGE_BODY_RE =
-  /challenges\.cloudflare\.com|cf-browser-verification|_cf_chl_opt|cf-turnstile|this website uses a security service|enable javascript and cookies to continue|verify you are human|px-captcha|datadome|_incapsula_|EO_Bot_Ssid|__tst_status/i;
+// Markers that only ever appear on the interstitial itself — the legacy CF
+// verification shell, the challenge opt blob, the "turn on JS and cookies"
+// copy, the PerimeterX/Imperva/EdgeOne block-page resources. Their presence is
+// proof the body IS the wall, never the real site.
+const CHALLENGE_DEFINITIVE_RE =
+  /cf-browser-verification|_cf_chl_opt|this website uses a security service|enable javascript and cookies to continue|verify you are human|px-captcha|_incapsula_|EO_Bot_Ssid|__tst_status/i;
+// Markers a *real* page can legitimately carry: a Cloudflare Turnstile or
+// DataDome widget embedded on a login / subscribe / comment surface. The
+// Economist's homepage, for instance, still references challenges.cloudflare.com
+// once you are past the wall. These count as a challenge ONLY when the page is
+// otherwise content-sparse (a bare verification widget and little else).
+const CHALLENGE_AMBIGUOUS_RE = /challenges\.cloudflare\.com|cf-turnstile|datadome/i;
+
+/** A real interstitial is content-sparse: a verification widget and not much
+ *  else. A real page that merely embeds an anti-bot widget still ships a full
+ *  nav and body. Count the cheap structural signals a harvest feeds on — links,
+ *  headings, paragraphs — to tell the two apart. */
+function looksContentRich(html: string): boolean {
+  const scan = html.slice(0, 400_000);
+  const anchors = (scan.match(/<a\s[^>]*\bhref=/gi) ?? []).length;
+  const headings = (scan.match(/<h[1-3][\s/>]/gi) ?? []).length;
+  const paragraphs = (scan.match(/<p[\s/>]/gi) ?? []).length;
+  return anchors >= 8 || headings >= 3 || (anchors >= 3 && paragraphs >= 3);
+}
 
 /** True when the HTML is a bot-protection interstitial (Cloudflare, DataDome,
  *  PerimeterX, …) rather than the real site. Harvesting one of these poisons
- *  every downstream field — "Just a moment…" becomes the brand name. */
+ *  every downstream field — "Just a moment…" becomes the brand name.
+ *
+ *  The check is deliberately asymmetric: a challenge *title* or a challenge-only
+ *  body marker blocks unconditionally, but an embeddable widget marker
+ *  (Turnstile / DataDome) blocks only when the page is also sparse. That
+ *  asymmetry is what lets the in-app browser's post-wall DOM — a real,
+ *  content-rich page that still references the widget — survive the harvest
+ *  instead of being discarded as if it were the wall itself. */
 export function isChallengePage(html: string): boolean {
   const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? "";
   if (CHALLENGE_TITLE_RE.test(title)) return true;
-  return CHALLENGE_BODY_RE.test(html.slice(0, 60_000));
+  const head = html.slice(0, 60_000);
+  if (CHALLENGE_DEFINITIVE_RE.test(head)) return true;
+  if (CHALLENGE_AMBIGUOUS_RE.test(head)) return !looksContentRich(html);
+  return false;
 }
 
 export function previewablePrefetchHtml(html: string, cap = HTML_CAP): string {
@@ -701,14 +750,19 @@ const EXTRA_PAGE_HINTS = /\/(about|company|pricing|product|features|story|missio
 export async function prefetchBrand(
   url: string,
   brandDir: string,
-  onProgress: PrefetchProgress = () => {},
+  opts: { onProgress?: PrefetchProgress; signal?: AbortSignal } = {},
 ): Promise<PrefetchResult | null> {
+  const onProgress = opts.onProgress ?? (() => {});
+  const { signal } = opts;
+  throwIfPrefetchAborted(signal);
   onProgress("fetch", url);
-  let page = await fetchText(url, HTML_CAP, { allowHttpError: true });
+  let page = await fetchText(url, HTML_CAP, { allowHttpError: true, signal });
+  throwIfPrefetchAborted(signal);
   // A non-2xx body is only useful when it's a bot-wall challenge page (it
   // routes into blocked mode below). A site's own 404/500 page is not the
   // brand — treat that as a failed fetch.
   if (page && !page.ok && !isChallengePage(page.text)) page = null;
+  throwIfPrefetchAborted(signal);
   let html: string;
   let baseUrl: string;
   let renderedDom: string | null = null; // set once Chrome has rendered the page
@@ -718,6 +772,7 @@ export async function prefetchBrand(
   } else {
     // Plain fetch blocked or answered with a bot challenge → headless-Chrome
     // fallback (real browser fingerprint).
+    throwIfPrefetchAborted(signal);
     onProgress(
       "chrome",
       page
@@ -725,6 +780,7 @@ export async function prefetchBrand(
         : "plain fetch blocked — rendering with headless Chrome",
     );
     renderedDom = await chromeDumpDom(url);
+    throwIfPrefetchAborted(signal);
     if (renderedDom) {
       html = renderedDom.slice(0, HTML_CAP);
       baseUrl = page?.finalUrl ?? url;
@@ -738,7 +794,7 @@ export async function prefetchBrand(
       return null;
     }
   }
-  return harvestFromHtml(html, baseUrl, brandDir, { url, renderedDom, onProgress });
+  return harvestFromHtml(html, baseUrl, brandDir, { url, renderedDom, onProgress, signal });
 }
 
 interface HarvestFromHtmlOptions {
@@ -754,6 +810,8 @@ interface HarvestFromHtmlOptions {
    *  run. False when the caller already supplied rendered DOM. Defaults true. */
   allowChrome?: boolean;
   onProgress?: PrefetchProgress;
+  /** Caller cancellation (user Stop) threaded into the harvest's sub-fetches. */
+  signal?: AbortSignal;
 }
 
 /** Turn page HTML (+ optional seed CSS) into a PrefetchResult: harvest colors,
@@ -766,10 +824,11 @@ async function harvestFromHtml(
   brandDir: string,
   opts: HarvestFromHtmlOptions,
 ): Promise<PrefetchResult> {
-  const { url } = opts;
+  const { url, signal } = opts;
   const onProgress: PrefetchProgress = opts.onProgress ?? (() => {});
   const allowChrome = opts.allowChrome ?? true;
   let renderedDom = opts.renderedDom ?? null;
+  throwIfPrefetchAborted(signal);
   // Chrome can render a challenge page too (interactive Turnstile etc.) —
   // re-check the HTML we actually ended up with.
   const blocked = isChallengePage(html);
@@ -807,12 +866,12 @@ async function harvestFromHtml(
       }
     }
     const cssResults = await Promise.all(
-      cssLinks.slice(0, MAX_CSS_FILES).map((u) => fetchText(u, CSS_CAP)),
+      cssLinks.slice(0, MAX_CSS_FILES).map((u) => fetchText(u, CSS_CAP, { signal })),
     );
     for (const r of cssResults) if (r) cssChunks.push(r.text);
     // Google Fonts CSS carries the canonical family names — fetch those too.
     const gfResults = await Promise.all(
-      googleFontsUrls.slice(0, 2).map((u) => fetchText(u, CSS_CAP)),
+      googleFontsUrls.slice(0, 2).map((u) => fetchText(u, CSS_CAP, { signal })),
     );
     for (const r of gfResults) if (r) cssChunks.push(r.text);
     allCss = cssChunks.join("\n");
@@ -824,8 +883,10 @@ async function harvestFromHtml(
     // at runtime. Render once with headless Chrome — the dumped DOM carries the
     // injected <style> tags and inline styles — and re-extract.
     if (colors.filter((c) => !c.extreme).length < 3 && !renderedDom && allowChrome && findChrome()) {
+      throwIfPrefetchAborted(signal);
       onProgress("chrome", "thin static CSS — re-harvesting from the rendered DOM");
       renderedDom = await chromeDumpDom(baseUrl);
+      throwIfPrefetchAborted(signal);
       if (renderedDom) {
         const domCss: string[] = [];
         for (const m of renderedDom.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) domCss.push(m[1]);
@@ -882,7 +943,7 @@ async function harvestFromHtml(
   if (refs.length === 0 && renderedDom && !blocked) refs = findLogoRefs(renderedDom, baseUrl);
   for (const ref of refs) {
     if (logos.length >= MAX_LOGOS) break;
-    const bin = await fetchBinary(ref.url, baseUrl);
+    const bin = await fetchBinary(ref.url, baseUrl, signal);
     if (!bin) continue;
     const file = `${ref.kind}-${logos.length}${extFor(bin.contentType, ref.url)}`;
     fs.writeFileSync(path.join(logosDir, file), bin.buf);
@@ -915,9 +976,11 @@ async function harvestFromHtml(
   fs.mkdirSync(prefetchDir, { recursive: true });
   let screenshot: string | null = null;
   if (logos.length === 0 && !blocked && allowChrome && findChrome()) {
+    throwIfPrefetchAborted(signal);
     onProgress("chrome", "no logo downloadable — capturing a page screenshot");
     const shotPath = path.join(prefetchDir, "screenshot.png");
     if (await chromeScreenshot(baseUrl, shotPath)) screenshot = "prefetch/screenshot.png";
+    throwIfPrefetchAborted(signal);
   }
   onProgress("logos-done", `${logos.length} candidates${screenshot ? " + page screenshot" : ""}`);
 
@@ -958,7 +1021,7 @@ async function harvestFromHtml(
   const candidates = navLinks.filter((l) => sameHost(l.url) && EXTRA_PAGE_HINTS.test(l.url));
   for (const cand of candidates.slice(0, MAX_EXTRA_PAGES)) {
     onProgress("extra-page", cand.url);
-    const extra = await fetchText(cand.url, HTML_CAP);
+    const extra = await fetchText(cand.url, HTML_CAP, { signal });
     if (!extra) continue;
     const t = decodeEntities(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(extra.text)?.[1] ?? "").trim();
     const text = [

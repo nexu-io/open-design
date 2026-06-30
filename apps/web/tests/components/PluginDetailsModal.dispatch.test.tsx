@@ -364,6 +364,34 @@ describe('PluginDetailsModal common metadata coverage', () => {
     expect(html.indexOf('plugin-meta-advanced')).toBeLessThan(html.indexOf('Capabilities'));
   });
 
+  it('localizes plugin metadata chrome in Chinese', () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider initial="zh-CN">
+        <PluginMetaSections
+          record={pluginWithMeta({
+            id: 'localized-meta',
+            query: 'Generate a {style} hero for {brand}.',
+          })}
+          omit={{ description: true }}
+          compact
+          heading="插件信息"
+          variant="minimal"
+        />
+      </I18nProvider>,
+    );
+
+    expect(html).toContain('插件信息');
+    expect(html).toContain('示例请求');
+    expect(html).toContain('开发者详情');
+    expect(html).toContain('输入项');
+    expect(html).toContain('工作流');
+    expect(html).toContain('能力');
+    expect(html).toContain('来源');
+    expect(html).not.toContain('Plugin info');
+    expect(html).not.toContain('Example query');
+    expect(html).not.toContain('Developer details');
+  });
+
   it('surfaces Plugin info first in the design-system sidebar, with DESIGN.md below', () => {
     const html = render(
       pluginWithMeta({

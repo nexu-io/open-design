@@ -90,6 +90,7 @@ vi.mock('../../src/analytics/provider', () => ({
 }));
 
 import { SettingsDialog } from '../../src/components/SettingsDialog';
+import { IntegrationsView } from '../../src/components/IntegrationsView';
 import type { AgentRefreshOptions, SettingsSection } from '../../src/components/SettingsDialog';
 import { reconcileAmrModelChoice } from '../../src/components/SettingsDialog';
 import { reconcileAmrProfileEnv } from '../../src/components/SettingsDialog';
@@ -254,6 +255,26 @@ function renderSettingsDialog(
   );
 
   return { onPersist, onPersistComposioKey, onClose, onRefreshAgents, ...view };
+}
+
+function renderIntegrationsView(
+  initial: Partial<AppConfig> = {},
+  options: {
+    initialTab?: 'mcp' | 'connectors' | 'skills' | 'use-everywhere';
+  } = {},
+) {
+  const onConfigPersist = vi.fn();
+  const onPersistComposioKey = vi.fn();
+  const view = render(
+    <IntegrationsView
+      config={{ ...baseConfig, ...initial }}
+      initialTab={options.initialTab ?? 'mcp'}
+      onConfigPersist={onConfigPersist}
+      onPersistComposioKey={onPersistComposioKey}
+    />,
+  );
+
+  return { onConfigPersist, onPersistComposioKey, ...view };
 }
 
 function renderLanguageSettingsDialog(initialLocale: Parameters<typeof I18nProvider>[0]['initial'] = 'en') {
@@ -4286,15 +4307,15 @@ describe('SettingsDialog pets interactions', () => {
   });
 });
 
-describe('SettingsDialog skills section', () => {
+describe('IntegrationsView skills tab', () => {
   afterEach(() => {
     cleanup();
   });
 
   it('lists functional skills and filters them by mode + search', async () => {
-    renderSettingsDialog(
+    renderIntegrationsView(
       { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'skills' },
+      { initialTab: 'skills' },
     );
 
     await waitFor(() => {
@@ -4316,9 +4337,9 @@ describe('SettingsDialog skills section', () => {
   });
 
   it('opens a skill detail panel and persists disabled skills from toggle switches', async () => {
-    const { onPersist } = renderSettingsDialog(
+    const { onConfigPersist } = renderIntegrationsView(
       { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'skills' },
+      { initialTab: 'skills' },
     );
 
     await waitFor(() => {
@@ -4334,19 +4355,19 @@ describe('SettingsDialog skills section', () => {
     const toggles = screen.getAllByTitle('Toggle');
     fireEvent.click(toggles[0] as HTMLElement);
 
-    await waitForPersist(
-      onPersist,
-      expect.objectContaining({
-        disabledSkills: ['blog-post'],
-      }),
-      {},
-    );
+    await waitFor(() => {
+      expect(onConfigPersist).toHaveBeenCalledWith(
+        expect.objectContaining({
+          disabledSkills: ['blog-post'],
+        }),
+      );
+    });
   });
 
   it('shows an empty state when search matches nothing', async () => {
-    renderSettingsDialog(
+    renderIntegrationsView(
       { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'skills' },
+      { initialTab: 'skills' },
     );
 
     await waitFor(() => {

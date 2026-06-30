@@ -14,9 +14,11 @@ import type {
   InstalledPluginRecord,
   PluginManifest,
 } from '@open-design/contracts';
-import { useT } from '../../i18n';
+import { useI18n } from '../../i18n';
+import { localizePluginChrome } from '../../i18n/plugin-content';
 import { resolvePluginQueryFallback } from '../../state/projects';
 import { Icon } from '../Icon';
+import { localizePluginDescription, localizePluginTitle } from '../plugins-home/localization';
 import {
   PreviewModal,
   type PreviewSharePopoverItem,
@@ -92,12 +94,14 @@ export function PluginMediaDetail({
   hideUseAction,
   onSharePopoverItemClick,
 }: Props) {
-  const t = useT();
+  const { t, locale } = useI18n();
   const [copied, setCopied] = useState(false);
 
   const manifest: PluginManifest = record.manifest ?? ({} as PluginManifest);
   const od = manifest.od ?? {};
-  const description = manifest.description ?? '';
+  const localizedTitle = localizePluginTitle(locale, record);
+  const description = localizePluginDescription(locale, record);
+  const pluginInfoLabel = localizePluginChrome(locale, 'pluginInfo');
   const query = resolvePluginQueryFallback(od.useCase?.query);
   const media = useMemo(() => readMedia(record), [record]);
   const hasAsset = Boolean(media.poster || media.videoUrl || media.audioUrl);
@@ -145,7 +149,7 @@ export function PluginMediaDetail({
             <img
               className="plugin-media-stage__audio-poster"
               src={media.poster}
-              alt={record.title}
+              alt={localizedTitle}
               referrerPolicy="no-referrer"
               loading="lazy"
             />
@@ -168,7 +172,7 @@ export function PluginMediaDetail({
         <img
           className="plugin-media-stage__image"
           src={media.poster}
-          alt={record.title}
+          alt={localizedTitle}
           loading="lazy"
           referrerPolicy="no-referrer"
         />
@@ -179,7 +183,11 @@ export function PluginMediaDetail({
   const views: PreviewView[] = [
     {
       id: 'media',
-      label: media.isVideo ? 'Video' : media.isAudio ? 'Audio' : 'Image',
+      label: media.isVideo
+        ? localizePluginChrome(locale, 'video')
+        : media.isAudio
+          ? localizePluginChrome(locale, 'audio')
+          : localizePluginChrome(locale, 'image'),
       custom: stage,
     },
   ];
@@ -214,25 +222,25 @@ export function PluginMediaDetail({
         record={record}
         omit={{ description: true, query: true }}
         compact
-        heading="Plugin info"
+        heading={pluginInfoLabel}
       />
     </div>
   );
 
   return (
     <PreviewModal
-      title={record.title}
+      title={localizedTitle}
       subtitle={description || undefined}
       views={views}
-      exportTitleFor={() => record.title}
+      exportTitleFor={() => localizedTitle}
       shareTarget={{
-        title: record.title,
+        title: localizedTitle,
         description: description || undefined,
         url: buildPluginShareUrl(record),
       }}
       onClose={onClose}
       sidebar={{
-        label: 'Plugin info',
+        label: pluginInfoLabel,
         defaultOpen: true,
         contentKey: record.id,
         content: sidebar,
@@ -243,7 +251,7 @@ export function PluginMediaDetail({
             label: pluginUsePrimaryAction(record, t).label,
             onClick: () => onUse(record, pluginUsePrimaryAction(record, t).action),
             busy: !!isApplying,
-            busyLabel: 'Applying…',
+            busyLabel: localizePluginChrome(locale, 'applying'),
             testId: `plugin-details-use-${record.id}`,
             menu: buildPluginUseMenu(record, onUse, t, onDuplicate),
           }}

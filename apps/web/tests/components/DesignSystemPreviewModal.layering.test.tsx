@@ -12,19 +12,19 @@ const { fetchDesignSystemShowcaseMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../src/providers/registry', () => ({
-  fetchDesignSystem: vi.fn(async () => ({ body: '# Claymorphism' })),
+  designSystemStaticUrl: (id: string, filePath: string) => `/design-systems/${id}/${filePath}`,
+  fetchDesignSystem: vi.fn(async () => ({
+    id: 'claymorphism',
+    title: 'Claymorphism',
+    summary: 'Bundled design system',
+    category: 'style',
+    body: '# Claymorphism',
+  })),
   fetchDesignSystemPreview: vi.fn(async () => '<!doctype html><p>tokens</p>'),
   fetchDesignSystemShowcase: fetchDesignSystemShowcaseMock,
-}));
-
-vi.mock('../../src/runtime/design-kit', () => ({
-  useDesignKit: () => ({ kit: { title: 'Claymorphism kit' }, loading: false }),
-}));
-
-vi.mock('../../src/components/DesignKitView', () => ({
-  DesignKitView: ({ dataTestId }: { dataTestId?: string }) => (
-    <div data-testid={dataTestId ?? 'design-kit-view'}>Rich design kit</div>
-  ),
+  fetchProjectFileText: vi.fn(async () => null),
+  openExternalUrl: vi.fn(),
+  projectRawUrl: (projectId: string, filePath: string) => `/raw/${projectId}/${filePath}`,
 }));
 
 const SYSTEM = {

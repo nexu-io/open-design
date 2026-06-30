@@ -9,6 +9,9 @@ export const BRAND_USAGE = `Usage:
                                        browser tab; open it to run the extraction agent.
                                        --prompt-file <path|-> reads the URL from a file or stdin.
                                        --locale <locale> localizes generated brand.html copy.
+  od brand continue <id> [--json]      Restart the deterministic extraction pass for an
+                                       existing brand/project/design-system without creating
+                                       a duplicate design system.
   od brand preview <id> [--json]       Re-render brand.html from the project's current
                                        brand.json so the kit page fills in live during
                                        extraction. --project <projectId> overrides the project.
@@ -28,7 +31,8 @@ export const BRAND_USAGE = `Usage:
 
 Output:
   Plain text by default; --json prints raw JSON for any subcommand.
-  extract prints "<id>\\t<projectId>" to stdout; finalize prints "<id>\\t<name>".
+  extract prints "<id>\\t<projectId>" to stdout; continue prints
+  "<id>\\t<status>\\t<projectId>\\t<conversationId>"; finalize prints "<id>\\t<name>".
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.`;

@@ -27,6 +27,7 @@ interface Props {
   onOpen: (id: string) => void;
   onViewAll: () => void;
   onDelete?: (id: string) => Promise<boolean | void> | boolean | void;
+  onDuplicate?: (id: string) => Promise<void> | void;
   onRename?: (id: string, name: string) => void;
   limit?: number;
 }
@@ -44,6 +45,7 @@ export function RecentProjectsStrip({
   onOpen,
   onViewAll,
   onDelete,
+  onDuplicate,
   onRename,
   limit = 6,
 }: Props) {
@@ -64,7 +66,7 @@ export function RecentProjectsStrip({
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
   const renameTitleId = useId();
   const confirmTitleId = useId();
-  const actionsAvailable = Boolean(onDelete || onRename);
+  const actionsAvailable = Boolean(onDelete || onDuplicate || onRename);
 
   useEffect(() => {
     if (!menuOpenId) return;
@@ -177,6 +179,14 @@ export function RecentProjectsStrip({
   function requestDelete(project: Project) {
     setMenuOpenId(null);
     setConfirmTarget(project);
+  }
+
+  function requestDuplicate(project: Project) {
+    if (!onDuplicate) return;
+    setMenuOpenId(null);
+    void Promise.resolve(onDuplicate(project.id)).catch((err) => {
+      console.warn('[RecentProjectsStrip] duplicate project failed:', err);
+    });
   }
 
   async function commitDelete() {
@@ -305,6 +315,12 @@ export function RecentProjectsStrip({
                         <button type="button" role="menuitem" onClick={() => startRename(project)}>
                           <Icon name="pencil" size={12} />
                           <span>{t('designs.menuRename')}</span>
+                        </button>
+                      ) : null}
+                      {onDuplicate ? (
+                        <button type="button" role="menuitem" onClick={() => requestDuplicate(project)}>
+                          <Icon name="copy" size={12} />
+                          <span>{t('designs.menuDuplicate')}</span>
                         </button>
                       ) : null}
                       {onDelete ? (

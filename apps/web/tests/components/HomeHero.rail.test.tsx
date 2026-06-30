@@ -151,6 +151,18 @@ describe('HomeHero intent rail', () => {
     expect(node.textContent).toContain('Video');
   });
 
+  it('does not reserve an empty active-context row for a hidden chip-bound plugin', () => {
+    renderHero({
+      activeChipId: 'wireframe',
+      activePluginTitle: 'Wireframe',
+      showActivePluginChip: false,
+      contextItemCount: 3,
+    });
+
+    expect(document.querySelector('.home-hero__active')).toBeNull();
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Wireframe');
+  });
+
   it('lets the active creation chip be removed from the composer', () => {
     const { onClearActiveChip } = renderHero({ activeChipId: 'prototype' });
     fireEvent.click(screen.getByTestId('home-hero-template-trigger'));

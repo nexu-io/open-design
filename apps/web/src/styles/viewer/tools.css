@@ -447,13 +447,15 @@
   padding: 8px 12px;
   background: #1c1b1a;
   color: #f0eee9;
+  border-radius: var(--radius-md);
   font-family: var(--mono);
   font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   max-height: 220px;
-  overflow-y: auto;
+  overflow: auto;
+  scrollbar-width: thin;
 }
 .op-bash .op-output { background: #2a2926; }
 

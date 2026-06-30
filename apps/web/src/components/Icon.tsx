@@ -678,7 +678,10 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
     case 'stop':
       return (
         <svg {...common}>
-          <rect x="6" y="6" width="12" height="12" rx="1.5" />
+          {/* Fill ~58% of the viewBox (was 50% at 12/24) so the square reads at
+             a weight comparable to the send glyph in the composer's icon-only
+             button instead of looking like a tiny dot. */}
+          <rect x="5" y="5" width="14" height="14" rx="2" />
         </svg>
       );
     case 'swatchbook':

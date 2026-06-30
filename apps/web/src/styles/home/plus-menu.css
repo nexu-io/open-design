@@ -355,6 +355,97 @@
   max-height: 160px;
 }
 
+/* ---------- Skills flyout: searchable list + hover summary ---------- */
+.plus-menu__flyout--skills {
+  min-width: 0;
+  max-width: none;
+  width: 430px;
+  max-width: calc(100vw - 24px);
+  height: min(320px, var(--plus-menu-flyout-max-height, calc(100vh - 24px)));
+  overflow: hidden;
+}
+.plus-menu__skill-pane {
+  display: flex;
+  gap: 8px;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  flex: 1 1 auto;
+}
+.plus-menu__skill-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  align-self: stretch;
+  flex: 0 0 204px;
+  max-width: 204px;
+}
+.plus-menu__skill-main .plus-menu__list {
+  flex: 1 1 auto;
+  max-height: none;
+}
+.plus-menu__skill-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.plus-menu__skill-preview-meta,
+.plus-menu__skill-preview-triggers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.plus-menu__skill-preview-meta span,
+.plus-menu__skill-preview-triggers span {
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plus-menu__skill-preview-triggers span {
+  color: color-mix(in srgb, var(--accent) 76%, var(--text));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.plus-menu__skill-preview-example {
+  margin: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.plus-menu__popup--flyout-contained .plus-menu__flyout--skills {
+  width: auto;
+  height: auto;
+}
+.plus-menu__popup--flyout-contained .plus-menu__skill-pane {
+  flex-direction: column;
+}
+.plus-menu__popup--flyout-contained .plus-menu__skill-main {
+  flex: 1 1 auto;
+  max-width: none;
+}
+.plus-menu__popup--flyout-contained .plus-menu__skill-preview {
+  border-left: 0;
+  border-top: 1px solid var(--border);
+  padding-left: 0;
+  padding-top: 8px;
+}
+
 /* ---------- Design-toolbox hover-detail / preview panel ---------- */
 /* Portaled (to <body>) third-level panel shown when a toolbox row is
    hovered. JS sets viewport-relative left/top from the row rect, so the

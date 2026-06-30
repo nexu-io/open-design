@@ -39,18 +39,63 @@ vi.mock('../../src/components/DesignBrowserPanel', () => ({
     initialIconUrl,
     initialTitle,
     initialUrl,
+    navigateRequest,
+    onPageSnapshotToast,
   }: {
     initialIconUrl?: string;
     initialTitle?: string;
     initialUrl?: string;
+    navigateRequest?: { url: string; nonce: number };
+    onPageSnapshotToast?: (event: {
+      actionFileName?: string;
+      actionLabel?: string;
+      actionTarget?: 'design-files' | 'file';
+      elapsedSeconds?: number;
+      message: string;
+      status: 'loading' | 'success' | 'error' | 'canceled';
+      tabId: string;
+      ttlMs?: number;
+    }) => void;
   }) => (
     <div
       data-testid="design-browser-panel"
       data-initial-icon-url={initialIconUrl ?? ''}
       data-initial-title={initialTitle ?? ''}
       data-initial-url={initialUrl ?? ''}
-    />
+      data-navigate-url={navigateRequest?.url ?? ''}
+      data-navigate-nonce={navigateRequest?.nonce ?? ''}
+    >
+      <button
+        type="button"
+        data-testid="emit-browser-snapshot-success"
+        onClick={() => onPageSnapshotToast?.({
+          actionFileName: 'browser-archive/example/manifest.json',
+          actionLabel: 'View Design Files',
+          actionTarget: 'design-files',
+          elapsedSeconds: 0,
+          message: 'Saved page snapshot (HTML + CSS).',
+          status: 'success',
+          tabId: '__browser__:1',
+          ttlMs: 8000,
+        })}
+      >
+        emit snapshot success
+      </button>
+    </div>
   ),
+  labelFromUrl: (url: string) => {
+    try {
+      return new URL(url).hostname.replace(/^www\./, '') || url;
+    } catch {
+      return url;
+    }
+  },
+  normalizeBrowserAddress: (rawAddress: string) => {
+    const value = rawAddress.trim();
+    if (/^https?:\/\//i.test(value)) return value;
+    if (/^[\w.-]+\.[a-z]{2,}/i.test(value)) return `https://${value}`;
+    return value || 'about:blank';
+  },
 }));
 
 vi.mock('../../src/components/workspace/TerminalViewer', () => ({
@@ -730,6 +775,53 @@ describe('FileWorkspace launcher tab creation', () => {
     ]);
   });
 
+  it('opens Design Files from the browser snapshot toast action instead of the manifest file', async () => {
+    const onTabsStateChange = vi.fn();
+    const browserTab = {
+      id: '__browser__:1',
+      insertAfter: '__design_files__',
+      label: 'Browser',
+      title: 'Example',
+      url: 'https://example.com',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: [],
+          active: '__browser__:1',
+          browserTabs: [browserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('emit-browser-snapshot-success'));
+    await screen.findByRole('button', { name: 'View Design Files' });
+    const toastAction = document.querySelector<HTMLButtonElement>('.od-toast-action');
+    if (!toastAction) throw new Error('Could not find browser snapshot toast action');
+    await act(async () => {
+      fireEvent.click(toastAction);
+    });
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: [],
+        active: DESIGN_FILES_TAB,
+        browserTabs: [browserTab],
+      });
+    });
+    expect(onTabsStateChange).not.toHaveBeenCalledWith(
+      expect.objectContaining({ active: 'browser-archive/example/manifest.json' }),
+    );
+  });
+
   it('anchors a new browser after the visible tab tail', async () => {
     const onTabsStateChange = vi.fn();
     const rootBrowserTab = {
@@ -950,6 +1042,44 @@ describe('FileWorkspace launcher tab creation', () => {
         active: '__browser__:1',
         browserTabs,
       });
+    });
+  });
+
+  it('creates and navigates a browser tab from a browser open request', async () => {
+    const onTabsStateChange = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['cover.html'], active: 'cover.html' }}
+        browserOpenRequest={{ tabId: '__browser__:1', url: 'https://economist.com/', nonce: 7 }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html'],
+        active: '__browser__:1',
+        browserTabs: [
+          {
+            id: '__browser__:1',
+            insertAfter: 'cover.html',
+            label: 'Browser',
+            title: 'economist.com',
+            url: 'https://economist.com/',
+          },
+        ],
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('design-browser-panel').getAttribute('data-navigate-url'))
+        .toBe('https://economist.com/');
     });
   });
 
@@ -1800,6 +1930,53 @@ describe('FileWorkspace add-module menu', () => {
       tabs: [],
       active: '__design_files__',
     });
+  });
+
+  it('keeps the pinned brand browser tab mounted while another tab is active', () => {
+    const browserTabs = [
+      {
+        id: '__browser__:1',
+        label: 'Browser',
+        title: 'The Economist',
+        url: 'https://www.economist.com/',
+      },
+    ];
+
+    // Without the pin, a browser tab that was never activated this session is
+    // not mounted while a file tab is active, so its live (post-wall) DOM can't
+    // be read — this is the failure the pin fixes.
+    const { unmount } = render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('brand.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['brand.html'], active: 'brand.html', browserTabs }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('design-browser-panel')).toBeNull();
+    unmount();
+
+    // With the pin, the same inactive browser tab stays mounted so the chat
+    // "Continue extraction" handler can read its post-wall DOM.
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('brand.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['brand.html'], active: 'brand.html', browserTabs }}
+        pinnedBrowserTabId="__browser__:1"
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+    const panel = screen.getByTestId('design-browser-panel');
+    expect(panel.dataset.initialTitle).toBe('The Economist');
   });
 
 });

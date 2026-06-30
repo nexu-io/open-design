@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createRef, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -202,6 +202,14 @@ beforeEach(() => {
     }
     if (url === '/api/skills') {
       return new Response(JSON.stringify({ skills }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url.startsWith('/api/skills/')) {
+      const id = decodeURIComponent(url.split('/').pop() ?? '');
+      const skill = skills.find((candidate) => candidate.id === id) ?? makeSkill({ id, name: id });
+      return new Response(JSON.stringify({ ...skill, body: `skill body for ${id}` }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -446,6 +454,15 @@ describe('ChatComposer context pickers', () => {
     expect(pill?.textContent).toBe('@Deck Builder');
     expect(pill?.getAttribute('data-mention-kind')).toBe('skill');
     expect(screen.getByTestId('staged-contexts').textContent).toContain('@Deck Builder');
+
+    fireEvent.click(
+      within(screen.getByTestId('staged-contexts')).getByRole('button', {
+        name: 'Deck Builder',
+      }),
+    );
+    await waitFor(() => expect(screen.getByTestId('skill-details-modal')).toBeTruthy());
+    expect(screen.getByText('skill body for deck-builder')).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close' }).at(-1)!);
 
     fireEvent.click(screen.getByLabelText('Remove Deck Builder'));
     await waitFor(() => expect(composerText().trim()).toBe(''));

@@ -84,9 +84,12 @@ function writeRuleProposalDecision(key: string, decision: Exclude<RuleProposalDe
 }
 
 /** Outcome a brand-browser-assist confirm handler reports back to the card so it
- *  can show a done / error state. */
+ *  can show a completed / error state. */
 export interface BrandBrowserAssistResult {
   ok: boolean;
+  /** `opened` means the Browser tab was focused/navigated; extraction still
+   * continues from the next-step action after the user clears verification. */
+  action?: 'opened' | 'confirmed';
   /** Failure reason to show inline (e.g. "needs the desktop app"). */
   message?: string;
 }
@@ -486,15 +489,16 @@ function writeBrandAssistDone(key: string): void {
   try {
     window.localStorage.setItem(key, 'done');
   } catch {
-    // Best effort — the in-memory `done` state still hides the button this mount.
+    // Best effort — the in-memory `done` state still shows the opened marker.
   }
 }
 
-// Brand extraction hit an anti-bot wall. This card asks the user to clear it in
-// the in-app browser tab, then its Confirm button runs a CLIENT-side handler
-// (read the unblocked DOM → re-extract) — it does NOT round-trip to the agent.
-// A localStorage latch keyed off the brand id keeps a resolved card from
-// re-prompting on reload.
+// Brand extraction hit an anti-bot wall. This card opens/focuses the in-app
+// browser tab so the user can clear verification, then the normal next-step
+// action continues extraction from that live page.
+// A localStorage marker keyed off the brand id remembers that the browser was
+// opened, but the action remains available because users may need to re-open the
+// Browser tab or re-trigger the Download Page highlight.
 function BrandBrowserAssistCard({
   card,
   onConfirm,
@@ -508,25 +512,15 @@ function BrandBrowserAssistCard({
   const [status, setStatus] = useState<'idle' | 'working' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  if (done) {
-    return (
-      <div className={`${styles.card} ${styles.ruleSaved}`} data-od-card="brand-browser-assist">
-        <span className={styles.ruleSavedIcon} aria-hidden>
-          <Icon name="check" size={14} />
-        </span>
-        <span className={styles.ruleSavedLabel}>{t('artifact.odCardBrandAssistDone')}</span>
-      </div>
-    );
-  }
-
   const confirm = async () => {
     if (!onConfirm) return;
     setStatus('working');
     setErrorMsg(null);
     try {
-      // The handler reports `{ ok: true }` only once the brand actually
-      // finalized; anything else (a desktop-only refusal, a thin harvest, a
-      // missing handler) keeps the button so the user can retry.
+      // `{ ok: true, action: "opened" }` means the Browser tab was focused and
+      // the user should clear verification before using the Continue next step.
+      // Plain `{ ok: true }` is kept for older handlers. Either successful
+      // outcome resolves this prompt so the card does not look unclicked.
       const result = await onConfirm(card);
       if (!result || result.ok !== true) {
         setStatus('error');
@@ -549,12 +543,20 @@ function BrandBrowserAssistCard({
           <Icon name="globe" size={13} />
         </span>
         <span className={styles.ruleKicker}>
-          {t('artifact.odCardBrandAssistKicker', { reason: card.reason || 'Cloudflare' })}
+          {t('artifact.odCardBrandAssistKicker', { reason: card.reason || 'Browser' })}
         </span>
       </div>
       <div className={styles.ruleSummary}>
         <p className={styles.ruleDescription}>{t('artifact.odCardBrandAssistBody')}</p>
         {card.url ? <p className={styles.ruleName}>{card.url}</p> : null}
+        {done ? (
+          <div className={styles.ruleSaved} role="status">
+            <span className={styles.ruleSavedIcon} aria-hidden>
+              <Icon name="check" size={14} />
+            </span>
+            <span className={styles.ruleSavedLabel}>{t('artifact.odCardBrandAssistDone')}</span>
+          </div>
+        ) : null}
       </div>
       {status === 'error' ? (
         <p className={styles.ruleError} role="status">

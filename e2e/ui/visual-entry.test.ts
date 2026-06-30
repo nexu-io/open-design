@@ -1,5 +1,5 @@
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
+import { openNewProjectModal } from '@/playwright/rail';
 import {
   captureVisual,
   captureVisualTarget,
@@ -196,10 +196,7 @@ test('[P2] captures the new project modal surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModal(page);
   await expect(page.getByTestId('new-project-name')).toBeVisible();
 
   await captureVisual(page, 'visual-new-project-modal');

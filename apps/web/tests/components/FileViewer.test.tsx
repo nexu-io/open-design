@@ -787,6 +787,40 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
   });
 
+  it('routes brand extraction stop requests from the preview iframe', async () => {
+    const file = baseFile({
+      name: 'brand.html',
+      path: 'brand.html',
+      mime: 'text/html',
+      kind: 'html',
+    });
+    const onBrandExtractionStopRequest = vi.fn();
+
+    render(
+      <FileViewer
+        projectId="project-brand-stop"
+        projectKind="prototype"
+        file={file}
+        liveHtml="<html><body>Brand</body></html>"
+        onBrandExtractionStopRequest={onBrandExtractionStopRequest}
+      />,
+    );
+
+    const frames = screen.getAllByTestId('artifact-preview-frame') as HTMLIFrameElement[];
+    await waitFor(() => expect(frames.some((frame) => !!frame.contentWindow)).toBe(true));
+    const frame = frames.find((candidate) => candidate.contentWindow) ?? frames[0];
+    if (!frame) throw new Error('expected artifact preview iframe');
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'od:brand-extraction-stop-request' },
+        source: frame.contentWindow,
+      }));
+    });
+
+    expect(onBrandExtractionStopRequest).toHaveBeenCalledTimes(1);
+  });
+
   it('does not treat slide-prefixed helper classes as deck slides', () => {
     const file = baseFile({
       name: 'page.html',

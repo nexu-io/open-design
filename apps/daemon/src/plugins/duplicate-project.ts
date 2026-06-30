@@ -37,9 +37,7 @@ interface CopyState {
   copiedFiles: number;
   copiedBytes: number;
   skippedFiles: number;
-  stopped: boolean;
   warnings: string[];
-  warnedLimits: Set<string>;
 }
 
 interface CopyOptions {
@@ -101,9 +99,7 @@ export async function duplicatePluginExampleIntoProject(
     copiedFiles: 1,
     copiedBytes: entryBytes,
     skippedFiles: 0,
-    stopped: false,
     warnings: [],
-    warnedLimits: new Set(),
   };
   const skipSourcePath = path.basename(entry.contentPath).toLowerCase() === 'index.html'
     ? path.resolve(entry.contentPath)
@@ -418,11 +414,9 @@ async function copyDirectoryContents(
   state: CopyState,
   options: CopyOptions,
 ): Promise<void> {
-  if (state.stopped) return;
   const entries = await readdir(sourceDir, { withFileTypes: true });
   await mkdir(destDir, { recursive: true });
   for (const entry of entries) {
-    if (state.stopped) return;
     if (shouldSkipEntry(entry.name, entry.isDirectory())) {
       state.skippedFiles += 1;
       continue;
@@ -433,31 +427,21 @@ async function copyDirectoryContents(
       continue;
     }
     if (entry.isSymbolicLink()) {
-      state.skippedFiles += 1;
-      state.warnings.push(`Skipped symlink: ${path.relative(sourceDir, source) || entry.name}`);
-      continue;
+      throwIncompleteDuplicate('symbolic links are not supported', path.relative(sourceDir, source) || entry.name);
     }
     if (entry.isDirectory()) {
       await copyDirectoryContents(source, destination, state, options);
       continue;
     }
     if (!entry.isFile()) {
-      state.skippedFiles += 1;
-      continue;
+      throwIncompleteDuplicate('special files are not supported', path.relative(sourceDir, source) || entry.name);
     }
     if (state.copiedFiles >= MAX_COPY_FILES) {
-      state.skippedFiles += 1;
-      stopCopying(state, 'files', 'Duplicate file limit reached; remaining files were not scanned.');
-      continue;
+      throwIncompleteDuplicate('duplicate file limit would skip required files', path.relative(sourceDir, source) || entry.name);
     }
     const sourceInfo = await stat(source);
     if (state.copiedBytes + sourceInfo.size > MAX_COPY_BYTES) {
-      state.skippedFiles += 1;
-      warnCopyLimit(state, 'bytes', 'Duplicate size limit reached; oversized files were skipped.');
-      if (state.copiedBytes >= MAX_COPY_BYTES) {
-        state.stopped = true;
-      }
-      continue;
+      throwIncompleteDuplicate('duplicate size limit would skip a required file', path.relative(sourceDir, source) || entry.name);
     }
     await mkdir(path.dirname(destination), { recursive: true });
     await copyFile(source, destination);
@@ -466,15 +450,12 @@ async function copyDirectoryContents(
   }
 }
 
-function stopCopying(state: CopyState, key: string, warning: string): void {
-  state.stopped = true;
-  warnCopyLimit(state, key, warning);
-}
-
-function warnCopyLimit(state: CopyState, key: string, warning: string): void {
-  if (state.warnedLimits.has(key)) return;
-  state.warnedLimits.add(key);
-  state.warnings.push(warning);
+function throwIncompleteDuplicate(reason: string, relPath: string): never {
+  throw new PluginDuplicateProjectError(
+    422,
+    'DUPLICATE_COPY_INCOMPLETE',
+    `This plugin example cannot be duplicated completely: ${reason} (${relPath}).`,
+  );
 }
 
 function shouldSkipEntry(name: string, isDirectory: boolean): boolean {

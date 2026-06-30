@@ -7,7 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrandSummary, DesignSystemSummary } from '@open-design/contracts';
 
 vi.mock('../../src/providers/registry', () => ({
-  fetchDesignSystemPreview: vi.fn(),
+  designSystemStaticUrl: (id: string, filePath: string) => `/design-systems/${id}/${filePath}`,
+  fetchDesignSystem: vi.fn(),
+  fetchProjectFileText: vi.fn(),
+  openExternalUrl: vi.fn(),
   projectRawUrl: (projectId: string, filePath: string) => `/raw/${projectId}/${filePath}`,
 }));
 
@@ -39,9 +42,13 @@ vi.mock('../../src/components/DesignSystemPreviewModal', () => ({
 
 import { DesignSystemPicker } from '../../src/components/DesignSystemPicker';
 import { I18nProvider, type Locale } from '../../src/i18n';
-import { fetchDesignSystemPreview } from '../../src/providers/registry';
+import {
+  fetchDesignSystem,
+  fetchProjectFileText,
+} from '../../src/providers/registry';
 
-const fetchDesignSystemPreviewMock = vi.mocked(fetchDesignSystemPreview);
+const fetchDesignSystemMock = vi.mocked(fetchDesignSystem);
+const fetchProjectFileTextMock = vi.mocked(fetchProjectFileText);
 
 const designSystems: DesignSystemSummary[] = [
   {
@@ -92,7 +99,29 @@ const acmeBrand: BrandSummary = {
 };
 
 beforeEach(() => {
-  fetchDesignSystemPreviewMock.mockResolvedValue('<html><body><h1>Preview</h1></body></html>');
+  fetchDesignSystemMock.mockImplementation(async (id) => ({
+    id,
+    title: id === 'clay' ? 'Clay' : 'Acme',
+    summary: id === 'clay' ? 'Friendly tactile product UI.' : 'Acme brand kit.',
+    category: id === 'clay' ? 'Product' : 'Brand',
+    body: id === 'clay'
+      ? [
+          '# Clay',
+          '',
+          'Friendly tactile product UI.',
+          '',
+          '## Typography',
+          '- Display: Fraunces',
+          '- Body: Inter',
+          '',
+          '## Color Palette',
+          '- Warm Paper #f4efe7',
+          '- Ink #25211d',
+        ].join('\n')
+      : '# Acme',
+    swatches: id === 'clay' ? ['#f4efe7', '#25211d'] : ['#0b5fff', '#0a0a0a'],
+  }));
+  fetchProjectFileTextMock.mockResolvedValue(null);
   brandsByDesignSystem.clear();
   brandsByDesignSystem.set('user:brand-acme', acmeBrand);
 });
@@ -124,12 +153,13 @@ describe('DesignSystemPicker brand preview', () => {
 
     fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
 
-    // The brand-backed system previews the Brand Kit card (identity blurb +
-    // typography specimen + palette), not the thin design-system iframe.
-    const brandPane = await screen.findByTestId('project-ds-picker-preview-brand');
+    // The brand-backed system previews the compact Brand Kit card (identity
+    // blurb + typography specimen + palette), not the thin design-system iframe.
+    const brandPane = await screen.findByTestId('project-ds-picker-preview-kit');
     expect(brandPane).toBeTruthy();
-    expect(screen.getByTestId('brand-preview-card').getAttribute('data-variant')).toBe('compact');
+    expect(screen.getByTestId('project-ds-picker-preview-kit-view').getAttribute('data-variant')).toBe('compact');
     expect(screen.getByText('Acme is a bold engineering brand for fast-moving teams.')).toBeTruthy();
+    expect(screen.queryByTestId('design-kit-logo-section')).toBeNull();
     expect(screen.getByText('Space Grotesk')).toBeTruthy();
     expect(screen.getByText('#0b5fff')).toBeTruthy();
     expect(screen.queryByTestId('project-ds-picker-preview-frame')).toBeNull();
@@ -138,18 +168,20 @@ describe('DesignSystemPicker brand preview', () => {
     expect(screen.getByTestId('design-system-preview-modal')).toBeTruthy();
   });
 
-  it('falls back to the thin design-system preview for a non-brand system', async () => {
+  it('uses the kit preview for a non-brand system too', async () => {
     renderPicker();
 
     fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
-    await screen.findByTestId('project-ds-picker-preview-brand');
+    await screen.findByTestId('project-ds-picker-preview-kit');
 
     fireEvent.mouseEnter(screen.getByTestId('project-ds-picker-option-clay'));
 
     await waitFor(() => {
-      expect(fetchDesignSystemPreviewMock).toHaveBeenCalledWith('clay');
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith('clay');
     });
-    expect(await screen.findByTestId('project-ds-picker-preview-frame')).toBeTruthy();
-    expect(screen.queryByTestId('project-ds-picker-preview-brand')).toBeNull();
+    expect(await screen.findByTestId('project-ds-picker-preview-kit-view')).toBeTruthy();
+    expect(screen.getByText('Friendly tactile product UI.')).toBeTruthy();
+    expect(screen.queryByTestId('design-kit-logo-section')).toBeNull();
+    expect(screen.queryByTestId('project-ds-picker-preview-frame')).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
+import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
 import type { Locator, Page, Request, Route } from '@playwright/test';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
 
@@ -2062,11 +2062,7 @@ function conversationIdFromMessagesApiPath(url: string): string {
 }
 
 async function openNewProjectPanel(page: Page) {
-  if (await page.getByTestId('new-project-panel').isVisible()) return;
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModal(page);
 }
 
 async function expectDesignsView(page: Page) {

@@ -193,6 +193,11 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'od-new-generation',
       projectKind: 'other',
+      inputs: {
+        artifactKind: 'document',
+        audience: 'readers',
+        topic: 'the user brief',
+      },
       projectMetadata: {
         kind: 'other',
         // Analytics-only tag: splits this card's projects out of generic

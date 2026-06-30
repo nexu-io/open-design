@@ -446,17 +446,7 @@
   overflow: hidden;
   min-height: 168px;
 }
-.design-card.is-design-system-project {
-  border-color: color-mix(in srgb, var(--red) 62%, var(--border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 42%, transparent);
-}
 .design-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
-.design-card.is-design-system-project:hover {
-  border-color: var(--red);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--red) 54%, transparent),
-    var(--shadow-sm);
-}
 .design-card-thumb {
   flex: 1;
   min-height: 100px;
@@ -685,6 +675,7 @@
   cursor: pointer;
 }
 .designs-select-toggle:hover { border-color: var(--border-strong); }
+.designs-new-project-button,
 .designs-refresh-button {
   display: inline-flex;
   align-items: center;
@@ -699,6 +690,11 @@
   cursor: pointer;
   transition: border-color 120ms var(--ease-out), opacity 120ms var(--ease-out);
 }
+.designs-new-project-button {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  color: var(--accent);
+}
+.designs-new-project-button:hover,
 .designs-refresh-button:hover:not(:disabled) {
   border-color: var(--border-strong);
 }
@@ -1022,22 +1018,10 @@
   transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out), transform 0.15s var(--ease-out);
   box-shadow: var(--shadow-xs);
 }
-.design-kanban-card.is-design-system-project {
-  border-color: color-mix(in srgb, var(--red) 62%, var(--border));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--red) 42%, transparent),
-    var(--shadow-xs);
-}
 .design-kanban-card:hover {
   border-color: var(--border-strong);
   box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
-}
-.design-kanban-card.is-design-system-project:hover {
-  border-color: var(--red);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--red) 54%, transparent),
-    var(--shadow-sm);
 }
 .design-kanban-card:active {
   transform: none;
@@ -1763,7 +1747,7 @@
 }
 
 .ws-browser-panel {
-  display: none;
+  display: flex;
   position: absolute;
   inset: 0;
   flex: 1 1 auto;
@@ -1771,9 +1755,16 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  z-index: 0;
 }
 .ws-browser-panel.active {
-  display: flex;
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  z-index: 1;
 }
 
 .designs-empty-state {

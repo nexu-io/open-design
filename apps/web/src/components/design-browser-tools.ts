@@ -2,6 +2,55 @@ import type { PreviewAnnotationStyle } from '../types';
 
 export type BrowserViewportId = 'desktop' | 'tablet' | 'mobile';
 
+export const BROWSER_PAGE_ARCHIVE_SCHEMA = 'open-design.browser-page-archive.v1';
+export const BROWSER_PAGE_ARCHIVE_INDEX_FILE = 'browser/latest-page-snapshot.json';
+
+export type BrowserPageArchiveResourceKind =
+  | 'image'
+  | 'stylesheet'
+  | 'script'
+  | 'font'
+  | 'media'
+  | 'icon'
+  | 'document'
+  | 'other';
+
+export interface BrowserPageArchiveCaptureResource {
+  url: string;
+  kind: BrowserPageArchiveResourceKind;
+  tag?: string;
+  rel?: string;
+  source?: string;
+}
+
+export interface BrowserPageArchiveCapture {
+  title: string;
+  url: string;
+  html: string;
+  css: string;
+  resources: BrowserPageArchiveCaptureResource[];
+}
+
+export interface BrowserPageArchiveManifestResource extends BrowserPageArchiveCaptureResource {
+  file?: string;
+  mime?: string;
+  size?: number;
+  status: 'saved' | 'failed' | 'skipped';
+  error?: string;
+}
+
+export interface BrowserPageArchiveManifest {
+  schema: typeof BROWSER_PAGE_ARCHIVE_SCHEMA;
+  capturedAt: number;
+  title: string;
+  url: string;
+  baseUrl: string;
+  htmlFile: string;
+  cssFile: string;
+  manifestFile: string;
+  resources: BrowserPageArchiveManifestResource[];
+}
+
 export interface BrowserElementSnapshot {
   filePath: string;
   elementId: string;
@@ -132,6 +181,155 @@ export const BROWSER_SERIALIZE_STYLES_SCRIPT = `
   return out.join('\\n');
 })()
 `;
+
+export const BROWSER_CAPTURE_PAGE_ARCHIVE_SCRIPT = `
+(() => {
+  const clean = (value) => String(value || '').replace(/\\s+/g, ' ').trim();
+  const doctype = document.doctype
+    ? '<!DOCTYPE ' + document.doctype.name + '>'
+    : '<!doctype html>';
+  const absoluteUrl = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw || raw.startsWith('#')) return '';
+    if (/^(?:javascript|mailto|tel):/i.test(raw)) return '';
+    try {
+      const resolved = new URL(raw, document.baseURI || location.href).href;
+      if (/^(?:https?:|data:)/i.test(resolved)) return resolved;
+    } catch (_) {}
+    return '';
+  };
+  const srcsetUrls = (value) => String(value || '')
+    .split(',')
+    .map((part) => absoluteUrl(part.trim().split(/\\s+/)[0] || ''))
+    .filter(Boolean);
+  const resources = [];
+  const seen = new Set();
+  const add = (url, kind, meta) => {
+    const resolved = absoluteUrl(url);
+    if (!resolved || seen.has(resolved)) return;
+    seen.add(resolved);
+    resources.push(Object.assign({ url: resolved, kind }, meta || {}));
+  };
+  const addSrcset = (value, kind, meta) => {
+    for (const url of srcsetUrls(value)) add(url, kind, meta);
+  };
+  const cssUrlValues = (value) => {
+    const urls = [];
+    String(value || '').replace(/url\\((['"]?)(.*?)\\1\\)/g, (_, _quote, rawUrl) => {
+      const resolved = absoluteUrl(rawUrl);
+      if (resolved) urls.push(resolved);
+      return '';
+    });
+    return urls;
+  };
+  const kindForLink = (rel, asValue, href) => {
+    const r = String(rel || '').toLowerCase();
+    const as = String(asValue || '').toLowerCase();
+    if (r.includes('stylesheet') || as === 'style') return 'stylesheet';
+    if (r.includes('icon')) return 'icon';
+    if (as === 'font' || /\\.(?:woff2?|ttf|otf)(?:[?#]|$)/i.test(href)) return 'font';
+    if (as === 'image') return 'image';
+    if (as === 'script' || r.includes('modulepreload')) return 'script';
+    return 'other';
+  };
+  for (const link of Array.from(document.querySelectorAll('link[href]'))) {
+    const href = link.getAttribute('href') || '';
+    const rel = link.getAttribute('rel') || '';
+    const asValue = link.getAttribute('as') || '';
+    add(href, kindForLink(rel, asValue, href), { tag: 'link', rel: clean(rel), source: 'link[href]' });
+  }
+  for (const image of Array.from(document.images || [])) {
+    add(image.currentSrc || image.src, 'image', { tag: 'img', source: 'img.currentSrc' });
+    addSrcset(image.getAttribute('srcset'), 'image', { tag: 'img', source: 'img[srcset]' });
+  }
+  for (const source of Array.from(document.querySelectorAll('source'))) {
+    const parent = source.parentElement?.tagName?.toLowerCase() || '';
+    const kind = parent === 'video' || parent === 'audio' || source.getAttribute('type')?.startsWith('video/')
+      ? 'media'
+      : 'image';
+    add(source.getAttribute('src'), kind, { tag: 'source', source: 'source[src]' });
+    addSrcset(source.getAttribute('srcset'), kind, { tag: 'source', source: 'source[srcset]' });
+  }
+  for (const media of Array.from(document.querySelectorAll('video[src], audio[src], video[poster]'))) {
+    add(media.getAttribute('src'), 'media', { tag: media.tagName.toLowerCase(), source: 'media[src]' });
+    add(media.getAttribute('poster'), 'image', { tag: media.tagName.toLowerCase(), source: 'video[poster]' });
+  }
+  for (const script of Array.from(document.querySelectorAll('script[src]'))) {
+    add(script.getAttribute('src'), 'script', { tag: 'script', source: 'script[src]' });
+  }
+  for (const node of Array.from(document.querySelectorAll('iframe[src], embed[src], object[data]'))) {
+    add(node.getAttribute('src') || node.getAttribute('data'), 'document', {
+      tag: node.tagName.toLowerCase(),
+      source: node.tagName.toLowerCase() + '[src]',
+    });
+  }
+  for (const node of Array.from(document.querySelectorAll('[style]')).slice(0, 2500)) {
+    for (const url of cssUrlValues(node.getAttribute('style'))) {
+      add(url, 'image', { tag: node.tagName.toLowerCase(), source: 'inline-style-url' });
+    }
+  }
+  for (const sheet of Array.from(document.styleSheets || [])) {
+    try {
+      const rules = sheet.cssRules;
+      if (!rules) continue;
+      for (const rule of Array.from(rules)) {
+        const cssText = rule && rule.cssText ? String(rule.cssText) : '';
+        const isFont = /^\\s*@font-face/i.test(cssText);
+        for (const url of cssUrlValues(cssText)) {
+          add(url, isFont ? 'font' : 'image', { source: isFont ? '@font-face' : 'css-url' });
+        }
+      }
+    } catch (_) {
+      // Cross-origin stylesheet rules are unreadable; link[href] still records them.
+    }
+  }
+  const cssOut = [];
+  for (const sheet of Array.from(document.styleSheets || [])) {
+    try {
+      const rules = sheet.cssRules;
+      if (!rules) continue;
+      for (const rule of Array.from(rules)) {
+        if (rule && rule.cssText) cssOut.push(rule.cssText);
+      }
+    } catch (_) {}
+  }
+  try {
+    const transparent = new Set(['rgba(0, 0, 0, 0)', 'transparent', '']);
+    const els = Array.from(document.querySelectorAll('body *')).slice(0, 2500);
+    for (const el of els) {
+      const cs = window.getComputedStyle(el);
+      if (!cs) continue;
+      const decl = [];
+      if (cs.color) decl.push('color:' + cs.color);
+      if (!transparent.has(cs.backgroundColor)) decl.push('background-color:' + cs.backgroundColor);
+      if (!transparent.has(cs.borderTopColor)) decl.push('border-color:' + cs.borderTopColor);
+      if (cs.fontFamily) decl.push('font-family:' + cs.fontFamily);
+      if (decl.length) cssOut.push('x{' + decl.join(';') + '}');
+    }
+  } catch (_) {}
+  return {
+    title: clean(document.title),
+    url: location.href,
+    html: doctype + '\\n' + document.documentElement.outerHTML,
+    css: cssOut.join('\\n'),
+    resources,
+  };
+})()
+`;
+
+export function isBrowserPageArchiveManifest(value: unknown): value is BrowserPageArchiveManifest {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<BrowserPageArchiveManifest>;
+  return (
+    item.schema === BROWSER_PAGE_ARCHIVE_SCHEMA &&
+    typeof item.url === 'string' &&
+    typeof item.baseUrl === 'string' &&
+    typeof item.htmlFile === 'string' &&
+    typeof item.cssFile === 'string' &&
+    typeof item.manifestFile === 'string' &&
+    Array.isArray(item.resources)
+  );
+}
 
 export function browserElementPickerScript(filePath: string): string {
   return `

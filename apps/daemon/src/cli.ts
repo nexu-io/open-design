@@ -5193,6 +5193,7 @@ async function runBrand(args) {
     case 'list':     return runBrandList(rest);
     case 'create':   return runBrandCreate(rest);
     case 'extract':  return runBrandCreate(rest);
+    case 'continue': return runBrandContinue(rest);
     case 'preview':  return runBrandPreview(rest);
     case 'finalize': return runBrandFinalize(rest);
     case 'extract-from-html': return runBrandExtractFromHtml(rest);
@@ -5339,6 +5340,48 @@ async function runBrandFinalize(rest) {
   const name = data?.brand?.name ?? data?.id ?? id;
   console.log(`${data?.id ?? id}\t${name}`);
   if (data?.designSystemId) process.stderr.write(`[brand] registered design system ${data.designSystemId}\n`);
+}
+
+async function runBrandContinue(rest) {
+  let flags;
+  try {
+    flags = parseFlags(rest, { string: BRAND_STRING_FLAGS, boolean: BRAND_BOOLEAN_FLAGS });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  const id = positionalArgs(rest, BRAND_STRING_FLAGS)[0];
+  if (!id) {
+    console.error('Usage: od brand continue <id> [--json]');
+    process.exit(2);
+  }
+  const base = await cliDaemonBaseUrl(flags);
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/brands/${encodeURIComponent(id)}/continue-extraction`, {
+      method: 'POST',
+      headers: { accept: 'application/json' },
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (resp.status === 404) {
+    console.error(`brand not found: ${id}`);
+    process.exit(4);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) {
+    process.stdout.write(JSON.stringify({ ok: true, ...data }, null, 2) + '\n');
+    return;
+  }
+  console.log([
+    data?.id ?? id,
+    data?.status ?? '-',
+    data?.projectId ?? '',
+    data?.conversationId ?? '',
+  ].join('\t'));
 }
 
 // Read a flag value as file content (or stdin when the value is "-"). Returns
@@ -5661,6 +5704,12 @@ async function runProject(args) {
   od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
                     [--plugin <id>] [--inputs <json>] [--metadata-json <path|->]
                     [--mode design|chat]
+  od project create-design-system <id> [--name "<title>"]
+                    [--prompt "<text>" | --prompt-file <path|->] [--json]
+                    Duplicate a project as a design-system workspace and seed
+                    the design-system generation prompt.
+  od project duplicate <id> [--name "<title>"] [--json]
+                    Duplicate a project and copy its Design Files.
   od project import <baseDir> [--name "<title>"]
   od project import-folder <path> [--name "<title>"] [--skill <id>]
                     [--design-system <id>] [--json]
@@ -5770,6 +5819,48 @@ Common options:
       }
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       console.log(`[project] created ${data.project?.id ?? id} (conversation ${data.conversationId})`);
+      return;
+    }
+    case 'create-design-system': {
+      const sourceProjectId = positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
+      if (!sourceProjectId) {
+        console.error('Usage: od project create-design-system <id> [--name "<title>"] [--prompt-file <path|->] [--json]');
+        process.exit(2);
+      }
+      const prompt = await readPromptFromFlags(flags);
+      const body = {};
+      if (typeof flags.name === 'string' && flags.name.length > 0) body.name = flags.name;
+      if (typeof prompt === 'string' && prompt.trim().length > 0) body.pendingPrompt = prompt;
+      const data = await postJsonToDaemon(
+        base,
+        `/api/projects/${encodeURIComponent(sourceProjectId)}/design-system-copy`,
+        body,
+      );
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(
+        `[project] created design system project ${data.project?.id ?? '-'} from ${sourceProjectId} `
+        + `(design system ${data.designSystemId ?? '-'}, conversation ${data.conversationId ?? '-'})`,
+      );
+      return;
+    }
+    case 'duplicate': {
+      const sourceProjectId = positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
+      if (!sourceProjectId) {
+        console.error('Usage: od project duplicate <id> [--name "<title>"] [--json]');
+        process.exit(2);
+      }
+      const body = {};
+      if (typeof flags.name === 'string' && flags.name.length > 0) body.name = flags.name;
+      const data = await postJsonToDaemon(
+        base,
+        `/api/projects/${encodeURIComponent(sourceProjectId)}/duplicate`,
+        body,
+      );
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(
+        `[project] duplicated ${sourceProjectId} as ${data.project?.id ?? '-'} `
+        + `(conversation ${data.conversationId ?? '-'})`,
+      );
       return;
     }
     case 'import': {

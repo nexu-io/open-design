@@ -45,6 +45,7 @@ import {
   fetchProjectDesignSystemPackageAudit,
   fetchLiveArtifacts,
   fetchProjectFiles,
+  fetchProjectFileText,
   fetchSkill,
   patchPreviewCommentStatus,
   projectRawUrl,
@@ -109,11 +110,23 @@ import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
-import { cancelBrandExtraction, extractBrandFromHtml, finalizeBrandProject } from '../runtime/brands';
-import { getBrandBrowser, BRAND_BROWSER_TAB_ID } from '../runtime/brand-browser-bridge';
 import {
+  cancelBrandExtraction,
+  continueBrandExtraction,
+  extractBrandFromHtml,
+  finalizeBrandProject,
+} from '../runtime/brands';
+import { isOpenDesignHostAvailable } from '@open-design/host';
+import {
+  getBrandBrowser,
+  BRAND_BROWSER_TAB_ID,
+  type BrandBrowserPageSnapshotResult,
+} from '../runtime/brand-browser-bridge';
+import {
+  BROWSER_PAGE_ARCHIVE_INDEX_FILE,
   BROWSER_SERIALIZE_HTML_SCRIPT,
   BROWSER_SERIALIZE_STYLES_SCRIPT,
+  isBrowserPageArchiveManifest,
 } from './design-browser-tools';
 import type { BrandBrowserAssistConfirm, BrandBrowserAssistResult } from './OdCard';
 import {
@@ -151,7 +164,14 @@ import {
   type SaveMessageOptions,
   waitGeneratedPluginShareTask,
 } from '../state/projects';
-import type { AppliedPluginSnapshot, ChatAnalyticsEntryFrom, ChatSessionMode, InstalledPluginRecord, WorkspaceContextItem } from '@open-design/contracts';
+import type {
+  AppliedPluginSnapshot,
+  BrandStatus,
+  ChatAnalyticsEntryFrom,
+  ChatSessionMode,
+  InstalledPluginRecord,
+  WorkspaceContextItem,
+} from '@open-design/contracts';
 import type {
   AgentEvent,
   AgentInfo,
@@ -208,7 +228,7 @@ import {
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
 import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
-import { DESIGN_SYSTEM_TAB, FileWorkspace } from './FileWorkspace';
+import { DESIGN_SYSTEM_TAB, FileWorkspace, type BrowserOpenRequest } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
 } from './design-files/pluginFolderActions';
@@ -238,6 +258,14 @@ import {
   buildFinalizeRequest,
 } from '../lib/resolve-finalize-request';
 
+type BrandBrowserSnapshot =
+  | { status: 'ready'; html: string; css: string; baseUrl: string }
+  | { status: 'unavailable'; message: string }
+  | { status: 'read-failed'; message: string };
+
+type BrandBrowserSnapshotExtractionResult =
+  | { status: 'handled' }
+  | { status: 'miss'; message: string | null };
 
 type ProjectChatSendMeta = ChatSendMeta & {
   queueOnly?: boolean;
@@ -306,6 +334,27 @@ export function mergeServerMessagesIntoConversation(
   return merged;
 }
 
+function ensureConversationPresent(
+  conversations: Conversation[],
+  conversationId: string,
+  projectId: string,
+): Conversation[] {
+  if (conversations.some((conversation) => conversation.id === conversationId)) {
+    return conversations;
+  }
+  const now = Date.now();
+  return [
+    {
+      id: conversationId,
+      projectId,
+      title: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+    ...conversations,
+  ];
+}
+
 interface Props {
   project: Project;
   routeFileName: string | null;
@@ -364,6 +413,14 @@ interface Props {
   onChangeDefaultDesignSystem?: (designSystemId: string | null) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onCreateProjectFromDesignSystem?: (designSystemId: string, title: string) => Promise<void> | void;
+  onCreateDesignSystemFromProject?: (
+    sourceProjectId: string,
+    input: { name?: string; pendingPrompt?: string },
+  ) => Promise<void> | void;
+  onDuplicateProject?: (
+    sourceProjectId: string,
+    input?: { name?: string },
+  ) => Promise<void> | void;
 }
 
 interface QueuedChatSend {
@@ -449,6 +506,123 @@ function designSystemFeedbackAttachments(
       kind: file.kind === 'image' ? 'image' : 'file',
       size: file.size,
     }));
+}
+
+function brandExtractionPreviewFileName(projectFiles: readonly ProjectFile[]): string {
+  return (
+    projectFiles.find((file) => file.name === 'brand.html')?.name ??
+    projectFiles.find((file) => file.name.endsWith('/brand.html'))?.name ??
+    'brand.html'
+  );
+}
+
+function buildBrandAgentExtractionContinuationPrompt(input: {
+  promptSeed?: string | null;
+  metadata?: ProjectMetadata | null;
+  projectFiles: readonly ProjectFile[];
+}): string {
+  const trimmed = input.promptSeed?.trim() ?? '';
+  const brandId = input.metadata?.brandId?.trim() || '(current brand id)';
+  const sourceUrl = input.metadata?.brandSourceUrl?.trim() || 'the source website';
+  const base = /DESIGN SYSTEM EXTRACTION|ready design system is NOT guaranteed/i.test(trimmed)
+    ? trimmed
+    : [
+        `Continue the AI design-system extraction for ${sourceUrl}.`,
+        `Brand id: ${brandId}`,
+        '',
+        'The programmatic pass has not produced a ready design system yet. Continue from the current brand.html scaffold and saved project files; do not assume the design system is ready, and do not create a duplicate design-system id.',
+        '',
+        'Inspect brand.html, brand.json, DESIGN.md, BRAND.md, context/, logos/, imagery/, fonts/, and system assets. Measure the source website when reachable. If the live page is an anti-bot verification interstitial, ask the user to clear it in the Browser tab before continuing.',
+        '',
+        `Write valid partial brand.json updates progressively, run od brand preview ${brandId} after meaningful field groups, then run od brand finalize ${brandId} when the kit is complete. Fix validation errors and keep updating the same registered design system in place.`,
+      ].join('\n');
+  const visibleFiles = input.projectFiles
+    .filter((file) => file.name.trim())
+    .slice(0, 80)
+    .map((file) => `  - ${file.name}${file.size > 0 ? ` (${Math.round(file.size / 1024)}KB)` : ''}`);
+  if (visibleFiles.length === 0 || base.includes('Current brand extraction continuation context:')) {
+    return base;
+  }
+  return [
+    base,
+    '',
+    'Current brand extraction continuation context:',
+    `- Source URL: ${sourceUrl}`,
+    `- Brand id: ${brandId}`,
+    '- Files visible in the project right now:',
+    ...visibleFiles,
+  ].join('\n');
+}
+
+function designSystemNameForSourceProject(project: Project): string {
+  const sourceName = project.name.trim() || 'Untitled';
+  return /\bdesign system\b/i.test(sourceName)
+    ? sourceName
+    : `${sourceName} Design System`;
+}
+
+function buildCreateDesignSystemFromProjectPrompt(input: {
+  project: Project;
+  projectFiles: readonly ProjectFile[];
+  activeDesignSystem?: DesignSystemSummary | null;
+}): string {
+  const visibleFiles = input.projectFiles
+    .filter((file) => file.name.trim())
+    .slice(0, 140)
+    .map((file) => `  - ${file.name}${file.size > 0 ? ` (${Math.round(file.size / 1024)}KB)` : ''}`);
+  const metadataJson = input.project.metadata
+    ? JSON.stringify(input.project.metadata, null, 2)
+    : '{}';
+  const activeDesignSystem = input.activeDesignSystem
+    ? [
+        `- Active design system id: ${input.activeDesignSystem.id}`,
+        `- Active design system title: ${input.activeDesignSystem.title}`,
+      ]
+    : ['- Active design system: (none)'];
+  return [
+    'Create this project as a complete Open Design design system workspace.',
+    '',
+    'Autonomy requirement:',
+    '- Do not ask setup or clarification questions during design-system generation.',
+    '- Do not emit `<question-form>`, "Quick brief — 30 seconds", direction cards, choice cards, or any UI that waits for user input.',
+    '- The source project already contains the evidence. Choose sensible defaults where details are missing and begin generating the design-system artifacts immediately.',
+    '',
+    'Source project handoff:',
+    `- Source project id: ${input.project.id}`,
+    `- Source project name: ${input.project.name}`,
+    ...activeDesignSystem,
+    '- Read `context/source-context.md` first. It lists the copied project files and original project metadata.',
+    '- Treat every copied file, uploaded asset, reference image, browser snapshot, sketch, generated artifact, and context note in this workspace as design-system evidence.',
+    '- Use the copied project outputs to infer real visual language, components, layout, interaction patterns, copy tone, tokens, typography, spacing, assets, and anti-patterns.',
+    '- Do not create another project or another design-system id. Update this new design-system project in place.',
+    '',
+    'Source project metadata:',
+    '```json',
+    metadataJson,
+    '```',
+    '',
+    'Visible copied files to inspect:',
+    ...(visibleFiles.length > 0 ? visibleFiles : ['  - (none listed yet; rely on context/source-context.md after the copy finishes)']),
+    input.projectFiles.length > visibleFiles.length
+      ? `  - ...and ${input.projectFiles.length - visibleFiles.length} more files listed in context/source-context.md`
+      : '',
+    '',
+    'Expected output:',
+    '- A clear `DESIGN.md` with product context, visual foundations, color, type, spacing, layout, components, motion, voice, and anti-patterns.',
+    '- A reusable package: `README.md`, `SKILL.md`, `colors_and_type.css`, provenance notes, `assets/`, `build/` when runtime icons exist, optional `fonts/`, focused `preview/` cards, preserved source examples, and `ui_kits/app/`.',
+    '- Preserve real source assets when evidence provides them: logos, app icons, tray icons, avatars, wordmarks, imagery, and font files belong in `assets/`, `build/`, or `fonts/`, not only in prose.',
+    '- Preserve high-signal source/component examples outside `context/` when copied files include substantial implementation or artifact code. Do not replace them with tiny stubs.',
+    '- Split review previews into focused cards for colors, typography, spacing, radius/shadows, components, brand assets, and applied UI surfaces. Preview cards must visibly load preserved files when available.',
+    '- Build `ui_kits/app/` as an applied interface kit that reflects the source project, with an index page and component files when the evidence supports them. Do not leave it as a generic static mock.',
+    '- Keep `README.md`, `SKILL.md`, `DESIGN.md`, preview manifest text, and `ui_kits/app/README.md` synchronized with the final file structure.',
+    '',
+    'Completion gate:',
+    '- Finish only after the project contains reviewable design-system artifacts and the right-side Design System tab can inspect them.',
+    '- Before your final response, run `"$OD_NODE_BIN" "$OD_BIN" tools connectors design-system-package-audit --path . --fail-on-warnings`.',
+    '- Fix every audit error and design-quality warning. If an issue cannot be fixed because source evidence is missing, explain that blocker instead of claiming the design system is ready.',
+    '',
+    'When finished, summarize the generated files and name the first previews reviewers should inspect.',
+  ].filter(Boolean).join('\n');
 }
 
 function chatAttachmentsFromPreviewCommentImages(
@@ -663,6 +837,95 @@ function isStoredChatAttachment(value: unknown): value is ChatAttachment {
     (record.kind === 'image' || record.kind === 'file') &&
     (record.size === undefined || typeof record.size === 'number') &&
     (record.order === undefined || typeof record.order === 'number')
+  );
+}
+
+function fallbackDesignSystemSummaryForProject(
+  project: Project,
+  designSystemId: string | null,
+): DesignSystemSummary | null {
+  if (!designSystemId || !isDesignSystemProject(project)) return null;
+  const metadata = project.metadata;
+  const sourceUrl = metadata?.brandSourceUrl?.trim() || null;
+  const title =
+    metadata?.sourceFileName?.trim()
+    || project.name.replace(/\s+Design System\s*$/i, '').trim()
+    || project.name
+    || 'Design system';
+  return {
+    id: designSystemId,
+    title,
+    category: 'Brands',
+    summary: sourceUrl ? `Draft design system extracted from ${sourceUrl}.` : '',
+    swatches: [],
+    surface: 'web',
+    source: 'user',
+    status: 'draft',
+    isEditable: true,
+    projectId: project.id,
+    ...(sourceUrl
+      ? { provenance: { sourceUrls: [sourceUrl], sourceNotes: `Extracting from ${sourceUrl}` } }
+      : {}),
+  };
+}
+
+function isBrandStatusValue(value: unknown): value is BrandStatus {
+  return value === 'extracting' || value === 'needs_input' || value === 'ready' || value === 'failed';
+}
+
+function brandExtractionAllowsEditing(status: BrandStatus | null): boolean {
+  return status === 'ready' || status === 'failed';
+}
+
+function normalizedBrandBrowserHost(parsed: URL): string {
+  const hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
+  return parsed.port ? `${hostname}:${parsed.port}` : hostname;
+}
+
+type BrowserExtractionUrlParts = {
+  host: string;
+  pathname: string;
+  search: string;
+};
+
+function normalizedBrandBrowserPathname(pathname: string): string {
+  const withoutTrailingSlash = pathname.replace(/\/+$/, '');
+  return withoutTrailingSlash || '/';
+}
+
+function browserExtractionUrlParts(value: string | null | undefined): BrowserExtractionUrlParts | null {
+  const url = value?.trim();
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return {
+      host: normalizedBrandBrowserHost(parsed),
+      pathname: normalizedBrandBrowserPathname(parsed.pathname),
+      search: parsed.search,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isBrandBrowserHomeRedirectPath(pathname: string): boolean {
+  if (pathname === '/home') return true;
+  return /^\/[a-z]{2}(?:-[a-z]{2})?$/i.test(pathname);
+}
+
+function brandBrowserSnapshotMatchesSource(
+  snapshotBaseUrl: string,
+  sourceUrl: string | null | undefined,
+): boolean {
+  const snapshot = browserExtractionUrlParts(snapshotBaseUrl);
+  const source = browserExtractionUrlParts(sourceUrl);
+  if (!snapshot || !source || snapshot.host !== source.host) return false;
+  if (snapshot.pathname === source.pathname && snapshot.search === source.search) return true;
+  return (
+    source.pathname === '/'
+    && source.search === ''
+    && snapshot.search === ''
+    && isBrandBrowserHomeRedirectPath(snapshot.pathname)
   );
 }
 
@@ -885,6 +1148,8 @@ export function ProjectView({
   onChangeDefaultDesignSystem,
   onDesignSystemsRefresh,
   onCreateProjectFromDesignSystem,
+  onCreateDesignSystemFromProject,
+  onDuplicateProject,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -1092,14 +1357,51 @@ export function ProjectView({
   // one-shot "ready — preview it" prompt so the user knows to open the Design
   // systems tab. A no-op for every non-brand-extraction project.
   const {
+    status: polledBrandExtractionStatus,
     ready: brandReady,
     prompt: brandReadyPrompt,
     dismiss: dismissBrandReady,
     browserAssist: brandBrowserAssist,
     dismissBrowserAssist: dismissBrandBrowserAssist,
   } = useBrandReadyPrompt(currentProject.metadata);
+  const currentBrandExtractionId = projectIsProgrammaticBrandExtraction
+    ? currentProject.metadata?.brandId?.trim() || null
+    : null;
+  const [brandExtractionStatusOverride, setBrandExtractionStatusOverride] =
+    useState<{ brandId: string; status: BrandStatus } | null>(null);
+  useEffect(() => {
+    if (!currentBrandExtractionId) {
+      setBrandExtractionStatusOverride(null);
+      return;
+    }
+    if (
+      brandExtractionStatusOverride &&
+      brandExtractionStatusOverride.brandId !== currentBrandExtractionId
+    ) {
+      setBrandExtractionStatusOverride(null);
+      return;
+    }
+    if (
+      brandExtractionStatusOverride &&
+      brandExtractionStatusOverride.brandId === currentBrandExtractionId &&
+      brandExtractionAllowsEditing(polledBrandExtractionStatus)
+    ) {
+      setBrandExtractionStatusOverride(null);
+    }
+  }, [brandExtractionStatusOverride, currentBrandExtractionId, polledBrandExtractionStatus]);
+  const effectiveBrandExtractionStatus =
+    brandExtractionStatusOverride?.brandId === currentBrandExtractionId
+      ? brandExtractionStatusOverride.status
+      : polledBrandExtractionStatus;
+  const terminalBrandPreviewRefreshRef = useRef<string | null>(null);
+  const designSystemEditable =
+    !projectIsProgrammaticBrandExtraction ||
+    brandExtractionAllowsEditing(effectiveBrandExtractionStatus) ||
+    Boolean(brandReady);
   const pendingBrandDesignSystemOpenRef = useRef<string | null>(null);
   const handledBrandReadyDesignSystemRef = useRef<string | null>(null);
+  const missingDesignSystemRefreshRef = useRef<string | null>(null);
+  const autoOpenedBrandDesignSystemRef = useRef<string | null>(null);
   const brandEmptyTranscriptRetriesRef = useRef<Map<string, number>>(new Map());
   const [chatSeed, setChatSeed] = useState<{ id: string; value: string } | null>(null);
   const [autoAuditRepairSeed, setAutoAuditRepairSeed] =
@@ -1154,12 +1456,14 @@ export function ProjectView({
   const [workspaceContexts, setWorkspaceContexts] = useState<WorkspaceContextItem[]>([]);
   const tabsLoadedRef = useRef(false);
   const tabsHydratedFromSavedStateRef = useRef(false);
+  const [tabsHydrationVersion, setTabsHydrationVersion] = useState(0);
   const hasAppliedInitialPrimaryOpenRef = useRef(false);
   // Routed to FileWorkspace — bumped whenever the user clicks "open" on a
   // tool card, an attachment chip, or a produced-file chip in chat. We
   // include a nonce so re-clicking the same name after the user closed the
   // tab still focuses it.
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
+  const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null);
   // Like `openRequest`, but additionally asks the preview workspace to open the
   // file's Share/Export menu. Drives the "Share" next-step action: it reuses the
   // existing export/deploy surface rather than introducing a new share backend.
@@ -1763,6 +2067,7 @@ export function ProjectView({
       tabsHydratedFromSavedStateRef.current = state.hasSavedState === true;
       setOpenTabsState(nextState);
       tabsLoadedRef.current = true;
+      setTabsHydrationVersion((version) => version + 1);
     })();
     return () => {
       cancelled = true;
@@ -1870,6 +2175,26 @@ export function ProjectView({
     const [nextFiles] = await Promise.all([refreshProjectFiles(), refreshLiveArtifacts()]);
     return nextFiles;
   }, [refreshLiveArtifacts, refreshProjectFiles]);
+
+  useEffect(() => {
+    if (!currentBrandExtractionId) {
+      terminalBrandPreviewRefreshRef.current = null;
+      return;
+    }
+    if (!brandExtractionAllowsEditing(effectiveBrandExtractionStatus)) {
+      terminalBrandPreviewRefreshRef.current = null;
+      return;
+    }
+    const refreshKey = `${currentBrandExtractionId}:${effectiveBrandExtractionStatus}`;
+    if (terminalBrandPreviewRefreshRef.current === refreshKey) return;
+    terminalBrandPreviewRefreshRef.current = refreshKey;
+    void refreshWorkspaceItems().catch(() => {});
+    setFilesRefresh((n) => n + 1);
+  }, [
+    currentBrandExtractionId,
+    effectiveBrandExtractionStatus,
+    refreshWorkspaceItems,
+  ]);
 
   useEffect(() => {
     if (!tabsLoadedRef.current) return;
@@ -2448,40 +2773,211 @@ export function ProjectView({
     [activeConversationId, project.id],
   );
 
-  // Client-side handler for the brand-browser-assist od-card's Confirm button:
-  // read the now-unblocked page DOM out of the in-app browser webview and re-run
-  // extraction against it. Desktop-only — the web-only <iframe> fallback can't
-  // read cross-origin guest DOM, so it returns a graceful refusal instead.
-  const handleBrandBrowserAssistConfirm = useCallback<BrandBrowserAssistConfirm>(
-    async (card): Promise<BrandBrowserAssistResult> => {
-      const tabId = card.browserTabId || BRAND_BROWSER_TAB_ID;
+  const readLocalBrowserPageArchiveSnapshot = useCallback(
+    async (sourceUrl: string | null | undefined): Promise<BrandBrowserSnapshot> => {
+      const manifestText = await fetchProjectFileText(project.id, BROWSER_PAGE_ARCHIVE_INDEX_FILE, {
+        cache: 'no-store',
+        cacheBustKey: Date.now(),
+      });
+      if (!manifestText) {
+        return { status: 'unavailable', message: t('chat.brandBrowserLocalSnapshotMissing') };
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(manifestText);
+      } catch {
+        return { status: 'read-failed', message: t('chat.brandBrowserLocalSnapshotReadFailed') };
+      }
+      if (!isBrowserPageArchiveManifest(parsed)) {
+        return { status: 'read-failed', message: t('chat.brandBrowserLocalSnapshotReadFailed') };
+      }
+      if (!brandBrowserSnapshotMatchesSource(parsed.baseUrl || parsed.url, sourceUrl)) {
+        return { status: 'unavailable', message: t('chat.brandBrowserLocalSnapshotMissing') };
+      }
+      const [html, css] = await Promise.all([
+        fetchProjectFileText(project.id, parsed.htmlFile, { cache: 'no-store', cacheBustKey: parsed.capturedAt }),
+        fetchProjectFileText(project.id, parsed.cssFile, { cache: 'no-store', cacheBustKey: parsed.capturedAt }),
+      ]);
+      if (!html?.trim()) {
+        return { status: 'read-failed', message: t('chat.brandBrowserLocalSnapshotReadFailed') };
+      }
+      return {
+        status: 'ready',
+        html,
+        css: css ?? '',
+        baseUrl: parsed.baseUrl || parsed.url,
+      };
+    },
+    [project.id, t],
+  );
+
+  const readBrandBrowserSnapshot = useCallback(
+    async (tabId = BRAND_BROWSER_TAB_ID, timeoutMs = 8000): Promise<BrandBrowserSnapshot> => {
       const handle = getBrandBrowser(project.id, tabId);
       if (!handle || !handle.isDesktopWebview) {
-        return { ok: false, message: t('chat.brandBrowserAssistDesktopOnly') };
+        return { status: 'unavailable', message: t('chat.brandBrowserAssistDesktopOnly') };
       }
+      // Guard against a tab that never actually navigated/loaded — reading a
+      // blank webview would otherwise look like an empty page.
+      const tabUrl = handle.getURL();
+      if (!tabUrl || tabUrl === 'about:blank') {
+        return { status: 'read-failed', message: t('chat.brandBrowserAssistReadFailed') };
+      }
+      // Electron's executeJavaScript never times out on its own; a tab still on a
+      // challenge wall / mid-redirect / hung renderer would freeze the recovery
+      // forever. Cap each read so the UI surfaces a retryable error instead.
+      const readTab = (script: string): Promise<string> => {
+        const promise = handle.executeJavaScript<string>(script, true);
+        if (!promise) return Promise.resolve('');
+        return Promise.race([
+          promise,
+          new Promise<string>((_, reject) =>
+            window.setTimeout(
+              () => reject(new Error(t('chat.brandBrowserAssistReadFailed'))),
+              timeoutMs,
+            ),
+          ),
+        ]);
+      };
       let html = '';
       let css = '';
       try {
-        const htmlPromise = handle.executeJavaScript<string>(BROWSER_SERIALIZE_HTML_SCRIPT, true);
-        html = htmlPromise ? await htmlPromise : '';
-        const cssPromise = handle.executeJavaScript<string>(BROWSER_SERIALIZE_STYLES_SCRIPT, true);
-        css = cssPromise ? await cssPromise : '';
+        // Read the DOM and the computed-style digest CONCURRENTLY: serially they
+        // stacked two full timeout windows back-to-back (a slow page meant ~16s
+        // per attempt, and the retry loop multiplied that into a minute-long
+        // spinner). The CSS digest is best-effort — a sparse/empty palette no
+        // longer fails extraction server-side — so it must never reject the read.
+        [html, css] = await Promise.all([
+          readTab(BROWSER_SERIALIZE_HTML_SCRIPT),
+          readTab(BROWSER_SERIALIZE_STYLES_SCRIPT).catch(() => ''),
+        ]);
       } catch (err) {
         return {
-          ok: false,
+          status: 'read-failed',
           message: err instanceof Error ? err.message : t('chat.brandBrowserAssistReadFailed'),
         };
       }
       if (!html.trim()) {
-        return { ok: false, message: t('chat.brandBrowserAssistReadFailed') };
+        return { status: 'read-failed', message: t('chat.brandBrowserAssistReadFailed') };
       }
-      const baseUrl = handle.getURL() || card.url || '';
-      const outcome = await extractBrandFromHtml(card.brandId, { html, css, baseUrl });
-      if (!outcome.ok) return { ok: false, message: outcome.error };
-      return { ok: true };
+      const baseUrl = handle.getURL() || tabUrl;
+      return { status: 'ready', html, css, baseUrl };
     },
     [project.id, t],
   );
+
+  const downloadBrandBrowserPageArchive = useCallback(
+    async (
+      sourceUrl: string | null | undefined,
+      tabId = BRAND_BROWSER_TAB_ID,
+      // The page-snapshot download now persists only page.html + styles.css
+      // (extraction reads nothing else), so it completes in well under a
+      // second. This race is just a generous safety ceiling for serializing a
+      // very large DOM, not a budget for asset fetching.
+      timeoutMs = 30_000,
+    ): Promise<BrandBrowserSnapshot> => {
+      const handle = getBrandBrowser(project.id, tabId);
+      if (!handle || !handle.isDesktopWebview || !handle.downloadPageSnapshot) {
+        return { status: 'unavailable', message: t('chat.brandBrowserAssistDesktopOnly') };
+      }
+      const result: BrandBrowserPageSnapshotResult = await Promise.race<BrandBrowserPageSnapshotResult>([
+        handle.downloadPageSnapshot(),
+        new Promise<BrandBrowserPageSnapshotResult>((_, reject) =>
+          window.setTimeout(
+            () => reject(new Error(t('chat.brandBrowserSnapshotSaveFailed'))),
+            timeoutMs,
+          ),
+        ),
+      ]).catch((err): BrandBrowserPageSnapshotResult => ({
+        ok: false,
+        message: err instanceof Error ? err.message : t('chat.brandBrowserSnapshotSaveFailed'),
+      }));
+      if (!result.ok) {
+        return { status: 'read-failed', message: result.message || t('chat.brandBrowserSnapshotSaveFailed') };
+      }
+      return readLocalBrowserPageArchiveSnapshot(sourceUrl || result.baseUrl || '');
+    },
+    [project.id, readLocalBrowserPageArchiveSnapshot, t],
+  );
+
+  const readBrandBrowserSnapshotWithRetry = useCallback(
+    async (tabId = BRAND_BROWSER_TAB_ID): Promise<BrandBrowserSnapshot> => {
+      // The pinned webview can still be mounting/registering right after a
+      // workspace remount, and a freshly-focused tab may not have committed its
+      // post-wall URL yet — so a single read can spuriously report the live DOM
+      // unreadable. Re-read a few times before giving up. Only meaningful on the
+      // desktop host: the web-only host never exposes a webview, so retrying
+      // can't change an `unavailable` verdict.
+      let snapshot = await readBrandBrowserSnapshot(tabId, 8000);
+      if (snapshot.status === 'ready' || !isOpenDesignHostAvailable()) return snapshot;
+      // Retries cover the mount/registration race only — a ready webview resolves
+      // these reads almost instantly. Use a short per-retry cap so a genuinely
+      // hung/walled page fails fast instead of stacking full timeout windows.
+      for (let attempt = 0; attempt < 3 && snapshot.status !== 'ready'; attempt += 1) {
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, 500);
+        });
+        snapshot = await readBrandBrowserSnapshot(tabId, 3000);
+      }
+      return snapshot;
+    },
+    [readBrandBrowserSnapshot],
+  );
+
+  // Client-side handler for the brand-browser-assist od-card's button: open or
+  // focus the bound Browser tab, surface the Download Page menu action, and let
+  // Continue extraction consume the saved snapshot or live DOM.
+  const handleBrandBrowserAssistConfirm = useCallback<BrandBrowserAssistConfirm>(
+    async (card): Promise<BrandBrowserAssistResult> => {
+      const url = card.url?.trim() || currentProject.metadata?.brandSourceUrl?.trim() || '';
+      if (!url) return { ok: false, message: t('chat.brandBrowserAssistReadFailed') };
+      const nonce = Date.now();
+      setBrowserOpenRequest({
+        tabId: card.browserTabId || BRAND_BROWSER_TAB_ID,
+        url,
+        nonce,
+        attentionAction: 'download-page',
+      });
+      setProjectActionsToast({
+        message: t('chat.brandBrowserAssistDownloadGuideTitle'),
+        details: t('chat.brandBrowserAssistDownloadGuideDetails'),
+        tone: 'default',
+        ttlMs: 12000,
+      });
+      return { ok: true, action: 'opened' };
+    },
+    [currentProject.metadata?.brandSourceUrl, t],
+  );
+
+  // Identity for host-authored chat messages (the brand browser-assist prompt
+  // below). Without it the message collapses to the generic "Assistant" label +
+  // monogram; stamping the user's currently-selected design agent makes its
+  // avatar and role name follow that selection (Claude by default), matching how
+  // handleSend identifies a real turn.
+  const selectedAssistantIdentity = useMemo<{
+    agentId: string | undefined;
+    agentName: string | undefined;
+  }>(() => {
+    if (config.mode === 'daemon') {
+      const selectedAgent = config.agentId ? agentsById.get(config.agentId) : null;
+      const selectedAgentChoice = config.agentId
+        ? config.agentModels?.[config.agentId]
+        : undefined;
+      const effectiveChoice = effectiveAgentModelChoice(selectedAgent, selectedAgentChoice);
+      return {
+        agentId: config.agentId ?? undefined,
+        agentName: agentModelDisplayName(
+          config.agentId,
+          selectedAgent?.name,
+          effectiveChoice?.model,
+        ),
+      };
+    }
+    return {
+      agentId: apiProtocolAgentId(config.apiProtocol),
+      agentName: apiProtocolModelLabel(config.apiProtocol, config.model),
+    };
+  }, [config, agentsById]);
 
   // One-shot: when extraction is blocked by an anti-bot wall (or has stalled past
   // the timeout), drop the assist card into the conversation so the user can
@@ -2490,20 +2986,29 @@ export function ProjectView({
   const injectedAssistRef = useRef<string | null>(null);
   useEffect(() => {
     if (!brandBrowserAssist || !activeConversationId) return;
+    if (messagesConversationId !== activeConversationId) return;
     const { brandId, sourceUrl, reason } = brandBrowserAssist;
     const dedupeKey = `${activeConversationId}:${brandId}`;
     if (injectedAssistRef.current === dedupeKey) return;
     injectedAssistRef.current = dedupeKey;
+    if (conversationHasBrandBrowserAssist(messagesRef.current, brandId)) {
+      dismissBrandBrowserAssist();
+      return;
+    }
     const payload = JSON.stringify({
       brandId,
       browserTabId: BRAND_BROWSER_TAB_ID,
       ...(sourceUrl ? { url: sourceUrl } : {}),
       reason,
     });
+    const content = `${t('chat.brandBrowserAssistMessage')}\n\n<od-card type="brand-browser-assist">${payload}</od-card>`;
     appendConversationMessage(activeConversationId, {
       id: randomUUID(),
       role: 'assistant',
-      content: `${t('chat.brandBrowserAssistMessage')}\n\n<od-card type="brand-browser-assist">${payload}</od-card>`,
+      agentId: selectedAssistantIdentity.agentId,
+      agentName: selectedAssistantIdentity.agentName,
+      content,
+      events: [{ kind: 'text', text: content }],
       createdAt: Date.now(),
     });
     dismissBrandBrowserAssist();
@@ -2512,6 +3017,8 @@ export function ProjectView({
     activeConversationId,
     appendConversationMessage,
     dismissBrandBrowserAssist,
+    messagesConversationId,
+    selectedAssistantIdentity,
     t,
   ]);
 
@@ -2558,6 +3065,34 @@ export function ProjectView({
     },
     [refreshConversationMessagesFromServer, scheduleProjectTimeout],
   );
+
+  // The programmatic brand-extraction transcript is a synthetic row the daemon
+  // reconciles to a terminal state out of band (finalize success, the 30s
+  // "needs a hand" checkpoint, or a user Stop) — there is no SSE run streaming
+  // it. Poll the conversation while that row is still "running" so the terminal
+  // flip shows up live instead of leaving an ever-climbing "Working" clock until
+  // a manual reload. Self-cleans the moment the row settles or a live agent run
+  // takes over (we never refresh on top of an active stream).
+  const hasRunningBrandTranscriptRow = useMemo(
+    () =>
+      currentProject.metadata?.importedFrom === 'brand-extraction'
+      && messages.some((m) => m.role === 'assistant' && m.runStatus === 'running'),
+    [currentProject.metadata?.importedFrom, messages],
+  );
+  useEffect(() => {
+    if (!hasRunningBrandTranscriptRow || streaming) return undefined;
+    const conversationId = activeConversationId;
+    if (!conversationId) return undefined;
+    const timer = window.setInterval(() => {
+      void refreshConversationMessagesFromServer(conversationId);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [
+    hasRunningBrandTranscriptRow,
+    streaming,
+    activeConversationId,
+    refreshConversationMessagesFromServer,
+  ]);
 
   const markStreamingConversation = useCallback((conversationId: string) => {
     streamingConversationIdRef.current = conversationId;
@@ -4677,17 +5212,30 @@ export function ProjectView({
   // make room for the prioritized send.
   const handleStop = useCallback(() => {
     const stoppedAt = Date.now();
-    const shouldCancelProgrammaticBrandExtraction = messagesRef.current.some((message) =>
-      isProgrammaticBrandExtractionStatusMessage(message, currentProject.metadata)
-    );
-    const programmaticBrandId = shouldCancelProgrammaticBrandExtraction
+    const programmaticBrandId = isProgrammaticBrandExtractionProject(currentProject.metadata)
       ? currentProject.metadata?.brandId?.trim() || ''
       : '';
     if (programmaticBrandId) {
       void Promise.resolve(cancelBrandExtraction(programmaticBrandId))
+        .then((result) => {
+          if (result.ok && isBrandStatusValue(result.status)) {
+            setBrandExtractionStatusOverride({
+              brandId: programmaticBrandId,
+              status: result.status,
+            });
+          }
+        })
         .finally(() => {
-          void projectDetail.refresh();
-          void onProjectsRefresh();
+          void (async () => {
+            await Promise.allSettled([
+              projectDetail.refresh(),
+              Promise.resolve(onProjectsRefresh()),
+              Promise.resolve(onDesignSystemsRefresh?.()),
+              refreshWorkspaceItems(),
+            ]);
+            setFilesRefresh((n) => n + 1);
+            requestOpenFile(DESIGN_SYSTEM_TAB);
+          })();
         });
     }
     cancelSendTextBuffer(true);
@@ -4716,9 +5264,12 @@ export function ProjectView({
     cancelSendTextBuffer,
     cancelReattachTextBuffers,
     currentProject.metadata,
+    onDesignSystemsRefresh,
     onProjectsRefresh,
     persistMessage,
     projectDetail.refresh,
+    requestOpenFile,
+    refreshWorkspaceItems,
   ]);
 
   // Flip the deck preview to the slide a queued send's marked element lives on
@@ -5492,6 +6043,29 @@ export function ProjectView({
     setMessageLoadRetryNonce((nonce) => nonce + 1);
   }, [activeConversationId, failedMessagesConversationId, project.id, openTabsState.active]);
 
+  const refreshConversationsForProgrammaticBrandRetry = useCallback(
+    async (conversationId: string): Promise<boolean> => {
+      const capturedProjectId = project.id;
+      const myToken = ++conversationsRefreshTokenRef.current;
+      try {
+        const list = await listConversations(capturedProjectId);
+        if (projectIdRef.current !== capturedProjectId) return false;
+        if (conversationsRefreshTokenRef.current !== myToken) return false;
+        setConversations(ensureConversationPresent(list, conversationId, capturedProjectId));
+        return true;
+      } catch (err) {
+        if (projectIdRef.current !== capturedProjectId) return false;
+        if (conversationsRefreshTokenRef.current !== myToken) return false;
+        console.warn('Failed to refresh conversations after brand extraction retry', err);
+        setConversations((curr) =>
+          ensureConversationPresent(curr, conversationId, capturedProjectId),
+        );
+        return true;
+      }
+    },
+    [project.id],
+  );
+
   const handleDeleteConversation = useCallback(
     async (id: string) => {
       const ok = await deleteConversationApi(project.id, id);
@@ -5775,16 +6349,36 @@ export function ProjectView({
     [project, projectDesignSystemId, onProjectChange, designSystems, analytics.track],
   );
 
-  const projectMeta = useMemo(() => {
-    // Design system is rendered by the adjacent picker chip — keep the
-    // bare meta string focused on skill / mode so the two surfaces
-    // don't show the same label twice.
+  // Canonical project-type chip shown next to the editable title. We label
+  // by the resolved skill/template `mode` (the real type taxonomy) rather
+  // than the skill's display name, so every project kind — prototype, deck,
+  // template, image, video, audio, design system — reads as one consistent,
+  // short type just like "Design system". Returns null for freeform projects
+  // (no resolvable type), which hides the chip.
+  const projectTypeLabel = useMemo<string | null>(() => {
+    if (projectIsDesignSystemProject) return t('dsManager.tabDesignSystem');
     const summary =
       skills.find((s) => s.id === project.skillId) ??
       designTemplates.find((s) => s.id === project.skillId);
-    const skill = summary?.name;
-    return skill ?? t('project.metaFreeform');
-  }, [skills, designTemplates, project.skillId, t]);
+    switch (summary?.mode) {
+      case 'prototype':
+        return t('project.typePrototype');
+      case 'deck':
+        return t('project.typeDeck');
+      case 'template':
+        return t('project.typeTemplate');
+      case 'design-system':
+        return t('dsManager.tabDesignSystem');
+      case 'image':
+        return t('project.typeImage');
+      case 'video':
+        return t('project.typeVideo');
+      case 'audio':
+        return t('project.typeAudio');
+      default:
+        return null;
+    }
+  }, [projectIsDesignSystemProject, skills, designTemplates, project.skillId, t]);
 
   const activeDesignSystemSummary = useMemo(() => {
     if (!projectDesignSystemId) return null;
@@ -5793,14 +6387,75 @@ export function ProjectView({
 
   const designSystemProject = useMemo(() => {
     if (!projectIsDesignSystemProject || !projectDesignSystemId) return null;
+    return designSystems.find((d) => d.id === projectDesignSystemId)
+      ?? fallbackDesignSystemSummaryForProject(currentProject, projectDesignSystemId);
+  }, [
+    currentProject,
+    designSystems,
+    projectDesignSystemId,
+    projectIsDesignSystemProject,
+  ]);
+  const designSystemProjectFromRegistry = useMemo(() => {
+    if (!projectIsDesignSystemProject || !projectDesignSystemId) return null;
     return designSystems.find((d) => d.id === projectDesignSystemId) ?? null;
   }, [designSystems, projectDesignSystemId, projectIsDesignSystemProject]);
+  useEffect(() => {
+    if (!projectIsDesignSystemProject || !projectDesignSystemId) {
+      missingDesignSystemRefreshRef.current = null;
+      return;
+    }
+    if (designSystemProjectFromRegistry) {
+      missingDesignSystemRefreshRef.current = null;
+      return;
+    }
+    if (missingDesignSystemRefreshRef.current === projectDesignSystemId) return;
+    missingDesignSystemRefreshRef.current = projectDesignSystemId;
+    void Promise.resolve(onDesignSystemsRefresh?.()).catch((err) => {
+      missingDesignSystemRefreshRef.current = null;
+      console.warn('[design-system] failed to refresh missing project design system', err);
+    });
+  }, [
+    designSystemProjectFromRegistry,
+    onDesignSystemsRefresh,
+    projectDesignSystemId,
+    projectIsDesignSystemProject,
+  ]);
   useEffect(() => {
     const pending = pendingBrandDesignSystemOpenRef.current;
     if (!pending || designSystemProject?.id !== pending) return;
     pendingBrandDesignSystemOpenRef.current = null;
     requestOpenFile(DESIGN_SYSTEM_TAB);
   }, [designSystemProject?.id, requestOpenFile]);
+  useEffect(() => {
+    if (!projectIsProgrammaticBrandExtraction || !designSystemProject?.id) {
+      autoOpenedBrandDesignSystemRef.current = null;
+      return;
+    }
+    if (autoOpenedBrandDesignSystemRef.current === designSystemProject.id) return;
+    if (!tabsLoadedRef.current) return;
+    if (routeFileName) {
+      autoOpenedBrandDesignSystemRef.current = designSystemProject.id;
+      return;
+    }
+    if (openTabsState.active || openTabsState.tabs.length > 0) {
+      autoOpenedBrandDesignSystemRef.current = designSystemProject.id;
+      return;
+    }
+    if (tabsHydratedFromSavedStateRef.current) {
+      autoOpenedBrandDesignSystemRef.current = designSystemProject.id;
+      return;
+    }
+    autoOpenedBrandDesignSystemRef.current = designSystemProject.id;
+    requestOpenFile(DESIGN_SYSTEM_TAB);
+  }, [
+    designSystemProject?.id,
+    openTabsState.active,
+    openTabsState.tabs.length,
+    projectIsProgrammaticBrandExtraction,
+    requestOpenFile,
+    routeFileName,
+    tabsHydrationVersion,
+  ]);
   const designSystemActivityEvents = useMemo(
     () => designSystemProject ? latestDesignSystemActivityEvents(messages) : [],
     [designSystemProject, messages],
@@ -6145,12 +6800,250 @@ export function ProjectView({
     () => brandEnrichmentPromptSeed,
   );
   const [brandEnrichmentStarting, setBrandEnrichmentStarting] = useState(false);
+  const [brandAgentExtractionStarting, setBrandAgentExtractionStarting] = useState(false);
+  const [brandProgrammaticContinueStarting, setBrandProgrammaticContinueStarting] = useState(false);
+  const brandProgrammaticContinueStartingRef = useRef(false);
   const [brandCreateDesignStarting, setBrandCreateDesignStarting] = useState(false);
+  const [projectDesignSystemCreateStarting, setProjectDesignSystemCreateStarting] = useState(false);
+  const [projectDuplicateStarting, setProjectDuplicateStarting] = useState(false);
   useEffect(() => {
     if (brandEnrichmentPromptSeed) {
       setBrandEnrichmentPromptSeedCache(brandEnrichmentPromptSeed);
     }
   }, [brandEnrichmentPromptSeed]);
+
+  const handleContinueBrandExtraction = useCallback(() => {
+    if (brandProgrammaticContinueStartingRef.current) return;
+    const brandId = currentProject.metadata?.brandId?.trim();
+    if (!projectIsProgrammaticBrandExtraction || !brandId) return;
+    brandProgrammaticContinueStartingRef.current = true;
+    setBrandProgrammaticContinueStarting(true);
+    setBrandExtractionStatusOverride({ brandId, status: 'extracting' });
+    const brandPreviewFile = brandExtractionPreviewFileName(projectFiles);
+    const brandExtractionSourceUrl =
+      currentProject.metadata?.brandSourceUrl?.trim() ||
+      brandBrowserAssist?.sourceUrl?.trim() ||
+      '';
+
+    const refreshAfterProgrammaticContinue = async (
+      status: string,
+      conversationId?: string | null,
+    ) => {
+      setBrandExtractionStatusOverride({
+        brandId,
+        status: isBrandStatusValue(status) ? status : 'extracting',
+      });
+      dismissBrandBrowserAssist();
+      await Promise.allSettled([
+        projectDetail.refresh(),
+        Promise.resolve(onProjectsRefresh()),
+        Promise.resolve(onDesignSystemsRefresh?.()),
+        refreshWorkspaceItems(),
+      ]);
+      setFilesRefresh((n) => n + 1);
+      requestOpenFile(brandPreviewFile);
+      const returnedConversationId = conversationId?.trim() || null;
+      if (returnedConversationId) {
+        const stillCurrent = await refreshConversationsForProgrammaticBrandRetry(returnedConversationId);
+        if (!stillCurrent) return;
+        if (
+          returnedConversationId !== activeConversationId
+          || failedMessagesConversationId === returnedConversationId
+        ) {
+          handleSelectConversation(returnedConversationId);
+        } else {
+          scheduleConversationMessageRefresh(returnedConversationId);
+        }
+        return;
+      }
+      if (activeConversationId) scheduleConversationMessageRefresh(activeConversationId);
+    };
+
+    void (async () => {
+      const delay = (ms: number) =>
+        new Promise<void>((resolve) => {
+          window.setTimeout(resolve, ms);
+        });
+      const snapshotMessage = (snapshot: BrandBrowserSnapshot): string | null =>
+        snapshot.status === 'ready' ? null : snapshot.message;
+      const hasBrowserFallback = (): boolean => {
+        const handle = getBrandBrowser(project.id, BRAND_BROWSER_TAB_ID);
+        return Boolean(handle?.isDesktopWebview);
+      };
+      const extractSnapshot = async (
+        snapshot: BrandBrowserSnapshot,
+        options: { recoverableFailureIsMiss?: boolean } = {},
+      ): Promise<BrandBrowserSnapshotExtractionResult> => {
+        if (snapshot.status !== 'ready') {
+          return { status: 'miss', message: snapshot.message };
+        }
+        if (!brandBrowserSnapshotMatchesSource(snapshot.baseUrl, brandExtractionSourceUrl)) {
+          // The Browser tab/saved archive is for a different page than the brand
+          // source. Stop instead of extracting a design system for the wrong site.
+          setBrandExtractionStatusOverride({ brandId, status: 'needs_input' });
+          setProjectActionsToast({
+            message: t('chat.brandBrowserAssistReadFailed'),
+            details: null,
+            tone: 'error',
+            ttlMs: 7000,
+          });
+          return { status: 'handled' };
+        }
+        const outcome = await extractBrandFromHtml(brandId, {
+          html: snapshot.html,
+          css: snapshot.css,
+          baseUrl: snapshot.baseUrl,
+        });
+        if (!outcome.ok) {
+          if (options.recoverableFailureIsMiss) {
+            return { status: 'miss', message: outcome.error };
+          }
+          // Recoverable, not terminal: the read may have caught the page mid-load
+          // / still on the wall. Keep the kit in the calm `needs_input` state (a
+          // retry or the agent fallback can still finish it) instead of flashing
+          // the red "Extraction failed" terminal. The toast explains the retry.
+          setBrandExtractionStatusOverride({ brandId, status: 'needs_input' });
+          setProjectActionsToast({
+            message: outcome.error,
+            details: null,
+            tone: 'error',
+            ttlMs: 6000,
+          });
+          return { status: 'handled' };
+        }
+        await refreshAfterProgrammaticContinue('ready');
+        return { status: 'handled' };
+      };
+
+      const localSnapshot = await readLocalBrowserPageArchiveSnapshot(brandExtractionSourceUrl);
+      const localExtract = await extractSnapshot(localSnapshot, { recoverableFailureIsMiss: true });
+      if (localExtract.status === 'handled') return;
+
+      const daemonOutcome = await continueBrandExtraction(brandId);
+      let fallbackMessage: string | null = localExtract.message;
+      if (daemonOutcome.ok) {
+        await refreshAfterProgrammaticContinue(
+          daemonOutcome.result.status,
+          daemonOutcome.result.conversationId,
+        );
+        if (daemonOutcome.result.status === 'ready') return;
+        if (!isOpenDesignHostAvailable() && !hasBrowserFallback()) return;
+      } else {
+        fallbackMessage = daemonOutcome.error;
+        if (!isOpenDesignHostAvailable() && !hasBrowserFallback()) {
+          setBrandExtractionStatusOverride({ brandId, status: 'needs_input' });
+          setProjectActionsToast({
+            message: daemonOutcome.error,
+            details: null,
+            tone: 'error',
+            ttlMs: 5000,
+          });
+          return;
+        }
+      }
+
+      // Foreground the pinned Browser tab before either live DOM communication
+      // or invoking its page-snapshot downloader. When the user clicks Continue
+      // from the preview tab, the browser <webview> may be `display:none` and
+      // Electron can throttle its renderer; a focus-only request wakes it
+      // without navigating/re-triggering a wall.
+      if (isOpenDesignHostAvailable() && brandExtractionSourceUrl) {
+        setBrowserOpenRequest({
+          tabId: BRAND_BROWSER_TAB_ID,
+          url: brandExtractionSourceUrl,
+          nonce: Date.now(),
+          focusOnly: true,
+        });
+        await delay(600);
+      }
+
+      const liveSnapshot = await readBrandBrowserSnapshotWithRetry(BRAND_BROWSER_TAB_ID);
+      requestOpenFile(brandPreviewFile);
+      if ((await extractSnapshot(liveSnapshot)).status === 'handled') return;
+
+      const archivedSnapshot = await downloadBrandBrowserPageArchive(brandExtractionSourceUrl);
+      requestOpenFile(brandPreviewFile);
+      if ((await extractSnapshot(archivedSnapshot)).status === 'handled') return;
+
+      // Still no readable local source. Recoverable — clear/settle/download the
+      // Browser page and click Continue again, or use the agent fallback.
+      setBrandExtractionStatusOverride({ brandId, status: 'needs_input' });
+      if (isOpenDesignHostAvailable() && brandExtractionSourceUrl) {
+        setBrowserOpenRequest({
+          tabId: BRAND_BROWSER_TAB_ID,
+          url: brandExtractionSourceUrl,
+          nonce: Date.now(),
+          attentionAction: 'download-page',
+        });
+      }
+      setProjectActionsToast({
+        message:
+          snapshotMessage(archivedSnapshot) ||
+          snapshotMessage(liveSnapshot) ||
+          fallbackMessage ||
+          t('chat.brandBrowserAssistReadFailed'),
+        details: t('chat.brandBrowserAssistDownloadGuideDetails'),
+        tone: 'error',
+        ttlMs: 7000,
+      });
+    })()
+      .catch((err) => {
+        setBrandExtractionStatusOverride({ brandId, status: 'needs_input' });
+        setProjectActionsToast({
+          message: err instanceof Error ? err.message : t('chat.brandBrowserAssistReadFailed'),
+          details: null,
+          tone: 'error',
+          ttlMs: 5000,
+        });
+      })
+      .finally(() => {
+        brandProgrammaticContinueStartingRef.current = false;
+        setBrandProgrammaticContinueStarting(false);
+      });
+  }, [
+    activeConversationId,
+    brandBrowserAssist?.sourceUrl,
+    currentProject.metadata,
+    dismissBrandBrowserAssist,
+    failedMessagesConversationId,
+    handleSelectConversation,
+    onDesignSystemsRefresh,
+    onProjectsRefresh,
+    projectDetail,
+    project.id,
+    projectFiles,
+    projectIsProgrammaticBrandExtraction,
+    downloadBrandBrowserPageArchive,
+    readLocalBrowserPageArchiveSnapshot,
+    readBrandBrowserSnapshotWithRetry,
+    refreshConversationsForProgrammaticBrandRetry,
+    refreshWorkspaceItems,
+    requestOpenFile,
+    scheduleConversationMessageRefresh,
+    t,
+  ]);
+
+  const handleBrandAgentExtraction = useCallback(() => {
+    if (brandAgentExtractionStarting) return;
+    const brandId = currentProject.metadata?.brandId?.trim();
+    if (brandId) setBrandExtractionStatusOverride({ brandId, status: 'extracting' });
+    const prompt = buildBrandAgentExtractionContinuationPrompt({
+      promptSeed: brandEnrichmentPromptSeed || brandEnrichmentPromptSeedCache,
+      metadata: currentProject.metadata,
+      projectFiles,
+    });
+    setBrandAgentExtractionStarting(true);
+    requestOpenFile(brandExtractionPreviewFileName(projectFiles));
+    void handleSend(prompt, [], []).finally(() => setBrandAgentExtractionStarting(false));
+  }, [
+    brandAgentExtractionStarting,
+    brandEnrichmentPromptSeed,
+    brandEnrichmentPromptSeedCache,
+    currentProject.metadata,
+    handleSend,
+    projectFiles,
+    requestOpenFile,
+  ]);
 
   // Run the deeper "AI Optimize" enrichment pass on a programmatically-extracted
   // brand: send the hidden seeded enrichment prompt + the default design-system
@@ -6207,6 +7100,64 @@ export function ProjectView({
     brandCreateDesignStarting,
     designSystemProject,
     onCreateProjectFromDesignSystem,
+  ]);
+
+  const handleCreateDesignSystemFromProject = useCallback(() => {
+    if (
+      projectDesignSystemCreateStarting ||
+      projectIsDesignSystemProject ||
+      !onCreateDesignSystemFromProject
+    ) {
+      return;
+    }
+    const name = designSystemNameForSourceProject(currentProject);
+    const pendingPrompt = buildCreateDesignSystemFromProjectPrompt({
+      project: currentProject,
+      projectFiles,
+      activeDesignSystem: activeDesignSystemSummary,
+    });
+    setProjectDesignSystemCreateStarting(true);
+    void Promise.resolve(onCreateDesignSystemFromProject(currentProject.id, {
+      name,
+      pendingPrompt,
+    }))
+      .catch((err) => {
+        setProjectActionsToast({
+          message: err instanceof Error ? err.message : String(err),
+          details: null,
+          tone: 'error',
+        });
+      })
+      .finally(() => {
+        setProjectDesignSystemCreateStarting(false);
+      });
+  }, [
+    activeDesignSystemSummary,
+    currentProject,
+    onCreateDesignSystemFromProject,
+    projectDesignSystemCreateStarting,
+    projectFiles,
+    projectIsDesignSystemProject,
+  ]);
+
+  const handleDuplicateProject = useCallback(() => {
+    if (projectDuplicateStarting || !onDuplicateProject) return;
+    setProjectDuplicateStarting(true);
+    void Promise.resolve(onDuplicateProject(currentProject.id, {}))
+      .catch((err) => {
+        setProjectActionsToast({
+          message: err instanceof Error ? err.message : String(err),
+          details: null,
+          tone: 'error',
+        });
+      })
+      .finally(() => {
+        setProjectDuplicateStarting(false);
+      });
+  }, [
+    currentProject.id,
+    onDuplicateProject,
+    projectDuplicateStarting,
   ]);
 
   // Continue in CLI / Finalize design package handlers + keyboard
@@ -6626,11 +7577,20 @@ export function ProjectView({
               connectRepoNeeded={connectRepoNeeded}
               githubConnected={githubConnected}
               onConnectRepo={handleConnectRepo}
+              brandExtractionComplete={effectiveBrandExtractionStatus === 'ready' || Boolean(brandReady)}
               brandEnrichmentEligible={brandEnrichmentEligibleForProject}
               onContinueBrandEnrichment={handleBrandEnrichment}
               brandEnrichmentBusy={brandEnrichmentStarting}
+              onContinueBrandAgentExtraction={handleBrandAgentExtraction}
+              continueBrandAgentExtractionBusy={brandAgentExtractionStarting}
+              onContinueBrandExtraction={handleContinueBrandExtraction}
+              continueBrandExtractionBusy={brandProgrammaticContinueStarting}
               onCreateDesignFromActiveDesignSystem={handleCreateDesignFromActiveDesignSystem}
               createDesignFromActiveDesignSystemBusy={brandCreateDesignStarting}
+              onCreateDesignSystemFromProject={
+                projectIsDesignSystemProject ? undefined : handleCreateDesignSystemFromProject
+              }
+              createDesignSystemFromProjectBusy={projectDesignSystemCreateStarting}
               onBrandBrowserAssistConfirm={handleBrandBrowserAssistConfirm}
               composerDraftSignal={composerDraftSignal}
               petConfig={config.pet}
@@ -6688,8 +7648,8 @@ export function ProjectView({
                   >
                     {project.name}
                   </span>
-                  {projectMeta !== t('project.metaFreeform') ? (
-                    <span className="meta" data-testid="project-meta">{projectMeta}</span>
+                  {projectTypeLabel ? (
+                    <span className="meta" data-testid="project-meta">{projectTypeLabel}</span>
                   ) : null}
                 </span>
               )}
@@ -6749,6 +7709,8 @@ export function ProjectView({
           commentQueueOnSend={commentQueueOnSend}
           commentSendDisabled={currentConversationQueueDisabled}
           openRequest={openRequest}
+          browserOpenRequest={browserOpenRequest}
+          pinnedBrowserTabId={projectIsProgrammaticBrandExtraction ? BRAND_BROWSER_TAB_ID : null}
           shareRequest={shareRequest}
           downloadRequest={downloadRequest}
           slideNavRequest={slideNavRequest}
@@ -6760,6 +7722,7 @@ export function ProjectView({
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
           onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
+          onBrandExtractionStopRequest={projectIsProgrammaticBrandExtraction ? handleStop : undefined}
           onRequestBrowserUsePrompt={handleBrowserUsePrompt}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           activePluginActionPaths={activePluginActionPaths}
@@ -6769,9 +7732,16 @@ export function ProjectView({
           onFocusModeChange={setWorkspaceFocused}
           designSystemProject={designSystemProject}
           designSystemBrandId={designSystemBrandId}
+          designSystemEditable={designSystemEditable}
           defaultDesignSystemId={config.designSystemId}
           onSetDefaultDesignSystem={onChangeDefaultDesignSystem}
           onDesignSystemsRefresh={onDesignSystemsRefresh}
+          onCreateDesignSystemFromProject={
+            projectIsDesignSystemProject ? undefined : handleCreateDesignSystemFromProject
+          }
+          createDesignSystemFromProjectBusy={projectDesignSystemCreateStarting}
+          onDuplicateProject={onDuplicateProject ? handleDuplicateProject : undefined}
+          duplicateProjectBusy={projectDuplicateStarting}
           onDeleteDesignSystemProject={onDeleteProject}
           onDesignSystemNeedsWork={sendDesignSystemFeedback}
           designSystemReview={currentProject.metadata?.designSystemReview}
@@ -6918,6 +7888,19 @@ function artifactExtensionFor(art: Artifact): '.html' | '.jsx' | '.tsx' {
     return '.jsx';
   }
   return '.html';
+}
+
+function conversationHasBrandBrowserAssist(messages: ChatMessage[], brandId: string): boolean {
+  const brandNeedle = `"brandId":"${escapeJsonNeedle(brandId)}"`;
+  return messages.some((message) =>
+    message.role === 'assistant' &&
+    message.content.includes('<od-card type="brand-browser-assist"') &&
+    message.content.includes(brandNeedle),
+  );
+}
+
+function escapeJsonNeedle(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function artifactBaseNameFor(art: Artifact): string {

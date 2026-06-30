@@ -168,6 +168,7 @@ vi.mock('../../src/components/ChatPane', () => ({
 
 const fileWorkspaceSpy = vi.fn();
 vi.mock('../../src/components/FileWorkspace', () => ({
+  DESIGN_SYSTEM_TAB: '__design_system__',
   FileWorkspace: (props: Record<string, unknown>) => {
     fileWorkspaceSpy(props);
     return null;

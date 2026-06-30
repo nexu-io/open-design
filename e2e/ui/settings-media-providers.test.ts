@@ -1,5 +1,5 @@
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
+import { openNewProjectModal } from '@/playwright/rail';
 import type { Page, Route } from '@playwright/test';
 import { openSettingsDialog } from '../lib/playwright/amr.js';
 
@@ -144,9 +144,7 @@ async function openMediaSettingsFromCurrentPage(page: Page) {
 }
 
 async function openNewProjectImageModelPicker(page: Page) {
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await openNewProjectModal(page);
   await page.getByTestId('new-project-tab-media').click();
   await page.getByTestId('new-project-media-surface-image').click();
   await page.getByTestId('model-picker-trigger').click();

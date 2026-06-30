@@ -16,3 +16,19 @@ export async function ensureRailOpen(page: Page): Promise<void> {
   }
   await expect(page.locator('.entry-nav-rail')).toBeVisible();
 }
+
+export async function openNewProjectModal(page: Page): Promise<void> {
+  if (await page.getByTestId('new-project-panel').isVisible().catch(() => false)) return;
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-projects').click();
+  const projectsView = page.getByTestId('entry-view-projects');
+  await expect(projectsView).toBeVisible();
+  const toolbarButton = projectsView.getByTestId('designs-new-project');
+  if (await toolbarButton.isVisible().catch(() => false)) {
+    await toolbarButton.click();
+  } else {
+    await projectsView.getByTestId('designs-empty-new-project').click();
+  }
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+}

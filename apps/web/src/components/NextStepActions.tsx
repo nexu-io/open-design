@@ -23,22 +23,50 @@ import type { SkillSummary } from '../types';
 import styles from './NextStepActions.module.css';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
-export type NextStepActionsVariant = 'default' | 'design-system' | 'brand-extraction';
+export type NextStepActionsVariant =
+  | 'default'
+  | 'project-incomplete'
+  | 'design-system'
+  | 'brand-extraction'
+  | 'brand-extraction-incomplete'
+  | 'brand-programmatic-incomplete'
+  | 'brand-ai-incomplete';
 
 export const DESIGN_SYSTEM_NEXT_STEP_ACTIONS = [
   {
     id: 'design-system-ai-refine',
     icon: 'sparkles' as IconName,
-    title: 'AI refine design system',
+    titleKey: 'nextStep.designSystemAiRefineTitle' as keyof Dict,
     prompt:
       'Use AI extraction to refine this design system in place. Read the current DESIGN.md, brand.json, source context, tokens, typography, palette, assets, and component kit previews. Re-measure any linked website or source files when available, then update the same design system id without creating a duplicate. Focus on stronger token roles, brand voice, component guidance, light/dark kit quality, and reusable implementation notes. Finish by summarizing what changed and which files were updated.',
   },
   {
     id: 'design-system-audit-kit',
     icon: 'blocks' as IconName,
-    title: 'Audit tokens & kit',
+    titleKey: 'nextStep.designSystemAuditKitTitle' as keyof Dict,
     prompt:
       'Audit this design system for readiness. Check DESIGN.md, brand.json, variables.css, theme.json, kit.html, kit.dark.html, generated artifacts, palette contrast, typography specimens, spacing/radius rules, and component coverage. Fix the highest-impact issues directly, keep the same registered design system id, and report remaining gaps before publishing or using it in other projects.',
+  },
+] as const;
+
+export const PROJECT_CONTINUE_PROMPT =
+  'Continue from the stopped or incomplete turn. Read the conversation, current project files, and any visible errors, then take the next concrete step. If a primary artifact already exists, update it in place; otherwise create the missing primary artifact and summarize what changed.';
+
+export const PROJECT_GENERATE_ARTIFACT_PROMPT =
+  'Generate the missing project artifact now. Use the current conversation and project context to create the primary previewable deliverable, usually index.html unless another file type is clearly requested. Save it into this project and include a concise summary of the files created.';
+
+export const PROJECT_INCOMPLETE_NEXT_STEP_ACTIONS = [
+  {
+    id: 'project-continue',
+    icon: 'refresh' as IconName,
+    titleKey: 'nextStep.projectContinueTitle' as keyof Dict,
+    prompt: PROJECT_CONTINUE_PROMPT,
+  },
+  {
+    id: 'project-generate-artifact',
+    icon: 'plus' as IconName,
+    titleKey: 'nextStep.projectGenerateArtifactTitle' as keyof Dict,
+    prompt: PROJECT_GENERATE_ARTIFACT_PROMPT,
   },
 ] as const;
 
@@ -57,6 +85,43 @@ export const BRAND_EXTRACTION_NEXT_STEP_ACTIONS = [
     descriptionKey: 'nextStep.brandCreateDesignBody' as keyof Dict,
     busyKey: 'nextStep.createDesignBusy' as keyof Dict,
   },
+] as const;
+
+export const BRAND_CONTINUE_EXTRACTION_PROMPT =
+  'Continue the programmatic design-system extraction from the saved draft. Re-open the source website and current brand files, inspect brand.html, brand.json, DESIGN.md, system assets, and any prefetched source files if present, then fill missing logo, palette, typography, imagery, and kit guidance progressively. Update the same design system id and do not create a duplicate.';
+
+export const BRAND_EXTRACTION_INCOMPLETE_NEXT_STEP_ACTIONS = [
+  {
+    id: 'brand-continue-extraction',
+    icon: 'sparkles' as IconName,
+    titleKey: 'nextStep.brandContinueExtractionTitle' as keyof Dict,
+    descriptionKey: 'nextStep.brandContinueExtractionBody' as keyof Dict,
+    busyKey: 'nextStep.brandContinueExtractionBusy' as keyof Dict,
+    prompt: BRAND_CONTINUE_EXTRACTION_PROMPT,
+  },
+  {
+    id: 'brand-continue-ai-extraction',
+    icon: 'sparkles' as IconName,
+    titleKey: 'nextStep.brandContinueAiExtractionTitle' as keyof Dict,
+    descriptionKey: 'nextStep.brandContinueAiExtractionProgrammaticBody' as keyof Dict,
+    busyKey: 'nextStep.brandContinueAiExtractionBusy' as keyof Dict,
+  },
+] as const;
+
+export const BRAND_AI_EXTRACTION_INCOMPLETE_NEXT_STEP_ACTIONS = [
+  {
+    id: 'brand-continue-ai-extraction',
+    icon: 'sparkles' as IconName,
+    titleKey: 'nextStep.brandContinueAiExtractionTitle' as keyof Dict,
+    descriptionKey: 'nextStep.brandContinueAiExtractionAiBody' as keyof Dict,
+    busyKey: 'nextStep.brandContinueAiExtractionBusy' as keyof Dict,
+  },
+] as const;
+
+const ALL_BRAND_EXTRACTION_NEXT_STEP_ACTIONS = [
+  ...BRAND_EXTRACTION_NEXT_STEP_ACTIONS,
+  ...BRAND_EXTRACTION_INCOMPLETE_NEXT_STEP_ACTIONS,
+  ...BRAND_AI_EXTRACTION_INCOMPLETE_NEXT_STEP_ACTIONS,
 ] as const;
 
 // Surfaced under More → Design toolbox. The two featured ids already have their
@@ -85,9 +150,19 @@ interface Props {
   // design system.
   onAiOptimize?: () => void;
   aiOptimizeBusy?: boolean;
+  // Restart the deterministic programmatic pass for an incomplete brand
+  // extraction, reusing the same brand/project/design-system.
+  onContinueExtraction?: () => void;
+  continueExtractionBusy?: boolean;
+  // Resume the selected agent on an incomplete brand extraction scaffold.
+  onContinueAiExtraction?: () => void;
+  continueAiExtractionBusy?: boolean;
   // Create a new design using the active brand/design system.
   onCreateDesign?: () => void;
   createDesignBusy?: boolean;
+  // Create a new design-system project from the current regular project.
+  onCreateDesignSystem?: () => void;
+  createDesignSystemBusy?: boolean;
   // Seed the composer with a specific global skill resource picked from the toolbox.
   onPickSkill?: (skillId: string) => void;
   // Available global skill resources. The full composer toolbox also includes
@@ -109,7 +184,7 @@ const MENU_WIDTH = 200;
 // Conservative heights used to keep a flyout on-screen vertically (over-estimating
 // only shifts it further up, which is always safe).
 const DETAIL_HEIGHT = 180;
-const MENU_HEIGHT = 150;
+const MENU_HEIGHT = 180;
 // The Design toolbox submenu mirrors the plus-menu panel: title/search,
 // follow-up actions, and global resources.
 const TOOLBOX_SUB_WIDTH = 300;
@@ -139,10 +214,43 @@ function place(
 
 type Anchor = { left: number; top: number };
 type SubKind = 'toolbox' | 'share';
-type BrandExtractionActionId = (typeof BRAND_EXTRACTION_NEXT_STEP_ACTIONS)[number]['id'];
+type BrandExtractionAction = (typeof ALL_BRAND_EXTRACTION_NEXT_STEP_ACTIONS)[number];
+type BrandExtractionActionId = BrandExtractionAction['id'];
+type PromptNextStepAction =
+  | (typeof DESIGN_SYSTEM_NEXT_STEP_ACTIONS)[number]
+  | (typeof PROJECT_INCOMPLETE_NEXT_STEP_ACTIONS)[number];
 type Detail =
   | ({ kind: 'toolbox'; id: DesignToolboxActionId } & Anchor)
   | ({ kind: 'brand'; id: BrandExtractionActionId } & Anchor);
+
+function brandActionTitle(action: BrandExtractionAction, t: TranslateFn, busy: boolean): string {
+  if ('busyKey' in action && busy) return t(action.busyKey);
+  return t(action.titleKey);
+}
+
+function brandActionDescription(action: BrandExtractionAction, t: TranslateFn): string {
+  return t(action.descriptionKey);
+}
+
+function promptActionTitle(action: PromptNextStepAction, t: TranslateFn): string {
+  return t(action.titleKey);
+}
+
+function promptActionPrompt(action: PromptNextStepAction, locale: string): string {
+  if (locale !== 'zh-CN') return action.prompt;
+  switch (action.id) {
+    case 'project-continue':
+      return '从已停止或未完成的回合继续处理。先阅读当前对话、项目文件和可见错误，再执行下一个具体步骤。如果主产物已经存在，就在原文件上更新；否则创建缺失的主产物，并简要总结改了什么。';
+    case 'project-generate-artifact':
+      return '现在生成缺失的项目产物。基于当前对话和项目上下文创建主要的可预览交付物；除非明确要求其他文件类型，通常保存为 index.html。把文件保存到当前项目中，并简要说明创建了哪些文件。';
+    case 'design-system-ai-refine':
+      return '使用 AI 提取继续原地优化这个设计系统。读取当前 DESIGN.md、brand.json、source context、tokens、字体、色板、资产和组件套件预览；如果有链接的网站或源文件，请重新测量。保持同一个设计系统 id，不要创建重复系统。重点强化 token 角色、品牌语气、组件指导、明暗主题套件质量和可复用实现说明。最后总结改动和更新的文件。';
+    case 'design-system-audit-kit':
+      return '审查这个设计系统是否已经可用。检查 DESIGN.md、brand.json、variables.css、theme.json、kit.html、kit.dark.html、生成产物、色彩对比度、字体样张、间距/圆角规则和组件覆盖度。直接修复最高影响的问题，保持同一个已注册设计系统 id，并在发布或用于其他项目之前报告剩余缺口。';
+    default:
+      return (action as PromptNextStepAction).prompt;
+  }
+}
 
 export function NextStepActions({
   fileName,
@@ -152,8 +260,14 @@ export function NextStepActions({
   onPromptAction,
   onAiOptimize,
   aiOptimizeBusy = false,
+  onContinueExtraction,
+  continueExtractionBusy = false,
+  onContinueAiExtraction,
+  continueAiExtractionBusy = false,
   onCreateDesign,
   createDesignBusy = false,
+  onCreateDesignSystem,
+  createDesignSystemBusy = false,
   onPickSkill,
   skills = [],
   toolboxSkillNames,
@@ -293,12 +407,12 @@ export function NextStepActions({
     [closeAll, onToolboxAction, track],
   );
   const handlePromptAction = useCallback(
-    (action: (typeof DESIGN_SYSTEM_NEXT_STEP_ACTIONS)[number]) => {
+    (action: PromptNextStepAction) => {
       track('toolbox_action', action.id);
-      onPromptAction?.(action.prompt);
+      onPromptAction?.(promptActionPrompt(action, locale));
       closeAll();
     },
-    [closeAll, onPromptAction, track],
+    [closeAll, locale, onPromptAction, track],
   );
 
   const handleAiOptimize = useCallback(() => {
@@ -314,6 +428,50 @@ export function NextStepActions({
     onCreateDesign?.();
     closeAll();
   }, [closeAll, createDesignBusy, onCreateDesign, track]);
+
+  const handleCreateDesignSystem = useCallback(() => {
+    if (createDesignSystemBusy) return;
+    track('toolbox_action', 'project-create-design-system');
+    onCreateDesignSystem?.();
+    closeAll();
+  }, [closeAll, createDesignSystemBusy, onCreateDesignSystem, track]);
+
+  const handleContinueAiExtraction = useCallback(() => {
+    if (continueAiExtractionBusy) return;
+    track('toolbox_action', 'brand-continue-ai-extraction');
+    onContinueAiExtraction?.();
+    closeAll();
+  }, [closeAll, continueAiExtractionBusy, onContinueAiExtraction, track]);
+
+  const handleBrandAction = useCallback(
+    (action: BrandExtractionAction) => {
+      if (action.id === 'brand-continue-extraction') {
+        if (continueExtractionBusy) return;
+        track('toolbox_action', action.id);
+        onContinueExtraction?.();
+        closeAll();
+        return;
+      }
+      if (action.id === 'brand-continue-ai-extraction') {
+        handleContinueAiExtraction();
+        return;
+      }
+      if (action.id === 'brand-ai-optimize') {
+        handleAiOptimize();
+        return;
+      }
+      handleCreateDesign();
+    },
+    [
+      closeAll,
+      continueExtractionBusy,
+      handleContinueAiExtraction,
+      handleAiOptimize,
+      handleCreateDesign,
+      onContinueExtraction,
+      track,
+    ],
+  );
 
   const handlePickSkill = useCallback(
     (skillId: string) => {
@@ -356,10 +514,34 @@ export function NextStepActions({
   const canDownload = !!(fileName && onDownload);
   const canContribute = !!onShareToOpenDesign;
   const hasShareGroup = canShare || canDownload || canContribute;
-  const hasMore = !!onToolboxAction || hasShareGroup;
+  const showCreateDesignSystem = (
+    variant === 'default' ||
+    variant === 'project-incomplete'
+  ) && !!onCreateDesignSystem;
+  const hasMore = showCreateDesignSystem || !!onToolboxAction || hasShareGroup;
   const showToolbox = !!onToolboxAction;
+  const showProjectIncompleteRows = variant === 'project-incomplete' && !!onPromptAction;
   const showDesignSystemRows = variant === 'design-system' && !!onPromptAction;
-  const showBrandRows = variant === 'brand-extraction' && (!!onAiOptimize || !!onCreateDesign);
+  const brandActions =
+    variant === 'brand-ai-incomplete'
+      ? BRAND_AI_EXTRACTION_INCOMPLETE_NEXT_STEP_ACTIONS
+      : variant === 'brand-extraction-incomplete' || variant === 'brand-programmatic-incomplete'
+        ? BRAND_EXTRACTION_INCOMPLETE_NEXT_STEP_ACTIONS
+        : BRAND_EXTRACTION_NEXT_STEP_ACTIONS;
+  const showBrandRows =
+    (
+      variant === 'brand-extraction' ||
+      variant === 'brand-extraction-incomplete' ||
+      variant === 'brand-programmatic-incomplete' ||
+      variant === 'brand-ai-incomplete'
+    ) &&
+    (
+      variant === 'brand-extraction-incomplete' || variant === 'brand-programmatic-incomplete'
+        ? !!onContinueExtraction || !!onContinueAiExtraction
+        : variant === 'brand-ai-incomplete'
+          ? !!onContinueAiExtraction
+        : !!onAiOptimize || !!onCreateDesign
+    );
 
   // Hover handlers shared by every flyout surface: stay open while hovered.
   const keepOpen = { onMouseEnter: cancelClose, onMouseLeave: scheduleClose };
@@ -367,19 +549,23 @@ export function NextStepActions({
   return (
     <div className={styles.root} data-testid="next-step-actions">
       <div className={styles.label}>{t('nextStep.title')}</div>
-      {showBrandRows || showDesignSystemRows || showToolbox || hasMore ? (
+      {showBrandRows || showProjectIncompleteRows || showDesignSystemRows || showToolbox || hasMore ? (
         <div className={styles.toolboxList} data-testid="next-step-toolbox">
           {showBrandRows
-            ? BRAND_EXTRACTION_NEXT_STEP_ACTIONS.map((action) => {
+            ? brandActions.map((action) => {
                 const busy =
+                  (action.id === 'brand-continue-extraction' && continueExtractionBusy) ||
+                  (action.id === 'brand-continue-ai-extraction' && continueAiExtractionBusy) ||
                   (action.id === 'brand-ai-optimize' && aiOptimizeBusy) ||
                   (action.id === 'brand-create-design' && createDesignBusy);
                 const unavailable =
+                  (action.id === 'brand-continue-extraction' && !onContinueExtraction) ||
+                  (action.id === 'brand-continue-ai-extraction' && !onContinueAiExtraction) ||
                   (action.id === 'brand-ai-optimize' && !onAiOptimize) ||
                   (action.id === 'brand-create-design' && !onCreateDesign);
                 if (unavailable) return null;
-                const title = t(busy ? action.busyKey : action.titleKey);
-                const description = t(action.descriptionKey);
+                const title = brandActionTitle(action, t, busy);
+                const description = brandActionDescription(action, t);
                 return (
                   <button
                     key={action.id}
@@ -390,7 +576,7 @@ export function NextStepActions({
                     aria-label={`${title}. ${description}`}
                     disabled={busy}
                     title={description}
-                    onClick={action.id === 'brand-ai-optimize' ? handleAiOptimize : handleCreateDesign}
+                    onClick={() => handleBrandAction(action)}
                     onMouseEnter={(e) => openBrandDetail(action.id, e.currentTarget.getBoundingClientRect())}
                     onMouseLeave={scheduleClose}
                   >
@@ -408,6 +594,21 @@ export function NextStepActions({
                 );
               })
             : null}
+          {showProjectIncompleteRows
+            ? PROJECT_INCOMPLETE_NEXT_STEP_ACTIONS.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  className={styles.toolboxRow}
+                  data-testid={`next-step-project-action-${action.id}`}
+                  onClick={() => handlePromptAction(action)}
+                >
+                  <Icon name={action.icon} size={14} className={styles.toolboxRowIcon} />
+                  <span className={styles.toolboxRowTitle}>{promptActionTitle(action, t)}</span>
+                  <Icon name="chevron-right" size={13} className={styles.toolboxRowArrow} />
+                </button>
+              ))
+            : null}
           {showDesignSystemRows
             ? DESIGN_SYSTEM_NEXT_STEP_ACTIONS.map((action) => (
                 <button
@@ -418,12 +619,13 @@ export function NextStepActions({
                   onClick={() => handlePromptAction(action)}
                 >
                   <Icon name={action.icon} size={14} className={styles.toolboxRowIcon} />
-                  <span className={styles.toolboxRowTitle}>{action.title}</span>
+                  <span className={styles.toolboxRowTitle}>{promptActionTitle(action, t)}</span>
                   <Icon name="chevron-right" size={13} className={styles.toolboxRowArrow} />
                 </button>
               ))
             : null}
           {showToolbox && !showDesignSystemRows
+            && !showProjectIncompleteRows
             && !showBrandRows
             ? FEATURED_DESIGN_TOOLBOX_ACTION_IDS.map((id) => {
                 const action = getDesignToolboxAction(id);
@@ -470,7 +672,7 @@ export function NextStepActions({
         ? createPortal(
             (() => {
               if (detail.kind === 'brand') {
-                const action = BRAND_EXTRACTION_NEXT_STEP_ACTIONS.find((item) => item.id === detail.id);
+                const action = brandActions.find((item) => item.id === detail.id);
                 if (!action) return null;
                 return (
                   <div
@@ -479,8 +681,8 @@ export function NextStepActions({
                     style={{ left: detail.left, top: detail.top }}
                     {...keepOpen}
                   >
-                    <div className={styles.detailTitle}>{t(action.titleKey)}</div>
-                    <div className={styles.detailDesc}>{t(action.descriptionKey)}</div>
+                    <div className={styles.detailTitle}>{brandActionTitle(action, t, false)}</div>
+                    <div className={styles.detailDesc}>{brandActionDescription(action, t)}</div>
                   </div>
                 );
               }
@@ -507,7 +709,7 @@ export function NextStepActions({
           )
         : null}
 
-      {/* Level 2: More → [Design toolbox, Share] */}
+      {/* Level 2: More → [Create design system, Design toolbox, Share] */}
       {more && typeof document !== 'undefined'
         ? createPortal(
             <div
@@ -517,6 +719,27 @@ export function NextStepActions({
               style={{ left: more.left, top: more.top }}
               {...keepOpen}
             >
+              {showCreateDesignSystem ? (
+                <button
+                  type="button"
+                  className={styles.flyoutRow}
+                  data-testid="next-step-more-create-design-system"
+                  disabled={createDesignSystemBusy}
+                  title={t('nextStep.createDesignSystemBody')}
+                  onClick={handleCreateDesignSystem}
+                >
+                  <Icon
+                    name={createDesignSystemBusy ? 'spinner' : 'blocks'}
+                    size={14}
+                    className={createDesignSystemBusy ? 'icon-spin' : styles.toolboxRowIcon}
+                  />
+                  <span className={styles.toolboxRowTitle}>
+                    {createDesignSystemBusy
+                      ? t('nextStep.createDesignSystemBusy')
+                      : t('nextStep.createDesignSystemTitle')}
+                  </span>
+                </button>
+              ) : null}
               {showToolbox ? (
                 <button
                   type="button"

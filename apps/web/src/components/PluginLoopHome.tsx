@@ -66,6 +66,16 @@ interface Props {
   onSubmit: (payload: PluginLoopSubmit) => void;
 }
 
+function pluginLoopLocalLabel(
+  locale: string,
+  key: 'pluginActive' | 'reloadExampleQuery',
+): string {
+  if (locale === 'zh-CN') {
+    return key === 'pluginActive' ? '插件已启用' : '重新加载示例请求';
+  }
+  return key === 'pluginActive' ? 'Plugin active' : 'Reload example query';
+}
+
 interface ActivePlugin {
   record: InstalledPluginRecord;
   result: ApplyResult;
@@ -337,12 +347,12 @@ export function PluginLoopHome({ onSubmit }: Props) {
                     type="button"
                     className="plugin-loop-home__card-details"
                     onClick={() => { trackPluginLoopClick(analytics.track, { page_name: 'plugins', area: 'plugin_loop', element: 'card_details', plugin_id: p.id }); openDetails(p); }}
-                    aria-label={`View details for ${p.title}`}
+                    aria-label={t('pluginCard.detailsAria', { title: cardTitle })}
                     data-testid={`view-details-${p.id}`}
-                    title="View plugin details"
+                    title={t('pluginCard.details')}
                   >
                     <Icon name="eye" size={12} />
-                    <span>Details</span>
+                    <span>{t('pluginCard.details')}</span>
                   </button>
                   <button
                     type="button"
@@ -353,14 +363,14 @@ export function PluginLoopHome({ onSubmit }: Props) {
                     data-testid={`use-example-${p.id}`}
                   >
                     {isPending
-                      ? 'Applying…'
+                      ? t('pluginCard.applying')
                       : hasQuery
                         ? isActive
-                          ? 'Reload example query'
-                          : 'Use example query'
+                          ? pluginLoopLocalLabel(locale, 'reloadExampleQuery')
+                          : t('pluginCard.useWithQuery')
                         : isActive
-                          ? 'Plugin active'
-                          : 'Use plugin'}
+                          ? pluginLoopLocalLabel(locale, 'pluginActive')
+                          : t('preview.usePlugin')}
                   </button>
                 </div>
               </div>

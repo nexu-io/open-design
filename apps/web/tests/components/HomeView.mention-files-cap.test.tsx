@@ -50,6 +50,8 @@ function stubContextFetch() {
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
   vi.unstubAllGlobals();
 });
 
@@ -81,7 +83,9 @@ describe('HomeView design-files mention picker', () => {
       },
     });
 
-    await waitFor(() => expect(screen.getByText('design-1.png')).toBeTruthy());
+    await waitFor(() => {
+      expect(within(screen.getByTestId('home-hero-staged-files')).getByText('design-1.png')).toBeTruthy();
+    });
 
     // Open the context picker with a query that matches every staged file.
     setHomeHeroPrompt('@design');
@@ -127,7 +131,9 @@ describe('HomeView design-files mention picker', () => {
         items: files.map((file) => ({ kind: 'file', getAsFile: () => file })),
       },
     });
-    await waitFor(() => expect(screen.getByText('design-1.png')).toBeTruthy());
+    await waitFor(() => {
+      expect(within(screen.getByTestId('home-hero-staged-files')).getByText('design-1.png')).toBeTruthy();
+    });
 
     setHomeHeroPrompt('@design');
     await settle();

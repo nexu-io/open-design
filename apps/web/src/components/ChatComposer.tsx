@@ -73,6 +73,7 @@ import {
 import { ComposerPluginPreview } from './ComposerPluginPreview';
 import { computeToolboxDetailPosition } from './composer-detail-position';
 import { PluginDetailsModal } from "./PluginDetailsModal";
+import { SkillDetailsModal } from './SkillDetailsModal';
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
 import { BUILT_IN_PETS, CUSTOM_PET_ID } from "./pet/pets";
 import {
@@ -463,6 +464,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // Detail modal — opened from a context chip click (kind === 'plugin')
     // or from the tools-menu "Details" affordance.
     const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
+    const [detailsSkill, setDetailsSkill] = useState<{
+      id: string;
+      summary?: SkillSummary | null;
+    } | null>(null);
     const [activeAppliedPlugin, setActiveAppliedPlugin] =
       useState<AppliedPluginSnapshot | null>(null);
     const pluginsSectionRef = useRef<PluginsSectionHandle | null>(null);
@@ -2257,9 +2262,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 setActiveAppliedPlugin(null);
               }}
               onChipDetails={(item: ContextItem) => {
-                if (item.kind !== 'plugin') return;
-                const record = installedPlugins.find((p) => p.id === item.id);
-                if (record) setDetailsRecord(record);
+                if (item.kind === 'plugin') {
+                  const record = installedPlugins.find((p) => p.id === item.id);
+                  if (record) setDetailsRecord(record);
+                  return;
+                }
+                if (item.kind === 'skill') {
+                  setDetailsSkill({
+                    id: item.id,
+                    summary: skills.find((skill) => skill.id === item.id) ?? null,
+                  });
+                }
               }}
             />
           ) : null}
@@ -2293,6 +2306,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onPluginDetails={(id) => {
                 const record = installedPlugins.find((plugin) => plugin.id === id);
                 if (record) setDetailsRecord(record);
+              }}
+              onSkillDetails={(id) => {
+                setDetailsSkill({
+                  id,
+                  summary: stagedSkills.find((skill) => skill.id === id)
+                    ?? skills.find((skill) => skill.id === id)
+                    ?? null,
+                });
               }}
               t={t}
             />
@@ -2441,6 +2462,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onAddPlugin={() => {
                 trackComposerBar({ element: 'plus_add', resource_kind: 'plugin' });
                 onBrowsePlugins?.();
+              }}
+              skills={skills}
+              onPickSkill={(skill) => {
+                trackComposerBar({
+                  element: 'plus_pick',
+                  resource_kind: 'skill',
+                  resource_id: skill.id,
+                });
+                void insertSkillMention(skill);
               }}
               mcpServers={enabledMcpServers}
               onPickMcp={(server) => {
@@ -2593,7 +2623,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 data-tooltip={t('chat.stop')}
                 aria-label={t('chat.stop')}
               >
-                <Icon name="stop" size={13} />
+                <Icon name="stop" size={16} />
                 <span>{t('chat.stop')}</span>
               </button>
             ) : null}
@@ -2615,7 +2645,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 title={t('chat.send')}
                 data-tooltip={t('chat.send')}
               >
-                <Icon name="send" size={13} />
+                <Icon name="send" size={16} />
                 <span>{t('chat.send')}</span>
               </button>
             ) : null}
@@ -2659,6 +2689,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             }}
             onDuplicate={(record) => void duplicateDetailsPlugin(record)}
             hideUseAction
+          />
+        ) : null}
+        {detailsSkill ? (
+          <SkillDetailsModal
+            skillId={detailsSkill.id}
+            summary={detailsSkill.summary}
+            onClose={() => setDetailsSkill(null)}
           />
         ) : null}
         {libraryPickerOpen ? (
@@ -2991,6 +3028,7 @@ function StagedRunContexts({
   onRemoveAttachment,
   onRemovePlugin,
   onPluginDetails,
+  onSkillDetails,
   t,
 }: {
   designSystemPicker?: ReactNode;
@@ -3009,6 +3047,7 @@ function StagedRunContexts({
   onRemoveAttachment: (path: string) => void;
   onRemovePlugin?: () => void;
   onPluginDetails?: (id: string) => void;
+  onSkillDetails?: (id: string) => void;
   t: TranslateFn;
 }) {
   // Attachment thumbnails preview in a portal modal; keep that state here so the
@@ -3101,12 +3140,18 @@ function StagedRunContexts({
           key={s.id}
           className={`staged-chip staged-context staged-context--skill staged-skill-${s.source ?? 'built-in'}`}
         >
-          <span className="staged-icon" aria-hidden>
-            <Icon name="sparkles" size={12} />
-          </span>
-          <span className="staged-name" title={s.description || s.name}>
-            @{s.name}
-          </span>
+          <button
+            type="button"
+            className="staged-context-open"
+            onClick={() => onSkillDetails?.(s.id)}
+            title={s.description || s.name}
+            aria-label={s.name}
+          >
+            <span className="staged-icon" aria-hidden>
+              <Icon name="sparkles" size={12} />
+            </span>
+            <span className="staged-name">@{s.name}</span>
+          </button>
           <button
             type="button"
             className="staged-remove od-tooltip"

@@ -110,6 +110,8 @@ export interface RegisterPluginRoutesDeps {
   projectStore: {
     insertProject(db: SqliteDbLike, project: unknown): Project | null;
     getProject(db: SqliteDbLike, id: string): Project | null;
+    dbDeleteProject(db: SqliteDbLike, id: string): unknown;
+    removeProjectDir(projectsRoot: string, projectId: string): Promise<unknown>;
   };
   conversations: {
     insertConversation(db: SqliteDbLike, conversation: unknown): unknown;
@@ -177,6 +179,8 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
   app.post('/api/plugins/:id/upgrade', async (req, res) => helpers.installOrUpgradePlugin(req, res, 'upgrade'));
   app.post('/api/plugins/:id/apply', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {}; const inputs = body.inputs && typeof body.inputs === 'object' ? body.inputs : {}; const grantCaps = Array.isArray(body.grantCaps) ? body.grantCaps.filter((c: unknown): c is string => typeof c === 'string') : []; const locale = typeof body.locale === 'string' ? body.locale : undefined; const registry = await helpers.loadPluginRegistryView(); const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService); const computed = plugins.applyPlugin({ plugin, inputs, registry, locale, connectorProbe }); if (grantCaps.length > 0) { const merged = new Set([...computed.result.capabilitiesGranted, ...grantCaps]); computed.result.capabilitiesGranted = Array.from(merged); computed.result.appliedPlugin.capabilitiesGranted = Array.from(merged); } res.json({ ok: true, ...computed.result, warnings: computed.warnings, manifestSourceDigest: computed.manifestSourceDigest }); } catch (err: unknown) { if (err instanceof plugins.MissingInputError) return res.status(422).json({ error: 'missing_inputs', fields: err.fields }); res.status(500).json({ error: String(err) }); } });
   app.post('/api/plugins/:id/duplicate-project', helpers.requireLocalDaemonRequest, async (req, res) => {
+    let cleanupProjectId: string | null = null;
+    let insertedProject = false;
     try {
       const pluginId = Array.isArray(req.params.id) ? req.params.id[0] ?? '' : req.params.id ?? '';
       const plugin = plugins.getInstalledPlugin(db, pluginId);
@@ -193,6 +197,7 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       const now = Date.now();
       const projectId = ids.randomId();
       const conversationId = ids.randomId();
+      cleanupProjectId = projectId;
       const metadata: ProjectMetadata = {
         kind: 'prototype',
         templateId: `plugin:${plugin.id}`,
@@ -219,6 +224,7 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
         createdAt: now,
         updatedAt: now,
       });
+      insertedProject = true;
       conversations.insertConversation(db, {
         id: conversationId,
         projectId,
@@ -227,7 +233,13 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
         updatedAt: now,
       });
       const loadedProject = projectStore.getProject(db, projectId) ?? project;
-      if (!loadedProject) return res.status(500).json({ error: { code: 'project-load-failed', message: 'created project could not be loaded' } });
+      if (!loadedProject) {
+        throw new PluginDuplicateProjectError(
+          500,
+          'project-load-failed',
+          'created project could not be loaded',
+        );
+      }
       const response: PluginDuplicateProjectResponse = {
         ok: true,
         projectId,
@@ -242,6 +254,10 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       };
       res.status(201).json(response);
     } catch (err: unknown) {
+      if (cleanupProjectId) {
+        if (insertedProject) projectStore.dbDeleteProject(db, cleanupProjectId);
+        await projectStore.removeProjectDir(paths.PROJECTS_DIR, cleanupProjectId).catch(() => {});
+      }
       if (err instanceof PluginDuplicateProjectError) {
         return res.status(err.status).json({ error: { code: err.code, message: err.message } });
       }

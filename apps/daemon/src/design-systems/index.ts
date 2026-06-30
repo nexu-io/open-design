@@ -1118,7 +1118,7 @@ export async function createUserDesignSystem(
   input: UserDesignSystemInput,
 ): Promise<DesignSystemSummary> {
   const title = normalizeTitle(input.title);
-  const dirId = await uniqueSlug(root, slugify(title));
+  const { dirId, dir } = await reserveUniqueSlugDirectory(root, slugify(title));
   const now = new Date().toISOString();
   const provenance = normalizeProvenance(input.provenance, {
     ...(input.summary ? { companyBlurb: input.summary } : {}),
@@ -1131,37 +1131,43 @@ export async function createUserDesignSystem(
     sourceNotes,
   });
   const surface = input.surface ?? extractSurface(body) ?? 'web';
-  await mkdir(path.join(root, dirId), { recursive: true });
-  await writeFile(path.join(root, dirId, 'DESIGN.md'), body, 'utf8');
-  const artifactMode = normalizeArtifactMode(input.artifactMode);
-  await writeUserMetadata(root, dirId, {
-    title,
-    category: cleanText(input.category) || extractCategory(body) || 'Custom',
-    surface,
-    status: input.status ?? 'draft',
-    ...(artifactMode ? { artifactMode } : {}),
-    createdAt: now,
-    updatedAt: now,
-    ...(provenance ? { provenance } : {}),
-  });
-  if (artifactMode !== 'agent-managed') {
-    await writeGeneratedDesignSystemFiles(root, dirId, {
+  let createdDir = false;
+  try {
+    createdDir = true;
+    await writeFile(path.join(dir, 'DESIGN.md'), body, 'utf8');
+    const artifactMode = normalizeArtifactMode(input.artifactMode);
+    await writeUserMetadata(root, dirId, {
       title,
       category: cleanText(input.category) || extractCategory(body) || 'Custom',
       surface,
-      summary: summarize(body),
+      status: input.status ?? 'draft',
+      ...(artifactMode ? { artifactMode } : {}),
+      createdAt: now,
+      updatedAt: now,
       ...(provenance ? { provenance } : {}),
-      ...(sourceNotes ? { sourceNotes } : {}),
-      body,
     });
+    if (artifactMode !== 'agent-managed') {
+      await writeGeneratedDesignSystemFiles(root, dirId, {
+        title,
+        category: cleanText(input.category) || extractCategory(body) || 'Custom',
+        surface,
+        summary: summarize(body),
+        ...(provenance ? { provenance } : {}),
+        ...(sourceNotes ? { sourceNotes } : {}),
+        body,
+      });
+    }
+    const listed = await listDesignSystems(root, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    });
+    return listed.find((s) => s.id === `user:${dirId}`)!;
+  } catch (err) {
+    if (createdDir) await rm(dir, { recursive: true, force: true });
+    throw err;
   }
-  const listed = await listDesignSystems(root, {
-    idPrefix: 'user:',
-    source: 'user',
-    isEditable: true,
-    defaultStatus: 'draft',
-  });
-  return listed.find((s) => s.id === `user:${dirId}`)!;
 }
 
 export async function updateUserDesignSystem(
@@ -2666,6 +2672,31 @@ async function uniqueSlug(root: string, base: string): Promise<string> {
       return candidate;
     }
   }
+}
+
+async function reserveUniqueSlugDirectory(root: string, base: string): Promise<{ dirId: string; dir: string }> {
+  await mkdir(root, { recursive: true });
+  let candidate = base || 'design-system';
+  let index = 2;
+  for (;;) {
+    const dir = path.join(root, candidate);
+    try {
+      await mkdir(dir);
+      return { dirId: candidate, dir };
+    } catch (err) {
+      if (!isNodeErrorCode(err, 'EEXIST')) throw err;
+      candidate = `${base || 'design-system'}-${index++}`;
+    }
+  }
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: unknown }).code === code,
+  );
 }
 
 function slugify(raw: string): string {

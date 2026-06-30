@@ -174,12 +174,12 @@ describe('DesignFilesPanel sections', () => {
     expect(tsRow.querySelector('.df-row-sub')?.textContent).toBe('Script');
   });
 
-  it('shows the type as the row subtitle instead of file size', () => {
+  it('shows the file size beside the modified time while preserving the type subtitle', () => {
     renderPanel([file({ name: 'chart.png', kind: 'image', size: 4096 })]);
 
     const row = screen.getByTestId('design-file-row-chart.png');
     expect(row.querySelector('.df-row-sub')?.textContent).toBe('Image');
-    expect(row.textContent).not.toContain('KB');
+    expect(row.querySelector('.df-row-size')?.textContent).toBe('4.0 KB');
   });
 
   it('shows the upload hint in the footer while idle', () => {

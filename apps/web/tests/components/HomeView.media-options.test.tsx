@@ -55,6 +55,8 @@ const PROMPT_TEMPLATES: PromptTemplateSummary[] = [
 afterEach(() => {
   vi.unstubAllGlobals();
   cleanup();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 
 describe('HomeView media composer options', () => {
@@ -67,12 +69,13 @@ describe('HomeView media composer options', () => {
 
     expect(screen.queryByTestId('session-mode-trigger')).toBeNull();
 
-    await setHomePrompt('Create a dashboard.');
+    await setHomePrompt('Create a clean loading animation');
     await submitHome();
-    await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
-        conversationMode: 'design',
-      }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
+      prompt: 'Create a clean loading animation',
+      conversationMode: 'design',
     });
   });
 

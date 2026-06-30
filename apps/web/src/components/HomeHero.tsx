@@ -23,7 +23,6 @@ import type {
   RefObject,
 } from 'react';
 import type {
-  ChatSessionMode,
   ConnectorDetail,
   DesignSystemSummary,
   InputFieldSpec,
@@ -90,8 +89,8 @@ import {
 import { CaretFloatingLayer } from './composer/CaretFloatingLayer';
 import { PlaceholderCarousel } from './home-hero/PlaceholderCarousel';
 import {
+  buildPlaceholderScenarios,
   PLACEHOLDER_BASE_HINT_KEY,
-  PLACEHOLDER_SCENARIO_DEFS,
   type PlaceholderScenario,
 } from './home-hero/placeholderScenarios';
 
@@ -131,8 +130,6 @@ interface Props {
   // showing: the host seeds the prompt with `scenario.text`, binds the
   // scenario's template, and creates the project -- one-click "just start".
   onSubmitScenario?: (scenario: PlaceholderScenario) => void;
-  sessionMode?: ChatSessionMode;
-  onSessionModeChange?: (mode: ChatSessionMode) => void;
   activePluginTitle: string | null;
   // True when the active plugin chip shows a user-picked plugin (Community card
   // or example-prompt preset) rather than a task-type chip's default plugin —
@@ -144,6 +141,7 @@ interface Props {
   onClearActiveChip?: () => void;
   activeSkillId?: string | null;
   activeSkillTitle?: string | null;
+  activeSkillRecord?: SkillSummary | null;
   onClearActiveSkill?: () => void;
   selectedPluginContexts?: InstalledPluginRecord[];
   selectedMcpContexts?: McpServerConfig[];
@@ -162,6 +160,7 @@ interface Props {
   onAddConnector?: () => void;
   onAddMcp?: () => void;
   onOpenPluginDetails?: (record: InstalledPluginRecord) => void;
+  onOpenSkillDetails?: (skill: SkillSummary) => void;
   pluginInputFields?: InputFieldSpec[];
   pluginInputValues?: Record<string, unknown>;
   pluginInputTemplate?: string | null;
@@ -272,6 +271,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     activePluginRecord = null,
     activeSkillId = null,
     activeSkillTitle = null,
+    activeSkillRecord = null,
     activeChipId,
     onClearActivePlugin,
     onClearActiveChip = onClearActivePlugin,
@@ -287,6 +287,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onAddConnector = () => undefined,
     onAddMcp = () => undefined,
     onOpenPluginDetails = () => undefined,
+    onOpenSkillDetails = () => undefined,
     pluginInputFields = EMPTY_INPUT_FIELDS,
     pluginInputValues = EMPTY_PLUGIN_INPUT_VALUES,
     onPluginInputValuesChange = () => undefined,
@@ -394,21 +395,21 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // with nothing bound we cycle the full set. Memoised by chip + locale so the
   // reference only changes on a real switch, which restarts the carousel.
   const carouselScenarios = useMemo<PlaceholderScenario[]>(() => {
-    const resolved = PLACEHOLDER_SCENARIO_DEFS.map((def) => ({
-      id: def.id,
-      chipId: def.chipId,
-      text: t(def.textKey),
-    }));
-    return activeChipId
-      ? resolved.filter((scenario) => scenario.chipId === activeChipId)
-      : resolved;
-  }, [activeChipId, t]);
+    return buildPlaceholderScenarios({
+      activeChipId,
+      resolveTextKey: (key) => t(key),
+      examplesForChip: (chipId) => homeHeroChipPromptExamples(chipId, locale),
+      fallbackForChip: (chipId) => fallbackPlaceholderScenarioText(chipId, locale, t),
+    });
+  }, [activeChipId, locale, t]);
   // The placeholder carousel runs while the composer is empty and nothing
   // OTHER than a create-template chip is bound. A selected template keeps it
   // alive (showing that template's scenarios); only an explicit plugin/skill
   // pick — which owns its own placeholder — or a non-empty composer stops it.
-  // Media/live-artifact templates carry no scenarios, so the pool is empty and
-  // the editor falls back to its own placeholder there.
+  // Template types without curated carousel lines fall back to their localized
+  // prompt examples, then to a localized chip-label prompt. That keeps every
+  // create template submittable from an empty composer instead of silently
+  // disabling Send.
   const carouselActive =
     active &&
     !submitting &&
@@ -1061,14 +1062,21 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     if (activePluginRecord) onOpenPluginDetails(activePluginRecord);
   }
 
-  // plugin/MCP/connector contexts now render as inline @mention pills in the
-  // composer, so they no longer drive this top row — only staged files (which
-  // have no inline representation) and the active plugin/skill/example chips do.
+  function openActiveSkillDetails() {
+    if (activeSkillRecord) onOpenSkillDetails(activeSkillRecord);
+  }
+
+  // Inline-backed plugin/MCP/connector contexts already render as @mention pills
+  // in the editor. This row should mount only for content that has a visible chip
+  // here; the aggregate context count is just an aria label when the row exists.
+  const showActivePluginRow = Boolean(showActivePluginChip && activePluginTitle);
   const showActiveContextRow =
-    contextItemCount > 0 ||
-    (showActivePluginChip && activePluginTitle) ||
-    activeSkillTitle ||
-    stagedFiles.length > 0;
+    stagedFiles.length > 0 ||
+    showActivePluginRow ||
+    Boolean(activeSkillTitle) ||
+    contextOnlyPlugins.length > 0 ||
+    contextOnlyMcpServers.length > 0 ||
+    contextOnlyConnectors.length > 0;
 
   let optionRenderIndex = 0;
 
@@ -1176,7 +1184,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 })}
               </span>
             ) : null}
-            {showActivePluginChip && activePluginTitle ? (
+            {showActivePluginRow ? (
               <span className="home-hero__active-chip" data-testid="home-hero-active-plugin">
                 <button
                   type="button"
@@ -1225,10 +1233,26 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 className="home-hero__active-chip home-hero__active-chip--skill"
                 data-testid="home-hero-active-skill"
               >
-                <span className="home-hero__active-icon" aria-hidden>
-                  <Icon name="sparkles" size={12} />
-                </span>
-                <span className="home-hero__active-label">{t('homeHero.skillPrefix', { title: activeSkillTitle })}</span>
+                <button
+                  type="button"
+                  className="home-hero__active-chip-body"
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    openActiveSkillDetails();
+                  }}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    openActiveSkillDetails();
+                  }}
+                  onClick={openActiveSkillDetails}
+                  disabled={!activeSkillRecord}
+                  title={activeSkillRecord ? activeSkillRecord.description || activeSkillTitle : undefined}
+                >
+                  <span className="home-hero__active-icon" aria-hidden>
+                    <Icon name="sparkles" size={12} />
+                  </span>
+                  <span className="home-hero__active-label">{t('homeHero.skillPrefix', { title: activeSkillTitle })}</span>
+                </button>
                 <button
                   type="button"
                   className="home-hero__active-clear od-tooltip"
@@ -1537,6 +1561,17 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   resource_kind: 'plugin',
                 });
                 onAddPlugin();
+              }}
+              skills={skillOptions}
+              onPickSkill={(skill) => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_pick',
+                  resource_kind: 'skill',
+                  resource_id: skill.id,
+                });
+                pickSkill(skill);
               }}
               mcpServers={mcpOptions}
               onPickMcp={(server) => {
@@ -3161,6 +3196,26 @@ function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): st
     case 'create-brand-kit': return t('homeHero.chip.createBrandKitDesc');
     default: return '';
   }
+}
+
+function fallbackPlaceholderScenarioText(
+  chipId: string,
+  locale: Locale,
+  t: ReturnType<typeof useT>,
+): string | null {
+  const label = homeHeroChipLabel(chipId, t).trim();
+  if (!label || label === chipId) return null;
+  const description = homeHeroChipDescription(chipId, t).trim();
+  const kind = promptLocaleKind(locale);
+  if (kind === 'zh') {
+    return description ? `创建一个${label}：${description}` : `创建一个${label}`;
+  }
+  if (kind === 'ja') {
+    return description ? `${label}を作成する：${description}` : `${label}を作成する`;
+  }
+  return description
+    ? `Create ${englishArticle(label)} ${label}: ${description}`
+    : `Create ${englishArticle(label)} ${label}`;
 }
 
 // The hover "what happens next" line — describes how the scenario will be

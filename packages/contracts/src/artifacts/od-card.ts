@@ -122,9 +122,9 @@ export interface OdCardRuleProposal {
 }
 
 /** A client-action card shown when brand extraction is blocked by an anti-bot
- *  wall: it asks the user to solve the challenge in the in-app browser tab, then
- *  its Confirm button (handled client-side, NOT round-tripped to the agent)
- *  reads the unblocked DOM and re-runs extraction from it. */
+ *  wall: it opens/focuses the in-app browser tab so the user can solve the
+ *  challenge, then the normal continue-extraction action reads the unblocked
+ *  DOM and re-runs extraction from it. */
 export interface OdCardBrandBrowserAssist {
   kind: 'brand-browser-assist';
   /** Brand whose extraction to re-run from the rendered page. */

@@ -62,6 +62,51 @@ export const PLACEHOLDER_SCENARIO_DEFS: ReadonlyArray<PlaceholderScenarioDef> = 
   { id: 'landing-layout', textKey: 'homeHero.carousel.landingLayout', chipId: 'wireframe' },
 ];
 
+export interface BuildPlaceholderScenariosInput {
+  activeChipId: string | null;
+  resolveTextKey: (key: keyof Dict) => string;
+  examplesForChip?: (chipId: string) => ReadonlyArray<string>;
+  fallbackForChip?: (chipId: string) => string | null;
+  scenarioDefs?: ReadonlyArray<PlaceholderScenarioDef>;
+}
+
+export function buildPlaceholderScenarios({
+  activeChipId,
+  resolveTextKey,
+  examplesForChip = () => [],
+  fallbackForChip = () => null,
+  scenarioDefs = PLACEHOLDER_SCENARIO_DEFS,
+}: BuildPlaceholderScenariosInput): PlaceholderScenario[] {
+  if (activeChipId) {
+    const chipScenarioDefs = scenarioDefs.filter((def) => def.chipId === activeChipId);
+    if (chipScenarioDefs.length > 0) {
+      return chipScenarioDefs.map((def) => ({
+        id: def.id,
+        chipId: def.chipId,
+        text: resolveTextKey(def.textKey),
+      }));
+    }
+    const examples = examplesForChip(activeChipId);
+    if (examples.length > 0) {
+      return examples.map((text, index) => ({
+        id: `${activeChipId}-prompt-example-${index + 1}`,
+        chipId: activeChipId,
+        text,
+      }));
+    }
+    const fallback = fallbackForChip(activeChipId);
+    return fallback
+      ? [{ id: `${activeChipId}-fallback`, chipId: activeChipId, text: fallback }]
+      : [];
+  }
+
+  return scenarioDefs.map((def) => ({
+    id: def.id,
+    chipId: def.chipId,
+    text: resolveTextKey(def.textKey),
+  }));
+}
+
 // ---- Typewriter state machine (pure, so it is unit-testable) --------------
 
 export type TypewriterPhase = 'typing' | 'holding' | 'deleting' | 'pausing';
