@@ -15,6 +15,7 @@ import type {
   ImportFolderRequest,
   ImportFolderResponse,
   InstalledPluginRecord,
+  PluginDuplicateProjectResponse,
   PluginInstallOutcome,
   PluginShareAction,
   ProjectPluginFolderInstallRequest,
@@ -695,6 +696,28 @@ export async function listPlugins(
 export function isVisiblePlugin(plugin: InstalledPluginRecord): boolean {
   const od = (plugin.manifest?.od ?? {}) as Record<string, unknown>;
   return od.hidden !== true;
+}
+
+export async function duplicatePluginAsProject(
+  pluginId: string,
+  input: { name?: string } = {},
+): Promise<PluginDuplicateProjectResponse> {
+  const resp = await fetch(
+    `/api/plugins/${encodeURIComponent(pluginId)}/duplicate-project`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!resp.ok) {
+    throw new Error(await readErrorMessage(resp));
+  }
+  const json = (await resp.json()) as PluginDuplicateProjectResponse;
+  if (!json?.ok || !json.projectId) {
+    throw new Error('Could not duplicate this template.');
+  }
+  return json;
 }
 
 interface PluginInstallEvent {

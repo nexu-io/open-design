@@ -658,9 +658,15 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
 
       const inspect = await measureSmokeStep(timings, 'wait healthy inspect eval', async () => waitForHealthyDesktop());
       expect(inspect.status?.state).toBe('running');
-      expect(inspect.status?.url).toBe('od://app/');
+      // A fresh install boots at `od://app/` and the SPA immediately redirects to the dedicated
+      // onboarding route (`od://app/onboarding`, since the #4513 cloud sign-in redesign). Whether
+      // the desktop is reported healthy just before or just after that redirect is a race, so the
+      // healthy URL/href may be either — match the prefix leniently exactly as the mac smoke and
+      // the onboarding-landing assertion below do, instead of pinning the bare root (which flaked
+      // ~3 of 4 nightly Windows builds when the redirect won the race).
+      expect(inspect.status?.url).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
       const health = assertHealthEvalValue(inspect.eval?.value);
-      expect(health.href).toBe('od://app/');
+      expect(health.href).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
       expect(health.status).toBe(200);
       expect(health.health.ok).toBe(true);
 
@@ -671,7 +677,13 @@ winOnboardingDescribe('packaged windows onboarding AMR smoke', () => {
         snapshot.byokLinkVisible,
         'fresh packaged Windows onboarding cloud sign-in landing',
       );
-      expect(initial.href).toBe('od://app/');
+      // Onboarding lives on a dedicated route since the #4513 cloud sign-in
+      // redesign, so the href is `od://app/onboarding` (packaged) — not the
+      // bare app root. Match the prefix the same lenient way the mac smoke
+      // does instead of pinning the exact root path. Before the user-data
+      // reset fix the app booted to Home and never reached this line, which
+      // is why the stale exact-match assertion went unnoticed.
+      expect(initial.href).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
       expect(initial.cloudSignInVisible).toBe(true);
       expect(initial.localLinkVisible).toBe(true);
       expect(initial.byokLinkVisible).toBe(true);

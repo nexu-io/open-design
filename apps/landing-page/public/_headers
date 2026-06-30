@@ -77,3 +77,7 @@
 # Newsletter subscribe function writes to KV — must not be cached.
 /subscribe
   Cache-Control: no-store
+
+# Contact-sales (Workspace-for-Teams leads) function writes to KV — no caching.
+/contact-sales
+  Cache-Control: no-store

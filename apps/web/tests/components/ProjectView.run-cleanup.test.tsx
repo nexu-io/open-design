@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { ComponentProps } from 'react';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -36,6 +37,7 @@ const patchConversation = vi.fn();
 const patchProject = vi.fn();
 const saveTabs = vi.fn();
 const writeProjectTextFile = vi.fn();
+const cancelBrandExtraction = vi.fn();
 
 const replayArtifact: Artifact = {
   identifier: 'real-daemon-smoke',
@@ -120,6 +122,14 @@ vi.mock('../../src/providers/registry', () => ({
 vi.mock('../../src/providers/project-events', () => ({
   useProjectFileEvents: vi.fn(),
 }));
+
+vi.mock('../../src/runtime/brands', async () => {
+  const actual = await vi.importActual<typeof import('../../src/runtime/brands')>('../../src/runtime/brands');
+  return {
+    ...actual,
+    cancelBrandExtraction: (...args: unknown[]) => cancelBrandExtraction(...args),
+  };
+});
 
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
@@ -333,6 +343,7 @@ describe('retry target resolution', () => {
 describe('ProjectView daemon cleanup', () => {
   beforeEach(() => {
     listProjectRuns.mockResolvedValue([]);
+    cancelBrandExtraction.mockResolvedValue({ ok: true, status: 'failed' });
   });
 
   afterEach(() => {
@@ -706,6 +717,187 @@ describe('ProjectView daemon cleanup', () => {
       expect(seededCall).toBeUndefined();
     } finally {
       window.sessionStorage.removeItem('od:auto-send-first:project-2');
+    }
+  });
+
+  it('reloads an empty brand-extraction transcript without auto-sending the fallback prompt', async () => {
+    const programmaticMessages: ChatMessage[] = [
+      {
+        id: 'brand-user-1',
+        role: 'user',
+        content: 'Extract a design system from https://refly.ai/.',
+        createdAt: 1,
+      },
+      {
+        id: 'brand-assistant-1',
+        role: 'assistant',
+        content: 'Programmatic design-system extraction started from https://refly.ai/.',
+        createdAt: 1,
+        startedAt: 1,
+        runStatus: 'running',
+      },
+    ];
+    listConversations.mockResolvedValue([{ id: 'conv-brand', title: 'Conversation' }]);
+    listMessages
+      .mockResolvedValueOnce([])
+      .mockResolvedValue(programmaticMessages);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: ['brand.html'], activeTabId: 'brand.html' });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+
+    window.sessionStorage.setItem('od:auto-send-first:brand-project', '1');
+
+    render(
+      <ProjectView
+        project={{
+          id: 'brand-project',
+          name: 'refly.ai Design System',
+          skillId: null,
+          designSystemId: null,
+          pendingPrompt: 'Extract refly.ai into a design system.',
+          metadata: {
+            kind: 'brand',
+            importedFrom: 'brand-extraction',
+            brandId: 'refly-ai',
+            brandSourceUrl: 'https://refly.ai/',
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.messages).toEqual(programmaticMessages);
+    });
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.streaming).toBe(true);
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
+    const latestChatPaneProps = chatPaneSpy.mock.calls.at(-1)?.[0] as {
+      onStop?: () => void;
+    };
+    latestChatPaneProps.onStop?.();
+    await waitFor(() => expect(cancelBrandExtraction).toHaveBeenCalledWith('refly-ai'));
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'brand-project',
+        'conv-brand',
+        expect.objectContaining({
+          id: 'brand-assistant-1',
+          runStatus: 'canceled',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem('od:auto-send-first:brand-project')).toBeNull();
+  });
+
+  it('waits for pendingPrompt hydration before consuming an auto-send flag', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+
+    chatPaneSpy.mockClear();
+    const onClearPendingPrompt = vi.fn();
+    window.sessionStorage.setItem('od:auto-send-first:project-hydrating', '1');
+
+    const baseProps = {
+      project: {
+        id: 'project-hydrating',
+        name: 'Ramp.com Design System',
+        skillId: null,
+        designSystemId: null,
+      } as never,
+      routeFileName: null,
+      config: { mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never,
+      agents: [{ id: 'agent-1', name: 'OpenCode', models: [] } as never],
+      skills: [],
+      designTemplates: [],
+      designSystems: [],
+      daemonLive: true,
+      onModeChange: () => {},
+      onAgentChange: () => {},
+      onAgentModelChange: () => {},
+      onRefreshAgents: () => {},
+      onOpenSettings: () => {},
+      onBack: () => {},
+      onClearPendingPrompt,
+      onTouchProject: () => {},
+      onProjectChange: () => {},
+      onProjectsRefresh: () => {},
+    } satisfies ComponentProps<typeof ProjectView>;
+
+    try {
+      const view = render(<ProjectView {...baseProps} />);
+
+      await waitFor(() => {
+        expect(chatPaneSpy).toHaveBeenCalled();
+        expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
+      });
+      expect(streamViaDaemon).not.toHaveBeenCalled();
+      expect(onClearPendingPrompt).not.toHaveBeenCalled();
+      expect(window.sessionStorage.getItem('od:auto-send-first:project-hydrating')).toBe('1');
+
+      view.rerender(
+        <ProjectView
+          {...baseProps}
+          project={{
+            id: 'project-hydrating',
+            name: 'Ramp.com Design System',
+            skillId: null,
+            designSystemId: null,
+            createdAt: 1,
+            updatedAt: 1,
+            pendingPrompt: 'Extract ramp.com into a design system.',
+          }}
+        />,
+      );
+
+      await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+      expect(onClearPendingPrompt).toHaveBeenCalledTimes(1);
+      expect(streamViaDaemon.mock.calls[0]?.[0]).toMatchObject({
+        history: [
+          expect.objectContaining({
+            role: 'user',
+            content: 'Extract ramp.com into a design system.',
+          }),
+        ],
+      });
+      expect(window.sessionStorage.getItem('od:auto-send-first:project-hydrating')).toBeNull();
+    } finally {
+      window.sessionStorage.removeItem('od:auto-send-first:project-hydrating');
     }
   });
 

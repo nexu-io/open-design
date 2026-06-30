@@ -104,7 +104,7 @@ describe('classifyRunFailure', () => {
     ).toEqual({
       failure_category: 'user_cancel',
       failure_detail: 'user_cancelled',
-      failure_stage: 'finalize',
+      failure_stage: 'first_token_wait',
       retryable: false,
       user_action: 'none',
     });
@@ -134,9 +134,25 @@ describe('classifyRunFailure', () => {
     ).toEqual({
       failure_category: 'user_cancel',
       failure_detail: 'user_cancelled',
-      failure_stage: 'finalize',
+      failure_stage: 'first_token_wait',
       retryable: false,
       user_action: 'none',
+    });
+  });
+
+  it('uses phase evidence for cancelled runs with tool activity', () => {
+    expect(
+      classifyRunFailure({
+        result: 'cancelled',
+        status: { status: 'canceled' },
+        events: [
+          { event: 'agent', data: { type: 'text_delta', delta: 'working' } },
+          { event: 'agent', data: { type: 'tool_use', id: 'tool-1', name: 'Read' } },
+        ],
+      }),
+    ).toMatchObject({
+      failure_category: 'user_cancel',
+      failure_stage: 'tool_execution',
     });
   });
 
@@ -762,6 +778,20 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
       failure_stage: 'first_token_wait',
       retryable: true,
       user_action: 'retry',
+    });
+  });
+
+  it('uses artifact phase evidence for timeout after artifact output', () => {
+    expect(
+      classify('TIMEOUT', 'Agent timed out.', [
+        { event: 'agent', data: { type: 'text_delta', delta: 'done' } },
+        { event: 'agent', data: { type: 'artifact', path: 'index.html' } },
+        errorEvent('TIMEOUT', 'Agent timed out.', true),
+      ]),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_stage: 'artifact_write',
+      retryable: true,
     });
   });
 

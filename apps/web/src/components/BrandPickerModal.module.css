@@ -1,0 +1,120 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(26, 25, 22, 0.32);
+  animation: bpmBackdropIn var(--dur-enter, 200ms) var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+
+@keyframes bpmBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal {
+  width: 100%;
+  max-width: 860px;
+  /* Stable, spacious dialog with a bounded height; the brand gallery scrolls
+     internally (fillHeight) while the header stays pinned. */
+  height: min(680px, 84vh);
+  display: flex;
+  flex-direction: column;
+  padding: 22px 24px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
+  animation: bpmModalIn var(--dur-enter, 200ms) var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+
+@keyframes bpmModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .modal {
+    animation: none;
+  }
+}
+
+.head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.headText {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color 140ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+    color 140ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+
+.close:hover,
+.close:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+
+/* The whole picker (popular brands, search, filters, and gallery) flows and
+   scrolls together here, so the modal reads as one scrolling surface rather
+   than a pinned head over a separately-scrolling list. Only the dialog header
+   (title/close) stays pinned above. Horizontal padding gives the cards' hover
+   lift + shadow breathing room against the scrollbar. */
+.pickerWrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  padding: 16px 4px 4px 2px;
+  border-top: 1px solid var(--border);
+}

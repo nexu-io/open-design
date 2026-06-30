@@ -92,7 +92,13 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(page.locator('.entry-brand')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
   await expect(page.getByTestId('home-hero-plus-trigger')).toBeVisible();
-  await expect(page.getByTestId('home-hero-submit')).toBeDisabled();
+  // Empty input can still run the active placeholder-carousel suggestion.
+  await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
+  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-design-system-picker')).toBeVisible();
+  await expect(page.getByTestId('working-dir-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-section')).toBeVisible();
+  await expect(page.getByTestId('home-hero-blank-project')).toBeVisible();
   const createTabs = page.getByTestId('home-hero-type-tabs');
   await expect(createTabs).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-prototype')).toBeVisible();
@@ -174,13 +180,14 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-nav-integrations')).toBeVisible();
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-plugins')).toHaveCount(0);
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-integrations')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-section')).toBeVisible();
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
   await expect(page.getByTestId('home-hero-active-type-chip')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-rail-prototype')).toHaveAttribute('aria-selected', 'false');
   await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
-  await expect(page.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('plugins-home-pill-category-prototype')).toHaveAttribute('aria-selected', 'false');
+  await expect(page.getByTestId('home-templates-hint')).toBeVisible();
   await expect(page.getByTestId('plugins-home-row-subcategory-prototype')).toHaveCount(0);
 });
 
@@ -196,7 +203,9 @@ test('[P1] home view exposes the redesigned hero, recent projects, and starters'
   await expect(page.getByTestId('recent-projects-view-all')).toBeVisible();
   await expect(home.getByTestId('plugins-home-section')).toBeVisible();
   await expect(home.getByTestId('plugins-home-browse-registry')).toBeVisible();
+  await expect(home.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-templates-hint')).toHaveCount(0);
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
 
   await ensureRailOpen(page);
@@ -274,6 +283,9 @@ test('[P1] design systems page is reachable from entry nav and supports search, 
   await expect(page.getByTestId('design-system-card-agentic')).toHaveCount(0);
   await page.getByTestId('design-systems-surface-all').click();
 
+  // Master-detail: selecting a list row renders that system in the right
+  // preview pane, where the full-preview and "set as default" actions live.
+  await page.getByTestId('design-system-card-airbnb').click();
   await page.getByTestId('design-system-preview-airbnb').click();
   const preview = page.getByRole('dialog', { name: /Airbnb preview/i });
   await expect(preview).toBeVisible();
@@ -436,7 +448,7 @@ test('[P2] entry help menu exposes community links and topbar routes Use everywh
   );
   await expect(menu.getByRole('menuitem', { name: /Join Discord/i })).toHaveAttribute(
     'href',
-    'https://discord.gg/9ptkbbqRu',
+    'https://discord.gg/mHAjSMV6gz',
   );
 
   await page.getByTestId('entry-use-everywhere-button').click();
@@ -1162,12 +1174,10 @@ test('[P0] @critical required home plugin prompt parameters gate submit and bind
   expect(applyBodies.at(-1)?.inputs).toMatchObject(body.pluginInputs ?? {});
 });
 
-test('[P0] @critical home Ask mode creates a chat conversation without the default design router plugin', async ({ page }) => {
+test('[P0] @critical home composer routes free-form prompts through the design router by default', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await page.getByTestId('session-mode-trigger').click();
-  await page.getByRole('menuitemradio', { name: 'Ask mode' }).click();
-  await expect(page.getByTestId('session-mode-trigger')).toContainText('Ask');
+  await expect(page.getByTestId('session-mode-trigger')).toHaveCount(0);
 
   const input = page.getByTestId('home-hero-input');
   const prompt =
@@ -1187,8 +1197,8 @@ test('[P0] @critical home Ask mode creates a chat conversation without the defau
   };
   expect(body.name).toBe('Infographic 5 Habits Effective Code Reviewers');
   expect(body.pendingPrompt).toBe(prompt);
-  expect(body.conversationMode).toBe('chat');
-  expect(body.pluginId).toBeUndefined();
+  expect(body.conversationMode).toBe('design');
+  expect(body.pluginId).toBe('od-default');
   expect(body.metadata?.kind).toBe('other');
 });
 
@@ -1293,7 +1303,7 @@ test('[P0] @critical home hero input keeps Shift+Enter as a newline and submits 
   const input = page.getByTestId('home-hero-input');
   const submit = page.getByTestId('home-hero-submit');
 
-  await expect(submit).toBeDisabled();
+  await expect(submit).toBeEnabled();
   await input.click();
   await input.fill('Line one');
   await input.press('Shift+Enter');
@@ -1351,7 +1361,7 @@ test('[P0] @critical home hero attachment input stages files, enables submit, an
 
   const input = page.getByTestId('home-hero-file-input');
   const submit = page.getByTestId('home-hero-submit');
-  await expect(submit).toBeDisabled();
+  await expect(submit).toBeEnabled();
 
   await input.setInputFiles({
     name: 'brief.txt',
@@ -1366,7 +1376,7 @@ test('[P0] @critical home hero attachment input stages files, enables submit, an
 
   await page.getByRole('button', { name: /Remove brief\.txt/i }).click();
   await expect(staged).toHaveCount(0);
-  await expect(submit).toBeDisabled();
+  await expect(submit).toBeEnabled();
 });
 
 test('[P0] @critical home hero attachment-only submit uploads the file and sends it with the first message', async ({ page }) => {

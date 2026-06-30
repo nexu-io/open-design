@@ -250,6 +250,15 @@ export default defineConfig({
       filter: (page) => {
         if (page.includes('/og/')) return false;
         const path = new URL(page).pathname;
+        // Legacy catalog routes (/skills, /systems, /templates) now live
+        // under /plugins/* and are 301-redirected by `public/_redirects`,
+        // and legacy region-cased locale codes (zh-CN, zh-TW, es-ES, pt-BR)
+        // 301 to their canonical lowercase locale (/zh/, /es/). Their old
+        // page routes still build, so without this guard `@astrojs/sitemap`
+        // lists ~460 redirecting URLs. A sitemap must carry only final 200
+        // canonical URLs — never redirects — so drop these legacy prefixes.
+        if (/^\/(skills|systems|templates)\//.test(path)) return false;
+        if (/^\/(zh-CN|zh-TW|es-ES|pt-BR)\//.test(path)) return false;
         const localeMatch = path.match(/^\/([a-z]{2}(?:-[a-z]{2})?)\//);
         if (localeMatch) {
           const code = localeMatch[1];
@@ -286,11 +295,15 @@ export default defineConfig({
           item.priority = 0.9;
           item.changefreq = changefreq.weekly;
         } else if (
-          path === '/skills/' ||
-          path === '/systems/' ||
-          path === '/templates/' ||
           path === '/craft/' ||
-          path === '/plugins/'
+          path === '/plugins/' ||
+          // Canonical section hubs that the legacy /skills, /systems, and
+          // /templates roots now 301 to — keep them on the elevated catalog
+          // crawl hint (0.7 / weekly) rather than letting them fall through
+          // to the generic 0.5 / monthly default.
+          path === '/plugins/skills/' ||
+          path === '/plugins/systems/' ||
+          path === '/plugins/templates/'
         ) {
           item.priority = 0.7;
           item.changefreq = changefreq.weekly;

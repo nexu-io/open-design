@@ -7,6 +7,8 @@ import {
   buildDesignManifestContent,
   downloadImageDataUrl,
   buildSandboxedPreviewDocument,
+  downloadDesignSystemArchive,
+  downloadProjectArchive,
   exportAsImage,
   exportAsMd,
   exportAsPdf,
@@ -14,14 +16,114 @@ import {
   reportPrintSizeWhenStable,
   exportProjectAsHtml,
   exportProjectAsPdf,
+  exportProjectAsPptx,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
+  planDeckImageCapture,
   requestPreviewSnapshot,
+  sourceLooksLikeExportableDeck,
 } from '../../src/runtime/exports';
+
+describe('planDeckImageCapture (#4604 current-slide capture for runtime decks)', () => {
+  it('whole-deck capture renders off-screen with no index (stitch all)', () => {
+    expect(planDeckImageCapture({ deck: true, wholeDeck: true, trackedActive: 3 })).toEqual({
+      useOffscreen: true,
+      index: undefined,
+    });
+  });
+
+  it('Export-as-image of an ordinary page renders the whole page off-screen', () => {
+    expect(planDeckImageCapture({ deck: false, wholeDeck: true, trackedActive: null })).toEqual({
+      useOffscreen: true,
+      index: undefined,
+    });
+  });
+
+  it('current-view capture of an ordinary page stays viewport-based (host snapshot)', () => {
+    // Copy screenshot / captureViewport annotation must reflect what the user is
+    // looking at, NOT an off-screen full-page render of the whole document.
+    expect(planDeckImageCapture({ deck: false, wholeDeck: false, trackedActive: null })).toEqual({
+      useOffscreen: false,
+      index: undefined,
+    });
+  });
+
+  it('tracked deck current-slide renders off-screen at the active index', () => {
+    expect(planDeckImageCapture({ deck: true, wholeDeck: false, trackedActive: 4 })).toEqual({
+      useOffscreen: true,
+      index: 4,
+    });
+  });
+
+  it('runtime-managed deck (no tracked active) skips off-screen → host snapshot, NOT index 0', () => {
+    // The viewer doesn't track a deck-stage / data-screen-label deck's active
+    // slide, so a current-slide capture must use the visible host snapshot rather
+    // than off-screen-rendering slide 0.
+    expect(planDeckImageCapture({ deck: true, wholeDeck: false, trackedActive: null })).toEqual({
+      useOffscreen: false,
+      index: undefined,
+    });
+  });
+});
 
 function mockResponse(headers: Record<string, string>): Response {
   return { headers: new Headers(headers) } as Response;
 }
+
+describe('sourceLooksLikeExportableDeck (#4604 horizontal deck export)', () => {
+  // Runtime-managed decks (`<deck-stage>` web component with slotted
+  // `<section data-screen-label>` children) carry NO literal class="slide", so
+  // the viewer's `.slide`-only nav heuristic misses them and export would force a
+  // single page-mode capture of slide 1. This broader signal recognizes them so
+  // image/PDF capture every slide.
+  it('detects a <deck-stage> runtime deck (no class="slide")', () => {
+    const src =
+      '<deck-stage width="1920" height="1080">' +
+      '<section class="s-cover" data-screen-label="01 Cover">A</section>' +
+      '<section class="s-grid" data-screen-label="02 Grid">B</section>' +
+      '</deck-stage>';
+    expect(sourceLooksLikeExportableDeck(src)).toBe(true);
+  });
+
+  it('detects data-screen-label slide surfaces on their own', () => {
+    expect(
+      sourceLooksLikeExportableDeck('<section data-screen-label="01 Intro">x</section>'),
+    ).toBe(true);
+  });
+
+  it('detects explicit deck slide classes, but not plain .slide', () => {
+    expect(sourceLooksLikeExportableDeck('<div class="slide">x</div>')).toBe(false);
+    expect(sourceLooksLikeExportableDeck('<section class="slide">x</section>')).toBe(false);
+    expect(sourceLooksLikeExportableDeck('<div class="s-cover deck-slide">x</div>')).toBe(true);
+    expect(sourceLooksLikeExportableDeck('<div class="ppt-slide">x</div>')).toBe(true);
+  });
+
+  it('detects legacy html-ppt slide structure without treating every .slide as a deck', () => {
+    expect(
+      sourceLooksLikeExportableDeck('<section class="slide" data-title="Cover">x</section>'),
+    ).toBe(true);
+    expect(
+      sourceLooksLikeExportableDeck('<section data-title="Cover" class="slide is-active">x</section>'),
+    ).toBe(true);
+    expect(
+      sourceLooksLikeExportableDeck('<div class="deck"><section class="slide">x</section></div>'),
+    ).toBe(true);
+  });
+
+  it('does NOT treat an ordinary page as a deck', () => {
+    expect(
+      sourceLooksLikeExportableDeck('<main><h1>Landing</h1><p>Hello</p></main>'),
+    ).toBe(false);
+    // `slideshow` is not a `slide` class token.
+    expect(sourceLooksLikeExportableDeck('<div class="slideshow">x</div>')).toBe(false);
+  });
+
+  it('returns false for empty / nullish source', () => {
+    expect(sourceLooksLikeExportableDeck('')).toBe(false);
+    expect(sourceLooksLikeExportableDeck(null)).toBe(false);
+    expect(sourceLooksLikeExportableDeck(undefined)).toBe(false);
+  });
+});
 
 describe('isUsablePrintSize (#4458)', () => {
   // The print-ready handshake reports the artifact's own content size so the
@@ -467,6 +569,243 @@ describe('exportProjectAsHtml', () => {
 
     expect(capturedFilename).toBe('Fallback.html');
     expect(await capturedBlob!.text()).toContain('<main>fallback</main>');
+  });
+});
+
+describe('binary project/design-system downloads', () => {
+  let capturedBlob: Blob | undefined;
+  let capturedFilename: string | undefined;
+
+  beforeEach(() => {
+    capturedBlob = undefined;
+    capturedFilename = undefined;
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob: Blob) => {
+        capturedBlob = blob;
+        return 'blob:test';
+      },
+      revokeObjectURL: () => {},
+    });
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const anchor = { href: '', click: () => {} } as { href: string; download?: string; click: () => void };
+        Object.defineProperty(anchor, 'download', {
+          set(value: string) {
+            capturedFilename = value;
+          },
+          get() {
+            return capturedFilename ?? '';
+          },
+        });
+        return anchor;
+      },
+      body: { appendChild: () => {}, removeChild: () => {} },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('POSTs to the pptx export route and downloads the returned bytes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('PK-fake-pptx', { status: 200 })),
+    );
+
+    const res = await exportProjectAsPptx({ projectId: 'proj 1', fileName: 'decks/pitch.html' });
+
+    expect(res.ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/pptx', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fileName: 'decks/pitch.html', deck: true }),
+    });
+    expect(capturedFilename).toBe('pitch.pptx');
+    expect(await capturedBlob!.text()).toBe('PK-fake-pptx');
+  });
+
+  it('requests editable PPTX when the caller selects native shapes and text', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('PK-editable-pptx', { status: 200 })),
+    );
+
+    const res = await exportProjectAsPptx({
+      projectId: 'proj 1',
+      fileName: 'decks/pitch.html',
+      editable: true,
+    });
+
+    expect(res.ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/pptx', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fileName: 'decks/pitch.html', deck: true, editable: true }),
+    });
+    expect(capturedFilename).toBe('pitch.pptx');
+    expect(await capturedBlob!.text()).toBe('PK-editable-pptx');
+  });
+
+  it('honors the server UTF-8 Content-Disposition filename over the local fallback', async () => {
+    // Production always returns a Content-Disposition (title/RFC-5987 based); the
+    // happy-path test above only exercises the no-header fallback. This pins the
+    // branch the download actually uses in the desktop runtime.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('PK-fake-pptx', {
+            status: 200,
+            headers: {
+              'content-disposition':
+                "attachment; filename=\"Caf_ Deck __.pptx\"; filename*=UTF-8''Caf%C3%A9%20Deck%20%E7%AE%80%E6%8A%A5.pptx",
+            },
+          }),
+      ),
+    );
+
+    const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'decks/pitch.html', title: 'Café Deck 简报' });
+
+    expect(res.ok).toBe(true);
+    expect(capturedFilename).toBe('Café Deck 简报.pptx');
+  });
+
+  it('routes pdf format to the raster pdf-image endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('%PDF-fake', { status: 200 })));
+
+    await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html', format: 'pdf' });
+
+    expect(fetch).toHaveBeenCalledWith('/api/projects/p/export/pdf-image', expect.anything());
+    expect(capturedFilename).toBe('deck.pdf');
+  });
+
+  it('reports 501 (no off-screen renderer) as unavailable, not a semantic error', async () => {
+    // The caller may fall back to the vector/browser PDF only on genuine
+    // unavailability — so 501 must surface as `unavailable`, with no error.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: { message: 'desktop only' } }), { status: 501 })),
+    );
+
+    const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html' });
+
+    expect(res).toEqual({ ok: false, unavailable: true });
+  });
+
+  it('surfaces a semantic failure (non-501) as an error, not unavailable', async () => {
+    // A bad-deck 422 / renderer 502 must NOT be masked as "fall back to vector";
+    // it carries the daemon message so the caller can surface it.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: { message: 'this artifact is not a slide deck' } }), { status: 422 })),
+    );
+
+    const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html' });
+
+    expect(res).toEqual({ ok: false, error: 'this artifact is not a slide deck' });
+  });
+
+  it('treats a transport failure as unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+
+    const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html' });
+
+    expect(res).toEqual({ ok: false, unavailable: true });
+  });
+
+  it('a post-response failure (renderer already produced bytes) is an error, not unavailable', async () => {
+    // The 200 came back — a failure reading the body / triggering the download
+    // must NOT be reported as `unavailable`, or the caller silently downgrades to
+    // the lower-fidelity vector PDF instead of surfacing the failure.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        blob: async () => {
+          throw new Error('corrupt response body');
+        },
+      })),
+    );
+
+    const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html', format: 'pdf' });
+
+    expect(res).toEqual({ ok: false, error: 'corrupt response body' });
+  });
+
+  it('fetches the design-system archive endpoint and downloads the daemon-named zip', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('PKzip-bytes', {
+      status: 200,
+      headers: {
+        'content-type': 'application/zip',
+        'content-disposition': "attachment; filename=\"Acme.zip\"; filename*=UTF-8''Acme.zip",
+      },
+    })));
+
+    const ok = await downloadDesignSystemArchive({
+      designSystemId: 'user:acme brand',
+      fallbackTitle: 'Acme Brand',
+    });
+
+    expect(ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/design-systems/user%3Aacme%20brand/archive');
+    expect(capturedFilename).toBe('Acme.zip');
+    expect(await capturedBlob!.text()).toContain('zip-bytes');
+  });
+
+  it('returns false and does not download when the request fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('not found', { status: 404 })));
+
+    const ok = await downloadDesignSystemArchive({
+      designSystemId: 'user:missing',
+      fallbackTitle: 'Missing',
+    });
+
+    expect(ok).toBe(false);
+    expect(capturedBlob).toBeUndefined();
+  });
+
+  it('downloads the backing project archive with the daemon filename', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('project-zip', {
+      status: 200,
+      headers: {
+        'content-type': 'application/zip',
+        'content-disposition': "attachment; filename=\"Project.zip\"; filename*=UTF-8''Project.zip",
+      },
+    })));
+
+    const ok = await downloadProjectArchive({
+      projectId: 'project 123',
+      fallbackTitle: 'Fallback Project',
+    });
+
+    expect(ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/projects/project%20123/archive');
+    expect(capturedFilename).toBe('Project.zip');
+    expect(await capturedBlob!.text()).toContain('project-zip');
+  });
+
+  it('passes an optional root when downloading a project subfolder archive', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('folder-zip', {
+      status: 200,
+      headers: {
+        'content-type': 'application/zip',
+      },
+    })));
+
+    const ok = await downloadProjectArchive({
+      projectId: 'project-1',
+      fallbackTitle: 'Fallback Project',
+      root: '/system/',
+    });
+
+    expect(ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/projects/project-1/archive?root=system');
+    expect(capturedFilename).toBe('system.zip');
   });
 });
 

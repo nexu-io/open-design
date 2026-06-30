@@ -35,8 +35,11 @@ import {
   type PackedTarballInfo,
 } from "./assemble.js";
 import type { ToolPackConfig } from "./config.js";
-import { linuxResources } from "./resources.js";
-import { electronBuilderVersionForAppVersion } from "./versions.js";
+import { domToPptxBundleResource } from "./dom-to-pptx-resource.js";
+import { copyBundledResourceTrees, linuxResources } from "./resources.js";
+import { copyOptionalVelaCliBinary } from "./vela-cli.js";
+import { electronBuilderVersionForAppVersion, readRuntimeAppVersion } from "./versions.js";
+import { processWebSourcemaps } from "./web-sourcemaps.js";
 
 // Re-exported for existing consumers (tests, mac/win closure checks) that import
 // these shared assembly primitives from the linux module. The single source of
@@ -403,6 +406,9 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
     extraResources: [
       { from: paths.resourceRoot, to: "open-design" },
       { from: paths.packagedConfigPath, to: "open-design-config.json" },
+      // Vendored dom-to-pptx browser bundle for editable PPTX export (read from
+      // process.resourcesPath by the desktop main at runtime).
+      domToPptxBundleResource(config),
     ],
     files: ["**/*", "!**/node_modules/.bin", "!**/node_modules/electron{,/**/*}"],
     icon: linuxResources.icon,

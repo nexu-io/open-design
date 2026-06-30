@@ -17,13 +17,21 @@ import {
   deriveConfigureGlobals,
   modelIdForTracking,
   sessionModeToTracking,
+  type TrackingDesignSystemSource,
+  type TrackingDesignSystemKind,
+  type TrackingDesignSystemEditSurface,
 } from '@open-design/contracts/analytics';
 import type { OdNativeEvent } from '@open-design/agui-adapter';
 import { newInsertId, readAnalyticsContext } from '../analytics.js';
 import type { AnalyticsContext } from '../analytics.js';
+import { spawnEnvForAgent } from '../agents.js';
 import { agentCliEnvForAgent, readAppConfig } from '../app-config.js';
+import {
+  codexSessionIdFromRunEvents,
+  readCodexRolloutFirstCall,
+} from '../codex-rollout-usage.js';
 import type { ConnectorService } from '../connectors/service.js';
-import { getProject, listConversations, upsertMessage } from '../db.js';
+import { getProject, listConversations, updateProject, upsertMessage } from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
 import {
   deriveLangfuseDeliveryState,
@@ -323,6 +331,14 @@ function toProjectRecord(value: unknown): ProjectRecord | null {
   return typeof record.id === 'string'
     ? value as ProjectRecord
     : null;
+}
+
+function isProjectEnrichableDesignSystem(project: ProjectRecord): boolean {
+  if (typeof project.designSystemId === 'string' && project.designSystemId.length > 0) {
+    return true;
+  }
+  const metadata = project.metadata;
+  return metadata?.importedFrom === 'brand-extraction' || metadata?.importedFrom === 'design-system';
 }
 
 function toConversationRecords(value: unknown): ConversationRecord[] {
@@ -672,6 +688,36 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
     design.runs.start(run, () => startChatRun(meta, run));
 
+    const reqBody = requestBody;
+    const analyticsHints =
+      (reqBody as { analyticsHints?: Record<string, unknown> | null }).analyticsHints
+        && typeof (reqBody as { analyticsHints?: unknown }).analyticsHints === 'object'
+        ? ((reqBody as { analyticsHints?: Record<string, unknown> }).analyticsHints ?? {})
+        : {};
+    // Marks the AI-optimize (deep enrichment) run so completion can flag the DS
+    // ai_refined even when analytics is unavailable or disabled.
+    const hintDsEnrichment = analyticsHints.dsEnrichment === true;
+    const requestProjectId = typeof reqBody.projectId === 'string' ? reqBody.projectId : null;
+    if (hintDsEnrichment && requestProjectId) {
+      design.runs.wait(run).then((status: TerminalRunStatus) => {
+        if (runResultFromStatus(status.status) !== 'success') return;
+        try {
+          const enrichedProject = toProjectRecord(getProject(db, requestProjectId));
+          if (enrichedProject && isProjectEnrichableDesignSystem(enrichedProject)) {
+            updateProject(db, requestProjectId, {
+              metadata: {
+                ...(enrichedProject.metadata ?? {}),
+                enrichmentStatus: 'ai_refined',
+                enrichmentCompletedAt: Date.now(),
+              },
+            });
+          }
+        } catch {
+          // Best-effort flag; do not fail run completion if metadata refresh fails.
+        }
+      }).catch(() => {});
+    }
+
     const analyticsContext = readAnalyticsContext(req);
     if (analyticsContext) {
       run.analyticsContext = analyticsContext;
@@ -684,7 +730,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       });
     }).catch(() => {});
     if (analyticsContext) {
-      const reqBody = requestBody;
       const runInsertId = newInsertId();
       const appCfgForAnalytics = await readAppConfig(RUNTIME_DATA_DIR).catch(
         () => ({} as Record<string, unknown>),
@@ -718,11 +763,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const userQueryTokens = promptText.length > 0
         ? Math.ceil(promptText.length / 4)
         : 0;
-      const analyticsHints =
-        (reqBody as { analyticsHints?: Record<string, unknown> | null }).analyticsHints
-          && typeof (reqBody as { analyticsHints?: unknown }).analyticsHints === 'object'
-          ? ((reqBody as { analyticsHints?: Record<string, unknown> }).analyticsHints ?? {})
-          : {};
       const hintEntryFrom = typeof analyticsHints.entryFrom === 'string'
         ? analyticsHints.entryFrom
         : undefined;
@@ -745,7 +785,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           ? { has_existing_artifact: hintHasExistingArtifact }
           : {}),
       };
-      const requestProjectId = typeof reqBody.projectId === 'string' ? reqBody.projectId : null;
       const runProjectForAnalytics = requestProjectId
         ? toProjectRecord(getProject(db, requestProjectId))
         : null;
@@ -793,6 +832,45 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           ),
         ),
       ];
+      // Map the internal DS selection source -> the wire `design_system_source`
+      // enum (previously hard-wired to unknown/not_applicable). And derive
+      // official-vs-custom from the id shape (`user:<id>` => custom). See the
+      // design-system tracking spec §3.5 (U3/U4).
+      const dsSelectedId = analyticsDesignSystemSelection.id;
+      const designSystemSourceForRun: TrackingDesignSystemSource = (() => {
+        switch (analyticsDesignSystemSelection.source) {
+          case 'request':
+            return 'user_selected';
+          case 'plugin':
+            return 'template_inherited';
+          case 'project':
+            return 'project_saved';
+          case 'app-default':
+            return 'default';
+          case 'none':
+          default:
+            return dsSelectedId ? 'unknown' : 'not_applicable';
+        }
+      })();
+      const designSystemKindForRun: TrackingDesignSystemKind | undefined = dsSelectedId
+        ? dsSelectedId.startsWith('user:')
+          ? 'custom'
+          : 'official'
+        : undefined;
+      const designSystemSlugForRun =
+        dsSelectedId && !dsSelectedId.startsWith('user:') ? dsSelectedId : undefined;
+      // E1 (tracking spec §3.4): a DS-project run that edits an EXISTING design
+      // system carries which surface drove it. comment/mark ride their own
+      // entry_from; everything else editing an existing DS is the chat surface.
+      // First-generation runs (no existing artifact) get no edit_surface.
+      const editSurfaceForRun: TrackingDesignSystemEditSurface | undefined =
+        runProjectKind === 'design_system' && hintHasExistingArtifact === true
+          ? hintEntryFrom === 'comment'
+            ? 'comment'
+            : hintEntryFrom === 'mark'
+              ? 'mark'
+              : 'chat'
+          : undefined;
       const baseProps: Record<string, unknown> = {
         page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
         area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
@@ -809,12 +887,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         project_kind: runProjectKind,
         ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
         ...sessionDimensionProps,
-        design_system_id: analyticsDesignSystemSelection.id ?? undefined,
+        design_system_id: dsSelectedId ?? undefined,
         design_system_selection_source: analyticsDesignSystemSelection.source,
-        design_system_source:
-          analyticsDesignSystemSelection.id
-            ? 'unknown'
-            : 'not_applicable',
+        design_system_source: designSystemSourceForRun,
+        ...(designSystemKindForRun ? { design_system_kind: designSystemKindForRun } : {}),
+        ...(designSystemSlugForRun ? { design_system_slug: designSystemSlugForRun } : {}),
+        ...(editSurfaceForRun ? { edit_surface: editSurfaceForRun } : {}),
         ...(isDesignSystemRun ? {
           ds_source_origin: typeof dsRunContext.origin === 'string'
             ? dsRunContext.origin
@@ -883,6 +961,26 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         );
         const result = runResultFromStatus(status.status);
         const errorCode = deriveRunErrorCode(status);
+        // C14/C15: AI-optimize (enrichment) run settled. Emit the dedicated
+        // result event; the success metadata flag runs outside this analytics gate.
+        if (hintDsEnrichment && analyticsContext) {
+          design.analytics.capture({
+            eventName: 'design_system_enrich_result',
+            context: analyticsContext,
+            appVersion: design.getAppVersion(),
+            properties: {
+              page_name: 'design_system_project',
+              area: 'design_system_enrich',
+              result,
+              design_system_id: dsSelectedId ?? undefined,
+              project_id: requestProjectId,
+              run_id: run.id,
+              ...(errorCode ? { error_code: errorCode } : {}),
+              duration_ms: Math.max(0, Date.now() - run.createdAt),
+            },
+            insertId: newInsertId(),
+          });
+        }
         const failure = classifyRunFailure({
           result,
           status,
@@ -895,6 +993,70 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           reqBody.model,
           userQueryTokens,
         );
+        // Whether this run is a non-first turn in its conversation — i.e. a
+        // prior completed assistant turn exists (excluding this run's own
+        // placeholder). The session-reuse cache win only applies to follow-up
+        // turns, so slicing `first_call_cache_hit_ratio` by this flag is the
+        // baseline-vs-optimized comparison. Mirrors server.ts hasPriorAssistantTurn.
+        const isFollowupTurn = run.conversationId
+          ? Boolean(
+              db
+                .prepare(
+                  `SELECT 1 FROM messages
+                     WHERE conversation_id = ?
+                       AND role = 'assistant'
+                       AND COALESCE(content, '') <> ''
+                       AND id <> COALESCE(?, '')
+                     LIMIT 1`,
+                )
+                .get(run.conversationId, run.assistantMessageId ?? ''),
+            )
+          : false;
+        // Resolve the turn's first-call usage (cache-hit of the OPENING model
+        // call — the signal session reuse moves). Every coding agent except
+        // codex reports per-call usage on the stream, so the forward-scanned
+        // first usage event IS the opening call. codex reports only a single
+        // cumulative `turn.completed` usage on the stream, so its first stream
+        // event is the whole-session aggregate; its real per-call number lives
+        // in the rollout `last_token_usage`, read here best-effort.
+        const firstCallUsage = await (async (): Promise<{
+          first_call_input_tokens?: number;
+          first_call_cache_read_input_tokens?: number;
+          first_call_cache_hit_ratio?: number;
+        } | null> => {
+          if (run.agentId === 'codex') {
+            // Best-effort: a throw anywhere here (env resolution, rollout read)
+            // must degrade to "no codex first-call fields", never bubble to the
+            // outer run_finished .catch and drop the whole completion event.
+            try {
+              const sessionId = codexSessionIdFromRunEvents(run.events);
+              const codexHome = spawnEnvForAgent(
+                'codex',
+                { ...process.env, OD_DATA_DIR: RUNTIME_DATA_DIR },
+                agentCliEnvForAgent(
+                  (appCfgAtFinish as { agentCliEnv?: AgentCliEnv }).agentCliEnv,
+                  'codex',
+                ),
+              ).CODEX_HOME;
+              return await readCodexRolloutFirstCall({ codexHome, sessionId });
+            } catch {
+              return null;
+            }
+          }
+          if (usageAnalytics.first_call_input_tokens === undefined) return null;
+          return {
+            first_call_input_tokens: usageAnalytics.first_call_input_tokens,
+            ...(usageAnalytics.first_call_cache_read_input_tokens !== undefined
+              ? {
+                  first_call_cache_read_input_tokens:
+                    usageAnalytics.first_call_cache_read_input_tokens,
+                }
+              : {}),
+            ...(usageAnalytics.first_call_cache_hit_ratio !== undefined
+              ? { first_call_cache_hit_ratio: usageAnalytics.first_call_cache_hit_ratio }
+              : {}),
+          };
+        })();
         const analyticsCapturedAt = Date.now();
         const timingAnalytics = summarizeRunTimingAnalytics({
           runCreatedAt: run.createdAt,
@@ -1036,6 +1198,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             ...(usageAnalytics.cache_hit_ratio !== undefined
               ? { cache_hit_ratio: usageAnalytics.cache_hit_ratio }
               : {}),
+            // First-call cache-hit of the turn's opening model call (per-call
+            // usage for claude/opencode/codebuddy/pi from the stream; codex from
+            // its rollout). Sliced by is_followup_turn, this isolates the
+            // session-reuse cache win on non-first turns.
+            ...(firstCallUsage ?? {}),
+            is_followup_turn: isFollowupTurn,
             cache_token_source: usageAnalytics.cache_token_source,
             token_count_source: usageAnalytics.token_count_source,
           },

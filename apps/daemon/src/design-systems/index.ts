@@ -12,6 +12,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import JSZip from 'jszip';
 
 import {
   type ComponentsManifest,
@@ -75,6 +76,16 @@ export type DesignSystemPullFileDetail = {
   updatedAt: string;
   encoding: 'utf8' | 'base64';
   content: string;
+};
+
+export type DesignSystemStaticFileDetail = {
+  path: string;
+  name: string;
+  kind: DesignSystemFileKind;
+  size: number;
+  updatedAt: string;
+  contentType: string;
+  bytes: Buffer;
 };
 
 export type DesignSystemPackageInfo = {
@@ -168,6 +179,7 @@ type DesignSystemProjectManifest = {
 
 export type DesignSystemProvenance = {
   companyBlurb?: string;
+  sourceUrls?: string[];
   githubUrls?: string[];
   localCodeFiles?: string[];
   figFiles?: string[];
@@ -506,6 +518,45 @@ export async function readDesignSystemPullFile(
   }
 }
 
+export async function readDesignSystemStaticFile(
+  root: string,
+  id: string,
+  relativePath: string,
+  options: { idPrefix?: string } = {},
+): Promise<DesignSystemStaticFileDetail | null> {
+  const dirId = stripPrefixAndValidateId(id, options.idPrefix);
+  const cleanPath = sanitizeRelativeFilePath(relativePath);
+  if (!dirId || !cleanPath) return null;
+
+  const brandRoot = path.join(root, dirId);
+  const manifest = await readProjectManifest(brandRoot, dirId);
+  if (!(await isAllowedDesignSystemStaticFile(brandRoot, manifest, cleanPath))) return null;
+
+  const resolvedRoot = path.resolve(brandRoot);
+  const filePath = path.resolve(brandRoot, cleanPath);
+  if (filePath !== resolvedRoot && !filePath.startsWith(`${resolvedRoot}${path.sep}`)) {
+    return null;
+  }
+
+  try {
+    const stats = await stat(filePath);
+    if (!stats.isFile()) return null;
+    const bytes = await readFile(filePath);
+    return {
+      path: cleanPath,
+      name: path.basename(cleanPath),
+      kind: classifyDesignSystemFile(cleanPath, false),
+      size: stats.size,
+      updatedAt: stats.mtime.toISOString(),
+      contentType: designSystemStaticContentType(cleanPath),
+      bytes,
+    };
+  } catch (err) {
+    if (isAbsenceError(err)) return null;
+    throw err;
+  }
+}
+
 export function isDesignTokenChannelEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
@@ -817,6 +868,83 @@ async function buildDesignSystemPullFileAllowlist(
   }
 
   return allowed;
+}
+
+const DESIGN_SYSTEM_STATIC_SYSTEM_FILES = new Set([
+  'system/index.html',
+  'system/kit.html',
+  'system/kit.dark.html',
+  'system/tokens.default.json',
+  'system/artifacts/landing.html',
+  'system/artifacts/deck.html',
+  'system/artifacts/poster.html',
+  'system/artifacts/email.html',
+  'system/artifacts/newsletter.html',
+  'system/artifacts/form.html',
+]);
+
+async function isAllowedDesignSystemStaticFile(
+  brandRoot: string,
+  manifest: DesignSystemProjectManifest | null,
+  relativePath: string,
+): Promise<boolean> {
+  if (!isSafeManifestPath(relativePath)) return false;
+  if (DESIGN_SYSTEM_STATIC_SYSTEM_FILES.has(relativePath)) return true;
+
+  const allowed = new Set<string>();
+  const add = (filePath: string | undefined): void => {
+    const cleanPath = typeof filePath === 'string' ? sanitizeRelativeFilePath(filePath) : null;
+    if (cleanPath) allowed.add(cleanPath);
+  };
+
+  add(manifest?.files.design ?? 'DESIGN.md');
+  add(manifest?.files.tokens ?? 'tokens.css');
+  add(manifest?.files.components ?? 'components.html');
+  add(manifest?.files.designTokens);
+  add(manifest?.files.tailwind);
+  add(manifest?.usage ?? 'USAGE.md');
+  add(manifest?.componentsManifest ?? 'components.manifest.json');
+  for (const page of manifest?.preview?.pages ?? []) add(page.path);
+  for (const font of manifest?.fonts ?? []) add(font.file);
+
+  if (manifest?.assetsDir === 'assets') {
+    await addFilesUnderDeclaredDir(brandRoot, 'assets', allowed);
+  }
+
+  return allowed.has(relativePath);
+}
+
+function designSystemStaticContentType(relativePath: string): string {
+  const ext = path.extname(relativePath).toLowerCase();
+  switch (ext) {
+    case '.html':
+      return 'text/html; charset=utf-8';
+    case '.css':
+      return 'text/css; charset=utf-8';
+    case '.json':
+      return 'application/json; charset=utf-8';
+    case '.svg':
+      return 'image/svg+xml';
+    case '.png':
+      return 'image/png';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.webp':
+      return 'image/webp';
+    case '.gif':
+      return 'image/gif';
+    case '.woff':
+      return 'font/woff';
+    case '.woff2':
+      return 'font/woff2';
+    case '.ttf':
+      return 'font/ttf';
+    case '.otf':
+      return 'font/otf';
+    default:
+      return 'application/octet-stream';
+  }
 }
 
 async function addFilesUnderDeclaredDir(
@@ -1298,6 +1426,215 @@ export async function readUserDesignSystemFile(
   }
 }
 
+// Pack a user design system's entire on-disk directory into a shareable .zip.
+// The archive is the same file tree the Design Files panel shows (folders walked
+// recursively, dotfiles + the internal metadata.json/revisions/ excluded) plus a
+// generated SKILLS.md usage guide so a recipient can drop the folder into any AI
+// coding tool and get on-brand output without further art direction. Returns null
+// for non-user ids (built-in presets live elsewhere and have no editable dir).
+export async function buildUserDesignSystemArchive(
+  root: string,
+  id: string,
+): Promise<{ buffer: Buffer; baseName: string; title: string } | null> {
+  const dirId = stripPrefixAndValidateId(id, 'user:');
+  if (!dirId) return null;
+  const base = path.join(root, dirId);
+  try {
+    const baseStats = await stat(base);
+    if (!baseStats.isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  await ensureGeneratedDesignSystemFiles(root, dirId);
+
+  const summaries: DesignSystemFileSummary[] = [];
+  await collectDesignSystemFiles(base, '', summaries);
+  const fileEntries = summaries.filter((entry) => entry.kind !== 'folder');
+
+  const metadata = await readUserMetadata(root, dirId);
+  let body = '';
+  try {
+    body = await readFile(path.join(base, 'DESIGN.md'), 'utf8');
+  } catch {
+    // DESIGN.md is normally present; an empty body still produces a valid guide.
+  }
+  const title = normalizeTitle(metadata.title ?? firstHeading(body) ?? dirId);
+
+  const zip = new JSZip();
+  for (const entry of fileEntries) {
+    const buf = await readFile(path.join(base, ...entry.path.split('/')));
+    zip.file(entry.path, buf, {
+      date: entry.updatedAt ? new Date(entry.updatedAt) : new Date(0),
+      binary: true,
+    });
+  }
+
+  // Inject the usage guide unless the system already ships its own SKILLS.md.
+  if (!fileEntries.some((entry) => entry.path.toLowerCase() === 'skills.md')) {
+    const skills = buildDesignSystemSkillsMarkdown({
+      title,
+      summary: summarize(body),
+      category: metadata.category ?? extractCategory(body) ?? 'Custom',
+      surface: metadata.surface ?? extractSurface(body) ?? 'web',
+      palette: normalizeSwatches(body),
+      ...(metadata.provenance ? { provenance: metadata.provenance } : {}),
+    });
+    zip.file('SKILLS.md', skills, { date: new Date(0), binary: false });
+  }
+
+  const buffer = await zip.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+  });
+  return { buffer, baseName: title || dirId, title };
+}
+
+// Surface-specific framing for the SKILLS.md guide: what the system is best at
+// and the deliverables an agent should expect to produce from it.
+const DESIGN_SYSTEM_SURFACE_GUIDE: Record<
+  DesignSystemSurface,
+  { deliverables: string; goodFor: string[] }
+> = {
+  web: {
+    deliverables: 'websites, landing pages, dashboards, decks, and product UI',
+    goodFor: [
+      'Landing pages & marketing sites',
+      'Slide decks & pitch decks',
+      'Dashboards & product UI',
+      'Prototypes & component mockups',
+    ],
+  },
+  image: {
+    deliverables: 'social posts, ads, posters, and other image creative',
+    goodFor: [
+      'Social posts & ad creative',
+      'Posters & one-pagers',
+      'Cover art & thumbnails',
+      'On-brand illustration prompts',
+    ],
+  },
+  video: {
+    deliverables: 'video, motion, and animated creative',
+    goodFor: [
+      'Promo & explainer video',
+      'Motion graphics & title cards',
+      'Animated social clips',
+      'Storyboards & shot lists',
+    ],
+  },
+  audio: {
+    deliverables: 'audio, podcast, and sonic-brand work',
+    goodFor: [
+      'Podcast & episode branding',
+      'Audio ad scripts',
+      'Sonic-logo & jingle direction',
+      'Voice & tone guidance',
+    ],
+  },
+};
+
+// Build the SKILLS.md usage guide bundled into every downloaded design system.
+// Pure (no I/O) so it can be unit tested against fixed inputs. The guide teaches
+// a recipient how to feed the system to an AI coding tool for on-brand results
+// and attributes it to the Open Design open-source project for shareability.
+export function buildDesignSystemSkillsMarkdown(input: {
+  title: string;
+  summary: string;
+  category: string;
+  surface: DesignSystemSurface;
+  palette: GeneratedPalette;
+  provenance?: DesignSystemProvenance;
+}): string {
+  const { title, summary, category, surface, palette } = input;
+  const guide = DESIGN_SYSTEM_SURFACE_GUIDE[surface] ?? DESIGN_SYSTEM_SURFACE_GUIDE.web;
+  const sourceUrls = (input.provenance?.sourceUrls ?? []).filter(
+    (url): url is string => typeof url === 'string' && url.trim().length > 0,
+  );
+
+  const lines: string[] = [];
+  lines.push(`# How to use the ${title} design system`);
+  lines.push('');
+  if (summary) {
+    lines.push(summary);
+    lines.push('');
+  }
+  lines.push(
+    `This package is a portable **${category}** design system for ${guide.deliverables}. ` +
+      'Hand the unzipped folder to any AI coding agent — Claude Code, Codex, Cursor, ' +
+      'Gemini, OpenCode, or Qwen — alongside `DESIGN.md`, and it will produce on-brand ' +
+      'work without further art direction.',
+  );
+  lines.push('');
+
+  lines.push('## What it is good for');
+  lines.push('');
+  for (const item of guide.goodFor) lines.push(`- ${item}`);
+  lines.push('');
+
+  lines.push('## How to apply it');
+  lines.push('');
+  lines.push('1. Unzip this folder and open it in your AI coding tool.');
+  lines.push(
+    '2. Tell the agent: "Use `DESIGN.md` as the design system for everything you generate."',
+  );
+  lines.push('3. Ask for the artifact you want — e.g. "a pricing page" or "a 10-slide deck".');
+  lines.push(
+    '4. The agent reads `DESIGN.md` (identity, palette, typography, voice, layout) and the ' +
+      '`system/` kit, then matches the brand.',
+  );
+  lines.push('');
+  lines.push(
+    '`DESIGN.md` is the single source of truth. The `system/` directory (when present) ships ' +
+      'the rendered kit and design tokens — keep them together so the agent can read both.',
+  );
+  lines.push('');
+
+  lines.push('## Palette quick reference');
+  lines.push('');
+  lines.push('| Role | Hex |');
+  lines.push('| --- | --- |');
+  lines.push(`| Background | \`${palette.background}\` |`);
+  lines.push(`| Foreground | \`${palette.foreground}\` |`);
+  lines.push(`| Accent | \`${palette.accent}\` |`);
+  lines.push(`| Border | \`${palette.border}\` |`);
+  lines.push(`| Muted | \`${palette.muted}\` |`);
+  lines.push('');
+
+  lines.push('## Tips for better results');
+  lines.push('');
+  lines.push('- Reference `DESIGN.md` explicitly in every prompt so the agent stays on-brand.');
+  lines.push(
+    '- Ask the agent to pull exact hex values and font families from `DESIGN.md` rather than ' +
+      'inventing its own.',
+  );
+  lines.push(
+    '- For multi-page or multi-slide work, ask it to reuse the same tokens across every page.',
+  );
+  lines.push('- Iterate by pointing at a specific section of `DESIGN.md` when something looks off.');
+  lines.push('');
+
+  if (sourceUrls.length > 0) {
+    lines.push('## Source');
+    lines.push('');
+    lines.push(`Extracted from: ${sourceUrls.join(', ')}`);
+    lines.push('');
+  }
+
+  lines.push('---');
+  lines.push('');
+  lines.push(
+    'Generated with **Open Design** — the open-source, local-first Claude Design alternative. ' +
+      'Generate decks, landing pages, dashboards, and brand systems with your favourite AI ' +
+      'coding agent.',
+  );
+  lines.push('');
+  lines.push('https://github.com/nexu-io/open-design');
+  lines.push('');
+
+  return lines.join('\n');
+}
+
 async function ensureGeneratedDesignSystemFiles(root: string, id: string): Promise<void> {
   const metadata = await readUserMetadata(root, id);
   await migrateLegacyDesignSystemPackage(root, id, metadata);
@@ -1509,6 +1846,11 @@ async function collectDesignSystemFiles(
   const entries = await readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
+    // Never list or archive symlinks: `readFile`/`stat` would follow them out of
+    // the design-system root, letting a crafted package exfiltrate arbitrary
+    // daemon-readable files through the ZIP download. Excluding them here keeps
+    // both the file listing and `buildUserDesignSystemArchive` inside `base`.
+    if (entry.isSymbolicLink()) continue;
     if (!relativeDir && (entry.name === 'metadata.json' || entry.name === 'revisions')) continue;
     const relativePath = relativeDir
       ? path.posix.join(relativeDir.replaceAll(path.sep, '/'), entry.name)
@@ -2360,12 +2702,14 @@ function cleanMultiline(raw: string | undefined): string {
 function parseProvenance(raw: unknown): DesignSystemProvenance | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const value = raw as Record<string, unknown>;
+  const sourceUrls = parseStringList(value.sourceUrls);
   const githubUrls = parseStringList(value.githubUrls);
   const localCodeFiles = parseStringList(value.localCodeFiles);
   const figFiles = parseStringList(value.figFiles);
   const assetFiles = parseStringList(value.assetFiles);
   return normalizeProvenance({
     ...(typeof value.companyBlurb === 'string' ? { companyBlurb: value.companyBlurb } : {}),
+    ...(sourceUrls ? { sourceUrls } : {}),
     ...(githubUrls ? { githubUrls } : {}),
     ...(localCodeFiles ? { localCodeFiles } : {}),
     ...(figFiles ? { figFiles } : {}),
@@ -2386,6 +2730,7 @@ function normalizeProvenance(
   fallback: { companyBlurb?: string; sourceNotes?: string } = {},
 ): DesignSystemProvenance | undefined {
   const companyBlurb = cleanMultiline(raw?.companyBlurb) || cleanMultiline(fallback.companyBlurb);
+  const sourceUrls = uniqueCleanList(raw?.sourceUrls);
   const githubUrls = uniqueCleanList(raw?.githubUrls);
   const localCodeFiles = uniqueCleanList(raw?.localCodeFiles);
   const figFiles = uniqueCleanList(raw?.figFiles);
@@ -2394,6 +2739,7 @@ function normalizeProvenance(
   const sourceNotes = cleanMultiline(raw?.sourceNotes) || cleanMultiline(fallback.sourceNotes);
   const provenance: DesignSystemProvenance = {
     ...(companyBlurb ? { companyBlurb } : {}),
+    ...(sourceUrls.length > 0 ? { sourceUrls } : {}),
     ...(githubUrls.length > 0 ? { githubUrls } : {}),
     ...(localCodeFiles.length > 0 ? { localCodeFiles } : {}),
     ...(figFiles.length > 0 ? { figFiles } : {}),
@@ -2422,6 +2768,7 @@ function hasProvenance(provenance: DesignSystemProvenance): boolean {
     provenance.companyBlurb
       || provenance.notes
       || provenance.sourceNotes
+      || provenance.sourceUrls?.length
       || provenance.githubUrls?.length
       || provenance.localCodeFiles?.length
       || provenance.figFiles?.length
@@ -2433,7 +2780,8 @@ function provenanceToNotes(provenance: DesignSystemProvenance | undefined): stri
   if (!provenance) return '';
   const lines: string[] = [];
   if (provenance.companyBlurb) lines.push(`Company/product context: ${provenance.companyBlurb}`);
-  if (provenance.githubUrls?.length) lines.push(`GitHub/code links: ${provenance.githubUrls.join(', ')}`);
+  if (provenance.sourceUrls?.length) lines.push(`Source links: ${provenance.sourceUrls.join(', ')}`);
+  if (provenance.githubUrls?.length) lines.push(`GitHub repositories: ${provenance.githubUrls.join(', ')}`);
   if (provenance.localCodeFiles?.length) lines.push(`Local code references: ${provenance.localCodeFiles.join(', ')}`);
   if (provenance.figFiles?.length) lines.push(`Figma files: ${provenance.figFiles.join(', ')}`);
   if (provenance.assetFiles?.length) lines.push(`Fonts, logos and assets: ${provenance.assetFiles.join(', ')}`);
@@ -2620,8 +2968,11 @@ function renderProvenanceMarkdown(
   }
   const sections = [
     provenance.companyBlurb ? `## Company / Product\n\n${provenance.companyBlurb}` : '',
+    provenance.sourceUrls?.length
+      ? `## Source Links\n\n${provenance.sourceUrls.map((value) => `- ${value}`).join('\n')}`
+      : '',
     provenance.githubUrls?.length
-      ? `## GitHub / Code Links\n\n${provenance.githubUrls.map((value) => `- ${value}`).join('\n')}`
+      ? `## GitHub Repositories\n\n${provenance.githubUrls.map((value) => `- ${value}`).join('\n')}`
       : '',
     provenance.localCodeFiles?.length
       ? `## Local Code References\n\n${provenance.localCodeFiles.map((value) => `- ${value}`).join('\n')}`

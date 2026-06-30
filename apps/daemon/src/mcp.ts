@@ -25,6 +25,7 @@ import { postCreateArtifactRequest } from './artifacts/create.js';
 
 const SERVER_NAME = 'open-design';
 const SERVER_VERSION = '0.2.0';
+const MCP_STDIO_IDLE_EXIT_MS = 30 * 60 * 1000;
 
 type JsonObject = Record<string, unknown>;
 interface RunMcpOptions { daemonUrl: string | URL }
@@ -43,6 +44,69 @@ interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; inclu
 interface ProjectFileBundleEntry { name: string; mime: string; size: number | null; content: string | null; binary: boolean }
 interface BundleInput { project: ProjectPayload | ProjectSummary; entry: string; files: ProjectFileBundleEntry[]; truncated: boolean; active: ActiveContext | null; resolved?: ResolvedProject | null }
 interface ErrorWithCode { message?: string; code?: string; cause?: { code?: string } }
+
+interface McpIdleExitControllerOptions {
+  idleMs: number;
+  onIdle: () => void;
+}
+
+export function _createMcpIdleExitController({
+  idleMs,
+  onIdle,
+}: McpIdleExitControllerOptions) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let inFlight = 0;
+  let disposed = false;
+
+  const clear = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+
+  const schedule = () => {
+    if (disposed) return;
+    clear();
+    timer = setTimeout(() => {
+      timer = null;
+      if (disposed) return;
+      if (inFlight > 0) {
+        schedule();
+        return;
+      }
+      disposed = true;
+      onIdle();
+    }, idleMs);
+  };
+
+  schedule();
+
+  return {
+    noteActivity() {
+      schedule();
+    },
+    async trackRequest<T>(fn: () => T | Promise<T>): Promise<T> {
+      if (disposed) {
+        return fn();
+      }
+      inFlight += 1;
+      schedule();
+      try {
+        return await fn();
+      } finally {
+        inFlight -= 1;
+        if (inFlight === 0) {
+          schedule();
+        }
+      }
+    },
+    dispose() {
+      disposed = true;
+      clear();
+    },
+  };
+}
 
 // Mimes whose body we surface as MCP `text` content. Everything else
 // returns a clear error directing the caller at list_files for
@@ -434,6 +498,15 @@ const TOOL_DEFS = [
 
 export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   const baseUrl = String(daemonUrl).replace(/\/$/, '');
+  let closeTransportForIdle: (() => void) | null = null;
+  const idleExit = _createMcpIdleExitController({
+    idleMs: MCP_STDIO_IDLE_EXIT_MS,
+    onIdle: () => closeTransportForIdle?.(),
+  });
+  const withMcpActivity =
+    <Args extends unknown[], Result>(handler: (...args: Args) => Result | Promise<Result>) =>
+      (...args: Args) =>
+        idleExit.trackRequest(() => handler(...args));
 
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
@@ -533,11 +606,11 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
     },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  server.setRequestHandler(ListToolsRequestSchema, withMcpActivity(async () => ({
     tools: TOOL_DEFS,
-  }));
+  })));
 
-  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  server.setRequestHandler(ListResourcesRequestSchema, withMcpActivity(async () => {
     const [skillsData, dsData] = await Promise.all([
       getJson<SkillsPayload>(`${baseUrl}/api/skills`).catch((): SkillsPayload => ({ skills: [] })),
       getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`).catch((): DesignSystemsPayload => ({ designSystems: [] })),
@@ -567,9 +640,9 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
       });
     }
     return { resources };
-  });
+  }));
 
-  server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
+  server.setRequestHandler(ReadResourceRequestSchema, withMcpActivity(async (req) => {
     const uri = req.params?.uri;
     if (uri === 'od://focus/active') {
       const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
@@ -609,27 +682,54 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
         },
       ],
     };
-  });
+  }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+  server.setRequestHandler(CallToolRequestSchema, withMcpActivity(async (req) => {
     const name = req.params?.name;
     const args: McpArgs = (req.params?.arguments ?? {}) as McpArgs;
     return handleMcpToolCall(baseUrl, name, args);
-  });
+  }));
 
   const transport = new StdioServerTransport();
-  await server.connect(transport);
+  try {
+    closeTransportForIdle = () => {
+      void transport.close().catch(() => {});
+    };
+    await server.connect(transport);
 
-  // server.connect() only *starts* the transport; it resolves once the
-  // stdio reader is wired up, not when the stream closes. Hold the
-  // process open until the client disconnects (stdin EOF) so the cli.ts
-  // top-level `process.exit(0)` doesn't kill us mid-handshake.
-  await new Promise<void>((resolve) => {
-    const done = () => resolve();
-    transport.onclose = done;
-    process.stdin.once('end', done);
-    process.stdin.once('close', done);
-  });
+    const sdkOnMessage = transport.onmessage;
+    transport.onmessage = (...args) => {
+      idleExit.noteActivity();
+      sdkOnMessage?.(...args);
+    };
+
+    // server.connect() only *starts* the transport; it resolves once the
+    // stdio reader is wired up, not when the stream closes. Hold the
+    // process open until the client disconnects (stdin EOF) so the cli.ts
+    // top-level `process.exit(0)` doesn't kill us mid-handshake.
+    await new Promise<void>((resolve) => {
+      const sdkOnClose = transport.onclose;
+      let finished = false;
+      const done = () => {
+        if (finished) return;
+        finished = true;
+        idleExit.dispose();
+        resolve();
+      };
+      transport.onclose = () => {
+        sdkOnClose?.();
+        done();
+      };
+      const closeTransportForStdin = () => {
+        void transport.close().catch(() => done());
+      };
+      process.stdin.once('end', closeTransportForStdin);
+      process.stdin.once('close', closeTransportForStdin);
+    });
+  } finally {
+    idleExit.dispose();
+    closeTransportForIdle = null;
+  }
 }
 
 function ok(payload: unknown) {

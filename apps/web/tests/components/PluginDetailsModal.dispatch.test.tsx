@@ -76,7 +76,10 @@ function make(args: MakeArgs): InstalledPluginRecord {
 
 function render(
   record: InstalledPluginRecord,
-  options: { hideUseAction?: boolean } = {},
+  options: {
+    hideUseAction?: boolean;
+    onDuplicate?: (record: InstalledPluginRecord) => void;
+  } = {},
 ): string {
   return renderToStaticMarkup(
     <I18nProvider>
@@ -84,6 +87,7 @@ function render(
         record={record}
         onClose={() => {}}
         onUse={() => {}}
+        onDuplicate={options.onDuplicate}
         hideUseAction={options.hideUseAction}
       />
     </I18nProvider>,
@@ -251,6 +255,30 @@ describe('PluginDetailsModal dispatch', () => {
     expect(html).toContain('data-detail-variant="scenario"');
     expect(html).toContain('plugin-details-use-scenario-noquery');
     expect(html).not.toContain('plugin-details-use-scenario-noquery-menu');
+  });
+
+  it('only offers duplicate in the detail menu for duplicable HTML previews', () => {
+    const duplicate = () => {};
+    const html = render(
+      make({
+        id: 'html-duplicable',
+        title: 'HTML Duplicable',
+        preview: { type: 'html', entry: './example.html' },
+      }),
+      { onDuplicate: duplicate },
+    );
+    expect(html).toContain('plugin-details-use-html-duplicable-menu');
+
+    const image = render(
+      make({
+        id: 'image-only',
+        title: 'Image Only',
+        preview: { type: 'image', entry: './final/spritesheet.png' },
+      }),
+      { onDuplicate: duplicate },
+    );
+    expect(image).toContain('plugin-details-use-image-only');
+    expect(image).not.toContain('plugin-details-use-image-only-menu');
   });
 });
 

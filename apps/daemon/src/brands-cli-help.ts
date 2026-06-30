@@ -8,12 +8,21 @@ export const BRAND_USAGE = `Usage:
   od brand create <url> [--json]       brand and a backing project with the site open in a
                                        browser tab; open it to run the extraction agent.
                                        --prompt-file <path|-> reads the URL from a file or stdin.
+                                       --locale <locale> localizes generated brand.html copy.
   od brand preview <id> [--json]       Re-render brand.html from the project's current
                                        brand.json so the kit page fills in live during
                                        extraction. --project <projectId> overrides the project.
+                                       --locale <locale> overrides the stored brand locale.
   od brand finalize <id> [--json]      Register the agent's extracted kit (brand.json in the
                                        backing project) as a design system; marks it ready.
                                        --project <projectId> overrides the backing project.
+                                       --locale <locale> overrides the stored brand locale.
+  od brand extract-from-html <id> --html-file <path|->
+                       [--css-file <path>] [--base-url <url>] [--json]
+                                       Re-run extraction against pre-captured rendered HTML
+                                       (e.g. a page already loaded past an anti-bot wall),
+                                       instead of fetching. --html-file reads from a file or
+                                       stdin; --css-file folds in collected stylesheet text.
   od brand get <id> [--json]           Print one brand's full detail (meta + brand + guide).
   od brand delete <id> [--json]        Remove a brand and its registered design system.
 

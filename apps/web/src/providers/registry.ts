@@ -6,6 +6,7 @@ import type {
   ConnectorDetailResponse,
   ConnectorListResponse,
   ConnectorStatusResponse,
+  FigmaImportResult,
   ImportGitHubDesignSystemRequest,
   ImportGitHubDesignSystemResponse,
   ImportShadcnDesignSystemRequest,
@@ -478,7 +479,9 @@ export async function fetchDesignSystemsResult(): Promise<DesignSystemsResult> {
 
 export async function fetchDesignSystem(id: string): Promise<DesignSystemDetail | null> {
   try {
-    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`);
+    // no-store so edits made elsewhere (the in-project Design System tab) are
+    // reflected the next time the manager / a consumer re-reads the system.
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`, { cache: 'no-store' });
     if (!resp.ok) return null;
     return parseDesignSystemDetail(await resp.json());
   } catch {
@@ -1855,6 +1858,42 @@ export async function uploadProjectFile(
   }
 }
 
+// Offline `.fig` import. Uploads the Figma file to the daemon, which decodes
+// it in-process (no Figma account) and stages a `figma/` snapshot into the
+// project. Returns the inventory + a ready-to-send reshape prompt, or an
+// error string the caller can surface.
+export async function importProjectFigma(
+  projectId: string,
+  file: File,
+  opts?: { notes?: string; subdir?: string },
+): Promise<{ ok: true; result: FigmaImportResult } | { ok: false; error: string }> {
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    if (opts?.notes && opts.notes.trim()) form.append('notes', opts.notes.trim());
+    if (opts?.subdir && opts.subdir.trim()) form.append('subdir', opts.subdir.trim());
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/figma/import`, {
+      method: 'POST',
+      body: form,
+    });
+    if (!resp.ok) {
+      let message = `import failed (${resp.status})`;
+      try {
+        const body = (await resp.json()) as { error?: { message?: string } | string };
+        const text = typeof body.error === 'string' ? body.error : body.error?.message;
+        if (text) message = text;
+      } catch {
+        /* keep the status-only message */
+      }
+      return { ok: false, error: message };
+    }
+    const result = (await resp.json()) as FigmaImportResult;
+    return { ok: true, result };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 // Multi-file project upload used by the chat composer's paste / drop /
 // picker. Each file lands flat in the project folder; the response is
 // reshaped into ChatAttachments so the composer can stage them without a
@@ -1963,6 +2002,10 @@ export function projectRawUrl(projectId: string, filePath: string): string {
     .map((seg) => encodeURIComponent(seg))
     .join('/');
   return `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`;
+}
+
+export function designSystemStaticUrl(designSystemId: string, filePath: string): string {
+  return `/api/design-systems/${encodeURIComponent(designSystemId)}/static?path=${encodeURIComponent(filePath)}`;
 }
 
 function looksLikeImage(name: string): boolean {
@@ -2286,5 +2329,336 @@ export async function uninstallDesignSystem(
     return { ok: true };
   } catch {
     return { error: 'Network error' };
+  }
+}
+
+// --- OD Library ------------------------------------------------------------
+
+import type {
+  LibraryApplyResponse,
+  LibraryAsset,
+  LibraryAssetListResponse,
+  LibraryConnectionStatus,
+  LibraryEditAsPageResponse,
+  LibraryIngestResponse,
+  LibraryPairingStartResponse,
+  LibrarySyncResponse,
+} from '@open-design/contracts';
+import { LIBRARY_UPLOAD_MAX_BYTES, isLibraryUploadMimeAllowed } from '@open-design/contracts';
+
+/** Raw bytes URL for a library asset (image src / download href). */
+export function libraryAssetRawUrl(id: string): string {
+  return `/api/library/assets/${encodeURIComponent(id)}/raw`;
+}
+
+/**
+ * OD Figma capture download URL — only meaningful for clipper-captured `html`
+ * assets whose `metadata.figmaCapture` marker is set. Importable via the OD
+ * Figma plugin.
+ */
+export function libraryAssetFigmaUrl(id: string): string {
+  return `/api/library/assets/${encodeURIComponent(id)}/figma`;
+}
+
+/**
+ * Captured-element markup URL — only meaningful for element-pick screenshot
+ * assets whose `metadata.element.hasHtml` is set. Returns the element's
+ * `outerHTML` as `text/html`.
+ */
+export function libraryAssetElementUrl(id: string): string {
+  return `/api/library/assets/${encodeURIComponent(id)}/element`;
+}
+
+export interface LibraryAssetQuery {
+  kind?: string;
+  source?: string;
+  q?: string;
+  date?: string;
+  tag?: string;
+}
+
+export async function fetchLibraryAssets(query: LibraryAssetQuery = {}): Promise<LibraryAsset[]> {
+  try {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value) params.set(key, value);
+    }
+    const qs = params.toString();
+    const resp = await fetch(`/api/library/assets${qs ? `?${qs}` : ''}`);
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as LibraryAssetListResponse;
+    return json.assets ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch a single library asset by id (`GET /api/library/assets/:id`). Returns
+ * null when the asset is gone or the request fails. Powers the Library grid's
+ * incremental SSE merge — on an `ingest` event we hydrate just the one asset
+ * instead of refetching the whole list.
+ */
+export async function fetchLibraryAsset(id: string): Promise<LibraryAsset | null> {
+  try {
+    const resp = await fetch(`/api/library/assets/${encodeURIComponent(id)}`);
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { asset?: LibraryAsset };
+    return json.asset ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Copy a library asset into a project's design files (default `library/`
+ * subdir) and record a provenance back-link so the registry knows the asset
+ * was consumed. Powers "Select from library" in the composer and Design Files.
+ * With `includeElement`, an element-pick capture also materializes its captured
+ * markup as a companion `.element.html` file (see `elementRelPath`). Returns the
+ * apply response (`relPath` + optional `elementRelPath`), or null on error.
+ */
+export async function applyLibraryAsset(
+  assetId: string,
+  projectId: string,
+  dir?: string,
+  opts?: { includeElement?: boolean },
+): Promise<LibraryApplyResponse | null> {
+  try {
+    const resp = await fetch(`/api/library/assets/${encodeURIComponent(assetId)}/apply`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId,
+        ...(dir ? { dir } : {}),
+        ...(opts?.includeElement ? { includeElement: true } : {}),
+      }),
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as LibraryApplyResponse;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch the captured `outerHTML` of an element-pick library asset (served from
+ * `/api/library/assets/:id/element`). Returns null when the asset has no stored
+ * element markup or the request fails.
+ */
+export async function fetchLibraryAssetElementHtml(assetId: string): Promise<string | null> {
+  try {
+    const resp = await fetch(libraryAssetElementUrl(assetId));
+    if (!resp.ok) return null;
+    const html = await resp.text();
+    return html.trim() ? html : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Turn a captured `html` library asset into a brand-new editable OD project.
+ * The daemon copies the capture into the project as an editable `index.html`
+ * and seeds a conversation; the caller opens the project on that file. Returns
+ * null on error.
+ */
+export async function editLibraryAssetAsPage(
+  assetId: string,
+): Promise<LibraryEditAsPageResponse | null> {
+  try {
+    const resp = await fetch(`/api/library/assets/${encodeURIComponent(assetId)}/edit-as-page`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as LibraryEditAsPageResponse;
+  } catch {
+    return null;
+  }
+}
+
+const LIBRARY_MIME_EXT: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'image/svg+xml': '.svg',
+  'image/avif': '.avif',
+  'image/bmp': '.bmp',
+  'text/html': '.html',
+  'text/css': '.css',
+  'application/json': '.json',
+};
+
+/** A filesystem-safe filename for a library asset, with an extension by mime. */
+function libraryAssetFileName(asset: LibraryAsset, mime: string): string {
+  const fallback = `asset-${asset.id.slice(0, 8)}`;
+  const base =
+    (asset.sourceTitle || asset.sourceDomain || fallback)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48) || fallback;
+  const ext =
+    LIBRARY_MIME_EXT[mime] ||
+    (mime.startsWith('image/') ? `.${mime.slice(6).split('+')[0]}` : '');
+  return `${base}${ext}`;
+}
+
+/**
+ * Fetch a library asset's bytes and wrap them in a `File`, so the asset can be
+ * fed into upload-shaped flows that expect browser File objects (e.g. seeding
+ * the design-system creation flow's source material). Returns null on error.
+ */
+export async function fetchLibraryAssetAsFile(asset: LibraryAsset): Promise<File | null> {
+  try {
+    const resp = await fetch(libraryAssetRawUrl(asset.id));
+    if (!resp.ok) return null;
+    const blob = await resp.blob();
+    const type = asset.mime || blob.type || 'application/octet-stream';
+    return new File([blob], libraryAssetFileName(asset, type), { type });
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteLibraryAsset(id: string): Promise<boolean> {
+  try {
+    const resp = await fetch(`/api/library/assets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Force a Library reconcile (`POST /api/library/sync`) — pulls design systems
+ * and agent-produced project deliverables into the Library as referenced assets.
+ * Powers the Library toolbar "Sync" button. Returns the counts of what was newly
+ * indexed, or null on error.
+ */
+export async function syncLibrary(): Promise<LibrarySyncResponse | null> {
+  try {
+    const resp = await fetch('/api/library/sync', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as LibrarySyncResponse;
+  } catch {
+    return null;
+  }
+}
+
+// --- manual upload ---------------------------------------------------------
+
+/** Outcome of a single manual upload — drives the per-file status in the UI. */
+export interface LibraryUploadOutcome {
+  ok: boolean;
+  asset?: LibraryAsset;
+  deduped?: boolean;
+  /** Human-readable failure reason (policy reject, oversize, network…). */
+  error?: string;
+  /** Daemon error code when the failure came back from the server. */
+  code?: string;
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('file read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function readLibraryUploadError(resp: Response): Promise<{ error: string; code?: string }> {
+  const payload = (await resp.json().catch(() => null)) as
+    | { error?: { message?: string; code?: string } | string }
+    | null;
+  const err = payload?.error;
+  if (typeof err === 'object' && err) {
+    return { error: err.message ?? `Upload failed (${resp.status})`, ...(err.code ? { code: err.code } : {}) };
+  }
+  return { error: typeof err === 'string' && err ? err : `Upload failed (${resp.status})` };
+}
+
+/**
+ * Upload one file into the Library through the manual-upload ingest path.
+ *
+ * Runs the shared format/size policy as a pre-flight so an unsupported or
+ * oversized file fails instantly with a friendly message instead of a wasted
+ * round-trip, then posts the bytes inline as a `data:` URI. The daemon enforces
+ * the same policy as the source of truth.
+ */
+export async function uploadLibraryFile(file: File): Promise<LibraryUploadOutcome> {
+  if (file.size > LIBRARY_UPLOAD_MAX_BYTES) {
+    return {
+      ok: false,
+      code: 'PAYLOAD_TOO_LARGE',
+      error: `Too large — max ${Math.round(LIBRARY_UPLOAD_MAX_BYTES / 1_000_000)} MB`,
+    };
+  }
+  if (!isLibraryUploadMimeAllowed(file.type || undefined, file.name)) {
+    return { ok: false, code: 'UNSUPPORTED_MEDIA_TYPE', error: 'Unsupported format' };
+  }
+  try {
+    const dataUrl = await readFileAsDataUrl(file);
+    const resp = await fetch('/api/library/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl, filename: file.name, mime: file.type || undefined }),
+    });
+    if (!resp.ok) {
+      return { ok: false, ...(await readLibraryUploadError(resp)) };
+    }
+    const json = (await resp.json()) as LibraryIngestResponse;
+    return { ok: true, asset: json.asset, deduped: json.deduped };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Upload failed' };
+  }
+}
+
+/** Upload a pasted/typed text snippet as a text-family Library asset. */
+export async function uploadLibraryText(
+  text: string,
+  opts: { filename?: string } = {},
+): Promise<LibraryUploadOutcome> {
+  try {
+    const resp = await fetch('/api/library/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, ...(opts.filename ? { filename: opts.filename } : {}) }),
+    });
+    if (!resp.ok) {
+      return { ok: false, ...(await readLibraryUploadError(resp)) };
+    }
+    const json = (await resp.json()) as LibraryIngestResponse;
+    return { ok: true, asset: json.asset, deduped: json.deduped };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Upload failed' };
+  }
+}
+
+export async function startLibraryPairing(): Promise<LibraryPairingStartResponse | null> {
+  try {
+    const resp = await fetch('/api/library/pair', { method: 'POST' });
+    if (!resp.ok) return null;
+    return (await resp.json()) as LibraryPairingStartResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchLibraryConnection(): Promise<LibraryConnectionStatus | null> {
+  try {
+    const resp = await fetch('/api/library/connection');
+    if (!resp.ok) return null;
+    return (await resp.json()) as LibraryConnectionStatus;
+  } catch {
+    return null;
   }
 }
