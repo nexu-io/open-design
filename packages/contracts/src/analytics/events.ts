@@ -1248,6 +1248,9 @@ export interface SettingsPopoverClickProps {
     | 'follow_x'
     | 'follow_threads'
     | 'open_youtube'
+    | 'follow_instagram'
+    | 'follow_linkedin'
+    | 'follow_xiaohongshu'
     | 'open_settings';
   // element=language_select → snake_cased locale (e.g. en, zh_cn, pt_br);
   // element=appearance → system | light | dark.
