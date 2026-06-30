@@ -264,6 +264,110 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     });
   });
 
+  it("maps queued project status into material-stage ready work", () => {
+    const project: Project = {
+      id: "project-queued",
+      name: "待启动素材整理",
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1_700_000_000_000,
+      updatedAt: 1_700_000_100_000,
+      pendingPrompt: "先整理素材，再决定剪辑方向",
+      metadata: { kind: "video" satisfies ProjectMetadata["kind"] },
+      status: { value: "queued" },
+    };
+
+    const result = buildCreatorDashboardDataFromOpenDesign({
+      projects: [project],
+      runs: [],
+    });
+
+    const firstTask = result.tasks[0]!;
+    expect(firstTask.stage).toBe("material");
+    expect(firstTask.stageLabel).toBe("素材");
+    expect(firstTask.status).toBe("ready");
+    expect(firstTask.priority).toBe("medium");
+    expect(firstTask.priorityLabel).toBe("中");
+
+    expect(result.focus?.title).toBe("待启动素材整理");
+    expect(result.focus?.reason).toBe("Ready brief, no run yet");
+    expect(result.focus?.recommendedAction).toBe("Start first run");
+  });
+
+  it("maps awaiting_input status into blocked review work", () => {
+    const project: Project = {
+      id: "project-awaiting",
+      name: "等待确认的项目",
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1_700_000_000_000,
+      updatedAt: 1_700_000_100_000,
+      pendingPrompt: "等你确认下一步",
+      metadata: { kind: "video" satisfies ProjectMetadata["kind"] },
+      status: { value: "awaiting_input" },
+    };
+
+    const result = buildCreatorDashboardDataFromOpenDesign({
+      projects: [project],
+      runs: [],
+    });
+
+    const firstTask = result.tasks[0]!;
+    expect(firstTask.stage).toBe("review");
+    expect(firstTask.stageLabel).toBe("复盘");
+    expect(firstTask.status).toBe("blocked");
+    expect(firstTask.priority).toBe("high");
+    expect(firstTask.priorityLabel).toBe("高");
+  });
+
+  it("maps succeeded status into done review work", () => {
+    const project: Project = {
+      id: "project-succeeded",
+      name: "已完成项目",
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1_700_000_000_000,
+      updatedAt: 1_700_000_100_000,
+      metadata: { kind: "video" satisfies ProjectMetadata["kind"] },
+      status: { value: "succeeded" },
+    };
+
+    const result = buildCreatorDashboardDataFromOpenDesign({
+      projects: [project],
+      runs: [],
+    });
+
+    const firstTask = result.tasks[0]!;
+    expect(firstTask.stage).toBe("review");
+    expect(firstTask.status).toBe("done");
+    expect(firstTask.priority).toBe("low");
+  });
+
+  it("maps failed status into blocked editing work", () => {
+    const project: Project = {
+      id: "project-failed",
+      name: "失败项目",
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1_700_000_000_000,
+      updatedAt: 1_700_000_100_000,
+      pendingPrompt: "修复失败的生成",
+      metadata: { kind: "video" satisfies ProjectMetadata["kind"] },
+      status: { value: "failed" },
+    };
+
+    const result = buildCreatorDashboardDataFromOpenDesign({
+      projects: [project],
+      runs: [],
+    });
+
+    const firstTask = result.tasks[0]!;
+    expect(firstTask.stage).toBe("editing");
+    expect(firstTask.stageLabel).toBe("剪辑");
+    expect(firstTask.status).toBe("blocked");
+    expect(firstTask.priority).toBe("high");
+  });
+
   it("sorts tasks by urgency and newest activity first", () => {
     const projects: Project[] = [
       {
