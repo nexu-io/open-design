@@ -1428,6 +1428,120 @@ const matterRuntime = readFileSync(
             if (ev.key === 'Escape') setNavOpen(false);
           });
         })();
+        // Open Design Cloud (AMR) header account. Same as `enhanceMobileNav`
+        // above, this mirrors `header-enhancer.astro` because the homepage does
+        // not include that enhancer. Detect a live cloud session, swap the
+        // "Sign in" link for the avatar menu, drive popup login + polling, and
+        // sign out. Everything fails closed to signed-out (non-apex origin or
+        // blocked third-party cookies just keep "Sign in" showing).
+        (function enhanceAmrAccount() {
+          const account = document.querySelector('[data-amr-account]');
+          if (!account) return;
+          const api = (account.getAttribute('data-amr-api') || '').replace(/\/$/, '');
+          const loginUrl = account.getAttribute('data-amr-login') || '';
+          const signinEl = account.querySelector('[data-amr-signin]');
+          const menuEl = account.querySelector('[data-amr-menu]');
+          const avatarImg = account.querySelector('[data-amr-avatar]');
+          const avatarFallback = account.querySelector('[data-amr-avatar-fallback]');
+          const nameEl = account.querySelector('[data-amr-name]');
+          const emailEl = account.querySelector('[data-amr-email]');
+          const signoutBtn = account.querySelector('[data-amr-signout]');
+
+          const sessionUrl = api + '/api/auth/get-session';
+          const signoutUrl = api + '/api/auth/sign-out';
+
+          const fetchSession = () =>
+            fetch(sessionUrl, {
+              credentials: 'include',
+              headers: { Accept: 'application/json' },
+            })
+              .then((r) => (r.ok ? r.json() : null))
+              .then((data) => (data && data.user ? data.user : null))
+              .catch(() => null);
+
+          const initials = (user) => {
+            const base = (user.name || user.email || '').trim();
+            return base ? base[0].toUpperCase() : '·';
+          };
+
+          const showSignedIn = (user) => {
+            if (nameEl) nameEl.textContent = user.name || '';
+            if (emailEl) emailEl.textContent = user.email || '';
+            if (avatarImg && user.image) {
+              avatarImg.setAttribute('src', user.image);
+              avatarImg.removeAttribute('hidden');
+              if (avatarFallback) avatarFallback.setAttribute('hidden', '');
+            } else {
+              if (avatarImg) avatarImg.setAttribute('hidden', '');
+              if (avatarFallback) {
+                avatarFallback.textContent = initials(user);
+                avatarFallback.removeAttribute('hidden');
+              }
+            }
+            if (signinEl) signinEl.setAttribute('hidden', '');
+            if (menuEl) menuEl.removeAttribute('hidden');
+          };
+
+          const showSignedOut = () => {
+            if (menuEl) {
+              menuEl.setAttribute('hidden', '');
+              menuEl.removeAttribute('open');
+            }
+            if (signinEl) signinEl.removeAttribute('hidden');
+          };
+
+          // Initial silent probe for an existing session.
+          fetchSession().then((user) => {
+            if (user) showSignedIn(user);
+          });
+
+          if (signinEl && loginUrl) {
+            signinEl.addEventListener('click', (ev) => {
+              ev.preventDefault();
+              const popup = window.open(
+                loginUrl,
+                'od-amr-login',
+                'width=480,height=720,menubar=no,toolbar=no,location=yes',
+              );
+              const started = Date.now();
+              const POLL_MS = 2000;
+              const MAX_MS = 5 * 60 * 1000;
+              const timer = setInterval(() => {
+                if (Date.now() - started > MAX_MS) {
+                  clearInterval(timer);
+                  return;
+                }
+                if (popup && popup.closed) {
+                  clearInterval(timer);
+                  fetchSession().then((user) => {
+                    if (user) showSignedIn(user);
+                  });
+                  return;
+                }
+                fetchSession().then((user) => {
+                  if (!user) return;
+                  clearInterval(timer);
+                  try {
+                    if (popup && !popup.closed) popup.close();
+                  } catch {}
+                  showSignedIn(user);
+                });
+              }, POLL_MS);
+            });
+          }
+
+          if (signoutBtn) {
+            signoutBtn.addEventListener('click', () => {
+              fetch(signoutUrl, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { Accept: 'application/json' },
+              })
+                .catch(() => {})
+                .then(() => showSignedOut());
+            });
+          }
+        })();
         // Product and Resources are category-label <button class="nav-trigger">
         // triggers (not links, so they never navigate) whose dropdown is
         // revealed by the same pure-CSS :hover / :focus-within rule as the hub
