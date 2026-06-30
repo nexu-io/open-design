@@ -638,4 +638,39 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     expect(result.focus?.reason).toBe("Run in progress");
     expect(result.focus?.recommendedAction).toBe("Monitor run");
   });
+
+  it("maps queued runs into queued focus state", () => {
+    const project: Project = {
+      id: "project-queued-run",
+      name: "排队中的项目",
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1_700_000_000_000,
+      updatedAt: 1_700_000_100_000,
+      metadata: { kind: "video" satisfies ProjectMetadata["kind"] },
+      status: { value: "queued" },
+    };
+
+    const run: ChatRunStatusResponse = {
+      id: "run-queued",
+      projectId: "project-queued-run",
+      conversationId: "conv-queued",
+      assistantMessageId: "msg-queued",
+      agentId: "codex",
+      status: "queued",
+      createdAt: 1_700_000_050_000,
+      updatedAt: 1_700_000_060_000,
+    };
+
+    const result = buildCreatorDashboardDataFromOpenDesign({
+      projects: [project],
+      runs: [run],
+    });
+
+    expect(result.activities.map((item) => item.title)).toEqual(["运行开始"]);
+    expect(result.focus?.conversationId).toBe("conv-queued");
+    expect(result.focus?.assistantMessageId).toBe("msg-queued");
+    expect(result.focus?.reason).toBe("Run queued");
+    expect(result.focus?.recommendedAction).toBe("Monitor run");
+  });
 });

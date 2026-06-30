@@ -644,7 +644,23 @@ function buildRunFocusCandidate(
       moment: Math.max(run.updatedAt, run.createdAt),
     };
   }
-  if (run.status === "running" || run.status === "queued") {
+  if (run.status === "queued") {
+    return {
+      projectId: project.id,
+      conversationId: run.conversationId ?? null,
+      assistantMessageId: run.assistantMessageId ?? null,
+      title: project.name,
+      description: task.description,
+      stageLabel: task.stageLabel,
+      statusLabel: task.statusLabel,
+      sourceLabel: task.sourceLabel,
+      reason: "Run queued",
+      recommendedAction: "Monitor run",
+      rank: 90,
+      moment: Math.max(run.updatedAt, run.createdAt),
+    };
+  }
+  if (run.status === "running") {
     return {
       projectId: project.id,
       conversationId: run.conversationId ?? null,
