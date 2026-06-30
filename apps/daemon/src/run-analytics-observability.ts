@@ -325,6 +325,66 @@ function extractUsageCacheFields(usage: Record<string, unknown>): UsageCacheFiel
   };
 }
 
+interface EffectiveInputTokens {
+  // The cache-inclusive prompt size, the denominator a cache-hit ratio divides
+  // into. `undefined` when there is no input figure to anchor on.
+  effectiveInput: number | undefined;
+  // The portion that was NOT served from cache. `undefined` when the provider
+  // gave no cache split to compute it from.
+  uncachedInput: number | undefined;
+}
+
+// `input_tokens` is reported in two incompatible conventions across the
+// provider/runtime matrix, and the SAME field name (`cached_input_tokens` etc.)
+// appears under both:
+//   - INCLUSIVE (OpenAI chat-completions, codex's rollout `last_token_usage`):
+//     input_tokens already contains the cache-read subset → effective = input,
+//     uncached = input - read.
+//   - ADDITIVE (Anthropic, and the Responses-API / ACP usage that the AMR/vela
+//     and pi STREAM emits): input_tokens is the UNCACHED remainder and the
+//     cache-read/creation tokens are reported separately on top → effective =
+//     input + read + creation, uncached = input.
+// Picking the wrong convention is not cosmetic: treating an additive payload as
+// inclusive makes the denominator far too small, so `cache_hit_ratio` /
+// `first_call_cache_hit_ratio` blow past 1.0 (observed ~78% of AMR and ~57% of
+// pi follow-up runs) and `uncached_input_tokens` collapses to 0.
+//
+// The discriminator is a hard arithmetic invariant, not a heuristic guess: a
+// cache-read subset can never exceed the total it is a subset of, so
+// `cacheRead > input` is impossible under inclusive accounting and proves the
+// payload is additive. Anthropic is additive by field shape regardless. Every
+// `cacheRead <= input` payload therefore stays byte-identical to the prior
+// behavior; only the previously-corrupt additive case is repaired.
+function resolveEffectiveInputTokens(
+  inputTokens: number | undefined,
+  cacheReadInputTokens: number | undefined,
+  cacheCreationInputTokens: number | undefined,
+  cacheTokenSource: 'anthropic' | 'openai' | 'unavailable' | undefined,
+): EffectiveInputTokens {
+  if (inputTokens === undefined) {
+    return { effectiveInput: undefined, uncachedInput: undefined };
+  }
+  const read = cacheReadInputTokens ?? 0;
+  const additive =
+    cacheTokenSource === 'anthropic' ||
+    (cacheTokenSource === 'openai' &&
+      cacheReadInputTokens !== undefined &&
+      read > inputTokens);
+  if (additive) {
+    return {
+      effectiveInput: inputTokens + read + (cacheCreationInputTokens ?? 0),
+      uncachedInput: inputTokens,
+    };
+  }
+  return {
+    effectiveInput: inputTokens,
+    uncachedInput:
+      cacheTokenSource === 'openai' && cacheReadInputTokens !== undefined
+        ? Math.max(0, inputTokens - cacheReadInputTokens)
+        : undefined,
+  };
+}
+
 export function scanRunEventsForUsageAnalytics(
   events: RunEventForAnalyticsObservability[],
   reqBodyModel: unknown,
@@ -420,19 +480,16 @@ export function scanRunEventsForUsageAnalytics(
     firstCallCacheTokenSource = fields.cacheTokenSource;
     break;
   }
-  // Anthropic reports input_tokens as the UNCACHED portion (cache_read and
-  // cache_creation are separate), so the effective input is their sum; OpenAI
-  // folds cached into input_tokens. Mirrors the last-call effective computation
-  // below exactly, including cache_creation, so the first-call and last-call
-  // ratios share one denominator definition.
-  const firstCallInputEffective =
-    firstCallInputTokens !== undefined
-      ? firstCallCacheTokenSource === 'anthropic'
-        ? firstCallInputTokens +
-          (firstCallCacheReadInputTokens ?? 0) +
-          (firstCallCacheCreationInputTokens ?? 0)
-        : firstCallInputTokens
-      : undefined;
+  // Effective-input / uncached resolution is shared with the last-call scan
+  // below (one denominator definition for `first_call_cache_hit_ratio` and
+  // `cache_hit_ratio`), and now normalizes additive-vs-inclusive usage so the
+  // ratio can never exceed 1. See resolveEffectiveInputTokens.
+  const { effectiveInput: firstCallInputEffective } = resolveEffectiveInputTokens(
+    firstCallInputTokens,
+    firstCallCacheReadInputTokens,
+    firstCallCacheCreationInputTokens,
+    firstCallCacheTokenSource,
+  );
   const firstCallCacheHitRatio =
     firstCallInputEffective !== undefined &&
     firstCallInputEffective > 0 &&
@@ -440,25 +497,18 @@ export function scanRunEventsForUsageAnalytics(
       ? firstCallCacheReadInputTokens / firstCallInputEffective
       : undefined;
 
-  const inputTokensEffective =
-    inputTokens !== undefined
-      ? cacheTokenSource === 'anthropic'
-        ? inputTokens + (cacheReadInputTokens ?? 0) + (cacheCreationInputTokens ?? 0)
-        : inputTokens
-      : undefined;
+  const { effectiveInput: inputTokensEffective, uncachedInput: uncachedInputTokens } =
+    resolveEffectiveInputTokens(
+      inputTokens,
+      cacheReadInputTokens,
+      cacheCreationInputTokens,
+      cacheTokenSource,
+    );
   const totalTokens =
     providerTotalTokens ??
     (inputTokensEffective !== undefined && outputTokens !== undefined
       ? inputTokensEffective + outputTokens
       : undefined);
-  const uncachedInputTokens =
-    inputTokens !== undefined && cacheTokenSource === 'anthropic'
-      ? inputTokens
-      : inputTokens !== undefined &&
-          cacheTokenSource === 'openai' &&
-          cacheReadInputTokens !== undefined
-        ? Math.max(0, inputTokens - cacheReadInputTokens)
-        : undefined;
   const estimatedContextTokens =
     inputTokensEffective !== undefined && userQueryTokens > 0
       ? Math.max(0, inputTokensEffective - userQueryTokens)
