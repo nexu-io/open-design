@@ -73,10 +73,13 @@ test('cursor-agent declares the --trust capability probe (issue #4461 root cause
 });
 
 test('opencode args keep the documented run/json argv and ignore unsupported reasoning options', () => {
+  agentCapabilities.delete('opencode');
   const prompt = 'design a dashboard';
   const baseArgs = opencode.buildArgs(prompt, [], [], {});
   assert.equal(opencode.promptViaStdin, true);
   assert.equal(opencode.reasoningOptions, undefined);
+  assert.deepEqual(opencode.helpArgs, ['run', '--help']);
+  assert.deepEqual(opencode.capabilityFlags?.['--dangerously-skip-permissions'], 'skipPermissions');
   assert.equal(baseArgs.includes('-'), false);
   assert.equal(baseArgs.includes(prompt), false);
   assert.deepEqual(baseArgs, [
@@ -112,6 +115,21 @@ test('opencode args keep the documented run/json argv and ignore unsupported rea
   assert.deepEqual(withReasoning, withModel);
   assert.equal(withModel.includes('--dangerously-skip-permissions'), false);
   assert.equal(withModel.includes('--model'), false);
+});
+
+test('opencode passes --dangerously-skip-permissions when the help probe finds it', () => {
+  agentCapabilities.set('opencode', { skipPermissions: true });
+  try {
+    const args = opencode.buildArgs('design a dashboard', [], [], {});
+    assert.deepEqual(args, [
+      'run',
+      '--format',
+      'json',
+      '--dangerously-skip-permissions',
+    ]);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely
