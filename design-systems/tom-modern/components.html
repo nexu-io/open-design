@@ -1,0 +1,276 @@
+<!-- Tom Modern Design — Component Fixture -->
+<!-- Source: https://github.com/Tom-Opencart/tom-modern-html-style-rule -->
+<!-- Standalone preview of key components -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tom Modern — Components</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-sans/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-mono/style.css">
+<link rel="stylesheet" href="tokens.css">
+<style>
+/* Layout */
+.container { width: min(100% - 40px, var(--tm-container)); margin: 0 auto; }
+.section { padding: 96px 0; }
+.section-alt { background: rgba(255,255,255,0.72); border-top: 1px solid var(--tm-line-muted); border-bottom: 1px solid var(--tm-line-muted); }
+.section-head { max-width: 760px; margin: 0 auto 48px; text-align: center; }
+.section-head h2 { margin: 0; font-weight: 700; letter-spacing: -0.04em; text-transform: uppercase; font-size: clamp(2.3rem, 5vw, 4.8rem); line-height: 0.96; }
+.section-head p { color: var(--tm-text-secondary); line-height: 1.65; margin-top: 16px; }
+.title-highlight { color: var(--tm-accent); }
+.frame { background: var(--tm-surface); border: 1px solid var(--tm-line); box-shadow: var(--tm-shadow-soft); }
+.eyebrow { display: inline-block; font-family: var(--tm-font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--tm-muted); margin-bottom: 16px; }
+
+/* Reset */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { color: var(--tm-text); font-family: var(--tm-font-sans); background-color: var(--tm-bg); background-image: linear-gradient(rgba(150,150,150,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(150,150,150,0.04) 1px, transparent 1px); background-size: 30px 30px; -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration: none; }
+
+/* Buttons */
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 16px 22px; border: 1px solid var(--tm-line); text-decoration: none; text-transform: uppercase; letter-spacing: 0.08em; font-size: 13px; font-weight: 700; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; }
+.button:hover { transform: translate(-2px, -2px); box-shadow: var(--tm-shadow-hard); }
+.button-primary { background: var(--tm-text); color: #fff; box-shadow: var(--tm-shadow-soft); }
+.button-secondary { background: transparent; color: var(--tm-text); }
+.button-block { width: 100%; }
+
+/* Feature 3-col */
+.feature-3col { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 18px; }
+.feature-3card { display: flex; flex-direction: column; padding: 18px; border: 1px solid var(--tm-line); background: var(--tm-surface); transition: transform 0.18s; }
+.feature-3card:hover { transform: translate(-3px, -3px); box-shadow: var(--tm-shadow-hard); }
+.feature-3card__icon { width: 40px; height: 40px; margin-bottom: 14px; border: 1px solid var(--tm-line); background: var(--tm-accent); color: #fff; display: flex; align-items: center; justify-content: center; }
+.feature-3card__icon svg { width: 18px; height: 18px; }
+.feature-3card h3 { margin: 0 0 8px; font-size: 15px; font-weight: 700; text-transform: uppercase; }
+.feature-3card p { margin: 0; color: var(--tm-muted); font-size: 14px; }
+
+/* Pricing */
+.pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 42px; align-items: start; }
+.pricing-card { padding: 32px; }
+.pricing-head { margin-bottom: 24px; padding-bottom: 20px; border-bottom: 2px solid var(--tm-line); }
+.pricing-head span { font-family: var(--tm-font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--tm-muted); }
+.pricing-head strong { display: block; font-size: 48px; letter-spacing: -0.04em; margin: 8px 0 4px; }
+.pricing-head small { font-size: 14px; color: var(--tm-muted); }
+.plain-list { list-style: none; margin-top: 16px; }
+.plain-list li { position: relative; padding-left: 18px; margin-bottom: 8px; font-size: 14px; color: var(--tm-text-secondary); }
+.plain-list li::before { content: ""; position: absolute; left: 0; top: 8px; width: 8px; height: 8px; background: var(--tm-accent); }
+
+/* FAQ */
+.faq-wrap { max-width: 800px; margin: 0 auto; }
+.faq-list { display: flex; flex-direction: column; gap: 12px; }
+.faq-item { overflow: hidden; }
+.faq-question { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 18px 24px; border: none; background: none; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; }
+.faq-question:hover { background: var(--tm-surface-alt); }
+.faq-icon { width: 20px; height: 20px; position: relative; }
+.faq-icon::before, .faq-icon::after { content: ""; position: absolute; background: var(--tm-text); }
+.faq-icon::before { left: 9px; top: 4px; width: 2px; height: 12px; }
+.faq-icon::after { left: 4px; top: 9px; width: 12px; height: 2px; }
+.faq-item.is-open .faq-icon::before { display: none; }
+.faq-answer { display: none; padding: 0 24px 18px; }
+.faq-answer p { color: var(--tm-text-secondary); font-size: 14px; line-height: 1.6; }
+.faq-item.is-open .faq-answer { display: block; }
+
+/* Token Card */
+.key-card-frame { width: 100%; max-width: 390px; padding: 18px; border: 1px solid var(--tm-line); background: var(--tm-surface); box-shadow: var(--tm-shadow-soft); }
+.key-card-meta { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--tm-line-muted); font-family: var(--tm-font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--tm-muted); }
+.key-card { position: relative; isolation: isolate; overflow: hidden; background: linear-gradient(155deg, #14192B 0%, #1B2A3D 55%, #11393A 100%); padding: 24px 22px 18px; color: #EEF1F8; }
+.key-card__sheen { position: absolute; top: -40%; left: -65%; width: 170%; height: 180%; background: linear-gradient(115deg, transparent 32%, rgba(14,124,123,0.45) 42%, rgba(201,127,30,0.4) 50%, rgba(255,255,255,0.3) 56%, transparent 66%); transform: rotate(9deg) translateX(-12%); mix-blend-mode: screen; pointer-events: none; z-index: 0; animation: sheen-sweep 2.4s ease-out 0.2s 1; }
+@keyframes sheen-sweep { from { transform: rotate(9deg) translateX(-38%); } to { transform: rotate(9deg) translateX(-12%); } }
+.key-card__label { position: relative; z-index: 1; font-family: var(--tm-font-mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #E8B872; margin-bottom: 12px; }
+.key-card__value { position: relative; z-index: 1; font-family: var(--tm-font-mono); font-size: clamp(19px, 2.1vw, 24px); letter-spacing: 1px; font-weight: 500; display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 20px; }
+.key-card__value .sep { color: rgba(238,241,248,0.35); margin: 0 1px; }
+.key-card__value .seg--dim { color: rgba(238,241,248,0.32); }
+.key-card__perforation { position: relative; border-top: 1px dashed rgba(238,241,248,0.28); margin: 0 -22px; padding: 0 22px; }
+.key-card__perforation::before, .key-card__perforation::after { content: ""; position: absolute; top: -8px; width: 16px; height: 16px; border-radius: 50%; background: var(--tm-bg); }
+.key-card__perforation::before { left: -8px; }
+.key-card__perforation::after { right: -8px; }
+.key-card__footer { position: relative; z-index: 1; display: flex; gap: 8px; flex-wrap: wrap; padding-top: 14px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-family: var(--tm-font-mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(238,241,248,0.22); color: #DCE2F0; }
+.chip svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+/* Code Window */
+.tm-code-window { position: relative; overflow: hidden; border: 1px solid rgba(17,21,23,0.12); background: var(--tm-code-bg); box-shadow: var(--tm-shadow-code); }
+.tm-code-window::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(120deg, rgba(255,255,255,0.08), transparent 34%), radial-gradient(circle at 80% 0%, rgba(92,207,230,0.12), transparent 30%); }
+.tm-code-header { position: relative; z-index: 1; display: flex; align-items: center; gap: 14px; min-height: 44px; padding: 0 18px; border-bottom: 1px solid rgba(255,255,255,0.08); background: var(--tm-code-panel); }
+.tm-code-dots { display: inline-flex; gap: 8px; }
+.tm-code-dots span { width: 11px; height: 11px; border-radius: 50%; }
+.tm-code-dots span:nth-child(1) { background: #ff5f57; }
+.tm-code-dots span:nth-child(2) { background: #ffbd2e; }
+.tm-code-dots span:nth-child(3) { background: #28c840; }
+.tm-code-title { overflow: hidden; color: rgba(238,242,245,0.58); font-family: var(--tm-font-mono); font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.tm-code-body { position: relative; z-index: 1; overflow-x: auto; padding: 24px; }
+.tm-code-body pre { margin: 0; }
+.tm-code-body code { display: block; min-width: max-content; color: var(--tm-code-text); font-family: var(--tm-font-mono); font-size: 14px; line-height: 1.72; tab-size: 2; }
+.token-keyword { color: #ffd866; }
+.token-function { color: #5ccfe6; }
+.token-string { color: #a6e3a1; }
+.token-number { color: #c792ea; }
+.token-property { color: #82aaff; }
+.token-comment { color: #6f7b86; }
+.token-punctuation { color: #aab2bf; }
+
+/* Panel */
+.panel { position: relative; padding: 30px 32px 32px; margin-bottom: 18px; border: 1px solid var(--tm-line); background: var(--tm-surface); box-shadow: var(--tm-shadow-hard); }
+.panel::before { content: ""; position: absolute; left: 0; top: 0; width: 72px; border-top: 4px solid var(--tm-accent); }
+.panel-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--tm-line-muted); }
+.panel-tick { width: 11px; height: 11px; background: var(--tm-accent); }
+.panel h2 { margin: 0; font-size: clamp(21px, 2vw, 25px); line-height: 1.15; font-weight: 700; letter-spacing: -0.03em; text-transform: uppercase; }
+.list-clean { list-style: none; display: grid; gap: 12px; }
+.list-clean li { position: relative; padding: 0 0 0 22px; color: var(--tm-text-secondary); }
+.list-clean li::before { content: ""; position: absolute; left: 0; top: 9px; width: 9px; height: 9px; background: var(--tm-accent); }
+.list-clean li strong { color: var(--tm-text); }
+
+@media (max-width: 980px) {
+    .pricing-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+    .container { width: min(100% - 24px, var(--tm-container)); }
+    .section { padding: 56px 0; }
+    .feature-3col { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="container" style="padding-top: 48px; padding-bottom: 48px;">
+
+    <!-- BUTTONS -->
+    <div class="section-head">
+        <p class="eyebrow">Buttons</p>
+        <h2>Primary & <span class="title-highlight">Secondary</span></h2>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-bottom: 64px;">
+        <button class="button button-primary">Primary Action</button>
+        <button class="button button-secondary">Secondary Action</button>
+    </div>
+
+    <!-- FEATURE CARDS -->
+    <div class="section-head">
+        <p class="eyebrow">Features</p>
+        <h2>Three <span class="title-highlight">Columns</span></h2>
+    </div>
+    <div class="feature-3col" style="margin-bottom: 64px;">
+        <article class="feature-3card">
+            <div class="feature-3card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg></div>
+            <h3>Layout Blocks</h3>
+            <p>Hero, trust band, feature grids, panels, and more.</p>
+        </article>
+        <article class="feature-3card">
+            <div class="feature-3card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+            <h3>Premium Cards</h3>
+            <p>Token card with holographic sheen and code window.</p>
+        </article>
+        <article class="feature-3card">
+            <div class="feature-3card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>
+            <h3>Interactive</h3>
+            <p>Tabs, FAQ accordion, contact forms with JS.</p>
+        </article>
+    </div>
+
+    <!-- PANEL -->
+    <div class="panel" style="margin-bottom: 64px;">
+        <div class="panel-head">
+            <span class="panel-tick"></span>
+            <h2>Key Features</h2>
+        </div>
+        <ul class="list-clean">
+            <li><strong>Automation:</strong> Key binding on order status transition.</li>
+            <li><strong>Uniqueness:</strong> Same code never issued twice.</li>
+            <li><strong>Stock sync:</strong> Quantity auto-recalculates from free key count.</li>
+        </ul>
+    </div>
+
+    <!-- PRICING -->
+    <div class="section-head">
+        <p class="eyebrow">Pricing</p>
+        <h2>One <span class="title-highlight">Plan</span></h2>
+    </div>
+    <div class="pricing-grid" style="margin-bottom: 64px;">
+        <div>
+            <p style="color: var(--tm-text-secondary); line-height: 1.65;">Everything included in a single subscription. No hidden fees.</p>
+        </div>
+        <div class="pricing-card frame">
+            <div class="pricing-head">
+                <span>Platform</span>
+                <strong>$49</strong>
+                <small>/ month</small>
+            </div>
+            <ul class="plain-list">
+                <li>AI insights and problem list</li>
+                <li>Replay and heatmaps</li>
+                <li>Revenue loss counter</li>
+                <li>Trigger forms</li>
+                <li>Email notifications</li>
+                <li>Unlimited users</li>
+            </ul>
+            <a class="button button-primary button-block" href="#">Get Started</a>
+        </div>
+    </div>
+
+    <!-- TOKEN CARD -->
+    <div class="section-head">
+        <p class="eyebrow">Premium Component</p>
+        <h2>Token <span class="title-highlight">Card</span></h2>
+    </div>
+    <div style="display: flex; justify-content: center; margin-bottom: 64px;">
+        <div class="key-card-frame">
+            <div class="key-card-meta">
+                <span>Preview</span>
+                <span>Sample</span>
+            </div>
+            <div class="key-card">
+                <div class="key-card__sheen"></div>
+                <div class="key-card__label">Activation Key</div>
+                <div class="key-card__value">
+                    <span>8F2C</span><span class="sep">-</span><span class="seg--dim">ZQ91</span><span class="sep">-</span><span>K4D7</span><span class="sep">-</span><span class="seg--dim">TX5E</span>
+                </div>
+                <div class="key-card__perforation">
+                    <div class="key-card__footer">
+                        <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>Unique</span>
+                        <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>1 Code = 1 Order</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CODE WINDOW -->
+    <div class="section-head">
+        <p class="eyebrow">Premium Component</p>
+        <h2>Code <span class="title-highlight">Window</span></h2>
+    </div>
+    <div class="tm-code-window">
+        <div class="tm-code-header">
+            <span class="tm-code-dots"><span></span><span></span><span></span></span>
+            <span class="tm-code-title">example.js</span>
+        </div>
+        <div class="tm-code-body">
+<pre><code><span class="token-keyword">const</span> <span class="token-function">pluckDeep</span> = <span class="token-property">key</span> <span class="token-punctuation">=></span> <span class="token-property">obj</span> <span class="token-punctuation">=></span>
+  key<span class="token-punctuation">.</span><span class="token-function">split</span>(<span class="token-string">'.'</span>)<span class="token-punctuation">.</span><span class="token-function">reduce</span>(
+    (<span class="token-property">accum</span><span class="token-punctuation">,</span> <span class="token-property">key</span>) <span class="token-punctuation">=></span> accum<span class="token-punctuation">[</span>key<span class="token-punctuation">]</span><span class="token-punctuation">,</span>
+    obj
+  )<span class="token-punctuation">;</span>
+
+<span class="token-comment">// Extract tokens from page styles</span>
+<span class="token-keyword">const</span> <span class="token-function">analyze</span> <span class="token-punctuation">=</span> <span class="token-keyword">async</span> (<span class="token-property">url</span>) <span class="token-punctuation">=></span> <span class="token-punctuation">{</span>
+  <span class="token-keyword">const</span> tokens <span class="token-punctuation">=</span> <span class="token-keyword">await</span> <span class="token-function">extractDesignTokens</span>(url)<span class="token-punctuation">;</span>
+  <span class="token-keyword">return</span> <span class="token-function">createDesignMarkdown</span>(tokens)<span class="token-punctuation">;</span>
+<span class="token-punctuation">}</span><span class="token-punctuation">;</span></code></pre>
+        </div>
+    </div>
+
+</div>
+
+<script>
+document.querySelectorAll('.faq-question').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const item = btn.closest('.faq-item');
+        const isOpen = item.classList.contains('is-open');
+        document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('is-open'));
+        if (!isOpen) item.classList.add('is-open');
+    });
+});
+</script>
+
+</body>
+</html>
