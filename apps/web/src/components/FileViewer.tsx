@@ -137,6 +137,7 @@ import {
   previewIframeKeepAliveKey,
 } from './IframeKeepAlivePool';
 import type {
+  ChatAttachment,
   ChatCommentAttachment,
   PreviewComment,
   PreviewCommentAttachment,
@@ -957,6 +958,7 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[]) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
+  onStageBoardCapture?: (att: ChatAttachment) => void;
   onFileSaved?: () => Promise<void> | void;
   // Open `openName` as a tab (focusing it) and close `closeName` in one
   // atomic tab-state update. The React module pointer uses this to jump to the
@@ -989,6 +991,7 @@ export function FileViewer({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onStageBoardCapture,
   onFileSaved,
   onOpenFileReplacing,
   commentPortalId,
@@ -1033,6 +1036,7 @@ export function FileViewer({
         onSavePreviewComment={onSavePreviewComment}
         onRemovePreviewComment={onRemovePreviewComment}
         onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+        onStageBoardCapture={onStageBoardCapture}
         onFileSaved={onFileSaved}
         commentPortalId={commentPortalId}
         onCommentModeChange={onCommentModeChange}
@@ -4430,6 +4434,7 @@ function HtmlViewer({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onStageBoardCapture,
   onFileSaved,
   commentPortalId,
   onCommentModeChange,
@@ -4450,6 +4455,7 @@ function HtmlViewer({
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[]) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
+  onStageBoardCapture?: (att: ChatAttachment) => void;
   onFileSaved?: () => Promise<void> | void;
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
@@ -5660,7 +5666,7 @@ function HtmlViewer({
     wasUrlLoadPreviewRef.current = false;
     activateSrcDocTransport();
   }, [activateSrcDocTransport, useUrlLoadPreview, useLazySrcDocTransport]);
-  
+
   useEffect(() => {
     restorePreviewScrollPosition();
   }, [boardMode, drawOverlayOpen, manualEditMode, srcDoc, restorePreviewScrollPosition]);
@@ -7966,6 +7972,21 @@ function HtmlViewer({
         setExportToast({ message: t('fileViewer.screenshotPreviewLoading'), tone: 'error' });
         return;
       }
+      if (onStageBoardCapture) {
+        const blob = await imageDataUrlToBlob(snap.dataUrl, 'png');
+        const file = new File([blob], `screenshot-${Date.now()}.png`, { type: 'image/png' });
+        const upload = await uploadProjectFiles(projectId, [file]);
+        const uploaded = upload.uploaded[0];
+        if (!uploaded) {
+          console.warn('[handleCopyScreenshot] upload failed:', upload.error ?? upload.failed);
+          setExportToast({ message: t('fileViewer.screenshotCaptureFailed'), tone: 'error' });
+          return;
+        }
+        onStageBoardCapture(uploaded);
+        setExportToast({ message: t('fileViewer.screenshotCopied'), tone: 'success' });
+        return;
+      }
+
       const result = await copyImageDataUrlToClipboard(snap.dataUrl);
       setExportToast(
         result === 'copied'
@@ -7988,7 +8009,7 @@ function HtmlViewer({
     } finally {
       screenshotInFlightRef.current = false;
     }
-  }, [captureExportImageSnapshot, t]);
+  }, [captureExportImageSnapshot, onStageBoardCapture, projectId, t]);
 
   const openImageExportModal = async () => {
     // Don't reopen while an export is still running: reopening resets the shared
@@ -8809,17 +8830,18 @@ function HtmlViewer({
               </button>
               <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button
-                className={`viewer-action viewer-action-icon od-tooltip${manualEditMode ? ' active' : ''}`}
+                className={`viewer-action od-tooltip${manualEditMode ? ' active' : ''}`}
                 type="button"
                 data-testid="manual-edit-mode-toggle"
-                data-tooltip={t('fileViewer.edit')}
+                data-tooltip="Edit"
                 data-tooltip-placement="bottom"
-                title={t('fileViewer.edit')}
-                aria-label={t('fileViewer.edit')}
+                title="Edit"
+                aria-label="Edit"
                 aria-pressed={manualEditMode}
                 onClick={activateManualEditTool}
               >
                 <RemixIcon name="edit-line" size={15} />
+                <span>Edit</span>
               </button>
               <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button

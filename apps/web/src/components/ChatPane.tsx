@@ -466,6 +466,8 @@ interface Props {
   onAttachComment?: (comment: PreviewComment) => void;
   onDetachComment?: (commentId: string) => void;
   onDeleteComment?: (commentId: string) => void;
+  composerAttachmentInbox?: ChatAttachment[];
+  onComposerAttachmentsAccepted?: (paths: string[]) => void;
   onSend: (
     prompt: string,
     attachments: ChatAttachment[],
@@ -695,6 +697,8 @@ export function ChatPane({
   onAttachComment,
   onDetachComment,
   onDeleteComment,
+  composerAttachmentInbox = [],
+  onComposerAttachmentsAccepted,
   onSend,
   onRetry,
   onResumeRun,
@@ -952,6 +956,11 @@ export function ChatPane({
   } | null>(null);
   const [composerSlotHeight, setComposerSlotHeight] = useState(0);
   const [editingQueuedSendId, setEditingQueuedSendId] = useState<string | null>(null);
+  useEffect(() => {
+    if (composerAttachmentInbox.length > 0 && tab !== 'chat') {
+      setTab('chat');
+    }
+  }, [composerAttachmentInbox.length, tab]);
   // Reverse scan (no array copy) + memo so this and the maps below don't
   // recompute on every non-`messages` render (scroll, hover, toggles).
   const lastAssistantId = useMemo(() => {
@@ -1816,6 +1825,8 @@ export function ChatPane({
       onEnsureProject={onEnsureProject}
       commentAttachments={commentsToAttachments(attachedComments)}
       onRemoveCommentAttachment={onDetachComment}
+      incomingAttachments={tab === 'chat' ? composerAttachmentInbox : []}
+      onIncomingAttachmentsAccepted={onComposerAttachmentsAccepted}
       onSend={(prompt, attachments, commentAttachments, meta) => {
         pinnedToBottomRef.current = true;
         scrolledToFormRef.current = new Set();

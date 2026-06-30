@@ -179,6 +179,8 @@ interface Props {
   onEnsureProject: () => Promise<string | null>;
   commentAttachments?: ChatCommentAttachment[];
   onRemoveCommentAttachment?: (id: string) => void;
+  incomingAttachments?: ChatAttachment[];
+  onIncomingAttachmentsAccepted?: (paths: string[]) => void;
   // Available skills the user can compose into a turn via @<skill>. The
   // chat layer already filters out disabled skills before passing them in
   // here, so the picker can render the list as-is. Keep this optional so
@@ -347,6 +349,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onEnsureProject,
       commentAttachments = [],
       onRemoveCommentAttachment,
+      incomingAttachments = [],
+      onIncomingAttachmentsAccepted,
       skills = [],
       onSend,
       onStop,
@@ -1110,6 +1114,32 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         return next;
       });
     }
+
+    useEffect(() => {
+      if (incomingAttachments.length === 0) return;
+      const acceptedPaths = Array.from(new Set(incomingAttachments.map((attachment) => attachment.path)));
+      setStaged((current) => {
+        const knownPaths = new Set(current.map((attachment) => attachment.path));
+        let order = Math.max(nextAttachmentOrderRef.current, nextChatAttachmentOrder(current));
+        const additions: ChatAttachment[] = [];
+        for (const attachment of incomingAttachments) {
+          if (knownPaths.has(attachment.path)) continue;
+          knownPaths.add(attachment.path);
+          additions.push({
+            ...attachment,
+            order: attachment.order ?? order++,
+          });
+        }
+        if (additions.length === 0) return current;
+        const next = sortChatAttachmentsByOrder([...current, ...additions]);
+        nextAttachmentOrderRef.current = Math.max(order, nextChatAttachmentOrder(next));
+        return next;
+      });
+      window.requestAnimationFrame(() => {
+        editorRef.current?.focus();
+      });
+      onIncomingAttachmentsAccepted?.(acceptedPaths);
+    }, [incomingAttachments, onIncomingAttachmentsAccepted]);
 
     function appendContextAttachment(filePath: string) {
       setStaged((current) => {

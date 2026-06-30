@@ -1160,6 +1160,7 @@ export function ProjectView({
   // include a nonce so re-clicking the same name after the user closed the
   // tab still focuses it.
   const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
+  const [composerAttachmentInbox, setComposerAttachmentInbox] = useState<ChatAttachment[]>([]);
   // Like `openRequest`, but additionally asks the preview workspace to open the
   // file's Share/Export menu. Drives the "Share" next-step action: it reuses the
   // existing export/deploy surface rather than introducing a new share backend.
@@ -1892,6 +1893,21 @@ export function ProjectView({
   const requestOpenFile = useCallback((name: string) => {
     if (!name) return;
     setOpenRequest({ name, nonce: Date.now() });
+  }, []);
+
+  const handleStageBoardCapture = useCallback((attachment: ChatAttachment) => {
+    setComposerAttachmentInbox((current) => {
+      if (current.some((item) => item.path === attachment.path)) return current;
+      return [...current, attachment];
+    });
+  }, []);
+
+  const handleComposerAttachmentsAccepted = useCallback((paths: string[]) => {
+    if (paths.length === 0) return;
+    const accepted = new Set(paths);
+    setComposerAttachmentInbox((current) =>
+      current.filter((attachment) => !accepted.has(attachment.path)),
+    );
   }, []);
 
   useEffect(() => {
@@ -6570,6 +6586,8 @@ export function ProjectView({
               onAttachComment={attachPreviewComment}
               onDetachComment={detachPreviewComment}
               onDeleteComment={(commentId) => void removePreviewComment(commentId)}
+              composerAttachmentInbox={composerAttachmentInbox}
+              onComposerAttachmentsAccepted={handleComposerAttachmentsAccepted}
               onSend={handleSend}
               onRetry={handleRetry}
               onResumeRun={handleResumeRun}
@@ -6760,6 +6778,7 @@ export function ProjectView({
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}
           onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
+          onStageBoardCapture={handleStageBoardCapture}
           onRequestBrowserUsePrompt={handleBrowserUsePrompt}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
           activePluginActionPaths={activePluginActionPaths}

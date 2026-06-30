@@ -160,6 +160,7 @@ interface Props {
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[]) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
+  onStageBoardCapture?: (att: ChatAttachment) => void;
   onRequestBrowserUsePrompt?: (prompt: string) => void;
   onPluginFolderAgentAction?: (
     relativePath: string,
@@ -421,6 +422,7 @@ export function FileWorkspace({
   onSavePreviewComment,
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
+  onStageBoardCapture,
   onRequestBrowserUsePrompt,
   onPluginFolderAgentAction,
   activePluginActionPaths,
@@ -2329,6 +2331,7 @@ export function FileWorkspace({
             onSavePreviewComment={onSavePreviewComment}
             onRemovePreviewComment={onRemovePreviewComment}
             onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+            onStageBoardCapture={onStageBoardCapture}
             onFileSaved={onRefreshFiles}
             onOpenFileReplacing={openFileReplacing}
             commentPortalId={commentPortalId}

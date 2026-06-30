@@ -30,6 +30,7 @@ export interface ManualEditStyles {
   justifyContent: string;
   alignItems: string;
   backgroundColor: string;
+  backgroundImage: string;
   opacity: string;
   padding: string;
   paddingTop: string;
@@ -141,7 +142,7 @@ export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign', 'lineHeight', 'letterSpacing',
   'width', 'height', 'minHeight',
   'gap', 'flexDirection', 'justifyContent', 'alignItems',
-  'backgroundColor', 'opacity',
+  'backgroundColor', 'backgroundImage', 'opacity',
   'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
   'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
   'border', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
