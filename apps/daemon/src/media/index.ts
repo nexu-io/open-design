@@ -311,6 +311,7 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
  */
 export async function generateMedia(args: {
   projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
+  metadata?: { baseDir?: string } | null;
   prompt?: string; output?: string; aspect?: string; length?: number; duration?: number; voice?: string;
   audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
   compositionDir?: string; image?: string; images?: string[]; onProgress?: ProgressFn; requestInit?: MediaRequestInit;
@@ -319,6 +320,7 @@ export async function generateMedia(args: {
     projectRoot,
     projectsRoot,
     projectId,
+    metadata,
     surface,
     model,
     prompt,
@@ -433,7 +435,7 @@ export async function generateMedia(args: {
     : durationClamp.value;
   const warnings = [lengthClamp.warning, durationClamp.warning].filter(Boolean);
 
-  const dir = await ensureProject(projectsRoot, projectId);
+  const dir = await ensureProject(projectsRoot, projectId, metadata ?? undefined);
   const safeOut = sanitizeName(
     output || autoOutputName(surface, model, resolvedAudioKind),
   );

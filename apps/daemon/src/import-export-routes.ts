@@ -20,6 +20,11 @@ import {
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from './reasoning-egress.js';
 import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
 import { parseOrchestratorWorkspace } from './workspace-contract.js';
+import {
+  createLocationProjectDir,
+  defaultExternalProjectLocationForRuntime,
+  writeProjectManifest,
+} from './project-locations.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation' | 'appConfig'> {}
 
@@ -79,27 +84,65 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         const now = Date.now();
         const baseName =
           originalName.replace(/\.zip$/i, '').trim() || 'Claude Design import';
-        const imported = await importClaudeDesignZip(
-          req.file.path,
-          projectDir(PROJECTS_DIR, id),
-        );
+        const defaultLocation = await defaultExternalProjectLocationForRuntime({
+          dataDir: RUNTIME_DATA_DIR,
+          dataDirCanonical: RUNTIME_DATA_DIR_CANONICAL,
+          projectsDir: PROJECTS_DIR,
+        });
+        const externalProjectDir = defaultLocation
+          ? await createLocationProjectDir(defaultLocation, id)
+          : null;
+        const targetProjectDir = externalProjectDir ?? projectDir(PROJECTS_DIR, id);
+        let imported;
+        try {
+          imported = await importClaudeDesignZip(
+            req.file.path,
+            targetProjectDir,
+          );
+          if (externalProjectDir) {
+            await writeProjectManifest(externalProjectDir, {
+              schemaVersion: 1,
+              id,
+              name: baseName,
+              createdAt: now,
+              updatedAt: now,
+              skillId: null,
+              designSystemId: null,
+            });
+          }
+        } catch (err) {
+          if (externalProjectDir) await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
+          throw err;
+        }
         fs.promises.unlink(req.file.path).catch(() => {});
 
-        const project = insertProject(db, {
-          id,
-          name: baseName,
-          skillId: null,
-          designSystemId: null,
-          pendingPrompt: `Imported from Claude Design ZIP: ${originalName}. Continue editing ${imported.entryFile}.`,
-          metadata: {
-            kind: 'prototype',
-            importedFrom: 'claude-design',
-            entryFile: imported.entryFile,
-            sourceFileName: originalName,
-          },
-          createdAt: now,
-          updatedAt: now,
-        });
+        let project;
+        try {
+          project = insertProject(db, {
+            id,
+            name: baseName,
+            skillId: null,
+            designSystemId: null,
+            pendingPrompt: `Imported from Claude Design ZIP: ${originalName}. Continue editing ${imported.entryFile}.`,
+            metadata: {
+              kind: 'prototype',
+              importedFrom: 'claude-design',
+              entryFile: imported.entryFile,
+              sourceFileName: originalName,
+              ...(externalProjectDir
+                ? {
+                    baseDir: externalProjectDir,
+                    projectLocationId: defaultLocation?.id,
+                  }
+                : {}),
+            },
+            createdAt: now,
+            updatedAt: now,
+          });
+        } catch (err) {
+          if (externalProjectDir) await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
+          throw err;
+        }
         const cid = randomId();
         insertConversation(db, {
           id: cid,
@@ -916,7 +959,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
       const files = await listFiles(PROJECTS_DIR, req.params.id, {
-        metadata: project.metadata,
+        ...(project.metadata === undefined ? {} : { metadata: project.metadata }),
       });
       /** @type {import('@open-design/contracts').ProjectExportManifestResponse} */
       const body = buildProjectExportManifestResponse({
@@ -944,11 +987,13 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       if (typeof fileName !== 'string' || fileName.length === 0) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
+      const project = getProject(db, req.params.id);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       const input = await buildDesktopPdfExportInput({
         daemonUrl: daemonUrlRef.current,
         deck: deck === true,
         fileName,
-        metadata: getProject(db, req.params.id)?.metadata ?? null,
+        metadata: project.metadata ?? null,
         projectId: req.params.id,
         projectsRoot: PROJECTS_DIR,
         title: typeof title === 'string' ? title : undefined,

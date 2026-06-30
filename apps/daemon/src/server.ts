@@ -69,6 +69,11 @@ import {
   renderBrowserUseUnavailablePrompt,
 } from './browser-use-diagnostics.js';
 import {
+  createLocationProjectDir,
+  defaultExternalProjectLocationForRuntime,
+  writeProjectManifest,
+} from './project-locations.js';
+import {
   UPLOAD_DIR,
   composeLiveInstructionPrompt,
   formatDesignFilesWorkspaceHint,
@@ -3741,7 +3746,13 @@ export async function startServer({
     })
     .catch(() => detectAgents().catch(() => {}));
 
-  await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
+  const liveArtifactProjectMetadataById = new Map(
+    listProjects(db).map((project) => [project.id, project.metadata]),
+  );
+  await recoverStaleLiveArtifactRefreshes({
+    projectsRoot: PROJECTS_DIR,
+    projectMetadataById: liveArtifactProjectMetadataById,
+  }).catch((error) => {
     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
   });
 
@@ -4526,8 +4537,48 @@ export async function startServer({
         const actionPluginId = PLUGIN_SHARE_ACTION_PLUGIN_IDS[action];
         const actionPlugin = getInstalledPlugin(db, actionPluginId);
         if (!actionPlugin) return res.status(409).json({ ok: false, code: 'share-action-plugin-missing', message: `The bundled action plugin "${actionPluginId}" is not installed. Restart the daemon so bundled plugins are registered.` });
-        const now = Date.now(); const id = randomId(); const cid = randomId(); const sourceSlug = githubRepoNameFromPluginName(sourcePlugin.id); const stagedPath = `plugin-source/${sourceSlug}`; const prompt = renderPluginSharePrompt({ action, sourcePlugin, stagedPath }); const metadata = { kind: 'prototype' }; const projectRoot = await ensureProject(PROJECTS_DIR, id, metadata); await copyPluginFolderForProjectContext(sourcePlugin.fsPath, path.join(projectRoot, 'plugin-source', sourceSlug));
-        insertProject(db, { id, name: `${PLUGIN_SHARE_ACTION_LABELS[action]}: ${sourcePlugin.title || sourcePlugin.id}`, skillId: null, designSystemId: null, pendingPrompt: prompt, metadata, createdAt: now, updatedAt: now });
+        const now = Date.now();
+        const id = randomId();
+        const cid = randomId();
+        const sourceSlug = githubRepoNameFromPluginName(sourcePlugin.id);
+        const stagedPath = `plugin-source/${sourceSlug}`;
+        const prompt = renderPluginSharePrompt({ action, sourcePlugin, stagedPath });
+        const projectName = `${PLUGIN_SHARE_ACTION_LABELS[action]}: ${sourcePlugin.title || sourcePlugin.id}`;
+        const defaultLocation = await defaultExternalProjectLocationForRuntime({
+          dataDir: RUNTIME_DATA_DIR,
+          dataDirCanonical: RUNTIME_DATA_DIR_CANONICAL,
+          projectsDir: PROJECTS_DIR,
+        });
+        const externalProjectDir = defaultLocation ? await createLocationProjectDir(defaultLocation, id) : null;
+        const metadata = {
+          kind: 'prototype',
+          ...(externalProjectDir
+            ? {
+                baseDir: externalProjectDir,
+                importedFrom: 'project-location',
+                projectLocationId: defaultLocation.id,
+              }
+            : {}),
+        };
+        const projectRoot = await ensureProject(PROJECTS_DIR, id, metadata);
+        try {
+          if (externalProjectDir) {
+            await writeProjectManifest(externalProjectDir, {
+              schemaVersion: 1,
+              id,
+              name: projectName,
+              createdAt: now,
+              updatedAt: now,
+              skillId: null,
+              designSystemId: null,
+            });
+          }
+          await copyPluginFolderForProjectContext(sourcePlugin.fsPath, path.join(projectRoot, 'plugin-source', sourceSlug));
+          insertProject(db, { id, name: projectName, skillId: null, designSystemId: null, pendingPrompt: prompt, metadata, createdAt: now, updatedAt: now });
+        } catch (err) {
+          if (externalProjectDir) await fs.promises.rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
+          throw err;
+        }
         insertConversation(db, { id: cid, projectId: id, title: null, createdAt: now, updatedAt: now });
         const registry = await loadPluginRegistryView(); const connectorProbe = buildConnectorProbe(connectorService); const resolved = resolvePluginSnapshot({ db, body: { pluginId: actionPluginId, pluginInputs: { source_plugin_id: sourcePlugin.id, source_plugin_title: sourcePlugin.title || sourcePlugin.id, source_plugin_version: sourcePlugin.version, source_plugin_path: sourcePlugin.fsPath, plugin_context_path: stagedPath }, locale: typeof body.locale === 'string' ? body.locale : undefined }, projectId: id, conversationId: cid, registry, connectorProbe });
         if (resolved && !resolved.ok) return res.status(resolved.status).json(resolved.body);
@@ -8722,16 +8773,52 @@ export async function startServer({
       ? null
       : appConfig.designSystemId ?? null;
 
-    insertProject(db, {
-      id: projectId,
-      name: projectName,
-      skillId: 'live-artifact',
-      designSystemId: orbitDesignSystemId,
-      pendingPrompt: null,
-      metadata: { kind: 'orbit', trigger },
-      createdAt: now,
-      updatedAt: now,
+    const defaultProjectLocation = await defaultExternalProjectLocationForRuntime({
+      dataDir: RUNTIME_DATA_DIR,
+      dataDirCanonical: RUNTIME_DATA_DIR_CANONICAL,
+      projectsDir: PROJECTS_DIR,
     });
+    const externalProjectDir = defaultProjectLocation
+      ? await createLocationProjectDir(defaultProjectLocation, projectId)
+      : null;
+    const projectMetadata = {
+      kind: 'orbit',
+      trigger,
+      ...(externalProjectDir
+        ? {
+            baseDir: externalProjectDir,
+            importedFrom: 'project-location',
+            projectLocationId: defaultProjectLocation.id,
+          }
+        : {}),
+    };
+
+    try {
+      if (externalProjectDir) {
+        await writeProjectManifest(externalProjectDir, {
+          schemaVersion: 1,
+          id: projectId,
+          name: projectName,
+          createdAt: now,
+          updatedAt: now,
+          skillId: 'live-artifact',
+          designSystemId: orbitDesignSystemId,
+        });
+      }
+      insertProject(db, {
+        id: projectId,
+        name: projectName,
+        skillId: 'live-artifact',
+        designSystemId: orbitDesignSystemId,
+        pendingPrompt: null,
+        metadata: projectMetadata,
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch (err) {
+      if (externalProjectDir) await fs.promises.rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
+      throw err;
+    }
     insertConversation(db, {
       id: conversationId,
       projectId,
@@ -8765,7 +8852,7 @@ export async function startServer({
     });
 
     if (template?.dir) {
-      const cwd = await ensureProject(PROJECTS_DIR, projectId);
+      const cwd = await ensureProject(PROJECTS_DIR, projectId, projectMetadata);
       const result = await stageActiveSkill(
         cwd,
         skillCwdAliasSegment(template.dir),
@@ -8807,7 +8894,7 @@ export async function startServer({
       db.prepare(
         `UPDATE messages SET run_status = ?, ended_at = ? WHERE id = ?`,
       ).run(finalStatus.status, Date.now(), assistantMessageId);
-      const artifacts = await listLiveArtifacts({ projectsRoot: PROJECTS_DIR, projectId });
+      const artifacts = await listLiveArtifacts({ projectsRoot: PROJECTS_DIR, projectId, projectMetadata });
       const artifact = artifacts.find((candidate) => candidate.createdByRunId === run.id);
       const status = finalStatus.status === 'succeeded' && !artifact ? 'failed' : finalStatus.status;
       return {
@@ -9296,6 +9383,7 @@ export async function startServer({
     critique: critiqueDeps,
     validation: validationDeps,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
+    projectStore: projectStoreDeps,
     telemetry: { reportFinalizedMessage, reportFeedback },
   });
 

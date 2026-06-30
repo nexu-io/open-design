@@ -21,6 +21,7 @@ import type { BoundedJsonObject, LiveArtifactRefreshErrorRecord, LiveArtifactRef
 export interface RefreshLiveArtifactOptions {
   projectsRoot: string;
   projectId: string;
+  projectMetadata?: { baseDir?: string } | null;
   artifactId: string;
   now?: Date;
   onStarted?: (event: { refreshId: string; artifact: LiveArtifactStoreRecord['artifact'] }) => void | Promise<void>;
@@ -78,10 +79,11 @@ function hasRefreshPermission(source: LiveArtifactSource): boolean {
 async function executeRefreshSource(options: {
   projectsRoot: string;
   projectId: string;
+  projectMetadata?: { baseDir?: string } | null;
   source: LiveArtifactSource;
   signal: AbortSignal;
 }): Promise<BoundedJsonObject> {
-  const { projectsRoot, projectId, source, signal } = options;
+  const { projectsRoot, projectId, projectMetadata, source, signal } = options;
   if (source.type === 'connector_tool') {
     const connector = source.connector;
     if (connector === undefined) throw new Error('connector refresh source requires connector metadata');
@@ -102,7 +104,13 @@ async function executeRefreshSource(options: {
   if (source.type !== 'daemon_tool' && source.type !== 'local_file') {
     throw new Error(`refresh source ${source.type} is not supported yet`);
   }
-  return executeLocalDaemonRefreshSource({ projectsRoot, projectId, source, signal });
+  return executeLocalDaemonRefreshSource({
+    projectsRoot,
+    projectId,
+    ...(projectMetadata === undefined ? {} : { projectMetadata }),
+    source,
+    signal,
+  });
 }
 
 export async function refreshLiveArtifact(options: RefreshLiveArtifactOptions): Promise<RefreshLiveArtifactResult> {
@@ -132,6 +140,7 @@ export async function refreshLiveArtifact(options: RefreshLiveArtifactOptions): 
         ...(entry.source === undefined ? {} : { source: entry.source }),
         ...(entry.error === undefined ? {} : { error: toRefreshErrorRecord(entry.error) }),
         ...(entry.metadata === undefined ? {} : { metadata: entry.metadata }),
+        ...(options.projectMetadata === undefined ? {} : { projectMetadata: options.projectMetadata }),
       });
     };
 
@@ -140,6 +149,7 @@ export async function refreshLiveArtifact(options: RefreshLiveArtifactOptions): 
     const running = await markLiveArtifactRefreshRunning({
       projectsRoot: options.projectsRoot,
       projectId: options.projectId,
+      ...(options.projectMetadata === undefined ? {} : { projectMetadata: options.projectMetadata }),
       artifactId: options.artifactId,
       refreshId,
       now: refreshStartedAt,
@@ -185,6 +195,7 @@ export async function refreshLiveArtifact(options: RefreshLiveArtifactOptions): 
                 async (signal) => executeRefreshSource({
                   projectsRoot: options.projectsRoot,
                   projectId: options.projectId,
+                  ...(options.projectMetadata === undefined ? {} : { projectMetadata: options.projectMetadata }),
                   source: documentSource,
                   signal,
                 }),
@@ -213,6 +224,7 @@ export async function refreshLiveArtifact(options: RefreshLiveArtifactOptions): 
       const committed = await commitLiveArtifactRefreshCandidate({
         projectsRoot: options.projectsRoot,
         projectId: options.projectId,
+        ...(options.projectMetadata === undefined ? {} : { projectMetadata: options.projectMetadata }),
         artifactId: options.artifactId,
         refreshId,
         dataJson: candidate.dataJson,
@@ -238,6 +250,7 @@ export async function refreshLiveArtifact(options: RefreshLiveArtifactOptions): 
       await markLiveArtifactRefreshFailed({
         projectsRoot: options.projectsRoot,
         projectId: options.projectId,
+        ...(options.projectMetadata === undefined ? {} : { projectMetadata: options.projectMetadata }),
         artifactId: options.artifactId,
         refreshId,
         now: refreshFinishedAt,

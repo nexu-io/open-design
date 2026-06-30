@@ -56,7 +56,7 @@ import fs from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { projectDir } from './projects.js';
+import { resolveProjectDir } from './projects.js';
 
 const SCHEMA_VERSION = 2;
 const TRANSCRIPT_FILENAME = '.transcript.jsonl';
@@ -119,6 +119,7 @@ type Block =
 
 export interface TranscriptExportOptions {
   now?: () => Date;
+  metadata?: { baseDir?: string } | null;
   /**
    * When set, restricts the export to a single conversation. The handoff
    * flow scopes to the one conversation the user is resuming; project-wide
@@ -147,11 +148,13 @@ export function exportProjectTranscript(
   projectId: string,
   options: TranscriptExportOptions = {},
 ): TranscriptExportResult {
-  const dir = projectDir(projectsRoot, projectId);
+  const dir = resolveProjectDir(projectsRoot, projectId, options.metadata ?? undefined);
   // The project may have DB rows but no on-disk directory yet (a synthesis
   // caller can hit this immediately after `insertProject`). mkdirSync with
   // recursive is idempotent; cheaper than guarding via existsSync.
-  fs.mkdirSync(dir, { recursive: true });
+  const usesExternalDir = typeof options.metadata?.baseDir === 'string'
+    && path.isAbsolute(path.normalize(options.metadata.baseDir));
+  if (!usesExternalDir) fs.mkdirSync(dir, { recursive: true });
 
   const finalPath = path.join(dir, TRANSCRIPT_FILENAME);
   const tmpPath = path.join(

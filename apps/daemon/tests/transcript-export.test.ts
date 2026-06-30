@@ -158,6 +158,21 @@ describe('exportProjectTranscript', () => {
     });
   });
 
+  it('writes transcript files under metadata.baseDir for external projects', () => {
+    const { db, projectsRoot } = setup({ skipMkdir: true });
+    const externalDir = path.join(tempDir!, 'external-project');
+    fs.mkdirSync(externalDir, { recursive: true });
+
+    const result = exportProjectTranscript(db, projectsRoot, PROJECT_ID, {
+      now: FIXED_NOW,
+      metadata: { baseDir: externalDir },
+    } as any);
+
+    expect(result.path).toBe(path.join(externalDir, '.transcript.jsonl'));
+    expect(fs.existsSync(path.join(projectsRoot, PROJECT_ID))).toBe(false);
+    expect(line(readLines(result.path), 0).projectId).toBe(PROJECT_ID);
+  });
+
   it('emits header, conversation marker, and one message line per message', () => {
     const { db, projectsRoot } = setup();
     seedConversation(db, { id: 'c1', createdAt: 100, title: 'Greeting' });
