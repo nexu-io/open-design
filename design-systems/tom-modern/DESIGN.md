@@ -34,39 +34,39 @@ Atmosphere comes from a subtle 30px grid overlay on the page background, structu
 
 | Token | Hex | Role |
 |---|---|---|
-| `--tm-accent` | `#ff5a00` | Primary accent — CTAs, links, interactive highlights, accent words |
+| `--accent` | `#ff5a00` | Primary accent — CTAs, links, interactive highlights, accent words |
 
 ### Surfaces
 
 | Token | Hex | Role |
 |---|---|---|
-| `--tm-bg` | `#fafafa` | Page background — neutral near-white, never warm |
-| `--tm-surface` | `#ffffff` | Card and panel surfaces |
-| `--tm-surface-alt` | `#f4f4f5` | Alternate surface for section rhythm |
+| `--bg` | `#fafafa` | Page background — neutral near-white, never warm |
+| `--surface` | `#ffffff` | Card and panel surfaces |
+| `--surface-warm` | `var(--surface)` | Alternate surface for section rhythm (aliases to surface) |
 
 ### Text
 
 | Token | Hex | Role |
 |---|---|---|
-| `--tm-text` | `#27272a` | Primary text — headlines, body, buttons |
-| `--tm-text-secondary` | `#52525b` | Secondary text — descriptions, lead paragraphs |
-| `--tm-muted` | `#71717a` | Muted text — captions, labels, metadata |
+| `--fg` | `#27272a` | Primary text — headlines, body, buttons |
+| `--fg-2` | `#52525b` | Secondary text — descriptions, lead paragraphs |
+| `--muted` | `#71717a` | Muted text — captions, labels, metadata |
 
 ### Borders
 
 | Token | Hex | Role |
 |---|---|---|
-| `--tm-line` | `#969696` | Primary borders — card outlines, structural lines |
-| `--tm-line-muted` | `#d4d4d8` | Muted borders — subtle separators |
+| `--border` | `#969696` | Primary borders — card outlines, structural lines |
+| `--border-soft` | `#d4d4d8` | Muted borders — subtle separators |
 
-### Shadows
+### Shadows (brand-specific)
 
 | Token | Value | Role |
 |---|---|---|
 | `--tm-shadow-hard` | `8px 8px 0 rgba(150,150,150,0.12)` | Hard offset shadow — hover states, emphasis |
 | `--tm-shadow-soft` | `4px 4px 0 rgba(150,150,150,0.1)` | Soft offset shadow — default card state |
 
-### Code Window
+### Code Window (brand-specific)
 
 | Token | Hex | Role |
 |---|---|---|
@@ -124,7 +124,7 @@ If Geist is unavailable:
 
 ### Buttons
 
-- **Primary:** Dark fill (`--tm-text`), white text, 0px radius, hard shadow on hover
+- **Primary:** Dark fill (`--fg`), white text, 0px radius, hard shadow on hover
 - **Secondary:** Transparent, dark text, 1px border, white fill on hover
 - **Block:** Full-width variant of any button
 
@@ -188,7 +188,7 @@ If Geist is unavailable:
 ### Section Rhythm
 
 Sections alternate between:
-1. White background (`--tm-bg`)
+1. White background (`--bg`)
 2. Alternate surface (`rgba(255,255,255,0.72)` with borders)
 
 This creates visual rhythm without color changes.
@@ -198,7 +198,7 @@ This creates visual rhythm without color changes.
 | Level | Treatment | Use |
 |---|---|---|
 | 0 — Flat | No shadow, no border | Body text, section backgrounds |
-| 1 — Border | 1px `--tm-line` border | Cards, panels, inputs |
+| 1 — Border | 1px `--border` border | Cards, panels, inputs |
 | 2 — Soft shadow | `4px 4px 0 rgba(150,150,150,0.1)` | Default card state |
 | 3 — Hard shadow | `8px 8px 0 rgba(150,150,150,0.12)` | Hover states, emphasis |
 | 4 — Code shadow | `0 28px 90px rgba(22,22,22,0.14)` | Code window only |
