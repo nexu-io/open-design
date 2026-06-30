@@ -49,6 +49,11 @@
 /llms.txt
   Cache-Control: public, max-age=3600
 
+# Public pricing contract consumed by /pricing/ client-side reconciliation.
+/pricing/plans.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+
 # Static assets in public/. Filenames don't carry a content hash, so we use
 # a moderate browser TTL and rely on edge purge from CF Pages on deploy.
 /favicon.png

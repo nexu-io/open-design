@@ -254,6 +254,7 @@ export interface HeaderProductMenuCopy {
   agent: string;
   plugins: string;
   pluginItems: { templates: string; skills: string; systems: string };
+  pricing: string;
   resources: string;
   resourceItems: {
     blog: string;
@@ -287,6 +288,7 @@ export interface CommonCopy {
 
 const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy> = {
   en: {
+    pricing: "Pricing",
     toggleNavigationMenu: 'Toggle navigation menu',
     product: 'Product',
     openDesignName: 'Open Design',
@@ -326,6 +328,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   zh: {
+    pricing: "价格",
     toggleNavigationMenu: '切换导航菜单',
     product: '产品',
     openDesignName: 'Open Design',
@@ -365,6 +368,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   'zh-tw': {
+    pricing: "價格",
     toggleNavigationMenu: '切換導覽選單',
     product: '產品',
     openDesignName: 'Open Design',
@@ -404,6 +408,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ja: {
+    pricing: "料金",
     toggleNavigationMenu: 'ナビゲーションメニューを切り替え',
     product: 'プロダクト',
     openDesignName: 'Open Design',
@@ -443,6 +448,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ko: {
+    pricing: "요금제",
     toggleNavigationMenu: '내비게이션 메뉴 전환',
     product: '제품',
     openDesignName: 'Open Design',
@@ -482,6 +488,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   de: {
+    pricing: "Preise",
     toggleNavigationMenu: 'Navigationsmenu umschalten',
     product: 'Produkt',
     openDesignName: 'Open Design',
@@ -521,6 +528,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   fr: {
+    pricing: "Tarifs",
     toggleNavigationMenu: 'Basculer le menu de navigation',
     product: 'Produit',
     openDesignName: 'Open Design',
@@ -560,6 +568,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ru: {
+    pricing: "Цены",
     toggleNavigationMenu: 'Переключить меню навигации',
     product: 'Продукт',
     openDesignName: 'Open Design',
@@ -599,6 +608,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   es: {
+    pricing: "Precios",
     toggleNavigationMenu: 'Alternar menú de navegación',
     product: 'Producto',
     openDesignName: 'Open Design',
@@ -638,6 +648,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   'pt-br': {
+    pricing: "Preços",
     toggleNavigationMenu: 'Alternar menu de navegação',
     product: 'Produto',
     openDesignName: 'Open Design',
@@ -677,6 +688,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   it: {
+    pricing: "Prezzi",
     toggleNavigationMenu: 'Apri o chiudi il menu di navigazione',
     product: 'Prodotto',
     openDesignName: 'Open Design',
@@ -716,6 +728,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   vi: {
+    pricing: "Giá",
     toggleNavigationMenu: 'Chuyển menu điều hướng',
     product: 'Sản phẩm',
     openDesignName: 'Open Design',
@@ -755,6 +768,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   pl: {
+    pricing: "Cennik",
     toggleNavigationMenu: 'Przełącz menu nawigacji',
     product: 'Produkt',
     openDesignName: 'Open Design',
@@ -794,6 +808,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   id: {
+    pricing: "Harga",
     toggleNavigationMenu: 'Alihkan menu navigasi',
     product: 'Produk',
     openDesignName: 'Open Design',
@@ -833,6 +848,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   nl: {
+    pricing: "Prijzen",
     toggleNavigationMenu: 'Navigatiemenu wisselen',
     product: 'Product',
     openDesignName: 'Open Design',
@@ -872,6 +888,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ar: {
+    pricing: "الأسعار",
     toggleNavigationMenu: 'تبديل قائمة التنقل',
     product: 'المنتج',
     openDesignName: 'Open Design',
@@ -911,6 +928,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   tr: {
+    pricing: "Fiyatlandırma",
     toggleNavigationMenu: 'Gezinme menüsünü aç/kapat',
     product: 'Ürün',
     openDesignName: 'Open Design',
@@ -950,6 +968,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   uk: {
+    pricing: "Ціни",
     toggleNavigationMenu: 'Перемкнути меню навігації',
     product: 'Продукт',
     openDesignName: 'Open Design',
