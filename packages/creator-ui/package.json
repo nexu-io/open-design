@@ -1,0 +1,33 @@
+{
+  "name": "@open-design/creator-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure presentation helpers and view-model normalization for the Creator Workbench. No components, no CSS, no state management.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/creator-domain": "workspace:*",
+    "@open-design/creator-events": "workspace:*",
+    "@open-design/creator-workflows": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}
