@@ -134,6 +134,13 @@ export const EN: SolutionLocaleCopy = {
     ctaTitle: 'Generate your first wireframe tonight',
     ctaBody:
       'Star the repo, install Open Design, and turn your next screen idea into an editable wireframe — and then into shipped code — in the agent you already use.',
+    relatedTitle: 'Related tools & guides',
+    related: [
+      { href: '/blog/design-to-code-tools/', label: 'Best design-to-code tools' },
+      { href: '/blog/best-ai-design-tools/', label: 'Best AI design tools' },
+      { href: '/solutions/prototype/', label: 'Prototyping with Open Design' },
+      { href: '/solutions/designer/', label: 'Open Design for designers' },
+    ],
   },
   prototype: {
     title: 'Build interactive prototypes with Open Design + Claude Code',

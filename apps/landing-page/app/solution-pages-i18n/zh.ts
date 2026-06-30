@@ -89,6 +89,13 @@ export const ZH: SolutionLocaleCopy = {
     ctaTitle: '今晚就生成第一张线框',
     ctaBody:
       'Star 仓库、装上 Open Design，把你下一个屏幕想法变成可编辑线框——再变成可上线代码——全在你已经在用的 agent 里。',
+    relatedTitle: '相关工具与指南',
+    related: [
+      { href: '/blog/design-to-code-tools/', label: '最佳设计转代码工具' },
+      { href: '/blog/best-ai-design-tools/', label: '最佳 AI 设计工具' },
+      { href: '/solutions/prototype/', label: '用 Open Design 做原型' },
+      { href: '/solutions/designer/', label: 'Open Design 给设计师' },
+    ],
   },
   prototype: {
     title: '用 Open Design + Claude Code 做可交互原型',
