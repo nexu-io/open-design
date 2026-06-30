@@ -44,14 +44,14 @@ This file is the single source of truth for agents entering this repository. Rea
 - macOS, Linux, and WSL2 are the primary supported paths. Windows native is best-effort — file an issue if it doesn't work.
 - Historical Windows-specific friction is documented in closed issues #10, #96, #100, #203, and #315; check the issue tracker for the current state before filing new reports.
 - Install Node 24. Either `winget install OpenJS.NodeJS.LTS` (currently Node 24.x) or download from https://nodejs.org. After install, verify with `node --version` — the WinGet LTS pointer rolls to the next major in October 2026, so re-verify if you re-run the install command later. Do not use Node 22 — see FAQ.
-- `corepack enable` fails with EPERM on Windows (cannot write shims to `Program Files`). Use `npm install -g pnpm@10.33.2` instead.
-- `better-sqlite3` has no prebuilt binary for win32/Node 24; `pnpm install` will compile it from source via node-gyp (~2 min). Requires Visual Studio Build Tools 2022 or newer. This is expected — not a sign of version incompatibility.
+- `corepack enable` fails with EPERM on Windows (cannot write shims to `Program Files`). Use `corepack prepare pnpm@10.33.2 --activate` instead. Always invoke pnpm as `corepack pnpm` in this repo, not bare `pnpm`.
+- `better-sqlite3` has no prebuilt binary for win32/Node 24; `corepack pnpm install` will compile it from source via node-gyp (~2 min). Requires Visual Studio Build Tools 2022 or newer. This is expected — not a sign of version incompatibility.
 - For `tools-dev` start/stop/status usage, see "Local lifecycle" below.
 
 ## Local lifecycle
 
-- Use `pnpm tools-dev` as the only local development lifecycle entry point.
-- Do not add or restore root lifecycle aliases: `pnpm dev`, `pnpm dev:all`, `pnpm daemon`, `pnpm preview`, or `pnpm start`.
+- Use `corepack pnpm tools-dev` as the only local development lifecycle entry point.
+- Do not add or restore root lifecycle aliases: `corepack pnpm dev`, `corepack pnpm dev:all`, `corepack pnpm daemon`, `corepack pnpm preview`, or `corepack pnpm start`.
 - Ports are governed by `tools-dev` flags: `--daemon-port` and `--web-port`.
 - `tools-dev` exports `OD_PORT` for the web proxy target and `OD_WEB_PORT` for the web listener; do not use `NEXT_PORT`.
 
@@ -132,8 +132,8 @@ obvious, block the PR and request core-maintainer guidance.
 
 ## Root command boundary
 
-- Keep root scripts reserved for true repo-level checks and tools control-plane entrypoints: `pnpm guard`, `pnpm typecheck`, `pnpm tools-dev`, `pnpm tools-pack`, and `pnpm tools-serve`.
-- Do not add root aggregate `pnpm build` or `pnpm test` aliases. Build/test commands must stay package-scoped (`pnpm --filter <package> ...`) or tool-scoped (`pnpm tools-pack ...`).
+- Keep root scripts reserved for true repo-level checks and tools control-plane entrypoints: `corepack pnpm guard`, `corepack pnpm typecheck`, `corepack pnpm tools-dev`, `corepack pnpm tools-pack`, and `corepack pnpm tools-serve`.
+- Do not add root aggregate `corepack pnpm build` or `corepack pnpm test` aliases. Build/test commands must stay package-scoped (`corepack pnpm --filter <package> ...`) or tool-scoped (`corepack pnpm tools-pack ...`).
 - Do not add root e2e aliases; e2e package commands and ownership rules live in `e2e/AGENTS.md`.
 
 ## GitHub automation boundary
@@ -164,7 +164,7 @@ Do not add a new business-named follow-on workflow such as `foo.comment.atom.yml
 - Keep shared API DTOs, SSE event unions, error shapes, task shapes, and example payloads in `packages/contracts`; update contracts before wiring divergent web/daemon request or response shapes.
 - Keep `packages/contracts` pure TypeScript and free of Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, and sidecar control-plane dependencies.
 - Keep project-owned entrypoints, modules, scripts, tests, reporters, and configs TypeScript-first; generated `dist/*.js` is runtime output, and source edits belong in `.ts` files.
-- New `.js`, `.mjs`, or `.cjs` files need an explicit generated/vendor/compatibility reason and must pass `pnpm guard`.
+- New `.js`, `.mjs`, or `.cjs` files need an explicit generated/vendor/compatibility reason and must pass `corepack pnpm guard`.
 - App business logic must not know about sidecar/control-plane concepts. Keep sidecar awareness in `apps/<app>/sidecar` or the desktop sidecar entry wrapper.
 - Shared web/daemon app contracts belong in `packages/contracts`; that package must not depend on Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, or the sidecar control-plane protocol.
 - Sidecar process stamps must have exactly five fields: `app`, `mode`, `namespace`, `ipc`, and `source`.
@@ -209,10 +209,10 @@ Every user-facing capability must be reachable through both the web UI **and** t
 ## PR-duty tooling
 
 This repository no longer ships a maintainer PR-duty control plane. The former
-`pnpm tools-pr` workflow has moved to the standalone `PerishCode/duty` project
+`corepack pnpm tools-pr` workflow has moved to the standalone `PerishCode/duty` project
 so personal review-lane automation does not become product workspace
 maintenance surface. Do not recreate `tools/pr`, `@open-design/tools-pr`, or a
-root `pnpm tools-pr` script without a new explicit maintainer decision.
+root `corepack pnpm tools-pr` script without a new explicit maintainer decision.
 
 ## Agent runtime conventions
 
@@ -241,7 +241,7 @@ root `pnpm tools-pr` script without a new explicit maintainer decision.
 - New component-owned UI styles should default to CSS Modules next to the component (`Component.module.css`) instead of expanding global stylesheets. This is preferred for isolated components, panels, menus, drawers, toolbars, cards, and form sections.
 - When touching an existing component with nearby global styles, prefer migrating that component's local selectors to a CSS Module as part of the change if it is small and testable. Do not mix a large mechanical move with behavior/styling changes in the same patch.
 - Keep global class names only for deliberate shared contracts: reusable primitives, theme hooks, third-party/content styling, cross-component layout, or selectors that rely on global cascade/specificity. Document any new global selector group with its owning feature.
-- CSS refactors must preserve cascade semantics. For mechanical splits, verify expanded import content/order matches the previous stylesheet; for CSS Module migrations, validate the affected UI path with `pnpm --filter @open-design/web typecheck` and a focused build/test or visual check when practical.
+- CSS refactors must preserve cascade semantics. For mechanical splits, verify expanded import content/order matches the previous stylesheet; for CSS Module migrations, validate the affected UI path with `corepack pnpm --filter @open-design/web typecheck` and a focused build/test or visual check when practical.
 
 ## Web component reuse
 
@@ -265,17 +265,17 @@ root `pnpm tools-pr` script without a new explicit maintainer decision.
 
 ## Validation strategy
 
-- After package, workspace, or command-entry changes, run `pnpm install` so workspace links and generated dist entries stay fresh.
+- After package, workspace, or command-entry changes, run `corepack pnpm install` so workspace links and generated dist entries stay fresh.
 - For agent-stream / parser changes (`apps/daemon/src/claude-stream.ts`, `json-event-stream.ts`, `qoder-stream.ts`, etc.), replay a recorded session through the mock CLIs in `mocks/` to verify event shapes round-trip without burning provider budget. PATH-overlay activation: `export PATH="$PWD/mocks/bin:$PATH" OD_MOCKS_TRACE=<8-char-id> OD_MOCKS_NO_DELAY=1`. See `mocks/README.md` for the trace catalog and selection knobs.
-- Treat every `pnpm-lock.yaml` change as requiring a Nix pnpm deps hash refresh check. `nix/pnpm-deps.nix` is a generated lock artifact; use `pnpm nix:update-hash` only when intentionally maintaining Nix packaging, then re-run `nix flake check --print-build-logs --keep-going`. Contributors without Nix can rely on the PR `Validate workspace` gate, which now uploads or auto-applies the generated hash-only fix when possible.
-- Before marking regular work ready, run at least `pnpm guard` and `pnpm typecheck`, plus the package-scoped tests/builds that match the files changed. Do not use or add root `pnpm test`/`pnpm build` aliases.
-- For local web runtime loops, prefer `pnpm tools-dev run web --daemon-port <port> --web-port <port>`.
+- Treat every `pnpm-lock.yaml` change as requiring a Nix pnpm deps hash refresh check. `nix/pnpm-deps.nix` is a generated lock artifact; use `corepack pnpm nix:update-hash` only when intentionally maintaining Nix packaging, then re-run `nix flake check --print-build-logs --keep-going`. Contributors without Nix can rely on the PR `Validate workspace` gate, which now uploads or auto-applies the generated hash-only fix when possible.
+- Before marking regular work ready, run at least `corepack pnpm guard` and `corepack pnpm typecheck`, plus the package-scoped tests/builds that match the files changed. Do not use or add root `corepack pnpm test`/`corepack pnpm build` aliases.
+- For local web runtime loops, prefer `corepack pnpm tools-dev run web --daemon-port <port> --web-port <port>`.
 - For e2e tests that need a tools-dev daemon/web runtime, use the shared tools-dev harness under `e2e/lib/tools-dev/` and the framework suite adapters (`e2e/lib/playwright/suite.ts`, `e2e/lib/vitest/suite.ts`). Do not hand-spawn `tools-dev` from test cases or duplicate lifecycle helpers under framework-specific folders.
 - Playwright UI tests must import `test`/`expect` from `@/playwright/suite`, not directly from `@playwright/test`; type-only imports from `@playwright/test` remain fine. The suite owns one isolated tools-dev daemon/web/data root per Playwright worker. Do not add a shared-runtime fallback; set Playwright workers to `1` when constrained.
 - Playwright suite code must not own workspace prebuild policy. CI and callers keep the existing prebuild steps; `tools-dev` daemon freshness checks are only a fallback guard.
-- On a GUI-capable machine, validate desktop by running `pnpm tools-dev`, then `pnpm tools-dev inspect desktop status`.
+- On a GUI-capable machine, validate desktop by running `corepack pnpm tools-dev`, then `corepack pnpm tools-dev inspect desktop status`.
 - Stamp/namespace changes must validate two concurrent namespaces and run desktop `inspect eval` plus `inspect screenshot` for each namespace.
-- Path/log changes must run `pnpm tools-dev logs --namespace <name> --json` and confirm log paths are under `.tmp/tools-dev/<namespace>/...`.
+- Path/log changes must run `corepack pnpm tools-dev logs --namespace <name> --json` and confirm log paths are under `.tmp/tools-dev/<namespace>/...`.
 
 ## Bug follow-up workflow
 
@@ -294,54 +294,54 @@ For a worked example of one full loop (red e2e spec → fix → green), see `e2e
 # Common commands
 
 ```bash
-pnpm install
-pnpm nix:update-hash
-pnpm tools-dev
-pnpm tools-serve start updater
-pnpm tools-dev start web
-pnpm tools-dev run web --daemon-port 17456 --web-port 17573
-pnpm tools-dev status --json
-pnpm tools-dev logs --json
-pnpm tools-dev inspect desktop status --json
-pnpm tools-dev inspect desktop screenshot --path /tmp/open-design.png
-pnpm tools-dev stop
-pnpm tools-dev check
+corepack pnpm install
+corepack pnpm nix:update-hash
+corepack pnpm tools-dev
+corepack pnpm tools-serve start updater
+corepack pnpm tools-dev start web
+corepack pnpm tools-dev run web --daemon-port 17456 --web-port 17573
+corepack pnpm tools-dev status --json
+corepack pnpm tools-dev logs --json
+corepack pnpm tools-dev inspect desktop status --json
+corepack pnpm tools-dev inspect desktop screenshot --path /tmp/open-design.png
+corepack pnpm tools-dev stop
+corepack pnpm tools-dev check
 ```
 
 ```bash
-pnpm guard
-pnpm typecheck
+corepack pnpm guard
+corepack pnpm typecheck
 ```
 
 ```bash
-pnpm --filter @open-design/web typecheck
-pnpm --filter @open-design/web test
-pnpm --filter @open-design/web build
-pnpm --filter @open-design/daemon test
-pnpm --filter @open-design/daemon build
-pnpm --filter @open-design/desktop build
-pnpm --filter @open-design/tools-dev build
-pnpm --filter @open-design/tools-pack build
-pnpm --filter @open-design/tools-serve build
+corepack pnpm --filter @open-design/web typecheck
+corepack pnpm --filter @open-design/web test
+corepack pnpm --filter @open-design/web build
+corepack pnpm --filter @open-design/daemon test
+corepack pnpm --filter @open-design/daemon build
+corepack pnpm --filter @open-design/desktop build
+corepack pnpm --filter @open-design/tools-dev build
+corepack pnpm --filter @open-design/tools-pack build
+corepack pnpm --filter @open-design/tools-serve build
 ```
 
 ```bash
-pnpm tools-pack mac build --to all
-pnpm tools-pack mac install
-pnpm tools-pack mac cleanup
-pnpm tools-pack win build --to nsis
-pnpm tools-pack win install
-pnpm tools-pack win cleanup
-pnpm tools-pack linux build --to appimage
-pnpm tools-pack linux install
-pnpm tools-pack linux build --containerized
+corepack pnpm tools-pack mac build --to all
+corepack pnpm tools-pack mac install
+corepack pnpm tools-pack mac cleanup
+corepack pnpm tools-pack win build --to nsis
+corepack pnpm tools-pack win install
+corepack pnpm tools-pack win cleanup
+corepack pnpm tools-pack linux build --to appimage
+corepack pnpm tools-pack linux install
+corepack pnpm tools-pack linux build --containerized
 ```
 
 # FAQ
 
-## Why is there no root `pnpm dev` / `pnpm start`?
+## Why is there no root `corepack pnpm dev` / `corepack pnpm start`?
 
-To avoid starting daemon, web, and desktop through inconsistent env, port, namespace, or log paths. All local lifecycle flows must go through `pnpm tools-dev`.
+To avoid starting daemon, web, and desktop through inconsistent env, port, namespace, or log paths. All local lifecycle flows must go through `corepack pnpm tools-dev`.
 
 ## Why should `apps/nextjs` not be restored?
 
@@ -355,9 +355,9 @@ Desktop queries runtime status through sidecar IPC. The web URL comes from `tool
 
 `@open-design/sidecar-proto` owns Open Design app/mode/source constants, namespace validation, stamp fields/flags, IPC message schema, status shapes, and error semantics. `@open-design/sidecar` provides only generic bootstrap, IPC transport, path/runtime resolution, launch env, and JSON runtime files. `@open-design/platform` provides only generic OS process stamp serialization, command parsing, and process matching/search primitives, consuming the proto descriptor.
 
-## When is `pnpm install` required?
+## When is `corepack pnpm install` required?
 
-Run `pnpm install` after changing package manifests, workspace layout, command entrypoints, bin/link-related content, or after adding/removing workspace packages.
+Run `corepack pnpm install` after changing package manifests, workspace layout, command entrypoints, bin/link-related content, or after adding/removing workspace packages.
 
 ## Can I use Node 22 instead of Node 24?
 
