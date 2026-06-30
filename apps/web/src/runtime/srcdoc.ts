@@ -2026,6 +2026,8 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   const safeInitialSlideIndex = Number.isFinite(initialSlideIndex)
     ? Math.max(0, Math.floor(initialSlideIndex))
     : 0;
+  const hasInlineSlideMessageListener =
+    /addEventListener\s*\(\s*['"]message['"]/i.test(doc) && /\bod:slide\b/.test(doc);
   const isFrameworkDeck = /\bid\s*=\s*["']deck-stage["']/i.test(doc);
   const styleFix = isFrameworkDeck
     ? ''
@@ -2035,6 +2037,23 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   const script = `<script data-od-deck-bridge>(function(){
   var initialSlideIndex = ${safeInitialSlideIndex};
   var didRestoreInitialSlide = initialSlideIndex <= 0;
+  if (${JSON.stringify(isFrameworkDeck)}) {
+    window.addEventListener('keydown', function(ev){
+      var key = ev && ev.key;
+      if (
+        key !== 'ArrowRight' &&
+        key !== 'PageDown' &&
+        key !== ' ' &&
+        key !== 'ArrowLeft' &&
+        key !== 'PageUp' &&
+        key !== 'Home' &&
+        key !== 'End'
+      ) return;
+      var t = ev.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      ev.stopPropagation();
+    }, true);
+  }
   function slides(){
     // Structured selectors first so decorative .slide markup in non-deck
     // pages (icons, badges, code samples) is not counted as deck slides;
@@ -2365,6 +2384,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
       var i = activeIndex(list);
       var count = list.length;
       var progressWidth = count ? ((i + 1) / count * 100) + '%' : '0';
+      updateDeckChrome(i, count);
       window.parent.postMessage({
         type: 'od:slide-state',
         active: i,
@@ -2399,11 +2419,81 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     didRestoreInitialSlide = true;
     gotoIndex(initialSlideIndex);
   }
-  window.addEventListener('message', function(ev){
+  var odSlideMessageBeforeIndex = -1;
+  var odDeckBridgeInstallingMessageListener = false;
+  var odHasExternalSlideMessageListener = ${JSON.stringify(hasInlineSlideMessageListener)};
+  function odMaybeHandlesSlideMessages(listener) {
+    try {
+      var source = '';
+      if (typeof listener === 'function') source = String(listener);
+      else if (listener && typeof listener.handleEvent === 'function') source = String(listener.handleEvent);
+      if (/\\bod:slide\\b/.test(source)) return true;
+      return /slide/i.test(source) && /message/i.test(source);
+    } catch (_) {
+      return false;
+    }
+  }
+  try {
+    var odOriginalAddEventListener = window.addEventListener;
+    window.addEventListener = function(type, listener, options) {
+      if (
+        type === 'message' &&
+        !odDeckBridgeInstallingMessageListener &&
+        odMaybeHandlesSlideMessages(listener)
+      ) {
+        odHasExternalSlideMessageListener = true;
+      }
+      return odOriginalAddEventListener.call(this, type, listener, options);
+    };
+  } catch (_) {}
+  function addOdSlideMessageListener(listener, options) {
+    odDeckBridgeInstallingMessageListener = true;
+    try { window.addEventListener('message', listener, options); }
+    finally { odDeckBridgeInstallingMessageListener = false; }
+  }
+  addOdSlideMessageListener(function(ev){
     var data = ev && ev.data;
     if (!data || data.type !== 'od:slide') return;
-    if (data.action === 'go' && typeof data.index === 'number') gotoIndex(data.index);
-    else go(data.action);
+    var before = activeIndex(slides());
+    odSlideMessageBeforeIndex = before;
+    setTimeout(function(){
+      if (activeIndex(slides()) !== before) report();
+    }, 0);
+  }, true);
+  addOdSlideMessageListener(function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:slide') return;
+    var before = odSlideMessageBeforeIndex;
+    odSlideMessageBeforeIndex = -1;
+    function applyBridgeFallback() {
+      var current = activeIndex(slides());
+      if (data.action === 'go' && typeof data.index === 'number') {
+        if (current === data.index) {
+          report();
+          return;
+        }
+        gotoIndex(data.index);
+        return;
+      }
+      // Some generated decks ship their own od:slide listener. Let every
+      // listener for this message event settle first; then, if the artifact
+      // already moved from the captured index, report instead of applying the
+      // same command again.
+      if (before >= 0 && current !== before) {
+        report();
+        return;
+      }
+      go(data.action);
+    }
+    if (before >= 0 && activeIndex(slides()) !== before) {
+      report();
+      return;
+    }
+    if (odHasExternalSlideMessageListener) {
+      setTimeout(applyBridgeFallback, 0);
+      return;
+    }
+    applyBridgeFallback();
   });
   function ownDeckButton(id, action){
     var btn = document.getElementById(id);
