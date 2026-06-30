@@ -1,5 +1,6 @@
 import { amrAgentDef } from './defs/amr.js';
 import { claudeAgentDef } from './defs/claude.js';
+import { clineAgentDef } from './defs/cline.js';
 import { codexAgentDef } from './defs/codex.js';
 import { devinAgentDef } from './defs/devin.js';
 import { geminiAgentDef } from './defs/gemini.js';
@@ -29,6 +30,7 @@ import type { RuntimeAgentDef } from './types.js';
 const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   amrAgentDef,
   claudeAgentDef,
+  clineAgentDef,
   codexAgentDef,
   devinAgentDef,
   geminiAgentDef,

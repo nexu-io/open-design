@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  AGENT_DEFS, aider, antigravity, assert, claude, cline, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
@@ -112,6 +112,48 @@ test('opencode args keep the documented run/json argv and ignore unsupported rea
   assert.deepEqual(withReasoning, withModel);
   assert.equal(withModel.includes('--dangerously-skip-permissions'), false);
   assert.equal(withModel.includes('--model'), false);
+});
+
+test('cline uses headless auto-approve mode with cwd, model, and thinking options', () => {
+  const prompt = 'design a landing page';
+  const args = cline.buildArgs(
+    prompt,
+    [],
+    [],
+    { model: 'anthropic/claude-sonnet-4-5', reasoning: 'medium' },
+    { cwd: '/tmp/od-project' },
+  );
+
+  assert.equal(cline.bin, 'cline');
+  assert.equal(cline.streamFormat, 'plain');
+  assert.equal(cline.maxPromptArgBytes, 30_000);
+  assert.deepEqual(args, [
+    '--auto-approve',
+    'true',
+    '--cwd',
+    '/tmp/od-project',
+    '--model',
+    'anthropic/claude-sonnet-4-5',
+    '--thinking',
+    'medium',
+    prompt,
+  ]);
+});
+
+test('cline omits default model and reasoning flags', () => {
+  const args = cline.buildArgs(
+    'short prompt',
+    [],
+    [],
+    { model: 'default', reasoning: 'default' },
+    {},
+  );
+
+  assert.deepEqual(args, [
+    '--auto-approve',
+    'true',
+    'short prompt',
+  ]);
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely
