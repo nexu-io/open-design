@@ -122,7 +122,6 @@ import { fetchProviderModels } from '../providers/provider-models';
 import {
   fetchConnectors,
   fetchDesignTemplates,
-  fetchLatestGithubReleaseInfo,
   openExternalUrl,
 } from '../providers/registry';
 import { MEDIA_PROVIDERS } from '../media/models';
@@ -131,6 +130,17 @@ import { isVisualStabilityMode } from '../utils/visualStability';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
+import {
+  checkForUpdaterUpdate,
+  deriveUpdaterModel,
+  downloadUpdaterUpdate,
+  openUpdaterInstaller,
+  quitAfterUpdaterInstallerOpen,
+  readUpdaterStatus,
+  subscribeToUpdaterStatus,
+  type UpdaterActionResult,
+  type UpdaterModel,
+} from '../lib/updater';
 import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
 import { DesignSystemsSection } from './DesignSystemsSection';
@@ -215,6 +225,147 @@ interface ByokProviderPreset {
 // card into view on the execution section and plays a highlight (plus a
 // sign-in coachmark when the user has not authorized AMR yet).
 export type SettingsHighlight = 'amr' | null;
+
+const OPEN_DESIGN_RELEASES_URL = 'https://github.com/nexu-io/open-design/releases';
+
+type AboutUpdatePrimaryAction = 'check' | 'download' | 'install' | 'quit';
+type AboutUpdateTone = 'neutral' | 'success' | 'warning' | 'error';
+
+export interface AboutUpdateControl {
+  primaryAction: AboutUpdatePrimaryAction | null;
+  primaryLabelKey: keyof Dict | null;
+  showReleaseLink: boolean;
+  statusKey: keyof Dict;
+  statusTone: AboutUpdateTone;
+  statusVars?: Record<string, string | number>;
+}
+
+export function deriveAboutUpdateControl(
+  model: UpdaterModel,
+  appVersionInfo: AppVersionInfo | null,
+): AboutUpdateControl {
+  if (appVersionInfo?.packaged === false) {
+    return {
+      primaryAction: null,
+      primaryLabelKey: null,
+      showReleaseLink: true,
+      statusKey: 'settings.updateStatusDevelopment',
+      statusTone: 'neutral',
+    };
+  }
+
+  if (model.environment !== 'desktop' || !model.enabled || !model.supported) {
+    return {
+      primaryAction: null,
+      primaryLabelKey: null,
+      showReleaseLink: true,
+      statusKey: 'settings.updateStatusUnsupported',
+      statusTone: 'warning',
+    };
+  }
+
+  switch (model.status?.state) {
+    case 'checking':
+      return {
+        primaryAction: null,
+        primaryLabelKey: 'updater.checking',
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusChecking',
+        statusTone: 'neutral',
+      };
+    case 'not-available':
+      return {
+        primaryAction: 'check',
+        primaryLabelKey: 'settings.updateRecheck',
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusUpToDate',
+        statusTone: 'success',
+      };
+    case 'available':
+      return {
+        primaryAction: model.canDownload ? 'download' : null,
+        primaryLabelKey: model.canDownload ? 'updater.download' : null,
+        showReleaseLink: true,
+        statusKey: model.availableVersion
+          ? 'settings.updateStatusAvailable'
+          : 'settings.updateStatusAvailableUnknown',
+        statusTone: 'warning',
+        ...(model.availableVersion ? { statusVars: { version: model.availableVersion } } : {}),
+      };
+    case 'downloading': {
+      const percent = model.downloadProgress?.percent;
+      return {
+        primaryAction: null,
+        primaryLabelKey: 'updater.downloading',
+        showReleaseLink: true,
+        statusKey: typeof percent === 'number'
+          ? 'settings.updateStatusDownloadingPercent'
+          : 'settings.updateStatusDownloading',
+        statusTone: 'neutral',
+        ...(typeof percent === 'number' ? { statusVars: { percent } } : {}),
+      };
+    }
+    case 'downloaded': {
+      if (model.installerOpened && model.canQuitAfterInstallerOpen) {
+        return {
+          primaryAction: 'quit',
+          primaryLabelKey: 'updater.quitButton',
+          showReleaseLink: false,
+          statusKey: 'settings.updateQuitFailed',
+          statusTone: 'warning',
+        };
+      }
+      const canInstallUpdate = model.canOpenInstaller || model.canApplyInPlace;
+      return {
+        primaryAction: canInstallUpdate ? 'install' : null,
+        primaryLabelKey: canInstallUpdate
+          ? model.updateKind === 'payload'
+            ? 'updater.installRestart'
+            : 'settings.updateNow'
+          : null,
+        showReleaseLink: true,
+        statusKey: model.availableVersion
+          ? 'settings.updateStatusReady'
+          : 'settings.updateStatusReadyUnknown',
+        statusTone: 'success',
+        ...(model.availableVersion ? { statusVars: { version: model.availableVersion } } : {}),
+      };
+    }
+    case 'installing':
+      return {
+        primaryAction: null,
+        primaryLabelKey: 'updater.installingRestart',
+        showReleaseLink: false,
+        statusKey: 'settings.updateStatusInstalling',
+        statusTone: 'neutral',
+      };
+    case 'error':
+      return {
+        primaryAction: 'check',
+        primaryLabelKey: 'settings.updateRetry',
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusFailed',
+        statusTone: 'error',
+      };
+    case 'unsupported':
+      return {
+        primaryAction: null,
+        primaryLabelKey: null,
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusUnsupported',
+        statusTone: 'warning',
+      };
+    case 'idle':
+    default:
+      return {
+        primaryAction: 'check',
+        primaryLabelKey: 'settings.updateCheck',
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusNotChecked',
+        statusTone: 'neutral',
+      };
+  }
+}
 
 interface Props {
   initial: AppConfig;
@@ -1504,26 +1655,79 @@ export function SettingsDialog({
   const [agentCustomModelIds, setAgentCustomModelIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
-  const [versionChecking, setVersionChecking] = useState(false);
+  const [aboutUpdaterModel, setAboutUpdaterModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
+  const [aboutUpdateActionBusy, setAboutUpdateActionBusy] = useState(false);
   const [aboutToast, setAboutToast] = useState<string | null>(null);
 
-  const handleInstallLatest = useCallback(async () => {
-    if (versionChecking || !appVersionInfo) return;
-    setVersionChecking(true);
+  useEffect(() => {
+    let mounted = true;
+    const unsubscribe = subscribeToUpdaterStatus((status) => {
+      if (!mounted) return;
+      setAboutUpdaterModel(deriveUpdaterModel(status, { hostAvailable: true }));
+    });
+    void readUpdaterStatus({ payload: { source: 'settings-about:mount' } }).then((result) => {
+      if (!mounted) return;
+      setAboutUpdaterModel(result.ok ? result.model : deriveUpdaterModel(null, { hostAvailable: false }));
+    });
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  const aboutUpdateControl = useMemo(
+    () => deriveAboutUpdateControl(aboutUpdaterModel, appVersionInfo),
+    [aboutUpdaterModel, appVersionInfo],
+  );
+
+  const applyAboutUpdaterResult = useCallback((result: UpdaterActionResult): boolean => {
+    if (!result.ok) {
+      setAboutToast(t('settings.updateActionFailed'));
+      return false;
+    }
+    setAboutUpdaterModel(result.model);
+    if (result.model.errorMessage != null) {
+      setAboutToast(t('settings.updateActionFailed'));
+      return false;
+    }
+    return true;
+  }, [t]);
+
+  const handleAboutUpdateAction = useCallback(async () => {
+    if (aboutUpdateActionBusy || aboutUpdaterModel.busy || aboutUpdateControl.primaryAction == null) return;
+    setAboutUpdateActionBusy(true);
     try {
-      const release = await fetchLatestGithubReleaseInfo();
-      const latestTag = (release?.tagName ?? '').replace(/^v/, '');
-      if (release?.stale !== true && latestTag && latestTag === appVersionInfo.version) {
-        setAboutToast(t('settings.alreadyLatest'));
-        return;
+      const options = { payload: { source: 'settings-about' } };
+      if (aboutUpdateControl.primaryAction === 'check') {
+        applyAboutUpdaterResult(await checkForUpdaterUpdate(options));
+      } else if (aboutUpdateControl.primaryAction === 'download') {
+        applyAboutUpdaterResult(await downloadUpdaterUpdate(options));
+      } else if (aboutUpdateControl.primaryAction === 'quit') {
+        const quitResult = await quitAfterUpdaterInstallerOpen(options);
+        if (!quitResult.ok) setAboutToast(t('settings.updateQuitFailed'));
+      } else {
+        const installed = applyAboutUpdaterResult(await openUpdaterInstaller(options));
+        if (installed) {
+          const quitResult = await quitAfterUpdaterInstallerOpen(options);
+          if (!quitResult.ok) setAboutToast(t('settings.updateQuitFailed'));
+        }
       }
     } catch {
-      // network error — fall through to open releases page
+      setAboutToast(t('settings.updateActionFailed'));
     } finally {
-      setVersionChecking(false);
+      setAboutUpdateActionBusy(false);
     }
-    window.open('https://github.com/nexu-io/open-design/releases', '_blank', 'noopener,noreferrer');
-  }, [versionChecking, appVersionInfo, t]);
+  }, [
+    aboutUpdateActionBusy,
+    aboutUpdateControl.primaryAction,
+    aboutUpdaterModel.busy,
+    applyAboutUpdaterResult,
+    t,
+  ]);
+
+  const handleOpenReleaseNotes = useCallback(() => {
+    void openExternalUrl(OPEN_DESIGN_RELEASES_URL);
+  }, []);
 
   // Precise inverse of App.handleCompleteOnboarding: flip
   // onboardingCompleted back to false, mirror it to localStorage and the
@@ -5302,18 +5506,51 @@ export function SettingsDialog({
               {appVersionInfo ? (
                 <dl className="settings-about-list">
                   <div className="settings-about-version-row">
-                    <div className="settings-about-version-left">
-                      <dt>{t('settings.appVersion')}</dt>
-                      <span className="settings-about-version-num">{appVersionInfo.version}</span>
+                    <div className="settings-about-version-copy">
+                      <div className="settings-about-version-left">
+                        <dt>{t('settings.appVersion')}</dt>
+                        <span className="settings-about-version-num">{appVersionInfo.version}</span>
+                        <dd
+                          aria-live="polite"
+                          className={`settings-about-update-status settings-about-update-status--${aboutUpdateControl.statusTone}`}
+                        >
+                          {t(aboutUpdateControl.statusKey, aboutUpdateControl.statusVars)}
+                        </dd>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      className="settings-about-download-link"
-                      disabled={versionChecking}
-                      onClick={handleInstallLatest}
-                    >
-                      {versionChecking ? t('common.loading') : t('settings.installLatest')}
-                    </button>
+                    <div className="settings-about-update-actions">
+                      {aboutUpdateControl.primaryLabelKey ? (
+                        <button
+                          type="button"
+                          className={`settings-about-update-button${
+                            aboutUpdateControl.primaryAction === 'download'
+                              || aboutUpdateControl.primaryAction === 'install'
+                              || aboutUpdateControl.primaryAction === 'quit'
+                              ? ' settings-about-update-button--primary'
+                              : ''
+                          }`}
+                          disabled={
+                            aboutUpdateActionBusy
+                            || aboutUpdaterModel.busy
+                            || aboutUpdateControl.primaryAction == null
+                          }
+                          onClick={handleAboutUpdateAction}
+                        >
+                          {aboutUpdateActionBusy
+                            ? t('common.loading')
+                            : t(aboutUpdateControl.primaryLabelKey)}
+                        </button>
+                      ) : null}
+                      {aboutUpdateControl.showReleaseLink ? (
+                        <button
+                          type="button"
+                          className="settings-about-release-link"
+                          onClick={handleOpenReleaseNotes}
+                        >
+                          {t('settings.updateViewReleases')}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                   <div>
                     <dt>{t('settings.appChannel')}</dt>

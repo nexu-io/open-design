@@ -2,6 +2,8 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
+import { installMockOpenDesignHost } from '@open-design/host/testing';
 import { en } from '../../src/i18n/locales/en';
 
 const {
@@ -223,6 +225,30 @@ const sampleDesignSystems = [
   },
 ];
 
+let restoreOpenDesignHost: (() => void) | null = null;
+
+function updateStatus(
+  overrides: Partial<OpenDesignHostUpdaterStatusSnapshot> = {},
+): OpenDesignHostUpdaterStatusSnapshot {
+  return {
+    arch: 'arm64',
+    capabilities: {
+      canApplyInPlace: false,
+      canDownload: true,
+      canOpenInstaller: true,
+      requiresManualInstall: true,
+    },
+    channel: 'beta',
+    currentVersion: '1.2.3-beta.3',
+    enabled: true,
+    mode: 'package-launcher',
+    platform: 'darwin',
+    state: 'idle',
+    supported: true,
+    ...overrides,
+  };
+}
+
 function renderSettingsDialog(
   initial: Partial<AppConfig> = {},
   options: {
@@ -401,6 +427,11 @@ beforeEach(() => {
     latencyMs: 1,
     models: [],
   });
+});
+
+afterEach(() => {
+  restoreOpenDesignHost?.();
+  restoreOpenDesignHost = null;
 });
 
 describe('SettingsDialog execution settings BYOK interactions', () => {
@@ -4544,12 +4575,54 @@ describe('SettingsDialog about interactions', () => {
     expect(second.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('opens the releases page when the latest release info is stale', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
-    fetchLatestGithubReleaseInfoMock.mockResolvedValue({
-      tagName: 'v0.4.1',
-      htmlUrl: 'https://github.com/nexu-io/open-design/releases/tag/v0.4.1',
-      stale: true,
+  it('shows development builds as unsupported for in-app updates', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '0.4.1',
+          channel: 'beta',
+          packaged: false,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+      },
+    );
+
+    expect(screen.getByText(en['settings.updateStatusDevelopment'])).toBeTruthy();
+    expect(screen.queryByRole('button', { name: en['settings.installLatest'] })).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: en['settings.updateViewReleases'] }));
+
+    expect(openExternalUrlMock).toHaveBeenCalledWith('https://github.com/nexu-io/open-design/releases');
+  });
+
+  it('downloads an available packaged update from the about page', async () => {
+    const available = updateStatus({
+      availableVersion: '1.2.3-beta.4',
+      state: 'available',
+    });
+    const downloaded = updateStatus({
+      artifact: {
+        name: 'Open Design Beta.dmg',
+        platformKey: 'macAppleSilicon',
+        type: 'dmg',
+        url: 'https://fixture.test/Open Design Beta.dmg',
+      },
+      availableVersion: '1.2.3-beta.4',
+      downloadPath: '/tmp/open-design-updater/Open Design Beta.dmg',
+      state: 'downloaded',
+    });
+    const download = vi.fn(async () => downloaded);
+    restoreOpenDesignHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          download,
+          status: vi.fn(async () => available),
+        },
+      },
     });
 
     renderSettingsDialog(
@@ -4557,7 +4630,7 @@ describe('SettingsDialog about interactions', () => {
       {
         initialSection: 'about',
         appVersionInfo: {
-          version: '0.4.1',
+          version: '1.2.3-beta.3',
           channel: 'beta',
           packaged: true,
           platform: 'darwin',
@@ -4566,15 +4639,149 @@ describe('SettingsDialog about interactions', () => {
       },
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Install latest' }));
+    expect(
+      await screen.findByText('New version 1.2.3-beta.4 found. Preparing download.'),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: en['updater.download'] }));
 
     await waitFor(() => {
-      expect(openSpy).toHaveBeenCalledWith(
-        'https://github.com/nexu-io/open-design/releases',
-        '_blank',
-        'noopener,noreferrer',
-      );
+      expect(download).toHaveBeenCalledWith({ payload: { source: 'settings-about' } });
     });
-    expect(screen.queryByText(en['settings.alreadyLatest'])).toBeNull();
+    expect(screen.getByText('Version 1.2.3-beta.4 is ready to install.')).toBeTruthy();
+  });
+
+  it('installs a downloaded payload update from the about page', async () => {
+    const payloadReady = updateStatus({
+      artifact: {
+        name: 'open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+        platformKey: 'mac',
+        type: 'payload',
+        url: 'https://fixture.test/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+      },
+      availableVersion: '1.2.3-beta.4',
+      capabilities: {
+        canApplyInPlace: true,
+        canDownload: true,
+        canOpenInstaller: false,
+        requiresManualInstall: false,
+      },
+      downloadPath: '/tmp/open-design-updater/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+      state: 'downloaded',
+    });
+    const installing = updateStatus({
+      ...payloadReady,
+      state: 'installing',
+    });
+    const install = vi.fn(async () => installing);
+    const quit = vi.fn(async () => ({ ok: true as const }));
+    restoreOpenDesignHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => payloadReady),
+        },
+      },
+    });
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '1.2.3-beta.3',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+      },
+    );
+
+    expect(await screen.findByText('Version 1.2.3-beta.4 is ready to install.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: en['updater.installRestart'] }));
+
+    await waitFor(() => {
+      expect(install).toHaveBeenCalledWith({ payload: { source: 'settings-about' } });
+    });
+    await waitFor(() => {
+      expect(quit).toHaveBeenCalledWith({ payload: { source: 'settings-about' } });
+    });
+  });
+
+  it('keeps a quit retry action when update install succeeds but quit fails', async () => {
+    const payloadReady = updateStatus({
+      artifact: {
+        name: 'open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+        platformKey: 'mac',
+        type: 'payload',
+        url: 'https://fixture.test/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+      },
+      availableVersion: '1.2.3-beta.4',
+      capabilities: {
+        canApplyInPlace: true,
+        canDownload: true,
+        canOpenInstaller: false,
+        requiresManualInstall: false,
+      },
+      downloadPath: '/tmp/open-design-updater/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+      state: 'downloaded',
+    });
+    const installed = updateStatus({
+      ...payloadReady,
+      installResult: {
+        dryRun: true,
+        openedAt: '2026-05-19T00:00:00.000Z',
+        path: '/tmp/open-design-updater/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+      },
+    });
+    const install = vi.fn(async () => installed);
+    const quit = vi.fn(async () => ({
+      ok: false as const,
+      reason: 'desktop quit is not available',
+    }));
+    restoreOpenDesignHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => payloadReady),
+        },
+      },
+    });
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '1.2.3-beta.3',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+      },
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: en['updater.installRestart'] }));
+
+    await waitFor(() => {
+      expect(install).toHaveBeenCalledWith({ payload: { source: 'settings-about' } });
+    });
+    await waitFor(() => {
+      expect(quit).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByRole('button', { name: en['updater.quitButton'] })).toBeTruthy();
+    expect(screen.getAllByText(en['settings.updateQuitFailed']).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: en['updater.quitButton'] }));
+
+    await waitFor(() => {
+      expect(quit).toHaveBeenCalledTimes(2);
+    });
+    expect(install).toHaveBeenCalledTimes(1);
   });
 });

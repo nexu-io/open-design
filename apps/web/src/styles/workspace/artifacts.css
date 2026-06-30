@@ -263,6 +263,7 @@
 }
 .settings-about-version-row {
   justify-content: space-between;
+  align-items: flex-start;
 }
 .settings-about-list dt {
   font-size: 12px;
@@ -297,35 +298,164 @@
 .settings-about-version-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+  column-gap: 12px;
+  row-gap: 6px;
+}
+.settings-about-version-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
 }
 .settings-about-version-num {
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
 }
-.settings-about-download-link {
+.settings-about-list dd.settings-about-update-status {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 22px;
+  margin: 0;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 30%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-strong);
+  text-align: start;
+  white-space: normal;
+}
+.settings-about-list dd.settings-about-update-status--success {
+  color: var(--green, #137a3d);
+  border-color: color-mix(in srgb, var(--green, #137a3d) 28%, transparent);
+  background: color-mix(in srgb, var(--green, #137a3d) 12%, transparent);
+}
+.settings-about-list dd.settings-about-update-status--warning {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent-strong) 30%, transparent);
+  background: color-mix(in srgb, var(--accent-strong) 10%, transparent);
+}
+.settings-about-list dd.settings-about-update-status--error {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 32%, transparent);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+}
+.settings-about-update-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  max-width: min(42%, 300px);
+  gap: 8px;
+}
+.settings-about-update-button,
+.settings-about-release-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 26px;
   padding: 2px 9px;
   font-size: 11px;
   font-weight: 500;
+  line-height: 1.2;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-muted);
   text-decoration: none;
-  transition: background 120ms var(--ease-out), color 120ms var(--ease-out), border-color 120ms var(--ease-out);
-  white-space: nowrap;
+  transition:
+    background 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out),
+    color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    transform 80ms var(--ease-out);
+  text-align: center;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
-.settings-about-download-link:hover:not(:disabled) {
+.settings-about-update-button {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent-strong) 34%, var(--border));
+  background: var(--accent-tint);
+}
+.settings-about-update-button--primary {
+  color: var(--accent-contrast, #ffffff);
+  border-color: color-mix(in srgb, var(--accent-strong) 72%, var(--border-strong));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent-strong) 88%, #ffffff 12%),
+      var(--accent-strong)
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-strong) 20%, transparent),
+    0 8px 18px color-mix(in srgb, var(--accent-strong) 20%, transparent);
+}
+.settings-about-release-link {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 18%, var(--border));
+}
+.settings-about-update-button:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent-strong) 48%, var(--border-strong));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-strong) 12%, transparent);
+}
+.settings-about-release-link:hover:not(:disabled) {
   background: var(--bg-subtle);
   color: var(--text);
   border-color: var(--border-strong);
 }
-.settings-about-download-link:disabled {
+.settings-about-update-button:not(.settings-about-update-button--primary):active:not(:disabled) {
+  transform: translateY(1px);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow: inset 0 1px 3px color-mix(in srgb, var(--accent-strong) 18%, transparent);
+}
+.settings-about-update-button--primary:hover:not(:disabled) {
+  color: var(--accent-contrast, #ffffff);
+  border-color: color-mix(in srgb, var(--accent-strong) 88%, #ffffff);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent-strong) 78%, #ffffff 22%),
+      color-mix(in srgb, var(--accent-strong) 94%, #000000 6%)
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-strong) 30%, transparent),
+    0 10px 22px color-mix(in srgb, var(--accent-strong) 28%, transparent);
+}
+.settings-about-update-button--primary:active:not(:disabled) {
+  transform: translateY(1px);
+  background: color-mix(in srgb, var(--accent-strong) 86%, #000000 14%);
+  box-shadow:
+    inset 0 1px 4px color-mix(in srgb, #000000 28%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--accent-strong) 34%, transparent);
+}
+.settings-about-update-button:disabled,
+.settings-about-release-link:disabled {
   opacity: 0.5;
   cursor: default;
+}
+@media (max-width: 720px) {
+  .settings-about-version-row {
+    flex-direction: column;
+  }
+  .settings-about-update-actions {
+    max-width: 100%;
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 
 .media-provider-reload-row {
