@@ -11,10 +11,10 @@
   },
   "scripts": {
     "postinstall": "node ./scripts/postinstall.mjs",
-    "tools-dev": "pnpm exec tools-dev",
-    "tools-pack": "pnpm exec tools-pack",
-    "tools-release": "pnpm exec tools-release",
-    "tools-serve": "pnpm exec tools-serve",
+    "tools-dev": "corepack pnpm exec tools-dev",
+    "tools-pack": "corepack pnpm exec tools-pack",
+    "tools-release": "corepack pnpm exec tools-release",
+    "tools-serve": "corepack pnpm exec tools-serve",
     "nix:update-hash": "node --experimental-strip-types ./scripts/update-nix-pnpm-deps-hash.ts",
     "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts scripts/product-neutrality.test.ts scripts/web-import-isolation.test.ts scripts/check-cross-app-imports.test.ts scripts/approve-fork-pr-workflows.test.ts scripts/lint-craft-references.test.ts",
     "lint:craft": "tsx ./scripts/lint-craft-references.ts",
@@ -25,7 +25,7 @@
     "seed:test-projects": "node --experimental-strip-types scripts/seed-test-projects.ts",
     "seed:curated-design-skills": "node --experimental-strip-types scripts/seed-curated-design-skills.ts",
     "backfill:failed-runs": "node --experimental-strip-types scripts/backfill-failed-runs-with-artifacts.ts",
-    "typecheck": "pnpm -r --workspace-concurrency=4 --if-present run typecheck && tsc -p scripts/tsconfig.json --noEmit"
+    "typecheck": "corepack pnpm -r --workspace-concurrency=4 --if-present run typecheck && tsc -p scripts/tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@open-design/components": "workspace:*",
