@@ -3630,6 +3630,8 @@ export function byokProtocolToTracking(
       return 'ollama_cloud';
     case 'senseaudio':
       return 'senseaudio';
+    case 'bedrock':
+      return null;
     default:
       return null;
   }

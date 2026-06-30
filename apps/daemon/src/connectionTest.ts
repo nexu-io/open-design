@@ -803,6 +803,14 @@ function inspectProviderCompletion(
     };
   }
 
+  if (protocol === 'bedrock') {
+    return {
+      valid: false,
+      kind: 'unknown',
+      detail: 'AWS Bedrock BYOK connection tests need AWS credential signing, which is not supported by the current API-key smoke test.',
+    };
+  }
+
   return { valid: false };
 }
 
@@ -1204,6 +1212,10 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
       };
     }
+    case 'bedrock':
+      throw new Error(
+        'AWS Bedrock BYOK requires AWS credential signing; the current provider smoke test only supports API-key based providers.',
+      );
     default:
       throw new Error(`Unknown protocol: ${(input as { protocol?: string }).protocol}`);
   }

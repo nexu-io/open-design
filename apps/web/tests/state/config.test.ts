@@ -896,6 +896,31 @@ describe('loadConfig', () => {
     expect(loadConfig().baseUrl).toBe('https://api.example.com/v1');
   });
 
+  it('keeps custom proxy paths containing bedrock-runtime on their selected protocol', () => {
+    const persisted: Partial<AppConfig> = {
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: 'sk-proxy',
+      apiVersion: '2024-01-01',
+      baseUrl: 'https://proxy.example.com/bedrock-runtime/v1',
+      model: 'gpt-4o',
+      configMigrationVersion: 1,
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(persisted));
+
+    const config = loadConfig();
+
+    expect(config.apiProtocol).toBe('openai');
+    expect(config.apiKey).toBe('sk-proxy');
+    expect(config.apiVersion).toBe('2024-01-01');
+    expect(config.baseUrl).toBe('https://proxy.example.com/bedrock-runtime/v1');
+    expect(config.model).toBe('gpt-4o');
+    expect(store.get('open-design:config')).toBe(JSON.stringify(persisted));
+  });
+
   it('migrates legacy Anthropic API configs to an explicit apiProtocol', () => {
     const legacyConfig: Partial<AppConfig> = {
       mode: 'api',
@@ -911,6 +936,87 @@ describe('loadConfig', () => {
     const config = loadConfig();
 
     expect(config.apiProtocol).toBe('anthropic');
+  });
+
+  it('downgrades legacy Bedrock Runtime configs to the default chat protocol', () => {
+    const legacyConfig: Partial<AppConfig> = {
+      mode: 'api',
+      apiKey: 'bedrock-secret',
+      apiVersion: 'bedrock-2023-05-31',
+      baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+      model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(legacyConfig));
+
+    const config = loadConfig();
+
+    expect(config.apiProtocol).toBe('anthropic');
+    expect(config.apiKey).toBe('');
+    expect(config.apiVersion).toBe('');
+    expect(config.baseUrl).toBe(DEFAULT_CONFIG.baseUrl);
+    expect(config.model).toBe(DEFAULT_CONFIG.model);
+    expect(config.apiProviderBaseUrl).toBe(DEFAULT_CONFIG.apiProviderBaseUrl);
+  });
+
+  it('downgrades explicitly persisted Bedrock configs to the default chat protocol', () => {
+    const savedConfig: Partial<AppConfig> = {
+      mode: 'api',
+      apiProtocol: 'bedrock',
+      apiKey: 'bedrock-secret',
+      apiVersion: 'bedrock-2023-05-31',
+      baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+      model: 'amazon.nova-lite-v1:0',
+      configMigrationVersion: 1,
+      apiProtocolConfigs: {
+        bedrock: {
+          apiKey: 'nested-bedrock-secret',
+          apiVersion: 'bedrock-2023-05-31',
+          baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+          model: 'amazon.nova-lite-v1:0',
+        },
+        openai: {
+          apiKey: 'sk-openai',
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'gpt-4o',
+        },
+      },
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    };
+    store.set('open-design:config', JSON.stringify(savedConfig));
+
+    const config = loadConfig();
+
+    expect(config.apiProtocol).toBe('anthropic');
+    expect(config.apiKey).toBe('');
+    expect(config.apiVersion).toBe('');
+    expect(config.baseUrl).toBe(DEFAULT_CONFIG.baseUrl);
+    expect(config.model).toBe(DEFAULT_CONFIG.model);
+    expect(config.apiProviderBaseUrl).toBe(DEFAULT_CONFIG.apiProviderBaseUrl);
+    expect(config.apiProtocolConfigs?.bedrock).toBeUndefined();
+    expect(config.apiProtocolConfigs?.openai).toEqual({
+      apiKey: 'sk-openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+    });
+
+    const persisted = JSON.parse(
+      store.get('open-design:config') ?? '{}',
+    ) as Partial<AppConfig>;
+    expect(persisted.apiProtocol).toBe('anthropic');
+    expect(persisted.apiKey).toBe('');
+    expect(persisted.apiVersion).toBe('');
+    expect(persisted.baseUrl).toBe(DEFAULT_CONFIG.baseUrl);
+    expect(persisted.apiProtocolConfigs?.bedrock).toBeUndefined();
+    expect(persisted.apiProtocolConfigs?.openai).toEqual({
+      apiKey: 'sk-openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+    });
   });
 
   it('infers protocol for legacy daemon-mode API fields without changing mode', () => {

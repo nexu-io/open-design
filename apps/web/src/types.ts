@@ -105,7 +105,15 @@ export type {
 } from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';
-export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama' | 'senseaudio' | 'aihubmix';
+export type ApiProtocol =
+  | 'anthropic'
+  | 'openai'
+  | 'azure'
+  | 'google'
+  | 'ollama'
+  | 'senseaudio'
+  | 'aihubmix'
+  | 'bedrock';
 
 export type LiveArtifactTabId = `live:${string}`;
 // Tab ids are arbitrary strings; the template-literal members below are
@@ -256,6 +264,11 @@ export interface ApiProtocolConfig {
   byokSpeechVoice?: string;
 }
 
+export interface ByokProviderConfigDraft {
+  apiConfig: ApiProtocolConfig;
+  maxTokens?: number;
+}
+
 // Per-CLI model + reasoning the user picked in the model menu. Each agent
 // keeps its own slot so flipping between Codex and Gemini doesn't reset the
 // other one's choice. Missing entries fall back to the agent's first
@@ -381,6 +394,8 @@ export interface AppConfig {
   byokSpeechModel?: string;
   byokSpeechVoice?: string;
   apiProtocolConfigs?: Partial<Record<ApiProtocol, ApiProtocolConfig>>;
+  /** BYOK provider drafts keyed by protocol + selected provider base URL. */
+  byokProviderConfigDrafts?: Record<string, ByokProviderConfigDraft>;
   /** Internal config schema/migration version for localStorage upgrades. */
   configMigrationVersion?: number;
   /** Base URL of the selected known provider; cleared once the user customizes provider fields. */
