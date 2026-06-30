@@ -312,7 +312,10 @@ export async function finalizeDesignPackage(
     // Phase 3: export transcript via the PR #493 primitive. Returns the
     // disk path; we read the body and run it through the truncation
     // policy so a 4 MB transcript does not blow Anthropic's context.
-    const transcriptResult = exportProjectTranscript(db, projectsRoot, projectId, { now });
+    const transcriptResult = exportProjectTranscript(db, projectsRoot, projectId, {
+      now,
+      metadata: projectMetadata,
+    });
     const transcriptJsonl = fs.readFileSync(transcriptResult.path, 'utf8');
     const truncatedJsonl = truncateTranscriptForPrompt(transcriptJsonl);
 

@@ -1,5 +1,6 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import http from 'node:http';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,6 +34,7 @@ const serverRuntimeDataRoot = process.env.OD_DATA_DIR
 let server: http.Server | undefined;
 let baseUrl: string;
 const projectIds: string[] = [];
+const tempRoots: string[] = [];
 
 beforeEach(async () => {
   const started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
@@ -54,6 +56,7 @@ afterEach(async () => {
       rm(path.join(serverRuntimeDataRoot, 'projects', projectId), { recursive: true, force: true }),
     ),
   );
+  await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 function uniqueProjectId() {
@@ -97,6 +100,23 @@ async function createProject(projectId: string): Promise<JsonFetchResult> {
     body: JSON.stringify({ id: projectId, name: projectId }),
   });
   return { status: response.status, body: (await response.json()) as JsonObject };
+}
+
+async function importExternalProject(): Promise<{ projectId: string; baseDir: string }> {
+  const root = await mkdtemp(path.join(tmpdir(), 'od-live-artifacts-route-ext-'));
+  tempRoots.push(root);
+  const baseDir = path.join(root, 'project');
+  await mkdir(baseDir, { recursive: true });
+  const response = await jsonFetch(`${baseUrl}/api/import/folder`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ baseDir }),
+  });
+  expect(response.status).toBe(200);
+  const projectId = response.body.project?.id;
+  expect(typeof projectId).toBe('string');
+  projectIds.push(projectId);
+  return { projectId, baseDir: response.body.project.metadata.baseDir };
 }
 
 async function rawHttpJsonFetch<TBody extends JsonObject = JsonObject>(
@@ -215,6 +235,28 @@ function mintToolToken(projectId: string, runId: string, overrides: Partial<Para
 }
 
 describe('live artifact tool routes', () => {
+  it('creates live artifact storage in imported project metadata.baseDir', async () => {
+    const { projectId, baseDir } = await importExternalProject();
+    const token = mintToolToken(projectId, 'run-external-live-artifact');
+
+    const create = await jsonFetch(`${baseUrl}/api/tools/live-artifacts/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        input: validCreateInput('External Route Artifact'),
+        templateHtml: '<!doctype html><h1>{{data.title}}</h1>',
+      }),
+    });
+
+    expect(create.status).toBe(200);
+    const artifactId = create.body.artifact.id;
+    const artifactPath = path.join(baseDir, '.live-artifacts', artifactId, 'artifact.json');
+    await expect(readFile(artifactPath, 'utf8')).resolves.toContain('"title": "External Route Artifact"');
+    await expect(stat(path.join(serverRuntimeDataRoot, 'projects', projectId, '.live-artifacts'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
   it('creates and lists live artifacts for agent registration', async () => {
     const projectId = uniqueProjectId();
     const runId = 'run-route-test';

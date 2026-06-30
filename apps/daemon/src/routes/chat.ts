@@ -55,11 +55,12 @@ const FEEDBACK_REASON_ALLOWLIST: ReadonlySet<string> = new Set([
   'other',
 ]);
 
-export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry'> {}
+export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'projectStore' | 'telemetry'> {}
 
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
+  const { getProject } = ctx.projectStore;
   const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, sanitizeCustomModel, listProviderModels } = ctx.agents;
   const {
     handleCritiqueArtifact,
@@ -1466,6 +1467,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         'projectId is required and must be a safe identifier',
       );
     }
+    const projectMetadata = getProject(db, projectId)?.metadata;
 
     const effectiveBaseUrl = baseUrl || opts.defaultBaseUrl;
     const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);
@@ -1532,6 +1534,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       projectRoot: ctx.paths.PROJECT_ROOT,
       projectsRoot: ctx.paths.PROJECTS_DIR,
       projectId,
+      ...(projectMetadata === undefined ? {} : { metadata: projectMetadata }),
       upstreamApiKey: apiKey,
       upstreamBaseUrl: effectiveBaseUrl,
       requestInit: {},

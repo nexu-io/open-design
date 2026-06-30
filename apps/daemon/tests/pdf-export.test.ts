@@ -55,6 +55,27 @@ describe('buildDesktopPdfExportInput', () => {
     expect(input.title).toBe('index');
     expect(input.defaultFilename).toBe('index.pdf');
   });
+
+  it('reads export HTML from metadata.baseDir for external projects', async () => {
+    const externalDir = path.join(projectsRoot, '..', 'external-project');
+    await mkdir(path.join(externalDir, 'deck'), { recursive: true });
+    await writeFile(
+      path.join(externalDir, 'deck', 'index.html'),
+      '<!doctype html><section class="slide">External</section>',
+    );
+
+    const input = await buildDesktopPdfExportInput({
+      daemonUrl: 'http://127.0.0.1:7456',
+      deck: true,
+      fileName: 'deck/index.html',
+      metadata: { baseDir: externalDir },
+      projectId,
+      projectsRoot,
+      title: 'External Deck',
+    } as any);
+
+    expect(input.html).toBe('<!doctype html><section class="slide">External</section>');
+  });
 });
 
 describe('POST /api/projects/:id/export/pdf', () => {
@@ -71,6 +92,18 @@ describe('POST /api/projects/:id/export/pdf', () => {
     }) as { server: { close(cb: () => void): void }; url: string };
 
     try {
+      const createResponse = await fetch(`${started.url}/api/projects`, {
+        body: JSON.stringify({
+          id: projectId,
+          name: 'PDF route fixture',
+          skillId: null,
+          designSystemId: null,
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      });
+      expect(createResponse.status).toBe(200);
+
       await fetch(`${started.url}/api/projects/${encodeURIComponent(projectId)}/files`, {
         body: JSON.stringify({
           content: '<!doctype html><section class="slide">One</section>',

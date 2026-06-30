@@ -172,6 +172,7 @@ export async function synthesizeHandoffPrompt(
   const transcriptResult = exportProjectTranscript(db, projectsRoot, projectId, {
     now,
     conversationId: options.conversationId,
+    metadata: project.metadata,
   });
   // Fail fast on an empty conversation: synthesizing a handoff from zero
   // messages would spend BYOK tokens to fabricate context that does not
