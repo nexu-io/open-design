@@ -24,11 +24,16 @@ export type TutorialLongformI18n = Record<
 >;
 
 import { entry as e_open_design_31_skills_72_systems_popular_ai } from './tutorials-longform/open-design-31-skills-72-systems-popular-ai';
+import { entry as e_open_design_claude_design_alternative_open_source_brendan_o_connell } from './tutorials-longform/open-design-claude-design-alternative-open-source-brendan-o-connell';
+import { entry as e_open_design_design_engine_codedigipt } from './tutorials-longform/open-design-design-engine-codedigipt';
 import { entry as e_open_design_feature_tour_silicon_hotpot } from './tutorials-longform/open-design-feature-tour-silicon-hotpot';
 import { entry as e_open_design_full_overview_vs_figma_purpleschool_anton_larichev } from './tutorials-longform/open-design-full-overview-vs-figma-purpleschool-anton-larichev';
+import { entry as e_open_design_full_walkthrough_self_hosted_alternative_ai_stack_engineer } from './tutorials-longform/open-design-full-walkthrough-self-hosted-alternative-ai-stack-engineer';
 import { entry as e_open_design_in_20_minutes_coding_menace } from './tutorials-longform/open-design-in-20-minutes-coding-menace';
 import { entry as e_open_design_install_demo_systems_chase_ai } from './tutorials-longform/open-design-install-demo-systems-chase-ai';
 import { entry as e_open_design_local_setup_ollama_alternative_ai_automation_station } from './tutorials-longform/open-design-local-setup-ollama-alternative-ai-automation-station';
+import { entry as e_open_design_open_design_vs_claude_design_landing_page_roy_shavit } from './tutorials-longform/open-design-open-design-vs-claude-design-landing-page-roy-shavit';
+import { entry as e_open_design_open_source_claude_alternative_aicodeking } from './tutorials-longform/open-design-open-source-claude-alternative-aicodeking';
 import { entry as e_open_design_overview_worldofai } from './tutorials-longform/open-design-overview-worldofai';
 import { entry as e_open_design_replacing_claude_design_jack_roberts } from './tutorials-longform/open-design-replacing-claude-design-jack-roberts';
 import { entry as e_open_design_setup_gemini_cli_free_credits_sandeep_singh } from './tutorials-longform/open-design-setup-gemini-cli-free-credits-sandeep-singh';
@@ -37,11 +42,16 @@ import { entry as e_open_design_windows_wsl_installation_setup_ai_automation } f
 
 export const tutorialsLongformI18n: TutorialLongformI18n = {
   "open-design-31-skills-72-systems-popular-ai": e_open_design_31_skills_72_systems_popular_ai,
+  "open-design-claude-design-alternative-open-source-brendan-o-connell": e_open_design_claude_design_alternative_open_source_brendan_o_connell,
+  "open-design-design-engine-codedigipt": e_open_design_design_engine_codedigipt,
   "open-design-feature-tour-silicon-hotpot": e_open_design_feature_tour_silicon_hotpot,
   "open-design-full-overview-vs-figma-purpleschool-anton-larichev": e_open_design_full_overview_vs_figma_purpleschool_anton_larichev,
+  "open-design-full-walkthrough-self-hosted-alternative-ai-stack-engineer": e_open_design_full_walkthrough_self_hosted_alternative_ai_stack_engineer,
   "open-design-in-20-minutes-coding-menace": e_open_design_in_20_minutes_coding_menace,
   "open-design-install-demo-systems-chase-ai": e_open_design_install_demo_systems_chase_ai,
   "open-design-local-setup-ollama-alternative-ai-automation-station": e_open_design_local_setup_ollama_alternative_ai_automation_station,
+  "open-design-open-design-vs-claude-design-landing-page-roy-shavit": e_open_design_open_design_vs_claude_design_landing_page_roy_shavit,
+  "open-design-open-source-claude-alternative-aicodeking": e_open_design_open_source_claude_alternative_aicodeking,
   "open-design-overview-worldofai": e_open_design_overview_worldofai,
   "open-design-replacing-claude-design-jack-roberts": e_open_design_replacing_claude_design_jack_roberts,
   "open-design-setup-gemini-cli-free-credits-sandeep-singh": e_open_design_setup_gemini_cli_free_credits_sandeep_singh,
