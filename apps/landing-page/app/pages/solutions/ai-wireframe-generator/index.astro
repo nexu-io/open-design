@@ -13,12 +13,8 @@
  */
 import Layout from '../../../_components/sub-page-layout.astro';
 import LazyImg from '../../../_components/lazy-img.astro';
-import TemplateCard from '../../../_components/template-card.astro';
 import { getInfoPageCopy } from '../../../info-page-i18n';
 import { getSolutionPageCopy } from '../../../solution-pages-i18n';
-import { getBundledPlugins } from '../../../_lib/bundled-plugins';
-import { bundledRecordOf, categorizePlugin } from '../../../_lib/plugin-facets';
-import { pickSolutionPlugins } from '../../../_lib/solution-featured';
 import { localeFromPath, localizedHref, localePath, stripLocaleFromPath } from '../../../i18n';
 
 const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
@@ -31,23 +27,6 @@ const page = getSolutionPageCopy(locale, 'aiWireframeGenerator');
 
 const title = page.title;
 const description = page.description;
-
-// Real prototype-category plugins for the feature grid (wireframes mature into
-// prototypes, so the example set is shared). pickSolutionPlugins throws if any
-// id is missing, so a renamed/removed plugin fails the build instead of
-// silently shipping a short grid.
-const FEATURED_IDS = [
-  'example-web-prototype',
-  'example-mobile-app',
-  'example-saas-landing',
-  'example-gamified-app',
-  'example-hr-onboarding',
-  'example-kami-landing',
-];
-const allPrototypes = getBundledPlugins().filter(
-  (p) => categorizePlugin(bundledRecordOf(p)) === 'prototype',
-);
-const featured = pickSolutionPlugins(allPrototypes, FEATURED_IDS, 'prototype');
 
 // Related tools / pages for the cross-link matrix (Figma's SEO win). Links to
 // surfaces that exist today; sibling generator pages join as they ship.
@@ -141,11 +120,14 @@ const jsonLd = [
       </ol>
     </section>
 
-    <section class="info-section catalog-grid templates-grid" id="features">
+    <section class="info-section" id="features">
       <h2>{page.featuresTitle}</h2>
-      <ul class="tpl-grid solution-tpl-grid">
-        {featured.map((record, idx) => (
-          <TemplateCard record={record} index={idx} />
+      <ul class="tool-feature-grid">
+        {page.features.map((f) => (
+          <li class="tool-feature-card">
+            <h3>{f.title}</h3>
+            <p>{f.body}</p>
+          </li>
         ))}
       </ul>
     </section>
@@ -225,3 +207,30 @@ const jsonLd = [
     </section>
   </article>
 </Layout>
+
+<style>
+  .tool-feature-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+  }
+  .tool-feature-card {
+    border: 1px solid var(--hairline, rgba(0, 0, 0, 0.1));
+    border-radius: 12px;
+    padding: 1.1rem 1.2rem;
+    background: var(--surface, #fff);
+  }
+  .tool-feature-card h3 {
+    margin: 0 0 0.35rem;
+    font-size: 1.02rem;
+  }
+  .tool-feature-card p {
+    margin: 0;
+    color: var(--muted, #555);
+    font-size: 0.94rem;
+    line-height: 1.5;
+  }
+</style>
