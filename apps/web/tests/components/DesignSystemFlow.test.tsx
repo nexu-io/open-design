@@ -2243,6 +2243,13 @@ describe('DesignSystemCreationFlow', () => {
       'context/source-context.md',
       expect.stringContaining('GitHub Connector Intake Runbook'),
     );
+    // GitHub is connected here, so the re-read source-context runbook must not
+    // tell the user to re-authenticate as if disconnected (issue #4854).
+    expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
+      project.id,
+      'context/source-context.md',
+      expect.stringContaining('GitHub is already connected for this workspace'),
+    );
     expect(mocks.writeProjectTextFile).toHaveBeenCalledWith(
       project.id,
       'context/source-context.md',
