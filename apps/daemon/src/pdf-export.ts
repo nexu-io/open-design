@@ -13,6 +13,9 @@ export interface BuildDesktopPdfExportInputOptions {
   daemonUrl: string;
   deck?: boolean;
   fileName: string;
+  // See BuildDeckRenderInputOptions.metadata: imported-folder projects resolve
+  // their workspace via metadata.baseDir, else readProjectFile 404s.
+  metadata?: Record<string, unknown> | null;
   projectId: string;
   projectsRoot: string;
   title?: string;
@@ -21,7 +24,12 @@ export interface BuildDesktopPdfExportInputOptions {
 export async function buildDesktopPdfExportInput(
   options: BuildDesktopPdfExportInputOptions,
 ): Promise<DesktopExportPdfInput> {
-  const file = await readProjectFile(options.projectsRoot, options.projectId, options.fileName);
+  const file = await readProjectFile(
+    options.projectsRoot,
+    options.projectId,
+    options.fileName,
+    options.metadata ?? undefined,
+  );
   const title = displayTitle(options.title, options.fileName);
   return {
     baseHref: rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
@@ -38,6 +46,9 @@ export interface BuildDesktopArtifactExportInputOptions {
   fileName: string;
   format: DesktopExportArtifactFormat;
   imageFormat?: DesktopExportArtifactImageFormat;
+  // See BuildDeckRenderInputOptions.metadata: imported-folder projects resolve
+  // their workspace via metadata.baseDir, else readProjectFile 404s.
+  metadata?: Record<string, unknown> | null;
   projectId: string;
   projectsRoot: string;
   title?: string;
@@ -48,7 +59,12 @@ export interface BuildDesktopArtifactExportInputOptions {
 export async function buildDesktopArtifactExportInput(
   options: BuildDesktopArtifactExportInputOptions,
 ): Promise<DesktopExportArtifactInput> {
-  const file = await readProjectFile(options.projectsRoot, options.projectId, options.fileName);
+  const file = await readProjectFile(
+    options.projectsRoot,
+    options.projectId,
+    options.fileName,
+    options.metadata ?? undefined,
+  );
   const title = displayTitle(options.title, options.fileName);
   return {
     baseHref: rawBaseHref(options.daemonUrl, options.projectId, options.fileName),

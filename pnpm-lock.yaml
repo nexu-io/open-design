@@ -110,9 +110,15 @@ importers:
       node-pty:
         specifier: 1.1.0
         version: 1.1.0
+      pdf-lib:
+        specifier: 1.17.1
+        version: 1.17.1
       posthog-node:
         specifier: 5.34.6
         version: 5.34.6
+      pptxgenjs:
+        specifier: 4.0.1
+        version: 4.0.1
       prom-client:
         specifier: 15.1.3
         version: 15.1.3
@@ -783,8 +789,8 @@ importers:
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
     optionalDependencies:
       '@powerformer/vela-cli':
-        specifier: 0.0.18
-        version: 0.0.18
+        specifier: 0.0.19
+        version: 0.0.19
 
   tools/release:
     dependencies:
@@ -1939,6 +1945,12 @@ packages:
   '@oslojs/encoding@1.1.0':
     resolution: {integrity: sha512-70wQhgYmndg4GCPxPPxPGevRKqTIJ2Nh4OkiMWmDAVYsTQ+Ta7Sq+rPevXyXGdzr30/qZBnyOalCszoMxlyldQ==}
 
+  '@pdf-lib/standard-fonts@1.0.0':
+    resolution: {integrity: sha512-hU30BK9IUN/su0Mn9VdlVKsWBS6GyhVfqjwl1FjZN4TxP6cCw0jP2w7V3Hf5uX7M0AZJ16vey9yE0ny7Sa59ZA==}
+
+  '@pdf-lib/upng@1.0.1':
+    resolution: {integrity: sha512-dQK2FUMQtowVP00mtIksrlZhdFXQZPC+taih1q4CvPZ5vqdxR/LKBaFg0oAfzd1GlHZXXSPdQfzQnt+ViGvEIQ==}
+
   '@playwright/test@1.60.0':
     resolution: {integrity: sha512-O71yZIbAh/PxDMNGns37GHBIfrVkEVyn+AXyIa5dOTfb4/xNvRWV+Vv/NMbNCtODB/pO7vLlF2OTmMVLhmr7Ag==}
     engines: {node: '>=18'}
@@ -1950,33 +1962,33 @@ packages:
   '@posthog/types@1.374.2':
     resolution: {integrity: sha512-ZghQSFMi+HFJNPvPjBoyY/jWQ+q6mSQVtWQxOHMSbBidUZjsyYbxYxBFbHy2qWLNe4mEpX+Wqir2Q4I/4AVvJQ==}
 
-  '@powerformer/vela-cli-darwin-arm64@0.0.18':
-    resolution: {integrity: sha512-HN6vCzaqiSVGQX4ZYjpiJb5WEYsrfAXHTk6+KT8ttO78KRCl2URILunML9h88zkvRDkYy0pdw7Pm6BxIs7yQ1Q==}
+  '@powerformer/vela-cli-darwin-arm64@0.0.19':
+    resolution: {integrity: sha512-18sQlsfLiMDHxOfYjV05alWabbCQ20xtXRhACoIWVPdcqcQp5+SJHE9nwyAuoQV5xkTJiPSc3niuzH3RicpCDg==}
     cpu: [arm64]
     os: [darwin]
 
-  '@powerformer/vela-cli-darwin-x64@0.0.18':
-    resolution: {integrity: sha512-p0kBx8x+WRmlfbN5cKx8KN//R9gUTZ5JP2VaiOkYktzFXSo+/8MB5biEHBj+NTQTECzlM7CYA8DZETfMZ9egFA==}
+  '@powerformer/vela-cli-darwin-x64@0.0.19':
+    resolution: {integrity: sha512-ttOzkUwYuBgBCfQqxpxUjh4trfCGwg2cs1+n+AK5UUAzZxzukyexRgSkWFoONcnYZ9f1Yg4ItwJ4eeFr/vF5yQ==}
     cpu: [x64]
     os: [darwin]
 
-  '@powerformer/vela-cli-linux-arm64@0.0.18':
-    resolution: {integrity: sha512-ykeePUT9F+kr6YGelWuErS2NnWdkctDTooOcEr5LFa83dxN0j6/v3HLhMdEChW5LohNgJIVNEufpAmV+A/hnnQ==}
+  '@powerformer/vela-cli-linux-arm64@0.0.19':
+    resolution: {integrity: sha512-qWzTTMOpEo54jnlhgMrt8p8NrOpx9ou9SQyWc4nDqcNCm47evonvVrXY9SCZzGUdBJnDJCMtjRshzkp5H1OM+g==}
     cpu: [arm64]
     os: [linux]
 
-  '@powerformer/vela-cli-linux-x64@0.0.18':
-    resolution: {integrity: sha512-9T1jJ+0CaPbycu7rAO+kGLvhETcZYixHy/fWugsA2xRZZTGHjVL2iAfqrz6luo2/j1C3yR/b0Ddjykmh/XxrMg==}
+  '@powerformer/vela-cli-linux-x64@0.0.19':
+    resolution: {integrity: sha512-J2JUnvfOgi6uHqE1sripaFFGI4LArJlfo7WKmfadB1s4fk5rVkSP3koRmqtTLOBPayVgGfqksBifCkrSsOP7Pg==}
     cpu: [x64]
     os: [linux]
 
-  '@powerformer/vela-cli-win32-x64@0.0.18':
-    resolution: {integrity: sha512-NEZL4EtxlBtzch2elugHRiV5ApBAsjlfakcQfAUMMxoatTkQs3fPWLKip9LnkW7c9j3bhZJFPXL9fXf5gIwZRg==}
+  '@powerformer/vela-cli-win32-x64@0.0.19':
+    resolution: {integrity: sha512-0HKqydALitrcUM3ntk+iGR10DoMqI/7lx4WdhgLYBz5nFlX/Flpbe2Vn1GYrexWqm+x5q8m5pEp4YeIjpGKfmw==}
     cpu: [x64]
     os: [win32]
 
-  '@powerformer/vela-cli@0.0.18':
-    resolution: {integrity: sha512-0UxAaTyF6xm6nh65dQfPlTuu4913JOjftAk6PxAWuilyJav3GFuF4OMFa31PlVstNOCnEqxW4QgUj2HSbVD/EA==}
+  '@powerformer/vela-cli@0.0.19':
+    resolution: {integrity: sha512-gjE+DfF67c6V9asJfOSPpNSBGryiQD2OicsilLsX1p8cXNOpnTkQecDeTDntdHRWTi0ZQ31MQEuKilTH6WdXUg==}
     hasBin: true
 
   '@preact/signals-core@1.14.2':
@@ -2423,6 +2435,9 @@ packages:
 
   '@types/node@20.19.39':
     resolution: {integrity: sha512-orrrD74MBUyK8jOAD/r0+lfa1I2MO6I+vAkmAWzMYbCcgrN4lCrmK52gRFQq/JRxfYPfonkr4b0jcY7Olqdqbw==}
+
+  '@types/node@22.20.0':
+    resolution: {integrity: sha512-QWlFW2wf3nTjC13/DqRnBpR4ZO36VJH/JVBkA/vcnmbTBNQIlnObqyqZE1tUR7+Ni23Lda8R1BxMfbXRpCUx5g==}
 
   '@types/node@24.12.2':
     resolution: {integrity: sha512-A1sre26ke7HDIuY/M23nd9gfB+nrmhtYyMINbjI1zHJxYteKR6qSMX56FsmjMcDb3SMcjJg5BiRRgOCC/yBD0g==}
@@ -3566,6 +3581,9 @@ packages:
     resolution: {integrity: sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw==}
     engines: {node: '>= 14'}
 
+  https@1.0.0:
+    resolution: {integrity: sha512-4EC57ddXrkaF0x83Oj8sM6SLQHAWXw90Skqu2M4AEWENZ3F02dFJE/GARA8igO79tcgYqGrD7ae4f5L3um2lgg==}
+
   humanize-ms@1.2.1:
     resolution: {integrity: sha512-Fl70vYtsAFb/C06PTS9dZBo7ihau+Tu/DNCk/OyHhea07S+aeMWpFFkUaXRa8fI+ScZbEI8dfSxwY7gxZ9SAVQ==}
 
@@ -3584,6 +3602,11 @@ packages:
 
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
+
+  image-size@1.2.1:
+    resolution: {integrity: sha512-rH+46sQJ2dlwfjfhCyNx5thzrv+dtmBIhPHk0zgRUukHzZ/kRueTJXoYYsclBaKcSMBWuGbOFXtioLpzTb5euw==}
+    engines: {node: '>=16.x'}
+    hasBin: true
 
   immediate@3.0.6:
     resolution: {integrity: sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==}
@@ -4342,6 +4365,9 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
+  pdf-lib@1.17.1:
+    resolution: {integrity: sha512-V/mpyJAoTsN4cnP31vc0wfNA1+p20evqqnap0KLoRUN0Yk/p3wN52DOEsL4oBFcLdb76hlpKPtzJIgo67j/XLw==}
+
   pe-library@0.4.1:
     resolution: {integrity: sha512-eRWB5LBz7PpDu4PUlwT0PhnQfTQJlDDdPa35urV4Osrm0t0AqQFGn+UIkU3klZvwJ8KPO3VbBFsXquA6p6kqZw==}
     engines: {node: '>=12', npm: '>=6'}
@@ -4417,6 +4443,9 @@ packages:
     engines: {node: '>=14.0.0'}
     hasBin: true
 
+  pptxgenjs@4.0.1:
+    resolution: {integrity: sha512-TeJISr8wouAuXw4C1F/mC33xbZs/FuEG6nH9FG1Zj+nuPcGMP5YRHl6X+j3HSUnS1f3at6k75ZZXPMZlA5Lj9A==}
+
   preact@10.29.1:
     resolution: {integrity: sha512-gQCLc/vWroE8lIpleXtdJhTFDogTdZG9AjMUpVkDf2iTCNwYNWA+u16dL41TqUDJO4gm2IgrcMv3uTpjd4Pwmg==}
 
@@ -4485,6 +4514,9 @@ packages:
 
   query-selector-shadow-dom@1.0.1:
     resolution: {integrity: sha512-lT5yCqEBgfoMYpf3F2xQRK7zEr1rhIIZuceDK6+xRkJQ4NMbHTwXqk4NkwDwQMNqXgG9r9fyHnzwNVs6zV5KRw==}
+
+  queue@6.0.2:
+    resolution: {integrity: sha512-iHZWu+q3IdFZFX36ro/lKBkSvfkztY5Y7HMiPlOUjhupPcG2JMfst2KKEpu5XndviX/3UhFbRngUPNKtgvtZiA==}
 
   quick-lru@5.1.1:
     resolution: {integrity: sha512-WuyALRjWPDGtt/wzJiadO5AXY+8hZ80hVpe6MyivgraREW751X3SbhRvG3eLKOYN+8VEvqLcf3wdnt44Z4S4SA==}
@@ -4973,6 +5005,9 @@ packages:
 
   truncate-utf8-bytes@1.0.2:
     resolution: {integrity: sha512-95Pu1QXQvruGEhv62XCMO3Mm90GscOCClvrIUwCM0PYOXK3kaF3l3sIHxx71ThJfcbM2O5Au6SO3AWCSEfW4mQ==}
+
+  tslib@1.14.1:
+    resolution: {integrity: sha512-Xni35NKzjgMrwevysHTCArtLDpPvye8zV/0E4EyYn43P7/7qvQwPh9BGkHewbMulVntbigmcT7rdX3BNo9wRJg==}
 
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
@@ -6731,6 +6766,14 @@ snapshots:
 
   '@oslojs/encoding@1.1.0': {}
 
+  '@pdf-lib/standard-fonts@1.0.0':
+    dependencies:
+      pako: 1.0.11
+
+  '@pdf-lib/upng@1.0.1':
+    dependencies:
+      pako: 1.0.11
+
   '@playwright/test@1.60.0':
     dependencies:
       playwright: 1.60.0
@@ -6741,28 +6784,28 @@ snapshots:
 
   '@posthog/types@1.374.2': {}
 
-  '@powerformer/vela-cli-darwin-arm64@0.0.18':
+  '@powerformer/vela-cli-darwin-arm64@0.0.19':
     optional: true
 
-  '@powerformer/vela-cli-darwin-x64@0.0.18':
+  '@powerformer/vela-cli-darwin-x64@0.0.19':
     optional: true
 
-  '@powerformer/vela-cli-linux-arm64@0.0.18':
+  '@powerformer/vela-cli-linux-arm64@0.0.19':
     optional: true
 
-  '@powerformer/vela-cli-linux-x64@0.0.18':
+  '@powerformer/vela-cli-linux-x64@0.0.19':
     optional: true
 
-  '@powerformer/vela-cli-win32-x64@0.0.18':
+  '@powerformer/vela-cli-win32-x64@0.0.19':
     optional: true
 
-  '@powerformer/vela-cli@0.0.18':
+  '@powerformer/vela-cli@0.0.19':
     optionalDependencies:
-      '@powerformer/vela-cli-darwin-arm64': 0.0.18
-      '@powerformer/vela-cli-darwin-x64': 0.0.18
-      '@powerformer/vela-cli-linux-arm64': 0.0.18
-      '@powerformer/vela-cli-linux-x64': 0.0.18
-      '@powerformer/vela-cli-win32-x64': 0.0.18
+      '@powerformer/vela-cli-darwin-arm64': 0.0.19
+      '@powerformer/vela-cli-darwin-x64': 0.0.19
+      '@powerformer/vela-cli-linux-arm64': 0.0.19
+      '@powerformer/vela-cli-linux-x64': 0.0.19
+      '@powerformer/vela-cli-win32-x64': 0.0.19
     optional: true
 
   '@preact/signals-core@1.14.2': {}
@@ -7175,6 +7218,10 @@ snapshots:
       undici-types: 5.26.5
 
   '@types/node@20.19.39':
+    dependencies:
+      undici-types: 6.21.0
+
+  '@types/node@22.20.0':
     dependencies:
       undici-types: 6.21.0
 
@@ -8699,6 +8746,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  https@1.0.0: {}
+
   humanize-ms@1.2.1:
     dependencies:
       ms: 2.1.3
@@ -8718,6 +8767,10 @@ snapshots:
       safer-buffer: 2.1.2
 
   ieee754@1.2.1: {}
+
+  image-size@1.2.1:
+    dependencies:
+      queue: 6.0.2
 
   immediate@3.0.6: {}
 
@@ -9563,6 +9616,13 @@ snapshots:
 
   pathe@2.0.3: {}
 
+  pdf-lib@1.17.1:
+    dependencies:
+      '@pdf-lib/standard-fonts': 1.0.0
+      '@pdf-lib/upng': 1.0.1
+      pako: 1.0.11
+      tslib: 1.14.1
+
   pe-library@0.4.1: {}
 
   pend@1.2.0: {}
@@ -9638,6 +9698,13 @@ snapshots:
       commander: 9.5.0
     optional: true
 
+  pptxgenjs@4.0.1:
+    dependencies:
+      '@types/node': 22.20.0
+      https: 1.0.0
+      image-size: 1.2.1
+      jszip: 3.10.1
+
   preact@10.29.1: {}
 
   prebuild-install@7.1.3:
@@ -9710,6 +9777,10 @@ snapshots:
       side-channel: 1.1.0
 
   query-selector-shadow-dom@1.0.1: {}
+
+  queue@6.0.2:
+    dependencies:
+      inherits: 2.0.4
 
   quick-lru@5.1.1: {}
 
@@ -10334,6 +10405,8 @@ snapshots:
   truncate-utf8-bytes@1.0.2:
     dependencies:
       utf8-byte-length: 1.0.5
+
+  tslib@1.14.1: {}
 
   tslib@2.8.1: {}
 

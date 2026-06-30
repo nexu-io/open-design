@@ -275,7 +275,7 @@ describe('chat assistant feedback', () => {
     expect(screen.getByText('😊')).toBeTruthy();
     expect(
       screen.getByTestId('assistant-feedback-discord-positive').getAttribute('href'),
-    ).toBe('https://discord.gg/9ptkbbqRu');
+    ).toBe('https://discord.gg/mHAjSMV6gz');
     expect(screen.getByText(/Share what you made with the/i)).toBeTruthy();
 
     fireEvent.click(screen.getByLabelText('Understood my request'));
@@ -365,7 +365,7 @@ describe('chat assistant feedback', () => {
     expect(screen.getByText('😔')).toBeTruthy();
     expect(
       screen.getByTestId('assistant-feedback-discord-negative').getAttribute('href'),
-    ).toBe('https://discord.gg/9ptkbbqRu');
+    ).toBe('https://discord.gg/mHAjSMV6gz');
     expect(
       screen.getByText(/so the team can understand what went wrong/i),
     ).toBeTruthy();

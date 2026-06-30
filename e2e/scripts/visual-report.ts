@@ -14,7 +14,7 @@ const visualPrefix = 'visual-regression';
 const inlineCaseLimit = 20;
 const pixelThreshold = 0.1;
 const changedPixelFloor = 500;
-const changedPixelRatioFloor = 0.02;
+const comparisonImageWidth = 220;
 const diffBoxPadding = 6;
 const diffBoxMergeDistance = 12;
 const diffBoxStrokeWidth = 3;
@@ -250,8 +250,8 @@ export async function compareCase(input: {
   };
 }
 
-export function isChangedVisualDiff(diffPixels: number, diffPixelRatio: number): boolean {
-  return diffPixels >= changedPixelFloor && diffPixelRatio >= changedPixelRatioFloor;
+export function isChangedVisualDiff(diffPixels: number, _diffPixelRatio: number): boolean {
+  return diffPixels >= changedPixelFloor;
 }
 
 async function writeDiffPng(mainPath: string, prPath: string, diffPath: string): Promise<DiffPngResult> {
@@ -588,9 +588,9 @@ function renderComment(input: { compared: ComparedCase[]; headSha: string; baseS
 
   lines.push(`Head: \`${shortSha(headSha)}\` · Base: \`${shortSha(baseSha)}\``);
   if (missing.length === compared.length) {
-    lines.push('', '> Baseline unavailable; PR screenshots captured, no diff computed.');
+    lines.push('', '> Baseline unavailable; PR screenshots are new visual cases and need baseline review.');
   } else if (missing.length > 0) {
-    lines.push('', `> ${missing.length} case(s) have no baseline; PR screenshots are shown without a diff.`);
+    lines.push('', `> ${missing.length} new visual case(s) have no baseline yet; review these screenshots before accepting their baselines.`);
   }
   if (hasFallbackBaseline) {
     lines.push('', '> Some cases used the nearest available ancestor baseline instead of the exact base SHA.');
@@ -602,7 +602,7 @@ function renderComment(input: { compared: ComparedCase[]; headSha: string; baseS
   lines.push('', summaryLine({ changed, unchanged, missing, failed }), '');
 
   if (changed.length > 0) {
-    lines.push('### Changed cases', '', ...renderCaseList(changed.slice(0, inlineCaseLimit)), '');
+    lines.push('### Changed cases', '', ...renderComparisonCaseTable(changed.slice(0, inlineCaseLimit)), '');
     if (changed.length > inlineCaseLimit) {
       lines.push(`_${changed.length - inlineCaseLimit} additional changed case(s) omitted from this comment._`, '');
     }
@@ -617,11 +617,14 @@ function renderComment(input: { compared: ComparedCase[]; headSha: string; baseS
   }
 
   if (missing.length > 0) {
-    lines.push('<details><summary>PR screenshots without baselines</summary>', '', ...renderCaseList(missing.slice(0, inlineCaseLimit), false), '</details>', '');
+    lines.push('### New cases without baselines', '', ...renderMissingCaseGrid(missing.slice(0, inlineCaseLimit)), '');
+    if (missing.length > inlineCaseLimit) {
+      lines.push(`_${missing.length - inlineCaseLimit} additional new case(s) omitted from this comment._`, '');
+    }
   }
 
   if (unchanged.length > 0) {
-    lines.push('<details><summary>Unchanged cases</summary>', '', ...renderCaseList(unchanged.slice(0, inlineCaseLimit)), '</details>', '');
+    lines.push('<details><summary>Unchanged cases</summary>', '', ...renderComparisonCaseTable(unchanged.slice(0, inlineCaseLimit)), '</details>', '');
   }
 
   lines.push('_Visual diff is advisory only and does not block merging._', '');
@@ -632,45 +635,49 @@ function summaryLine(groups: { changed: ComparedCase[]; unchanged: ComparedCase[
   return [
     `**${groups.changed.length} changed**`,
     `${groups.unchanged.length} unchanged`,
-    `${groups.missing.length} missing baseline`,
+    `${groups.missing.length} new without baseline`,
     `${groups.failed.length} failed`,
   ].join(' · ');
 }
 
-function renderCaseList(cases: ComparedCase[], includeDiff = true): string[] {
-  const lines: string[] = [];
+function renderComparisonCaseTable(cases: ComparedCase[]): string[] {
+  const lines: string[] = ['| Case | Main | PR | Diff |', '| --- | --- | --- | --- |'];
   for (const visualCase of cases) {
+    lines.push(`| ${caseSummaryCell(visualCase)} | ${imageCell(visualCase.mainUrl, 'main', comparisonImageWidth)} | ${imageCell(visualCase.prUrl, 'pr', comparisonImageWidth)} | ${imageCell(visualCase.diffUrl, 'diff', comparisonImageWidth)} |`);
+  }
+
+  return lines;
+}
+
+function caseSummaryCell(visualCase: ComparedCase): string {
     const baselineNote = visualCase.baselineBehindBy != null && visualCase.baselineBehindBy > 0
       ? ` · baseline ${visualCase.baselineBehindBy} commit(s) behind`
       : '';
     const diffNote = visualCase.diffPixels == null
       ? ''
       : ` · ${visualCase.diffPixels.toLocaleString('en-US')} px${visualCase.diffPixelRatio == null ? '' : ` (${formatPercent(visualCase.diffPixelRatio)})`}`;
-    lines.push(`#### ${escapeMarkdown(visualCase.name)}`);
     const notes = `${diffNote}${baselineNote}`.replace(/^ · /u, '');
-    if (notes.length > 0) {
-      lines.push(`<sub>${escapeHtml(notes)}</sub>`);
-    }
-    if (includeDiff) {
-      lines.push(
-        '',
-        `<strong>Main</strong><br>${imageCell(visualCase.mainUrl, 'main')}`,
-        '',
-        `<strong>PR</strong><br>${imageCell(visualCase.prUrl, 'pr')}`,
-        '',
-        `<strong>Diff</strong><br>${imageCell(visualCase.diffUrl, 'diff')}`,
-        '',
-      );
-    } else {
-      lines.push('', `<strong>PR</strong><br>${imageCell(visualCase.prUrl, 'pr')}`, '');
-    }
-  }
+    return notes.length > 0
+      ? `<strong>${escapeHtml(visualCase.name)}</strong><br><sub>${escapeHtml(notes)}</sub>`
+      : `<strong>${escapeHtml(visualCase.name)}</strong>`;
+}
 
+function renderMissingCaseGrid(cases: ComparedCase[]): string[] {
+  const lines: string[] = ['| PR | PR | PR |', '| --- | --- | --- |'];
+  for (let index = 0; index < cases.length; index += 3) {
+    const row = cases.slice(index, index + 3).map((visualCase) => {
+      return `<strong>${escapeHtml(visualCase.name)}</strong><br>${imageCell(visualCase.prUrl, 'pr', comparisonImageWidth)}`;
+    });
+    while (row.length < 3) {
+      row.push('');
+    }
+    lines.push(`| ${row.join(' | ')} |`);
+  }
   return lines;
 }
 
-function imageCell(url: string | undefined, alt: string): string {
-  return url == null ? 'n/a' : `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="640">`;
+function imageCell(url: string | undefined, alt: string, width: number): string {
+  return url == null ? 'n/a' : `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="${width}">`;
 }
 
 function formatPercent(value: number): string {

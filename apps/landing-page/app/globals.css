@@ -680,6 +680,30 @@ body::before {
   letter-spacing: 0.04em;
 }
 
+/* Product / Resources are category labels, not pages — they render as
+   disclosure buttons that toggle their own dropdown instead of navigating
+   (Product used to bounce to the homepage, Resources to /blog/). Style the
+   button to read identically to the sibling <a> nav links, then reset the
+   native button chrome. */
+.nav-links .nav-trigger {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.18s ease;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.nav-links .nav-trigger:hover { color: var(--coral); }
+
 /* AMR partner logo at the tail of the nav links (700×272 lockup scaled to
    the bar). */
 .nav-links .nav-amr {
@@ -5219,8 +5243,11 @@ footer .container {
     border-bottom: 1px solid rgba(26, 26, 26, 0.06);
   }
   .nav-links li:last-child { border-bottom: none; }
-  .nav-links a {
+  .nav-links a,
+  .nav-links .nav-trigger {
     display: block;
+    width: 100%;
+    text-align: left;
     padding: 14px 0;
     font-size: 16px;
   }

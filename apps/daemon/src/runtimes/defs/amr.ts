@@ -260,6 +260,55 @@ export async function fetchVelaRemoteModelsWithRetry(
   throw lastError instanceof Error ? lastError : new Error(velaModelsErrorMessage(lastError));
 }
 
+/** Live account fields parsed from `vela billing summary --format json`. */
+export interface VelaBillingSummary {
+  /** Real subscription tier (e.g. "max"); absent for free accounts. */
+  plan?: string;
+  /** Total available balance in USD (string), or null when unavailable. */
+  balanceUsd?: string | null;
+}
+
+/**
+ * Read the signed-in account's billing summary via the vela CLI — the same
+ * data source used for models, so balance/tier come through the versioned CLI
+ * contract rather than a separate HTTP call. Returns total available balance
+ * and the real membership tier.
+ */
+export async function fetchVelaBillingSummary(
+  resolvedBin: string,
+  env: NodeJS.ProcessEnv,
+): Promise<VelaBillingSummary> {
+  const { stdout } = await execAgentFile(
+    resolvedBin,
+    ['billing', 'summary', '--format', 'json'],
+    { env, timeout: AMR_MODELS_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+  );
+  const data = JSON.parse(String(stdout)) as {
+    balanceUsd?: unknown;
+    totalAvailableCreditsUsd?: unknown;
+    membershipTier?: unknown;
+  };
+  // Use `balanceUsd` — the same field the console wallet page renders as the
+  // headline "余额" — so the two surfaces always agree. Fall back to the total
+  // available only if `balanceUsd` is missing.
+  const balanceUsd =
+    typeof data.balanceUsd === 'string'
+      ? data.balanceUsd
+      : typeof data.totalAvailableCreditsUsd === 'string'
+        ? data.totalAvailableCreditsUsd
+        : null;
+  // `membershipTier` is omitted for free accounts. A SUCCESSFUL summary with no
+  // tier therefore means "free" — normalize to the explicit sentinel so the UI
+  // shows the plan and the Upgrade CTA for free users. "Unknown" (billing
+  // unavailable) is signalled separately by the fetch rejecting → null account,
+  // never by an absent tier on a successful read.
+  const tier =
+    typeof data.membershipTier === 'string' && data.membershipTier.trim()
+      ? data.membershipTier.trim()
+      : 'free';
+  return { plan: tier, balanceUsd };
+}
+
 export const amrAgentDef = {
   id: 'amr',
   name: 'AMR',
@@ -271,6 +320,11 @@ export const amrAgentDef = {
   fallbackModels: [] as RuntimeModelOption[],
   buildArgs: () => ['agent', 'run', '--runtime', 'opencode'],
   streamFormat: 'acp-json-rpc',
+  // vela resumes the upstream OpenCode session via ACP session/load across
+  // turns (the OpenCode session store persists per conversation), so the daemon
+  // captures the durable handle, skips the transcript resend on resume, and
+  // maps vela's resume_failed onto the reseed path. See resumesSessionViaAcpLoad.
+  resumesSessionViaAcpLoad: true,
   // Vela routes model selection through ACP's `session/set_model` and only
   // accepts ids that survived the `vela models` preflight check, so a
   // free-text "Custom" id silently fails at spawn. The model picker

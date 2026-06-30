@@ -7,6 +7,8 @@ import type { Page } from '@playwright/test';
 
 import { writeFakeVelaBin, seedVelaLoginConfig } from '@/amr';
 import { runErrorCard } from '@/playwright/chat';
+import { routeAgents } from '@/playwright/mock-factory';
+import { T } from '@/timeouts';
 import { createFakeAgentRuntimes } from '@/playwright/fake-agents';
 import {
   createProjectViaApi,
@@ -21,8 +23,60 @@ import {
 
 let codexRuntime: Awaited<ReturnType<typeof createFakeAgentRuntimes>>['codex'];
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
+const AMR_AGENT = {
+  id: 'amr',
+  name: 'Open Design AMR',
+  bin: 'vela',
+  available: true,
+  version: 'test',
+  models: [{ id: 'glm-5', label: 'glm-5' }],
+};
+const CLAUDE_AGENT = {
+  id: 'claude',
+  name: 'Claude Code',
+  bin: 'claude',
+  available: true,
+  version: 'test',
+  models: [{ id: 'default', label: 'Default' }],
+};
+const ANTIGRAVITY_AGENT = {
+  id: 'antigravity',
+  name: 'Antigravity',
+  bin: 'antigravity',
+  available: true,
+  version: 'test',
+  models: [{ id: 'default', label: 'Default' }],
+};
 
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: 'serial', timeout: T.xlong });
+
+async function stubCatalogsEmpty(page: Page) {
+  await page.route('**/api/skills', async (route) => {
+    await route.fulfill({ json: { skills: [] } });
+  });
+  await page.route('**/api/design-templates', async (route) => {
+    await route.fulfill({ json: { designTemplates: [] } });
+  });
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: [] } });
+  });
+}
+
+async function stubRuntimeAgents(page: Page) {
+  await routeAgents(page, [
+    AMR_AGENT,
+    {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: 'test',
+      models: [{ id: 'default', label: 'Default' }],
+    },
+    CLAUDE_AGENT,
+    ANTIGRAVITY_AGENT,
+  ]);
+}
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -38,6 +92,8 @@ test.beforeAll(async () => {
 });
 
 test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and keep Retry available', async ({ page }) => {
+  await stubCatalogsEmpty(page);
+  await stubRuntimeAgents(page);
   const profile = 'local';
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
@@ -72,7 +128,7 @@ test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and ke
   await gotoProject(page, amr.projectId);
   await sendPrompt(page, 'AMR insufficient balance recovery smoke');
 
-  const topUp = page.getByRole('button', { name: /Top up AMR|前往充值|前往儲值/i }).first();
+  const topUp = page.getByRole('button', { name: /Top up|充值|儲值/i }).first();
   const retry = page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first();
   await expect(topUp).toBeVisible({ timeout: 15_000 });
   await expect(retry).toBeVisible();
@@ -98,6 +154,8 @@ test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and ke
 });
 
 test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in', async ({ page }) => {
+  await stubCatalogsEmpty(page);
+  await stubRuntimeAgents(page);
   let loggedIn = false;
   let loginRequested = false;
   await page.route('**/api/integrations/vela/status', async (route) => {
@@ -151,6 +209,8 @@ test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in', 
 });
 
 test('[P0] @critical AMR model catalog invalid-key failures route to authorization recovery', async ({ page }) => {
+  await stubCatalogsEmpty(page);
+  await stubRuntimeAgents(page);
   let loggedIn = false;
   let loginRequested = false;
   await page.route('**/api/integrations/vela/status', async (route) => {
@@ -239,7 +299,7 @@ test('[P0] @critical AMR model catalog invalid-key failures route to authorizati
   const authorizeAndRetry = page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first();
   await expect(authorizeAndRetry).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Switch to AMR & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to Open Design & retry/i })).toHaveCount(0);
 
   await authorizeAndRetry.click();
   await expect.poll(() => loginRequested, { timeout: 10_000 }).toBe(true);
@@ -247,6 +307,8 @@ test('[P0] @critical AMR model catalog invalid-key failures route to authorizati
 });
 
 test('[P0] @critical Settings reopens AMR with the configured profile, account badge, and model catalog', async ({ page }) => {
+  await stubCatalogsEmpty(page);
+  await stubRuntimeAgents(page);
   const profile = 'test';
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
@@ -288,6 +350,8 @@ test('[P0] @critical Settings reopens AMR with the configured profile, account b
 });
 
 test('[P0] @critical Settings preserves AMR account, recharge shortcut, and model catalog after switching runtimes', async ({ page }) => {
+  await stubCatalogsEmpty(page);
+  await stubRuntimeAgents(page);
   const profile = 'test';
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
@@ -324,7 +388,7 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
   await expect(settings.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
   await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-amr-switch@example.com');
   await expect(settings.locator('.agent-card-amr-profile-badge')).toContainText(/test/i);
-  await expect(settings.getByRole('link', { name: /AMR Console|控制台/i })).toBeVisible();
+  await expect(settings.getByRole('link', { name: /Console|控制台/i })).toBeVisible();
 
   await settings.getByRole('combobox', { name: 'Model', exact: true }).click();
   let modelPopover = page.getByTestId('settings-agent-model-popover-amr');
@@ -335,13 +399,13 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
 
   await settings.getByTestId('settings-agent-select-codex').click();
   await expect(settings.getByTestId('settings-agent-select-codex')).toHaveAttribute('aria-pressed', 'true');
-  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('Open Design AMR');
+  await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('Open Design');
 
   await settings.getByTestId('settings-agent-select-amr').click();
   await expect(settings.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
   await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-amr-switch@example.com');
   await expect(settings.locator('.agent-card-amr-profile-badge')).toContainText(/test/i);
-  const amrConsole = settings.getByRole('link', { name: /AMR Console|控制台/i });
+  const amrConsole = settings.getByRole('link', { name: /Console|控制台/i });
   await expect(amrConsole).toBeVisible();
   await expect(amrConsole).toHaveAttribute('href', /source=open_design/);
 
@@ -366,6 +430,8 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
 });
 
 test('[P0] after an AMR failure the user can switch to Codex and complete a fresh run', async ({ page }) => {
+  await stubCatalogsEmpty(page);
+  await stubRuntimeAgents(page);
   // AMR_AUTH_REQUIRED means the AMR session is invalid, so /status reports
   // signed-out — the inline auth card then offers the Authorize & retry action.
   await page.route('**/api/integrations/vela/status', async (route) => {
@@ -412,6 +478,8 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
 });
 
 test('[P0] upstream outages keep Retry available without promoting AMR', async ({ page }) => {
+  await stubCatalogsEmpty(page);
+  await stubRuntimeAgents(page);
   const root = join(tmpdir(), `open-design-upstream-ui-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const runtimes = await createFakeAgentRuntimes({ root: join(root, 'agents'), runtimeIds: ['claude'] });
   const config = {
@@ -423,6 +491,7 @@ test('[P0] upstream outages keep Retry available without promoting AMR', async (
     skillId: null,
     designSystemId: null,
     onboardingCompleted: true,
+    privacyDecisionAt: 1,
     mediaProviders: {},
     agentModels: {
       claude: { model: 'default', reasoning: 'default' },
@@ -481,11 +550,13 @@ test('[P0] upstream outages keep Retry available without promoting AMR', async (
 
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/Generation service unavailable|model provider is temporarily unavailable/i).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to AMR & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to Open Design & retry/i })).toHaveCount(0);
   await expect(page.getByText(/Model call failed/i)).toHaveCount(0);
 });
 
 test('[P0] antigravity rate limits offer terminal model switching without promoting AMR', async ({ page }) => {
+  await stubCatalogsEmpty(page);
+  await stubRuntimeAgents(page);
   let oauthLaunchCalls = 0;
   await page.route('**/api/agents/antigravity/oauth-launch', async (route) => {
     oauthLaunchCalls += 1;
@@ -505,6 +576,7 @@ test('[P0] antigravity rate limits offer terminal model switching without promot
     skillId: null,
     designSystemId: null,
     onboardingCompleted: true,
+    privacyDecisionAt: 1,
     mediaProviders: {},
     agentModels: {
       antigravity: { model: 'default', reasoning: 'default' },
@@ -561,7 +633,7 @@ test('[P0] antigravity rate limits offer terminal model switching without promot
   const launchTerminal = page.getByRole('button', { name: /Switch model in terminal/i }).first();
   await expect(launchTerminal).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to AMR & retry/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Switch to Open Design & retry/i })).toHaveCount(0);
 
   await launchTerminal.click();
 
@@ -581,6 +653,8 @@ async function setupAmrWorkspace(
     assistantText?: string;
   },
 ) {
+  await stubCatalogsEmpty(page);
+
   const root = join(tmpdir(), `open-design-amr-ui-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const homeDir = join(root, 'home');
   const velaBin = await writeFakeVelaBin(join(root, 'bin'), {
@@ -606,6 +680,7 @@ async function setupAmrWorkspace(
     skillId: null,
     designSystemId: null,
     onboardingCompleted: true,
+    privacyDecisionAt: 1,
     mediaProviders: {},
     agentModels: {
       amr: { model: 'default', reasoning: 'default' },

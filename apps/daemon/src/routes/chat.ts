@@ -76,6 +76,7 @@ const PROVIDER_PROTOCOLS: ReadonlySet<ConnectionTestProtocol> = new Set([
   'ollama',
   'senseaudio',
   'aihubmix',
+  'bedrock',
 ]);
 
 function deploymentProxyRunMetadataBody(proxyBody: Partial<ProxyStreamRequest>): Record<string, unknown> {
@@ -248,7 +249,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         res,
         400,
         'BAD_REQUEST',
-        'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix',
+        'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
       );
     }
     const credentialSource = rejectInvalidCredentialSource(body.credentialSource, res);
@@ -268,7 +269,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     // AIHubMix's catalogue (GET /api/v1/models?type=llm) is public, so its
     // model list loads without a key. Every other protocol needs the key to
     // hit its /v1/models endpoint.
-    const apiKeyRequired = protocol !== 'aihubmix';
+    const apiKeyRequired = protocol !== 'aihubmix' && protocol !== 'bedrock';
     if (
       !effectiveBaseUrl.trim() ||
       (apiKeyRequired && !effectiveApiKey.trim())
@@ -335,20 +336,19 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     try {
       if (body.mode === 'provider') {
         const protocol = body.protocol;
-        if (
-          !isProviderProtocol(protocol)
-        ) {
+        if (!isProviderProtocol(protocol)) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix',
+            'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
           );
         }
         const credentialSource = rejectInvalidCredentialSource(body.credentialSource, res);
         if (!credentialSource) return;
         let effectiveBaseUrl = typeof body.baseUrl === 'string' ? body.baseUrl : '';
         let effectiveApiKey = typeof body.apiKey === 'string' ? body.apiKey : '';
+        const apiKeyRequired = credentialSource === 'deployment' || protocol !== 'bedrock';
         let allowPrivateNetworkBaseUrl = false;
         let metadata: Record<string, unknown> | undefined;
         let deploymentProfile: DeploymentProviderProfile | null = null;
@@ -365,14 +365,16 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         if (
           typeof body.model !== 'string' ||
           !effectiveBaseUrl.trim() ||
-          !effectiveApiKey.trim() ||
+          (apiKeyRequired && !effectiveApiKey.trim()) ||
           !body.model.trim()
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'baseUrl, apiKey, and model are required',
+            apiKeyRequired
+              ? 'baseUrl, apiKey, and model are required'
+              : 'baseUrl and model are required',
           );
         }
         const reasoningDenial = authorizeReasoningEgress({

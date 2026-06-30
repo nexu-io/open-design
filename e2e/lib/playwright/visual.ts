@@ -97,7 +97,7 @@ export const VISUAL_CLI_AGENTS = [
 
 export const VISUAL_AMR_AGENT = {
   id: 'amr',
-  name: 'Open Design AMR',
+  name: 'Open Design',
   bin: 'vela',
   available: true,
   version: '0.1.0',
@@ -167,6 +167,13 @@ type VisualPageOptions = {
   projects?: readonly VisualProject[];
   config?: Partial<VisualConfig>;
   agents?: readonly unknown[];
+};
+
+type VisualVelaAccountOptions = {
+  profile?: string;
+  plan?: string;
+  balanceUsd?: string;
+  email?: string;
 };
 
 const VISUAL_PLUGINS = [
@@ -523,6 +530,49 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
   }, [VISUAL_STYLE_ID] as const);
 }
 
+export async function mockSignedInVelaAccount(
+  page: Page,
+  options: VisualVelaAccountOptions = {},
+): Promise<void> {
+  const profile = options.profile ?? 'test';
+  const plan = options.plan ?? 'plus';
+  const balanceUsd = options.balanceUsd ?? '247.51';
+  const email = options.email ?? 'leaf@example.com';
+  const fetchedAt = '2026-06-25T03:59:00.000Z';
+
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        loggedIn: true,
+        loginInFlight: false,
+        profile,
+        user: { id: 'u1', email },
+        account: { plan, balanceUsd },
+        configPath: '/home/test/.amr/config.json',
+      }),
+    });
+  });
+
+  await page.route('**/api/integrations/vela/wallet**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'available',
+        profile,
+        user: { id: 'u1', email, plan },
+        balanceUsd,
+        updatedAt: fetchedAt,
+        fetchedAt,
+        stale: false,
+        source: 'vela_api',
+      }),
+    });
+  });
+}
+
 export async function waitForVisualReady(page: Page): Promise<void> {
   await page.getByText('Loading Open Design…').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
   await expect(page.getByTestId('home-hero')).toBeVisible();
@@ -553,6 +603,52 @@ export async function gotoVisualWorkspace(page: Page): Promise<void> {
     .click();
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
+  await prepareVisualWorkspaceFileList(page);
+}
+
+export async function prepareVisualWorkspaceFileList(page: Page): Promise<void> {
+  await page.getByTestId('design-files-tab').click();
+  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('design-file-row-index.html')).toBeVisible();
+  await expect(page.getByTestId('design-file-preview')).toHaveCount(0);
+  await resetVisualScroll(page);
+  await waitForVisualStable(page);
+}
+
+export async function prepareVisualWorkspacePreview(page: Page): Promise<void> {
+  await prepareVisualWorkspaceFileList(page);
+  const fileRow = page.getByTestId('design-file-row-index.html');
+  await fileRow.getByRole('button').first().click();
+  const preview = page.getByTestId('design-file-preview');
+  await expect(preview).toBeVisible();
+  await preview.getByRole('button', { name: /^Open$/ }).click();
+  await expect(
+    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+      name: 'Visual CSS Smoke',
+    }),
+  ).toBeVisible();
+  await resetVisualScroll(page);
+  await waitForVisualStable(page);
+}
+
+export async function prepareVisualAvatarMenu(page: Page): Promise<Locator> {
+  await prepareVisualWorkspaceFileList(page);
+  const menu = await openAvatarMenu(page);
+  await expect(menu.locator('.avatar-item').first()).toBeVisible();
+  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('design-file-row-index.html')).toBeVisible();
+  await waitForVisualStable(page);
+  return menu;
+}
+
+export async function prepareVisualSettingsDialog(page: Page): Promise<Locator> {
+  await prepareVisualWorkspaceFileList(page);
+  const dialog = await openSettingsDetailsFromHeader(page);
+  await expect(dialog.getByRole('tablist', { name: 'Execution mode' })).toBeVisible();
+  await waitForVisualStable(page);
+  return dialog;
 }
 
 export async function openAvatarMenu(page: Page): Promise<Locator> {
@@ -574,6 +670,17 @@ export async function openSettingsDetailsFromHeader(page: Page): Promise<Locator
 export async function waitForVisualFonts(page: Page): Promise<void> {
   await page.evaluate(async () => {
     await document.fonts.ready;
+  });
+}
+
+export async function resetVisualScroll(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    document.scrollingElement?.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    for (const element of document.querySelectorAll<HTMLElement>(
+      '.entry-main--scroll, .workspace, .file-workspace, [data-testid="file-workspace"]',
+    )) {
+      element.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
   });
 }
 

@@ -27,6 +27,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { startServer } from '../../src/server.js';
 import { readAppConfig, writeAppConfig } from '../../src/app-config.js';
 import {
+  clearAllVelaLiveAccounts,
   parseAmrEntryAnalyticsPayload,
   parseAmrOnboardingProfileAnalyticsPayload,
 } from '../../src/integrations/vela.js';
@@ -128,6 +129,22 @@ function seedLogin(profile: string, payload: Record<string, unknown> = {}): void
   writeFileSync(configPath(), JSON.stringify(full, null, 2), 'utf8');
 }
 
+async function setSettingsAmrEnv(extra: Record<string, string | undefined>): Promise<void> {
+  const dataDir = process.env.OD_DATA_DIR as string;
+  const cfg = await readAppConfig(dataDir);
+  const amr: Record<string, string> = {
+    ...((cfg.agentCliEnv?.amr as Record<string, string>) ?? {}),
+  };
+  for (const [key, value] of Object.entries(extra)) {
+    if (value === undefined) delete amr[key];
+    else amr[key] = value;
+  }
+  await writeAppConfig(dataDir, {
+    ...cfg,
+    agentCliEnv: { ...(cfg.agentCliEnv ?? {}), amr },
+  });
+}
+
 async function startWalletApi(
   handler: (req: http.IncomingMessage, res: http.ServerResponse) => void | Promise<void>,
 ): Promise<{ close: () => Promise<void>; requests: string[]; url: string }> {
@@ -203,6 +220,11 @@ afterEach(() => {
   delete process.env.OD_AMR_LOGIN_ACTIVATION_GRACE_MS;
   delete process.env.FAKE_VELA_LOGIN_USER_EMAIL;
   delete process.env.FAKE_VELA_LOGIN_USER_PLAN;
+  delete process.env.FAKE_VELA_BILLING_TIER;
+  delete process.env.FAKE_VELA_BILLING_BALANCE_USD;
+  delete process.env.FAKE_VELA_BILLING_LOG;
+  delete process.env.FAKE_VELA_BILLING_DELAY_MS;
+  delete process.env.FAKE_VELA_BILLING_UNKNOWN_COMMAND;
   delete process.env.FAKE_VELA_ENV_DUMP_PATH;
   delete process.env.OD_PUBLIC_BASE_URL;
   delete process.env.VELA_RUNTIME_KEY;
@@ -562,6 +584,186 @@ describe('GET /api/integrations/vela/status', () => {
     expect(body.user?.email).toBe('leaf@example.com');
     expect(body.user?.plan).toBe('free');
     expect(body.user?.name).toBe('杨瑾龙');
+  });
+
+  it('blocks the first signed-in /status on a cold cache and surfaces the fetched plan + balance', async () => {
+    // Regression: the new account surfaces read /status once and do not
+    // re-poll, so a cold cache must resolve live billing BEFORE the first
+    // response — otherwise plan/balance stay hidden until the user refocuses.
+    clearAllVelaLiveAccounts();
+    process.env.FAKE_VELA_BILLING_TIER = 'plus';
+    process.env.FAKE_VELA_BILLING_BALANCE_USD = '247.51';
+    // Config carries no plan, so plan/balance can only come from the live fetch.
+    seedLogin('local', {
+      user: { id: 'cold-1', email: 'cold@example.com', plan: undefined },
+    });
+    const { body } = await getJson<{
+      loggedIn: boolean;
+      user: { email?: string } | null;
+      account?: { plan?: string; balanceUsd?: string | null };
+    }>(`${baseUrl}/api/integrations/vela/status`);
+    expect(body.loggedIn).toBe(true);
+    // Env-/config-identity stays on `user`; live billing rides on `account`.
+    expect(body.account?.plan).toBe('plus');
+    expect(body.account?.balanceUsd).toBe('247.51');
+  });
+
+  it('normalizes a successful billing summary without a tier to free (upgradeable)', async () => {
+    // membershipTier is omitted for free accounts; a successful read must still
+    // surface a concrete plan so the UI shows it AND keeps the Upgrade CTA.
+    clearAllVelaLiveAccounts();
+    // Balance set, tier unset → fake-vela returns balanceUsd with NO membershipTier.
+    process.env.FAKE_VELA_BILLING_BALANCE_USD = '0.00';
+    seedLogin('local', {
+      user: { id: 'free-1', email: 'free@example.com', plan: undefined },
+    });
+    const { body } = await getJson<{
+      loggedIn: boolean;
+      account?: { plan?: string; balanceUsd?: string | null };
+    }>(`${baseUrl}/api/integrations/vela/status`);
+    expect(body.loggedIn).toBe(true);
+    expect(body.account?.plan).toBe('free');
+    expect(body.account?.balanceUsd).toBe('0.00');
+  });
+
+  it('keeps failed live billing reads throttled for repeated status polls', async () => {
+    clearAllVelaLiveAccounts();
+    const billingLog = path.join(tmpHome, 'billing-summary.log');
+    process.env.FAKE_VELA_BILLING_LOG = billingLog;
+    // Leave FAKE_VELA_BILLING_* unset so fake-vela exits non-zero for the
+    // optional live billing read.
+    seedLogin('local', {
+      user: { id: 'backoff-1', email: 'backoff@example.com', plan: undefined },
+    });
+
+    const first = await getJson<{
+      loggedIn: boolean;
+      account?: { plan?: string; balanceUsd?: string | null };
+    }>(`${baseUrl}/api/integrations/vela/status`);
+    const second = await getJson<{
+      loggedIn: boolean;
+      account?: { plan?: string; balanceUsd?: string | null };
+    }>(`${baseUrl}/api/integrations/vela/status`);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(first.body.loggedIn).toBe(true);
+    expect(second.body.loggedIn).toBe(true);
+    expect(first.body.account).toBeUndefined();
+    expect(second.body.account).toBeUndefined();
+    const attempts = existsSync(billingLog)
+      ? readFileSync(billingLog, 'utf8').trim().split('\n').filter(Boolean)
+      : [];
+    expect(attempts).toHaveLength(1);
+  });
+
+  it('keeps signed-in status usable when old vela CLI lacks billing commands', async () => {
+    clearAllVelaLiveAccounts();
+    process.env.FAKE_VELA_BILLING_UNKNOWN_COMMAND = '1';
+    seedLogin('local', {
+      user: { id: 'old-cli-1', email: 'old-cli@example.com', plan: undefined },
+    });
+
+    const { status, body } = await getJson<{
+      loggedIn: boolean;
+      user: { email?: string } | null;
+      account?: { plan?: string; balanceUsd?: string | null };
+    }>(`${baseUrl}/api/integrations/vela/status`);
+
+    expect(status).toBe(200);
+    expect(body.loggedIn).toBe(true);
+    expect(body.user?.email).toBe('old-cli@example.com');
+    expect(body.account).toBeUndefined();
+  });
+
+  it('uses the same Settings-backed credential for billing fetch and live-account cache key', async () => {
+    clearAllVelaLiveAccounts();
+    const billingLog = path.join(tmpHome, 'billing-summary-env.log');
+    process.env.FAKE_VELA_BILLING_LOG = billingLog;
+    process.env.FAKE_VELA_BILLING_DELAY_MS = '150';
+    process.env.FAKE_VELA_BILLING_TIER = 'plus';
+    process.env.FAKE_VELA_BILLING_BALANCE_USD = '8.00';
+    seedLogin('local', {
+      user: { id: 'race-1', email: 'race@example.com', plan: undefined },
+    });
+
+    try {
+      await setSettingsAmrEnv({
+        VELA_RUNTIME_KEY: 'rt-billing-account-A',
+        VELA_LINK_URL: 'http://link.invalid',
+      });
+      const pending = getJson<{
+        loggedIn: boolean;
+        account?: { plan?: string; balanceUsd?: string | null };
+      }>(`${baseUrl}/api/integrations/vela/status`);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      await setSettingsAmrEnv({ VELA_RUNTIME_KEY: 'rt-billing-account-B' });
+
+      const { body } = await pending;
+
+      expect(body.loggedIn).toBe(true);
+      expect(body.account?.plan).toBe('plus');
+      expect(body.account?.balanceUsd).toBe('8.00');
+      const attempts = readFileSync(billingLog, 'utf8')
+        .trim()
+        .split('\n')
+        .filter(Boolean);
+      expect(attempts).toHaveLength(1);
+      expect(attempts[0]).toContain('rt-billing-account-A');
+      expect(attempts[0]).not.toContain('rt-billing-account-B');
+    } finally {
+      await setSettingsAmrEnv({
+        VELA_RUNTIME_KEY: undefined,
+        VELA_LINK_URL: undefined,
+      });
+    }
+  });
+
+  it('does not leak cached billing when the Settings-backed env credential switches accounts', async () => {
+    // Account A and B share ~/.amr/config.json (untouched) and differ only by
+    // the agentCliEnv.amr VELA_RUNTIME_KEY. The credential fingerprint must keep
+    // their live-account caches separate so B never inherits A's plan/balance.
+    clearAllVelaLiveAccounts();
+    const dataDir = process.env.OD_DATA_DIR as string;
+    const setAmrEnv = async (extra: Record<string, string | undefined>) => {
+      const cfg = await readAppConfig(dataDir);
+      const amr: Record<string, string> = {
+        ...((cfg.agentCliEnv?.amr as Record<string, string>) ?? {}),
+      };
+      for (const [k, v] of Object.entries(extra)) {
+        if (v === undefined) delete amr[k];
+        else amr[k] = v;
+      }
+      await writeAppConfig(dataDir, {
+        ...cfg,
+        agentCliEnv: { ...(cfg.agentCliEnv ?? {}), amr },
+      });
+    };
+    seedLogin('local', {
+      user: { id: 'cfg', email: 'cfg@example.com', plan: undefined },
+    });
+    try {
+      await setAmrEnv({
+        VELA_RUNTIME_KEY: 'rt-account-A',
+        VELA_LINK_URL: 'http://link.invalid',
+      });
+      process.env.FAKE_VELA_BILLING_TIER = 'plus';
+      const a = await getJson<{ account?: { plan?: string } }>(
+        `${baseUrl}/api/integrations/vela/status`,
+      );
+      expect(a.body.account?.plan).toBe('plus');
+
+      // Switch the Settings env credential to account B WITHOUT touching the
+      // config file, and change what billing returns for the new account.
+      await setAmrEnv({ VELA_RUNTIME_KEY: 'rt-account-B' });
+      process.env.FAKE_VELA_BILLING_TIER = 'max';
+      const b = await getJson<{ account?: { plan?: string } }>(
+        `${baseUrl}/api/integrations/vela/status`,
+      );
+      expect(b.body.account?.plan).toBe('max');
+    } finally {
+      await setAmrEnv({ VELA_RUNTIME_KEY: undefined, VELA_LINK_URL: undefined });
+    }
   });
 
   it('never leaks the runtimeKey or controlKey in the status payload', async () => {
@@ -1763,5 +1965,37 @@ describe('login → status round-trip (E2E across the three routes)', () => {
 
     delete process.env.FAKE_VELA_LOGIN_USER_EMAIL;
     delete process.env.FAKE_VELA_LOGIN_USER_PLAN;
+  });
+});
+
+describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () => {
+  const payloadFor = (source: string, page: string) => ({
+    pageName: 'open_design',
+    sourcePageName: page,
+    area: 'amr_entry',
+    element: source,
+    action: 'click_amr_entry',
+    entryId: 'od-amr-entry-x',
+    sourceProduct: 'open_design',
+    sourceDetail: source,
+    entryOccurredAt: '2026-06-03T12:00:00.000Z',
+  });
+
+  it('accepts the four new upgrade / agent-card sources so mirroring is not 400ed', () => {
+    const cases: Array<[string, string]> = [
+      ['settings_amr_upgrade', 'settings'],
+      ['inline_amr_upgrade', 'chat_panel'],
+      ['avatar_amr_upgrade', 'chat_panel'],
+      ['avatar_amr_agent_card', 'chat_panel'],
+    ];
+    for (const [source, page] of cases) {
+      expect(parseAmrEntryAnalyticsPayload(payloadFor(source, page))).not.toBeNull();
+    }
+  });
+
+  it('still rejects an unknown source', () => {
+    expect(
+      parseAmrEntryAnalyticsPayload(payloadFor('made_up_source', 'settings')),
+    ).toBeNull();
   });
 });

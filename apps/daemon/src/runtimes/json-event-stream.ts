@@ -152,7 +152,16 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
   const part = isRecord(obj.part) ? obj.part : {};
 
   if (obj.type === 'step_start') {
-    onEvent({ type: 'status', label: 'running' });
+    // `sessionID` is OpenCode's own session handle (capture-style resume).
+    // Surface it on the step-start status so the daemon can persist it to
+    // `agent_sessions` and replay it as `run -s <id>` next turn. OpenCode
+    // stamps it on every stream event; step_start is the turn opener, so a
+    // create turn always exposes it here.
+    const sessionId =
+      typeof obj.sessionID === 'string' && obj.sessionID.length > 0
+        ? obj.sessionID
+        : null;
+    onEvent({ type: 'status', label: 'running', sessionId });
     return true;
   }
 
@@ -675,16 +684,21 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
   }
 
   if (obj.type === 'thread.started') {
-    // Surface codex's thread/session uuid on the same `sessionId` status
-    // channel claude uses (claude-stream.ts). It identifies this run's rollout
-    // file (`$CODEX_HOME/sessions/**/rollout-*-<thread_id>.jsonl`), which is the
-    // only place codex records per-call usage — run_finished reads it to recover
-    // the turn's first-call cache hit (codex's stream usage is cumulative only).
-    onEvent({
-      type: 'status',
-      label: 'initializing',
-      ...(typeof obj.thread_id === 'string' ? { sessionId: obj.thread_id } : {}),
-    });
+    // `thread_id` is Codex's own session handle, surfaced on the same
+    // `sessionId` status channel claude uses (claude-stream.ts). It serves two
+    // consumers: (1) the daemon persists it to `agent_sessions` and replays it
+    // as `exec resume <thread_id>` on the next turn (capture-style resume), and
+    // (2) it identifies this run's rollout file
+    // (`$CODEX_HOME/sessions/**/rollout-*-<thread_id>.jsonl`), the only place
+    // codex records per-call usage, which run_finished reads to recover the
+    // turn's first-call cache hit (codex's stream usage is cumulative only).
+    // Codex emits this both for a fresh `exec` and for `exec resume` (echoing
+    // the resumed id), so it is a stable capture point either way.
+    const threadId =
+      typeof obj.thread_id === 'string' && obj.thread_id.length > 0
+        ? obj.thread_id
+        : null;
+    onEvent({ type: 'status', label: 'initializing', sessionId: threadId });
     return true;
   }
 

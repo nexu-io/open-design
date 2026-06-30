@@ -997,8 +997,7 @@ async function harvestFromHtml(
 
   // Persist raw material for the agent to Read deeper if it wants to.
   fs.writeFileSync(path.join(prefetchDir, "material.md"), materialMd);
-  fs.writeFileSync(path.join(prefetchDir, "page.html"), html.slice(0, HTML_CAP));
-  fs.writeFileSync(path.join(prefetchDir, "page-preview.html"), previewablePrefetchHtml(html));
+  fs.writeFileSync(path.join(prefetchDir, "page.html"), previewablePrefetchHtml(html));
   fs.writeFileSync(path.join(prefetchDir, "styles.css"), allCss.slice(0, 2_000_000));
 
   return { ...partial, thin, materialMd };

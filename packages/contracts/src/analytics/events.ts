@@ -70,7 +70,9 @@ export type AnalyticsEventName =
   | 'design_system_create_result'
   | 'design_system_review_result'
   | 'design_system_status_result'
-  | 'design_system_apply_result';
+  | 'design_system_apply_result'
+  // AI optimize (deep enrichment) of a programmatically-extracted DS.
+  | 'design_system_enrich_result';
 
 // ---- Pages ---------------------------------------------------------------
 
@@ -103,9 +105,25 @@ export type TrackingSettingsPage = 'settings';
 
 export type TrackingProjectKind =
   | 'prototype'
+  // `wireframe` / `mobile` / `live_artifact` are prototype-kind projects the
+  // Home task rail (task_chip) offers as their own cards. They all reuse the
+  // web-prototype seed (so the product `metadata.kind` stays `prototype`), but
+  // the analytics dimension splits them out so a created project's
+  // `project_kind` lines up 1:1 with the card the user picked:
+  //   - `wireframe`     ← metadata.fidelity === 'wireframe'
+  //   - `mobile`        ← metadata.platform/platformTargets is a mobile surface
+  //   - `live_artifact` ← metadata.intent === 'live-artifact'
+  // Derivation precedence (a prototype that matches several): live_artifact >
+  // wireframe > mobile. See `projectKindToTracking`.
+  | 'wireframe'
+  | 'mobile'
   | 'live_artifact'
   | 'slide_deck'
   | 'template'
+  // `document` is an `other`-kind project (resumes / reports / PDFs) the Home
+  // `document` card creates. Tagged via `metadata.intent === 'document'` so it
+  // splits out of generic `other` and matches its task_chip.
+  | 'document'
   | 'image'
   | 'video'
   // `hyperframes` is a `video` project rendered by the local HyperFrames
@@ -148,7 +166,11 @@ export type TrackingAmrEntrySource =
   | 'chat_error_switch_retry_card'
   | 'generation_preview_authorize_retry'
   | 'generation_preview_recharge'
-  | 'generation_preview_switch_retry_card';
+  | 'generation_preview_switch_retry_card'
+  | 'settings_amr_upgrade'
+  | 'inline_amr_upgrade'
+  | 'avatar_amr_upgrade'
+  | 'avatar_amr_agent_card';
 
 export interface AmrEntryAttribution {
   entryId: string;
@@ -236,6 +258,7 @@ export type TrackingArtifactKind =
 // tracked exclusively by artifact_deploy_result (see TrackingDeployProvider).
 export type TrackingExportFormat =
   | 'pdf'
+  | 'pptx'
   | 'zip'
   | 'html'
   | 'image'
@@ -323,6 +346,40 @@ export type TrackingRunFailureStage =
   | 'artifact_write'
   | 'child_close'
   | 'finalize';
+export type TrackingRunLifecyclePhase =
+  | 'queued'
+  | 'prompt_build'
+  | 'launch_preflight'
+  | 'process_spawn'
+  | 'stdin_write'
+  | 'runtime_init'
+  | 'first_token_wait'
+  | 'stream_output'
+  | 'tool_execution'
+  | 'artifact_write'
+  | 'finalize'
+  | 'complete'
+  | 'unknown';
+export type TrackingRunPhaseTimingStatus =
+  | 'complete'
+  | 'partial'
+  | 'missing';
+export type TrackingArtifactWriteStatus =
+  | 'none'
+  | 'started'
+  | 'completed'
+  | 'failed';
+export type TrackingArtifactWriteSource =
+  | 'write_tool'
+  | 'live_artifact'
+  | 'design_system_file'
+  | 'artifact_event'
+  | 'unknown';
+export type TrackingFirstModelEventType =
+  | 'text_delta'
+  | 'thinking_delta'
+  | 'tool_use'
+  | 'artifact';
 export type TrackingRunFailureUserAction =
   | 'retry'
   | 'login'
@@ -709,6 +766,11 @@ export type TrackingDesignSystemsArea =
   | 'design_system_generation'
   | 'design_system_preview'
   | 'design_system_picker'
+  // Preset-brand picker opened from the create form ("Start from a brand").
+  // A brand here is one *source* for a design system, not a separate object.
+  | 'preset_brand_picker'
+  // AI-optimize (deep enrichment) banner on a DS-as-project.
+  | 'design_system_enrich'
   | 'composer';
 
 export type TrackingDesignSystemsViewType =
@@ -724,6 +786,10 @@ export type TrackingDesignSystemsEntryFrom =
   | 'home_card'
   | 'composer_picker'
   | 'project_settings'
+  // Created from inside a project's canvas / file workspace.
+  | 'project_canvas'
+  // Created from the Library surface.
+  | 'library'
   | 'unknown';
 
 // Origin of the design system itself. NOT the same field as
@@ -753,6 +819,22 @@ export type TrackingDesignSystemStatus =
   | 'failed'
   | 'archived'
   | 'unknown';
+
+// Whether a design system is an official/preset one or user-built. Derived
+// from the design_system_id shape: `user:<id>` => custom, everything else
+// (registry-backed presets) => official. `unknown` when no DS is in play.
+export type TrackingDesignSystemKind = 'official' | 'custom' | 'unknown';
+
+// Which surface initiated an edit of an existing design system. All of the
+// non-`direct_module` surfaces ultimately route through the agent (a run);
+// `direct_module` is an in-panel module button (some direct, some agent-routed).
+export type TrackingDesignSystemEditSurface =
+  | 'chat'
+  | 'edit'
+  | 'draw'
+  | 'comment'
+  | 'mark'
+  | 'direct_module';
 
 export interface DesignSystemsPageViewProps {
   page_name: 'design_systems' | 'design_system_project' | 'home' | 'studio';
@@ -843,7 +925,12 @@ export type TrackingDesignSystemCreateEntryFrom =
   | 'onboarding'
   | 'design_systems_page'
   | 'home_card'
+  | 'composer_picker'
   | 'project_settings'
+  // Created from inside a project's canvas / file workspace.
+  | 'project_canvas'
+  // Created from the Library surface.
+  | 'library'
   | 'unknown';
 
 export type TrackingDesignSystemSourceIngestEntryFrom =
@@ -964,6 +1051,11 @@ export interface DesignSystemCreateResultProps {
   project_id?: string;
   design_system_id?: string;
   design_system_source: TrackingDesignSystemOrigin;
+  // Every source actually used, comma-joined (e.g. `source_url,local_code`),
+  // so multi-source creates aren't flattened to the single `mixed` value of
+  // `design_system_source`. Mirrors the multi-value convention of
+  // target_platforms/connectors. See tracking spec dimension dict + comment ②.
+  ds_source_origins?: string;
   source_count: number;
   created_as_project: boolean;
   has_brand_description: boolean;
@@ -1029,6 +1121,30 @@ export interface DesignSystemApplyResultProps {
   duration_ms: number;
 }
 
+// AI optimize (deep enrichment) of a programmatically-extracted design system.
+// `design_system_enrich` click = the user pressed "AI Optimize" on the banner;
+// `design_system_enrich_result` = the enrichment run settled. Together they
+// give the AI-conversion rate (clicked ÷ programmatic creates) and, with
+// ProjectMetadata.enrichmentStatus, the programmatic-vs-ai_refined comparison.
+export interface DesignSystemEnrichClickProps {
+  page_name: 'design_system_project';
+  area: 'design_system_enrich';
+  element: 'ai_optimize';
+  design_system_id?: string;
+  project_kind?: TrackingProjectKind | null;
+}
+
+export interface DesignSystemEnrichResultProps {
+  page_name: 'design_system_project';
+  area: 'design_system_enrich';
+  result: 'success' | 'failed' | 'cancelled';
+  design_system_id?: string;
+  project_id?: string;
+  run_id?: string;
+  error_code?: string;
+  duration_ms?: number;
+}
+
 // --- Generic page_view (existing surfaces) ---
 //
 // Covers all page-level page_views that don't carry surface-specific
@@ -1086,7 +1202,7 @@ export interface HelpPopoverClickProps {
 export interface HomeToolbarClickProps {
   page_name: 'home';
   area: 'toolbar';
-  element: 'star' | 'execution_settings' | 'use_everywhere' | 'settings';
+  element: 'star' | 'execution_settings' | 'use_everywhere' | 'workspace_teams' | 'settings';
 }
 
 export interface ExecutionSettingsPopoverClickProps {
@@ -1117,7 +1233,7 @@ export interface ExecutionSettingsPopoverClickProps {
 
 // Items inside the header gear settings popover (EntrySettingsMenu): the
 // interface-language select, the appearance (system/light/dark) radio row,
-// the "Share Open Design" social grid, the Discord / follow-on-X links and
+// the "Share Open Design" social grid, the Discord / social follow links and
 // the Settings → details entry. The same popover is mounted both on the home
 // header and the in-project artifact header, hence the two-value page_name.
 export interface SettingsPopoverClickProps {
@@ -1127,8 +1243,11 @@ export interface SettingsPopoverClickProps {
     | 'language_select'
     | 'appearance'
     | 'share_channel'
+    | 'workspace_teams'
     | 'join_discord'
     | 'follow_x'
+    | 'follow_threads'
+    | 'open_youtube'
     | 'open_settings';
   // element=language_select → snake_cased locale (e.g. en, zh_cn, pt_br);
   // element=appearance → system | light | dark.
@@ -1569,10 +1688,77 @@ export interface DesignSystemsCreateClickProps {
     | 'browse_folder'
     | 'upload_fig'
     | 'add_assets'
+    // Opens the preset-brand picker ("Start from a brand").
+    | 'start_from_brand'
     | 'continue_to_generation'
     | 'back';
   // State *after* the toggle; only sent with element=show_access_methods.
   methods_expanded?: boolean;
+}
+
+// Preset-brand picker ("Start from a brand") on the /design-systems/create
+// form. Picking a brand adds its site as a *source* for the design system —
+// brand is an input here, not a separate object. Privacy: never send the raw
+// brand domain/URL; only the curated category + quick-pick flag.
+export interface DesignSystemsPresetBrandPickerClickProps {
+  page_name: 'design_systems';
+  area: 'preset_brand_picker';
+  element: 'brand_pick' | 'quick_pick' | 'close';
+  // Curated category bucket of the picked brand (e.g. `software`, `finance`).
+  // Only on brand_pick / quick_pick. Never the domain.
+  preset_brand_category?: string;
+  // True when picked from the quick "popular brands" row rather than search.
+  is_quick_pick?: boolean;
+}
+
+export interface DesignSystemsPresetBrandPickerSurfaceViewProps {
+  page_name: 'design_systems';
+  area: 'preset_brand_picker';
+}
+
+// Direct in-panel edits of an existing design system (tracking spec §3.6,
+// E3). Covers the DS list general ops (edit-with-agent / refresh / download),
+// the DesignKitView module buttons (logo / typography / palette / images /
+// kit), and the brand preview card. `edit_surface` is always `direct_module`
+// here; agent-routed edits (chat / draw / edit / comment / mark) ride on
+// run_created.edit_surface instead. Never carries artifact content/URLs.
+export interface DesignSystemEditClickProps {
+  page_name: 'design_systems' | 'design_system_project';
+  area: 'design_system_edit';
+  element:
+    | 'edit_with_agent'
+    | 'refresh'
+    | 'download'
+    | 'logo_upload'
+    | 'logo_delete'
+    | 'design_md_copy'
+    | 'design_md_edit'
+    | 'design_md_upload'
+    | 'font_upload'
+    | 'color_edit'
+    | 'image_upload'
+    | 'image_delete'
+    | 'kit_refresh'
+    | 'kit_download'
+    | 'kit_import'
+    | 'kit_reset'
+    | 'kit_open'
+    | 'brand_card_use_in_chat'
+    | 'brand_card_open_project'
+    | 'brand_card_delete';
+  module?:
+    | 'logo'
+    | 'design_md'
+    | 'typography'
+    | 'palette'
+    | 'images'
+    | 'kit'
+    | 'brand_card'
+    | 'general';
+  edit_surface?: TrackingDesignSystemEditSurface;
+  artifact_kind?: 'design_system';
+  design_system_id?: string;
+  project_id?: string;
 }
 
 // INTEGRATIONS
@@ -2363,6 +2549,9 @@ export type UiClickProps =
   | DesignSystemsTemplatesModalClickProps
   | DesignSystemsTemplatesModalSharePopoverClickProps
   | DesignSystemsCreateClickProps
+  | DesignSystemsPresetBrandPickerClickProps
+  | DesignSystemEnrichClickProps
+  | DesignSystemEditClickProps
   | IntegrationsTabClickProps
   | IntegrationsMcpTabClickProps
   | IntegrationsConnectorsTabClickProps
@@ -2531,6 +2720,7 @@ export type SurfaceViewProps =
   | PluginDetailModalSurfaceViewProps
   | PluginImportModalSurfaceViewProps
   | DesignSystemsTemplatesModalSurfaceViewProps
+  | DesignSystemsPresetBrandPickerSurfaceViewProps
   | AssistantFeedbackReasonPanelSurfaceViewProps
   | QuestionsFormSurfaceViewProps
   | UpdateIndicatorSurfaceViewProps
@@ -2636,7 +2826,14 @@ export interface RunCreatedProps {
   project_kind: TrackingProjectKind | null;
   design_system_id?: string;
   design_system_source: TrackingDesignSystemSource;
+  // Official preset vs user-built; `design_system_slug` carries the concrete
+  // preset id when official (never set for custom — only the id is sent there).
+  design_system_kind?: TrackingDesignSystemKind;
+  design_system_slug?: string;
   design_system_version?: string;
+  // Which surface drove this run when it's editing an existing DS
+  // (chat / edit / draw / comment / mark). Only on design_system_project runs.
+  edit_surface?: TrackingDesignSystemEditSurface;
   // DS-variant context. `ds_source_origin` mirrors the
   // `TrackingDesignSystemOrigin` set used on DS page_views (where
   // the DS came from), separate from the runtime-selection
@@ -2761,9 +2958,17 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   cache_token_source?: 'anthropic' | 'openai' | 'unavailable';
   queue_duration_ms?: number;
   pre_spawn_duration_ms?: number;
+  prompt_build_duration_ms?: number;
+  launch_preflight_duration_ms?: number;
   process_spawn_duration_ms?: number;
+  stdin_write_duration_ms?: number;
+  time_to_first_model_event_ms?: number;
+  first_model_event_type?: TrackingFirstModelEventType;
   time_to_first_token_ms?: number;
+  time_to_first_visible_output_ms?: number;
+  runtime_init_to_first_token_ms?: number;
   spawn_to_first_token_ms?: number;
+  time_to_first_artifact_ms?: number;
   // `spawn_to_first_token_ms` split into auditable subsegments so dashboards
   // can separate local CLI startup from session handshake from provider
   // first-token latency. The four parts sum back to `spawn_to_first_token_ms`
@@ -2775,8 +2980,18 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   generation_duration_ms?: number;
   tool_call_count?: number;
   tool_duration_ms?: number;
+  artifact_write_duration_ms?: number;
+  artifact_write_status?: TrackingArtifactWriteStatus;
+  artifact_write_source?: TrackingArtifactWriteSource;
   finalize_duration_ms?: number;
   total_duration_ms: number;
+  bottleneck_phase?: TrackingRunLifecyclePhase;
+  last_observed_phase?: TrackingRunLifecyclePhase;
+  phase_timing_status?: TrackingRunPhaseTimingStatus;
+  attempt_index?: number;
+  attempt_duration_ms?: number;
+  attempt_time_to_first_token_ms?: number;
+  attempt_terminal_phase?: TrackingRunLifecyclePhase;
   // DS-variant outcome fields. `design_system_created` is true when
   // the run produced a stored DESIGN.md; `preview_module_count` and
   // `missing_font_count` give the dashboard a coarse quality read
@@ -3180,7 +3395,8 @@ export type AnalyticsEventPayload =
   | { event: 'design_system_create_result'; props: DesignSystemCreateResultProps }
   | { event: 'design_system_review_result'; props: DesignSystemReviewResultProps }
   | { event: 'design_system_status_result'; props: DesignSystemStatusResultProps }
-  | { event: 'design_system_apply_result'; props: DesignSystemApplyResultProps };
+  | { event: 'design_system_apply_result'; props: DesignSystemApplyResultProps }
+  | { event: 'design_system_enrich_result'; props: DesignSystemEnrichResultProps };
 
 // ---- Enum mapping helpers (code ↔ CSV wire format) -----------------------
 
@@ -3203,19 +3419,47 @@ export function sessionModeToTracking(
 // `'hyperframes'` member docblock on `TrackingProjectKind`.
 const HYPERFRAMES_VIDEO_MODEL = 'hyperframes-html';
 
+// Discriminators read off a project's persisted `metadata` to split the coarse
+// product `kind` into the finer analytics `project_kind` (so a created
+// project's kind matches the Home task_chip the user picked). All optional —
+// when none are supplied the function behaves exactly as the legacy
+// `(kind, videoModel)` mapping.
+export interface ProjectKindTrackingHints {
+  fidelity?: string | null | undefined;
+  intent?: string | null | undefined;
+  platform?: string | null | undefined;
+  platformTargets?: readonly string[] | null | undefined;
+}
+
+function isMobileSurface(hints: ProjectKindTrackingHints | undefined): boolean {
+  const mobile = (target: string | null | undefined): boolean =>
+    target === 'mobile-ios' || target === 'mobile-android';
+  if (mobile(hints?.platform)) return true;
+  return (hints?.platformTargets ?? []).some(mobile);
+}
+
 export function projectKindToTracking(
   kind: string | null | undefined,
   videoModel?: string | null,
+  hints?: ProjectKindTrackingHints,
 ): TrackingProjectKind | null {
   switch (kind) {
     case 'prototype':
+      // Prototype subtypes share `kind: 'prototype'` but carry a distinguishing
+      // metadata field. Precedence (a prototype matching several): live_artifact
+      // > wireframe > mobile, then plain prototype.
+      if (hints?.intent === 'live-artifact') return 'live_artifact';
+      if (hints?.fidelity === 'wireframe') return 'wireframe';
+      if (isMobileSurface(hints)) return 'mobile';
       return 'prototype';
     case 'deck':
       return 'slide_deck';
     case 'template':
       return 'template';
     case 'other':
-      return 'other';
+      // Documents (resumes / reports / PDFs) ride the generic `other` kind but
+      // tag `intent: 'document'` so they split out of catch-all `other`.
+      return hints?.intent === 'document' ? 'document' : 'other';
     case 'image':
       return 'image';
     case 'video':
@@ -3232,6 +3476,31 @@ export function projectKindToTracking(
     default:
       return null;
   }
+}
+
+// Convenience wrapper: derive the analytics `project_kind` straight from a
+// project's persisted metadata, forwarding the subtype discriminators
+// (fidelity / intent / platform) so prototype/other projects resolve to their
+// finer kind. Prefer this at every call site that has the full metadata object.
+export function projectKindFromMetadataToTracking(
+  metadata:
+    | {
+        kind?: string | null;
+        videoModel?: string | null;
+        fidelity?: string | null;
+        intent?: string | null;
+        platform?: string | null;
+        platformTargets?: readonly string[] | null;
+      }
+    | null
+    | undefined,
+): TrackingProjectKind | null {
+  return projectKindToTracking(metadata?.kind, metadata?.videoModel, {
+    fidelity: metadata?.fidelity,
+    intent: metadata?.intent,
+    platform: metadata?.platform,
+    platformTargets: metadata?.platformTargets,
+  });
 }
 
 // Code `CreateTab` from apps/web/src/components/NewProjectPanel.tsx:
@@ -3361,6 +3630,8 @@ export function byokProtocolToTracking(
       return 'ollama_cloud';
     case 'senseaudio':
       return 'senseaudio';
+    case 'bedrock':
+      return null;
     default:
       return null;
   }

@@ -8,6 +8,7 @@ import {
   deriveComposioCredentialState,
   configForManualOrbitRun,
   isOrbitRunDisabled,
+  isProviderModelDiscoveryUnsupported,
   isValidApiBaseUrl,
   mergeProviderModelOptions,
   providerModelsCacheKey,
@@ -388,6 +389,27 @@ describe('SettingsDialog provider model fetch helpers', () => {
         'ollama',
       ),
     ).toBe(false);
+    expect(
+      canFetchProviderModels(
+        {
+          apiKey: 'sk-mimo',
+          baseUrl: 'https://token-plan-cn.xiaomimimo.com/anthropic',
+        },
+        'anthropic',
+      ),
+    ).toBe(false);
+    expect(
+      isProviderModelDiscoveryUnsupported(
+        'openai',
+        'https://token-plan-cn.xiaomimimo.com/v1',
+      ),
+    ).toBe(true);
+    expect(
+      isProviderModelDiscoveryUnsupported(
+        'anthropic',
+        'https://token-plan-cn.xiaomimimo.com/anthropic',
+      ),
+    ).toBe(true);
   });
 
   it('merges fetched provider models before static suggestions without duplicates', () => {
@@ -429,6 +451,27 @@ describe('SettingsDialog custom model picker state', () => {
 });
 
 describe('SettingsDialog AMR wallet display state', () => {
+  it('keeps the last balance visible while a refresh is pending', () => {
+    expect(
+      amrWalletValueLabel({
+        balance: '$0.10',
+        loadingLabel: 'Loading',
+        ready: false,
+        snapshot: {
+          status: 'available',
+          profile: 'local',
+          user: { id: 'user-1', email: 'amr@example.com' },
+          balanceUsd: '0.1000',
+          updatedAt: '2026-06-23T06:05:18.782Z',
+          fetchedAt: '2026-06-23T06:05:19.000Z',
+          stale: false,
+          source: 'daemon_cache',
+        },
+        unavailableLabel: 'Balance temporarily unavailable',
+      }),
+    ).toBe('$0.10');
+  });
+
   it('shows re-auth guidance when the daemon reports missing or rejected wallet credentials', () => {
     expect(
       amrWalletValueLabel({

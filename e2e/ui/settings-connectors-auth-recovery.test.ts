@@ -59,6 +59,8 @@ function baseConfig(): Record<string, unknown> {
     skillId: null,
     designSystemId: null,
     onboardingCompleted: true,
+    privacyDecisionAt: 1,
+    telemetry: { metrics: true, content: true },
     composio: {
       apiKey: '',
       apiKeyConfigured: true,
@@ -89,9 +91,9 @@ async function waitForLoadingToClear(page: Page) {
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible()) {
-    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
+  const privacyRegion = page.getByRole('region', { name: /Help us improve Open Design/i });
+  if (await privacyRegion.isVisible().catch(() => false)) {
+    await privacyRegion.getByRole('button', { name: /I get it|not now|got it/i }).click();
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
 }

@@ -1,4 +1,3 @@
-import type { ConnectionTestProtocol } from './connectionTest';
 import type { ReasoningExecutionRequestFields } from './reasoningExecution';
 
 // Shared DTOs for the `/api/projects/:id/finalize/<provider>` family of
@@ -16,9 +15,16 @@ export const FINALIZE_SCHEMA_VERSION = 1;
 
 /**
  * Provider ids supported by the finalized-design synthesis path.
- * Matches the BYOK protocols exposed by Settings and connection tests.
+ * Matches the daemon/web finalize allowlists. This is intentionally narrower
+ * than connection-test/provider-model protocols because some transports can be
+ * tested or listed before finalized-design synthesis supports them.
  */
-export type FinalizeProviderProtocol = ConnectionTestProtocol;
+export type FinalizeProviderProtocol =
+  | 'anthropic'
+  | 'openai'
+  | 'azure'
+  | 'google'
+  | 'ollama';
 
 /**
  * Request body for `POST /api/projects/:id/finalize/<provider>`.

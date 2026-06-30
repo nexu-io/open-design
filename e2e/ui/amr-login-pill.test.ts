@@ -141,7 +141,7 @@ test('[P1] AMR card authorizes through daemon login status and returns to author
 
   const amrCard = dialog
     .locator('.amr-agent-card, .agent-card-installed')
-    .filter({ hasText: /Open Design AMR|AMR \(vela\)/i })
+    .filter({ hasText: /Open Design|AMR \(vela\)/i })
     .first();
   await expect(amrCard).toBeVisible();
 
