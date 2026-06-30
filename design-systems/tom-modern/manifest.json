@@ -6,17 +6,13 @@
     "description": "Editorial-technical design system. Neutral canvas, single vermillion accent, sharp corners, Geist typography, hard shadows, structured composition.",
     "source": {
         "type": "bundled",
-        "origin": "https://github.com/Tom-Opencart/tom-modern-html-style-rule"
+        "origin": "https://github.com/Tom-Opencart/tom-modern-html-style-rule",
+        "license": "MIT",
+        "attribution": "Tom Modern Design by Tom-Opencart"
     },
     "files": {
         "design": "DESIGN.md",
         "tokens": "tokens.css",
         "components": "components.html"
-    },
-    "swatches": [
-        "#fafafa",
-        "#27272a",
-        "#ff5a00",
-        "#969696"
-    ]
+    }
 }

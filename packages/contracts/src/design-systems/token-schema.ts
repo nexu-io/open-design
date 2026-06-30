@@ -242,6 +242,7 @@ export const BRAND_EXTENSIONS: Readonly<Record<string, readonly string[]>> = {
  */
 export const BRAND_EXTENSION_PREFIXES: readonly string[] = [
   "--tag-bg-",
+  "--tm-",
 ];
 
 /**
