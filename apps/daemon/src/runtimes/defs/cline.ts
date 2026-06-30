@@ -2,31 +2,36 @@ import { DEFAULT_MODEL_OPTION } from './shared.js';
 import type { RuntimeAgentDef } from '../types.js';
 
 export const clineAgentDef = {
-    id: 'cline',
-    name: 'Cline CLI',
-    bin: 'cline',
-    versionArgs: ['--version'],
-    fallbackModels: [
-      DEFAULT_MODEL_OPTION,
-    ],
-    // Cline CLI v3.0.34 exposes a headless positional-prompt mode:
-    // `cline [prompt] --auto-approve true --cwd <dir>`. It also has `--json`,
-    // but OD does not yet have a Cline-specific event parser, so start with
-    // plain stdout and avoid pretending tool events are structured.
-    buildArgs: (prompt, _imagePaths, _extraAllowedDirs = [], options = {}, runtimeContext = {}) => {
-      const args = ['--auto-approve', 'true'];
-      if (runtimeContext.cwd) {
-        args.push('--cwd', runtimeContext.cwd);
-      }
-      if (options.model && options.model !== 'default') {
-        args.push('--model', options.model);
-      }
-      if (options.reasoning && options.reasoning !== 'default') {
-        args.push('--thinking', options.reasoning);
-      }
-      args.push(prompt);
-      return args;
-    },
-    maxPromptArgBytes: 30_000,
-    streamFormat: 'plain',
+  id: 'cline',
+  name: 'Cline CLI',
+  bin: 'cline',
+  versionArgs: ['--version'],
+  fallbackModels: [
+    DEFAULT_MODEL_OPTION,
+  ],
+  reasoningOptions: [
+    { id: 'default', label: 'Default' },
+    { id: 'none', label: 'None' },
+    { id: 'low', label: 'Low' },
+    { id: 'medium', label: 'Medium' },
+    { id: 'high', label: 'High' },
+    { id: 'xhigh', label: 'XHigh' },
+  ],
+  // Cline CLI reads a headless prompt from stdin when no positional prompt is
+  // supplied. Keep stdout plain until OD has a Cline-specific event parser.
+  buildArgs: (_prompt, _imagePaths, _extraAllowedDirs = [], options = {}, runtimeContext = {}) => {
+    const args = ['--auto-approve', 'true'];
+    if (runtimeContext.cwd) {
+      args.push('--cwd', runtimeContext.cwd);
+    }
+    if (options.model && options.model !== 'default') {
+      args.push('--model', options.model);
+    }
+    if (options.reasoning && options.reasoning !== 'default') {
+      args.push('--thinking', options.reasoning);
+    }
+    return args;
+  },
+  promptViaStdin: true,
+  streamFormat: 'plain',
 } satisfies RuntimeAgentDef;

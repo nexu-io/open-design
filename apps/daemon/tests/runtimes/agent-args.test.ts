@@ -126,7 +126,8 @@ test('cline uses headless auto-approve mode with cwd, model, and thinking option
 
   assert.equal(cline.bin, 'cline');
   assert.equal(cline.streamFormat, 'plain');
-  assert.equal(cline.maxPromptArgBytes, 30_000);
+  assert.equal(cline.promptViaStdin, true);
+  assert.equal(cline.maxPromptArgBytes, undefined);
   assert.deepEqual(args, [
     '--auto-approve',
     'true',
@@ -136,8 +137,8 @@ test('cline uses headless auto-approve mode with cwd, model, and thinking option
     'anthropic/claude-sonnet-4-5',
     '--thinking',
     'medium',
-    prompt,
   ]);
+  assert.equal(args.includes(prompt), false);
 });
 
 test('cline omits default model and reasoning flags', () => {
@@ -152,7 +153,18 @@ test('cline omits default model and reasoning flags', () => {
   assert.deepEqual(args, [
     '--auto-approve',
     'true',
-    'short prompt',
+  ]);
+});
+
+test('cline exposes thinking levels so reasoning can round-trip through the UI', () => {
+  assert.ok(cline.reasoningOptions);
+  assert.deepEqual(cline.reasoningOptions.map((option) => option.id), [
+    'default',
+    'none',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
   ]);
 });
 
