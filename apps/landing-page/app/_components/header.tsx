@@ -16,6 +16,8 @@ import {
   type HeaderCopy,
   type LandingLocaleCode,
 } from '../i18n';
+import { getSolutionPageCopy } from '../solution-pages-i18n';
+import type { SolutionPageKey } from '../solution-pages-i18n/types';
 
 const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_DISCUSSIONS = `${REPO}/discussions`;
@@ -45,13 +47,14 @@ const ROLE_HREFS = [
   '/solutions/marketing/',
 ] as const;
 
-// Solution → Tools. AI generator pages, paired positionally with the localized
-// `toolItems` tuple (Wireframe → UI → Design-to-code).
-const TOOL_HREFS = [
-  '/solutions/ai-wireframe-generator/',
-  '/solutions/ai-ui-generator/',
-  '/solutions/design-to-code/',
-] as const;
+// Solution → Tools. AI generator pages. Labels come from the solution-page
+// copy (the page breadcrumb) so the dropdown and the hub cards share one
+// translation source and cannot drift apart.
+const TOOL_ENTRIES: ReadonlyArray<{ href: string; key: SolutionPageKey }> = [
+  { href: '/solutions/ai-wireframe-generator/', key: 'aiWireframeGenerator' },
+  { href: '/solutions/ai-ui-generator/', key: 'aiUiGenerator' },
+  { href: '/solutions/design-to-code/', key: 'designToCode' },
+];
 
 // Agent column — AMR (the design Agent) heads the dropdown in the markup,
 // followed by the coding agents with a dedicated long-form design page
@@ -255,10 +258,12 @@ export function Header({
                     {productMenuCopy.tools}
                   </span>
                 </li>
-                {productMenuCopy.toolItems.map((name, index) => (
-                  <li key={name}>
-                    <a href={href(TOOL_HREFS[index]!)}>
-                      <span className='dropdown-name'>{name}</span>
+                {TOOL_ENTRIES.map(({ href: toolHref, key }) => (
+                  <li key={key}>
+                    <a href={href(toolHref)}>
+                      <span className='dropdown-name'>
+                        {getSolutionPageCopy(locale, key).breadcrumb}
+                      </span>
                     </a>
                   </li>
                 ))}
