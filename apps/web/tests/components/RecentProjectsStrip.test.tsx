@@ -68,6 +68,29 @@ function project(overrides: Partial<Project>): Project {
 }
 
 describe('RecentProjectsStrip', () => {
+  it('renders queued projects with queued status styling and label', () => {
+    const { container } = render(
+      <RecentProjectsStrip
+        projects={[
+          project({
+            id: 'project-queued',
+            name: 'Queued Project',
+            updatedAt: Date.now(),
+            status: { value: 'queued' },
+          }),
+        ]}
+        onOpen={() => {}}
+        onViewAll={() => {}}
+      />,
+    );
+
+    expect(screen.getByText('Queued')).toBeTruthy();
+    expect(
+      container.querySelector('.recent-projects__card-status.recent-projects__card-status-queued'),
+    ).toBeTruthy();
+    expect(container.querySelector('.recent-projects__card-status-dot')).toBeTruthy();
+  });
+
   it('matches project cards with previews and design-system tags', async () => {
     const { container } = render(
       <RecentProjectsStrip

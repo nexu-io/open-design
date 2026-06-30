@@ -1369,7 +1369,7 @@ function renderRunContextPrompt(selection, metadata) {
 }
 
 export function normalizeProjectDisplayStatus(status) {
-  return status === 'starting' || status === 'queued' ? 'running' : status;
+  return status === 'starting' ? 'running' : status;
 }
 
 export function composeProjectDisplayStatus(

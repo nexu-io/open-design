@@ -304,7 +304,7 @@ test('only succeeded statuses are overridden by awaiting input', () => {
   assert.equal(runStatuses.get('project-running')?.value, 'running');
 });
 
-test('queued active run surfaces as running in project projection', () => {
+test('queued active run stays queued in project projection', () => {
   const status = composeProjectDisplayStatus(
     {
       value: 'queued',
@@ -316,13 +316,13 @@ test('queued active run surfaces as running in project projection', () => {
   );
 
   assert.deepEqual(status, {
-    value: 'running',
+    value: 'queued',
     updatedAt: 42,
     runId: 'active-run',
   });
 });
 
-test('queued db-latest run status surfaces as running in project projection', () => {
+test('queued db-latest run status stays queued in project projection', () => {
   const db = createDb();
   seedProject(db, 'project-queued-db', 'queued');
 
@@ -335,7 +335,7 @@ test('queued db-latest run status surfaces as running in project projection', ()
 
   assert.equal(runStatuses.get('project-queued-db')?.value, 'queued');
   assert.deepEqual(status, {
-    value: 'running',
+    value: 'queued',
     updatedAt: 50,
     runId: 'project-queued-db-run-id',
   });
