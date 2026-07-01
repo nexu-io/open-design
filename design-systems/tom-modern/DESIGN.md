@@ -293,6 +293,35 @@ Create a landing page in Tom Modern Design style:
 - Eyebrows: uppercase mono labels above section titles
 ```
 
+### Required Font Loading
+
+When generating HTML with Tom Modern, load Geist explicitly. `tokens.css`
+declares the `Geist Sans` and `Geist Mono` family names, but generated
+artifacts do not automatically inherit the `@font-face` block from
+`components.html`.
+
+Use this loader before any generated CSS that references `--font-display`,
+`--font-body`, or `--font-mono`:
+
+```css
+@font-face {
+    font-family: 'Geist Sans';
+    src: url('https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-sans/Geist-Variable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Geist Mono';
+    src: url('https://cdn.jsdelivr.net/npm/geist@1.7.2/dist/fonts/geist-mono/GeistMono-Variable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-display: swap;
+}
+```
+
+If the host project can self-serve fonts, prefer bundling equivalent local
+woff2 files under `fonts/` while keeping the same family names.
+
 ### Component Classes
 
 ```css
