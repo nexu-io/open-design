@@ -6,11 +6,25 @@ import {
   defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
   type PluginManifest,
+  type ProjectFile,
+  type ProjectFileVersion,
+  type ProjectFileVersionPromptSource,
+  type ProjectFileVersionSource,
+  type ProjectFileVersionWarning,
 } from '@open-design/contracts';
 import { readMeta as readBrandMeta } from '../../brands/store.js';
 import { createProjectArtifactFile } from '../../artifacts/create.js';
 import { ArtifactPublicationBlockedError } from '../../artifacts/publication-guard.js';
 import { ArtifactRegressionError } from '../../artifacts/stub-guard.js';
+import {
+  createProjectFileVersion,
+  isProjectFileVersionPath,
+  listProjectFileVersions,
+  markProjectFileVersionStoreDeleted,
+  readProjectFileVersion,
+  renameProjectFileVersionStore,
+  withProjectFileVersionLock,
+} from '../../project-file-versions.js';
 import {
   createUserDesignSystem,
   deleteUserDesignSystem,
@@ -2399,6 +2413,152 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     res.setHeader('Content-Security-Policy', projectPreviewCsp);
   }
 
+  function rejectInternalVersionPath(res: Response, value: unknown): boolean {
+    if (!isProjectFileVersionPath(value)) return false;
+    sendApiError(res, 404, 'FILE_NOT_FOUND', 'file not found');
+    return true;
+  }
+
+  function normalizeProjectFileVersionSource(value: unknown): ProjectFileVersionSource | undefined {
+    return value === 'ai' || value === 'manual' || value === 'restore' ? value : undefined;
+  }
+
+  function parseProjectFileVersionSourceInput(
+    value: unknown,
+    fieldName: 'source' | 'versionSource',
+  ): ProjectFileVersionSource | undefined {
+    if (value === undefined || value === null) return undefined;
+    const normalized = normalizeProjectFileVersionSource(value);
+    if (normalized) return normalized;
+    throw new Error(`invalid ${fieldName}; expected one of: ai, manual, restore`);
+  }
+
+  function requestProjectFileVersionSource(value: unknown): ProjectFileVersionSource {
+    return parseProjectFileVersionSourceInput(value, 'source') ?? 'manual';
+  }
+
+  function requestProjectFileVersionUploadSource(body: any): ProjectFileVersionSource {
+    const hasVersionSource = body?.versionSource !== undefined && body?.versionSource !== null;
+    return parseProjectFileVersionSourceInput(
+      hasVersionSource ? body.versionSource : body?.source,
+      hasVersionSource ? 'versionSource' : 'source',
+    ) ?? 'manual';
+  }
+
+  function latestProjectPrompt(project: any): { prompt: string | null; promptSource?: Extract<ProjectFileVersionPromptSource, 'message' | 'project'> } {
+    try {
+      const row = db.prepare(
+        `SELECT m.content
+           FROM messages m
+           JOIN conversations c ON c.id = m.conversation_id
+          WHERE c.project_id = ?
+            AND m.role = 'user'
+            AND LENGTH(TRIM(m.content)) > 0
+          ORDER BY COALESCE(m.ended_at, m.started_at, m.created_at, 0) DESC,
+                   m.position DESC
+          LIMIT 1`,
+      ).get(project?.id) as { content?: string } | undefined;
+      if (typeof row?.content === 'string' && row.content.trim()) {
+        return { prompt: row.content.trim(), promptSource: 'message' };
+      }
+    } catch {
+      // Prompt provenance is best-effort; versions still save without it.
+    }
+    if (typeof project?.pendingPrompt === 'string' && project.pendingPrompt.trim()) {
+      return { prompt: project.pendingPrompt.trim(), promptSource: 'project' };
+    }
+    if (typeof project?.pending_prompt === 'string' && project.pending_prompt.trim()) {
+      return { prompt: project.pending_prompt.trim(), promptSource: 'project' };
+    }
+    return { prompt: null };
+  }
+
+  type HtmlVersionOverride = {
+    prompt?: string | null;
+    promptSource?: ProjectFileVersionPromptSource;
+    source?: ProjectFileVersionSource;
+    label?: string | null;
+  };
+
+  function htmlVersionOptions(
+    project: any,
+    override?: HtmlVersionOverride,
+  ): {
+    prompt: string | null;
+    promptSource?: ProjectFileVersionPromptSource;
+    source?: ProjectFileVersionSource;
+    label?: string;
+  } {
+    const fallbackPromptInfo = latestProjectPrompt(project);
+    const prompt = override?.prompt !== undefined
+      ? (typeof override.prompt === 'string' && override.prompt.trim() ? override.prompt.trim() : null)
+      : (override?.source === 'manual' || override?.source === 'restore' ? null : fallbackPromptInfo.prompt);
+    const promptSource = override?.promptSource
+      ?? (override?.source === 'manual'
+        ? 'manual'
+        : override?.source === 'restore'
+          ? 'restore'
+          : fallbackPromptInfo.promptSource);
+    const versionOptions: {
+      prompt: string | null;
+      promptSource?: ProjectFileVersionPromptSource;
+      source?: ProjectFileVersionSource;
+      label?: string;
+    } = {
+      prompt,
+    };
+    if (promptSource) versionOptions.promptSource = promptSource;
+    if (override?.source) versionOptions.source = override.source;
+    if (typeof override?.label === 'string' && override.label.trim()) {
+      versionOptions.label = override.label.trim();
+    }
+    return versionOptions;
+  }
+
+  type HtmlVersionLock = {
+    ensureCurrentVersion: (
+      content: string,
+      options?: ReturnType<typeof htmlVersionOptions>,
+    ) => Promise<ProjectFileVersion | null>;
+  };
+
+  function htmlVersionCaptureWarning(err: unknown): ProjectFileVersionWarning {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      code: 'PROJECT_FILE_VERSION_CAPTURE_FAILED',
+      message: `HTML version could not be saved: ${message}`,
+    };
+  }
+
+  async function tryEnsureLockedHtmlCurrentVersion(
+    project: any,
+    fileName: string,
+    content: string,
+    ensureCurrentVersion: HtmlVersionLock['ensureCurrentVersion'],
+    override?: HtmlVersionOverride,
+  ): Promise<{ version: ProjectFileVersion | null; versionWarning?: ProjectFileVersionWarning }> {
+    if (!/\.html?$/i.test(fileName)) return { version: null };
+    try {
+      return { version: await ensureCurrentVersion(content, htmlVersionOptions(project, override)) };
+    } catch (err) {
+      return { version: null, versionWarning: htmlVersionCaptureWarning(err) };
+    }
+  }
+
+  function fileFromVersionHistory(fileName: string, versions: ProjectFileVersion[]): ProjectFile | null {
+    const latest = versions.at(-1);
+    if (!latest) return null;
+    return {
+      name: latest.fileName || fileName,
+      path: latest.fileName || fileName,
+      type: 'file',
+      size: latest.size,
+      mtime: latest.createdAt,
+      kind: latest.kind,
+      mime: latest.mime,
+    };
+  }
+
   // Lets a browser (or the desktop export window, which shares the same Chromium
   // session/cache as the web UI) reuse already-downloaded fonts/CSS/images
   // across loads instead of re-fetching them every time — covers, live preview,
@@ -2842,6 +3002,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const params = req.params as unknown as { 0?: string; 1?: string };
       const projectId = String(params[0] ?? '');
       const relPath = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, relPath)) return;
       const project = getProject(db, projectId);
       // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
       // data: URIs, file://, and some sandboxed iframes also send null — all are
@@ -2911,8 +3072,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const params = req.params as unknown as { 0?: string; 1?: string };
       const projectId = String(params[0] ?? '');
       const rawSplat = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, rawSplat)) return;
       const project = getProject(db, projectId);
       await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
+      await markProjectFileVersionStoreDeleted(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -2954,11 +3117,220 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
+  app.get(/^\/api\/projects\/([^/]+)\/files\/(.+)\/versions$/u, async (req, res) => {
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string };
+      const projectId = String(params[0] ?? '');
+      const fileName = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, fileName)) return;
+      const project = getProject(db, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!/\.html?$/i.test(fileName)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'versions are only available for HTML files');
+      }
+      let file: ProjectFile | null = null;
+      let historyFileName = fileName;
+      try {
+        const workingFile = await readProjectFile(PROJECTS_DIR, project.id, fileName, project.metadata);
+        if (!/\.html?$/i.test(workingFile.name)) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'versions are only available for HTML files');
+        }
+        file = workingFile;
+        historyFileName = workingFile.name;
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT') throw err;
+      }
+      const versions = await listProjectFileVersions(PROJECTS_DIR, project.id, historyFileName, project.metadata);
+      file ??= fileFromVersionHistory(historyFileName, versions);
+      if (!file) {
+        return sendApiError(res, 404, 'FILE_NOT_FOUND', 'file not found');
+      }
+      /** @type {import('@open-design/contracts').ProjectFileVersionsResponse} */
+      const body = { file, versions };
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(body);
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  app.post(/^\/api\/projects\/([^/]+)\/files\/(.+)\/versions$/u, async (req, res) => {
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string };
+      const projectId = String(params[0] ?? '');
+      const fileName = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, fileName)) return;
+      const project = getProject(db, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      const file = await readProjectFile(PROJECTS_DIR, project.id, fileName, project.metadata);
+      if (!/\.html?$/i.test(file.name)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'versions are only available for HTML files');
+      }
+      const manualPrompt = typeof req.body?.prompt === 'string' && req.body.prompt.trim()
+        ? req.body.prompt.trim()
+        : null;
+      const requestedSource = requestProjectFileVersionSource(req.body?.source);
+      const fallbackPromptInfo = requestedSource === 'ai' && !manualPrompt ? latestProjectPrompt(project) : null;
+      const versionOptions: {
+        prompt: string | null;
+        promptSource?: ProjectFileVersionPromptSource;
+        source: ProjectFileVersionSource;
+        label?: string | null;
+      } = {
+        prompt: manualPrompt ?? fallbackPromptInfo?.prompt ?? null,
+        source: requestedSource,
+        label: typeof req.body?.label === 'string' ? req.body.label : null,
+      };
+      if (manualPrompt) {
+        versionOptions.promptSource = 'manual';
+      } else if (requestedSource === 'manual') {
+        versionOptions.promptSource = 'manual';
+      } else if (requestedSource === 'restore') {
+        versionOptions.promptSource = 'restore';
+      } else if (fallbackPromptInfo?.promptSource) {
+        versionOptions.promptSource = fallbackPromptInfo.promptSource;
+      }
+      const version = await createProjectFileVersion(
+        PROJECTS_DIR,
+        project.id,
+        file.name,
+        file.buffer.toString('utf8'),
+        versionOptions,
+        project.metadata,
+      );
+      if (!version) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'version could not be created');
+      }
+      /** @type {import('@open-design/contracts').CreateProjectFileVersionResponse} */
+      const body = { version };
+      res.json(body);
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  app.post(/^\/api\/projects\/([^/]+)\/files\/(.+)\/versions\/([^/]+)\/restore$/u, async (req, res) => {
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string; 2?: string };
+      const projectId = String(params[0] ?? '');
+      const fileName = String(params[1] ?? '');
+      const versionId = String(params[2] ?? '');
+      if (rejectInternalVersionPath(res, fileName)) return;
+      const project = getProject(db, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      const restored = await readProjectFileVersion(
+        PROJECTS_DIR,
+        project.id,
+        fileName,
+        versionId,
+        project.metadata,
+      );
+      const requestPrompt = typeof req.body?.prompt === 'string' && req.body.prompt.trim()
+        ? req.body.prompt.trim()
+        : null;
+      const prompt = requestPrompt
+        ?? restored.version.prompt
+        ?? latestProjectPrompt(project).prompt;
+      const { file, version, versionWarning } = await withProjectFileVersionLock(
+        PROJECTS_DIR,
+        project.id,
+        fileName,
+        project.metadata,
+        async (versionLock) => {
+          const file = await writeProjectFile(
+            PROJECTS_DIR,
+            project.id,
+            fileName,
+            Buffer.from(restored.content, 'utf8'),
+            {},
+            project.metadata,
+          );
+          let version: ProjectFileVersion | null = null;
+          let versionWarning: ProjectFileVersionWarning | undefined;
+          try {
+            version = await versionLock.createVersion(restored.content, {
+              prompt,
+              promptSource: requestPrompt ? 'manual' : 'restore',
+              source: 'restore',
+              restoreFromVersionId: restored.version.id,
+            });
+          } catch (err) {
+            versionWarning = htmlVersionCaptureWarning(err);
+          }
+          return { file, version, versionWarning };
+        },
+      );
+      /** @type {import('@open-design/contracts').RestoreProjectFileVersionResponse} */
+      const body = { file, version, ...(versionWarning ? { versionWarning } : {}) };
+      res.json(body);
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'VERSION_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  app.get(/^\/api\/projects\/([^/]+)\/files\/(.+)\/versions\/([^/]+)$/u, async (req, res) => {
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string; 2?: string };
+      const projectId = String(params[0] ?? '');
+      const fileName = String(params[1] ?? '');
+      const versionId = String(params[2] ?? '');
+      if (rejectInternalVersionPath(res, fileName)) return;
+      const project = getProject(db, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      const body = await readProjectFileVersion(
+        PROJECTS_DIR,
+        project.id,
+        fileName,
+        versionId,
+        project.metadata,
+      );
+      /** @type {import('@open-design/contracts').ProjectFileVersionResponse} */
+      const typedBody = body;
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(typedBody);
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'VERSION_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
   app.get(/^\/api\/projects\/([^/]+)\/files\/(.+)$/u, async (req, res) => {
     try {
       const params = req.params as unknown as { 0?: string; 1?: string };
       const projectId = String(params[0] ?? '');
       const fileSplat = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, fileSplat)) return;
       const project = getProject(db, projectId);
       const file = await readProjectFile(
         PROJECTS_DIR,
@@ -2994,30 +3366,78 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         const uploadProject = getProject(db, req.params.id);
         await ensureProject(PROJECTS_DIR, req.params.id, uploadProject?.metadata);
         if (req.file) {
-          const buf = await fs.promises.readFile(req.file.path);
-          // A caller-supplied `name` may carry an intentional subdirectory
-          // (e.g. "imagery/hero.png" from the design-kit uploader). Preserve it
-          // with sanitizePath (sanitizes each segment, keeps the slashes) so the
-          // file lands where brand.json references it; sanitizeName would flatten
-          // the slash to "_" and orphan the asset at the project root. Raw
-          // multipart originalnames are plain basenames, so sanitizeName fits.
-          const desiredName = req.body?.name
-            ? sanitizePath(req.body.name)
-            : sanitizeName(req.file.originalname);
-          const meta = await writeProjectFile(
-            PROJECTS_DIR,
-            req.params.id,
-            desiredName,
-            buf,
-            {},
-            uploadProject?.metadata,
-          );
-          fs.promises.unlink(req.file.path).catch(() => {});
-          /** @type {import('@open-design/contracts').ProjectFileResponse} */
-          const body = { file: meta };
-          return res.json(body);
+          try {
+            const buf = await fs.promises.readFile(req.file.path);
+            // A caller-supplied `name` may carry an intentional subdirectory
+            // (e.g. "imagery/hero.png" from the design-kit uploader). Preserve it
+            // with sanitizePath (sanitizes each segment, keeps the slashes) so the
+            // file lands where brand.json references it; sanitizeName would flatten
+            // the slash to "_" and orphan the asset at the project root. Raw
+            // multipart originalnames are plain basenames, so sanitizeName fits.
+            const desiredName = req.body?.name
+              ? sanitizePath(req.body.name)
+              : sanitizeName(req.file.originalname);
+            if (rejectInternalVersionPath(res, desiredName)) return;
+            const requestedSource = uploadProject && /\.html?$/i.test(desiredName)
+              ? requestProjectFileVersionUploadSource(req.body)
+              : null;
+            const writeAndCapture = async (versionLock?: HtmlVersionLock) => {
+              const meta = await writeProjectFile(
+                PROJECTS_DIR,
+                req.params.id,
+                desiredName,
+                buf,
+                {},
+                uploadProject?.metadata,
+              );
+              const versionCapture = uploadProject && requestedSource && /\.html?$/i.test(meta.name) && versionLock
+                ? await (async () => {
+                  const savedFile = await readProjectFile(PROJECTS_DIR, uploadProject.id, meta.name, uploadProject.metadata);
+                  return tryEnsureLockedHtmlCurrentVersion(
+                    uploadProject,
+                    meta.name,
+                    savedFile.buffer.toString('utf8'),
+                    versionLock.ensureCurrentVersion,
+                    {
+                      prompt: typeof req.body?.versionPrompt === 'string' ? req.body.versionPrompt : null,
+                      promptSource: 'manual',
+                      source: requestedSource,
+                      label: typeof req.body?.versionLabel === 'string' ? req.body.versionLabel : null,
+                    },
+                  );
+                })()
+                : null;
+              return { meta, versionCapture };
+            };
+            const { meta, versionCapture } = uploadProject && requestedSource
+              ? await withProjectFileVersionLock(
+                PROJECTS_DIR,
+                req.params.id,
+                desiredName,
+                uploadProject.metadata,
+                (versionLock) => writeAndCapture(versionLock),
+              )
+              : await writeAndCapture();
+            /** @type {import('@open-design/contracts').ProjectFileResponse} */
+            const body = {
+              file: meta,
+              ...(versionCapture?.versionWarning ? { versionWarning: versionCapture.versionWarning } : {}),
+            };
+            return res.json(body);
+          } finally {
+            fs.promises.unlink(req.file.path).catch(() => {});
+          }
         }
-        const { name, content, encoding, artifactManifest, artifact, overwrite } = req.body || {};
+        const {
+          name,
+          content,
+          encoding,
+          artifactManifest,
+          artifact,
+          overwrite,
+          versionLabel,
+          versionPrompt,
+        } = req.body || {};
         if (typeof name !== 'string' || typeof content !== 'string') {
           return sendApiError(
             res,
@@ -3026,6 +3446,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             'name and content required',
           );
         }
+        if (rejectInternalVersionPath(res, name)) return;
+        const desiredName = sanitizePath(name);
+        if (rejectInternalVersionPath(res, desiredName)) return;
+        const requestedSource = uploadProject && /\.html?$/i.test(desiredName)
+          ? requestProjectFileVersionUploadSource(req.body)
+          : null;
         if (artifactManifest !== undefined && artifactManifest !== null) {
           const validated = validateArtifactManifestInput(
             artifactManifest,
@@ -3044,15 +3470,16 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           encoding === 'base64'
             ? Buffer.from(content, 'base64')
             : Buffer.from(content, 'utf8');
-        const meta = artifact === true
-          ? await createProjectArtifactFile({
+        const writeAndCapture = async (versionLock?: HtmlVersionLock) => {
+          const meta = artifact === true
+            ? await createProjectArtifactFile({
               projectsRoot: PROJECTS_DIR,
               projectId: req.params.id,
               input: { name, content, encoding, artifactManifest },
               metadata: uploadProject?.metadata,
               writeProjectFile,
             })
-          : await writeProjectFile(
+            : await writeProjectFile(
               PROJECTS_DIR,
               req.params.id,
               name,
@@ -3063,10 +3490,52 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
               },
               uploadProject?.metadata,
             );
+          const versionCapture = uploadProject && requestedSource && /\.html?$/i.test(meta.name) && versionLock
+            ? await (async () => {
+              const savedFile = await readProjectFile(PROJECTS_DIR, uploadProject.id, meta.name, uploadProject.metadata);
+              const versionOverride: HtmlVersionOverride = {
+                source: requestedSource,
+                label: typeof versionLabel === 'string' ? versionLabel : null,
+              };
+              if (typeof versionPrompt === 'string') {
+                versionOverride.prompt = versionPrompt;
+              }
+              if (requestedSource === 'manual') {
+                versionOverride.promptSource = 'manual';
+              } else if (requestedSource === 'restore') {
+                versionOverride.promptSource = 'restore';
+              }
+              return tryEnsureLockedHtmlCurrentVersion(
+                uploadProject,
+                meta.name,
+                savedFile.buffer.toString('utf8'),
+                versionLock.ensureCurrentVersion,
+                versionOverride,
+              );
+            })()
+            : null;
+          return { meta, versionCapture };
+        };
+        const { meta, versionCapture } = uploadProject && requestedSource
+          ? await withProjectFileVersionLock(
+            PROJECTS_DIR,
+            req.params.id,
+            desiredName,
+            uploadProject.metadata,
+            (versionLock) => writeAndCapture(versionLock),
+          )
+          : await writeAndCapture();
         /** @type {import('@open-design/contracts').ProjectFileResponse} */
-        const body = { file: meta };
+        const body = {
+          file: meta,
+          ...(versionCapture?.versionWarning ? { versionWarning: versionCapture.versionWarning } : {}),
+        };
         res.json(body);
       } catch (err: any) {
+        const message = String(err?.message || err);
+        if (/^invalid (source|versionSource);/u.test(message)) {
+          return sendApiError(res, 400, 'BAD_REQUEST', message);
+        }
         if (err instanceof ArtifactRegressionError) {
           return sendApiError(res, 422, 'ARTIFACT_REGRESSION', err.message, {
             details: {
@@ -3102,12 +3571,20 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (typeof from !== 'string' || typeof to !== 'string') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'from and to required');
       }
+      if (rejectInternalVersionPath(res, from) || rejectInternalVersionPath(res, to)) return;
       const project = getProject(db, req.params.id);
       const result = await renameProjectFile(
         PROJECTS_DIR,
         req.params.id,
         from,
         to,
+        project?.metadata,
+      );
+      await renameProjectFileVersionStore(
+        PROJECTS_DIR,
+        req.params.id,
+        result.oldName,
+        result.newName,
         project?.metadata,
       );
       /** @type {import('@open-design/contracts').RenameProjectFileResponse} */
@@ -3127,8 +3604,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
   app.delete('/api/projects/:id/files/:name', async (req, res) => {
     try {
+      if (rejectInternalVersionPath(res, req.params.name)) return;
       const delProject = getProject(db, req.params.id);
       await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+      await markProjectFileVersionStoreDeleted(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);

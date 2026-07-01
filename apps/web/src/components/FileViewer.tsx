@@ -5,6 +5,7 @@ import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './
 import {
   buildSocialSharePayload,
   OPEN_DESIGN_GITHUB_REPO_URL,
+  type ProjectFileVersion,
   type SocialShareRequest,
   type SocialShareResponse,
 } from '@open-design/contracts';
@@ -50,6 +51,8 @@ import {
   fetchCloudflarePagesZones,
   fetchDeployConfig,
   fetchProjectDeployments,
+  fetchProjectFileVersion,
+  fetchProjectFileVersions,
   fetchProjectFilePreview,
   fetchProjectFiles,
   fetchProjectFileText,
@@ -59,6 +62,7 @@ import {
   projectRawUrl,
   LiveArtifactRefreshError,
   refreshLiveArtifact,
+  restoreProjectFileVersion,
   updateDeployConfig,
   type WebDeployConfigResponse,
   type WebCloudflarePagesDeploySelection,
@@ -744,6 +748,40 @@ function PreviewViewportControls({
           })}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function FileVersionViewportControls({
+  viewport,
+  onViewport,
+  t,
+}: {
+  viewport: PreviewViewportId;
+  onViewport: (viewport: PreviewViewportId) => void;
+  t: TranslateFn;
+}) {
+  return (
+    <div className="file-version-viewport-toggle" role="group" aria-label={t('fileViewer.viewportAria')}>
+      {PREVIEW_VIEWPORT_PRESETS.map((preset) => {
+        const selected = viewport === preset.id;
+        const label = t(preset.titleKey);
+        return (
+          <button
+            key={preset.id}
+            type="button"
+            className={`file-version-viewport-button od-tooltip${selected ? ' active' : ''}`}
+            aria-label={label}
+            aria-pressed={selected}
+            title={label}
+            data-tooltip={label}
+            data-tooltip-placement="bottom"
+            onClick={() => onViewport(preset.id)}
+          >
+            <RemixIcon name={previewViewportIcon(preset.id)} size={14} />
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -2464,6 +2502,631 @@ function FileActions({
         {t('fileViewer.open')}
       </a>
     </div>
+  );
+}
+
+function formatVersionDateTime(value: number | undefined, locale: Locale): string {
+  const date = new Date(Number(value) || Date.now());
+  try {
+    return date.toLocaleString(locale, {
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return date.toLocaleString();
+  }
+}
+
+function isHtmlVersionableFile(file: ProjectFile): boolean {
+  return file.kind === 'html' || /\.html?$/i.test(file.name);
+}
+
+function fileVersionSourceLabel(version: ProjectFileVersion, t: TranslateFn): string {
+  if (version.source === 'manual') return t('fileViewer.versions.sourceManual');
+  if (version.source === 'restore') return t('fileViewer.versions.sourceRestore');
+  return t('fileViewer.versions.sourceAi');
+}
+
+function fileVersionSourceClassName(version: ProjectFileVersion): string {
+  if (version.source === 'manual') return 'manual';
+  if (version.source === 'restore') return 'restore';
+  return 'ai';
+}
+
+export function fileVersionPreviewOptions(
+  projectId: string,
+  fileName: string,
+  source: string | null | undefined,
+) {
+  return {
+    deck: sourceLooksLikeExportableDeck(source),
+    baseHref: projectRawUrl(projectId, baseDirFor(fileName)),
+  };
+}
+
+function FileVersionManagerModal({
+  projectId,
+  file,
+  currentSource,
+  onClose,
+  onRestored,
+}: {
+  projectId: string;
+  file: ProjectFile;
+  currentSource: string | null;
+  onClose: () => void;
+  onRestored: (content: string, version: ProjectFileVersion) => Promise<void> | void;
+}) {
+  const { locale, t } = useI18n();
+  const tRef = useRef(t);
+  const [versions, setVersions] = useState<ProjectFileVersion[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedContent, setSelectedContent] = useState<string | null>(currentSource);
+  const [selectedContentVersionId, setSelectedContentVersionId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingContent, setLoadingContent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [previewViewport, setPreviewViewport] = useState<PreviewViewportId>('desktop');
+  const [search, setSearch] = useState('');
+  const [promptOpen, setPromptOpen] = useState(false);
+  const promptWrapRef = useRef<HTMLDivElement | null>(null);
+  const promptPopoverId = useId();
+  const [confirmRestore, setConfirmRestore] = useState(false);
+  const restoreWrapRef = useRef<HTMLDivElement | null>(null);
+  const restorePopoverId = useId();
+  const [previewFrameRef, previewFrameSize] = usePreviewCanvasSize<HTMLDivElement>();
+  // Track which srcDoc the iframe has finished rendering. Deriving readiness by
+  // comparing to the current srcDoc during render (rather than toggling a bool
+  // in a post-paint effect) keeps the overlay up across a switch with no
+  // one-frame flicker while the new document reparses.
+  const [loadedSrcDoc, setLoadedSrcDoc] = useState<string | null>(null);
+  // Client-side cache of fetched version HTML keyed by version id. Revisiting a
+  // version is then zero-fetch (and, because the srcDoc string value is stable,
+  // zero-reparse). `inFlightRef` dedupes concurrent hover-prefetch + click.
+  const contentCacheRef = useRef<Map<string, string>>(new Map());
+  const inFlightRef = useRef<Map<string, Promise<void>>>(new Map());
+  const versionById = useMemo(() => {
+    const map = new Map<string, ProjectFileVersion>();
+    for (const version of versions) map.set(version.id, version);
+    return map;
+  }, [versions]);
+  const selectedVersion =
+    (selectedId ? versionById.get(selectedId) : undefined) ??
+    versions.find((version) => version.current) ??
+    versions[0] ??
+    null;
+  const versionCountLabel = versions.length === 1
+    ? t('fileViewer.versions.countOne')
+    : t('fileViewer.versions.countMany', { count: versions.length });
+  // Show the filter box only once the list is long enough to need it.
+  const showSearch = versions.length > 3;
+  const normalizedSearch = search.trim().toLowerCase();
+  const visibleVersions = useMemo(() => {
+    if (!showSearch || !normalizedSearch) return versions;
+    return versions.filter((version) => {
+      const restoredFrom = version.restoreFromVersionId
+        ? versionById.get(version.restoreFromVersionId)
+        : null;
+      const haystack = [
+        `v${version.version}`,
+        `version ${version.version}`,
+        version.prompt ?? '',
+        version.label ?? '',
+        fileVersionSourceLabel(version, t),
+        formatVersionDateTime(version.createdAt, locale),
+        restoredFrom ? `v${restoredFrom.version}` : '',
+      ]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(normalizedSearch);
+    });
+  }, [showSearch, normalizedSearch, versions, versionById, t, locale]);
+  // Decks are 16:9; the desktop preview centers them in an aspect box (see the
+  // `.preview-viewport-deck` CSS) instead of letting the slide bottom-anchor in
+  // a taller pane. Cheap source sniff, memoized on the selected content.
+  const isDeckPreview = useMemo(
+    () =>
+      Boolean(
+        selectedContent && fileVersionPreviewOptions(projectId, file.name, selectedContent).deck,
+      ),
+    [selectedContent, projectId, file.name],
+  );
+  const selectedPrompt = selectedVersion?.prompt?.trim() ?? '';
+  const selectedDate = selectedVersion ? formatVersionDateTime(selectedVersion.createdAt, locale) : file.name;
+  const selectedRestoredFrom = selectedVersion?.restoreFromVersionId
+    ? versionById.get(selectedVersion.restoreFromVersionId)
+    : null;
+  const selectedContentMatchesVersion = Boolean(selectedId && selectedContentVersionId === selectedId && selectedContent);
+  const restoreDisabled =
+    !selectedVersion || selectedVersion.current || restoring || loadingContent || !selectedContentMatchesVersion;
+  const srcDoc = useMemo(() => {
+    if (!selectedContent) return '';
+    const previewOptions = fileVersionPreviewOptions(projectId, file.name, selectedContent);
+    return buildSrcdoc(selectedContent, {
+      ...previewOptions,
+      previewFocusGuard: true,
+    });
+  }, [file.name, projectId, selectedContent]);
+  const frameReady = loadedSrcDoc === srcDoc;
+
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+
+  // Fetch a single version's HTML into the cache exactly once. Reused by the
+  // selection effect and by hover/focus prefetch so a click lands on warm data.
+  const primeVersionContent = useCallback((versionId: string): Promise<void> => {
+    if (contentCacheRef.current.has(versionId)) return Promise.resolve();
+    const pending = inFlightRef.current.get(versionId);
+    if (pending) return pending;
+    const request = fetchProjectFileVersion(projectId, file.name, versionId)
+      .then((result) => {
+        if (result) contentCacheRef.current.set(versionId, result.content);
+      })
+      .catch(() => {})
+      .finally(() => {
+        inFlightRef.current.delete(versionId);
+      });
+    inFlightRef.current.set(versionId, request);
+    return request;
+  }, [file.name, projectId]);
+
+  const loadVersions = useCallback(async (preferredId?: string | null) => {
+    setLoading(true);
+    setError(null);
+    const result = await fetchProjectFileVersions(projectId, file.name);
+    if (!result) {
+      setError(tRef.current('fileViewer.versions.loadFailed'));
+      setLoading(false);
+      return;
+    }
+    const nextVersions = [...result.versions].sort((a, b) => b.version - a.version);
+    setVersions(nextVersions);
+    // Seed the cache with the live document so opening the modal renders the
+    // current version instantly — no round-trip for the version you're on.
+    const currentVersion = nextVersions.find((version) => version.current);
+    if (currentVersion && currentSource != null && !contentCacheRef.current.has(currentVersion.id)) {
+      contentCacheRef.current.set(currentVersion.id, currentSource);
+    }
+    const nextSelected =
+      (preferredId ? nextVersions.find((version) => version.id === preferredId) : null) ??
+      currentVersion ??
+      nextVersions[0] ??
+      null;
+    setSelectedId(nextSelected?.id ?? null);
+    setLoading(false);
+  }, [currentSource, file.name, projectId]);
+
+  useEffect(() => {
+    void loadVersions();
+  }, [loadVersions]);
+
+  useEffect(() => {
+    setCopied(false);
+    setConfirmRestore(false);
+    setPromptOpen(false);
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setSelectedContent(null);
+      setSelectedContentVersionId(null);
+      return;
+    }
+    // Cache hit: swap instantly with no fetch, no flash.
+    const cached = contentCacheRef.current.get(selectedId);
+    if (cached !== undefined) {
+      setSelectedContent(cached);
+      setSelectedContentVersionId(selectedId);
+      setLoadingContent(false);
+      setError(null);
+      return;
+    }
+    // Cache miss: keep the previous preview mounted under the loading overlay
+    // (do NOT clear selectedContent) so switching never blanks to white.
+    let cancelled = false;
+    setLoadingContent(true);
+    setError(null);
+    void primeVersionContent(selectedId).then(() => {
+      if (cancelled) return;
+      const next = contentCacheRef.current.get(selectedId);
+      if (next === undefined) {
+        setSelectedContent(null);
+        setSelectedContentVersionId(null);
+        setError(tRef.current('fileViewer.versions.previewFailed'));
+      } else {
+        setSelectedContent(next);
+        setSelectedContentVersionId(selectedId);
+      }
+      setLoadingContent(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [primeVersionContent, selectedId]);
+
+  // Safety net: if the iframe's load event is ever missed, clear the overlay
+  // after a grace period so it can't get stuck over a rendered document.
+  useEffect(() => {
+    if (!srcDoc || loadedSrcDoc === srcDoc) return;
+    const fallback = window.setTimeout(() => setLoadedSrcDoc(srcDoc), 6000);
+    return () => window.clearTimeout(fallback);
+  }, [srcDoc, loadedSrcDoc]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (confirmRestore) {
+        setConfirmRestore(false);
+        return;
+      }
+      if (promptOpen) {
+        setPromptOpen(false);
+        return;
+      }
+      onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose, promptOpen, confirmRestore]);
+
+  useEffect(() => {
+    if (!promptOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!promptWrapRef.current) return;
+      if (!promptWrapRef.current.contains(event.target as Node)) setPromptOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [promptOpen]);
+
+  useEffect(() => {
+    if (!confirmRestore) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!restoreWrapRef.current) return;
+      if (!restoreWrapRef.current.contains(event.target as Node)) setConfirmRestore(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [confirmRestore]);
+
+  async function copyPrompt() {
+    if (!selectedPrompt) return;
+    const ok = await copyToClipboard(selectedPrompt);
+    if (!ok) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  function openVersionInNewTab() {
+    if (loadingContent || !selectedContentMatchesVersion || !selectedContent || !selectedVersion) return;
+    openSandboxedPreviewInNewTab(
+      selectedContent,
+      `${file.name} · v${selectedVersion.version}`,
+      fileVersionPreviewOptions(projectId, file.name, selectedContent),
+    );
+  }
+
+  async function restoreVersion() {
+    if (restoreDisabled || !selectedVersion || !selectedContentMatchesVersion || !selectedContent) return;
+    setRestoring(true);
+    setError(null);
+    let closingAfterRestore = false;
+    try {
+      const result = await restoreProjectFileVersion(projectId, file.name, selectedVersion);
+      if (!result) {
+        setError(t('fileViewer.versions.restoreFailed'));
+        return;
+      }
+      const restoredVersion = result.version ?? selectedVersion;
+      await onRestored(selectedContent, restoredVersion);
+      if (result.versionWarning) {
+        await loadVersions(result.version?.id ?? selectedVersion.id);
+        setError(result.versionWarning.message);
+        return;
+      }
+      closingAfterRestore = true;
+      onClose();
+    } finally {
+      if (!closingAfterRestore) setRestoring(false);
+    }
+  }
+
+  return createPortal(
+    <div
+      className="modal-backdrop viewer-modal-backdrop file-version-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="file-version-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('fileViewer.versions.title')}
+      >
+        <div className="file-version-sidebar">
+          <div className="file-version-sidebar-head">
+            <span className="file-version-count">{versionCountLabel}</span>
+          </div>
+          {showSearch ? (
+            <div className="file-version-search">
+              <RemixIcon name="search-line" size={14} />
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder={t('common.searchEllipsis')}
+                aria-label={t('common.searchEllipsis')}
+              />
+              {search ? (
+                <button
+                  type="button"
+                  className="file-version-search-clear"
+                  aria-label={t('common.clear')}
+                  onClick={() => setSearch('')}
+                >
+                  <RemixIcon name="close-line" size={14} />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="file-version-list" role="listbox" aria-label={t('fileViewer.versions.listAria')}>
+            {loading ? (
+              <div
+                className="file-version-skeleton-list"
+                role="status"
+                aria-label={t('fileViewer.versions.loading')}
+              >
+                {[0, 1, 2, 3].map((row) => (
+                  <div key={row} className="file-version-skeleton-item" aria-hidden="true">
+                    <div className="file-version-skeleton-row">
+                      <span className="file-version-skeleton-line badge" />
+                      <span className="file-version-skeleton-line time" />
+                    </div>
+                    <span className="file-version-skeleton-line title" />
+                    <span className="file-version-skeleton-line meta" />
+                  </div>
+                ))}
+              </div>
+            ) : versions.length === 0 ? (
+              <div className="file-version-empty">{t('fileViewer.versions.empty')}</div>
+            ) : visibleVersions.length === 0 ? (
+              <div className="file-version-empty">{t('homeHero.noResults', { query: search.trim() })}</div>
+            ) : (
+              visibleVersions.map((version) => {
+                const selected = version.id === selectedVersion?.id;
+                const itemRestoredFrom = version.restoreFromVersionId
+                  ? versionById.get(version.restoreFromVersionId)
+                  : null;
+                const prefetch = () => {
+                  void primeVersionContent(version.id);
+                };
+                return (
+                  <button
+                    key={version.id}
+                    type="button"
+                    className={`file-version-item${selected ? ' active' : ''}`}
+                    role="option"
+                    aria-selected={selected}
+                    onClick={() => setSelectedId(version.id)}
+                    onMouseEnter={prefetch}
+                    onFocus={prefetch}
+                  >
+                    <span className="file-version-item-top">
+                      {version.current ? (
+                        <span className="file-version-current-badge">{t('fileViewer.versions.current')}</span>
+                      ) : null}
+                      <span className={`file-version-source-badge ${fileVersionSourceClassName(version)}`}>
+                        {fileVersionSourceLabel(version, t)}
+                      </span>
+                      <span className="file-version-time">
+                        {formatVersionDateTime(version.createdAt, locale)}
+                      </span>
+                    </span>
+                    <span className="file-version-item-title">
+                      {version.prompt || version.label || t('fileViewer.versions.versionLabel', { version: version.version })}
+                    </span>
+                    <span className="file-version-item-meta">
+                      {t('fileViewer.versions.versionLabel', { version: version.version })}
+                      {itemRestoredFrom ? (
+                        <span className="file-version-item-restored">
+                          {t('fileViewer.versions.restoredFrom', { version: itemRestoredFrom.version })}
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+        <div className="file-version-main">
+          <header className="file-version-head">
+            <div className="file-version-meta">
+              <div className="file-version-meta-row">
+                {selectedVersion?.current ? (
+                  <span className="file-version-current-badge">{t('fileViewer.versions.current')}</span>
+                ) : null}
+                {selectedVersion ? (
+                  <span className={`file-version-source-badge ${fileVersionSourceClassName(selectedVersion)}`}>
+                    {fileVersionSourceLabel(selectedVersion, t)}
+                  </span>
+                ) : null}
+                <span className="file-version-selected-date">{selectedDate}</span>
+                {selectedRestoredFrom ? (
+                  <span className="file-version-restored-from">
+                    {t('fileViewer.versions.restoredFrom', { version: selectedRestoredFrom.version })}
+                  </span>
+                ) : null}
+                <div
+                  className="file-version-prompt-popover-wrap"
+                  ref={promptWrapRef}
+                >
+                  <button
+                    type="button"
+                    className={`file-version-prompt-toggle${promptOpen ? ' active' : ''}`}
+                    aria-expanded={promptOpen}
+                    aria-controls={promptOpen ? promptPopoverId : undefined}
+                    disabled={!selectedVersion}
+                    onClick={() => setPromptOpen((value) => !value)}
+                  >
+                    <RemixIcon name="chat-3-line" size={15} />
+                    <span>{t('fileViewer.versions.promptTitle')}</span>
+                    <RemixIcon name="arrow-down-s-line" size={14} />
+                  </button>
+                  {promptOpen ? (
+                    <section
+                      className="file-version-prompt-popover"
+                      id={promptPopoverId}
+                      role="region"
+                      aria-label={t('fileViewer.versions.promptTitle')}
+                    >
+                      <div className="file-version-prompt-head">
+                        <h3>{t('fileViewer.versions.promptTitle')}</h3>
+                        <button
+                          type="button"
+                          className="viewer-action file-version-copy-prompt"
+                          disabled={!selectedPrompt}
+                          onClick={copyPrompt}
+                        >
+                          <RemixIcon name="file-copy-line" size={14} />
+                          <span>{copied ? t('fileViewer.copied') : t('fileViewer.versions.copyPrompt')}</span>
+                        </button>
+                      </div>
+                      <p>{selectedPrompt || t('fileViewer.versions.noPromptBody')}</p>
+                    </section>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            <div className="file-version-actions">
+              {selectedVersion && !selectedVersion.current ? (
+                <div className="file-version-restore-wrap" ref={restoreWrapRef}>
+                  <button
+                    type="button"
+                    className={`viewer-action primary file-version-restore-action${confirmRestore ? ' active' : ''}`}
+                    disabled={restoreDisabled}
+                    aria-haspopup="dialog"
+                    aria-expanded={confirmRestore}
+                    aria-controls={confirmRestore ? restorePopoverId : undefined}
+                    onClick={() => setConfirmRestore((value) => !value)}
+                  >
+                    <RemixIcon name={restoring ? 'loader-4-line' : 'git-branch-line'} size={14} />
+                    <span>
+                      {restoring
+                        ? t('fileViewer.versions.restoring')
+                        : t('fileViewer.versions.restore')}
+                    </span>
+                  </button>
+                  {confirmRestore ? (
+                    <div
+                      className="file-version-restore-confirm"
+                      id={restorePopoverId}
+                      role="dialog"
+                      aria-label={t('fileViewer.versions.restoreConfirmTitle')}
+                    >
+                      <h3>{t('fileViewer.versions.restoreConfirmTitle')}</h3>
+                      <p>{t('fileViewer.versions.restoreHelp')}</p>
+                      <div className="file-version-restore-confirm-actions">
+                        <button
+                          type="button"
+                          className="viewer-action"
+                          onClick={() => setConfirmRestore(false)}
+                        >
+                          {t('common.cancel')}
+                        </button>
+                        <button
+                          type="button"
+                          className="viewer-action primary"
+                          disabled={restoreDisabled}
+                          onClick={() => {
+                            setConfirmRestore(false);
+                            void restoreVersion();
+                          }}
+                        >
+                          {t('fileViewer.versions.restoreConfirmCta')}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <FileVersionViewportControls
+                viewport={previewViewport}
+                onViewport={setPreviewViewport}
+                t={t}
+              />
+              <button
+                type="button"
+                className="viewer-action viewer-action-icon od-tooltip"
+                aria-label={t('fileViewer.versions.open')}
+                title={t('fileViewer.versions.open')}
+                data-tooltip={t('fileViewer.versions.open')}
+                data-tooltip-placement="bottom"
+                disabled={!selectedContentMatchesVersion || loadingContent}
+                onClick={openVersionInNewTab}
+              >
+                <RemixIcon name="external-link-line" size={15} />
+              </button>
+              <button
+                type="button"
+                className="viewer-action viewer-action-icon od-tooltip"
+                aria-label={t('common.close')}
+                title={t('common.close')}
+                data-tooltip={t('common.close')}
+                data-tooltip-placement="bottom"
+                onClick={onClose}
+              >
+                <RemixIcon name="close-line" size={16} />
+              </button>
+            </div>
+          </header>
+          <div className="file-version-preview" ref={previewFrameRef}>
+            {error ? (
+              <div className="viewer-empty" role="alert">{error}</div>
+            ) : (
+              <>
+                {srcDoc ? (
+                  <div
+                    className={`preview-viewport preview-viewport-${previewViewport}${isDeckPreview ? ' preview-viewport-deck' : ''}`}
+                    style={previewViewportStyle(previewViewport, 1, previewFrameSize, { canvasPadding: 24 })}
+                  >
+                    <div className="preview-frame-clip">
+                      <div style={previewScaleShellStyle(previewViewport, 1)}>
+                        <iframe
+                          title={selectedVersion ? `${file.name} v${selectedVersion.version}` : file.name}
+                          sandbox="allow-scripts allow-downloads"
+                          srcDoc={srcDoc}
+                          onLoad={() => setLoadedSrcDoc(srcDoc)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : !loading && !loadingContent ? (
+                  <div className="viewer-empty">{t('fileViewer.versions.previewLoading')}</div>
+                ) : null}
+                {loading || loadingContent || (srcDoc && !frameReady) ? (
+                  <div
+                    className="file-version-preview-overlay"
+                    role="status"
+                    aria-label={t('fileViewer.versions.previewLoading')}
+                  >
+                    <span className="file-version-preview-spinner" aria-hidden="true" />
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -4864,6 +5527,9 @@ function HtmlViewer({
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
   const [deployMenuOpen, setDeployMenuOpen] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [versionModalOpen, setVersionModalOpen] = useState(false);
+  const [toolbarMoreOpen, setToolbarMoreOpen] = useState(false);
+  const toolbarMoreRef = useRef<HTMLDivElement | null>(null);
   const [exportReadyNudge, setExportReadyNudge] = useState(false);
   const exportReadyNudgeSeenRef = useRef<Set<string>>(new Set());
   // Template save UX. We surface a transient "Saved" pill in the share
@@ -5235,6 +5901,8 @@ function HtmlViewer({
   const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
   const [deploySavedToast, setDeploySavedToast] = useState<{ message: string; details: string } | null>(null);
   const [deployActionToast, setDeployActionToast] = useState<string | null>(null);
+  const [versionRestoredToast, setVersionRestoredToast] = useState<{ id: number; message: string } | null>(null);
+  const versionRestoredToastIdRef = useRef(0);
   const [imageExportModalOpen, setImageExportModalOpen] = useState(false);
   const [imageExportFormat, setImageExportFormat] = useState<ImageExportFormat>('png');
   const [imageExportError, setImageExportError] = useState<string | null>(null);
@@ -6808,6 +7476,8 @@ function HtmlViewer({
       ))) return false;
       const saved = await writeProjectTextFileDetailed(projectId, file.name, result.source, {
         artifactManifest: file.artifactManifest,
+        versionSource: 'manual',
+        versionLabel: label,
       });
       if (!saved.ok) {
         const status = 'status' in saved ? saved.status : undefined;
@@ -6915,6 +7585,8 @@ function HtmlViewer({
       ))) return;
       const saved = await writeProjectTextFile(projectId, file.name, latest.beforeSource, {
         artifactManifest: file.artifactManifest,
+        versionSource: 'manual',
+        versionLabel: `Undo ${latest.label}`,
       });
       if (!saved) {
         setManualEditError('Could not save the undo result.');
@@ -6947,6 +7619,8 @@ function HtmlViewer({
       ))) return;
       const saved = await writeProjectTextFile(projectId, file.name, latest.afterSource, {
         artifactManifest: file.artifactManifest,
+        versionSource: 'manual',
+        versionLabel: `Redo ${latest.label}`,
       });
       if (!saved) {
         setManualEditError('Could not save the redo result.');
@@ -7085,7 +7759,12 @@ function HtmlViewer({
       const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: file.name, content: next }),
+        body: JSON.stringify({
+          name: file.name,
+          content: next,
+          versionSource: 'manual',
+          versionLabel: t('fileViewer.edit'),
+        }),
       });
       if (!resp.ok) {
         const payload = await resp.json().catch(() => null) as { error?: string; message?: string } | null;
@@ -7170,6 +7849,23 @@ function HtmlViewer({
       document.removeEventListener('keydown', onKey);
     };
   }, [zoomMenuOpen]);
+
+  useEffect(() => {
+    if (!toolbarMoreOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!toolbarMoreRef.current) return;
+      if (!toolbarMoreRef.current.contains(e.target as Node)) setToolbarMoreOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setToolbarMoreOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [toolbarMoreOpen]);
 
   useEffect(() => {
     if (!agentToolsOpen) return;
@@ -7633,6 +8329,18 @@ function HtmlViewer({
       setSrcDocShellReady(false);
       setSrcDocTransportResetKey((key) => key + 1);
     }
+  }
+
+  async function handleVersionRestored(content: string) {
+    setSource(content);
+    sourceRef.current = content;
+    setInlinedSource(null);
+    setReloadKey((key) => key + 1);
+    await onFileSaved?.();
+    setVersionRestoredToast({
+      id: (versionRestoredToastIdRef.current += 1),
+      message: t('fileViewer.versions.restoreSuccess'),
+    });
   }
 
   function selectMode(nextMode: 'preview' | 'source') {
@@ -8576,6 +9284,7 @@ function HtmlViewer({
   };
   const boardAvailable = mode === 'preview' && source !== null;
   const showPreviewToolbarControls = mode === 'preview';
+  const versioningAvailable = isHtmlVersionableFile(file);
   const commentPreviewLayoutClass = [
     'comment-preview-layer',
     localCommentSideDockActive ? 'comment-preview-layer-with-side-dock' : '',
@@ -8874,39 +9583,59 @@ function HtmlViewer({
           >
             <Icon name="reload" size={14} />
           </button>
-          <div className="viewer-tabs" role="tablist" aria-label="View mode">
+          <div className="viewer-tabs viewer-mode-tabs" role="tablist" aria-label="View mode">
             {([
-              ['preview', t('fileViewer.preview')],
-              ['source', t('fileViewer.source')],
+              ['preview', t('fileViewer.preview'), 'eye-line'],
+              ['source', t('fileViewer.source'), 'code-line'],
             ] as const).map(([id, label]) => (
               <button
                 key={id}
                 type="button"
                 role="tab"
-                className={`viewer-tab ${mode === id ? 'active' : ''}`}
+                className={`viewer-tab od-tooltip ${mode === id ? 'active' : ''}`}
+                aria-label={label}
                 aria-selected={mode === id}
+                title={label}
+                data-tooltip={label}
+                data-tooltip-placement="bottom"
                 onClick={() => {
                   fireArtifactToolbarClick(id);
                   selectMode(id);
                 }}
               >
-                {label}
+                <RemixIcon name={id === 'preview' ? 'eye-line' : 'code-line'} size={14} className="viewer-tab-icon" />
+                <span className="viewer-tab-label">{label}</span>
               </button>
             ))}
           </div>
+          {versioningAvailable ? (
+            <button
+              type="button"
+              className="viewer-action file-version-trigger od-tooltip"
+              disabled={source === null}
+              title={t('fileViewer.versions.title')}
+              aria-label={t('fileViewer.versions.title')}
+              data-tooltip={t('fileViewer.versions.title')}
+              data-tooltip-placement="bottom"
+              onClick={() => setVersionModalOpen(true)}
+            >
+              <RemixIcon name="history-line" size={14} />
+              <span>{t('fileViewer.versions.entry')}</span>
+            </button>
+          ) : null}
           {showPreviewToolbarControls ? (
-            <>
+            <span className="viewer-preview-toolbar-inline">
               <span className="viewer-divider" aria-hidden />
               <PreviewViewportControls
                 viewport={previewViewport}
                 onViewport={setPreviewViewport}
                 t={t}
               />
-            </>
+            </span>
           ) : null}
           {showPreviewToolbarControls && showDeckNavigation ? (
             <span
-              className="deck-nav"
+              className="deck-nav viewer-deck-nav-inline"
               role="group"
               aria-label={t('fileViewer.slideNavAria')}
             >
@@ -8947,7 +9676,7 @@ function HtmlViewer({
         </div>
         <div className="viewer-toolbar-actions">
           {showPreviewToolbarControls ? (
-            <>
+            <div className="viewer-toolbar-inline-actions">
               {mode === 'preview' ? (
                 <button
                   type="button"
@@ -9059,8 +9788,202 @@ function HtmlViewer({
                   ) : null}
                 </div>
               ) : null}
-            </>
+            </div>
           ) : null}
+          <div className="viewer-toolbar-more" ref={toolbarMoreRef}>
+            <button
+              type="button"
+              className="viewer-action viewer-action-icon od-tooltip"
+              aria-label={t('nextStep.more')}
+              aria-haspopup="menu"
+              aria-expanded={toolbarMoreOpen}
+              data-tooltip={t('nextStep.more')}
+              data-tooltip-placement="bottom"
+              title={t('nextStep.more')}
+              onClick={() => setToolbarMoreOpen((value) => !value)}
+            >
+              <RemixIcon name="more-2-line" size={16} />
+            </button>
+            {toolbarMoreOpen ? (
+              <div className="viewer-toolbar-more-menu" role="menu">
+                {([
+                  ['preview', t('fileViewer.preview'), 'eye-line'],
+                  ['source', t('fileViewer.source'), 'code-line'],
+                ] as const).map(([id, label, icon]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`viewer-toolbar-more-item${mode === id ? ' active' : ''}`}
+                    role="menuitem"
+                    onClick={() => {
+                      fireArtifactToolbarClick(id);
+                      selectMode(id);
+                      setToolbarMoreOpen(false);
+                    }}
+                  >
+                    <RemixIcon name={icon} size={15} />
+                    <span>{label}</span>
+                    {mode === id ? <Icon name="check" size={13} /> : null}
+                  </button>
+                ))}
+                {versioningAvailable ? (
+                  <button
+                    type="button"
+                    className="viewer-toolbar-more-item"
+                    role="menuitem"
+                    disabled={source === null}
+                    onClick={() => {
+                      setVersionModalOpen(true);
+                      setToolbarMoreOpen(false);
+                    }}
+                  >
+                    <RemixIcon name="history-line" size={15} />
+                    <span>{t('fileViewer.versions.entry')}</span>
+                  </button>
+                ) : null}
+                {showPreviewToolbarControls ? (
+                  <>
+                    <div className="viewer-toolbar-more-separator" role="separator" />
+                    {PREVIEW_VIEWPORT_PRESETS.map((preset) => {
+                      const selected = previewViewport === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          className={`viewer-toolbar-more-item${selected ? ' active' : ''}`}
+                          role="menuitem"
+                          title={t(preset.titleKey)}
+                          onClick={() => {
+                            setPreviewViewport(preset.id);
+                            setToolbarMoreOpen(false);
+                          }}
+                        >
+                          <RemixIcon name={previewViewportIcon(preset.id)} size={15} />
+                          <span>{t(preset.labelKey)}</span>
+                          {selected ? <Icon name="check" size={13} /> : null}
+                        </button>
+                      );
+                    })}
+                    {showDeckNavigation ? (
+                      <>
+                        <div className="viewer-toolbar-more-separator" role="separator" />
+                        <button
+                          type="button"
+                          className="viewer-toolbar-more-item"
+                          role="menuitem"
+                          disabled={slideState !== null && slideState.active <= 0}
+                          onClick={() => {
+                            postSlide('prev');
+                            setToolbarMoreOpen(false);
+                          }}
+                        >
+                          <Icon name="chevron-right" size={14} style={{ transform: 'rotate(180deg)' }} />
+                          <span>{t('fileViewer.previousSlide')}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="viewer-toolbar-more-item"
+                          role="menuitem"
+                          disabled={slideState !== null && slideState.active >= slideState.count - 1}
+                          onClick={() => {
+                            postSlide('next');
+                            setToolbarMoreOpen(false);
+                          }}
+                        >
+                          <Icon name="chevron-right" size={14} />
+                          <span>{t('fileViewer.nextSlide')}</span>
+                        </button>
+                      </>
+                    ) : null}
+                    <div className="viewer-toolbar-more-separator" role="separator" />
+                    {mode === 'preview' ? (
+                      <button
+                        type="button"
+                        className="viewer-toolbar-more-item"
+                        role="menuitem"
+                        onClick={() => {
+                          handleCopyScreenshot();
+                          setToolbarMoreOpen(false);
+                        }}
+                      >
+                        <RemixIcon name="screenshot-2-line" size={15} />
+                        <span>{t('fileViewer.screenshot')}</span>
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={`viewer-toolbar-more-item${boardMode && !commentCreateMode && boardTool === 'inspect' ? ' active' : ''}`}
+                      role="menuitem"
+                      onClick={() => {
+                        activateCommentTool();
+                        setToolbarMoreOpen(false);
+                      }}
+                    >
+                      <RemixIcon name="chat-new-line" size={15} />
+                      <span>{t('fileViewer.comment')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`viewer-toolbar-more-item${drawOverlayOpen ? ' active' : ''}`}
+                      role="menuitem"
+                      onClick={() => {
+                        activateDrawTool();
+                        setToolbarMoreOpen(false);
+                      }}
+                    >
+                      <RemixIcon name="mark-pen-line" size={15} />
+                      <span>{t('fileViewer.mark')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`viewer-toolbar-more-item${manualEditMode ? ' active' : ''}`}
+                      role="menuitem"
+                      onClick={() => {
+                        activateManualEditTool();
+                        setToolbarMoreOpen(false);
+                      }}
+                    >
+                      <RemixIcon name="edit-line" size={15} />
+                      <span>{t('fileViewer.edit')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`viewer-toolbar-more-item${boardMode && commentCreateMode ? ' active' : ''}`}
+                      role="menuitem"
+                      onClick={() => {
+                        activateCommentCreateTool();
+                        setToolbarMoreOpen(false);
+                      }}
+                    >
+                      <RemixIcon name="message-3-line" size={15} />
+                      <span>{t('chat.tabComments')} ({visibleSideComments.length})</span>
+                    </button>
+                    {source !== null && mode === 'preview' ? (
+                      <>
+                        <div className="viewer-toolbar-more-separator" role="separator" />
+                        {[50, 75, 100, 125, 150, 200].map((level) => (
+                          <button
+                            key={level}
+                            type="button"
+                            className={`viewer-toolbar-more-item${zoom === level ? ' active' : ''}`}
+                            role="menuitem"
+                            onClick={() => {
+                              setZoom(level);
+                              setToolbarMoreOpen(false);
+                            }}
+                          >
+                            <RemixIcon name="zoom-in-line" size={15} />
+                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{level}%</span>
+                            {zoom === level ? <Icon name="check" size={13} /> : null}
+                          </button>
+                        ))}
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
       {((filePrimaryActions: ReactNode) => (
@@ -9795,6 +10718,15 @@ function HtmlViewer({
         </div>,
         document.body,
       ) : null}
+      {versionModalOpen && versioningAvailable && typeof document !== 'undefined' ? (
+        <FileVersionManagerModal
+          projectId={projectId}
+          file={file}
+          currentSource={source}
+          onClose={() => setVersionModalOpen(false)}
+          onRestored={handleVersionRestored}
+        />
+      ) : null}
       {pptxExportModalOpen && typeof document !== 'undefined' ? createPortal(
         <div className="modal-backdrop viewer-modal-backdrop image-export-backdrop" role="presentation">
           <div
@@ -10363,6 +11295,17 @@ function HtmlViewer({
           ttlMs={2400}
           role="alert"
           onDismiss={() => setDeployActionToast(null)}
+        />,
+        document.body,
+      ) : null}
+      {versionRestoredToast && typeof document !== 'undefined' ? createPortal(
+        <Toast
+          key={versionRestoredToast.id}
+          message={versionRestoredToast.message}
+          tone="success"
+          placement="top"
+          ttlMs={2400}
+          onDismiss={() => setVersionRestoredToast(null)}
         />,
         document.body,
       ) : null}

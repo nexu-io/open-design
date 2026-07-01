@@ -333,8 +333,13 @@ import {
 } from './runtimes/run-artifacts.js';
 import {
   createRunArtifactBaselines,
+  diffRunArtifacts,
   snapshotProjectArtifacts,
 } from './run-artifact-fs.js';
+import {
+  AiHtmlVersionSnapshotError,
+  snapshotAiHtmlVersionsForRun,
+} from './run-html-version-snapshots.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import { buildPromptStackTelemetry } from './prompt-telemetry.js';
 import { readAnalyticsContext } from './analytics.js';
@@ -3079,24 +3084,45 @@ const projectUpload = multer({
           meta,
         );
         (req as any)._uploadRelDir = relDir;
+        (req as any)._uploadAbsDir = absDir;
         cb(null, absDir);
       } catch (err) {
         cb(err, '');
       }
     },
-    filename: (_req, file, cb) => {
+    filename: (req, file, cb) => {
       // multer@1 hands us latin1-decoded multipart filenames; restore the
       // original UTF-8 so the response (and the on-disk name) preserves
-      // non-ASCII characters instead of mangling them. Then run the
-      // shared sanitiser and prepend a base36 timestamp so multiple
-      // uploads with the same original name don't clobber each other.
+      // non-ASCII characters instead of mangling them. Then run the shared
+      // sanitiser and only add a suffix when that sanitized source name
+      // would collide with an existing or same-batch upload.
       file.originalname = decodeMultipartFilename(file.originalname);
       const safe = sanitizeName(file.originalname);
-      cb(null, `${Date.now().toString(36)}-${safe}`);
+      const uploadDir = typeof (req as any)._uploadAbsDir === 'string' ? (req as any)._uploadAbsDir : '';
+      const reserved = (req as any)._uploadReservedNames instanceof Set
+        ? (req as any)._uploadReservedNames
+        : ((req as any)._uploadReservedNames = new Set());
+      cb(null, uniqueUploadFileName(uploadDir, safe, reserved));
     },
   }),
   limits: { fileSize: 200 * 1024 * 1024 },  // 200MB — covers the largest design assets we expect (PPTX/PDF/raw images)
 });
+
+function uniqueUploadFileName(uploadDir, safeName, reserved) {
+  const parsed = path.parse(safeName);
+  const base = parsed.name || parsed.base || 'file';
+  const ext = parsed.ext || '';
+  for (let index = 0; index < 10_000; index += 1) {
+    const candidate = index === 0 ? safeName : `${base}-${index}${ext}`;
+    if (reserved.has(candidate)) continue;
+    if (uploadDir && fs.existsSync(path.join(uploadDir, candidate))) continue;
+    reserved.add(candidate);
+    return candidate;
+  }
+  const fallback = `${base}-${Date.now().toString(36)}${ext}`;
+  reserved.add(fallback);
+  return fallback;
+}
 
 function handleProjectUpload(req, res, next) {
   projectUpload.array('files', 12)(req, res, (err) => {
@@ -5783,6 +5809,58 @@ export async function startServer({
         // Snapshotting is best-effort; finish falls back to the tool-stream count.
       }
     }
+    const latestRunPromptForHtmlVersionSnapshot = () => {
+      if (run.conversationId) {
+        try {
+          const row = db.prepare(
+            `SELECT content
+               FROM messages
+              WHERE conversation_id = ?
+                AND role = 'user'
+                AND LENGTH(TRIM(content)) > 0
+              ORDER BY COALESCE(ended_at, started_at, created_at, 0) DESC,
+                       position DESC
+              LIMIT 1`,
+          ).get(run.conversationId);
+          if (typeof row?.content === 'string' && row.content.trim()) {
+            return { prompt: row.content.trim(), promptSource: 'message' as const };
+          }
+        } catch {
+          // Version prompt provenance is best-effort.
+        }
+      }
+      const requestPrompt =
+        typeof currentPrompt === 'string' && currentPrompt.trim()
+          ? currentPrompt.trim()
+          : typeof message === 'string' && message.trim()
+            ? message.trim()
+            : null;
+      return requestPrompt ? { prompt: requestPrompt, promptSource: 'message' as const } : { prompt: null };
+    };
+    const snapshotAiHtmlVersionsBeforeSuccess = async () => {
+      if (!run?.id || !run.projectId) return;
+      const artifactBaseline = runArtifactBaselines.peek(run.id);
+      if (!artifactBaseline || artifactBaseline.contended) return;
+      let diff;
+      try {
+        diff = diffRunArtifacts(
+          artifactBaseline.before,
+          snapshotProjectArtifacts(artifactBaseline.cwd),
+        );
+      } catch {
+        return;
+      }
+      const promptInfo = latestRunPromptForHtmlVersionSnapshot();
+      await snapshotAiHtmlVersionsForRun({
+        projectsRoot: PROJECTS_DIR,
+        projectId: run.projectId,
+        projectRoot: artifactBaseline.cwd,
+        diff,
+        prompt: promptInfo.prompt,
+        ...(promptInfo.promptSource ? { promptSource: promptInfo.promptSource } : {}),
+        metadata: projectRecord?.metadata,
+      });
+    };
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
       agentId,
       projectRecord?.metadata,
@@ -8637,6 +8715,24 @@ export async function startServer({
         });
       }
       if (status === 'succeeded') {
+        try {
+          await snapshotAiHtmlVersionsBeforeSuccess();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const details = err instanceof AiHtmlVersionSnapshotError
+            ? { failures: err.failures }
+            : undefined;
+          send('error', createSseErrorPayload(
+            'HTML_VERSION_SNAPSHOT_FAILED',
+            message,
+            {
+              retryable: false,
+              ...(details ? { details } : {}),
+            },
+          ));
+          design.runs.finish(run, 'failed', 1, signal);
+          return;
+        }
         persistDeliveredAgentSessionState();
       }
       finishWithRetryDecision(status, code, signal);

@@ -33,6 +33,7 @@ import {
   applyInspectOverridesToSource,
   commentPreviewCanvasSize,
   effectivePreviewScale,
+  fileVersionPreviewOptions,
   parseInspectOverridesFromSource,
   previewOverlayTransform,
   serializeInspectOverrides,
@@ -2805,6 +2806,201 @@ describe('FileViewer SVG artifacts', () => {
         Reflect.deleteProperty(URL, 'revokeObjectURL');
       }
     }
+  });
+
+  it('uses the shared exportable-deck detector for version history preview options', () => {
+    const deckSource =
+      '<deck-stage><section data-screen-label="01 Cover">A</section>' +
+      '<section data-screen-label="02 Next">B</section></deck-stage>';
+    const options = fileVersionPreviewOptions('project-1', 'slides.html', deckSource);
+
+    expect(options.deck).toBe(true);
+    expect(options.baseHref).toBe('/api/projects/project-1/raw/');
+  });
+
+  it('closes the version modal and shows success feedback after switching versions', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const currentVersion = {
+      id: 'v2',
+      fileName: 'index.html',
+      version: 2,
+      label: 'Current checkpoint',
+      createdAt: 1_725_000_000_000,
+      source: 'manual',
+      prompt: 'Current prompt',
+      size: 42,
+      mime: 'text/html',
+      kind: 'html',
+      current: true,
+    };
+    const priorVersion = {
+      ...currentVersion,
+      id: 'v1',
+      version: 1,
+      label: 'Prior checkpoint',
+      prompt: 'Prior prompt',
+      current: false,
+    };
+    const restoredVersion = {
+      ...currentVersion,
+      id: 'v3',
+      version: 3,
+      label: 'Restored checkpoint',
+      source: 'restore',
+      prompt: 'Prior prompt',
+      restoreFromVersionId: 'v1',
+      current: true,
+    };
+    const onFileSaved = vi.fn();
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/api/projects/project-1/files/index.html/versions' && method === 'GET') {
+        return new Response(JSON.stringify({ file, versions: [currentVersion, priorVersion] }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/files/index.html/versions/v1' && method === 'GET') {
+        return new Response(JSON.stringify({
+          version: priorVersion,
+          content: '<html><body><h1>Prior</h1></body></html>',
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/files/index.html/versions/v1/restore' && method === 'POST') {
+        return new Response(JSON.stringify({ file, version: restoredVersion }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml="<html><body><h1>Current</h1></body></html>"
+        onFileSaved={onFileSaved}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Versions' }));
+    const versionDialog = await screen.findByRole('dialog', { name: 'Versions' });
+    fireEvent.click(within(versionDialog).getByRole('option', { name: /Prior prompt/ }));
+
+    const switchButton = within(versionDialog).getByRole('button', { name: 'Switch to this version' }) as HTMLButtonElement;
+    await waitFor(() => expect(switchButton.disabled).toBe(false));
+    fireEvent.click(switchButton);
+
+    const confirmDialog = await screen.findByRole('dialog', { name: 'Switch to this version?' });
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Switch' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Versions' })).toBeNull();
+    });
+    expect((await screen.findByRole('status')).textContent).toContain('Switched to this version.');
+    expect(onFileSaved).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-1/files/index.html/versions/v1/restore',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('disables version actions when the newly selected preview fails to load', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+    });
+    const currentVersion = {
+      id: 'v3',
+      fileName: 'index.html',
+      version: 3,
+      label: 'Current checkpoint',
+      createdAt: 1_725_000_000_000,
+      source: 'manual',
+      prompt: 'Current prompt',
+      size: 42,
+      mime: 'text/html',
+      kind: 'html',
+      current: true,
+    };
+    const priorVersion = {
+      ...currentVersion,
+      id: 'v2',
+      version: 2,
+      label: 'Prior checkpoint',
+      prompt: 'Prior prompt',
+      current: false,
+    };
+    const brokenVersion = {
+      ...currentVersion,
+      id: 'v1',
+      version: 1,
+      label: 'Broken checkpoint',
+      prompt: 'Broken prompt',
+      current: false,
+    };
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/api/projects/project-1/files/index.html/versions' && method === 'GET') {
+        return new Response(JSON.stringify({ file, versions: [currentVersion, priorVersion, brokenVersion] }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/files/index.html/versions/v2' && method === 'GET') {
+        return new Response(JSON.stringify({
+          version: priorVersion,
+          content: '<html><body><h1>Prior</h1></body></html>',
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/files/index.html/versions/v1' && method === 'GET') {
+        return new Response(JSON.stringify({ error: { code: 'VERSION_NOT_FOUND' } }), { status: 500 });
+      }
+      if (url.includes('/restore') && method === 'POST') {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml="<html><body><h1>Current</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Versions' }));
+    const versionDialog = await screen.findByRole('dialog', { name: 'Versions' });
+    fireEvent.click(within(versionDialog).getByRole('option', { name: /Prior prompt/ }));
+    const switchButton = within(versionDialog).getByRole('button', { name: 'Switch to this version' }) as HTMLButtonElement;
+    const openButton = within(versionDialog).getByRole('button', { name: 'Open preview' }) as HTMLButtonElement;
+    await waitFor(() => expect(switchButton.disabled).toBe(false));
+    expect(openButton.disabled).toBe(false);
+
+    fireEvent.click(within(versionDialog).getByRole('option', { name: /Broken prompt/ }));
+    await waitFor(() => {
+      expect(within(versionDialog).getByRole('alert').textContent).toContain('Could not load this version preview.');
+    });
+    expect(switchButton.disabled).toBe(true);
+    expect(openButton.disabled).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/projects/project-1/files/index.html/versions/v1/restore',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 
   it('does not show an export-started toast when desktop PDF export is canceled', async () => {

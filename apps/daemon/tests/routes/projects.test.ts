@@ -574,6 +574,43 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(deleted.ok).toBe(true);
   });
 
+  it('rejects folder create and delete requests for internal file-version storage', async () => {
+    const projectId = `proj-file-version-folder-guard-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'File version folder guard',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const postResp = await fetch(`${baseUrl}/api/projects/${projectId}/folders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '.file-versions' }),
+    });
+    expect(postResp.status).toBe(400);
+
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const versionRoot = path.join(dataDir, 'projects', projectId, '.file-versions');
+    const marker = path.join(versionRoot, 'sentinel', 'manifest.json');
+    await mkdir(path.dirname(marker), { recursive: true });
+    await writeFile(marker, '{}');
+
+    const deleteResp = await fetch(`${baseUrl}/api/projects/${projectId}/folders`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '.file-versions' }),
+    });
+    expect(deleteResp.status).toBe(400);
+    expect((await stat(marker)).isFile()).toBe(true);
+  });
+
   // PR #974: `fromTrustedPicker` is privileged the same way `baseDir`
   // is — only the HMAC-gated POST /api/import/folder may set it. POST
   // /api/projects (the generic create endpoint) and PATCH
