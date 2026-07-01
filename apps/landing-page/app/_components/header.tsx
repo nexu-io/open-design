@@ -24,8 +24,7 @@ const REPO_DISCUSSIONS = `${REPO}/discussions`;
 const DISCORD = 'https://discord.gg/mHAjSMV6gz';
 const X_PROFILE = 'https://x.com/OpenDesignHQ';
 // AMR product page on the production site (this repo has no /amr/ route).
-// Single destination for every AMR surface: the nav logo, the Agent
-// dropdown entry, and the footer Partners column.
+// Single destination for the Agent dropdown entry and cloud account surfaces.
 const AMR_URL = 'https://open-design.ai/amr/';
 
 // Open Design Cloud (AMR / vela) endpoints for the header sign-in module.
@@ -521,20 +520,6 @@ export function Header({
               </ul>
             </li>
 
-            {/* AMR partner logo at the tail of the nav links. */}
-            <li className='nav-amr'>
-              <a href={AMR_URL} aria-label='AMR' {...ext}>
-                <img
-                  className='nav-amr-logo'
-                  src='/amr-lockup.svg'
-                  alt='AMR'
-                  width={700}
-                  height={272}
-                  loading='lazy'
-                  decoding='async'
-                />
-              </a>
-            </li>
           </ul>
         </nav>
         <div className='nav-side'>

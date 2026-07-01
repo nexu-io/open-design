@@ -69,7 +69,7 @@
                   Agent<span class="dropdown-caret" aria-hidden="true">▾</span>
                 </a>
                 <ul class="nav-dropdown nav-dropdown-solution" aria-label="Agent">
-                  <li><a href="${AMR_URL}"><span class="dropdown-name">Open Design AMR</span><span class="dropdown-blurb">专业设计 Agent、零配置使用、自带 SOTA 模型与 Harness</span></a></li>
+                  <li><a href="${AMR_URL}"><span class="dropdown-name">Open Design</span><span class="dropdown-blurb">专业设计 Agent、零配置使用、自带 SOTA 模型与 Harness</span></a></li>
                   <li><a href="/zh/agents/codex-design/"><span class="dropdown-name">Codex</span></a></li>
                   <li><a href="/zh/agents/cursor-design/"><span class="dropdown-name">Cursor Agent</span></a></li>
                   <li><a href="/zh/agents/claude-code-design/"><span class="dropdown-name">Claude Code</span></a></li>
@@ -126,11 +126,6 @@
                   <li><a href="${REPO}/discussions" target="_blank" rel="noreferrer noopener"><span class="dropdown-name">Discussions</span></a></li>
                   <li><a href="${X_PROFILE}" target="_blank" rel="noreferrer noopener"><span class="dropdown-name">X</span></a></li>
                 </ul>
-              </li>
-              <li class="nav-amr">
-                <a href="${AMR_URL}" aria-label="AMR" target="_blank" rel="noreferrer noopener">
-                  <img class="nav-amr-logo" src="/amr-lockup.svg" alt="AMR" width="700" height="272" loading="lazy" decoding="async" />
-                </a>
               </li>
             </ul>
           </nav>
