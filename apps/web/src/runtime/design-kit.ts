@@ -96,6 +96,17 @@ export interface KitAsset {
   url: string;
 }
 
+interface BrandDesignAsset {
+  kind?: unknown;
+  label?: unknown;
+  href?: unknown;
+  available?: unknown;
+}
+
+type BrandWithDesignAssets = Brand & {
+  designAssets?: BrandDesignAsset[];
+};
+
 export interface DesignKit {
   designSystemId?: string;
   /** When set, the logo resolves via `/api/brands/:id/logo` (Brands surfaces). */
@@ -133,6 +144,54 @@ const ASSET_TILES: { kind: string; label: string; file: string }[] = [
   { kind: 'newsletter', label: 'Newsletter', file: 'system/artifacts/newsletter.html' },
   { kind: 'form', label: 'Form page', file: 'system/artifacts/form.html' },
 ];
+
+function slugFromAssetLabel(label: string, href: string): string {
+  const seed = label || href;
+  return seed
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'asset';
+}
+
+function brandDesignAssets(
+  brand: Brand,
+  resolveAssetUrl: (rel: string) => string | null,
+): KitAsset[] | null {
+  const custom = (brand as BrandWithDesignAssets).designAssets;
+  if (!Array.isArray(custom)) return null;
+  const out: KitAsset[] = [];
+  const seen = new Set<string>();
+  for (const item of custom) {
+    if (!item || typeof item !== 'object') continue;
+    if (item.available === false) continue;
+    if (typeof item.label !== 'string' || !item.label.trim()) continue;
+    if (typeof item.href !== 'string' || !item.href.trim()) continue;
+    const label = item.label.trim();
+    const href = item.href.trim();
+    const url = resolveAssetUrl(href);
+    if (!url) continue;
+    const rawKind = typeof item.kind === 'string' && item.kind.trim() ? item.kind.trim() : slugFromAssetLabel(label, href);
+    let kind = rawKind;
+    let suffix = 2;
+    while (seen.has(kind)) {
+      kind = `${rawKind}-${suffix}`;
+      suffix += 1;
+    }
+    seen.add(kind);
+    out.push({ kind, label, url });
+  }
+  return out.length > 0 ? out : null;
+}
+
+function defaultAssetTiles(resolveAssetUrl: (rel: string) => string | null): KitAsset[] {
+  return ASSET_TILES
+    .map((a) => {
+      const url = resolveAssetUrl(a.file);
+      return url ? { kind: a.kind, label: a.label, url } : null;
+    })
+    .filter((a): a is KitAsset => Boolean(a));
+}
 
 function fontList(typography: DesignKit['typography']): KitFont[] {
   return [typography.display, typography.body, typography.mono].filter(
@@ -350,7 +409,7 @@ export function brandToKit(brand: Brand, opts: BrandKitOptions): DesignKit {
         }
       : undefined,
     assets: showSystem
-      ? ASSET_TILES.map((a) => ({ kind: a.kind, label: a.label, url: asset(a.file)! }))
+      ? brandDesignAssets(brand, asset) ?? defaultAssetTiles(asset)
       : undefined,
     showcaseHtml: opts.showcaseHtml ?? null,
   };
@@ -480,7 +539,7 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
         }
       : undefined,
     assets: staticUrl
-      ? ASSET_TILES.map((a) => ({ kind: a.kind, label: a.label, url: staticUrl(a.file) }))
+      ? defaultAssetTiles(staticUrl)
       : undefined,
     showcaseHtml: opts.showcaseHtml ?? null,
   };
