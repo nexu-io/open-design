@@ -706,6 +706,288 @@ export const EN: SolutionLocaleCopy = {
       { href: '/solutions/engineering/', label: 'Open Design for engineering' },
     ],
   },
+  screenshotToCode: {
+    title: 'Screenshot to Code — turn a screenshot into code with Open Design',
+    description:
+      'A free, open-source screenshot-to-code workflow that turns a screenshot of any UI into clean, component-based code — inside the coding agent you already use. Drop in an image, describe what you want, and the agent rebuilds it as real code you own and ship, no locked-in export.',
+    breadcrumb: 'Screenshot to code',
+    label: 'Tool · Screenshot to code',
+    heading: 'Screenshot to code, in your agent',
+    lead: 'Have a screenshot of a UI you like? Hand it to your coding agent and let it rebuild the screen as clean, component-based code — responsive layout, real states, your stack. The screenshot is the brief; the output is code you own, not a throwaway snapshot.',
+    heroImageAlt:
+      'Editorial illustration of a UI screenshot turning into clean production code inside a coding agent, framed by a green selection box',
+    tldrTitle: 'In one line',
+    tldrBody:
+      'Most screenshot-to-code tools spit out one-time, absolute-positioned markup you then rewrite. Open Design rebuilds the screenshot inside your coding agent as clean, component-based code — real structure, your design system, no export step, no per-seat meter.',
+    stepsTitle: 'How screenshot to code works',
+    steps: [
+      {
+        title: 'Drop in the screenshot',
+        body: 'Give your agent an image of the screen you want — a screenshot of an app, a website, or a design. Open Design loads the right skill so the agent reads the layout and intent, not just pixels.',
+        imageAlt: 'Illustration of a UI screenshot being dropped into a terminal',
+      },
+      {
+        title: 'Rebuild as component-based code',
+        body: 'The agent maps the screenshot to reusable components and design tokens — consistent spacing, type, and color — and produces clean, readable code instead of a wall of absolute-positioned divs.',
+        imageAlt: 'Illustration of a screenshot converting into structured, component-based code',
+      },
+      {
+        title: 'Refine in conversation',
+        body: 'Adjust layout, states, and behavior by talking — "make it responsive," "wire the form," "match our tokens." The code updates in place; you are not stuck with a frozen one-time conversion.',
+        imageAlt: 'Illustration of code being refined through chat next to the source screenshot',
+      },
+      {
+        title: 'Ship the code you own',
+        body: 'The output is HTML/code in your repo, fully yours — no vendor-locked editor, no throwaway export, no redraw between the screenshot and the build. Ship it, then keep evolving it in the agent.',
+        imageAlt: 'Illustration of finished code held in a green selection frame, ready to ship',
+      },
+    ],
+    tableTitle: 'Open Design vs. typical screenshot-to-code tools',
+    tableColCapability: 'What you need',
+    tableColWithOd: 'With Open Design',
+    tableColWithout: 'Typical screenshot-to-code tools',
+    tableRows: [
+      {
+        capability: 'Start from an image',
+        withOd: 'Drop a screenshot into the agent you already have open',
+        without: 'Upload to a separate web tool, convert in their cloud',
+      },
+      {
+        capability: 'Code quality',
+        withOd: 'Clean, component-based code from a design system',
+        without: 'Absolute-positioned markup you rewrite by hand',
+      },
+      {
+        capability: 'Iterate after conversion',
+        withOd: 'Refine by talking; the code stays live in your project',
+        without: 'A frozen one-time snapshot you edit manually',
+      },
+      {
+        capability: 'Own the output',
+        withOd: 'Plain files and code in your repo, fully yours',
+        without: 'Locked to their editor or export format',
+      },
+      {
+        capability: 'Cost & lock-in',
+        withOd: 'Open source, bring your own keys, runs locally',
+        without: 'Per-seat or per-credit subscription, vendor-hosted',
+      },
+    ],
+    featuresTitle: 'What you can convert',
+    features: [
+      {
+        title: 'Screenshot to code',
+        body: 'Turn an image of any screen into clean, component-based code in your stack.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'App screenshots',
+        body: 'Rebuild a mobile or web app screen from a screenshot, with real states.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Website screenshots',
+        body: 'Recreate a landing or marketing page you screenshotted as responsive code.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Design screenshots',
+        body: 'Hand off a screenshot of a design or mockup and get shippable code back.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Forms & flows',
+        body: 'Rebuild a form or multi-step flow from a screenshot with real validation.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Any visual taste',
+        body: 'Editorial, soft, or bold — the code carries the screenshot’s style end to end.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Rebuilt from a screenshot with Open Design',
+    galleryLead:
+      'Every one started as an image and became code you can ship. Pick a template close to your screenshot, describe your variation, and the agent rebuilds it — screenshot to code, with no locked-in export.',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: 'Web app screen — screenshot to code' },
+      { thumb: 'example-mobile-app', caption: 'Mobile screen to code' },
+      { thumb: 'example-kami-landing', caption: 'Landing screenshot in code' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Soft-style web build' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Browse templates',
+    faqTitle: 'Screenshot to code FAQ',
+    faq: [
+      {
+        q: 'How does Open Design turn a screenshot into code?',
+        a: 'You give your coding agent an image of the screen and Open Design loads the right skill so the agent rebuilds it as clean, component-based code — reading layout and intent, not just tracing pixels.',
+      },
+      {
+        q: 'What kind of code does it produce?',
+        a: 'Clean, component-based HTML and code built from a reusable design system, so you can read, refine, and ship it — not the absolute-positioned markup most screenshot-to-code tools output.',
+      },
+      {
+        q: 'Is it free?',
+        a: 'Yes. Open Design is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-credit meter on the screenshot-to-code workflow itself.',
+      },
+      {
+        q: 'Which agents does it work with?',
+        a: 'Open Design works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
+      },
+    ],
+    ctaTitle: 'Turn your next screenshot into code tonight',
+    ctaBody:
+      'Star the repo, install Open Design, and turn a screenshot of the screen you want into clean, shippable code in the agent you already use.',
+    relatedTitle: 'Related tools & guides',
+    related: [
+      { href: '/solutions/figma-to-code/', label: 'Figma to code with Open Design' },
+      { href: '/solutions/design-to-code/', label: 'Design to code with Open Design' },
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI generator' },
+      { href: '/solutions/engineering/', label: 'Open Design for engineering' },
+    ],
+  },
+  aiPrototypeGenerator: {
+    title: 'AI Prototype Generator — prompt to a clickable prototype, then code',
+    description:
+      'A free, open-source AI prototype generator that turns a prompt into a real, clickable prototype — multiple screens, shared styles, live interactions — and carries it all the way to shipped code. An open alternative to Figma, Cursor, and Penpot prototype generators that runs inside the coding agent you already use.',
+    breadcrumb: 'AI prototype generator',
+    label: 'Tool · AI prototype generator',
+    heading: 'The AI prototype generator that ships code',
+    lead: 'Describe the flow and let your agent generate a real, clickable prototype — linked screens, consistent styles, working interactions. Unlike prototype generators that stop at a mockup, Open Design carries the same artifact to shipped code, in the agent you already run.',
+    heroImageAlt:
+      'Editorial illustration of a prompt turning into a clickable multi-screen prototype and then production code, framed by a green selection box',
+    tldrTitle: 'In one line',
+    tldrBody:
+      'Most AI prototype generators (Figma, Cursor, Penpot) stop at a clickable mockup you then rebuild. Open Design generates the prototype inside your coding agent and carries it from prompt to shipped code — no export step, no handoff gap, no per-seat meter.',
+    stepsTitle: 'How the AI prototype generator works',
+    steps: [
+      {
+        title: 'Describe the flow',
+        body: 'Tell your agent the journey in plain language — "an onboarding flow: sign-up, plan picker, and a dashboard." Open Design loads the prototype skill so the agent lays out linked screens, not a single static frame.',
+        imageAlt: 'Illustration of a plain-language flow description typed into a terminal',
+      },
+      {
+        title: 'Generate a clickable prototype',
+        body: 'The agent assembles linked screens from reusable components and design tokens, with real interactions — navigation, states, transitions. You get a coherent, clickable prototype as a set, not disconnected frames.',
+        imageAlt: 'Illustration of linked prototype screens with navigation arrows on a grid',
+      },
+      {
+        title: 'Refine by talking',
+        body: 'Adjust flow, states, and styling in conversation — "add an empty state," "link this button to the dashboard," "make it feel snappier." The prototype updates in place instead of being redrawn.',
+        imageAlt: 'Illustration of a prototype being refined through chat, adding a screen and a transition',
+      },
+      {
+        title: 'Ship the code you own',
+        body: 'Because the prototype lives in your project, it and the eventual code share one source of truth. The output is HTML/code you own and can ship — no vendor lock-in, no redraw between prototype and build.',
+        imageAlt: 'Illustration of a prototype flowing into shipped code held in a green selection frame',
+      },
+    ],
+    tableTitle: 'Open Design vs. typical AI prototype generators',
+    tableColCapability: 'What you need',
+    tableColWithOd: 'With Open Design',
+    tableColWithout: 'Figma / Cursor / Penpot prototype generators',
+    tableRows: [
+      {
+        capability: 'Generate from a prompt',
+        withOd: 'One prompt in the agent you already have open',
+        without: 'Generate inside their app or a separate web tool',
+      },
+      {
+        capability: 'Clickable, multi-screen',
+        withOd: 'Linked screens with real interactions, as a set',
+        without: 'Clickable, but often trapped in their editor',
+      },
+      {
+        capability: 'Prototype to code',
+        withOd: 'Same artifact becomes shipped code — no redraw',
+        without: 'Prototype is a dead end; rebuild for production',
+      },
+      {
+        capability: 'Own the output',
+        withOd: 'Plain files and code in your repo, fully yours',
+        without: 'Editable only inside their app; export-limited',
+      },
+      {
+        capability: 'Cost & lock-in',
+        withOd: 'Open source, bring your own keys, runs locally',
+        without: 'Per-seat or per-credit subscription, vendor-hosted',
+      },
+    ],
+    featuresTitle: 'What you can prototype',
+    features: [
+      {
+        title: 'App flows',
+        body: 'Onboarding, settings, and multi-screen journeys generated as a clickable set.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Web app prototypes',
+        body: 'Dashboards and tools with real navigation and states, then taken to code.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'SaaS & landing flows',
+        body: 'Marketing-to-signup flows you can prototype, style, and ship.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Onboarding & forms',
+        body: 'Multi-step onboarding and form flows with clear hierarchy and states.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Interactive concepts',
+        body: 'Pitch a clickable concept fast, then keep the same artifact to production.',
+        thumb: 'example-gamified-app',
+      },
+      {
+        title: 'Any visual taste',
+        body: 'Editorial, soft, or bold — carry one coherent style across every screen.',
+        thumb: 'example-kami-landing',
+      },
+    ],
+    galleryTitle: 'Prototypes built with Open Design',
+    galleryLead:
+      'Every one started as a prompt and rendered to a clickable, editable artifact. Pick a template close to your idea, describe your variation, and the agent adapts it — from prototype to shipped code.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: 'Dating web app — clickable prototype' },
+      { thumb: 'example-hr-onboarding', caption: 'HR onboarding flow' },
+      { thumb: 'example-mobile-app', caption: 'Mobile app prototype' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Soft-style web prototype' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Browse templates',
+    faqTitle: 'AI prototype generator FAQ',
+    faq: [
+      {
+        q: 'Is the AI prototype generator free?',
+        a: 'Yes. Open Design is open source and runs inside the coding agent you already use with your own provider keys — there is no per-seat or per-credit meter on the prototype generator itself.',
+      },
+      {
+        q: 'How is it different from Figma, Cursor, or Penpot prototype generators?',
+        a: 'Those stop at a clickable mockup inside their app. Open Design generates the prototype in your coding agent and carries the same artifact all the way to shipped code you own — no export, no rebuild for production.',
+      },
+      {
+        q: 'Are the prototypes clickable and multi-screen?',
+        a: 'Yes. The agent generates linked screens with real interactions — navigation, states, transitions — as a coherent set, then you refine them by talking.',
+      },
+      {
+        q: 'Which agents does it work with?',
+        a: 'Open Design works with Claude Code, Codex, Cursor Agent, Gemini CLI, and a dozen more first-party adapters. You bring your own provider keys; nothing is hosted for you.',
+      },
+    ],
+    ctaTitle: 'Generate your first prototype tonight',
+    ctaBody:
+      'Star the repo, install Open Design, and turn your next flow into a clickable prototype — and then into shipped code — in the agent you already use.',
+    relatedTitle: 'Related tools & guides',
+    related: [
+      { href: '/solutions/prototype/', label: 'Prototyping with Open Design' },
+      { href: '/solutions/ai-wireframe-generator/', label: 'AI wireframe generator' },
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI generator' },
+      { href: '/solutions/design-to-code/', label: 'Design to code with Open Design' },
+    ],
+  },
   prototype: {
     title: 'Build interactive prototypes with Open Design + Claude Code',
     description:

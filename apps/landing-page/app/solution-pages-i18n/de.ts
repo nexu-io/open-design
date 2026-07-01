@@ -706,6 +706,288 @@ export const DE: SolutionLocaleCopy = {
       { href: '/solutions/engineering/', label: 'Open Design für Engineering' },
     ],
   },
+  screenshotToCode: {
+    title: 'Screenshot zu Code — einen Screenshot mit Open Design in Code verwandeln',
+    description:
+      'Ein kostenloser, quelloffener Screenshot-zu-Code-Workflow, der einen Screenshot einer beliebigen UI in sauberen, komponentenbasierten Code verwandelt — in dem Coding-Agent, den du bereits nutzt. Leg ein Bild ab, beschreibe, was du willst, und der Agent baut es als echten Code neu, der dir gehört und den du auslieferst, ohne gebundenen Export.',
+    breadcrumb: 'Screenshot zu Code',
+    label: 'Tool · Screenshot zu Code',
+    heading: 'Screenshot zu Code, in deinem Agent',
+    lead: 'Hast du einen Screenshot einer UI, die dir gefällt? Reich ihn deinem Coding-Agent und lass ihn den Screen als sauberen, komponentenbasierten Code neu bauen — responsives Layout, echte Zustände, dein Stack. Der Screenshot ist das Briefing; die Ausgabe ist Code, der dir gehört, keine wegwerfbare Momentaufnahme.',
+    heroImageAlt:
+      'Redaktionelle Illustration, in der ein UI-Screenshot in einem Coding-Agent zu sauberem Produktionscode wird, gerahmt von einer grünen Auswahlbox',
+    tldrTitle: 'In einem Satz',
+    tldrBody:
+      'Die meisten Screenshot-zu-Code-Tools spucken einmaliges, absolut positioniertes Markup aus, das du dann neu schreibst. Open Design baut den Screenshot in deinem Coding-Agent als sauberen, komponentenbasierten Code neu — echte Struktur, dein Designsystem, kein Export-Schritt, kein Zähler pro Platz.',
+    stepsTitle: 'So funktioniert Screenshot zu Code',
+    steps: [
+      {
+        title: 'Leg den Screenshot ab',
+        body: 'Gib deinem Agent ein Bild des Screens, den du willst — einen Screenshot einer App, einer Website oder eines Designs. Open Design lädt die passende Fähigkeit, sodass der Agent das Layout und die Absicht liest, nicht nur die Pixel.',
+        imageAlt: 'Illustration eines UI-Screenshots, der in ein Terminal abgelegt wird',
+      },
+      {
+        title: 'Neu bauen als komponentenbasierter Code',
+        body: 'Der Agent bildet den Screenshot auf wiederverwendbare Komponenten und Design-Tokens ab — einheitliche Abstände, Schrift und Farbe — und erzeugt sauberen, lesbaren Code statt einer Wand aus absolut positionierten Divs.',
+        imageAlt: 'Illustration eines Screenshots, der in strukturierten, komponentenbasierten Code umgewandelt wird',
+      },
+      {
+        title: 'Verfeinere im Gespräch',
+        body: 'Passe Layout, Zustände und Verhalten im Gespräch an — "mach es responsiv", "verdrahte das Formular", "passe es an unsere Tokens an." Der Code aktualisiert sich an Ort und Stelle; du steckst nicht in einer eingefrorenen, einmaligen Umwandlung fest.',
+        imageAlt: 'Illustration von Code, der per Chat neben dem Quell-Screenshot verfeinert wird',
+      },
+      {
+        title: 'Liefere den Code aus, der dir gehört',
+        body: 'Die Ausgabe ist HTML/Code in deinem Repo, ganz dir gehörend — kein anbietergebundener Editor, kein wegwerfbarer Export, kein Neuzeichnen zwischen Screenshot und Build. Liefere ihn aus und entwickle ihn dann im Agent weiter.',
+        imageAlt: 'Illustration von fertigem Code, gehalten in einem grünen Auswahlrahmen, bereit zur Auslieferung',
+      },
+    ],
+    tableTitle: 'Open Design vs. typische Screenshot-zu-Code-Tools',
+    tableColCapability: 'Was du brauchst',
+    tableColWithOd: 'Mit Open Design',
+    tableColWithout: 'Typische Screenshot-zu-Code-Tools',
+    tableRows: [
+      {
+        capability: 'Von einem Bild starten',
+        withOd: 'Leg einen Screenshot in den Agent ab, den du bereits offen hast',
+        without: 'Auf ein separates Web-Tool hochladen, in deren Cloud umwandeln',
+      },
+      {
+        capability: 'Code-Qualität',
+        withOd: 'Sauberer, komponentenbasierter Code aus einem Designsystem',
+        without: 'Absolut positioniertes Markup, das du von Hand neu schreibst',
+      },
+      {
+        capability: 'Nach der Umwandlung iterieren',
+        withOd: 'Verfeinere im Gespräch; der Code bleibt live in deinem Projekt',
+        without: 'Eine eingefrorene, einmalige Momentaufnahme, die du manuell bearbeitest',
+      },
+      {
+        capability: 'Die Ausgabe besitzen',
+        withOd: 'Einfache Dateien und Code in deinem Repo, ganz dir gehörend',
+        without: 'An deren Editor oder Exportformat gebunden',
+      },
+      {
+        capability: 'Kosten & Lock-in',
+        withOd: 'Open Source, eigene Schlüssel mitbringen, läuft lokal',
+        without: 'Abo pro Platz oder pro Credit, anbietergehostet',
+      },
+    ],
+    featuresTitle: 'Was du umwandeln kannst',
+    features: [
+      {
+        title: 'Screenshot zu Code',
+        body: 'Verwandle ein Bild eines beliebigen Screens in sauberen, komponentenbasierten Code in deinem Stack.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'App-Screenshots',
+        body: 'Bau einen Mobile- oder Web-App-Screen aus einem Screenshot neu, mit echten Zuständen.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Website-Screenshots',
+        body: 'Erstelle eine Landing- oder Marketing-Seite, von der du einen Screenshot gemacht hast, als responsiven Code neu.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Design-Screenshots',
+        body: 'Übergib einen Screenshot eines Designs oder Mockups und erhalte auslieferbaren Code zurück.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Formulare & Flows',
+        body: 'Bau ein Formular oder einen mehrstufigen Flow aus einem Screenshot mit echter Validierung neu.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Jeder visuelle Geschmack',
+        body: 'Redaktionell, weich oder markant — der Code trägt den Stil des Screenshots von Anfang bis Ende.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Aus einem Screenshot mit Open Design neu gebaut',
+    galleryLead:
+      'Jedes begann als Bild und wurde zu Code, den du ausliefern kannst. Wähle eine Vorlage nahe deinem Screenshot, beschreibe deine Variante, und der Agent baut sie neu — Screenshot zu Code, ohne gebundenen Export.',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: 'Web-App-Screen — Screenshot zu Code' },
+      { thumb: 'example-mobile-app', caption: 'Mobiler Screen zu Code' },
+      { thumb: 'example-kami-landing', caption: 'Landing-Screenshot im Code' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Web-Build im weichen Stil' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Vorlagen durchsuchen',
+    faqTitle: 'FAQ zu Screenshot zu Code',
+    faq: [
+      {
+        q: 'Wie verwandelt Open Design einen Screenshot in Code?',
+        a: 'Du gibst deinem Coding-Agent ein Bild des Screens, und Open Design lädt die passende Fähigkeit, sodass der Agent es als sauberen, komponentenbasierten Code neu baut — es liest Layout und Absicht, statt nur Pixel nachzuzeichnen.',
+      },
+      {
+        q: 'Welche Art von Code erzeugt es?',
+        a: 'Sauberen, komponentenbasierten HTML und Code, gebaut aus einem wiederverwendbaren Designsystem, sodass du ihn lesen, verfeinern und ausliefern kannst — nicht das absolut positionierte Markup, das die meisten Screenshot-zu-Code-Tools ausgeben.',
+      },
+      {
+        q: 'Ist es kostenlos?',
+        a: 'Ja. Open Design ist quelloffen und läuft in dem Coding-Agent, den du bereits nutzt, mit deinen eigenen Anbieter-Schlüsseln — es gibt keinen Zähler pro Platz oder pro Credit für den Screenshot-zu-Code-Workflow selbst.',
+      },
+      {
+        q: 'Mit welchen Agents funktioniert es?',
+        a: 'Open Design funktioniert mit Claude Code, Codex, Cursor Agent, Gemini CLI und einem Dutzend weiterer hauseigener Adapter. Du bringst deine eigenen Anbieter-Schlüssel mit; nichts wird für dich gehostet.',
+      },
+    ],
+    ctaTitle: 'Verwandle deinen nächsten Screenshot noch heute Abend in Code',
+    ctaBody:
+      'Gib dem Repo einen Stern, installiere Open Design und verwandle einen Screenshot des Screens, den du willst, in sauberen, auslieferbaren Code im Agent, den du bereits nutzt.',
+    relatedTitle: 'Verwandte Tools & Guides',
+    related: [
+      { href: '/solutions/figma-to-code/', label: 'Figma zu Code mit Open Design' },
+      { href: '/solutions/design-to-code/', label: 'Design zu Code mit Open Design' },
+      { href: '/solutions/ai-ui-generator/', label: 'KI-UI-Generator' },
+      { href: '/solutions/engineering/', label: 'Open Design für Engineering' },
+    ],
+  },
+  aiPrototypeGenerator: {
+    title: 'KI-Prototyp-Generator — vom Prompt zum klickbaren Prototyp, dann Code',
+    description:
+      'Ein kostenloser, quelloffener KI-Prototyp-Generator, der einen Prompt in einen echten, klickbaren Prototyp verwandelt — mehrere Screens, geteilte Stile, live Interaktionen — und ihn den ganzen Weg bis zum ausgelieferten Code bringt. Eine offene Alternative zu den Prototyp-Generatoren von Figma, Cursor und Penpot, die in dem Coding-Agent läuft, den du bereits nutzt.',
+    breadcrumb: 'KI-Prototyp-Generator',
+    label: 'Tool · KI-Prototyp-Generator',
+    heading: 'Der KI-Prototyp-Generator, der Code ausliefert',
+    lead: 'Beschreibe den Flow und lass deinen Agent einen echten, klickbaren Prototyp generieren — verlinkte Screens, einheitliche Stile, funktionierende Interaktionen. Anders als Prototyp-Generatoren, die bei einem Mockup aufhören, trägt Open Design dasselbe Artefakt bis zum ausgelieferten Code, im Agent, den du bereits betreibst.',
+    heroImageAlt:
+      'Redaktionelle Illustration, in der ein Prompt zu einem klickbaren Multi-Screen-Prototyp und dann zu Produktionscode wird, gerahmt von einer grünen Auswahlbox',
+    tldrTitle: 'In einem Satz',
+    tldrBody:
+      'Die meisten KI-Prototyp-Generatoren (Figma, Cursor, Penpot) hören bei einem klickbaren Mockup auf, das du dann neu baust. Open Design generiert den Prototyp in deinem Coding-Agent und trägt ihn vom Prompt bis zum ausgelieferten Code — kein Export-Schritt, keine Übergabelücke, kein Zähler pro Platz.',
+    stepsTitle: 'So funktioniert der KI-Prototyp-Generator',
+    steps: [
+      {
+        title: 'Beschreibe den Flow',
+        body: 'Erzähl deinem Agent die Reise in einfacher Sprache — "ein Onboarding-Flow: Registrierung, Plan-Auswahl und ein Dashboard." Open Design lädt die Prototyp-Fähigkeit, sodass der Agent verlinkte Screens auslegt, keinen einzelnen statischen Frame.',
+        imageAlt: 'Illustration einer Flow-Beschreibung in einfacher Sprache, die in ein Terminal getippt wird',
+      },
+      {
+        title: 'Generiere einen klickbaren Prototyp',
+        body: 'Der Agent setzt verlinkte Screens aus wiederverwendbaren Komponenten und Design-Tokens zusammen, mit echten Interaktionen — Navigation, Zustände, Übergänge. Du bekommst einen zusammenhängenden, klickbaren Prototyp als Set, keine losgelösten Frames.',
+        imageAlt: 'Illustration verlinkter Prototyp-Screens mit Navigationspfeilen auf einem Raster',
+      },
+      {
+        title: 'Verfeinere im Gespräch',
+        body: 'Passe Flow, Zustände und Styling im Gespräch an — "füge einen Leerzustand hinzu", "verlinke diesen Button mit dem Dashboard", "lass es flotter wirken." Der Prototyp aktualisiert sich an Ort und Stelle, statt neu gezeichnet zu werden.',
+        imageAlt: 'Illustration eines Prototyps, der per Chat verfeinert wird, mit einem hinzugefügten Screen und einem Übergang',
+      },
+      {
+        title: 'Liefere den Code aus, der dir gehört',
+        body: 'Weil der Prototyp in deinem Projekt lebt, teilen er und der spätere Code eine einzige Quelle der Wahrheit. Die Ausgabe ist HTML/Code, der dir gehört und den du ausliefern kannst — kein anbietergebundener Editor, kein Neuzeichnen zwischen Prototyp und Build.',
+        imageAlt: 'Illustration eines Prototyps, der in ausgelieferten Code fließt, gehalten in einem grünen Auswahlrahmen',
+      },
+    ],
+    tableTitle: 'Open Design vs. typische KI-Prototyp-Generatoren',
+    tableColCapability: 'Was du brauchst',
+    tableColWithOd: 'Mit Open Design',
+    tableColWithout: 'Prototyp-Generatoren von Figma / Cursor / Penpot',
+    tableRows: [
+      {
+        capability: 'Aus einem Prompt generieren',
+        withOd: 'Ein Prompt im Agent, den du bereits offen hast',
+        without: 'In deren App oder einem separaten Web-Tool generieren',
+      },
+      {
+        capability: 'Klickbar, mehrere Screens',
+        withOd: 'Verlinkte Screens mit echten Interaktionen, als Set',
+        without: 'Klickbar, aber oft in deren Editor gefangen',
+      },
+      {
+        capability: 'Prototyp zu Code',
+        withOd: 'Dasselbe Artefakt wird zu ausgeliefertem Code — kein Neuzeichnen',
+        without: 'Prototyp ist eine Sackgasse; neu bauen für die Produktion',
+      },
+      {
+        capability: 'Die Ausgabe besitzen',
+        withOd: 'Einfache Dateien und Code in deinem Repo, ganz dir gehörend',
+        without: 'Nur in deren App bearbeitbar; exportbeschränkt',
+      },
+      {
+        capability: 'Kosten & Lock-in',
+        withOd: 'Open Source, eigene Schlüssel mitbringen, läuft lokal',
+        without: 'Abo pro Platz oder pro Credit, anbietergehostet',
+      },
+    ],
+    featuresTitle: 'Was du prototypisieren kannst',
+    features: [
+      {
+        title: 'App-Flows',
+        body: 'Onboarding, Einstellungen und Multi-Screen-Reisen, generiert als klickbares Set.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Web-App-Prototypen',
+        body: 'Dashboards und Tools mit echter Navigation und echten Zuständen, dann zu Code gebracht.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'SaaS- & Landing-Flows',
+        body: 'Marketing-zu-Anmeldung-Flows, die du prototypisieren, gestalten und ausliefern kannst.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Onboarding & Formulare',
+        body: 'Mehrstufige Onboarding- und Formular-Flows mit klarer Hierarchie und echten Zuständen.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Interaktive Konzepte',
+        body: 'Pitch ein klickbares Konzept schnell und behalte dann dasselbe Artefakt bis zur Produktion.',
+        thumb: 'example-gamified-app',
+      },
+      {
+        title: 'Jeder visuelle Geschmack',
+        body: 'Redaktionell, weich oder markant — trag einen zusammenhängenden Stil über jeden Screen.',
+        thumb: 'example-kami-landing',
+      },
+    ],
+    galleryTitle: 'Mit Open Design gebaute Prototypen',
+    galleryLead:
+      'Jeder begann als Prompt und wurde zu einem klickbaren, bearbeitbaren Artefakt gerendert. Wähle eine Vorlage nahe deiner Idee, beschreibe deine Variante, und der Agent passt sie an — vom Prototyp zum ausgelieferten Code.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: 'Dating-Web-App — klickbarer Prototyp' },
+      { thumb: 'example-hr-onboarding', caption: 'HR-Onboarding-Flow' },
+      { thumb: 'example-mobile-app', caption: 'Mobile-App-Prototyp' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Web-Prototyp im weichen Stil' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Vorlagen durchsuchen',
+    faqTitle: 'FAQ zum KI-Prototyp-Generator',
+    faq: [
+      {
+        q: 'Ist der KI-Prototyp-Generator kostenlos?',
+        a: 'Ja. Open Design ist quelloffen und läuft in dem Coding-Agent, den du bereits nutzt, mit deinen eigenen Anbieter-Schlüsseln — es gibt keinen Zähler pro Platz oder pro Credit für den Prototyp-Generator selbst.',
+      },
+      {
+        q: 'Wie unterscheidet er sich von den Prototyp-Generatoren von Figma, Cursor oder Penpot?',
+        a: 'Diese hören bei einem klickbaren Mockup in ihrer App auf. Open Design generiert den Prototyp in deinem Coding-Agent und trägt dasselbe Artefakt den ganzen Weg bis zum ausgelieferten Code, der dir gehört — kein Export, kein Neubau für die Produktion.',
+      },
+      {
+        q: 'Sind die Prototypen klickbar und mehrschirmig?',
+        a: 'Ja. Der Agent generiert verlinkte Screens mit echten Interaktionen — Navigation, Zustände, Übergänge — als zusammenhängendes Set, das du dann im Gespräch verfeinerst.',
+      },
+      {
+        q: 'Mit welchen Agents funktioniert es?',
+        a: 'Open Design funktioniert mit Claude Code, Codex, Cursor Agent, Gemini CLI und einem Dutzend weiterer hauseigener Adapter. Du bringst deine eigenen Anbieter-Schlüssel mit; nichts wird für dich gehostet.',
+      },
+    ],
+    ctaTitle: 'Generiere deinen ersten Prototyp noch heute Abend',
+    ctaBody:
+      'Gib dem Repo einen Stern, installiere Open Design und verwandle deinen nächsten Flow in einen klickbaren Prototyp — und dann in ausgelieferten Code — im Agent, den du bereits nutzt.',
+    relatedTitle: 'Verwandte Tools & Guides',
+    related: [
+      { href: '/solutions/prototype/', label: 'Prototyping mit Open Design' },
+      { href: '/solutions/ai-wireframe-generator/', label: 'KI-Wireframe-Generator' },
+      { href: '/solutions/ai-ui-generator/', label: 'KI-UI-Generator' },
+      { href: '/solutions/design-to-code/', label: 'Design zu Code mit Open Design' },
+    ],
+  },
   prototype: {
     title: 'Interaktive Prototypen mit Open Design + Claude Code bauen',
     description:
