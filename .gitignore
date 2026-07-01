@@ -85,6 +85,11 @@ docs/superpowers/
 # on every deploy. Should not be committed (~70MB of PNGs).
 apps/landing-page/public/previews/
 
+# On-demand enhancement runtimes (matter-js / cobe), regenerated from
+# node_modules by `scripts/vendor-enhancers.ts` on every build/dev. Generated
+# artifact, not source — must not be committed.
+apps/landing-page/public/enhancers/
+
 # Ad-hoc local e2e scripts and their screenshots
 e2e/scripts/test-fal-webui.ts
 e2e/scripts/fal-webui-*.png

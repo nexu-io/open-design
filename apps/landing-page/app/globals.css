@@ -3057,10 +3057,16 @@ section.tight { padding: 90px 0; }
   content: '';
   position: absolute;
   inset: 0;
-  background: url('/lab-stage-art.webp') center / cover no-repeat;
+  /* Image (453KB) is withheld until `.lab-stage` nears the viewport — see
+     `precise-lazyload.astro` (`data-precise-bg`) — so this below-fold backdrop
+     stops competing with the hero LCP for bandwidth. */
+  background: center / cover no-repeat;
   opacity: 0.8;
   z-index: 0;
   pointer-events: none;
+}
+.lab-stage.precise-bg-in::before {
+  background-image: url('/lab-stage-art.webp?v=2');
 }
 @media (max-width: 880px) {
   /* Two mobile bugs fixed here:
@@ -4546,8 +4552,14 @@ section.tight { padding: 90px 0; }
   content: '';
   position: absolute;
   inset: 0;
-  background: url('/cta-bg.webp?v=2') center / cover no-repeat;
+  /* Image (335KB) is withheld until `.cta-dance` nears the viewport — see
+     `precise-lazyload.astro` (`data-precise-bg`) — so this far-below-fold CTA
+     mural stops competing with the hero LCP for bandwidth. */
+  background: center / cover no-repeat;
   z-index: 0;
+}
+.cta-dance.precise-bg-in::before {
+  background-image: url('/cta-bg.webp?v=3');
 }
 /* Open Design Home window floating over the mural, centered in the lower half;
    its bottom is clipped by the block's overflow:hidden (matching the comp). */
