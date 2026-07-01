@@ -23,6 +23,8 @@ import {
 import { parseFrontmatter } from './frontmatter.js';
 import type { FrontmatterObject, FrontmatterValue } from './frontmatter.js';
 import { extractSwiftColors } from './swift-colors.js';
+import { buildDesignTokenContract } from './token-contract.js';
+import type { SourceDesignToken } from './token-contract.js';
 
 export type DesignSystemSurface = 'web' | 'image' | 'video' | 'audio';
 export type DesignSystemSource = 'built-in' | 'installed' | 'user';
@@ -1953,6 +1955,13 @@ function generatedDesignSystemFileWrites(
   const palette = normalizeSwatches(input.body);
   const summary = input.summary || 'A user-created Open Design design system.';
   const sections = extractMarkdownSections(input.body);
+  // Schema-aligned token contract (path A parity). `colors_and_type.css` keeps
+  // its legacy `--<slug>-*` vocabulary for the package's own previews, but the
+  // canonical `tokens.css` is what `readDesignSystemAssets` pulls and what the
+  // generation binding contract consumes, so it must speak TOKEN_SCHEMA.
+  const schemaTokensCss = buildDesignTokenContract({
+    sourceTokens: paletteToSourceTokens(palette),
+  }).tokensCss;
   const provenance = input.provenance ?? normalizeProvenance(undefined, {
     ...(input.sourceNotes ? { sourceNotes: input.sourceNotes } : {}),
   });
@@ -1976,6 +1985,10 @@ function generatedDesignSystemFileWrites(
     {
       targetPath: path.join(dir, 'colors_and_type.css'),
       content: renderCssTokens({ title: input.title, palette }),
+    },
+    {
+      targetPath: path.join(dir, 'tokens.css'),
+      content: schemaTokensCss,
     },
     {
       targetPath: path.join(dir, 'package.json'),
@@ -3092,6 +3105,23 @@ Prefer source-backed component roles over static duplicate HTML. When repository
 
 Use parent \`DESIGN.md\`, \`README.md\`, \`preview/\`, and \`context/\` as the evidence trail for any future refinement.
 `;
+}
+
+// Map a generated palette to TOKEN_SCHEMA identity tokens. Only the six colors
+// the palette carries are supplied as source evidence; the contract builder
+// fills surface, fonts, type scale, spacing, motion, etc. from TOKEN_SCHEMA
+// fallbacks / conservative A1 defaults, and self-checks that every `var()`
+// reference resolves.
+function paletteToSourceTokens(palette: GeneratedPalette): SourceDesignToken[] {
+  const source = 'generated-palette';
+  return [
+    { name: '--bg', value: palette.background, source },
+    { name: '--fg', value: palette.foreground, source },
+    { name: '--muted', value: palette.muted, source },
+    { name: '--border', value: palette.border, source },
+    { name: '--accent', value: palette.accent, source },
+    { name: '--success', value: palette.success, source },
+  ];
 }
 
 function renderCssTokens(input: { title: string; palette: GeneratedPalette }): string {
