@@ -28,6 +28,7 @@ project-cwd/
     ├── colors.json     # { source: '#hex' | 'tokenName', target: '--ds-token' }[]
     ├── typography.json # font + size + weight pairings
     ├── spacing.json    # spacing scale crosswalk
+    ├── gradients.json  # CSS gradient crosswalk
     ├── unmatched.json  # { source: ..., reason: 'no-target-equivalent' }[]
     └── meta.json       # { sourceKind: 'figma' | 'code', generatedAt, atomDigest }
 ```

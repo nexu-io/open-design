@@ -108,6 +108,16 @@ describe('runRewritePlan', () => {
     expect(metaJson.atomDigest.length).toBe(40);
   });
 
+  it('tolerates legacy token reports without a gradients bucket', async () => {
+    await setupNextRepo();
+    const tokensPath = path.join(cwd, 'code', 'tokens.json');
+    const legacyTokens = JSON.parse(await readFile(tokensPath, 'utf8')) as Record<string, unknown>;
+    delete legacyTokens.gradients;
+    await writeFile(tokensPath, JSON.stringify(legacyTokens));
+    const report = await runRewritePlan({ cwd });
+    expect(report.planMarkdown).toContain('- gradients:  0');
+  });
+
   it('produces stable atomDigest across two runs over the same code/index.json', async () => {
     await setupNextRepo();
     const a = await runRewritePlan({ cwd, intent: 'x' });

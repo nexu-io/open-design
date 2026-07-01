@@ -40,6 +40,29 @@ describe('design token contract builder', () => {
     );
   });
 
+  it('prefers chromatic action colors over neutral primary tokens for accent', () => {
+    const contract = buildDesignTokenContract({
+      sourceTokens: [
+        { name: '--primary', value: '#000000', source: 'src/theme.css', line: 2 },
+        { name: '--primary-text', value: '#111111', source: 'src/theme.css', line: 3 },
+        { name: '--button-primary-bg', value: '#006fff', source: 'src/theme.css', line: 4 },
+        { name: '--link-color', value: '#0055e8', source: 'src/theme.css', line: 5 },
+      ],
+    });
+
+    expect(contract.tokensCss).toContain('--accent: #006fff;');
+    expect(contract.tokensCss).toContain('--bg: #f8fafc;');
+    expect(contract.tokensCss).toContain('--accent-on: #ffffff;');
+    expect(contract.report.tokens).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: '--accent',
+          sourceName: '--button-primary-bg',
+        }),
+      ]),
+    );
+  });
+
   it('checks fixture references against the final schema declarations', () => {
     const contract = buildDesignTokenContract({ sourceTokens: [] });
 

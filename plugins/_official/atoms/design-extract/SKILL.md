@@ -26,7 +26,7 @@ both code-migration and figma-migration when fed different sources.
 ```text
 project-cwd/
 └── code/
-    └── tokens.json     # { colors[], typography[], spacing[], radius[], shadow[] }
+    └── tokens.json     # { colors[], typography[], spacing[], radius[], shadow[], gradients[] }
 ```
 
 Each token entry carries:

@@ -38,6 +38,7 @@ const codeTokens = (over: Partial<DesignExtractReport> = {}): DesignExtractRepor
   spacing:    [],
   radius:     [],
   shadow:     [],
+  gradients:  [],
   scannedFiles: [],
   warnings: [],
   endedAt: new Date().toISOString(),
@@ -130,6 +131,24 @@ describe('runTokenMap — multi-kind matching', () => {
     expect(report.radius[0]?.target).toBe('--ds-radius-md');
     expect(report.typography[0]?.target).toBe('ds-font-body');
   });
+
+  it('keeps gradient tokens in their own mapping bucket', async () => {
+    const gradientDs: DesignSystemTokenBag = {
+      tokens: [
+        { name: '--hero-gradient', value: 'linear-gradient(90deg, #006fff, #0055e8)', kind: 'gradient' },
+      ],
+    };
+    const source = codeTokens({
+      gradients: [{ kind: 'gradient', name: '--brand-gradient', value: 'linear-gradient(90deg, #006fff, #0055e8)', sources: ['hero.css:2'], usage: ['hero.css'] }],
+    });
+    const report = await runTokenMap({ cwd, source: { kind: 'code', report: source }, designSystem: gradientDs });
+    expect(report.gradients[0]).toMatchObject({
+      sourceName: '--brand-gradient',
+      target: '--hero-gradient',
+      kind: 'gradient',
+      via: 'exact',
+    });
+  });
 });
 
 describe('runTokenMap — disk inputs + outputs', () => {
@@ -148,6 +167,17 @@ describe('runTokenMap — disk inputs + outputs', () => {
     expect(meta.designSystemId).toBe('fixture-ds');
     expect(meta.atomDigest.length).toBe(40);
     expect(unmatched).toEqual([]);
+  });
+
+  it('tolerates legacy token reports without a gradients bucket', async () => {
+    await mkdir(path.join(cwd, 'code'), { recursive: true });
+    const { gradients: _gradients, ...legacyReport } = codeTokens({
+      colors: [{ kind: 'color', value: '#111111', sources: ['x:1'], usage: ['x'] }],
+    });
+    await writeFile(path.join(cwd, 'code', 'tokens.json'), JSON.stringify(legacyReport));
+    await runTokenMap({ cwd, designSystem: ds });
+    const gradients = JSON.parse(await readFile(path.join(cwd, 'token-map', 'gradients.json'), 'utf8'));
+    expect(gradients).toEqual([]);
   });
 
   it('falls back to figma/tokens.json when code/tokens.json is missing', async () => {

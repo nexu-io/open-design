@@ -84,6 +84,45 @@ body { font-family: 'Inter', system-ui, sans-serif; }
     expect(report.shadow.length).toBeGreaterThan(0);
   });
 
+  it('captures CSS gradients from backgrounds and custom properties', async () => {
+    await writeFile(path.join(repo, 'package.json'), JSON.stringify({ name: 'fixture' }));
+    await writeFile(path.join(repo, 'hero.css'), `
+:root {
+  --hero-gradient: linear-gradient(135deg, #006fff 0%, #00c2ff 100%);
+}
+.hero {
+  background: linear-gradient(90deg, #006fff, #0055e8);
+}
+`);
+    const report = await importThenExtract();
+    const values = report.gradients.map((t) => t.value);
+    expect(values).toEqual(expect.arrayContaining([
+      'linear-gradient(135deg, #006fff 0%, #00c2ff 100%)',
+      'linear-gradient(90deg, #006fff, #0055e8)',
+    ]));
+  });
+
+  it('captures long CSS custom-property gradients without a matching background literal', async () => {
+    await writeFile(path.join(repo, 'package.json'), JSON.stringify({ name: 'fixture' }));
+    const gradient = 'linear-gradient(135deg, rgba(0, 111, 255, 0.95) 0%, rgba(0, 194, 255, 0.75) 38%, rgba(72, 92, 255, 0.45) 68%, rgba(255, 255, 255, 0.1) 100%)';
+    expect(gradient.length).toBeGreaterThan(120);
+    await writeFile(path.join(repo, 'hero.css'), `
+:root {
+  --hero-gradient: ${gradient};
+}
+.hero {
+  background: var(--hero-gradient);
+}
+`);
+    const report = await importThenExtract();
+    expect(report.gradients).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: '--hero-gradient',
+        value: gradient,
+      }),
+    ]));
+  });
+
   it('captures Tailwind config quoted hex palette entries', async () => {
     await writeFile(path.join(repo, 'package.json'), JSON.stringify({
       name: 'fixture',

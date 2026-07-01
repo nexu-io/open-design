@@ -65,6 +65,7 @@ type TokenDefaults = Record<string, string>;
 type RoleHint = {
   needles: string[];
   validator?: (value: string) => boolean;
+  rank?: (token: SourceDesignToken, baseScore: number) => number;
   fallback?: string;
 };
 
@@ -103,7 +104,7 @@ const DEFAULT_TOKEN_VALUES: TokenDefaults = {
 };
 
 const ROLE_HINTS: Partial<Record<string, RoleHint>> = {
-  '--bg': { needles: ['background', 'bg'], validator: isColorValue },
+  '--bg': { needles: ['background', 'bg'], validator: isColorValue, rank: rankCanvasCandidate },
   '--surface': { needles: ['surface', 'card', 'popover', 'panel'], validator: isColorValue },
   '--surface-warm': { needles: ['surface-warm', 'secondary', 'subtle'], validator: isColorValue },
   '--fg': { needles: ['foreground', 'text', 'fg'], validator: isColorValue },
@@ -112,7 +113,11 @@ const ROLE_HINTS: Partial<Record<string, RoleHint>> = {
   '--meta': { needles: ['meta', 'caption', 'tertiary'], validator: isColorValue },
   '--border': { needles: ['border'], validator: isColorValue },
   '--border-soft': { needles: ['border-soft', 'border-subtle', 'separator'], validator: isColorValue },
-  '--accent': { needles: ['accent', 'primary', 'brand'], validator: isColorValue },
+  '--accent': {
+    needles: ['accent', 'primary', 'brand', 'button-primary', 'btn-primary', 'cta', 'link'],
+    validator: isColorValue,
+    rank: rankAccentCandidate,
+  },
   '--accent-on': { needles: ['accent-on', 'primary-foreground', 'accent-foreground', 'on-primary'], validator: isColorValue },
   '--success': { needles: ['success', 'positive'], validator: isColorValue },
   '--warn': { needles: ['warning', 'warn'], validator: isColorValue },
@@ -250,22 +255,80 @@ function bestCandidate(tokens: readonly SourceDesignToken[], hint: RoleHint): So
   return tokens
     .map((token) => ({
       token,
-      score: scoreTokenName(token.name, hint.needles),
+      score: hint.rank?.(token, scoreTokenName(token.name, hint.needles)) ?? scoreTokenName(token.name, hint.needles),
     }))
     .filter(({ token, score }) => score > 0 && validator(token.value) && valueIsUsableForSchema(token.value))
     .sort((a, b) => b.score - a.score || a.token.name.localeCompare(b.token.name))[0]?.token;
 }
 
+function rankAccentCandidate(token: SourceDesignToken, baseScore: number): number {
+  if (baseScore <= 0) return baseScore;
+  const segments = tokenNameSegments(token.name);
+  let score = baseScore;
+  if (hasAnySegment(segments, ['button', 'btn', 'cta', 'action', 'interactive'])) score += 80;
+  if (hasAnySegment(segments, ['link'])) score += 50;
+  if (
+    hasAnySegment(segments, ['text', 'foreground', 'fg']) ||
+    containsSegments(segments, ['on', 'primary']) ||
+    containsSegments(segments, ['on', 'accent'])
+  ) {
+    score -= 70;
+  }
+  const neutrality = literalColorNeutrality(token.value);
+  if (neutrality === 'chromatic') score += 60;
+  if (neutrality === 'neutral') score -= 45;
+  return score;
+}
+
+function rankCanvasCandidate(token: SourceDesignToken, baseScore: number): number {
+  if (baseScore <= 0) return baseScore;
+  return hasAnySegment(tokenNameSegments(token.name), ['button', 'btn', 'cta', 'action', 'link', 'interactive'])
+    ? baseScore - 100
+    : baseScore;
+}
+
 function scoreTokenName(name: string, needles: readonly string[]): number {
-  const normalized = name.toLowerCase().replace(/^--/, '');
+  const normalized = normalizeTokenName(name);
+  const segments = tokenNameSegments(normalized);
   let best = 0;
   for (const needle of needles) {
-    const normalizedNeedle = needle.toLowerCase().replace(/^--/, '');
+    const normalizedNeedle = normalizeTokenName(needle);
+    const needleSegments = normalizedNeedle.split('-').filter(Boolean);
     if (normalized === normalizedNeedle) best = Math.max(best, 100);
-    else if (normalized.endsWith(`-${normalizedNeedle}`)) best = Math.max(best, 80);
-    else if (normalized.includes(normalizedNeedle)) best = Math.max(best, 40);
+    else if (endsWithSegments(segments, needleSegments)) best = Math.max(best, 80);
+    else if (containsSegments(segments, needleSegments)) best = Math.max(best, 40);
   }
   return best;
+}
+
+function tokenNameSegments(name: string): string[] {
+  return normalizeTokenName(name).split('-').filter(Boolean);
+}
+
+function hasAnySegment(segments: readonly string[], candidates: readonly string[]): boolean {
+  return candidates.some((candidate) => segments.includes(candidate));
+}
+
+function normalizeTokenName(name: string): string {
+  return name
+    .replace(/^--/, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function endsWithSegments(segments: readonly string[], needle: readonly string[]): boolean {
+  if (needle.length === 0 || needle.length > segments.length) return false;
+  return needle.every((part, index) => segments[segments.length - needle.length + index] === part);
+}
+
+function containsSegments(segments: readonly string[], needle: readonly string[]): boolean {
+  if (needle.length === 0 || needle.length > segments.length) return false;
+  for (let start = 0; start <= segments.length - needle.length; start += 1) {
+    if (needle.every((part, index) => segments[start + index] === part)) return true;
+  }
+  return false;
 }
 
 function buildReport(
@@ -368,6 +431,43 @@ function extractVarReferences(value: string): string[] {
 
 function valueIsUsableForSchema(value: string): boolean {
   return extractVarReferences(value).every((ref) => SCHEMA_NAMES.has(ref));
+}
+
+function literalColorNeutrality(value: string): 'chromatic' | 'neutral' | undefined {
+  const rgb = parseLiteralRgb(value);
+  if (rgb === undefined) return undefined;
+  const spread = Math.max(rgb.r, rgb.g, rgb.b) - Math.min(rgb.r, rgb.g, rgb.b);
+  return spread <= 18 ? 'neutral' : 'chromatic';
+}
+
+function parseLiteralRgb(value: string): { r: number; g: number; b: number } | undefined {
+  const trimmed = value.trim();
+  const hex = trimmed.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i)?.[1];
+  if (hex !== undefined) {
+    if (hex.length === 3) {
+      return {
+        r: parseInt(hex[0]! + hex[0]!, 16),
+        g: parseInt(hex[1]! + hex[1]!, 16),
+        b: parseInt(hex[2]! + hex[2]!, 16),
+      };
+    }
+    return {
+      r: parseInt(hex.slice(0, 2), 16),
+      g: parseInt(hex.slice(2, 4), 16),
+      b: parseInt(hex.slice(4, 6), 16),
+    };
+  }
+  const rgb = trimmed.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i);
+  if (rgb === null) return undefined;
+  return {
+    r: clampRgb(Number(rgb[1])),
+    g: clampRgb(Number(rgb[2])),
+    b: clampRgb(Number(rgb[3])),
+  };
+}
+
+function clampRgb(value: number): number {
+  return Math.max(0, Math.min(255, Number.isFinite(value) ? value : 0));
 }
 
 function isColorValue(value: string): boolean {

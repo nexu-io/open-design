@@ -397,6 +397,7 @@ export function liftTokens(tree: FigmaNode[]): DesignExtractReport {
     spacing:    [...spacing.values()].sort(byNameOrValue),
     radius:     [...radius.values()].sort(byNameOrValue),
     shadow:     [],
+    gradients:  [],
     scannedFiles: [],
     warnings:     [],
     endedAt:      new Date().toISOString(),

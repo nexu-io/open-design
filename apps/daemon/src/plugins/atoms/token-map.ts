@@ -12,6 +12,7 @@
 //   <cwd>/token-map/spacing.json
 //   <cwd>/token-map/radius.json
 //   <cwd>/token-map/shadow.json
+//   <cwd>/token-map/gradients.json
 //   <cwd>/token-map/unmatched.json     — { source, reason }[]
 //   <cwd>/token-map/meta.json          — { sourceKind, generatedAt,
 //                                           atomDigest, designSystemId? }
@@ -45,7 +46,7 @@ export interface DesignSystemToken {
   // Canonical token name (e.g. 'ds-primary-500', '--ds-color-fg').
   name: string;
   // Token kind. Loose because design systems vary (e.g. some collapse
-  // 'spacing' + 'radius' into one scale); we mirror the same five
+  // 'spacing' + 'radius' into one scale); we mirror the same token
   // kinds design-extract emits.
   kind: DesignTokenKind;
   value: string;
@@ -86,6 +87,7 @@ export interface TokenMapReport {
   spacing:    TokenMapMatch[];
   radius:     TokenMapMatch[];
   shadow:     TokenMapMatch[];
+  gradients:  TokenMapMatch[];
   unmatched:  TokenMapUnmatched[];
   meta: {
     sourceKind:        'figma' | 'code';
@@ -146,13 +148,14 @@ export async function runTokenMap(opts: TokenMapOptions): Promise<TokenMapReport
     spacing:    [] as TokenMapMatch[],
     radius:     [] as TokenMapMatch[],
     shadow:     [] as TokenMapMatch[],
+    gradients:  [] as TokenMapMatch[],
   };
 
   let sourceTokenCount = 0;
   let matchedTokenCount = 0;
 
-  for (const kind of ['colors', 'typography', 'spacing', 'radius', 'shadow'] as const) {
-    for (const entry of source[kind]) {
+  for (const kind of ['colors', 'typography', 'spacing', 'radius', 'shadow', 'gradients'] as const) {
+    for (const entry of source[kind] ?? []) {
       sourceTokenCount++;
       const result = matchOne(kind, entry, targets);
       if (!result.match) {
@@ -260,6 +263,7 @@ export function parseDesignSystemTokens(body: string): DesignSystemToken[] {
 }
 
 function classifyKind(name: string, value: string): DesignTokenKind {
+  if (/gradient/i.test(name) || /^(?:repeating-)?(?:linear|radial|conic)-gradient\(/i.test(value.trim())) return 'gradient';
   if (HEX_RE.test(value) || /^rgb|^hsl/.test(value)) return 'color';
   if (/font/i.test(name)) return 'typography';
   if (/(radius|rounded)/i.test(name)) return 'radius';
@@ -318,7 +322,7 @@ interface MatchOutcome {
 }
 
 function matchOne(
-  kind: keyof Pick<DesignExtractReport, 'colors' | 'typography' | 'spacing' | 'radius' | 'shadow'>,
+  kind: keyof Pick<DesignExtractReport, 'colors' | 'typography' | 'spacing' | 'radius' | 'shadow' | 'gradients'>,
   entry: DesignTokenEntry,
   index: IndexedDesignSystem,
 ): MatchOutcome {
@@ -364,13 +368,14 @@ function matchOne(
   };
 }
 
-function kindOf(bucket: keyof Pick<DesignExtractReport, 'colors' | 'typography' | 'spacing' | 'radius' | 'shadow'>): DesignTokenKind {
+function kindOf(bucket: keyof Pick<DesignExtractReport, 'colors' | 'typography' | 'spacing' | 'radius' | 'shadow' | 'gradients'>): DesignTokenKind {
   switch (bucket) {
     case 'colors':     return 'color';
     case 'typography': return 'typography';
     case 'spacing':    return 'spacing';
     case 'radius':     return 'radius';
     case 'shadow':     return 'shadow';
+    case 'gradients':  return 'gradient';
   }
 }
 

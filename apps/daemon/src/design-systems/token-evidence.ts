@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-export type DesignTokenKind = 'color' | 'typography' | 'spacing' | 'radius' | 'shadow';
+export type DesignTokenKind = 'color' | 'typography' | 'spacing' | 'radius' | 'shadow' | 'gradient';
 
 export interface DesignTokenEntry {
   kind: DesignTokenKind;
@@ -16,6 +16,7 @@ export interface DesignExtractReport {
   spacing: DesignTokenEntry[];
   radius: DesignTokenEntry[];
   shadow: DesignTokenEntry[];
+  gradients: DesignTokenEntry[];
   scannedFiles: string[];
   warnings: string[];
   endedAt: string;
@@ -34,10 +35,13 @@ const HEX_COLOR_RE = /#[0-9a-fA-F]{3,8}\b/g;
 const RGBA_COLOR_RE = /rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}(?:\s*,\s*[\d.]+)?\s*\)/g;
 const HSLA_COLOR_RE = /hsla?\(\s*[\d.]+(?:deg|rad|turn)?\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?(?:\s*,\s*[\d.]+)?\s*\)/g;
 const CUSTOM_PROPERTY_RE = /(--[a-zA-Z0-9-_]+)\s*:\s*([^;{}\n]+);/g;
+const MAX_CUSTOM_PROPERTY_VALUE = 120;
+const MAX_GRADIENT_CUSTOM_PROPERTY_VALUE = 1000;
 const FONT_FAMILY_RE = /font-family\s*:\s*([^;\n]+)/g;
 const SPACING_PX_RE = /\b(?:padding|margin|gap|inset|top|left|right|bottom)\s*:\s*(\d+(?:\.\d+)?(?:px|rem|em))/g;
 const RADIUS_RE = /border-radius\s*:\s*([^;\n]+)/g;
 const SHADOW_RE = /box-shadow\s*:\s*([^;\n]+)/g;
+const GRADIENT_RE = /(?:background(?:-image)?|mask-image)\s*:\s*((?:repeating-)?(?:linear|radial|conic)-gradient\((?:[^()]|\([^()]*\))*\))/g;
 const TAILWIND_HEX_RE = /['"]#[0-9a-fA-F]{3,8}['"]/g;
 
 export function createDesignTokenEvidenceCollector() {
@@ -46,6 +50,7 @@ export function createDesignTokenEvidenceCollector() {
   const spacing: Map<string, DesignTokenEntry> = new Map();
   const radius: Map<string, DesignTokenEntry> = new Map();
   const shadow: Map<string, DesignTokenEntry> = new Map();
+  const gradients: Map<string, DesignTokenEntry> = new Map();
   const scannedFiles: string[] = [];
 
   return {
@@ -53,11 +58,12 @@ export function createDesignTokenEvidenceCollector() {
     scanText({ text, file, language }: { text: string; file: string; language?: string }): void {
       scannedFiles.push(file);
       extractColors(text, file, colors);
-      extractCSSCustomProperties(text, file, { colors, typography, spacing, radius, shadow });
+      extractCSSCustomProperties(text, file, { colors, typography, spacing, radius, shadow, gradients });
       extractTypography(text, file, typography);
       extractSpacing(text, file, spacing);
       extractRadius(text, file, radius);
       extractShadow(text, file, shadow);
+      extractGradients(text, file, gradients);
       if (language === 'js' || language === 'ts') extractTailwindHexes(text, file, colors);
     },
     toReport({ warnings, endedAt }: { warnings: string[]; endedAt: string }): DesignExtractReport {
@@ -67,6 +73,7 @@ export function createDesignTokenEvidenceCollector() {
         spacing: [...spacing.values()].sort(byNameOrValue),
         radius: [...radius.values()].sort(byNameOrValue),
         shadow: [...shadow.values()].sort(byNameOrValue),
+        gradients: [...gradients.values()].sort(byNameOrValue),
         scannedFiles,
         warnings,
         endedAt,
@@ -83,10 +90,15 @@ export function extractCssCustomProperties(text: string, file: string): CssCusto
     const name = match[1];
     const value = match[2]?.trim();
     if (name === undefined || value === undefined) continue;
-    if (value.length === 0 || value.length > 120) continue;
+    if (value.length === 0) continue;
+    if (value.length > MAX_CUSTOM_PROPERTY_VALUE && !isLongGradientCustomProperty(value)) continue;
     tokens.push({ name, value, source: file, line: lineNumberAt(text, match.index) });
   }
   return tokens;
+}
+
+function isLongGradientCustomProperty(value: string): boolean {
+  return value.length <= MAX_GRADIENT_CUSTOM_PROPERTY_VALUE && isGradientValue(value);
 }
 
 export function lineNumberAt(text: string, index: number): number {
@@ -118,6 +130,7 @@ function extractCSSCustomProperties(
     spacing: Map<string, DesignTokenEntry>;
     radius: Map<string, DesignTokenEntry>;
     shadow: Map<string, DesignTokenEntry>;
+    gradients: Map<string, DesignTokenEntry>;
   },
 ): void {
   for (const token of extractCssCustomProperties(text, file)) {
@@ -137,6 +150,9 @@ function extractCSSCustomProperties(
     }
     if ((name.includes('shadow') || name.includes('elev')) && token.value.trim().length > 0) {
       pushSource(out.shadow, `shv:${token.name}`, 'shadow', token.value, source, token.name);
+    }
+    if (isGradientValue(token.value) || name.includes('gradient')) {
+      pushSource(out.gradients, `gv:${token.name}`, 'gradient', token.value, source, token.name);
     }
   }
 }
@@ -182,6 +198,17 @@ function extractShadow(text: string, file: string, out: Map<string, DesignTokenE
     if (!value) continue;
     const line = lineNumberAt(text, match.index);
     pushSource(out, `sh:${value}`, 'shadow', value, `${file}:${line}`);
+  }
+}
+
+function extractGradients(text: string, file: string, out: Map<string, DesignTokenEntry>): void {
+  GRADIENT_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = GRADIENT_RE.exec(text)) !== null) {
+    const value = (match[1] ?? '').trim();
+    if (!value) continue;
+    const line = lineNumberAt(text, match.index);
+    pushSource(out, `g:${value}`, 'gradient', value, `${file}:${line}`);
   }
 }
 
@@ -236,6 +263,10 @@ function spacingNameHint(name: string): boolean {
 
 function isColorValue(value: string): boolean {
   return /^(#(?:[0-9a-f]{3,8})|rgb[a]?\(|hsl[a]?\(|oklch\(|color-mix\(|var\()/i.test(value.trim());
+}
+
+function isGradientValue(value: string): boolean {
+  return /^(?:repeating-)?(?:linear|radial|conic)-gradient\(/i.test(value.trim());
 }
 
 function isLengthLike(value: string): boolean {

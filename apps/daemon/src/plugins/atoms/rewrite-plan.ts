@@ -293,6 +293,7 @@ function renderNarrative(args: {
     lines.push(`- spacing:    ${args.tokens.spacing.length}`);
     lines.push(`- radius:     ${args.tokens.radius.length}`);
     lines.push(`- shadow:     ${args.tokens.shadow.length}`);
+    lines.push(`- gradients:  ${args.tokens.gradients?.length ?? 0}`);
     lines.push('');
   }
   lines.push('## Steps');
