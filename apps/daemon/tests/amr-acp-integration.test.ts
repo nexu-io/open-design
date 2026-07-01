@@ -737,6 +737,101 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     });
   });
 
+  it('promotes ACP retry status insufficient-balance updates to AMR recharge failures', async () => {
+    const child = spawnAcpUpdateFixture([
+      {
+        sessionUpdate: 'status',
+        type: 'retry',
+        status: 'retry',
+        message: '[code=insufficient_balance] insufficient wallet balance',
+      },
+    ]);
+    const errors: Array<{ event: string; payload: unknown }> = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Say hello',
+        cwd: process.cwd(),
+        model: 'claude-opus-4-6',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'error') errors.push({ event, payload });
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(true);
+      expect(session.completedSuccessfully()).toBe(false);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    const payload = errors[0]?.payload as {
+      message?: unknown;
+      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
+    };
+    expect(payload?.error?.code).toBe('AMR_INSUFFICIENT_BALANCE');
+    expect(payload?.error?.retryable).toBe(false);
+    expect(payload?.error?.details).toMatchObject({
+      kind: 'amr_account',
+      action: 'recharge',
+    });
+    expect(String(payload?.message ?? '')).toContain('AMR Cloud reported insufficient balance');
+  });
+
+  it('promotes structured manual-topup recovery retry updates to AMR recharge failures', async () => {
+    const child = spawnAcpUpdateFixture([
+      {
+        sessionUpdate: 'status',
+        type: 'retry',
+        status: 'retry',
+        recovery: {
+          status: 'waiting_payment',
+          manualTopupRequired: true,
+          pauseReason: 'insufficient_balance',
+          error: {
+            code: 'insufficient_balance',
+            message: 'insufficient wallet balance',
+          },
+        },
+      },
+    ]);
+    const errors: Array<{ event: string; payload: unknown }> = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Say hello',
+        cwd: process.cwd(),
+        model: 'claude-opus-4-6',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'error') errors.push({ event, payload });
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(true);
+      expect(session.completedSuccessfully()).toBe(false);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    const payload = errors[0]?.payload as {
+      message?: unknown;
+      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
+    };
+    expect(payload?.error?.code).toBe('AMR_INSUFFICIENT_BALANCE');
+    expect(payload?.error?.retryable).toBe(false);
+    expect(payload?.error?.details).toMatchObject({
+      kind: 'amr_account',
+      action: 'recharge',
+      promoted_by: 'open_design_acp_retry_status',
+    });
+    expect(String(payload?.message ?? '')).toContain('AMR Cloud reported insufficient balance');
+  });
+
   it('allows non-AMR ACP completions that produce no assistant text', async () => {
     const child = spawnFakeVela({ FAKE_VELA_TEXT: '' });
     const errors: Array<{ event: string; payload: unknown }> = [];
