@@ -1,6 +1,429 @@
 import type { SolutionLocaleCopy } from './types';
 
 export const DE: SolutionLocaleCopy = {
+  aiWireframeGenerator: {
+    title: 'KI-Wireframe-Generator — vom Prompt zum Wireframe mit Open Design',
+    description:
+      'Ein kostenloser, quelloffener KI-Wireframe-Generator, der einen Prompt in bearbeitbare Multi-Screen-Wireframes verwandelt — und sie den ganzen Weg bis zum ausgelieferten Code bringt. Open Design läuft in dem Coding-Agent, den du bereits nutzt, sodass das Wireframe und das echte Produkt eine Quelle teilen.',
+    breadcrumb: 'KI-Wireframe-Generator',
+    label: 'Tool · KI-Wireframe-Generator',
+    heading: 'Wireframes im Tempo eines Prompts',
+    lead: 'Beschreibe den Screen oder Flow und lass deinen Agent ein sauberes, bearbeitbares Wireframe generieren — einheitliches Layout, echte Komponenten, mehrere Screens. Dann mach weiter: Dasselbe Artefakt wird zu einem gestalteten Prototypen und ausgeliefertem Code, im Agent, den du bereits betreibst.',
+    heroImageAlt:
+      'Redaktionelle Illustration, in der ein Prompt zu einem bearbeitbaren Wireframe und dann zu einer fertigen UI wird, gerahmt von einer grünen Auswahlbox',
+    tldrTitle: 'In einem Satz',
+    tldrBody:
+      'Die meisten KI-Wireframe-Generatoren reichen dir ein Bild, das du später neu baust. Open Design generiert das Wireframe in deinem Coding-Agent und trägt es vom Prompt bis zum ausgelieferten Code — kein Export-Schritt, keine Übergabelücke, kein Zähler pro Platz.',
+    stepsTitle: 'So funktioniert der KI-Wireframe-Generator',
+    steps: [
+      {
+        title: 'Beschreibe den Screen',
+        body: 'Sag deinem Agent in klarer Sprache, was du als Wireframe willst — "ein Dashboard mit Seitenleiste, einer Statistik-Zeile und einer Tabelle der letzten Aktivitäten." Open Design lädt die Wireframe-Fähigkeit, sodass der Agent Struktur und Hierarchie anlegt, nicht nur ein einzelnes statisches Bild.',
+        imageAlt: 'Illustration einer in klarer Sprache verfassten Screen-Beschreibung, die in ein Terminal getippt wird',
+      },
+      {
+        title: 'Generiere bearbeitbare Wireframes',
+        body: 'Der Agent wendet Layout-Muster und Komponenten aus einem wiederverwendbaren Designsystem an, sodass jeder Screen Abstände, Raster und Struktur teilt. Du bekommst bearbeitbare, zusammenhängende Wireframes — mehrere Screens als Set, keine zusammenhanglosen Boxen.',
+        imageAlt: 'Illustration mehrerer Wireframe-Screens, die mit einem einheitlichen Layout-Raster erscheinen',
+      },
+      {
+        title: 'Erhöhe die Detailtreue',
+        body: 'Bitte den Agent, das Wireframe zu einem gestalteten, klickbaren Prototypen zu bringen — Typografie, Farbe, echte Interaktionen. Dasselbe Artefakt gewinnt an Detailtreue, statt neu gezeichnet zu werden, sodass zwischen Lo-Fi und Hi-Fi nichts weggeworfen wird.',
+        imageAlt: 'Illustration eines Low-Fidelity-Wireframes, das sich in einen polierten High-Fidelity-Screen verwandelt',
+      },
+      {
+        title: 'Liefere den Code aus, der dir gehört',
+        body: 'Da das Artefakt in deinem Projekt liegt, teilen das Wireframe und der spätere Code eine einzige Quelle der Wahrheit. Iteriere im Gespräch mit dem Agent; die Ausgabe ist HTML/Code, der dir gehört und den du ausliefern kannst — kein Anbieter-Lock-in.',
+        imageAlt: 'Illustration eines Wireframes, das in ausgelieferten Code übergeht, gehalten in einem grünen Auswahlrahmen',
+      },
+    ],
+    tableTitle: 'Open Design vs. typische KI-Wireframe-Generatoren',
+    tableColCapability: 'Was du brauchst',
+    tableColWithOd: 'Mit Open Design',
+    tableColWithout: 'Typische KI-Wireframe-Generatoren',
+    tableRows: [
+      {
+        capability: 'Aus einem Prompt generieren',
+        withOd: 'Ein Prompt im Agent, den du ohnehin offen hast',
+        without: 'Bei einem separaten Web-Tool anmelden, in deren Cloud generieren',
+      },
+      {
+        capability: 'Mehrere verknüpfte Screens',
+        withOd: 'Als Set generiert mit gemeinsamem Layout und Komponenten',
+        without: 'Oft nur ein Screen nach dem anderen',
+      },
+      {
+        capability: 'Lo-Fi zu Hi-Fi',
+        withOd: 'Dasselbe Artefakt gewinnt an Detailtreue — Wireframe → Prototyp → Code',
+        without: 'Wireframe ist eine Sackgasse; für Hi-Fi und für Code neu bauen',
+      },
+      {
+        capability: 'Die Ausgabe besitzen',
+        withOd: 'Einfache Dateien und Code in deinem Repo, ganz dir gehörend',
+        without: 'Nur in deren App bearbeitbar; exportbeschränkt',
+      },
+      {
+        capability: 'Kosten & Lock-in',
+        withOd: 'Open Source, eigene Schlüssel mitbringen, läuft lokal',
+        without: 'Abo pro Platz oder pro Credit, anbietergehostet',
+      },
+    ],
+    featuresTitle: 'Was du als Wireframe anlegen kannst',
+    features: [
+      {
+        title: 'Web-App-Screens',
+        body: 'Dashboards, Einstellungen, Multi-Screen-Flows — als zusammenhängendes Set als Wireframe angelegt, dann zu Code gebracht.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Mobile-App-Flows',
+        body: 'Screen-für-Screen-Mobile-Journeys mit einheitlicher Struktur und Zuständen.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'SaaS-Landingpages',
+        body: 'Marketing- und SaaS-Landing-Layouts, die du als Wireframe anlegen, gestalten und ausliefern kannst.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Onboarding & Formulare',
+        body: 'Mehrstufiges Onboarding, Anmeldung und Formular-Flows mit klarer Hierarchie angeordnet.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Jeder visuelle Geschmack',
+        body: 'Starte Lo-Fi, dann trage einen durchgängigen Stil von Anfang bis Ende — redaktionell, weich oder markant.',
+        thumb: 'example-gamified-app',
+      },
+      {
+        title: 'Landing & Conversion',
+        body: 'Hero-, Preis- und Warteliste-Layouts vom ersten Durchgang an verdrahtet und markengerecht.',
+        thumb: 'example-kami-landing',
+      },
+    ],
+    galleryTitle: 'Mit Open Design gebaute Wireframes',
+    galleryLead:
+      'Jedes begann als Prompt und wurde zu einem bearbeitbaren, klickbaren Artefakt gerendert. Wähle eine Vorlage nahe deiner Idee, beschreibe deine Variante, und der Agent passt sie an — vom Wireframe zum ausgelieferten Code.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: 'Dating-Web-App — Multi-Screen-Wireframe' },
+      { thumb: 'example-hr-onboarding', caption: 'HR-Onboarding-Flow' },
+      { thumb: 'example-kami-landing', caption: 'Produkt-Landing-Layout' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Web-Wireframe im weichen Stil' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Vorlagen durchsuchen',
+    faqTitle: 'FAQ zum KI-Wireframe-Generator',
+    faq: [
+      {
+        q: 'Ist der KI-Wireframe-Generator kostenlos?',
+        a: 'Ja. Open Design ist quelloffen und läuft in dem Coding-Agent, den du bereits nutzt, mit deinen eigenen Anbieter-Schlüsseln — es gibt keinen Zähler pro Platz oder pro Credit für den Wireframe-Generator selbst.',
+      },
+      {
+        q: 'Sind die Wireframes bearbeitbar oder nur Bilder?',
+        a: 'Bearbeitbar. Die Ausgabe ist echtes HTML und echter Code, sodass du Layout, Komponenten und Inhalt im Gespräch mit dem Agent verfeinern kannst — keine in ein Bild eingebrannten Pixel, das du neu bauen müsstest.',
+      },
+      {
+        q: 'Kann ein Wireframe zu einem Hi-Fi-Prototypen und echtem Code werden?',
+        a: 'Das ist der ganze Sinn. Dasselbe Artefakt gewinnt an Detailtreue — vom Wireframe über den gestalteten Prototypen bis zum ausgelieferten Code — weil es in deinem Projekt liegt, statt in jeder Phase neu gezeichnet zu werden.',
+      },
+      {
+        q: 'Mit welchen Agents funktioniert es?',
+        a: 'Open Design funktioniert mit Claude Code, Codex, Cursor Agent, Gemini CLI und einem Dutzend weiterer hauseigener Adapter. Du bringst deine eigenen Anbieter-Schlüssel mit; nichts wird für dich gehostet.',
+      },
+    ],
+    ctaTitle: 'Generiere dein erstes Wireframe noch heute Abend',
+    ctaBody:
+      'Gib dem Repo einen Stern, installiere Open Design und verwandle deine nächste Screen-Idee in ein bearbeitbares Wireframe — und dann in ausgelieferten Code — im Agent, den du bereits nutzt.',
+    relatedTitle: 'Verwandte Tools & Guides',
+    related: [
+      { href: '/solutions/ai-ui-generator/', label: 'KI-UI-Generator' },
+      { href: '/solutions/design-to-code/', label: 'Design zu Code mit Open Design' },
+      { href: '/blog/design-to-code-tools/', label: 'Beste Design-zu-Code-Tools' },
+      { href: '/solutions/prototype/', label: 'Prototyping mit Open Design' },
+    ],
+  },
+  aiUiGenerator: {
+    title: 'KI-UI-Generator — vom Prompt zur produktionsreifen UI mit Open Design',
+    description:
+      'Ein kostenloser, quelloffener KI-UI-Generator, der einen Prompt in eine echte, komponentenbasierte Oberfläche verwandelt — und sie den ganzen Weg bis zum ausgelieferten Code bringt. Open Design läuft in dem Coding-Agent, den du bereits nutzt, sodass die generierte UI und der Produktionscode dasselbe Artefakt sind.',
+    breadcrumb: 'KI-UI-Generator',
+    label: 'Tool · KI-UI-Generator',
+    heading: 'Generiere UI, die du wirklich ausliefern kannst',
+    lead: 'Beschreibe die Oberfläche und lass deinen Agent eine echte, komponentenbasierte UI generieren — einheitliches Designsystem, responsives Layout, funktionierende Zustände. Dann mach weiter: Dasselbe Artefakt wird zu ausgeliefertem Code, im Agent, den du bereits betreibst.',
+    heroImageAlt:
+      'Redaktionelle Illustration, in der ein Prompt zu einer komponentenbasierten UI und dann zu Produktionscode wird, gerahmt von einer grünen Auswahlbox',
+    tldrTitle: 'In einem Satz',
+    tldrBody:
+      'Die meisten KI-UI-Generatoren geben dir ein Mockup oder ein wegwerfbares React-Snippet. Open Design generiert die UI in deinem Coding-Agent und trägt sie vom Prompt bis zum ausgelieferten Code — echte Komponenten, dein Designsystem, kein Export-Schritt, kein Zähler pro Platz.',
+    stepsTitle: 'So funktioniert der KI-UI-Generator',
+    steps: [
+      {
+        title: 'Beschreibe die Oberfläche',
+        body: 'Sag deinem Agent in klarer Sprache, was er bauen soll — "eine Einstellungsseite mit Seitenleiste, Tab-Abschnitten und einer Speicherleiste." Open Design lädt die UI-Fähigkeit, sodass der Agent zu echten Komponenten und einem Designsystem greift, nicht zu einem Einzel-Screen.',
+        imageAlt: 'Illustration einer in klarer Sprache verfassten UI-Beschreibung, die in ein Terminal getippt wird',
+      },
+      {
+        title: 'Generiere eine komponentenbasierte UI',
+        body: 'Der Agent setzt die Oberfläche aus wiederverwendbaren Komponenten und Design-Tokens zusammen, sodass Abstände, Typskala und Farbe über jeden Screen hinweg einheitlich bleiben. Du bekommst eine zusammenhängende UI — keinen Haufen Inline-Stile, den du entwirren musst.',
+        imageAlt: 'Illustration einer UI, die sich aus wiederverwendbaren Komponenten-Blöcken auf einem Raster zusammensetzt',
+      },
+      {
+        title: 'Verfeinere im Gespräch',
+        body: 'Passe Layout, Zustände und Theme im Gespräch an — "straffe die Abstände", "füge einen Leerzustand hinzu", "mach es standardmäßig dunkel." Das Artefakt aktualisiert sich an Ort und Stelle, statt von Grund auf neu generiert zu werden.',
+        imageAlt: 'Illustration einer UI, die per Chat verfeinert wird, mit dezenten Vorher/Nachher-Zuständen',
+      },
+      {
+        title: 'Liefere den Code aus, der dir gehört',
+        body: 'Da die UI in deinem Projekt liegt, teilen das Design und der Produktionscode eine einzige Quelle der Wahrheit. Die Ausgabe ist HTML/Code, der dir gehört und den du ausliefern kannst — kein Anbieter-Lock-in, kein Neuzeichnen zwischen Design und Build.',
+        imageAlt: 'Illustration einer generierten UI, die in ausgelieferten Code übergeht, gehalten in einem grünen Auswahlrahmen',
+      },
+    ],
+    tableTitle: 'Open Design vs. typische KI-UI-Generatoren',
+    tableColCapability: 'Was du brauchst',
+    tableColWithOd: 'Mit Open Design',
+    tableColWithout: 'Typische KI-UI-Generatoren',
+    tableRows: [
+      {
+        capability: 'Aus einem Prompt generieren',
+        withOd: 'Ein Prompt im Agent, den du ohnehin offen hast',
+        without: 'Bei einem separaten Web-Tool anmelden, in deren Cloud generieren',
+      },
+      {
+        capability: 'Echte Komponenten',
+        withOd: 'Aus einem wiederverwendbaren Designsystem gebaut, einheitlich über Screens hinweg',
+        without: 'Einmaliges Markup oder Inline-Stile, die du später refaktorierst',
+      },
+      {
+        capability: 'Design zu Code',
+        withOd: 'Dasselbe Artefakt wird zu ausgeliefertem Code — kein Neuzeichnen',
+        without: 'UI-Mockup ist eine Sackgasse; für die Produktion neu bauen',
+      },
+      {
+        capability: 'Die Ausgabe besitzen',
+        withOd: 'Einfache Dateien und Code in deinem Repo, ganz dir gehörend',
+        without: 'Nur in deren App bearbeitbar; exportbeschränkt',
+      },
+      {
+        capability: 'Kosten & Lock-in',
+        withOd: 'Open Source, eigene Schlüssel mitbringen, läuft lokal',
+        without: 'Abo pro Platz oder pro Credit, anbietergehostet',
+      },
+    ],
+    featuresTitle: 'Was du generieren kannst',
+    features: [
+      {
+        title: 'Web-App-Oberflächen',
+        body: 'Dashboards, Einstellungen, Datentabellen — als zusammenhängendes Komponenten-Set generiert, dann zu Code gebracht.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Mobile-App-UI',
+        body: 'Screen-für-Screen-Mobile-Oberflächen mit einheitlichen Komponenten und Zuständen.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'SaaS- & Marketing-Seiten',
+        body: 'Landing-, Preis- und Marketing-UI, die du generieren, gestalten und ausliefern kannst.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Formulare & Flows',
+        body: 'Mehrstufige Formulare, Onboarding und Auth-Flows mit klarer Hierarchie und Zuständen.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Designsysteme',
+        body: 'Generiere UI, die ein gemeinsames Designsystem respektiert — Tokens, Komponenten, Abstände.',
+        thumb: 'example-gamified-app',
+      },
+      {
+        title: 'Jeder visuelle Geschmack',
+        body: 'Redaktionell, weich oder markant — trage einen durchgängigen Stil von Anfang bis Ende.',
+        thumb: 'example-kami-landing',
+      },
+    ],
+    galleryTitle: 'Mit Open Design gebaute UI',
+    galleryLead:
+      'Jede begann als Prompt und wurde zu einem echten, komponentenbasierten Artefakt gerendert. Wähle eine Vorlage nahe deiner Idee, beschreibe deine Variante, und der Agent passt sie an — von der UI zum ausgelieferten Code.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: 'Dating-Web-App — komponentenbasierte UI' },
+      { thumb: 'example-hr-onboarding', caption: 'HR-Onboarding-Flow' },
+      { thumb: 'example-kami-landing', caption: 'Produkt-Landing-UI' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Web-UI im weichen Stil' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Vorlagen durchsuchen',
+    faqTitle: 'FAQ zum KI-UI-Generator',
+    faq: [
+      {
+        q: 'Ist der KI-UI-Generator kostenlos?',
+        a: 'Ja. Open Design ist quelloffen und läuft in dem Coding-Agent, den du bereits nutzt, mit deinen eigenen Anbieter-Schlüsseln — es gibt keinen Zähler pro Platz oder pro Credit für den UI-Generator selbst.',
+      },
+      {
+        q: 'Generiert es echte Komponenten oder nur ein Mockup?',
+        a: 'Echte Komponenten. Die Ausgabe ist HTML und Code, gebaut aus einem wiederverwendbaren Designsystem, sodass du Layout, Zustände und Theme im Gespräch mit dem Agent verfeinerst, statt ein flaches Mockup neu zu bauen.',
+      },
+      {
+        q: 'Kann die generierte UI zu Produktionscode werden?',
+        a: 'Das ist der Punkt. Dasselbe Artefakt wird zu ausgeliefertem Code, weil es in deinem Projekt liegt — es gibt keine Neuzeichnung und keine Übergabelücke zwischen der generierten UI und dem, was du deployst.',
+      },
+      {
+        q: 'Mit welchen Agents funktioniert es?',
+        a: 'Open Design funktioniert mit Claude Code, Codex, Cursor Agent, Gemini CLI und einem Dutzend weiterer hauseigener Adapter. Du bringst deine eigenen Anbieter-Schlüssel mit; nichts wird für dich gehostet.',
+      },
+    ],
+    ctaTitle: 'Generiere deine erste UI noch heute Abend',
+    ctaBody:
+      'Gib dem Repo einen Stern, installiere Open Design und verwandle deine nächste Oberflächen-Idee in eine echte, komponentenbasierte UI — und dann in ausgelieferten Code — im Agent, den du bereits nutzt.',
+    relatedTitle: 'Verwandte Tools & Guides',
+    related: [
+      { href: '/solutions/ai-wireframe-generator/', label: 'KI-Wireframe-Generator' },
+      { href: '/solutions/design-to-code/', label: 'Design zu Code mit Open Design' },
+      { href: '/blog/best-ai-design-tools/', label: 'Beste KI-Design-Tools' },
+      { href: '/solutions/designer/', label: 'Open Design für Designer' },
+    ],
+  },
+  designToCode: {
+    title: 'Design zu Code — ein Design mit Open Design in ausgelieferten Code verwandeln',
+    description:
+      'Ein kostenloser, quelloffener Design-zu-Code-Workflow, der einen Prompt oder ein Design in echten, bearbeitbaren Code verwandelt — in dem Coding-Agent, den du bereits nutzt. Kein Export, keine Übergabe: Das Design und der Produktionscode sind ein Artefakt, das dir gehört und das du auslieferst.',
+    breadcrumb: 'Design zu Code',
+    label: 'Tool · Design zu Code',
+    heading: 'Design zu Code, ohne Übergabe',
+    lead: 'Beschreibe den Screen oder bring ein Design mit und lass deinen Agent ihn in sauberen, komponentenbasierten Code verwandeln — responsives Layout, echte Zustände, dein Stack. Das Design und der Code sind dasselbe Artefakt, sodass bei der Übersetzung nichts verloren geht.',
+    heroImageAlt:
+      'Redaktionelle Illustration, in der ein Design zu sauberem Produktionscode wird, gerahmt von einer grünen Auswahlbox',
+    tldrTitle: 'In einem Satz',
+    tldrBody:
+      'Die meisten Design-zu-Code-Tools exportieren eine einmalige Momentaufnahme, die du dann hütest. Open Design hält das Design und den Code als ein lebendiges Artefakt in deinem Agent — iteriere im Gespräch, liefere Code aus, der dir gehört, kein Zähler pro Platz.',
+    stepsTitle: 'So funktioniert Design zu Code',
+    steps: [
+      {
+        title: 'Starte von einem Prompt oder einem Design',
+        body: 'Beschreibe den Screen in klarer Sprache oder weise deinen Agent auf eine Design-Richtung. Open Design lädt die passende Fähigkeit, sodass der Agent Struktur und Komponenten baut, keine brüchige Einmal-Umwandlung.',
+        imageAlt: 'Illustration eines Designs und eines Prompts, die in ein Terminal einfließen',
+      },
+      {
+        title: 'Generiere komponentenbasierten Code',
+        body: 'Der Agent erzeugt sauberen, lesbaren Code, gebaut aus wiederverwendbaren Komponenten und Design-Tokens — einheitliche Abstände, Schrift und Farbe — statt einer Wand aus generiertem Markup, das du wegrefaktorieren würdest.',
+        imageAlt: 'Illustration eines Designs, das in strukturierten, komponentenbasierten Code umgewandelt wird',
+      },
+      {
+        title: 'Iteriere im Gespräch',
+        body: 'Verfeinere Layout, Zustände und Verhalten im Gespräch — "mach es responsiv", "verdrahte das Formular", "passe es an unsere Tokens an." Der Code aktualisiert sich an Ort und Stelle; das Design bleibt synchron, weil sie ein Artefakt sind.',
+        imageAlt: 'Illustration von Code, der per Chat verfeinert wird, während das Design synchron bleibt',
+      },
+      {
+        title: 'Liefere den Code aus, der dir gehört',
+        body: 'Die Ausgabe ist HTML/Code in deinem Repo, ganz dir gehörend — kein Export-Schritt, kein anbietergebundener Editor, kein Neuzeichnen zwischen Design und Build. Liefere ihn aus und entwickle ihn dann im Agent weiter.',
+        imageAlt: 'Illustration von fertigem Code, gehalten in einem grünen Auswahlrahmen, bereit zur Auslieferung',
+      },
+    ],
+    tableTitle: 'Open Design vs. typische Design-zu-Code-Tools',
+    tableColCapability: 'Was du brauchst',
+    tableColWithOd: 'Mit Open Design',
+    tableColWithout: 'Typische Design-zu-Code-Tools',
+    tableRows: [
+      {
+        capability: 'Die Umwandlung starten',
+        withOd: 'Ein Prompt im Agent, den du ohnehin offen hast',
+        without: 'Ein Plugin installieren oder zu einem separaten Web-Tool hochladen',
+      },
+      {
+        capability: 'Code-Qualität',
+        withOd: 'Sauberer, komponentenbasierter Code aus einem Designsystem',
+        without: 'Absolut positioniertes oder einmaliges Markup, das du neu schreibst',
+      },
+      {
+        capability: 'Design ↔ Code-Sync',
+        withOd: 'Ein Artefakt — Design und Code driften nie auseinander',
+        without: 'Ein einmaliger Export, der nach der ersten Änderung veraltet',
+      },
+      {
+        capability: 'Die Ausgabe besitzen',
+        withOd: 'Einfache Dateien und Code in deinem Repo, ganz dir gehörend',
+        without: 'An deren Editor oder Komponentenbibliothek gebunden',
+      },
+      {
+        capability: 'Kosten & Lock-in',
+        withOd: 'Open Source, eigene Schlüssel mitbringen, läuft lokal',
+        without: 'Abo pro Platz oder pro Credit, anbietergehostet',
+      },
+    ],
+    featuresTitle: 'Was du umwandeln kannst',
+    features: [
+      {
+        title: 'Prompt zu Code',
+        body: 'Beschreibe einen Screen und erhalte sauberen, komponentenbasierten Code in deinem Stack.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Wireframe zu Code',
+        body: 'Bring ein generiertes Wireframe den ganzen Weg bis zum ausgelieferten Code — dasselbe Artefakt.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'UI zur Produktion',
+        body: 'Verwandle eine generierte UI in responsiven Produktionscode mit echten Zuständen.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Landingpages',
+        body: 'Hero-, Preis- und Warteliste-Abschnitte in sauberen, markengerechten Code umgewandelt.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Formulare & Flows',
+        body: 'Mehrstufige Formulare und Onboarding mit echter Validierung und echten Zuständen verdrahtet.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Jeder visuelle Geschmack',
+        body: 'Redaktionell, weich oder markant — der Code trägt einen durchgängigen Stil von Anfang bis Ende.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Aus Design mit Open Design ausgeliefert',
+    galleryLead:
+      'Jedes begann als Prompt oder als Design und wurde zu Code, den du ausliefern kannst. Wähle eine Vorlage nahe deiner Idee, beschreibe deine Variante, und der Agent wandelt sie um — Design zu Code, ohne Übergabe.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: 'Dating-Web-App — Design zu Code' },
+      { thumb: 'example-hr-onboarding', caption: 'HR-Onboarding-Flow' },
+      { thumb: 'example-kami-landing', caption: 'Produkt-Landing im Code' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Web-Build im weichen Stil' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Vorlagen durchsuchen',
+    faqTitle: 'FAQ zu Design zu Code',
+    faq: [
+      {
+        q: 'Ist der Design-zu-Code-Workflow kostenlos?',
+        a: 'Ja. Open Design ist quelloffen und läuft in dem Coding-Agent, den du bereits nutzt, mit deinen eigenen Anbieter-Schlüsseln — es gibt keinen Zähler pro Platz oder pro Credit für den Design-zu-Code-Workflow selbst.',
+      },
+      {
+        q: 'Welche Art von Code erzeugt es?',
+        a: 'Sauberen, komponentenbasierten HTML und Code, gebaut aus einem wiederverwendbaren Designsystem, sodass du ihn lesen, verfeinern und ausliefern kannst — kein absolut positioniertes Markup, das du neu schreiben müsstest.',
+      },
+      {
+        q: 'Bleiben Design und Code synchron?',
+        a: 'Ja — sie sind ein Artefakt. Da das Design und der Code zusammen in deinem Projekt liegen, gibt es keinen einmaligen Export, der nach deiner ersten Änderung veraltet.',
+      },
+      {
+        q: 'Mit welchen Agents funktioniert es?',
+        a: 'Open Design funktioniert mit Claude Code, Codex, Cursor Agent, Gemini CLI und einem Dutzend weiterer hauseigener Adapter. Du bringst deine eigenen Anbieter-Schlüssel mit; nichts wird für dich gehostet.',
+      },
+    ],
+    ctaTitle: 'Verwandle dein nächstes Design noch heute Abend in Code',
+    ctaBody:
+      'Gib dem Repo einen Stern, installiere Open Design und verwandle deinen nächsten Screen — Prompt, Wireframe oder Design — in sauberen, auslieferbaren Code im Agent, den du bereits nutzt.',
+    relatedTitle: 'Verwandte Tools & Guides',
+    related: [
+      { href: '/solutions/ai-wireframe-generator/', label: 'KI-Wireframe-Generator' },
+      { href: '/solutions/ai-ui-generator/', label: 'KI-UI-Generator' },
+      { href: '/blog/design-to-code-tools/', label: 'Beste Design-zu-Code-Tools' },
+      { href: '/solutions/engineering/', label: 'Open Design für Engineering' },
+    ],
+  },
   prototype: {
     title: 'Interaktive Prototypen mit Open Design + Claude Code bauen',
     description:
