@@ -7581,23 +7581,20 @@ export async function startServer({
     // be recorded for that failure mode. See PR #3412.
     let firstBufferedStdoutAt: number | null = null;
     // Tracks whether any stream the run is using actually emitted user-
-    // visible content. Only the streams routed through `sendAgentEvent`
-    // contribute to this flag; ACP sessions and plain stdout streams are
-    // covered by their own success/failure paths and the empty-output
-    // guard below skips them via `trackingSubstantiveOutput`.
+    // visible content or a deliverable. Only the streams routed through
+    // `sendAgentEvent` contribute to this flag; ACP sessions and plain stdout
+    // streams are covered by their own success/failure paths and the
+    // empty-output guard below skips them via `trackingSubstantiveOutput`.
     let agentProducedOutput = false;
     let trackingSubstantiveOutput = false;
-    // Event types that count as "the agent actually produced something the
-    // user can see." Lifecycle markers (`status`) and meter readings
-    // (`usage`) deliberately do NOT count — a model can emit token-usage
-    // numbers for an empty completion (issue #691), and a `status:running`
-    // banner without any follow-up is exactly the silent-failure shape we
-    // want to surface as failed instead of succeeded.
+    // Event types that count as "the agent actually produced a response or a
+    // deliverable." Lifecycle markers (`status`), meter readings (`usage`),
+    // reasoning deltas, and tool activity deliberately do NOT count: a run can
+    // think/read/call tools and still terminate before returning text/artifacts
+    // to the user. Treat that as empty output instead of a silent success
+    // (issues #691, #4814).
     const SUBSTANTIVE_AGENT_EVENT_TYPES = new Set([
       'text_delta',
-      'thinking_delta',
-      'tool_use',
-      'tool_result',
       'artifact',
     ]);
     // First-token timing must reflect when the user actually starts seeing
