@@ -84,7 +84,7 @@ import {
   type ProjectFile,
   type ProjectFolder,
 } from '../types';
-import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
+import type { ChatSessionMode, SkillSummary, WorkspaceContextItem } from '@open-design/contracts';
 import { createTerminal, killTerminal } from '../state/projects';
 import { navigate } from '../router';
 import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
@@ -112,6 +112,7 @@ import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { PasteTextDialog } from './PasteTextDialog';
 import { LibraryPicker } from './LibraryPicker';
 import { QuestionsPanel } from './QuestionsPanel';
+import { VisualInspirationPanel } from './VisualInspirationPanel';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
 import {
@@ -271,6 +272,10 @@ interface Props {
   onSubmitQuestionForm?: (text: string) => void;
   // Bumped nonce that focuses the Questions tab (banner click / new form).
   focusQuestionsRequest?: { nonce: number } | null;
+  visualInspiration?: { key: string; briefText: string } | null;
+  visualInspirationDesignTemplates?: SkillSummary[];
+  visualInspirationCurrentSkillId?: string | null;
+  onSubmitVisualInspiration?: (text: string) => void;
 }
 
 interface SketchState {
@@ -525,12 +530,21 @@ export function FileWorkspace({
   questionsGenerating = false,
   onSubmitQuestionForm,
   focusQuestionsRequest = null,
+  visualInspiration = null,
+  visualInspirationDesignTemplates = [],
+  visualInspirationCurrentSkillId = null,
+  onSubmitVisualInspiration,
 }: Props) {
   const t = useT();
   // The chat column only shows a compact Questions banner; the form itself
   // lives here, including after submission when a banner click can reopen the
   // answered preview.
-  const showQuestionsTab = Boolean(questionForm || questionFormPreview || questionsGenerating);
+  const showQuestionsTab = Boolean(
+    visualInspiration || questionForm || questionFormPreview || questionsGenerating,
+  );
+  const questionsTabLabel = visualInspiration
+    ? t('visualInspiration.tabLabel')
+    : t('questions.tabLabel');
   const analytics = useAnalytics();
   // P1 page_view page_name=file_manager — once per project the user lands
   // inside the workspace. Re-fire when the projectId changes so a
@@ -2111,12 +2125,12 @@ export function FileWorkspace({
               tabIndex={0}
               data-testid="questions-tab"
               onClick={() => setActiveTab(QUESTIONS_TAB)}
-              title={t('questions.tabLabel')}
+              title={questionsTabLabel}
             >
               <span className="tab-icon" aria-hidden>
-                <Icon name="help-circle" size={13} />
+                <Icon name={visualInspiration ? 'image' : 'help-circle'} size={13} />
               </span>
-              <span className="ws-tab-label">{t('questions.tabLabel')}</span>
+              <span className="ws-tab-label">{questionsTabLabel}</span>
             </button>
           ) : null}
           {orderedWorkspaceTabs.map((entry) => {
@@ -2344,7 +2358,17 @@ export function FileWorkspace({
             />
           </div>
         ))}
-        {activeTab === QUESTIONS_TAB ? (
+        {activeTab === QUESTIONS_TAB && visualInspiration ? (
+          <VisualInspirationPanel
+            key={visualInspiration.key}
+            projectId={projectId}
+            briefText={visualInspiration.briefText}
+            designTemplates={visualInspirationDesignTemplates}
+            currentSkillId={visualInspirationCurrentSkillId}
+            submitDisabled={questionFormSubmitDisabled}
+            onSubmit={(text) => onSubmitVisualInspiration?.(text)}
+          />
+        ) : activeTab === QUESTIONS_TAB ? (
           <QuestionsPanel
             key={questionFormKey ?? undefined}
             projectId={projectId}

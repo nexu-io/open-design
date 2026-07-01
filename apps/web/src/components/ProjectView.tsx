@@ -1673,6 +1673,13 @@ export function ProjectView({
   const displayedQuestionFormKey = manualQuestionFormRequest
     ? `${activeConversationId ?? 'conversation'}:${manualQuestionFormRequest.messageId}:${manualQuestionFormRequest.form.id}:manual`
     : questionFormKey;
+  const [visualInspirationRequest, setVisualInspirationRequest] = useState<{
+    key: string;
+    briefText: string;
+  } | null>(null);
+  useEffect(() => {
+    setVisualInspirationRequest(null);
+  }, [project.id, activeConversationId]);
 
   // Auto-switch the workspace to the Questions tab when a new discovery form
   // first appears, and let the chat banner re-focus it on click. The nonce
@@ -7813,6 +7820,25 @@ export function ProjectView({
           focusQuestionsRequest={focusQuestionsRequest}
           onSubmitQuestionForm={(text) => {
             if (currentConversationActionDisabled) return;
+            const shouldOfferVisualInspiration =
+              displayedQuestionForm?.id === 'discovery' || displayedQuestionForm?.id === 'task-type';
+            if (!shouldOfferVisualInspiration) {
+              void handleSend(text, [], [], { entryFrom: 'question_answer' });
+              return;
+            }
+            setVisualInspirationRequest({
+              key: `${displayedQuestionFormKey ?? activeConversationId ?? project.id}:visual`,
+              briefText: text,
+            });
+            setQuestionsFocusNonce((n) => n + 1);
+          }}
+          visualInspiration={visualInspirationRequest}
+          visualInspirationDesignTemplates={designTemplates}
+          visualInspirationCurrentSkillId={project.skillId}
+          onSubmitVisualInspiration={(visualText) => {
+            if (currentConversationActionDisabled || !visualInspirationRequest) return;
+            const text = `${visualInspirationRequest.briefText}\n\n${visualText}`;
+            setVisualInspirationRequest(null);
             // Submitting question-form answers is a clarification turn, not a
             // fresh create/edit — tag entry_from so the dashboard can separate it.
             void handleSend(text, [], [], { entryFrom: 'question_answer' });

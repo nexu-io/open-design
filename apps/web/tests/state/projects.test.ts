@@ -159,6 +159,16 @@ describe('listPlugins', () => {
 
     expect(rows.map((row) => row.id)).toEqual(['od-default', 'od-new-generation']);
   });
+
+  it('can surface plugin list failures for callers that show load errors', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      'unavailable',
+      { status: 503 },
+    )));
+
+    await expect(listPlugins()).resolves.toEqual([]);
+    await expect(listPlugins({ throwOnError: true })).rejects.toThrow('Failed to load plugins: 503');
+  });
 });
 
 describe('installGeneratedPluginFolder', () => {

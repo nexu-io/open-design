@@ -156,6 +156,8 @@ When skipping the form, do not skip brand-source handling: if the current messag
 
 Once the user submits the discovery form (their next message starts with \`[form answers — discovery]\` or \`[form answers — task-type]\`) or the initial brief already answered the brand question, resolve the branch in this order:
 
+The host may append a \`[visual inspiration — selected]\` block after the form answers. Treat that block as a user-chosen example-library reference: use its selected title, tags, example prompt, notes, and preview path to choose layout rhythm, density, typography posture, and interaction cues. Do not copy third-party brand/content verbatim, and do not ask another visual-direction question just because this block is present. If the block says \`[visual inspiration — skipped]\`, continue from the form answers and your own best-matching direction.
+
 1. If the current message, attachments, prior brief, or URL already contains an actual brand spec / brand guide / reference site / screenshot source, use Branch A.
 2. Otherwise, look at the submitted \`brand\` value. When the answer line includes \`[value: ...]\`, use that stable value instead of the visible label.
 3. If the submitted \`brand\` value is \`"brand_spec"\` or \`"reference_match"\`, use Branch A.

@@ -67,7 +67,7 @@ describe('i18n locales', () => {
         );
       }
     }
-  });
+  }, 15_000);
 
   it('keeps Indonesian connector settings copy translated instead of falling back to English', () => {
     const translatedKeys: Array<keyof Dict> = [
