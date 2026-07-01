@@ -1376,6 +1376,8 @@ export const zhTW: Dict = {
   'newproj.importClaudeZip': '匯入 Claude Design ZIP',
   'newproj.importClaudeZipTitle': '匯入 Claude Design 匯出的 .zip 檔案',
   'newproj.importingClaudeZip': '正在匯入…',
+  'newproj.openFolder': '開啟資料夾',
+  'newproj.openingFolder': '正在開啟…',
   'newproj.privacyFooter': '預設情況下只有你能看到自己的專案。',
   'newproj.designSystem': '設計系統',
   'newproj.dsNoneFreeform': '不指定 — 自由發揮',

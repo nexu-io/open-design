@@ -1376,6 +1376,8 @@ export const ru: Dict = {
   'newproj.importClaudeZip': 'Импортировать ZIP-файл из Claude Design',
   'newproj.importClaudeZipTitle': 'Импортировать экспорт `.zip` из Claude Design',
   'newproj.importingClaudeZip': 'Импорт…',
+  'newproj.openFolder': 'Открыть папку',
+  'newproj.openingFolder': 'Открываю…',
   'newproj.privacyFooter': 'По умолчанию только вы можете видеть свой проект.',
   'newproj.designSystem': 'Дизайн-система',
   'newproj.dsNoneFreeform': 'Нет — произвольная форма',

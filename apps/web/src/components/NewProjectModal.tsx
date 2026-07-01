@@ -26,6 +26,7 @@ import {
   type CreateTab,
   type ImportClaudeDesignOutcome,
 } from './NewProjectPanel';
+import { useT } from '../i18n';
 
 interface Props {
   open: boolean;
@@ -84,6 +85,7 @@ function NewProjectModalBody({
   onClose,
   initialTab,
 }: Omit<Props, 'open'>) {
+  const t = useT();
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -149,7 +151,7 @@ function NewProjectModalBody({
         exit="exit"
       >
         <header className="new-project-modal__head">
-          <h2 className="new-project-modal__title">New project</h2>
+          <h2 className="new-project-modal__title">{t('newproj.titleOther')}</h2>
           <button
             ref={closeRef}
             type="button"

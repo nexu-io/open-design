@@ -1376,6 +1376,8 @@ export const id: Dict = {
   'newproj.importClaudeZip': 'Impor ZIP Claude Design',
   'newproj.importClaudeZipTitle': 'Impor file .zip hasil ekspor Claude Design',
   'newproj.importingClaudeZip': 'Mengimpor...',
+  'newproj.openFolder': 'Buka folder',
+  'newproj.openingFolder': 'Membuka…',
   'newproj.privacyFooter': 'Secara default hanya kamu yang bisa melihat proyekmu.',
   'newproj.designSystem': 'Sistem desain',
   'newproj.dsNoneFreeform': 'Tidak ada - bebas',
