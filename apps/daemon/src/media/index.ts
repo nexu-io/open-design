@@ -1937,7 +1937,7 @@ async function renderOpenRouterImage(
   };
   body.image_config = imageConfig;
 
-  const resp = await fetch(`${baseUrl}/chat/completions`, {
+  const resp = await fetch(`${baseUrl}/chat/completions`, withMediaRequestInit(ctx, {
     method: 'POST',
     headers: {
       'authorization': `Bearer ${credentials.apiKey}`,
@@ -1946,7 +1946,8 @@ async function renderOpenRouterImage(
       'X-Title': 'Open Design',
     },
     body: JSON.stringify(body),
-  });
+    signal: AbortSignal.timeout(Math.max(OPENAI_IMAGE_HEADERS_TIMEOUT_MS, OPENAI_IMAGE_BODY_TIMEOUT_MS)),
+  }));
   const text = await resp.text();
   if (!resp.ok) {
     throw new Error(`openrouter image ${resp.status}: ${truncate(text, 240)}`);
@@ -1984,7 +1985,7 @@ async function renderOpenRouterImage(
     bytes = Buffer.from(b64Match[1]!, 'base64');
   } else if (dataUrl.startsWith('http')) {
     // Some models may return a plain URL instead of inline base64.
-    const imgResp = await fetch(dataUrl);
+    const imgResp = await fetch(dataUrl, withMediaRequestInit(ctx));
     if (!imgResp.ok) throw new Error(`openrouter image download ${imgResp.status}`);
     bytes = Buffer.from(await imgResp.arrayBuffer());
   } else {
@@ -2094,7 +2095,7 @@ async function renderOpenRouterVideo(
   }
 
   // ── Step 1: Submit the generation request ──────────────────────────
-  const submitResp = await fetch(`${baseUrl}/videos`, {
+  const submitResp = await fetch(`${baseUrl}/videos`, withMediaRequestInit(ctx, {
     method: 'POST',
     headers: {
       'authorization': `Bearer ${credentials.apiKey}`,
@@ -2105,7 +2106,7 @@ async function renderOpenRouterVideo(
       'X-Title': 'Open Design',
     },
     body: JSON.stringify(body),
-  });
+  }));
   const submitText = await submitResp.text();
   if (!submitResp.ok) {
     throw new Error(
@@ -2147,13 +2148,13 @@ async function renderOpenRouterVideo(
 
   while (Date.now() - startedAt < maxMs) {
     await sleep(8000);
-    const pollResp = await fetch(pollingUrl, {
+    const pollResp = await fetch(pollingUrl, withMediaRequestInit(ctx, {
       headers: {
         'authorization': `Bearer ${credentials.apiKey}`,
         'HTTP-Referer': 'https://opendesign.dev',
         'X-Title': 'Open Design',
       },
-    });
+    }));
     const pollText = await pollResp.text();
     if (!pollResp.ok) {
       throw new Error(
@@ -2215,7 +2216,7 @@ async function renderOpenRouterVideo(
     dlHeaders['authorization'] = `Bearer ${credentials.apiKey}`;
   }
 
-  const dlResp = await fetch(contentUrl, { headers: dlHeaders });
+  const dlResp = await fetch(contentUrl, withMediaRequestInit(ctx, { headers: dlHeaders }));
   if (!dlResp.ok) {
     throw new Error(`openrouter video download ${dlResp.status}`);
   }
