@@ -53,7 +53,9 @@ const ROLE_HREFS = [
 const TOOL_ENTRIES: ReadonlyArray<{ href: string; key: SolutionPageKey }> = [
   { href: '/solutions/ai-wireframe-generator/', key: 'aiWireframeGenerator' },
   { href: '/solutions/ai-ui-generator/', key: 'aiUiGenerator' },
+  { href: '/solutions/ai-landing-page-generator/', key: 'aiLandingPageGenerator' },
   { href: '/solutions/design-to-code/', key: 'designToCode' },
+  { href: '/solutions/figma-to-code/', key: 'figmaToCode' },
 ];
 
 // Agent column — AMR (the design Agent) heads the dropdown in the markup,

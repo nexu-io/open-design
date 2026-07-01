@@ -110,6 +110,8 @@ export type SolutionPageKey =
   | 'aiWireframeGenerator'
   | 'aiUiGenerator'
   | 'designToCode'
+  | 'aiLandingPageGenerator'
+  | 'figmaToCode'
   | 'prototype'
   | 'dashboard'
   | 'slides'

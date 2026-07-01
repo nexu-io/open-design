@@ -424,6 +424,288 @@ export const TR: SolutionLocaleCopy = {
       { href: '/solutions/engineering/', label: 'Mühendislik için Open Design' },
     ],
   },
+  aiLandingPageGenerator: {
+    title: 'AI Açılış Sayfası Oluşturucu — komuttan yayına alabileceğiniz açılış sayfasına',
+    description:
+      'Bir komutu gerçek, duyarlı bir açılış sayfasına dönüştüren — ve onu yayına alınan koda kadar taşıyan ücretsiz, açık kaynaklı bir AI açılış sayfası oluşturucu. Open Design zaten kullandığınız kodlama ajanının içinde çalışır, böylece üretilen sayfa ile dağıtılan sayfa sahip olduğunuz aynı çıktıdır.',
+    breadcrumb: 'AI açılış sayfası oluşturucu',
+    label: 'Araç · AI açılış sayfası oluşturucu',
+    heading: 'Yayına alabileceğiniz bir açılış sayfası üretin',
+    lead: 'Teklifi tarif edin, ajanınız gerçek, duyarlı bir açılış sayfası üretsin — hero, özellikler, fiyatlandırma, bekleme listesi, markaya uygun. Sonra devam edin: aynı çıktı, zaten çalıştırdığınız ajanda dağıttığınız yayına alınan koda dönüşür.',
+    heroImageAlt:
+      'Bir komutun duyarlı bir açılış sayfasına ve ardından üretim koduna dönüştüğünü, yeşil bir seçim kutusuyla çerçevelendiğini gösteren editöryel illüstrasyon',
+    tldrTitle: 'Tek cümlede',
+    tldrBody:
+      'Çoğu AI açılış sayfası oluşturucu sayfanızı kendi düzenleyicilerine kilitler ve koltuk başı ücretlendirir. Open Design açılış sayfasını kodlama ajanınızın içinde üretir ve onu komuttan yayına alınan koda taşır — gerçek bölümler, sizin markanız, dışa aktarma adımı yok, koltuk başı sayaç yok.',
+    stepsTitle: 'AI açılış sayfası oluşturucu nasıl çalışır',
+    steps: [
+      {
+        title: 'Sayfayı tarif edin',
+        body: 'Ajanınıza sade bir dille ne kuracağını söyleyin — “bir not alma uygulaması için bir tanıtım sayfası: hero, üç özellik, fiyatlandırma ve bir bekleme listesi formu.” Open Design açılış sayfası becerisini yükler, böylece ajan net bir hiyerarşiyle gerçek bölümler yerleştirir.',
+        imageAlt: 'Sade dildeki bir açılış sayfası özetinin bir terminale yazıldığını gösteren illüstrasyon',
+      },
+      {
+        title: 'Duyarlı bir sayfa üretin',
+        body: 'Ajan sayfayı yeniden kullanılabilir bölümlerden ve tasarım belirteçlerinden birleştirir, böylece boşluklar, yazı tipi ve renk tutarlı kalır ve her ekranda doğru görünür. Özelleştirmek için savaştığınız bir şablon değil, tutarlı, markaya uygun bir açılış sayfası elde edersiniz.',
+        imageAlt: 'Bir açılış sayfasının bir ızgara üzerinde hero, özellik ve fiyatlandırma bölümlerinden birleştiğini gösteren illüstrasyon',
+      },
+      {
+        title: 'İyileştirin ve dönüşüm ekleyin',
+        body: 'Metni, bölümleri ve harekete geçirici çağrıları sohbet içinde ayarlayın — “hero’yu sıkılaştır,” “sosyal kanıt ekle,” “bekleme listesi formunu bağla.” Çıktı sıfırdan yeniden üretilmek yerine yerinde güncellenir.',
+        imageAlt: 'Bir açılış sayfasının sohbet yoluyla iyileştirildiğini, bir referans ve bir form eklendiğini gösteren illüstrasyon',
+      },
+      {
+        title: 'Sahip olduğunuz kodu yayına alın',
+        body: 'Sayfa projenizde yaşadığından, tasarım ile dağıtılan sayfa tek bir doğruluk kaynağını paylaşır. Çıktı, sahip olduğunuz ve her yerde barındırabileceğiniz HTML/koddur — satıcı bağımlılığı yok, tasarım ile yayın arasında yeniden çizim yok.',
+        imageAlt: 'Bir açılış sayfasının yeşil bir seçim çerçevesi içinde tutulan, yayına alınan koda aktığını gösteren illüstrasyon',
+      },
+    ],
+    tableTitle: 'Open Design, tipik AI açılış sayfası oluşturuculara karşı',
+    tableColCapability: 'İhtiyacınız olan',
+    tableColWithOd: 'Open Design ile',
+    tableColWithout: 'Tipik AI açılış sayfası oluşturucular',
+    tableRows: [
+      {
+        capability: 'Bir komuttan üretmek',
+        withOd: 'Zaten açık olan ajanınızda tek bir komut',
+        without: 'Ayrı bir web oluşturucusuna kaydolun, onların bulutunda üretin',
+      },
+      {
+        capability: 'Gerçek, duyarlı bölümler',
+        withOd: 'Yeniden kullanılabilir bir tasarım sisteminden kurulur, kırılma noktalarında tutarlı',
+        without: 'Kendi düzenleyicilerinde özelleştirdiğiniz kilitli bir şablon',
+      },
+      {
+        capability: 'Tasarımdan koda',
+        withOd: 'Aynı çıktı yayına alınan koda dönüşür — her yerde barındırın',
+        without: 'Sayfa onların platformunda yaşar; dışa aktarma kısıtlı ya da ücretli',
+      },
+      {
+        capability: 'Çıktıya sahip olmak',
+        withOd: 'Deponuzda sade dosyalar ve kod, tamamen sizin',
+        without: 'Sizin için barındırılır; sayfaya sahip olmazsınız, kiralarsınız',
+      },
+      {
+        capability: 'Maliyet ve bağımlılık',
+        withOd: 'Açık kaynak, kendi anahtarlarınızı getirin, yerelde çalışır',
+        without: 'Koltuk başı ya da sayfa başı abonelik, satıcı barındırmalı',
+      },
+    ],
+    featuresTitle: 'Neyi üretebilirsiniz',
+    features: [
+      {
+        title: 'Ürün tanıtım sayfaları',
+        body: 'Hero, özellikler, fiyatlandırma ve bir bekleme listesi — tutarlı bir sayfa olarak üretilir, sonra koda taşınır.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'SaaS pazarlama sayfaları',
+        body: 'Kendi alan adınızda üretebileceğiniz, temalandırabileceğiniz ve yayına alabileceğiniz özellik ve fiyatlandırma düzenleri.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Bekleme listesi ve yakında',
+        body: 'Çalışan bir form ve net bir harekete geçirici çağrı içeren tek amaçlı yakalama sayfaları.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Etkinlik ve kampanya sayfaları',
+        body: 'İlk denemeden itibaren bağlanmış ve markaya uygun, süreli kampanya düzenleri.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Uygulama indirme sayfaları',
+        body: 'Ürünü gösteren ve indirmeleri artıran mobil öncelikli sayfalar.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Her görsel zevk',
+        body: 'Editöryel, yumuşak ya da cesur — baştan sona tutarlı bir stil taşıyın.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Open Design ile oluşturulan açılış sayfaları',
+    galleryLead:
+      'Her biri bir komut olarak başladı ve gerçek, duyarlı bir çıktıya dönüştü. Fikrinize yakın bir şablon seçin, varyasyonunuzu tarif edin, ajan onu uyarlasın — açılış sayfasından yayına alınan koda.',
+    gallery: [
+      { thumb: 'example-kami-landing', caption: 'Ürün tanıtım sayfası' },
+      { thumb: 'example-saas-landing', caption: 'SaaS pazarlama sayfası' },
+      { thumb: 'example-hr-onboarding', caption: 'Bekleme listesi yakalama akışı' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Yumuşak stilde açılış düzeni' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Şablonlara göz atın',
+    faqTitle: 'AI açılış sayfası oluşturucu SSS',
+    faq: [
+      {
+        q: 'AI açılış sayfası oluşturucu ücretsiz mi?',
+        a: 'Evet. Open Design açık kaynaktır ve zaten kullandığınız kodlama ajanının içinde kendi sağlayıcı anahtarlarınızla çalışır — açılış sayfası oluşturucunun kendisinde koltuk başı ya da sayfa başı sayaç yoktur.',
+      },
+      {
+        q: 'Sayfayı her yerde barındırabilir miyim?',
+        a: 'Evet. Çıktı projenizdeki gerçek HTML ve koddur, böylece onu herhangi bir barındırıcıya dağıtabilirsiniz — platform bağımlılığı yok ve ödemeyi bıraktığınızda kaybolan kiralık bir sayfa yok.',
+      },
+      {
+        q: 'Sayfalar duyarlı ve markaya uygun mu?',
+        a: 'Evet. Ajan yeniden kullanılabilir bir tasarım sisteminden kurar, böylece sayfa kırılma noktalarında tutarlı kalır ve markanıza uyar — ve bir şablonla boğuşmak yerine konuşarak iyileştirirsiniz.',
+      },
+      {
+        q: 'Hangi ajanlarla çalışır?',
+        a: 'Open Design; Claude Code, Codex, Cursor Agent, Gemini CLI ve bir düzine kadar diğer birinci taraf adaptörle çalışır. Kendi sağlayıcı anahtarlarınızı getirirsiniz; sizin için hiçbir şey barındırılmaz.',
+      },
+    ],
+    ctaTitle: 'İlk açılış sayfanızı bu gece üretin',
+    ctaBody:
+      'Depoya yıldız verin, Open Design’ı kurun ve bir sonraki tanıtım fikrinizi gerçek, duyarlı bir açılış sayfasına — ardından yayına alınan koda — zaten kullandığınız ajanda dönüştürün.',
+    relatedTitle: 'İlgili araçlar ve rehberler',
+    related: [
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI oluşturucu' },
+      { href: '/solutions/design-to-code/', label: 'Open Design ile tasarımdan koda' },
+      { href: '/solutions/marketing/', label: 'Pazarlama için Open Design' },
+      { href: '/blog/best-ai-design-tools/', label: 'En iyi AI tasarım araçları' },
+    ],
+  },
+  figmaToCode: {
+    title: 'Figma’dan Koda — Open Design ile Figma tasarımlarını yayına alınan koda dönüştürün',
+    description:
+      'Bir Figma tasarımını temiz, bileşen tabanlı koda dönüştüren — zaten kullandığınız kodlama ajanının içinde, Claude Code’dan Codex’e — ücretsiz, açık kaynaklı bir Figma’dan koda iş akışı. Tasarımı Figma MCP üzerinden çekin ve ajan, sahip olduğunuz ve yayına aldığınız gerçek kodu kursun; kilitli dışa aktarma yok.',
+    breadcrumb: 'Figma’dan koda',
+    label: 'Araç · Figma’dan koda',
+    heading: 'Ajanınızda Figma’dan koda',
+    lead: 'Kodlama ajanınızı bir Figma tasarımına yöneltin ve çerçeveleri temiz, bileşen tabanlı koda dönüştürsün — duyarlı düzen, gerçek durumlar, sizin yığınınız. Figma MCP ile Claude Code ve diğer ajanlar tasarımı doğrudan okur, böylece tek seferlik bir dışa aktarmada hiçbir şey kaybolmaz.',
+    heroImageAlt:
+      'Bir Figma tasarımının bir kodlama ajanının içinde temiz üretim koduna dönüştüğünü, yeşil bir seçim kutusuyla çerçevelendiğini gösteren editöryel illüstrasyon',
+    tldrTitle: 'Tek cümlede',
+    tldrBody:
+      'Çoğu Figma’dan koda eklentisi, sonradan yeniden yazacağınız mutlak konumlu biçimlendirmenin tek seferlik bir anlık görüntüsünü dışa aktarır. Open Design tasarımı ve kodu ajanınızın içinde tek bir canlı çıktı olarak tutar — çerçeveleri Figma MCP üzerinden çekin, konuşarak yineleyin, sahip olduğunuz kodu yayına alın.',
+    stepsTitle: 'Figma’dan koda nasıl çalışır',
+    steps: [
+      {
+        title: 'Figma’yı ajanınıza bağlayın',
+        body: 'Figma MCP kurulduğunda, kodlama ajanınız — Claude Code, Codex, Cursor Agent — bir Figma dosyasını ya da seçili bir çerçeveyi doğrudan okuyabilir. Open Design doğru beceriyi yükler, böylece ajan kırılgan bir piksel kopyası değil, tasarım niyetini yapıya dönüştürür.',
+        imageAlt: 'Bir Figma çerçevesinin bir MCP bağlantısıyla bir terminale bağlandığını gösteren illüstrasyon',
+      },
+      {
+        title: 'Bileşen tabanlı kod üretin',
+        body: 'Ajan çerçeveyi yeniden kullanılabilir bileşenlere ve tasarım belirteçlerine eşler — tutarlı boşluklar, yazı ölçeği ve renk — ve sonradan elden geçireceğiniz bir mutlak konumlu div yığını yerine temiz, okunabilir kod üretir.',
+        imageAlt: 'Bir Figma çerçevesinin yapılandırılmış, bileşen tabanlı koda dönüştüğünü gösteren illüstrasyon',
+      },
+      {
+        title: 'Konuşarak yineleyin',
+        body: 'Düzeni, durumları ve davranışı konuşarak iyileştirin — “duyarlı yap,” “formu bağla,” “belirteçlerimize uydur.” Kod yerinde güncellenir ve ajan Figma’yı canlı okuduğundan, yeniden dışa aktarmak yerine en son tasarımı yeniden çekebilirsiniz.',
+        imageAlt: 'Bir Figma çerçevesi eşitli kalırken kodun sohbet yoluyla iyileştirildiğini gösteren illüstrasyon',
+      },
+      {
+        title: 'Sahip olduğunuz kodu yayına alın',
+        body: 'Çıktı, tamamen size ait, deponuzdaki HTML/koddur — satıcıya kilitli bir düzenleyici yok, bayatlayan bir dışa aktarma yok, tasarım ile yapım arasında yeniden çizim yok. Yayına alın, sonra ajanda geliştirmeye devam edin.',
+        imageAlt: 'Bitmiş kodun yeşil bir seçim çerçevesi içinde tutulan, yayına hazır halini gösteren illüstrasyon',
+      },
+    ],
+    tableTitle: 'Open Design, tipik Figma’dan koda araçlarına karşı',
+    tableColCapability: 'İhtiyacınız olan',
+    tableColWithOd: 'Open Design ile',
+    tableColWithout: 'Tipik Figma’dan koda araçları',
+    tableRows: [
+      {
+        capability: 'Figma tasarımını okumak',
+        withOd: 'Ajanınız Figma’yı MCP üzerinden canlı okur',
+        without: 'Bir eklenti tek seferlik bir anlık görüntü dışa aktarır',
+      },
+      {
+        capability: 'Kod kalitesi',
+        withOd: 'Bir tasarım sisteminden temiz, bileşen tabanlı kod',
+        without: 'Elle yeniden yazdığınız mutlak konumlu biçimlendirme',
+      },
+      {
+        capability: 'Tasarım ↔ kod eşitlemesi',
+        withOd: 'En son çerçeveyi yeniden çekin; konuşarak yineleyin',
+        without: 'İlk Figma düzenlemesinden sonra dışa aktarma bayatlar',
+      },
+      {
+        capability: 'Çıktıya sahip olmak',
+        withOd: 'Deponuzda sade dosyalar ve kod, tamamen sizin',
+        without: 'Kendi düzenleyicilerine ya da bileşen kitaplıklarına kilitli',
+      },
+      {
+        capability: 'Maliyet ve bağımlılık',
+        withOd: 'Açık kaynak, kendi anahtarlarınızı getirin, yerelde çalışır',
+        without: 'Koltuk başı ya da dışa aktarma başı abonelik, satıcı barındırmalı',
+      },
+    ],
+    featuresTitle: 'Neyi dönüştürebilirsiniz',
+    features: [
+      {
+        title: 'Figma’dan Claude Code’a',
+        body: 'Bir Figma çerçevesini MCP üzerinden Claude Code’a çekin ve temiz, bileşen tabanlı kod alın.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Figma’dan React / HTML’e',
+        body: 'Çerçeveleri zaten kullandığınız yığında duyarlı, gerçek durumlu koda dönüştürün.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Bütün ekranlar ve akışlar',
+        body: 'Çok ekranlı akışları ortak bileşenler ve tutarlı yapıyla bir küme olarak dönüştürün.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Açılış sayfaları',
+        body: 'Hero, fiyatlandırma ve bekleme listesi çerçeveleri temiz, markaya uygun koda dönüştürülür.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Formlar ve akışlar',
+        body: 'Gerçek doğrulama ve durumlarla bağlanmış çok adımlı formlar ve katılım.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Her görsel zevk',
+        body: 'Editöryel, yumuşak ya da cesur — kod, tasarımın stilini baştan sona taşır.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Open Design ile Figma’dan yayına',
+    galleryLead:
+      'Her biri bir Figma çerçevesi olarak başladı ve yayına alabileceğiniz koda dönüştü. Tasarımınıza yakın bir şablon seçin, varyasyonunuzu tarif edin, ajan onu dönüştürsün — Figma’dan koda, kilitli dışa aktarma olmadan.',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: 'Web uygulaması çerçevesi — Figma’dan koda' },
+      { thumb: 'example-mobile-app', caption: 'Mobil akıştan koda' },
+      { thumb: 'example-kami-landing', caption: 'Kodda açılış çerçevesi' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Yumuşak stilde web yapımı' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Şablonlara göz atın',
+    faqTitle: 'Figma’dan koda SSS',
+    faq: [
+      {
+        q: 'Open Design Figma’yı nasıl koda dönüştürür?',
+        a: 'Figma MCP üzerinden kodlama ajanınız — Claude Code, Codex, Cursor Agent — Figma dosyasını ya da seçili bir çerçeveyi doğrudan okur ve bir eklentiden tek seferlik bir anlık görüntü dışa aktarmak yerine temiz, bileşen tabanlı kod üretir.',
+      },
+      {
+        q: 'Ne tür bir kod üretiyor?',
+        a: 'Yeniden kullanılabilir bir tasarım sisteminden kurulan temiz, bileşen tabanlı HTML ve kod, böylece onu okuyabilir, iyileştirebilir ve yayına alabilirsiniz — çoğu Figma’dan koda dışa aktarıcısının ürettiği mutlak konumlu biçimlendirme değil.',
+      },
+      {
+        q: 'Ücretsiz mi?',
+        a: 'Evet. Open Design açık kaynaktır ve zaten kullandığınız kodlama ajanının içinde kendi sağlayıcı anahtarlarınızla çalışır — Figma’dan koda iş akışının kendisinde koltuk başı ya da dışa aktarma başı sayaç yoktur.',
+      },
+      {
+        q: 'Hangi ajanlarla çalışır?',
+        a: 'Open Design; Claude Code, Codex, Cursor Agent, Gemini CLI ve bir düzine kadar diğer birinci taraf adaptörle çalışır. Kendi sağlayıcı anahtarlarınızı ve kendi Figma MCP kurulumunuzu getirirsiniz; sizin için hiçbir şey barındırılmaz.',
+      },
+    ],
+    ctaTitle: 'Bir sonraki Figma çerçevenizi bu gece koda dönüştürün',
+    ctaBody:
+      'Depoya yıldız verin, Open Design’ı kurun, Figma MCP’yi bağlayın ve bir sonraki Figma tasarımınızı zaten kullandığınız ajanda temiz, yayına alınabilir koda dönüştürün.',
+    relatedTitle: 'İlgili araçlar ve rehberler',
+    related: [
+      { href: '/solutions/design-to-code/', label: 'Open Design ile tasarımdan koda' },
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI oluşturucu' },
+      { href: '/agents/claude-code-design/', label: 'Claude Code için Open Design' },
+      { href: '/solutions/engineering/', label: 'Mühendislik için Open Design' },
+    ],
+  },
   prototype: {
     title: 'Open Design + Claude Code ile etkileşimli prototipler oluşturun',
     description:

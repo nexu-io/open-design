@@ -424,6 +424,288 @@ export const KO: SolutionLocaleCopy = {
       { href: '/solutions/engineering/', label: '엔지니어링을 위한 Open Design' },
     ],
   },
+  aiLandingPageGenerator: {
+    title: 'AI 랜딩 페이지 생성기 — 프롬프트에서 출시하는 랜딩 페이지까지',
+    description:
+      '프롬프트를 진짜 반응형 랜딩 페이지로 바꾸고, 나아가 출시할 수 있는 코드까지 끌고 가는 무료 오픈소스 AI 랜딩 페이지 생성기입니다. Open Design은 이미 사용 중인 코딩 에이전트 안에서 실행되므로 생성된 페이지와 배포된 페이지가 내가 소유한 같은 산출물입니다.',
+    breadcrumb: 'AI 랜딩 페이지 생성기',
+    label: '도구 · AI 랜딩 페이지 생성기',
+    heading: '출시할 수 있는 랜딩 페이지를 생성하세요',
+    lead: '제안을 설명하면 에이전트가 진짜 반응형 랜딩 페이지를 생성합니다 — 히어로, 기능, 요금, 대기자 명단까지 브랜드에 맞게. 그리고 계속 나아갑니다: 같은 산출물이 배포하는 출시 코드가 됩니다, 이미 실행 중인 에이전트 안에서.',
+    heroImageAlt:
+      '프롬프트가 반응형 랜딩 페이지로, 다시 프로덕션 코드로 바뀌고 초록색 선택 상자로 둘러싸인 에디토리얼 일러스트',
+    tldrTitle: '한 줄로 말하면',
+    tldrBody:
+      '대부분의 AI 랜딩 페이지 빌더는 페이지를 자기네 에디터 안에 가두고 좌석당 과금합니다. Open Design은 코딩 에이전트 안에서 랜딩 페이지를 생성하고 프롬프트에서 출시 코드까지 그대로 끌고 갑니다 — 진짜 섹션, 내 브랜드, 내보내기 단계도 좌석당 과금도 없이.',
+    stepsTitle: 'AI 랜딩 페이지 생성기가 작동하는 방식',
+    steps: [
+      {
+        title: '페이지를 설명한다',
+        body: '무엇을 만들지 평범한 언어로 에이전트에게 알려 줍니다 — "메모 앱을 위한 출시 페이지: 히어로, 기능 세 개, 요금, 대기자 명단 폼"처럼. Open Design이 랜딩 페이지 기술을 불러와 에이전트가 명확한 위계를 갖춘 진짜 섹션을 배치합니다.',
+        imageAlt: '평범한 언어로 된 랜딩 페이지 브리프가 터미널에 입력되는 일러스트',
+      },
+      {
+        title: '반응형 페이지를 생성한다',
+        body: '에이전트는 재사용 가능한 섹션과 디자인 토큰으로 페이지를 조립하므로 여백, 타입, 색상이 일관되게 유지되고 어떤 화면에서도 제대로 보입니다. 커스터마이즈하려고 씨름해야 할 템플릿이 아니라, 일관되고 브랜드에 맞는 랜딩 페이지를 얻습니다.',
+        imageAlt: '랜딩 페이지가 그리드 위에서 히어로, 기능, 요금 섹션으로 조립되는 일러스트',
+      },
+      {
+        title: '다듬고 전환 요소를 더한다',
+        body: '카피, 섹션, 콜 투 액션을 대화로 조정합니다 — "히어로를 조여줘", "사회적 증거를 추가해줘", "대기자 명단 폼을 연결해줘"처럼. 산출물은 처음부터 다시 생성되는 대신 그 자리에서 갱신됩니다.',
+        imageAlt: '채팅으로 랜딩 페이지가 다듬어지며 후기와 폼이 추가되는 일러스트',
+      },
+      {
+        title: '내가 소유한 코드를 출시한다',
+        body: '페이지가 프로젝트 안에 살아 있으므로 디자인과 배포된 페이지가 하나의 진실 원천을 공유합니다. 출력은 어디에나 호스팅할 수 있는, 내가 소유한 HTML/코드입니다 — 벤더 종속도, 디자인과 출시 사이의 재작성도 없이.',
+        imageAlt: '랜딩 페이지가 초록색 선택 프레임에 담긴 출시 코드로 흘러 들어가는 일러스트',
+      },
+    ],
+    tableTitle: 'Open Design vs 일반적인 AI 랜딩 페이지 빌더',
+    tableColCapability: '필요한 것',
+    tableColWithOd: 'Open Design이라면',
+    tableColWithout: '일반적인 AI 랜딩 페이지 빌더',
+    tableRows: [
+      {
+        capability: '프롬프트에서 생성',
+        withOd: '이미 열어 둔 에이전트에 프롬프트 하나',
+        without: '별도 웹사이트 빌더에 가입하고 그들의 클라우드에서 생성',
+      },
+      {
+        capability: '진짜 반응형 섹션',
+        withOd: '재사용 가능한 디자인 시스템에서 만들어져 브레이크포인트 전반에서 일관',
+        without: '그들의 에디터 안에서 커스터마이즈하는 잠긴 템플릿',
+      },
+      {
+        capability: '디자인에서 코드로',
+        withOd: '같은 산출물이 출시 코드가 됨 — 어디에나 호스팅',
+        without: '페이지가 그들의 플랫폼에 머무름; 내보내기가 제한되거나 유료',
+      },
+      {
+        capability: '결과물을 소유',
+        withOd: '리포지토리 안의 평범한 파일과 코드, 온전히 내 것',
+        without: '대신 호스팅됨; 페이지를 소유가 아니라 임대',
+      },
+      {
+        capability: '비용과 종속',
+        withOd: '오픈소스, 자신의 키를 가져와 로컬에서 실행',
+        without: '좌석당 또는 페이지당 구독, 벤더 호스팅',
+      },
+    ],
+    featuresTitle: '생성할 수 있는 것',
+    features: [
+      {
+        title: '제품 출시 페이지',
+        body: '히어로, 기능, 요금, 대기자 명단을 — 일관된 페이지로 생성한 뒤 코드까지 끌고 갑니다.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'SaaS 마케팅 페이지',
+        body: '자신의 도메인에서 생성하고, 테마를 입히고, 출시할 수 있는 기능과 요금 레이아웃.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: '대기자 명단과 출시 예정',
+        body: '작동하는 폼과 명확한 콜 투 액션을 갖춘 단일 목적의 수집 페이지.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: '이벤트와 캠페인 페이지',
+        body: '처음부터 연결되고 브랜드에 맞춘, 기간이 정해진 캠페인 레이아웃.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: '앱 다운로드 페이지',
+        body: '제품을 보여 주고 설치를 유도하는 모바일 우선 페이지.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: '어떤 비주얼 취향이든',
+        body: '에디토리얼, 소프트, 볼드 — 처음부터 끝까지 하나의 일관된 스타일을 담습니다.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Open Design으로 만든 랜딩 페이지',
+    galleryLead:
+      '모두가 프롬프트로 시작해 진짜 반응형 산출물로 렌더링되었습니다. 아이디어에 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 맞춥니다 — 랜딩 페이지에서 출시 코드까지.',
+    gallery: [
+      { thumb: 'example-kami-landing', caption: '제품 출시 페이지' },
+      { thumb: 'example-saas-landing', caption: 'SaaS 마케팅 페이지' },
+      { thumb: 'example-hr-onboarding', caption: '대기자 명단 수집 플로우' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '소프트 스타일 랜딩 레이아웃' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '템플릿 둘러보기',
+    faqTitle: 'AI 랜딩 페이지 생성기 FAQ',
+    faq: [
+      {
+        q: 'AI 랜딩 페이지 생성기는 무료인가요?',
+        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 랜딩 페이지 생성기 자체에는 좌석당이나 페이지당 과금이 없습니다.',
+      },
+      {
+        q: '페이지를 어디에나 호스팅할 수 있나요?',
+        a: '네. 출력은 프로젝트 안의 진짜 HTML과 코드이므로 어떤 호스트에든 배포할 수 있습니다 — 플랫폼 종속도 없고, 결제를 멈추면 사라지는 임대 페이지도 없습니다.',
+      },
+      {
+        q: '페이지가 반응형이고 브랜드에 맞나요?',
+        a: '네. 에이전트가 재사용 가능한 디자인 시스템에서 만들기 때문에 페이지가 브레이크포인트 전반에서 일관되게 유지되고 브랜드와 일치합니다 — 그리고 템플릿과 씨름하는 대신 대화하며 다듬습니다.',
+      },
+      {
+        q: '어떤 에이전트와 함께 작동하나요?',
+        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+      },
+    ],
+    ctaTitle: '오늘 밤 첫 랜딩 페이지를 생성하세요',
+    ctaBody:
+      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 다음 출시 아이디어를 진짜 반응형 랜딩 페이지로 — 그리고 다시 출시 코드로 — 이미 사용 중인 에이전트 안에서 바꿔 보세요.',
+    relatedTitle: '관련 도구와 가이드',
+    related: [
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
+      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/solutions/marketing/', label: '마케팅을 위한 Open Design' },
+      { href: '/blog/best-ai-design-tools/', label: '최고의 AI 디자인 도구' },
+    ],
+  },
+  figmaToCode: {
+    title: 'Figma에서 코드로 — Open Design으로 Figma 디자인을 출시 코드로 바꾸기',
+    description:
+      'Figma 디자인을 깔끔한 컴포넌트 기반 코드로 바꾸는 무료 오픈소스 Figma-투-코드 워크플로우입니다 — 이미 사용 중인 코딩 에이전트 안에서, Claude Code부터 Codex까지. Figma MCP를 통해 디자인을 끌어오면 에이전트가 잠금 없는 내보내기로 내가 소유하고 출시하는 진짜 코드를 만듭니다.',
+    breadcrumb: 'Figma에서 코드로',
+    label: '도구 · Figma에서 코드로',
+    heading: 'Figma에서 코드로, 내 에이전트 안에서',
+    lead: '코딩 에이전트를 Figma 디자인에 가리키면 프레임을 깔끔한 컴포넌트 기반 코드로 바꿉니다 — 반응형 레이아웃, 진짜 상태, 내 스택. Figma MCP를 통해 Claude Code와 다른 에이전트가 디자인을 직접 읽으므로 일회성 내보내기에서 잃는 것이 없습니다.',
+    heroImageAlt:
+      'Figma 디자인이 코딩 에이전트 안에서 깔끔한 프로덕션 코드로 바뀌고 초록색 선택 상자로 둘러싸인 에디토리얼 일러스트',
+    tldrTitle: '한 줄로 말하면',
+    tldrBody:
+      '대부분의 Figma-투-코드 플러그인은 그 뒤로 다시 작성해야 할 절대 위치 지정 마크업의 일회성 스냅샷을 내보냅니다. Open Design은 디자인과 코드를 에이전트 안의 하나의 살아있는 산출물로 유지합니다 — Figma MCP를 통해 프레임을 끌어오고, 대화하며 반복하고, 내가 소유한 코드를 출시합니다.',
+    stepsTitle: 'Figma에서 코드로가 작동하는 방식',
+    steps: [
+      {
+        title: 'Figma를 에이전트에 연결한다',
+        body: 'Figma MCP를 설정해 두면 코딩 에이전트가 — Claude Code, Codex, Cursor Agent가 — Figma 파일이나 선택한 프레임을 직접 읽을 수 있습니다. Open Design이 알맞은 기술을 불러와 에이전트가 부서지기 쉬운 픽셀 복사가 아니라 디자인 의도를 구조로 바꿉니다.',
+        imageAlt: 'Figma 프레임이 MCP 링크를 통해 터미널에 연결되는 일러스트',
+      },
+      {
+        title: '컴포넌트 기반 코드를 생성한다',
+        body: '에이전트는 프레임을 재사용 가능한 컴포넌트와 디자인 토큰에 매핑하고 — 일관된 여백, 타입, 색상 — 리팩터링으로 걷어낼 절대 위치 지정 div의 벽 대신 깔끔하고 읽기 쉬운 코드를 만듭니다.',
+        imageAlt: 'Figma 프레임이 구조화된 컴포넌트 기반 코드로 변환되는 일러스트',
+      },
+      {
+        title: '대화로 반복한다',
+        body: '레이아웃, 상태, 동작을 대화로 다듬습니다 — "반응형으로 만들어줘", "폼을 연결해줘", "우리 토큰에 맞춰줘"처럼. 코드는 그 자리에서 갱신되고, 에이전트가 Figma를 실시간으로 읽기 때문에 다시 내보내는 대신 최신 디자인을 다시 끌어올 수 있습니다.',
+        imageAlt: 'Figma 프레임이 동기 상태를 유지하는 동안 채팅으로 코드가 다듬어지는 일러스트',
+      },
+      {
+        title: '내가 소유한 코드를 출시한다',
+        body: '출력은 리포지토리 안의 HTML/코드로, 온전히 내 것입니다 — 벤더에 종속된 에디터도, 낡아 버리는 내보내기도, 디자인과 빌드 사이의 재작성도 없이. 출시하고, 에이전트 안에서 계속 발전시키세요.',
+        imageAlt: '초록색 선택 프레임에 담겨 출시 준비가 된 완성 코드의 일러스트',
+      },
+    ],
+    tableTitle: 'Open Design vs 일반적인 Figma-투-코드 도구',
+    tableColCapability: '필요한 것',
+    tableColWithOd: 'Open Design이라면',
+    tableColWithout: '일반적인 Figma-투-코드 도구',
+    tableRows: [
+      {
+        capability: 'Figma 디자인을 읽기',
+        withOd: '에이전트가 MCP를 통해 Figma를 실시간으로 읽음',
+        without: '플러그인이 일회성 스냅샷을 내보냄',
+      },
+      {
+        capability: '코드 품질',
+        withOd: '디자인 시스템에서 나온 깔끔한 컴포넌트 기반 코드',
+        without: '손으로 다시 작성할 절대 위치 지정 마크업',
+      },
+      {
+        capability: '디자인 ↔ 코드 동기화',
+        withOd: '최신 프레임을 다시 끌어오고 대화하며 반복',
+        without: '첫 Figma 편집 후 낡아 버리는 내보내기',
+      },
+      {
+        capability: '결과물을 소유',
+        withOd: '리포지토리 안의 평범한 파일과 코드, 온전히 내 것',
+        without: '그들의 에디터나 컴포넌트 라이브러리에 종속',
+      },
+      {
+        capability: '비용과 종속',
+        withOd: '오픈소스, 자신의 키를 가져와 로컬에서 실행',
+        without: '좌석당 또는 내보내기당 구독, 벤더 호스팅',
+      },
+    ],
+    featuresTitle: '변환할 수 있는 것',
+    features: [
+      {
+        title: 'Figma에서 Claude Code로',
+        body: 'MCP를 통해 Figma 프레임을 Claude Code로 끌어와 깔끔한 컴포넌트 기반 코드를 얻습니다.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Figma에서 React / HTML로',
+        body: '프레임을 이미 사용 중인 스택에서 반응형이고 진짜 상태를 갖춘 코드로 바꿉니다.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: '전체 화면과 플로우',
+        body: '공유 컴포넌트와 일관된 구조로 멀티 스크린 플로우를 하나의 세트로 변환합니다.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: '랜딩 페이지',
+        body: '히어로, 요금, 대기자 명단 프레임을 깔끔하고 브랜드에 맞는 코드로 변환.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: '폼과 플로우',
+        body: '진짜 유효성 검사와 상태로 연결된 다단계 폼과 온보딩.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: '어떤 비주얼 취향이든',
+        body: '에디토리얼, 소프트, 볼드 — 코드가 처음부터 끝까지 디자인의 스타일을 담습니다.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Open Design으로 Figma에서 출시까지',
+    galleryLead:
+      '모두가 Figma 프레임으로 시작해 출시할 수 있는 코드가 되었습니다. 디자인에 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 변환합니다 — 잠금 없는 내보내기로 Figma에서 코드로.',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: '웹 앱 프레임 — Figma에서 코드로' },
+      { thumb: 'example-mobile-app', caption: '모바일 플로우를 코드로' },
+      { thumb: 'example-kami-landing', caption: '코드로 만든 랜딩 프레임' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '소프트 스타일 웹 빌드' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '템플릿 둘러보기',
+    faqTitle: 'Figma에서 코드로 FAQ',
+    faq: [
+      {
+        q: 'Open Design은 Figma를 어떻게 코드로 바꾸나요?',
+        a: 'Figma MCP를 통해 코딩 에이전트가 — Claude Code, Codex, Cursor Agent가 — Figma 파일이나 선택한 프레임을 직접 읽고, 플러그인에서 일회성 스냅샷을 내보내는 대신 깔끔한 컴포넌트 기반 코드를 생성합니다.',
+      },
+      {
+        q: '어떤 종류의 코드를 만들어 내나요?',
+        a: '재사용 가능한 디자인 시스템에서 만들어진 깔끔한 컴포넌트 기반 HTML과 코드이므로 읽고, 다듬고, 출시할 수 있습니다 — 대부분의 Figma-투-코드 변환기가 내놓는 절대 위치 지정 마크업이 아니라.',
+      },
+      {
+        q: '무료인가요?',
+        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — Figma-투-코드 워크플로우 자체에는 좌석당이나 내보내기당 과금이 없습니다.',
+      },
+      {
+        q: '어떤 에이전트와 함께 작동하나요?',
+        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키와 자신의 Figma MCP 설정을 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+      },
+    ],
+    ctaTitle: '오늘 밤 다음 Figma 프레임을 코드로 바꾸세요',
+    ctaBody:
+      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, Figma MCP를 연결하고, 다음 Figma 디자인을 이미 사용 중인 에이전트 안에서 깔끔하고 출시 가능한 코드로 바꿔 보세요.',
+    relatedTitle: '관련 도구와 가이드',
+    related: [
+      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
+      { href: '/agents/claude-code-design/', label: 'Claude Code를 위한 Open Design' },
+      { href: '/solutions/engineering/', label: '엔지니어링을 위한 Open Design' },
+    ],
+  },
   prototype: {
     title: 'Open Design + Claude Code로 인터랙티브 프로토타입 만들기',
     description:
