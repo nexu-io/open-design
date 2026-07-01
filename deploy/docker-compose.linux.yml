@@ -23,6 +23,10 @@ services:
       # even without the bridge mapping (which normally enforced the remap).
       OD_PORT: ${OPEN_DESIGN_PORT:-7456}
       OD_WEB_PORT: ${OPEN_DESIGN_PORT:-7456}
+      # With host networking the daemon binds directly on the host's interfaces.
+      # Lock it to loopback so the base file's 0.0.0.0 default does not expose
+      # Open Design on the LAN or public IP.
+      OD_BIND_HOST: 127.0.0.1
     healthcheck:
       # Use wget (available in Alpine) instead of node — faster and does not
       # compete with the daemon for CPU during startup.
