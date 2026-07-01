@@ -2254,6 +2254,14 @@ section.tight { padding: 90px 0; }
   display: block;
   width: 100%;
   height: auto;
+  /* Reserve the painting's real 1768×1144 box up front. Without an explicit
+     ratio the lazy-swap first renders the 1×1 placeholder as a full-width 1:1
+     SQUARE (~320px too tall, showing the browser's broken-image/alt glyph)
+     until the webp decodes, then snaps to the real ratio — a visible collapse
+     the tighter homepage lazy-load margin now exposes on slower connections.
+     A faint skeleton fill keeps the reserved box clean until the art paints. */
+  aspect-ratio: 1768 / 1144;
+  background: rgba(0, 0, 0, 0.04);
 }
 .about .footer-row {
   display: flex;
