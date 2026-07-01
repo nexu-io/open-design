@@ -155,7 +155,7 @@ function collectFailureText(input: RunFailureClassificationInput): string {
 }
 
 function isHardQuotaText(text: string): boolean {
-  return /\b(session limit|usage limit|limit reached|quota|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|credits|funds)|exceeded your current quota|out of credits)\b/i
+  return /\b(session limit|usage limit|limit reached|quota|billing (?:hard )?limit|insufficient[ _-]?(?:quota|credit|credits|funds)|exceeded your current quota|out of credits|no payment method|requires more credits|can only afford)\b|DAILY_LIMIT_EXCEEDED|用户额度不足|额度不足|预扣费额度失败/i
     .test(text);
 }
 
@@ -168,7 +168,7 @@ function isRateLimitText(text: string): boolean {
 }
 
 function isWorkspaceCreditsText(text: string): boolean {
-  return /\b(?:your )?workspace is out of credits\b|\badd credits to continue\b|\bask your workspace owner to refill\b/i
+  return /\b(?:your )?workspace is out of credits\b|\badd credits to continue\b|\bask your workspace owner to refill\b|\bno payment method\b|\brequires more credits\b/i
     .test(text);
 }
 
@@ -207,7 +207,7 @@ function isCliNotInstalledText(text: string): boolean {
   //   - Node "Error: spawn <path> ENOENT" (the executable file does not exist —
   //     distinct from spawn EPERM/EBADF/ENOEXEC where the file exists but can't run)
   // Both currently leak into the opaque execution_failed bucket (#3408 P1).
-  return /\bnot installed|not on PATH|cannot find the path specified|system cannot find the path specified|is not recognized as an internal or external command|\bspawn\b[^\n]*\bENOENT\b/i
+  return /\b(?:Codex CLI was not found|Missing optional dependency|Cannot find module|not installed|not on PATH|cannot find the (?:path|file) specified|system cannot find the (?:path|file) specified|is not recognized as an internal or external command|\bspawn\b[^\n]*\bENOENT\b)|�ڲ����ⲿ����|�Ҳ���ָ����·��|�޷�ִ��ָ���ĳ���|ϵͳ�Ҳ���ָ����·����|ϵͳ�޷�ִ��ָ���ĳ���/i
     .test(text);
 }
 
@@ -238,7 +238,7 @@ function isPermissionRequestNotFoundText(text: string): boolean {
 }
 
 function isAuthDetailText(text: string): boolean {
-  return /\b(refresh token|access token could not be refreshed|stale local profile|different or stale local profile|credentials from a different local environment|missing environment variable: `?[A-Z0-9_]*API_KEY`?|api key.*(?:missing|invalid)|invalid api key|credentials? (?:are )?missing|not logged in|Authentication required|carry the api (?:secret )?key)\b/i
+  return /\b(refresh token|access token could not be refreshed|stale local profile|different or stale local profile|credentials from a different local environment|missing environment variable: `?[A-Z0-9_]*API_KEY`?|api key.*(?:missing|invalid)|invalid api key|credentials? (?:are )?missing|not logged in|Authentication required|carry the api (?:secret )?key|No auth type is selected|set an Auth method|organization has disabled .* subscription access)\b/i
     .test(text);
 }
 
@@ -257,17 +257,17 @@ function isSessionResumeExpiredText(text: string): boolean {
 function isPromptTooLargeText(text: string): boolean {
   // `prefill context too large` is the local-runtime (MLX) shape of the same
   // "the prompt does not fit" failure that currently leaks into execution_failed.
-  return /\b(context window|prompt too large|maximum context|too many tokens|input.*too large|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt))\b/i
+  return /\b(context window|prompt too large|maximum context|too many tokens|input.*too large|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i
     .test(text);
 }
 
 function isUpstreamDetailText(text: string): boolean {
-  return /\b(stream disconnected before completion|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|error sending request|Provider returned error|high demand|model is at capacity|selected model is at capacity|temporarily unavailable|upstream_error|http2: response body closed|AMR model catalog is (?:temporarily )?unavailable|statusCode[\"']?\s*:\s*(?:400|404)|400 Bad Request|404 Not Found)\b/i
+  return /\b(stream disconnected before completion|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|ConnectionRefused|error sending request|Provider returned error|high demand|model is at capacity|selected model is at capacity|temporarily unavailable|upstream_error|http2: response body closed|peer closed connection|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to the Anthropic API|Unexpected server error|AMR model catalog is (?:temporarily )?unavailable|statusCode[\"']?\s*:\s*(?:400|404)|400 Bad Request|404 Not Found|NotFoundError|OpenAIException - \{\"detail\":\"Not Found\"\}|API Error:\s*400\b)\b/i
     .test(text);
 }
 
 function isUpstreamClientErrorText(text: string): boolean {
-  return /\b(statusCode[\"']?\s*:\s*(?:400|404)|400 Bad Request|404 Not Found)\b/i
+  return /\b(statusCode[\"']?\s*:\s*(?:400|404)|400 Bad Request|404 Not Found|NotFoundError|OpenAIException - \{\"detail\":\"Not Found\"\}|API Error:\s*400\b|validation error|literal_error|Invalid input|Type validation failed)\b/i
     .test(text);
 }
 
@@ -321,11 +321,11 @@ function upstreamDetail(text: string): TrackingRunFailureDetail {
     return 'provider_routing_error';
   }
   if (/\bhigh demand|temporary errors|model is at capacity|selected model is at capacity\b/i.test(text)) return 'provider_high_demand';
-  if (/\b(stream disconnected before completion|response\.completed|websocket closed|socket connection was closed unexpectedly|connection reset|tls handshake eof|tls close_notify|broken pipe|peer closed connection|remote host|远程主机强迫关闭|http2: response body closed)\b/i
+  if (/\b(stream disconnected before completion|response\.completed|websocket closed|socket connection was closed unexpectedly|connection reset|ConnectionRefused|tls handshake eof|tls close_notify|broken pipe|peer closed connection|remote host|远程主机强迫关闭|http2: response body closed|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to the Anthropic API)\b/i
     .test(text)) {
     return 'stream_disconnected';
   }
-  if (/\b(?:http|status|error|response)(?:[ _-]?code)?[\s:=#-]*5\d\d\b|\b5\d\d\s+(?:bad gateway|service unavailable|internal server error|gateway timeout)|\b(5xx|bad gateway|gateway timeout|internal server error|service unavailable|upstream[ _-](?:error|unavailable)|provider (?:error|unavailable)|overloaded)\b/i
+  if (/\b(?:http|status|error|response)(?:[ _-]?code)?[\s:=#-]*5\d\d\b|\b5\d\d\s+(?:bad gateway|service unavailable|internal server error|gateway timeout)|\b(5xx|bad gateway|gateway timeout|internal server error|service unavailable|upstream[ _-](?:error|unavailable)|provider (?:error|unavailable)|overloaded|Unexpected server error)\b/i
     .test(text)) {
     return 'upstream_5xx';
   }
@@ -411,6 +411,7 @@ function processExitDetail(
   if (/\bspawn failed: spawn EPERM\b/i.test(text)) return 'spawn_eperm';
   if (isSpawnFailureText(text)) return 'spawn_failed';
   if (/\bstdin: write EOF\b/i.test(text)) return 'stdin_write_eof';
+  if (isProcessCrashText(text)) return 'process_crashed';
   if (isAgentConfigInvalidText(text)) return 'agent_config_invalid';
   if (isFabricatedRoleMarkerText(text)) return 'fabricated_role_marker';
   if (/\bQoder run failed: stop_sequence\b/i.test(text)) {
@@ -423,6 +424,11 @@ function processExitDetail(
   if (errorCode === 'AGENT_TERMINATED_UNKNOWN') return 'terminated_unknown';
   if (errorCode === 'AGENT_EXECUTION_FAILED') return 'execution_failed';
   return 'unknown';
+}
+
+function isProcessCrashText(text: string): boolean {
+  return /\bBun v\d+\.\d+\.\d+\b[\s\S]*\b(oh no: Bun has crashed|panic\(|Illegal instruction|Segmentation fault)\b/i
+    .test(text);
 }
 
 // The daemon emits a `runtime_close` diagnostic into the run's event stream at
@@ -681,6 +687,7 @@ export function classifyRunFailure(
 
   if (
     errorCode === 'UPSTREAM_UNAVAILABLE' ||
+    errorCode === 'AGENT_CONNECTION_DROPPED' ||
     serviceFailure === 'UPSTREAM_UNAVAILABLE' ||
     isUpstreamDetailText(text)
   ) {
