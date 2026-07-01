@@ -14,7 +14,7 @@ import Layout from '../../../_components/sub-page-layout.astro';
 import LazyImg from '../../../_components/lazy-img.astro';
 import { getInfoPageCopy } from '../../../info-page-i18n';
 import { getSolutionPageCopy } from '../../../solution-pages-i18n';
-import { localeFromPath, localizedHref, localePath, stripLocaleFromPath } from '../../../i18n';
+import { getCommonCopy, localeFromPath, localizedHref, localePath, stripLocaleFromPath } from '../../../i18n';
 
 const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
 const REPO = 'https://github.com/nexu-io/open-design';
@@ -35,6 +35,9 @@ const relatedTools = page.related ?? [];
 
 const pagePath = localePath(locale, stripLocaleFromPath(Astro.url.pathname).pathname);
 const pageUrl = new URL(pagePath, SITE).toString();
+const solutionsHref = href('/solutions/');
+const solutionsLabel = getCommonCopy(locale).header.nav.solution;
+const solutionsUrl = new URL(localePath(locale, '/solutions/'), SITE).toString();
 
 const faq = page.faq;
 
@@ -44,7 +47,8 @@ const jsonLd = [
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
-      { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: pageUrl },
+      { '@type': 'ListItem', position: 2, name: solutionsLabel, item: solutionsUrl },
+      { '@type': 'ListItem', position: 3, name: page.breadcrumb, item: pageUrl },
     ],
   },
   {
@@ -70,6 +74,8 @@ const jsonLd = [
 <Layout title={title} description={description} active="solution" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
     <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={solutionsHref}>{solutionsLabel}</a>
     <span>/</span>
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>
