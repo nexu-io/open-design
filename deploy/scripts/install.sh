@@ -264,6 +264,26 @@ if ! detect_compose; then
   exit 1
 fi
 
+# The Linux host-network override uses the !reset YAML tag (Docker Compose
+# v2.17+). Reject legacy docker-compose v1 and podman-compose early so users
+# get a clear message instead of a YAML parse error mid-install.
+if [ "$OS" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
+  if [ "$COMPOSE_CMD" != "docker compose" ]; then
+    error "The Linux host-network override requires 'docker compose' v2."
+    error "Found: ${COMPOSE_CMD}"
+    step "Install the Docker Compose plugin: https://docs.docker.com/compose/install/"
+    exit 1
+  fi
+  _compose_ver="$($COMPOSE_CMD version --short 2>/dev/null || echo "0.0.0")"
+  _compose_major="$(echo "$_compose_ver" | cut -d. -f1)"
+  _compose_minor="$(echo "$_compose_ver" | cut -d. -f2)"
+  if [ "$_compose_major" -lt 2 ] || { [ "$_compose_major" -eq 2 ] && [ "$_compose_minor" -lt 17 ]; }; then
+    error "Docker Compose v2.17 or later required for the Linux override (found v${_compose_ver})."
+    step "Upgrade: https://docs.docker.com/compose/install/"
+    exit 1
+  fi
+fi
+
 if ! check_runtime_running; then
   warn "${CONTAINER_RUNTIME} is not running."
   case "$DISTRO" in
