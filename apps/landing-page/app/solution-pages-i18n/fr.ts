@@ -424,6 +424,288 @@ export const FR: SolutionLocaleCopy = {
       { href: '/solutions/engineering/', label: 'Open Design pour l’ingénierie' },
     ],
   },
+  aiLandingPageGenerator: {
+    title: 'Générateur de landing pages IA — de l’invite à une landing page à livrer',
+    description:
+      'Un générateur de landing pages IA gratuit et open source qui transforme une invite en une vraie landing page responsive — et la mène jusqu’au code livré. Open Design s’exécute dans l’agent de code que vous utilisez déjà, si bien que la page générée et la page déployée sont un seul artefact qui vous appartient.',
+    breadcrumb: 'Générateur de landing pages IA',
+    label: 'Outil · Générateur de landing pages IA',
+    heading: 'Générez une landing page prête à livrer',
+    lead: 'Décrivez l’offre et laissez votre agent générer une vraie landing page responsive — hero, fonctionnalités, tarifs, liste d’attente, à votre image. Puis continuez : le même artefact devient du code livré que vous déployez, dans l’agent que vous utilisez déjà.',
+    heroImageAlt:
+      'Illustration éditoriale d’une invite se transformant en une landing page responsive puis en code de production, encadrée par une boîte de sélection verte',
+    tldrTitle: 'En une ligne',
+    tldrBody:
+      'La plupart des générateurs de landing pages IA enferment votre page dans leur éditeur et la facturent au siège. Open Design génère la landing page dans votre agent de code et la porte de l’invite jusqu’au code livré — vraies sections, votre image de marque, sans étape d’export, sans compteur par siège.',
+    stepsTitle: 'Comment fonctionne le générateur de landing pages IA',
+    steps: [
+      {
+        title: 'Décrivez la page',
+        body: 'Dites à votre agent quoi construire en langage clair — "une page de lancement pour une appli de prise de notes : hero, trois fonctionnalités, tarifs et un formulaire de liste d’attente." Open Design charge la compétence landing-page pour que l’agent dispose de vraies sections avec une hiérarchie claire.',
+        imageAlt: 'Illustration d’un brief de landing page en langage clair tapé dans un terminal',
+      },
+      {
+        title: 'Générez une page responsive',
+        body: 'L’agent assemble la page à partir de sections réutilisables et de tokens de design, si bien qu’espacement, typographie et couleur restent cohérents et que le rendu est juste sur chaque écran. Vous obtenez une landing page cohérente et à votre image — pas un modèle que vous bataillez à personnaliser.',
+        imageAlt: 'Illustration d’une landing page s’assemblant à partir de sections hero, fonctionnalités et tarifs sur une grille',
+      },
+      {
+        title: 'Affinez et ajoutez de la conversion',
+        body: 'Ajustez le texte, les sections et les appels à l’action en conversation — "resserre le hero", "ajoute une preuve sociale", "branche le formulaire de liste d’attente." L’artefact se met à jour sur place au lieu d’être régénéré de zéro.',
+        imageAlt: 'Illustration d’une landing page affinée par le chat, ajoutant un témoignage et un formulaire',
+      },
+      {
+        title: 'Livrez le code qui vous appartient',
+        body: 'Comme la page vit dans votre projet, le design et la page déployée partagent une seule source de vérité. Le résultat est du HTML/code qui vous appartient et que vous pouvez héberger n’importe où — sans verrouillage fournisseur, sans redessin entre le design et le lancement.',
+        imageAlt: 'Illustration d’une landing page se transformant en code livré tenu dans un cadre de sélection vert',
+      },
+    ],
+    tableTitle: 'Open Design vs les générateurs de landing pages IA classiques',
+    tableColCapability: 'Ce dont vous avez besoin',
+    tableColWithOd: 'Avec Open Design',
+    tableColWithout: 'Générateurs de landing pages IA classiques',
+    tableRows: [
+      {
+        capability: 'Générer à partir d’une invite',
+        withOd: 'Une invite dans l’agent que vous avez déjà ouvert',
+        without: 'S’inscrire à un constructeur de site séparé, générer dans leur cloud',
+      },
+      {
+        capability: 'Vraies sections responsives',
+        withOd: 'Construites à partir d’un système de design réutilisable, cohérentes sur tous les points de rupture',
+        without: 'Un modèle verrouillé que vous personnalisez dans leur éditeur',
+      },
+      {
+        capability: 'Du design au code',
+        withOd: 'Le même artefact devient du code livré — hébergez-le n’importe où',
+        without: 'La page vit sur leur plateforme ; l’export est limité ou payant',
+      },
+      {
+        capability: 'Posséder le résultat',
+        withOd: 'Fichiers et code bruts dans votre dépôt, entièrement à vous',
+        without: 'Hébergée pour vous ; vous louez la page, vous ne la possédez pas',
+      },
+      {
+        capability: 'Coût et verrouillage',
+        withOd: 'Open source, apportez vos propres clés, s’exécute en local',
+        without: 'Abonnement par siège ou par page, hébergé chez le fournisseur',
+      },
+    ],
+    featuresTitle: 'Ce que vous pouvez générer',
+    features: [
+      {
+        title: 'Pages de lancement produit',
+        body: 'Hero, fonctionnalités, tarifs et une liste d’attente — générés comme une page cohérente, puis menés jusqu’au code.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Pages marketing SaaS',
+        body: 'Des mises en page de fonctionnalités et de tarifs que vous pouvez générer, thématiser et livrer sur votre propre domaine.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Liste d’attente et bientôt disponible',
+        body: 'Pages de capture à but unique avec un formulaire fonctionnel et un appel à l’action clair.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Pages d’événement et de campagne',
+        body: 'Mises en page de campagne limitées dans le temps, branchées et à votre image dès le premier jet.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Pages de téléchargement d’appli',
+        body: 'Pages mobile-first qui montrent le produit et poussent aux installations.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Tout goût visuel',
+        body: 'Éditorial, doux ou audacieux — portez un seul style cohérent de bout en bout.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Landing pages construites avec Open Design',
+    galleryLead:
+      'Chacune a démarré comme une invite et s’est rendue en un vrai artefact responsive. Choisissez un modèle proche de votre idée, décrivez votre variante, et l’agent l’adapte — de la landing page au code livré.',
+    gallery: [
+      { thumb: 'example-kami-landing', caption: 'Page de lancement produit' },
+      { thumb: 'example-saas-landing', caption: 'Page marketing SaaS' },
+      { thumb: 'example-hr-onboarding', caption: 'Parcours de capture de liste d’attente' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Landing au style doux' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Parcourir les modèles',
+    faqTitle: 'FAQ du générateur de landing pages IA',
+    faq: [
+      {
+        q: 'Le générateur de landing pages IA est-il gratuit ?',
+        a: 'Oui. Open Design est open source et s’exécute dans l’agent de code que vous utilisez déjà avec vos propres clés de fournisseur — il n’y a aucun compteur par siège ou par page sur le générateur de landing pages lui-même.',
+      },
+      {
+        q: 'Puis-je héberger la page n’importe où ?',
+        a: 'Oui. Le résultat est du vrai HTML et du code dans votre projet, vous pouvez donc le déployer chez n’importe quel hébergeur — sans verrouillage de plateforme et sans page louée qui disparaît quand vous arrêtez de payer.',
+      },
+      {
+        q: 'Les pages sont-elles responsives et à mon image ?',
+        a: 'Oui. L’agent construit à partir d’un système de design réutilisable, si bien que la page reste cohérente sur tous les points de rupture et correspond à votre image de marque — et vous l’affinez en parlant au lieu de vous battre avec un modèle.',
+      },
+      {
+        q: 'Avec quels agents fonctionne-t-il ?',
+        a: 'Open Design fonctionne avec Claude Code, Codex, Cursor Agent, Gemini CLI et une douzaine d’autres adaptateurs natifs. Vous apportez vos propres clés de fournisseur ; rien n’est hébergé pour vous.',
+      },
+    ],
+    ctaTitle: 'Générez votre première landing page ce soir',
+    ctaBody:
+      'Mettez une étoile au dépôt, installez Open Design, et transformez votre prochaine idée de lancement en une vraie landing page responsive — puis en code livré — dans l’agent que vous utilisez déjà.',
+    relatedTitle: 'Outils et guides connexes',
+    related: [
+      { href: '/solutions/ai-ui-generator/', label: 'Générateur d’UI IA' },
+      { href: '/solutions/design-to-code/', label: 'Du design au code avec Open Design' },
+      { href: '/solutions/marketing/', label: 'Open Design pour le marketing' },
+      { href: '/blog/best-ai-design-tools/', label: 'Meilleurs outils de design IA' },
+    ],
+  },
+  figmaToCode: {
+    title: 'Figma vers code — transformez vos designs Figma en code livré avec Open Design',
+    description:
+      'Un workflow Figma vers code gratuit et open source qui transforme un design Figma en code propre, à base de composants — dans l’agent de code que vous utilisez déjà, de Claude Code à Codex. Récupérez le design via le Figma MCP et laissez l’agent produire du vrai code qui vous appartient et que vous livrez, sans export verrouillé.',
+    breadcrumb: 'Figma vers code',
+    label: 'Outil · Figma vers code',
+    heading: 'Figma vers code, dans votre agent',
+    lead: 'Pointez votre agent de code sur un design Figma et laissez-le transformer les frames en code propre, à base de composants — disposition responsive, vrais états, votre stack. Avec le Figma MCP, Claude Code et d’autres agents lisent le design directement, si bien que rien n’est perdu dans un export ponctuel.',
+    heroImageAlt:
+      'Illustration éditoriale d’un design Figma se transformant en code de production propre à l’intérieur d’un agent de code, encadrée par une boîte de sélection verte',
+    tldrTitle: 'En une ligne',
+    tldrBody:
+      'La plupart des plugins Figma vers code exportent un instantané ponctuel de balisage positionné en absolu que vous réécrivez ensuite. Open Design garde le design et le code comme un seul artefact vivant dans votre agent — récupérez les frames via le Figma MCP, itérez en parlant, livrez du code qui vous appartient.',
+    stepsTitle: 'Comment fonctionne Figma vers code',
+    steps: [
+      {
+        title: 'Connectez Figma à votre agent',
+        body: 'Une fois le Figma MCP configuré, votre agent de code — Claude Code, Codex, Cursor Agent — peut lire un fichier Figma ou un frame sélectionné directement. Open Design charge la bonne compétence pour que l’agent transforme l’intention de design en structure, pas en une copie de pixels fragile.',
+        imageAlt: 'Illustration d’un frame Figma se connectant à un terminal via un lien MCP',
+      },
+      {
+        title: 'Générez du code à base de composants',
+        body: 'L’agent fait correspondre le frame à des composants réutilisables et à des tokens de design — espacement, typographie et couleur cohérents — et produit du code propre et lisible au lieu d’un mur de divs positionnés en absolu que vous refactoriseriez.',
+        imageAlt: 'Illustration d’un frame Figma se convertissant en code structuré, à base de composants',
+      },
+      {
+        title: 'Itérez en conversation',
+        body: 'Affinez la disposition, les états et le comportement en parlant — "rends-le responsive", "branche le formulaire", "aligne sur nos tokens." Le code se met à jour sur place, et comme l’agent lit Figma en direct, vous pouvez re-récupérer le dernier design au lieu de réexporter.',
+        imageAlt: 'Illustration de code affiné par le chat pendant qu’un frame Figma reste synchronisé',
+      },
+      {
+        title: 'Livrez le code qui vous appartient',
+        body: 'Le résultat est du HTML/code dans votre dépôt, entièrement à vous — sans éditeur verrouillé par le fournisseur, sans export qui se périme, sans redessin entre le design et la construction. Livrez-le, puis continuez à le faire évoluer dans l’agent.',
+        imageAlt: 'Illustration de code fini tenu dans un cadre de sélection vert, prêt à livrer',
+      },
+    ],
+    tableTitle: 'Open Design vs les outils Figma vers code classiques',
+    tableColCapability: 'Ce dont vous avez besoin',
+    tableColWithOd: 'Avec Open Design',
+    tableColWithout: 'Outils Figma vers code classiques',
+    tableRows: [
+      {
+        capability: 'Lire le design Figma',
+        withOd: 'Votre agent lit Figma en direct via le MCP',
+        without: 'Un plugin exporte un instantané ponctuel',
+      },
+      {
+        capability: 'Qualité du code',
+        withOd: 'Code propre, à base de composants issu d’un système de design',
+        without: 'Balisage positionné en absolu que vous réécrivez à la main',
+      },
+      {
+        capability: 'Synchronisation design ↔ code',
+        withOd: 'Re-récupérez le dernier frame ; itérez en parlant',
+        without: 'L’export se périme après la première modification Figma',
+      },
+      {
+        capability: 'Posséder le résultat',
+        withOd: 'Fichiers et code bruts dans votre dépôt, entièrement à vous',
+        without: 'Verrouillé à leur éditeur ou à leur bibliothèque de composants',
+      },
+      {
+        capability: 'Coût et verrouillage',
+        withOd: 'Open source, apportez vos propres clés, s’exécute en local',
+        without: 'Abonnement par siège ou par export, hébergé chez le fournisseur',
+      },
+    ],
+    featuresTitle: 'Ce que vous pouvez convertir',
+    features: [
+      {
+        title: 'Figma vers Claude Code',
+        body: 'Récupérez un frame Figma dans Claude Code via le MCP et obtenez du code propre, à base de composants.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Figma vers React / HTML',
+        body: 'Transformez les frames en code responsive avec de vrais états, dans la stack que vous utilisez déjà.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Écrans et parcours entiers',
+        body: 'Convertissez des parcours multi-écrans comme un ensemble, avec des composants partagés et une structure cohérente.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Landing pages',
+        body: 'Frames hero, tarifs et liste d’attente convertis en code propre et à votre image.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Formulaires et parcours',
+        body: 'Formulaires multi-étapes et onboarding branchés avec une vraie validation et de vrais états.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Tout goût visuel',
+        body: 'Éditorial, doux ou audacieux — le code porte le style du design de bout en bout.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Livré depuis Figma avec Open Design',
+    galleryLead:
+      'Chacun a démarré comme un frame Figma et est devenu du code que vous pouvez livrer. Choisissez un modèle proche de votre design, décrivez votre variante, et l’agent le convertit — Figma vers code, sans export verrouillé.',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: 'Frame d’appli web — Figma vers code' },
+      { thumb: 'example-mobile-app', caption: 'Parcours mobile vers code' },
+      { thumb: 'example-kami-landing', caption: 'Frame de landing en code' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Build web au style doux' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Parcourir les modèles',
+    faqTitle: 'FAQ Figma vers code',
+    faq: [
+      {
+        q: 'Comment Open Design transforme-t-il Figma en code ?',
+        a: 'Via le Figma MCP, votre agent de code — Claude Code, Codex, Cursor Agent — lit le fichier Figma ou un frame sélectionné directement et génère du code propre, à base de composants, au lieu d’exporter un instantané ponctuel depuis un plugin.',
+      },
+      {
+        q: 'Quel type de code produit-il ?',
+        a: 'Du HTML et du code propres, à base de composants, construits à partir d’un système de design réutilisable, si bien que vous pouvez le lire, l’affiner et le livrer — pas le balisage positionné en absolu que produisent la plupart des exportateurs Figma vers code.',
+      },
+      {
+        q: 'Est-ce gratuit ?',
+        a: 'Oui. Open Design est open source et s’exécute dans l’agent de code que vous utilisez déjà avec vos propres clés de fournisseur — il n’y a aucun compteur par siège ou par export sur le workflow Figma vers code lui-même.',
+      },
+      {
+        q: 'Avec quels agents fonctionne-t-il ?',
+        a: 'Open Design fonctionne avec Claude Code, Codex, Cursor Agent, Gemini CLI et une douzaine d’autres adaptateurs natifs. Vous apportez vos propres clés de fournisseur et votre propre configuration Figma MCP ; rien n’est hébergé pour vous.',
+      },
+    ],
+    ctaTitle: 'Transformez votre prochain frame Figma en code ce soir',
+    ctaBody:
+      'Mettez une étoile au dépôt, installez Open Design, connectez le Figma MCP, et transformez votre prochain design Figma en code propre et livrable dans l’agent que vous utilisez déjà.',
+    relatedTitle: 'Outils et guides connexes',
+    related: [
+      { href: '/solutions/design-to-code/', label: 'Du design au code avec Open Design' },
+      { href: '/solutions/ai-ui-generator/', label: 'Générateur d’UI IA' },
+      { href: '/agents/claude-code-design/', label: 'Open Design pour Claude Code' },
+      { href: '/solutions/engineering/', label: 'Open Design pour l’ingénierie' },
+    ],
+  },
   prototype: {
     title: 'Créer des prototypes interactifs avec Open Design + Claude Code',
     description:
