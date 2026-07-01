@@ -177,9 +177,9 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 
 ### 5.6 Cline CLI
 
-- Invocation: `cline --auto-approve true --cwd <dir> [--model <id>] [--thinking <level>] "<prompt>"`.
+- Invocation: `cline --auto-approve true --cwd <dir> [--model <id>] [--thinking <level>]`, with the composed prompt delivered over stdin.
 - Streaming: plain stdout in this first adapter. Cline v3.0.34 exposes `--json`, but OD does not yet ship a Cline-specific JSON event parser, so the adapter intentionally avoids advertising structured tool events.
-- Prompt delivery: positional argv. Because the CLI help only documents `[prompt]` and no stdin sentinel, the adapter declares `maxPromptArgBytes` so oversized composed prompts fail early with OD's existing argv-budget error instead of surfacing as `spawn ENAMETOOLONG` on Windows.
+- Prompt delivery: stdin. The daemon sets `promptViaStdin: true`, opens the child stdin pipe, and writes the composed prompt after spawning so normal OD prompt sizes avoid the Windows argv cap.
 - Permission: `--auto-approve true` matches OD's non-interactive runtime posture. Without it, a web chat run can stall on terminal approval prompts.
 - Models/reasoning: `--model` and `--thinking` are passed only when the user picks a non-default value; otherwise Cline's own provider configuration stays authoritative.
 - **Gotcha:** Detection currently proves only that `cline --version` can run. Cline owns provider auth and local configuration; the daemon surfaces run failures rather than editing Cline config or launching auth flows.
@@ -346,6 +346,7 @@ Each adapter is a separate module so community contributions can add new ones wi
 - **Billing awareness.** Some agents bill per message, some per token. OD doesn't track cost in MVP; v1 adds an optional "usage" event from adapters that expose it.
 - **Windows support.** PATH scanning and `spawn` semantics differ on Windows. v1 targets
   macOS and Linux; Windows is best-effort. Known issue fixed: `spawn ENAMETOOLONG` when
-  running Gemini CLI (and other plain-text agents) on Windows — resolved by routing the
-  composed prompt through stdin instead of as a CLI argument (see §5.5).
+  running stdin-capable plain-text agents such as Cline and Gemini CLI on Windows — resolved
+  by routing the composed prompt through stdin instead of as a CLI argument (see §5.6 and
+  §5.7).
 - **Docker-contained agents.** Some users run Claude Code in a container. Adapter needs a "remote" mode — probably same interface but talks over SSH. Phase 2+.
