@@ -706,6 +706,288 @@ export const ES: SolutionLocaleCopy = {
       { href: '/solutions/engineering/', label: 'Open Design para ingeniería' },
     ],
   },
+  screenshotToCode: {
+    title: 'De captura de pantalla a código — convierte una captura en código con Open Design',
+    description:
+      'Un flujo de captura de pantalla a código, gratuito y de código abierto, que convierte la captura de cualquier UI en código limpio y basado en componentes — dentro del agente de programación que ya usas. Suelta una imagen, describe lo que quieres y el agente la reconstruye como código real que es tuyo y puedes lanzar, sin una exportación atada al proveedor.',
+    breadcrumb: 'De captura de pantalla a código',
+    label: 'Herramienta · De captura de pantalla a código',
+    heading: 'De captura de pantalla a código, en tu agente',
+    lead: '¿Tienes una captura de pantalla de una UI que te gusta? Entrégasela a tu agente de programación y deja que reconstruya la pantalla como código limpio y basado en componentes — diseño adaptable, estados reales, tu stack. La captura es el brief; el resultado es código que es tuyo, no una instantánea desechable.',
+    heroImageAlt:
+      'Ilustración editorial de una captura de pantalla de una UI que se convierte en código de producción limpio dentro de un agente de programación, enmarcada por un recuadro de selección verde',
+    tldrTitle: 'En una línea',
+    tldrBody:
+      'La mayoría de las herramientas de captura de pantalla a código escupen marcado de posición absoluta de una sola vez que luego reescribes. Open Design reconstruye la captura dentro de tu agente de programación como código limpio y basado en componentes — estructura real, tu sistema de diseño, sin paso de exportación, sin medidor por licencia.',
+    stepsTitle: 'Cómo funciona de captura de pantalla a código',
+    steps: [
+      {
+        title: 'Suelta la captura de pantalla',
+        body: 'Dale a tu agente una imagen de la pantalla que quieres — una captura de una app, un sitio web o un diseño. Open Design carga la habilidad adecuada para que el agente lea el diseño y la intención, no solo los píxeles.',
+        imageAlt: 'Ilustración de una captura de pantalla de una UI soltándose en una terminal',
+      },
+      {
+        title: 'Reconstruye como código basado en componentes',
+        body: 'El agente asigna la captura a componentes reutilizables y tokens de diseño — espaciado, tipografía y color consistentes — y produce código limpio y legible en lugar de un muro de divs de posición absoluta.',
+        imageAlt: 'Ilustración de una captura de pantalla que se convierte en código estructurado basado en componentes',
+      },
+      {
+        title: 'Refina en conversación',
+        body: 'Ajusta el diseño, los estados y el comportamiento hablando — «hazlo adaptable», «conecta el formulario», «que coincida con nuestros tokens». El código se actualiza en su sitio; no te quedas atascado con una conversión de una sola vez congelada.',
+        imageAlt: 'Ilustración de código siendo refinado por chat junto a la captura de pantalla de origen',
+      },
+      {
+        title: 'Lanza el código que es tuyo',
+        body: 'La salida es HTML/código en tu repositorio, totalmente tuyo — sin editor atado al proveedor, sin exportación desechable, sin redibujar entre la captura y la construcción. Lánzalo y luego sigue evolucionándolo en el agente.',
+        imageAlt: 'Ilustración de código terminado sostenido en un recuadro de selección verde, listo para lanzar',
+      },
+    ],
+    tableTitle: 'Open Design frente a las herramientas de captura de pantalla a código habituales',
+    tableColCapability: 'Lo que necesitas',
+    tableColWithOd: 'Con Open Design',
+    tableColWithout: 'Herramientas de captura de pantalla a código habituales',
+    tableRows: [
+      {
+        capability: 'Empezar desde una imagen',
+        withOd: 'Suelta una captura de pantalla en el agente que ya tienes abierto',
+        without: 'Súbela a una herramienta web aparte, convierte en su nube',
+      },
+      {
+        capability: 'Calidad del código',
+        withOd: 'Código limpio y basado en componentes desde un sistema de diseño',
+        without: 'Marcado de posición absoluta que reescribes a mano',
+      },
+      {
+        capability: 'Iterar tras la conversión',
+        withOd: 'Refina hablando; el código se mantiene vivo en tu proyecto',
+        without: 'Una instantánea de una sola vez congelada que editas manualmente',
+      },
+      {
+        capability: 'Ser dueño del resultado',
+        withOd: 'Archivos y código sin complicaciones en tu repositorio, totalmente tuyos',
+        without: 'Atado a su editor o a su formato de exportación',
+      },
+      {
+        capability: 'Coste y dependencia del proveedor',
+        withOd: 'Código abierto, usa tus propias claves, funciona en local',
+        without: 'Suscripción por licencia o por crédito, alojado por el proveedor',
+      },
+    ],
+    featuresTitle: 'Lo que puedes convertir',
+    features: [
+      {
+        title: 'De captura de pantalla a código',
+        body: 'Convierte una imagen de cualquier pantalla en código limpio y basado en componentes en tu stack.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Capturas de apps',
+        body: 'Reconstruye una pantalla de app móvil o web a partir de una captura, con estados reales.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Capturas de sitios web',
+        body: 'Recrea una página de aterrizaje o de marketing que capturaste como código adaptable.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Capturas de diseños',
+        body: 'Entrega una captura de un diseño o una maqueta y recibe código listo para lanzar.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Formularios y flujos',
+        body: 'Reconstruye un formulario o un flujo de varios pasos a partir de una captura con validación real.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Cualquier gusto visual',
+        body: 'Editorial, suave o atrevido — el código mantiene el estilo de la captura de principio a fin.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Reconstruido desde una captura de pantalla con Open Design',
+    galleryLead:
+      'Cada uno empezó como una imagen y se convirtió en código que puedes lanzar. Elige una plantilla cercana a tu captura, describe tu variación y el agente la reconstruye — de captura de pantalla a código, sin una exportación atada al proveedor.',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: 'Pantalla de app web — de captura de pantalla a código' },
+      { thumb: 'example-mobile-app', caption: 'Pantalla móvil a código' },
+      { thumb: 'example-kami-landing', caption: 'Captura de aterrizaje en código' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Construcción web de estilo suave' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Explorar plantillas',
+    faqTitle: 'Preguntas frecuentes sobre de captura de pantalla a código',
+    faq: [
+      {
+        q: '¿Cómo convierte Open Design una captura de pantalla en código?',
+        a: 'Le das a tu agente de programación una imagen de la pantalla y Open Design carga la habilidad adecuada para que el agente la reconstruya como código limpio y basado en componentes — leyendo el diseño y la intención, no solo calcando píxeles.',
+      },
+      {
+        q: '¿Qué tipo de código produce?',
+        a: 'HTML y código limpios y basados en componentes construidos desde un sistema de diseño reutilizable, así que puedes leerlo, refinarlo y lanzarlo — no el marcado de posición absoluta que produce la mayoría de las herramientas de captura de pantalla a código.',
+      },
+      {
+        q: '¿Es gratuito?',
+        a: 'Sí. Open Design es de código abierto y funciona dentro del agente de programación que ya usas con tus propias claves de proveedor — no hay medidor por licencia ni por crédito sobre el flujo de captura de pantalla a código en sí.',
+      },
+      {
+        q: '¿Con qué agentes funciona?',
+        a: 'Open Design funciona con Claude Code, Codex, Cursor Agent, Gemini CLI y una docena más de adaptadores nativos. Usas tus propias claves de proveedor; nada se aloja por ti.',
+      },
+    ],
+    ctaTitle: 'Convierte tu próxima captura de pantalla en código esta noche',
+    ctaBody:
+      'Dale una estrella al repositorio, instala Open Design y convierte una captura de la pantalla que quieres en código limpio y listo para lanzar en el agente que ya usas.',
+    relatedTitle: 'Herramientas y guías relacionadas',
+    related: [
+      { href: '/solutions/figma-to-code/', label: 'De Figma a código con Open Design' },
+      { href: '/solutions/design-to-code/', label: 'De diseño a código con Open Design' },
+      { href: '/solutions/ai-ui-generator/', label: 'Generador de UI con IA' },
+      { href: '/solutions/engineering/', label: 'Open Design para ingeniería' },
+    ],
+  },
+  aiPrototypeGenerator: {
+    title: 'Generador de prototipos con IA — del prompt a un prototipo clicable y luego a código',
+    description:
+      'Un generador de prototipos con IA, gratuito y de código abierto, que convierte un prompt en un prototipo real y clicable — varias pantallas, estilos compartidos, interacciones en vivo — y lo lleva hasta el código listo para lanzar. Una alternativa abierta a los generadores de prototipos de Figma, Cursor y Penpot que funciona dentro del agente de programación que ya usas.',
+    breadcrumb: 'Generador de prototipos con IA',
+    label: 'Herramienta · Generador de prototipos con IA',
+    heading: 'El generador de prototipos con IA que entrega código',
+    lead: 'Describe el flujo y deja que tu agente genere un prototipo real y clicable — pantallas enlazadas, estilos consistentes, interacciones que funcionan. A diferencia de los generadores de prototipos que se detienen en una maqueta, Open Design lleva el mismo artefacto hasta el código listo para lanzar, en el agente que ya usas.',
+    heroImageAlt:
+      'Ilustración editorial de un prompt que se convierte en un prototipo clicable de varias pantallas y después en código de producción, enmarcado por un recuadro de selección verde',
+    tldrTitle: 'En una línea',
+    tldrBody:
+      'La mayoría de los generadores de prototipos con IA (Figma, Cursor, Penpot) se detienen en una maqueta clicable que luego reconstruyes. Open Design genera el prototipo dentro de tu agente de programación y lo lleva del prompt al código listo para lanzar — sin paso de exportación, sin brecha de entrega, sin medidor por licencia.',
+    stepsTitle: 'Cómo funciona el generador de prototipos con IA',
+    steps: [
+      {
+        title: 'Describe el flujo',
+        body: 'Cuéntale a tu agente el recorrido en lenguaje natural — «un flujo de onboarding: registro, selector de plan y un panel». Open Design carga la habilidad de prototipo para que el agente disponga pantallas enlazadas, no un solo marco estático.',
+        imageAlt: 'Ilustración de una descripción de flujo en lenguaje natural escrita en una terminal',
+      },
+      {
+        title: 'Genera un prototipo clicable',
+        body: 'El agente ensambla pantallas enlazadas a partir de componentes reutilizables y tokens de diseño, con interacciones reales — navegación, estados, transiciones. Obtienes un prototipo coherente y clicable como conjunto, no marcos desconectados.',
+        imageAlt: 'Ilustración de pantallas de prototipo enlazadas con flechas de navegación sobre una cuadrícula',
+      },
+      {
+        title: 'Refina hablando',
+        body: 'Ajusta el flujo, los estados y el estilo en conversación — «añade un estado vacío», «enlaza este botón al panel», «que se sienta más ágil». El prototipo se actualiza en su sitio en lugar de redibujarse.',
+        imageAlt: 'Ilustración de un prototipo siendo refinado por chat, añadiendo una pantalla y una transición',
+      },
+      {
+        title: 'Lanza el código que es tuyo',
+        body: 'Como el prototipo vive en tu proyecto, este y el código final comparten una sola fuente de verdad. La salida es HTML/código que es tuyo y puedes lanzar — sin dependencia del proveedor, sin redibujar entre prototipo y construcción.',
+        imageAlt: 'Ilustración de un prototipo fluyendo hacia código listo para lanzar sostenido en un recuadro de selección verde',
+      },
+    ],
+    tableTitle: 'Open Design frente a los generadores de prototipos con IA habituales',
+    tableColCapability: 'Lo que necesitas',
+    tableColWithOd: 'Con Open Design',
+    tableColWithout: 'Generadores de prototipos de Figma / Cursor / Penpot',
+    tableRows: [
+      {
+        capability: 'Generar desde un prompt',
+        withOd: 'Un prompt en el agente que ya tienes abierto',
+        without: 'Genera dentro de su app o en una herramienta web aparte',
+      },
+      {
+        capability: 'Clicable, de varias pantallas',
+        withOd: 'Pantallas enlazadas con interacciones reales, como conjunto',
+        without: 'Clicable, pero a menudo atrapado en su editor',
+      },
+      {
+        capability: 'Del prototipo al código',
+        withOd: 'El mismo artefacto se convierte en código listo para lanzar — sin redibujar',
+        without: 'El prototipo es un callejón sin salida; reconstruyes para producción',
+      },
+      {
+        capability: 'Ser dueño del resultado',
+        withOd: 'Archivos y código sin complicaciones en tu repositorio, totalmente tuyos',
+        without: 'Editable solo dentro de su app; exportación limitada',
+      },
+      {
+        capability: 'Coste y dependencia del proveedor',
+        withOd: 'Código abierto, usa tus propias claves, funciona en local',
+        without: 'Suscripción por licencia o por crédito, alojado por el proveedor',
+      },
+    ],
+    featuresTitle: 'Lo que puedes prototipar',
+    features: [
+      {
+        title: 'Flujos de app',
+        body: 'Onboarding, ajustes y recorridos de varias pantallas generados como un conjunto clicable.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Prototipos de app web',
+        body: 'Paneles y herramientas con navegación y estados reales, luego llevados a código.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Flujos SaaS y de aterrizaje',
+        body: 'Flujos de marketing a registro que puedes prototipar, dar estilo y lanzar.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Onboarding y formularios',
+        body: 'Flujos de onboarding y formularios de varios pasos con jerarquía y estados claros.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Conceptos interactivos',
+        body: 'Presenta un concepto clicable rápido y luego mantén el mismo artefacto hasta producción.',
+        thumb: 'example-gamified-app',
+      },
+      {
+        title: 'Cualquier gusto visual',
+        body: 'Editorial, suave o atrevido — mantén un estilo coherente en todas las pantallas.',
+        thumb: 'example-kami-landing',
+      },
+    ],
+    galleryTitle: 'Prototipos creados con Open Design',
+    galleryLead:
+      'Cada uno empezó como un prompt y se renderizó a un artefacto clicable y editable. Elige una plantilla cercana a tu idea, describe tu variación y el agente la adapta — del prototipo al código listo para lanzar.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: 'App web de citas — prototipo clicable' },
+      { thumb: 'example-hr-onboarding', caption: 'Flujo de onboarding de RR. HH.' },
+      { thumb: 'example-mobile-app', caption: 'Prototipo de app móvil' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Prototipo web de estilo suave' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Explorar plantillas',
+    faqTitle: 'Preguntas frecuentes sobre el generador de prototipos con IA',
+    faq: [
+      {
+        q: '¿Es gratuito el generador de prototipos con IA?',
+        a: 'Sí. Open Design es de código abierto y funciona dentro del agente de programación que ya usas con tus propias claves de proveedor — no hay medidor por licencia ni por crédito sobre el generador de prototipos en sí.',
+      },
+      {
+        q: '¿En qué se diferencia de los generadores de prototipos de Figma, Cursor o Penpot?',
+        a: 'Esos se detienen en una maqueta clicable dentro de su app. Open Design genera el prototipo en tu agente de programación y lleva el mismo artefacto hasta el código listo para lanzar que es tuyo — sin exportación, sin reconstruir para producción.',
+      },
+      {
+        q: '¿Son los prototipos clicables y de varias pantallas?',
+        a: 'Sí. El agente genera pantallas enlazadas con interacciones reales — navegación, estados, transiciones — como un conjunto coherente, y luego las refinas hablando.',
+      },
+      {
+        q: '¿Con qué agentes funciona?',
+        a: 'Open Design funciona con Claude Code, Codex, Cursor Agent, Gemini CLI y una docena más de adaptadores nativos. Usas tus propias claves de proveedor; nada se aloja por ti.',
+      },
+    ],
+    ctaTitle: 'Genera tu primer prototipo esta noche',
+    ctaBody:
+      'Dale una estrella al repositorio, instala Open Design y convierte tu próximo flujo en un prototipo clicable — y luego en código listo para lanzar — en el agente que ya usas.',
+    relatedTitle: 'Herramientas y guías relacionadas',
+    related: [
+      { href: '/solutions/prototype/', label: 'Prototipado con Open Design' },
+      { href: '/solutions/ai-wireframe-generator/', label: 'Generador de wireframes con IA' },
+      { href: '/solutions/ai-ui-generator/', label: 'Generador de UI con IA' },
+      { href: '/solutions/design-to-code/', label: 'De diseño a código con Open Design' },
+    ],
+  },
   prototype: {
     title: 'Crea prototipos interactivos con Open Design + Claude Code',
     description:

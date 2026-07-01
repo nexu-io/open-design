@@ -112,6 +112,8 @@ export type SolutionPageKey =
   | 'designToCode'
   | 'aiLandingPageGenerator'
   | 'figmaToCode'
+  | 'screenshotToCode'
+  | 'aiPrototypeGenerator'
   | 'prototype'
   | 'dashboard'
   | 'slides'
