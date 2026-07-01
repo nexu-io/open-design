@@ -1,0 +1,28 @@
+# Linux override for docker-compose.yml.
+#
+# Switches to host networking so the daemon sees browser connections as
+# 127.0.0.1, satisfying the loopback guard on connector endpoints
+# (Composio key save, GitHub OAuth, etc.) that bridge networking breaks.
+#
+# network_mode: host is Linux-only. macOS and Windows Docker Desktop users
+# should use the base docker-compose.yml behind a loopback-bound reverse proxy.
+#
+# Used automatically by install.sh on Linux. To apply manually:
+#   docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d
+name: open-design
+
+services:
+  open-design:
+    # Cap CPU so a busy agent run does not starve the host.
+    cpus: '1.5'
+    # Drop the bridge port mapping — host networking makes it irrelevant.
+    ports: !reset []
+    network_mode: host
+    healthcheck:
+      # Use wget (available in Alpine) instead of node — faster and does not
+      # compete with the daemon for CPU during startup.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7456/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s

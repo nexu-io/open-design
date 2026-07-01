@@ -19,10 +19,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
 OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.override.yml"
+LINUX_OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.linux.yml"
 
 # Build the -f argument list: always include the base file,
-# and add the override if it exists (used by tests for isolation).
+# add the Linux host-network override, and add docker-compose.override.yml if present
+# (used by tests for isolation).
 COMPOSE_FILES=(-f "$COMPOSE_FILE")
+if [ "$(uname -s)" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
+  COMPOSE_FILES+=(-f "$LINUX_OVERRIDE_FILE")
+fi
 if [ -f "$OVERRIDE_FILE" ]; then
   COMPOSE_FILES+=(-f "$OVERRIDE_FILE")
 fi
