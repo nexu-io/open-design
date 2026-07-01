@@ -9,6 +9,7 @@ import path from 'node:path';
 import { isBlocked } from './linked-dirs.js';
 import { listSkills, findSkillById } from './skills.js';
 import { listDesignSystems } from './design-systems/index.js';
+import { copyTreeDereferenced } from './cwd-aliases.js';
 
 /** @typedef {{ source: 'github', url: string } | { source: 'local', path: string }} InstallTarget */
 
@@ -133,11 +134,28 @@ async function installFromLocal(localPath, userDir, manifest) {
     // Doesn't exist — good.
   }
 
-  // Create symlink
+  // Copy the folder into the user library as a self-contained set of real
+  // files, dereferencing any symlinks inside it. Previously this created a
+  // junction to `realPath`, but the daemon's project file guard
+  // (`resolveSafeReal` in projects.ts) rejects any path that resolves outside
+  // the project via a symlink/junction, so a linked design system or skill
+  // could not be read, built, or exported ("path escapes project dir via
+  // symlink"). A dereferenced copy keeps the installed item entirely inside
+  // the managed library, matching how a GitHub install (a clone) already
+  // behaves. `copyTreeDereferenced` is used rather than
+  // `fs.cp({ dereference: true })` because the latter does not reliably
+  // dereference nested symlinks on Windows. Trade-off: the copy is a
+  // snapshot, so later edits to the source folder are not reflected.
   try {
-    fs.symlinkSync(realPath, linkPath, 'junction');
+    await copyTreeDereferenced(realPath, linkPath);
   } catch (err) {
-    return { ok: false, error: `Failed to create symlink: ${err.message}` };
+    // Remove a partial copy so the collision check doesn't block a retry.
+    try {
+      fs.rmSync(linkPath, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup
+    }
+    return { ok: false, error: `Failed to copy: ${err.message}` };
   }
 
   return { ok: true, dir: linkPath };
