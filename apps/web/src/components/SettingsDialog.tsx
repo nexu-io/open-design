@@ -4273,7 +4273,6 @@ export function SettingsDialog({
                           const modelSummary = agentModelSummary(a);
                           const amrBenefits = [
                             t('settings.amrBenefitOfficial'),
-                            t('settings.amrBenefitLowerPrice'),
                             t('settings.amrBenefitManyModels'),
                           ];
                           const versionLabel =
@@ -4405,15 +4404,6 @@ export function SettingsDialog({
                                                 {benefit}
                                               </span>
                                             ))}
-                                            <PlanBadge
-                                              plan={amrCardPlanLabel}
-                                              size="sm"
-                                              title={
-                                                amrCardPlanLabel
-                                                  ? `${t('settings.amrPlan')} ${amrCardPlanLabel}`
-                                                  : undefined
-                                              }
-                                            />
                                           </span>
                                         ) : description ? (
                                           <>
@@ -4446,6 +4436,23 @@ export function SettingsDialog({
                                           <span className="agent-card-amr-email-text" title={amrCardEmail}>
                                             {amrCardEmail}
                                           </span>
+                                          {amrCardPlanLabel ? (
+                                            <span
+                                              className="agent-card-plan-badge-slot"
+                                              aria-hidden="true"
+                                            >
+                                              <PlanBadge
+                                                plan={amrCardPlanLabel}
+                                                size="sm"
+                                                className="agent-card-plan-badge"
+                                                title={
+                                                  amrCardPlanLabel
+                                                    ? `${t('settings.amrPlan')} ${amrCardPlanLabel}`
+                                                    : undefined
+                                                }
+                                              />
+                                            </span>
+                                          ) : null}
                                           {amrCardProfileBadge ? (
                                             <span className="agent-card-amr-profile-badge">
                                               {amrCardProfileBadge}

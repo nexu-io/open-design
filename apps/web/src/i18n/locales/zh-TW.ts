@@ -329,7 +329,7 @@ export const zhTW: Dict = {
   "settings.amrActivationOpen": "開啟登入頁",
   "settings.amrCancelSignIn": "取消登入",
   "settings.amrAccountStatus": "AMR 帳戶狀態",
-  "settings.amrConsole": "控制台",
+  "settings.amrConsole": "管理",
   "settings.amrLoginErrorCompact": "AMR 登入失敗。",
   "settings.advanced": "進階",
   "settings.amrLogin": "登入",

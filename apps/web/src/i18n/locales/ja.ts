@@ -327,7 +327,7 @@ export const ja: Dict = {
   'settings.amrActivationOpen': 'サインインページを開く',
   'settings.amrCancelSignIn': 'サインインをキャンセル',
   'settings.amrAccountStatus': 'Open Design アカウントの状態',
-  'settings.amrConsole': 'コンソール',
+  'settings.amrConsole': '管理',
   'settings.amrBalance': '残高',
   'settings.amrPlan': 'プラン',
   'settings.amrUpgrade': 'アップグレード',

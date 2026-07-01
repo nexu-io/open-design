@@ -327,7 +327,7 @@ export const ko: Dict = {
   'settings.amrActivationOpen': '로그인 페이지 열기',
   'settings.amrCancelSignIn': '로그인 취소',
   'settings.amrAccountStatus': 'Open Design 계정 상태',
-  'settings.amrConsole': '콘솔',
+  'settings.amrConsole': '관리',
   'settings.amrBalance': '잔액',
   'settings.amrPlan': '플랜',
   'settings.amrUpgrade': '업그레이드',

@@ -327,7 +327,7 @@ export const th: Dict = {
   'settings.amrActivationOpen': 'เปิดหน้าเข้าสู่ระบบ',
   'settings.amrCancelSignIn': 'ยกเลิกการลงชื่อเข้าใช้',
   'settings.amrAccountStatus': 'สถานะบัญชี Open Design',
-  'settings.amrConsole': 'Console',
+  'settings.amrConsole': 'จัดการ',
   'settings.amrBalance': 'ยอดคงเหลือ',
   'settings.amrPlan': 'แพ็กเกจ',
   'settings.amrUpgrade': 'อัปเกรด',

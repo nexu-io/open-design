@@ -1262,9 +1262,15 @@
       color-mix(in srgb, var(--accent-tint) 10%, var(--bg-panel))
     );
 }
+.agent-card-installed:has(.agent-card-amr-auth) .agent-card-main {
+  flex-wrap: nowrap;
+}
 .agent-card-installed.active .agent-card-select {
   min-height: 78px;
   padding: 14px 18px 12px 22px;
+}
+.agent-card-installed:has(.agent-card-amr-auth) .agent-card-select {
+  flex: 1;
 }
 .agent-card-installed.active .agent-icon {
   border-radius: var(--radius-md);
@@ -1427,12 +1433,20 @@
 .agent-card-benefits {
   display: inline-flex;
   align-items: center;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   flex-wrap: nowrap;
   gap: 5px;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+}
+.agent-card-plan-badge-slot {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+.agent-card-plan-badge {
+  flex: 0 0 auto;
 }
 .agent-card-benefit {
   display: inline-flex;

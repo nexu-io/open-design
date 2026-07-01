@@ -327,7 +327,7 @@ export const id: Dict = {
   'settings.amrActivationOpen': 'Buka halaman masuk',
   'settings.amrCancelSignIn': 'Batalkan proses masuk',
   'settings.amrAccountStatus': 'Status akun Open Design',
-  'settings.amrConsole': 'Konsol',
+  'settings.amrConsole': 'Kelola',
   'settings.amrBalance': 'Saldo',
   'settings.amrPlan': 'Paket',
   'settings.amrUpgrade': 'Tingkatkan',

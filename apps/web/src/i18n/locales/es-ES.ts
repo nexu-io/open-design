@@ -327,7 +327,7 @@ export const esES: Dict = {
   'settings.amrActivationOpen': 'Abrir página de inicio de sesión',
   'settings.amrCancelSignIn': 'Cancelar inicio de sesión',
   'settings.amrAccountStatus': 'Estado de la cuenta Open Design',
-  'settings.amrConsole': 'Consola',
+  'settings.amrConsole': 'Gestionar',
   'settings.amrBalance': 'Saldo',
   'settings.amrPlan': 'Plan',
   'settings.amrUpgrade': 'Mejorar',

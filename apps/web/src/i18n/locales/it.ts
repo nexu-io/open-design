@@ -327,7 +327,7 @@ export const it: Dict = {
   'settings.amrActivationOpen': 'Apri la pagina di accesso',
   'settings.amrCancelSignIn': 'Annulla accesso',
   'settings.amrAccountStatus': 'Stato account Open Design',
-  'settings.amrConsole': 'Console',
+  'settings.amrConsole': 'Gestisci',
   'settings.amrBalance': 'Saldo',
   'settings.amrPlan': 'Piano',
   'settings.amrUpgrade': 'Esegui upgrade',

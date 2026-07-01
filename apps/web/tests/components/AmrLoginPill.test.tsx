@@ -248,7 +248,7 @@ describe('AmrLoginPill', () => {
 
     expect(screen.getByText('leaf@example.com')).toBeTruthy();
     expect(screen.getByText('TEST')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Console' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
       'https://vela.powerformer.net/wallet?source=open_design',
     );
   });
@@ -263,7 +263,7 @@ describe('AmrLoginPill', () => {
     });
 
     expect(screen.getByText('LOCAL')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Console' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
       'http://localhost:5173/wallet?source=open_design',
     );
   });
@@ -278,7 +278,7 @@ describe('AmrLoginPill', () => {
     });
 
     expect(screen.queryByText('PROD')).toBeNull();
-    expect(screen.getByRole('link', { name: 'Console' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
       'https://open-design.ai/amr/wallet?source=open_design',
     );
   });
@@ -305,7 +305,7 @@ describe('AmrLoginPill', () => {
       </I18nProvider>,
     );
 
-    const link = screen.getByRole('link', { name: 'Console' }) as HTMLAnchorElement;
+    const link = screen.getByRole('link', { name: 'Manage' }) as HTMLAnchorElement;
     fireEvent.click(link);
 
     const url = new URL(link.href);

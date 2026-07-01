@@ -328,7 +328,7 @@ export const zhCN: Dict = {
   "settings.amrActivationOpen": "打开登录页",
   "settings.amrCancelSignIn": "取消登录",
   "settings.amrAccountStatus": "AMR 账户状态",
-  "settings.amrConsole": "AMR 控制台",
+  "settings.amrConsole": "管理",
   "settings.amrLoginErrorCompact": "AMR 登录失败。",
   "settings.advanced": "高级设置",
   "settings.amrLogin": "登录",
