@@ -1413,24 +1413,26 @@
 .agent-card-name--amr {
   align-items: center;
   gap: 8px;
-  row-gap: 5px;
-  flex-wrap: wrap;
-  white-space: normal;
-  overflow: visible;
+  flex-wrap: nowrap;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
 }
 .agent-card-name.agent-card-name--amr .agent-card-title {
-  flex: 0 0 auto;
-  overflow: visible;
-  text-overflow: clip;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .agent-card-benefits {
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
   gap: 5px;
-  min-width: min(100%, 220px);
-  overflow: visible;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .agent-card-benefit {
   display: inline-flex;
