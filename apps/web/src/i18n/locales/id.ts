@@ -331,7 +331,7 @@ export const id: Dict = {
   'settings.amrBalance': 'Saldo',
   'settings.amrPlan': 'Paket',
   'settings.amrUpgrade': 'Tingkatkan',
-  'settings.amrLoginErrorCompact': 'Proses masuk Open Design gagal.',
+  'settings.amrLoginErrorCompact': 'Masuk ke cloud untuk sementara tidak tersedia. Coba lagi nanti.',
   'settings.advanced': 'Lanjutan',
   'settings.amrLogin': 'Masuk',
   'settings.amrLogout': 'Keluar',

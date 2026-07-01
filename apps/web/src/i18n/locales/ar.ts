@@ -331,7 +331,7 @@ export const ar: Dict = {
   'settings.amrBalance': 'الرصيد',
   'settings.amrPlan': 'الخطة',
   'settings.amrUpgrade': 'ترقية',
-  'settings.amrLoginErrorCompact': 'فشل تسجيل الدخول إلى Open Design.',
+  'settings.amrLoginErrorCompact': 'تسجيل الدخول إلى السحابة غير متاح مؤقتًا. يُرجى المحاولة مرة أخرى لاحقًا.',
   'settings.advanced': 'متقدّم',
   'settings.amrLogin': 'تسجيل الدخول',
   'settings.amrLogout': 'تسجيل الخروج',

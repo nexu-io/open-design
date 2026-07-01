@@ -331,7 +331,7 @@ export const de: Dict = {
   'settings.amrBalance': 'Guthaben',
   'settings.amrPlan': 'Tarif',
   'settings.amrUpgrade': 'Upgrade',
-  'settings.amrLoginErrorCompact': 'Open Design-Anmeldung fehlgeschlagen.',
+  'settings.amrLoginErrorCompact': 'Die Cloud-Anmeldung ist vorübergehend nicht verfügbar. Bitte versuche es später erneut.',
   'settings.advanced': 'Erweitert',
   'settings.amrLogin': 'Anmelden',
   'settings.amrLogout': 'Abmelden',

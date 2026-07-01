@@ -331,7 +331,7 @@ export const en: Dict = {
   'settings.amrBalance': 'Balance',
   'settings.amrPlan': 'Plan',
   'settings.amrUpgrade': 'Upgrade',
-  'settings.amrLoginErrorCompact': 'Sign-in failed.',
+  'settings.amrLoginErrorCompact': 'Cloud sign-in is temporarily unavailable. Please try again later.',
   'settings.advanced': 'Advanced',
   'settings.amrLogin': 'Sign in',
   'settings.amrLogout': 'Sign out',

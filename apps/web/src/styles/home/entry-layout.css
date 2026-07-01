@@ -2043,8 +2043,19 @@
   margin-top: 22px;
 }
 
+/* The two alternatives ("local CLI" / "your own key") are links to other
+   runtimes. Keep them dark and underlined on hover so they read as clickable
+   without competing with the primary sign-in button. */
 .onboarding-cloud__alts .onboarding-cloud__secondary {
   margin-top: 0;
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.onboarding-cloud__alts .onboarding-cloud__secondary:hover {
+  color: var(--text-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .onboarding-cloud__alts-or {

@@ -331,7 +331,7 @@ export const tr: Dict = {
   'settings.amrBalance': 'Bakiye',
   'settings.amrPlan': 'Plan',
   'settings.amrUpgrade': 'Yükselt',
-  'settings.amrLoginErrorCompact': 'Open Design oturum açma başarısız oldu.',
+  'settings.amrLoginErrorCompact': 'Bulut oturum açma geçici olarak kullanılamıyor. Lütfen daha sonra tekrar deneyin.',
   'settings.advanced': 'Gelişmiş',
   'settings.amrLogin': 'Oturum aç',
   'settings.amrLogout': 'Oturumu kapat',

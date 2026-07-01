@@ -331,7 +331,7 @@ export const ja: Dict = {
   'settings.amrBalance': '残高',
   'settings.amrPlan': 'プラン',
   'settings.amrUpgrade': 'アップグレード',
-  'settings.amrLoginErrorCompact': 'Open Design へのサインインに失敗しました。',
+  'settings.amrLoginErrorCompact': 'クラウドサインインは一時的に利用できません。しばらくしてからもう一度お試しください。',
   'settings.advanced': '詳細設定',
   'settings.amrLogin': 'サインイン',
   'settings.amrLogout': 'サインアウト',

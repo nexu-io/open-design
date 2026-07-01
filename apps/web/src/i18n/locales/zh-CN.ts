@@ -329,7 +329,7 @@ export const zhCN: Dict = {
   "settings.amrCancelSignIn": "取消登录",
   "settings.amrAccountStatus": "AMR 账户状态",
   "settings.amrConsole": "管理",
-  "settings.amrLoginErrorCompact": "AMR 登录失败。",
+  "settings.amrLoginErrorCompact": "云端登录暂时不可用，请稍后重试。",
   "settings.advanced": "高级设置",
   "settings.amrLogin": "登录",
   "settings.amrLogout": "登出",

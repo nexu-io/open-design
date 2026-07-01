@@ -331,7 +331,7 @@ export const hu: Dict = {
   'settings.amrBalance': 'Egyenleg',
   'settings.amrPlan': 'Csomag',
   'settings.amrUpgrade': 'Frissítés',
-  'settings.amrLoginErrorCompact': 'Az Open Design bejelentkezés sikertelen.',
+  'settings.amrLoginErrorCompact': 'A felhőbe való bejelentkezés átmenetileg nem érhető el. Próbáld újra később.',
   'settings.advanced': 'Speciális',
   'settings.amrLogin': 'Bejelentkezés',
   'settings.amrLogout': 'Kijelentkezés',

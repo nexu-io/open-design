@@ -331,7 +331,7 @@ export const ptBR: Dict = {
   'settings.amrBalance': 'Saldo',
   'settings.amrPlan': 'Plano',
   'settings.amrUpgrade': 'Fazer upgrade',
-  'settings.amrLoginErrorCompact': 'Falha no login do Open Design.',
+  'settings.amrLoginErrorCompact': 'O login na nuvem está temporariamente indisponível. Tente novamente mais tarde.',
   'settings.advanced': 'Avançado',
   'settings.amrLogin': 'Entrar',
   'settings.amrLogout': 'Sair',

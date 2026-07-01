@@ -331,7 +331,7 @@ export const ru: Dict = {
   'settings.amrBalance': 'Баланс',
   'settings.amrPlan': 'Тариф',
   'settings.amrUpgrade': 'Улучшить',
-  'settings.amrLoginErrorCompact': 'Не удалось войти в Open Design.',
+  'settings.amrLoginErrorCompact': 'Вход в облако временно недоступен. Повторите попытку позже.',
   'settings.advanced': 'Дополнительно',
   'settings.amrLogin': 'Войти',
   'settings.amrLogout': 'Выйти',

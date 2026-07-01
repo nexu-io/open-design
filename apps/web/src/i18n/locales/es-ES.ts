@@ -331,7 +331,7 @@ export const esES: Dict = {
   'settings.amrBalance': 'Saldo',
   'settings.amrPlan': 'Plan',
   'settings.amrUpgrade': 'Mejorar',
-  'settings.amrLoginErrorCompact': 'Error al iniciar sesión en Open Design.',
+  'settings.amrLoginErrorCompact': 'El inicio de sesión en la nube no está disponible temporalmente. Inténtalo de nuevo más tarde.',
   'settings.advanced': 'Avanzado',
   'settings.amrLogin': 'Iniciar sesión',
   'settings.amrLogout': 'Cerrar sesión',

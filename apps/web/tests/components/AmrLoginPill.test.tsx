@@ -168,7 +168,7 @@ describe('AmrAccountControl', () => {
     });
 
     expect(screen.getByRole('alert').textContent).toBe('command failed');
-    expect(screen.queryByText('Sign-in failed.')).toBeNull();
+    expect(screen.queryByText('Cloud sign-in is temporarily unavailable. Please try again later.')).toBeNull();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
   });
 });
@@ -476,7 +476,7 @@ describe('AmrLoginPill', () => {
     expect(screen.getByRole('alert').textContent).toBe(
       'profile "prod" api URL: is not configured',
     );
-    expect(screen.queryByText('Sign-in failed.')).toBeNull();
+    expect(screen.queryByText('Cloud sign-in is temporarily unavailable. Please try again later.')).toBeNull();
     expect(screen.queryByText('Signing in…')).toBeNull();
   });
 
@@ -715,7 +715,7 @@ describe('AmrLoginPill', () => {
           (init as RequestInit | undefined)?.method === 'POST',
       ),
     ).toBe(true);
-    expect(screen.getByText('Sign-in failed.')).toBeTruthy();
+    expect(screen.getByText('Cloud sign-in is temporarily unavailable. Please try again later.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
     expect(screen.queryByText('Signing in…')).toBeNull();
   });

@@ -331,7 +331,7 @@ export const pl: Dict = {
   'settings.amrBalance': 'Saldo',
   'settings.amrPlan': 'Plan',
   'settings.amrUpgrade': 'Ulepsz',
-  'settings.amrLoginErrorCompact': 'Logowanie Open Design nie powiodło się.',
+  'settings.amrLoginErrorCompact': 'Logowanie w chmurze jest tymczasowo niedostępne. Spróbuj ponownie później.',
   'settings.advanced': 'Zaawansowane',
   'settings.amrLogin': 'Zaloguj się',
   'settings.amrLogout': 'Wyloguj się',

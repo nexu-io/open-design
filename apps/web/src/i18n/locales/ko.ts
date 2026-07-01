@@ -331,7 +331,7 @@ export const ko: Dict = {
   'settings.amrBalance': '잔액',
   'settings.amrPlan': '플랜',
   'settings.amrUpgrade': '업그레이드',
-  'settings.amrLoginErrorCompact': 'Open Design 로그인에 실패했습니다.',
+  'settings.amrLoginErrorCompact': '클라우드 로그인을 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.',
   'settings.advanced': '고급',
   'settings.amrLogin': '로그인',
   'settings.amrLogout': '로그아웃',

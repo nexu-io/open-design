@@ -331,7 +331,7 @@ export const fr: Dict = {
   'settings.amrBalance': 'Solde',
   'settings.amrPlan': 'Forfait',
   'settings.amrUpgrade': 'Mettre à niveau',
-  'settings.amrLoginErrorCompact': 'Échec de la connexion Open Design.',
+  'settings.amrLoginErrorCompact': 'La connexion au cloud est temporairement indisponible. Veuillez réessayer plus tard.',
   'settings.advanced': 'Avancé',
   'settings.amrLogin': 'Se connecter',
   'settings.amrLogout': 'Se déconnecter',

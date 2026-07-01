@@ -898,7 +898,7 @@ describe('InlineModelSwitcher AMR row', () => {
     });
     expect(
       within(popover).queryByRole('radio', {
-        name: /^Open Design\s+Sign-in failed\./i,
+        name: /^Open Design\s+Cloud sign-in is temporarily unavailable\./i,
       }),
     ).toBeNull();
     expect(
@@ -966,7 +966,7 @@ describe('InlineModelSwitcher AMR row', () => {
     });
     expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login/cancel', { method: 'POST' });
     expect(
-      within(popover).getByRole('radio', { name: /^Open Design\s+Sign-in failed\./i }),
+      within(popover).getByRole('radio', { name: /^Open Design\s+Cloud sign-in is temporarily unavailable\./i }),
     ).toBeTruthy();
     expect(
       popover.querySelector('.inline-switcher__account-status.is-error'),

@@ -331,7 +331,7 @@ export const th: Dict = {
   'settings.amrBalance': 'ยอดคงเหลือ',
   'settings.amrPlan': 'แพ็กเกจ',
   'settings.amrUpgrade': 'อัปเกรด',
-  'settings.amrLoginErrorCompact': 'การลงชื่อเข้าใช้ Open Design ล้มเหลว',
+  'settings.amrLoginErrorCompact': 'ขณะนี้ไม่สามารถลงชื่อเข้าใช้ระบบคลาวด์ได้ชั่วคราว โปรดลองอีกครั้งในภายหลัง',
   'settings.advanced': 'ขั้นสูง',
   'settings.amrLogin': 'ลงชื่อเข้าใช้',
   'settings.amrLogout': 'ออกจากระบบ',

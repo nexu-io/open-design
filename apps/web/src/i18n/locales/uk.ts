@@ -331,7 +331,7 @@ export const uk: Dict = {
   'settings.amrBalance': 'Баланс',
   'settings.amrPlan': 'Тариф',
   'settings.amrUpgrade': 'Покращити',
-  'settings.amrLoginErrorCompact': 'Не вдалося ввійти в Open Design.',
+  'settings.amrLoginErrorCompact': 'Вхід у хмару тимчасово недоступний. Спробуйте пізніше.',
   'settings.advanced': 'Розширені',
   'settings.amrLogin': 'Увійти',
   'settings.amrLogout': 'Вийти',

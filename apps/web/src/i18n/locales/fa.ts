@@ -331,7 +331,7 @@ export const fa: Dict = {
   'settings.amrBalance': 'موجودی',
   'settings.amrPlan': 'طرح',
   'settings.amrUpgrade': 'ارتقا',
-  'settings.amrLoginErrorCompact': 'ورود به Open Design ناموفق بود.',
+  'settings.amrLoginErrorCompact': 'ورود به فضای ابری موقتاً در دسترس نیست. لطفاً بعداً دوباره تلاش کنید.',
   'settings.advanced': 'پیشرفته',
   'settings.amrLogin': 'ورود',
   'settings.amrLogout': 'خروج',
