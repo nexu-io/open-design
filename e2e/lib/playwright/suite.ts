@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { expect, test as base } from '@playwright/test';
 
 import { createToolsDevSuite, e2eWorkspaceRoot } from '../tools-dev/runtime.ts';
+import { T } from '../timeouts.ts';
 import type { ToolsDevSuite } from '../tools-dev/types.ts';
 
 type PlaywrightToolsDevSuite = ToolsDevSuite & {
@@ -53,7 +54,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         }
       }
     },
-    { scope: 'worker', timeout: 120_000 },
+    { scope: 'worker', timeout: T.xlong * 3 },
   ],
 
   baseURL: async ({ toolsDev }, use) => {
