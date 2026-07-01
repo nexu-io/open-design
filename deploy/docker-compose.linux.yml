@@ -18,10 +18,15 @@ services:
     # Drop the bridge port mapping — host networking makes it irrelevant.
     ports: !reset []
     network_mode: host
+    environment:
+      # Re-declare both port vars so the daemon listener follows OPEN_DESIGN_PORT
+      # even without the bridge mapping (which normally enforced the remap).
+      OD_PORT: ${OPEN_DESIGN_PORT:-7456}
+      OD_WEB_PORT: ${OPEN_DESIGN_PORT:-7456}
     healthcheck:
       # Use wget (available in Alpine) instead of node — faster and does not
       # compete with the daemon for CPU during startup.
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:7456/api/health"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:${OPEN_DESIGN_PORT:-7456}/api/health"]
       interval: 30s
       timeout: 10s
       retries: 5
