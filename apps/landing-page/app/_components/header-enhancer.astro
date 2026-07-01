@@ -216,6 +216,23 @@
       const sessionUrl = api + '/api/auth/get-session';
       const signoutUrl = api + '/api/auth/sign-out';
 
+      // Cloud (AMR) account funnel analytics — feeds the same PostHog sink as
+      // the rest of the site (window.__odTrack, guarded). area is always the
+      // header since this module only lives in the nav chrome.
+      const track = (name, extra) => {
+        try {
+          if (typeof window.__odTrack === 'function') {
+            window.__odTrack(
+              name,
+              Object.assign(
+                { area: 'header', locale: (document.documentElement.getAttribute('lang') || 'en').toLowerCase() },
+                extra || {},
+              ),
+            );
+          }
+        } catch (e) {}
+      };
+
       const fetchSession = () =>
         fetch(sessionUrl, {
           credentials: 'include',
@@ -296,6 +313,7 @@
       const completeSignIn = (user) => {
         hideOverlay();
         showSignedIn(user);
+        track('sign_in_success', {});
         goHome();
       };
 
@@ -310,6 +328,7 @@
       if (signinEl && loginUrl) {
         signinEl.addEventListener('click', (ev) => {
           ev.preventDefault();
+          track('sign_in_click', { source: 'header' });
           // Center the popup over the current browser window (multi-monitor
           // aware: screenLeft/screenTop give the window's screen offset).
           const W = 480;
@@ -364,6 +383,7 @@
 
       if (signoutBtn) {
         signoutBtn.addEventListener('click', () => {
+          track('sign_out_click', {});
           fetch(signoutUrl, {
             method: 'POST',
             credentials: 'include',
@@ -372,6 +392,11 @@
             .catch(() => {})
             .then(() => showSignedOut());
         });
+      }
+
+      const consoleLink = account.querySelector('[data-amr-console-link]');
+      if (consoleLink) {
+        consoleLink.addEventListener('click', () => track('cloud_console_open', { source: 'header_menu' }));
       }
     }
 
