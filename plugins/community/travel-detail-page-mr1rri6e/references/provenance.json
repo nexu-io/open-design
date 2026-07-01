@@ -1,0 +1,19 @@
+{
+  "candidateId": "847f1791-eec2-41a7-ab75-4e685d4c2727",
+  "projectId": "ea7712c6-0f6a-4ca9-bd1b-ab99591450a3",
+  "runId": "abfa0754-d325-4ad2-b466-7db2abe9bcba",
+  "conversationId": "a22fecd1-8482-4879-a6a1-07890ced1909",
+  "provenance": {
+    "summary": "Detected from mr1r4oz8-SKILL.md after a successful run.",
+    "detectedAt": 1782890848625
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "mr1r4oz8-SKILL.md",
+      "label": "mr1r4oz8-SKILL.md",
+      "size": 6403,
+      "copied": true
+    }
+  ]
+}
