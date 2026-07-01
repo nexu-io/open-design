@@ -14,6 +14,15 @@
   const REPO = 'https://github.com/nexu-io/open-design';
   const X_PROFILE = 'https://x.com/OpenDesignHQ';
   const AMR_URL = 'https://open-design.ai/amr/';
+  // Open Design Cloud (AMR) account entry — mirrors header.tsx defaults so the
+  // static community pages show the same sign-in / account state as the main
+  // site. The main header derives its post-login home from `href('/')`; these
+  // community pages are the default (English) locale with no locale prefix
+  // (`<html lang="en">`), so the equivalent home is the locale-neutral root `/`.
+  const AMR_API_BASE = 'https://amr-api.open-design.ai';
+  const AMR_LOGIN_URL = 'https://open-design.ai/amr/login';
+  const AMR_CONSOLE_URL = 'https://open-design.ai/amr?source=open_design';
+  const AMR_HOME = '/';
 
   const renderSiteNav = () => `
     <div class="site-chrome" data-chrome-headroom>
@@ -103,6 +112,9 @@
                   <li><a href="/zh/plugins/systems/"><span class="dropdown-name">设计系统</span></a></li>
                 </ul>
               </li>
+              <li>
+                <a href="/zh/pricing/">价格</a>
+              </li>
               <li class="has-dropdown">
                 <a href="/zh/blog/">
                   资源<span class="dropdown-caret" aria-hidden="true">▾</span>
@@ -119,9 +131,9 @@
                   社区<span class="dropdown-caret" aria-hidden="true">▾</span>
                 </a>
                 <ul class="nav-dropdown" aria-label="社区">
-                  <li><a href="/community/#contributors"><span class="dropdown-name">贡献者</span></a></li>
-                  <li><a href="/community/#ambassadors"><span class="dropdown-name">大使</span></a></li>
-                  <li><a href="/community/#moderators"><span class="dropdown-name">版主</span></a></li>
+                  <li><a href="/community/contributors/"><span class="dropdown-name">贡献者</span></a></li>
+                  <li><a href="/community/ambassadors/"><span class="dropdown-name">大使</span></a></li>
+                  <li><a href="/community/moderators/"><span class="dropdown-name">版主</span></a></li>
                   <li><a href="${DISCORD}" target="_blank" rel="noreferrer noopener"><span class="dropdown-name">Discord</span></a></li>
                   <li><a href="${REPO}/discussions" target="_blank" rel="noreferrer noopener"><span class="dropdown-name">Discussions</span></a></li>
                   <li><a href="${X_PROFILE}" target="_blank" rel="noreferrer noopener"><span class="dropdown-name">X</span></a></li>
@@ -157,6 +169,23 @@
               </div>
             </details>
             <a class="nav-cta ghost" href="/zh/download/" aria-label="下载桌面端" title="下载桌面端" data-download-cta data-download-page>下载</a>
+            <div class="nav-account" data-amr-account data-amr-api="${AMR_API_BASE}" data-amr-login="${AMR_LOGIN_URL}" data-amr-console="${AMR_CONSOLE_URL}" data-amr-home="${AMR_HOME}">
+              <a class="nav-signin" href="${AMR_LOGIN_URL}" data-amr-signin>登录</a>
+              <details class="nav-account-menu" data-amr-menu hidden>
+                <summary class="nav-account-trigger" aria-label="账户菜单" title="账户菜单">
+                  <img class="nav-avatar" alt="" data-amr-avatar />
+                  <span class="nav-avatar-fallback" data-amr-avatar-fallback aria-hidden="true"></span>
+                </summary>
+                <div class="nav-account-dropdown" role="menu">
+                  <div class="nav-account-id">
+                    <span class="nav-account-name" data-amr-name></span>
+                    <span class="nav-account-email" data-amr-email></span>
+                  </div>
+                  <a class="nav-account-item" role="menuitem" href="${AMR_CONSOLE_URL}" target="_blank" rel="noreferrer noopener" data-amr-console-link>控制台</a>
+                  <button type="button" class="nav-account-item nav-account-signout" role="menuitem" data-amr-signout>退出登录</button>
+                </div>
+              </details>
+            </div>
           </div>
         </div>
         <svg class="nav-glass-defs" aria-hidden="true" focusable="false" width="0" height="0">
@@ -181,6 +210,168 @@
 
   for (const placeholder of document.querySelectorAll('od-site-nav')) {
     placeholder.outerHTML = renderSiteNav();
+  }
+
+  // Open Design Cloud (AMR) header account. Ported 1:1 from
+  // `app/_components/header-enhancer.astro` so these static pages detect a cloud
+  // session, swap the "登录" link for an avatar menu, drive popup login, and
+  // handle sign-out. Every network path fails closed to the signed-out state.
+  const account = document.querySelector('[data-amr-account]');
+  if (account) {
+    const api = (account.getAttribute('data-amr-api') || '').replace(/\/$/, '');
+    const loginUrl = account.getAttribute('data-amr-login') || '';
+    const homeUrl = account.getAttribute('data-amr-home') || '';
+    const signinEl = account.querySelector('[data-amr-signin]');
+    const menuEl = account.querySelector('[data-amr-menu]');
+    const avatarImg = account.querySelector('[data-amr-avatar]');
+    const avatarFallback = account.querySelector('[data-amr-avatar-fallback]');
+    const nameEl = account.querySelector('[data-amr-name]');
+    const emailEl = account.querySelector('[data-amr-email]');
+    const signoutBtn = account.querySelector('[data-amr-signout]');
+
+    const sessionUrl = api + '/api/auth/get-session';
+    const signoutUrl = api + '/api/auth/sign-out';
+
+    const fetchSession = () =>
+      fetch(sessionUrl, {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => (data && data.user ? data.user : null))
+        .catch(() => null);
+
+    const initials = (user) => {
+      const base = (user.name || user.email || '').trim();
+      return base ? base[0].toUpperCase() : '·';
+    };
+
+    const showSignedIn = (user) => {
+      if (nameEl) nameEl.textContent = user.name || '';
+      if (emailEl) emailEl.textContent = user.email || '';
+      if (avatarImg && user.image) {
+        avatarImg.setAttribute('src', user.image);
+        avatarImg.removeAttribute('hidden');
+        if (avatarFallback) avatarFallback.setAttribute('hidden', '');
+      } else {
+        if (avatarImg) avatarImg.setAttribute('hidden', '');
+        if (avatarFallback) {
+          avatarFallback.textContent = initials(user);
+          avatarFallback.removeAttribute('hidden');
+        }
+      }
+      if (signinEl) signinEl.setAttribute('hidden', '');
+      if (menuEl) menuEl.removeAttribute('hidden');
+    };
+
+    const showSignedOut = () => {
+      if (menuEl) {
+        menuEl.setAttribute('hidden', '');
+        menuEl.removeAttribute('open');
+      }
+      if (signinEl) signinEl.removeAttribute('hidden');
+    };
+
+    let overlayEl = null;
+    const showOverlay = () => {
+      if (overlayEl) return;
+      overlayEl = document.createElement('div');
+      overlayEl.className = 'nav-login-overlay';
+      overlayEl.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(overlayEl);
+      requestAnimationFrame(() => {
+        if (overlayEl) overlayEl.classList.add('is-active');
+      });
+    };
+    const hideOverlay = () => {
+      if (!overlayEl) return;
+      const el = overlayEl;
+      overlayEl = null;
+      el.classList.remove('is-active');
+      const drop = () => el.remove();
+      el.addEventListener('transitionend', drop, { once: true });
+      setTimeout(drop, 400);
+    };
+
+    const goHome = () => {
+      if (!homeUrl) return;
+      const targetUrl = new URL(homeUrl, window.location.href);
+      const here = window.location.pathname.replace(/\/+$/, '');
+      const target = targetUrl.pathname.replace(/\/+$/, '');
+      if (here !== target) window.location.assign(homeUrl);
+    };
+
+    const completeSignIn = (user) => {
+      hideOverlay();
+      showSignedIn(user);
+      goHome();
+    };
+
+    fetchSession().then((user) => {
+      if (user) showSignedIn(user);
+    });
+
+    if (signinEl && loginUrl) {
+      signinEl.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        const W = 480;
+        const H = 720;
+        const dx = window.screenLeft ?? window.screenX ?? 0;
+        const dy = window.screenTop ?? window.screenY ?? 0;
+        const vw = window.innerWidth || document.documentElement.clientWidth || screen.width;
+        const vh = window.innerHeight || document.documentElement.clientHeight || screen.height;
+        const left = Math.round(dx + (vw - W) / 2);
+        const top = Math.round(dy + (vh - H) / 2);
+        const popup = window.open(
+          loginUrl,
+          'od-amr-login',
+          `width=${W},height=${H},left=${left},top=${top},menubar=no,toolbar=no,location=yes`,
+        );
+        if (!popup) {
+          window.location.assign(loginUrl);
+          return;
+        }
+        showOverlay();
+        const started = Date.now();
+        const POLL_MS = 2000;
+        const MAX_MS = 5 * 60 * 1000;
+        const timer = setInterval(() => {
+          if (Date.now() - started > MAX_MS) {
+            clearInterval(timer);
+            hideOverlay();
+            return;
+          }
+          if (popup.closed) {
+            clearInterval(timer);
+            fetchSession().then((user) => {
+              if (user) completeSignIn(user);
+              else hideOverlay();
+            });
+            return;
+          }
+          fetchSession().then((user) => {
+            if (!user) return;
+            clearInterval(timer);
+            try {
+              if (!popup.closed) popup.close();
+            } catch {}
+            completeSignIn(user);
+          });
+        }, POLL_MS);
+      });
+    }
+
+    if (signoutBtn) {
+      signoutBtn.addEventListener('click', () => {
+        fetch(signoutUrl, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        })
+          .catch(() => {})
+          .then(() => showSignedOut());
+      });
+    }
   }
 
   const injectHomeFooterStyles = () => {
