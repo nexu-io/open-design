@@ -28,6 +28,7 @@ import { uk } from './locales/uk';
 import { tr } from './locales/tr';
 import { th } from './locales/th';
 import { it } from './locales/it';
+import { ta } from './locales/ta';
 import { getOpenDesignHost } from '@open-design/host';
 import { LOCALES, type Dict, type Locale } from './types';
 
@@ -56,6 +57,7 @@ const DICTS: Record<Locale, Dict> = {
   'tr': tr,
   'th': th,
   'it': it,
+  'ta': ta,
 };
 
 const LS_KEY = 'open-design:locale';
