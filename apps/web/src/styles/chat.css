@@ -1624,6 +1624,67 @@
   align-items: center;
   justify-content: center;
 }
+/* Usage / cost tag — a 3-segment signal meter plus a tier label so the user
+   knows roughly how much a run in each mode consumes before switching.
+   Tiers reuse the semantic status tokens: green (light) → blue (standard) →
+   amber (heavy). --cost-color drives the meter; card variant fills a pill. */
+.session-mode-cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  line-height: 1;
+  white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.session-mode-cost--low {
+  --cost-color: var(--green);
+  --cost-bg: var(--green-bg);
+  --cost-border: var(--green-border);
+}
+.session-mode-cost--medium {
+  --cost-color: var(--blue);
+  --cost-bg: var(--blue-bg);
+  --cost-border: var(--blue-border);
+}
+.session-mode-cost--high {
+  --cost-color: var(--amber);
+  --cost-bg: var(--amber-bg);
+  --cost-border: color-mix(in srgb, var(--amber) 32%, transparent);
+}
+.session-mode-cost__meter {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+.session-mode-cost__bar {
+  width: 3px;
+  border-radius: 1px;
+  background: var(--cost-color);
+  opacity: 0.24;
+}
+.session-mode-cost__bar:nth-child(1) { height: 6px; }
+.session-mode-cost__bar:nth-child(2) { height: 9px; }
+.session-mode-cost__bar:nth-child(3) { height: 12px; }
+.session-mode-cost__bar.is-on {
+  opacity: 1;
+}
+.session-mode-cost--menu .session-mode-cost__label {
+  color: var(--text-soft);
+  font-size: 10px;
+}
+.session-mode-cost--card {
+  padding: 3px 8px;
+  border: 1px solid var(--cost-border);
+  border-radius: var(--radius-pill);
+  background: var(--cost-bg);
+}
+.session-mode-cost--card .session-mode-cost__label {
+  color: var(--cost-color);
+}
 .session-mode-card {
   padding: 10px;
   border: 1px solid var(--border);
@@ -1661,6 +1722,11 @@
 }
 .session-mode-card__heading {
   min-width: 0;
+  flex: 1 1 auto;
+}
+.session-mode-card__head .session-mode-cost--card {
+  flex: 0 0 auto;
+  margin-top: 1px;
 }
 .session-mode-card__title {
   color: var(--text-strong);

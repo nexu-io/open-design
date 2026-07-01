@@ -504,6 +504,8 @@ export function DesignSystemPicker({
         type="button"
         className={`project-ds-picker-trigger${selected ? ' picked' : ''}`}
         data-testid="project-ds-picker-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         disabled={loading}
         title={selected?.title ?? t('designSystemPicker.select')}

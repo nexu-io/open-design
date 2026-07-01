@@ -105,6 +105,78 @@ describe('NextStepActions', () => {
     expect(onPromptAction).toHaveBeenCalledWith(expect.stringContaining('refine this design system in place'));
   });
 
+  it('offers document handoff rows after plan mode produces only a document', () => {
+    const onPromptAction = vi.fn();
+    renderActions({
+      variant: 'plan',
+      fileName: 'plan.md',
+      planFileName: 'plan.md',
+      artifactFileName: null,
+      onPromptAction,
+    });
+
+    expect(screen.queryByText(AUTO_MATCH_TITLE)).toBeNull();
+    expect(screen.getByText(en['nextStep.planGenerateTitle'])).toBeTruthy();
+    expect(screen.getByText(en['nextStep.planImproveTitle'])).toBeTruthy();
+    expect(screen.queryByText(en['nextStep.planImproveArtifactTitle'])).toBeNull();
+
+    fireEvent.click(screen.getByTestId('next-step-plan-action-plan-generate-from-doc'));
+    expect(onPromptAction).toHaveBeenLastCalledWith(
+      expect.stringContaining('plan.md'),
+      { sessionMode: 'design' },
+    );
+
+    fireEvent.click(screen.getByTestId('next-step-plan-action-plan-improve-doc'));
+    expect(onPromptAction).toHaveBeenLastCalledWith(
+      expect.stringContaining('plan.md'),
+      { sessionMode: 'plan' },
+    );
+  });
+
+  it('offers artifact refinement after plan mode produces only an artifact', () => {
+    const onPromptAction = vi.fn();
+    renderActions({
+      variant: 'plan',
+      fileName: 'index.html',
+      planFileName: null,
+      artifactFileName: 'index.html',
+      onPromptAction,
+    });
+
+    expect(screen.queryByText(en['nextStep.planGenerateTitle'])).toBeNull();
+    expect(screen.queryByText(en['nextStep.planImproveTitle'])).toBeNull();
+    expect(screen.getByText(en['nextStep.planImproveArtifactTitle'])).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('next-step-plan-action-plan-improve-artifact'));
+    expect(onPromptAction).toHaveBeenLastCalledWith(
+      expect.stringContaining('index.html'),
+      { sessionMode: 'design' },
+    );
+  });
+
+  it('offers a document/artifact merge when plan mode produces both', () => {
+    const onPromptAction = vi.fn();
+    renderActions({
+      variant: 'plan',
+      fileName: 'plan.md',
+      planFileName: 'plan.md',
+      artifactFileName: 'index.html',
+      onPromptAction,
+    });
+
+    expect(screen.queryByText(en['nextStep.planGenerateTitle'])).toBeNull();
+    expect(screen.queryByText(en['nextStep.planImproveTitle'])).toBeNull();
+    expect(screen.getByText(en['nextStep.planMergeTitle'])).toBeTruthy();
+    expect(screen.getByText(en['nextStep.planImproveArtifactTitle'])).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('next-step-plan-action-plan-merge-doc-artifact'));
+    expect(onPromptAction).toHaveBeenLastCalledWith(
+      expect.stringContaining('plan.md'),
+      { sessionMode: 'design' },
+    );
+    expect(onPromptAction.mock.calls.at(-1)?.[0]).toContain('index.html');
+  });
+
   it('uses brand-extraction primary rows for programmatic brand projects', () => {
     const onAiOptimize = vi.fn();
     const onCreateDesign = vi.fn();

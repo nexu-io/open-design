@@ -364,13 +364,25 @@
 }
 
 .itemThumb {
+  --logo-display-surface:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(246, 242, 232, 0.96)),
+    conic-gradient(
+      from 45deg,
+      rgba(25, 23, 19, 0.07) 0 25%,
+      rgba(255, 255, 255, 0.42) 0 50%,
+      rgba(25, 23, 19, 0.07) 0 75%,
+      rgba(255, 255, 255, 0.42) 0
+    )
+      0 0 / 16px 16px;
   display: flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
   width: 40px;
   height: 40px;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 72%, #fff 28%);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  background: var(--logo-display-surface);
   overflow: hidden;
 }
 
@@ -402,6 +414,9 @@
   height: 100%;
   object-fit: contain;
   padding: 6px;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.45));
 }
 
 .itemMeta {

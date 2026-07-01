@@ -32,6 +32,7 @@ export interface ProjectFileStubGuardWarning {
 export interface ProjectFile {
   name: string;
   path?: string;
+  localPath?: string;
   type?: 'file' | 'dir';
   size: number;
   mtime: number;

@@ -346,6 +346,7 @@
   transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
 }
 .home-hero__input-card:has(.inline-switcher__popover),
+.home-hero__input-card:has(.session-mode-toggle__popover),
 .home-hero__input-card:has(.home-hero__plugin-picker),
 .home-hero__input-card:has(.home-hero__template-menu) {
   z-index: 1700;
@@ -927,6 +928,29 @@
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
+}
+.home-hero__mode-switcher {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+.home-hero__mode-switcher .session-mode-toggle,
+.home-hero__mode-switcher .session-mode-toggle__trigger {
+  height: 32px;
+  min-height: 32px;
+  box-sizing: border-box;
+}
+.home-hero__mode-switcher .session-mode-toggle__trigger {
+  max-width: 118px;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+.home-hero__mode-switcher .session-mode-toggle__popover {
+  right: 0;
+  left: auto;
+  z-index: 1701;
+  flex-direction: row-reverse;
+  align-items: flex-end;
 }
 .home-hero__execution-switcher {
   display: inline-flex;

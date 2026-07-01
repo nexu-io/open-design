@@ -91,6 +91,13 @@ const localizedBodyHtml =
   ) ??
   fallbackPost.bodyHtml;
 
+// A localized bodyHtml can differ in length from the English Markdown; prefer a
+// per-locale readingTime when one is set so the estimate matches what the reader
+// actually sees, and fall back to the shared English value otherwise.
+const localizedReadingTime =
+  (localizedPostI18n as { readingTime?: number } | undefined)?.readingTime ??
+  post.data.readingTime;
+
 // Build the table of contents. For pre-rendered bodyHtml (rich/localized
 // posts) inject heading ids and collect the TOC in one pass; for the Markdown
 // `<Content />` path use Astro's already-slugged `headings` array.
@@ -260,7 +267,7 @@ const author = getBlogAuthor((post.data as { author?: string }).author);
 
             <div class='post-meta'>
               <span>{fmtDate(post.data.date)}</span>
-              <span>{post.data.readingTime} {ui.blog.minRead}</span>
+              <span>{localizedReadingTime} {ui.blog.minRead}</span>
               <span>{localizedPostField('category')}</span>
             </div>
 

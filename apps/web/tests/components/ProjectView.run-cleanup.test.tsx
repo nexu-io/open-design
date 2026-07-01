@@ -976,6 +976,96 @@ describe('ProjectView daemon cleanup', () => {
     }
   });
 
+  it('passes Home-staged workspace contexts into the project composer during auto-send', async () => {
+    const workspaceItems = [
+      {
+        id: 'project:reference-a',
+        kind: 'project',
+        label: 'Reference A',
+        title: 'Reference A',
+        path: 'reference-a',
+        absolutePath: '/Users/me/reference-a',
+      },
+      {
+        id: 'project:reference-b',
+        kind: 'project',
+        label: 'Reference B',
+        title: 'Reference B',
+        path: 'reference-b',
+        absolutePath: '/Users/me/reference-b',
+      },
+    ];
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+
+    chatPaneSpy.mockClear();
+    window.sessionStorage.setItem('od:auto-send-first:project-context', '1');
+    window.sessionStorage.setItem(
+      'od:auto-send-context:project-context',
+      JSON.stringify({ workspaceItems }),
+    );
+
+    try {
+      render(
+        <ProjectView
+          project={{
+            id: 'project-context',
+            name: 'Project',
+            skillId: null,
+            designSystemId: null,
+            pendingPrompt: 'Inspect the reference dir.',
+            metadata: { kind: 'prototype', linkedDirs: ['/Users/me/reference-a', '/Users/me/reference-b'] },
+          } as never}
+          routeFileName={null}
+          config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+          agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+          skills={[]}
+          designTemplates={[]}
+          designSystems={[]}
+          daemonLive
+          onModeChange={() => {}}
+          onAgentChange={() => {}}
+          onAgentModelChange={() => {}}
+          onRefreshAgents={() => {}}
+          onOpenSettings={() => {}}
+          onBack={() => {}}
+          onClearPendingPrompt={() => {}}
+          onTouchProject={() => {}}
+          onProjectChange={() => {}}
+          onProjectsRefresh={() => {}}
+        />,
+      );
+
+      const chatProps = await waitForReadyChatPaneProps() as {
+        initialWorkspaceContexts?: unknown[];
+      };
+      expect(chatProps.initialWorkspaceContexts).toEqual(workspaceItems);
+
+      await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+      expect(streamViaDaemon.mock.calls[0]?.[0]).toMatchObject({
+        history: [
+          expect.objectContaining({
+            content: 'Inspect the reference dir.',
+            runContext: { workspaceItems },
+          }),
+        ],
+      });
+      expect(window.sessionStorage.getItem('od:auto-send-context:project-context')).toBeNull();
+    } finally {
+      window.sessionStorage.removeItem('od:auto-send-first:project-context');
+      window.sessionStorage.removeItem('od:auto-send-context:project-context');
+    }
+  });
+
   it('queues board comment attachments while the current daemon run is still busy', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);

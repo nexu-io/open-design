@@ -28,8 +28,8 @@ import { Icon, type IconName } from './Icon';
 
 const PLUS_MENU_MARGIN = 12;
 const PLUS_MENU_GAP = 8;
-const PLUS_MENU_WIDTH = 190;
-const PLUS_MENU_FLYOUT_WIDTH = 360;
+const PLUS_MENU_WIDTH = 208;
+const PLUS_MENU_FLYOUT_WIDTH = 260;
 // The Plugins flyout is wider than the others because it carries a
 // side-by-side hover-preview column. This MUST match the rendered width of
 // `.plus-menu__flyout--plugins` in styles/home/plus-menu.css — over-reserving
@@ -37,10 +37,13 @@ const PLUS_MENU_FLYOUT_WIDTH = 360;
 // silently drop the preview column.
 const PLUS_MENU_PLUGIN_FLYOUT_WIDTH = 466;
 const PLUS_MENU_SKILL_FLYOUT_WIDTH = 430;
+const PLUS_MENU_TOOLBOX_FLYOUT_WIDTH = 320;
 const PLUS_MENU_PREFERRED_MIN_HEIGHT = 180;
 const PLUS_MENU_FLYOUT_MAX_HEIGHT = 320;
+export type PlusMenuPlacementPreference = 'auto' | 'down' | 'up';
 type PlusMenuFlyoutPlacement = 'right' | 'left' | 'contained';
 type PlusMenuFlyoutVerticalPlacement = 'down' | 'up';
+type PlusMenuSubmenu = 'connectors' | 'plugins' | 'skills' | 'mcp' | 'toolbox';
 type PlusMenuPopupStyle = CSSProperties & Record<'--plus-menu-flyout-max-height', string>;
 
 function getFlyoutBoundary(anchor: HTMLElement): Pick<DOMRect, 'left' | 'right'> {
@@ -60,7 +63,10 @@ function getFlyoutBoundary(anchor: HTMLElement): Pick<DOMRect, 'left' | 'right'>
   };
 }
 
-function getPlusMenuStyle(anchor: HTMLElement): CSSProperties {
+function getPlusMenuStyle(
+  anchor: HTMLElement,
+  placementPreference: PlusMenuPlacementPreference,
+): CSSProperties {
   const rect = anchor.getBoundingClientRect();
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || PLUS_MENU_WIDTH;
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 640;
@@ -72,22 +78,36 @@ function getPlusMenuStyle(anchor: HTMLElement): CSSProperties {
   const spaceAbove = rect.top - PLUS_MENU_MARGIN - PLUS_MENU_GAP;
   const spaceBelow = viewportHeight - rect.bottom - PLUS_MENU_MARGIN - PLUS_MENU_GAP;
 
-  if (spaceAbove >= PLUS_MENU_PREFERRED_MIN_HEIGHT || spaceAbove >= spaceBelow) {
-    return {
-      left,
-      top: 'auto',
-      bottom: Math.max(PLUS_MENU_MARGIN, viewportHeight - rect.top + PLUS_MENU_GAP),
-      width,
-      maxHeight: Math.max(0, spaceAbove),
-    };
-  }
-
-  return {
+  const upStyle = {
+    left,
+    top: 'auto',
+    bottom: Math.max(PLUS_MENU_MARGIN, viewportHeight - rect.top + PLUS_MENU_GAP),
+    width,
+    maxHeight: Math.max(0, spaceAbove),
+  } satisfies CSSProperties;
+  const downStyle = {
     left,
     top: Math.max(PLUS_MENU_MARGIN, rect.bottom + PLUS_MENU_GAP),
     bottom: 'auto',
     width,
     maxHeight: Math.max(0, spaceBelow),
+  } satisfies CSSProperties;
+
+  if (placementPreference === 'down') {
+    return downStyle;
+  }
+  if (placementPreference === 'up') {
+    return upStyle;
+  }
+
+  if (spaceAbove >= PLUS_MENU_PREFERRED_MIN_HEIGHT || spaceAbove >= spaceBelow) {
+    return {
+      ...upStyle,
+    };
+  }
+
+  return {
+    ...downStyle,
   };
 }
 
@@ -113,6 +133,13 @@ function getFlyoutPlacement(
   });
 }
 
+function getFlyoutWidth(submenu: PlusMenuSubmenu | null): number {
+  if (submenu === 'plugins') return PLUS_MENU_PLUGIN_FLYOUT_WIDTH;
+  if (submenu === 'skills') return PLUS_MENU_SKILL_FLYOUT_WIDTH;
+  if (submenu === 'toolbox') return PLUS_MENU_TOOLBOX_FLYOUT_WIDTH;
+  return PLUS_MENU_FLYOUT_WIDTH;
+}
+
 export interface ComposerPlusMenuProps {
   /** Connector context options shown under the "Connectors" submenu. */
   connectors: ConnectorDetail[];
@@ -126,19 +153,25 @@ export interface ComposerPlusMenuProps {
   /** Opens the plugin registry; omit to hide the add row. */
   onAddPlugin?: () => void;
 
-  /** Skill options shown under the "Skills" submenu. */
-  skills?: SkillSummary[];
-  onPickSkill?: (skill: SkillSummary) => void;
-
   /** Enabled MCP servers shown under the "MCP" submenu. */
   mcpServers: McpServerConfig[];
   onPickMcp: (server: McpServerConfig) => void;
   /** Opens MCP settings; omit to hide the add row. */
   onAddMcp?: () => void;
 
+  /** Available skills shown under the "Skills" submenu. */
+  skills?: SkillSummary[];
+  onPickSkill?: (skill: SkillSummary) => void;
+
   /** Triggers file attachment (opens the native picker). */
   onAttachFiles: () => void;
   attachLoading?: boolean;
+
+  /** Opens the reference-project picker. */
+  onReferenceProject?: () => void;
+
+  /** Opens a native folder picker and stages the folder as local code context. */
+  onLinkLocalCode?: () => void;
 
   /** Opens the "Select from library" picker; omit to hide the row. */
   onSelectFromLibrary?: () => void;
@@ -146,6 +179,10 @@ export interface ComposerPlusMenuProps {
   /** Opens the "Import from Figma" dialog (offline .fig decode or a Figma
    *  URL → webpage); omit to hide the row. */
   onImportFigma?: () => void;
+  /** Opens the "how to download a .fig" guide. */
+  onShowFigmaHelp?: () => void;
+  /** Opens the design-system picker/surface. */
+  onOpenDesignSystems?: () => void;
 
   /**
    * Optional "Design toolbox" row, rendered LAST. Only the project composer
@@ -165,6 +202,14 @@ export interface ComposerPlusMenuProps {
    * cold composer.
    */
   onOpen?: () => void;
+
+  /**
+   * Home opens below the trigger like Claude Design's project picker, while
+   * the bottom project composer opens upward so it stays attached to the chat
+   * bar. `auto` preserves the older viewport-driven fallback for tests and
+   * any future neutral surface.
+   */
+  placementPreference?: PlusMenuPlacementPreference;
 }
 
 function pluginMatches(
@@ -222,19 +267,22 @@ export function ComposerPlusMenu({
   onAddMcp,
   onAttachFiles,
   attachLoading,
+  onReferenceProject,
+  onLinkLocalCode,
   onSelectFromLibrary,
   onImportFigma,
+  onShowFigmaHelp,
+  onOpenDesignSystems,
   renderToolbox,
   toolboxLabel,
   triggerTestId,
   onOpen,
+  placementPreference = 'auto',
 }: ComposerPlusMenuProps) {
   const t = useT();
   const { locale } = useI18n();
   const [open, setOpen] = useState(false);
-  const [submenu, setSubmenu] = useState<
-    'connectors' | 'plugins' | 'skills' | 'mcp' | 'toolbox' | null
-  >(null);
+  const [submenu, setSubmenu] = useState<PlusMenuSubmenu | null>(null);
   const [query, setQuery] = useState('');
   // Id of the plugin row the preview column is mirroring. Defaults to the
   // first filtered row (see `hoveredPlugin`) so the panel is never blank
@@ -245,6 +293,7 @@ export function ComposerPlusMenu({
   const [flyoutPlacement, setFlyoutPlacement] = useState<PlusMenuFlyoutPlacement>('right');
   const [flyoutVerticalPlacement, setFlyoutVerticalPlacement] = useState<PlusMenuFlyoutVerticalPlacement>('down');
   const [flyoutMaxHeight, setFlyoutMaxHeight] = useState(PLUS_MENU_FLYOUT_MAX_HEIGHT);
+  const [flyoutStyle, setFlyoutStyle] = useState<CSSProperties | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
@@ -288,36 +337,79 @@ export function ComposerPlusMenu({
     setSubmenu(null);
   }
 
-  function updateFlyoutGeometry(row: HTMLDivElement | null) {
+  function updateFlyoutGeometry(row: HTMLDivElement | null, nextSubmenu: PlusMenuSubmenu | null) {
+    const anchor = triggerRef.current;
+    const flyoutWidth = getFlyoutWidth(nextSubmenu);
+    const placement = anchor ? getFlyoutPlacement(anchor, flyoutWidth) : 'right';
+    setFlyoutPlacement(placement);
+
     if (!row) {
       setFlyoutVerticalPlacement('down');
       setFlyoutMaxHeight(PLUS_MENU_FLYOUT_MAX_HEIGHT);
+      setFlyoutStyle(null);
       return;
     }
     const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 640;
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1024;
     const rowRect = row.getBoundingClientRect();
     const downSpace = viewportHeight - (rowRect.top - 5) - PLUS_MENU_MARGIN;
     const upSpace = rowRect.bottom + 5 - PLUS_MENU_MARGIN;
     const verticalPlacement =
       downSpace >= PLUS_MENU_FLYOUT_MAX_HEIGHT || downSpace >= upSpace ? 'down' : 'up';
-    setFlyoutVerticalPlacement(verticalPlacement);
-    setFlyoutMaxHeight(
-      Math.max(
-        120,
-        Math.min(
-          PLUS_MENU_FLYOUT_MAX_HEIGHT,
-          verticalPlacement === 'up' ? upSpace : downSpace,
-        ),
+    const maxHeight = Math.max(
+      120,
+      Math.min(
+        PLUS_MENU_FLYOUT_MAX_HEIGHT,
+        verticalPlacement === 'up' ? upSpace : downSpace,
       ),
     );
+    setFlyoutVerticalPlacement(verticalPlacement);
+    setFlyoutMaxHeight(maxHeight);
+
+    if (placement === 'contained') {
+      setFlyoutStyle(null);
+      return;
+    }
+
+    const sideStyle =
+      placement === 'left'
+        ? {
+            left: Math.max(
+              PLUS_MENU_MARGIN,
+              rowRect.left - PLUS_MENU_GAP - flyoutWidth,
+            ),
+          }
+        : {
+            left: Math.min(
+              Math.max(PLUS_MENU_MARGIN, rowRect.right + PLUS_MENU_GAP),
+              Math.max(PLUS_MENU_MARGIN, viewportWidth - PLUS_MENU_MARGIN - flyoutWidth),
+            ),
+          };
+    const verticalStyle =
+      verticalPlacement === 'up'
+        ? {
+            top: 'auto',
+            bottom: Math.max(PLUS_MENU_MARGIN, viewportHeight - rowRect.bottom + 5),
+          }
+        : {
+            top: Math.max(PLUS_MENU_MARGIN, rowRect.top - 5),
+            bottom: 'auto',
+          };
+
+    setFlyoutStyle({
+      ...sideStyle,
+      ...verticalStyle,
+      width: Math.min(flyoutWidth, Math.max(0, viewportWidth - PLUS_MENU_MARGIN * 2)),
+      maxHeight,
+    });
   }
 
   function openSubmenu(
-    next: 'connectors' | 'plugins' | 'skills' | 'mcp' | 'toolbox',
+    next: PlusMenuSubmenu,
     row: HTMLDivElement | null,
   ) {
     cancelSubmenuClose();
-    updateFlyoutGeometry(row);
+    updateFlyoutGeometry(row, next);
     setSubmenu(next);
   }
 
@@ -353,26 +445,22 @@ export function ComposerPlusMenu({
     const updateMenuPosition = () => {
       const anchor = triggerRef.current;
       if (!anchor) return;
-      setMenuStyle(getPlusMenuStyle(anchor));
-      const flyoutWidth =
-        submenu === 'plugins'
-          ? PLUS_MENU_PLUGIN_FLYOUT_WIDTH
-          : submenu === 'skills'
-            ? PLUS_MENU_SKILL_FLYOUT_WIDTH
-          : PLUS_MENU_FLYOUT_WIDTH;
-      setFlyoutPlacement(getFlyoutPlacement(anchor, flyoutWidth));
+      setMenuStyle(getPlusMenuStyle(anchor, placementPreference));
       const activeRow = popupRef.current?.querySelector<HTMLDivElement>('.plus-menu__submenu-row.is-open') ?? null;
-      updateFlyoutGeometry(activeRow);
+      updateFlyoutGeometry(activeRow, submenu);
     };
 
     updateMenuPosition();
+    const popup = popupRef.current;
     window.addEventListener('resize', updateMenuPosition);
     window.addEventListener('scroll', updateMenuPosition, true);
+    popup?.addEventListener('scroll', updateMenuPosition);
     return () => {
       window.removeEventListener('resize', updateMenuPosition);
       window.removeEventListener('scroll', updateMenuPosition, true);
+      popup?.removeEventListener('scroll', updateMenuPosition);
     };
-  }, [open, submenu]);
+  }, [open, submenu, placementPreference]);
 
   const needle = query.trim().toLowerCase();
   const filteredPlugins = needle
@@ -444,6 +532,7 @@ export function ComposerPlusMenu({
           role="menu"
           style={popupStyle}
         >
+          <PlusMenuGroup label={t('chat.plus.group.files')}>
           <button
             type="button"
             role="menuitem"
@@ -457,11 +546,26 @@ export function ComposerPlusMenu({
           >
             <Icon
               name={attachLoading ? 'spinner' : 'attach'}
-              size={15}
+              size={14}
               className="plus-menu__item-icon"
             />
-            <span>{t('chat.attachAria')}</span>
+            <span>{t('chat.plus.attachFiles')}</span>
           </button>
+          {onReferenceProject ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="plus-menu__item"
+              data-testid="composer-plus-reference-project"
+              onClick={() => {
+                close();
+                onReferenceProject();
+              }}
+            >
+              <Icon name="folder" size={14} className="plus-menu__item-icon" />
+              <span>{t('chat.plus.referenceProject')}</span>
+            </button>
+          ) : null}
           {LIBRARY_UI_VISIBLE && onSelectFromLibrary ? (
             <button
               type="button"
@@ -473,32 +577,89 @@ export function ComposerPlusMenu({
                 onSelectFromLibrary();
               }}
             >
-              <Icon name="layers-filled" size={15} className="plus-menu__item-icon" />
+              <Icon name="layers-filled" size={14} className="plus-menu__item-icon" />
               <span>{t('chat.selectFromLibrary')}</span>
             </button>
           ) : null}
+          </PlusMenuGroup>
+
+          {onLinkLocalCode ? (
+            <PlusMenuGroup label={t('chat.plus.group.code')}>
+              <button
+                type="button"
+                role="menuitem"
+                className="plus-menu__item"
+                data-testid="composer-plus-local-code"
+                onClick={() => {
+                  close();
+                  onLinkLocalCode();
+                }}
+              >
+                <Icon name="folder" size={14} className="plus-menu__item-icon" />
+                <span>{t('chat.plus.linkLocalCode')}</span>
+              </button>
+            </PlusMenuGroup>
+          ) : null}
+
+          {(onImportFigma || onOpenDesignSystems) ? (
+            <PlusMenuGroup label={t('chat.plus.group.designs')}>
           {onImportFigma ? (
+            <div className="plus-menu__split-row" role="none">
+              <button
+                type="button"
+                role="menuitem"
+                className="plus-menu__item plus-menu__split-main"
+                data-testid="composer-plus-figma"
+                onClick={() => {
+                  close();
+                  onImportFigma();
+                }}
+              >
+                <Icon name="upload" size={14} className="plus-menu__item-icon" />
+                <span>{t('chat.plus.uploadFig')}</span>
+              </button>
+              {onShowFigmaHelp ? (
+                <button
+                  type="button"
+                  className="plus-menu__learn"
+                  data-testid="composer-plus-figma-help"
+                  onClick={() => {
+                    close();
+                    onShowFigmaHelp();
+                  }}
+                >
+                  {t('chat.plus.learnHow')}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {onOpenDesignSystems ? (
             <button
               type="button"
               role="menuitem"
               className="plus-menu__item"
-              data-testid="composer-plus-figma"
+              data-testid="composer-plus-design-system"
               onClick={() => {
                 close();
-                onImportFigma();
+                onOpenDesignSystems();
               }}
             >
-              <Icon name="import" size={15} className="plus-menu__item-icon" />
-              <span>{t('chat.importFigma')}</span>
+              <Icon name="blocks" size={14} className="plus-menu__item-icon" />
+              <span>{t('chat.plus.designSystem')}</span>
             </button>
           ) : null}
+            </PlusMenuGroup>
+          ) : null}
+
+          <PlusMenuGroup label={t('chat.plus.group.other')} hideLabel>
           <PlusSubmenuRow
-            label={t('connectors.title')}
+            label={t('chat.plus.connectors')}
             icon="link"
             open={submenu === 'connectors'}
             testId="composer-plus-connectors"
             onOpen={(row) => openSubmenu('connectors', row)}
             onClose={scheduleCloseSubmenu}
+            flyoutStyle={flyoutStyle}
           >
             <div className="plus-menu__list">
               {connectors.length === 0 ? (
@@ -518,7 +679,7 @@ export function ComposerPlusMenu({
                       onPickConnector(connector);
                     }}
                   >
-                    <Icon name="link" size={15} className="plus-menu__item-icon" />
+                    <Icon name="link" size={14} className="plus-menu__item-icon" />
                     <span>{connector.name}</span>
                   </button>
                 ))
@@ -536,19 +697,20 @@ export function ComposerPlusMenu({
                     onAddConnector();
                   }}
                 >
-                  <Icon name="plus" size={15} className="plus-menu__item-icon" />
+                  <Icon name="plus" size={14} className="plus-menu__item-icon" />
                   <span>{t('homeHero.addConnectors')}</span>
                 </button>
               </>
             ) : null}
           </PlusSubmenuRow>
           <PlusSubmenuRow
-            label={t('entry.navPlugins')}
+            label={t('chat.plus.plugins')}
             icon="sparkles"
             open={submenu === 'plugins'}
             testId="composer-plus-plugins"
             onOpen={(row) => openSubmenu('plugins', row)}
             onClose={scheduleCloseSubmenu}
+            flyoutStyle={flyoutStyle}
             flyoutClassName={
               filteredPlugins.length > 0 ? 'plus-menu__flyout--plugins' : undefined
             }
@@ -584,7 +746,7 @@ export function ComposerPlusMenu({
                           onPickPlugin(plugin);
                         }}
                       >
-                        <Icon name="sparkles" size={15} className="plus-menu__item-icon" />
+                        <Icon name="sparkles" size={14} className="plus-menu__item-icon" />
                         <span>{localizePluginTitle(locale, plugin)}</span>
                       </button>
                     ))
@@ -602,7 +764,7 @@ export function ComposerPlusMenu({
                         onAddPlugin();
                       }}
                     >
-                      <Icon name="plus" size={15} className="plus-menu__item-icon" />
+                      <Icon name="plus" size={14} className="plus-menu__item-icon" />
                       <span>{t('homeHero.addPlugin')}</span>
                     </button>
                   </>
@@ -621,6 +783,7 @@ export function ComposerPlusMenu({
               testId="composer-plus-skills"
               onOpen={(row) => openSubmenu('skills', row)}
               onClose={scheduleCloseSubmenu}
+              flyoutStyle={flyoutStyle}
               flyoutClassName={
                 filteredSkills.length > 0 ? 'plus-menu__flyout--skills' : undefined
               }
@@ -673,12 +836,13 @@ export function ComposerPlusMenu({
             </PlusSubmenuRow>
           ) : null}
           <PlusSubmenuRow
-            label="MCP"
+            label={t('chat.plus.mcp')}
             icon="link"
             open={submenu === 'mcp'}
             testId="composer-plus-mcp"
             onOpen={(row) => openSubmenu('mcp', row)}
             onClose={scheduleCloseSubmenu}
+            flyoutStyle={flyoutStyle}
           >
             <div className="plus-menu__search">
               <Icon name="search" size={13} />
@@ -705,7 +869,7 @@ export function ComposerPlusMenu({
                       onPickMcp(server);
                     }}
                   >
-                    <Icon name="link" size={15} className="plus-menu__item-icon" />
+                    <Icon name="link" size={14} className="plus-menu__item-icon" />
                     <span>{server.label || server.id}</span>
                   </button>
                 ))
@@ -723,7 +887,7 @@ export function ComposerPlusMenu({
                     onAddMcp();
                   }}
                 >
-                  <Icon name="plus" size={15} className="plus-menu__item-icon" />
+                  <Icon name="plus" size={14} className="plus-menu__item-icon" />
                   <span>{t('homeHero.addMcp')}</span>
                 </button>
               </>
@@ -736,13 +900,32 @@ export function ComposerPlusMenu({
               open={submenu === 'toolbox'}
               onOpen={(row) => openSubmenu('toolbox', row)}
               onClose={scheduleCloseSubmenu}
+              flyoutStyle={flyoutStyle}
             >
               {renderToolbox(close)}
             </PlusSubmenuRow>
           ) : null}
+          </PlusMenuGroup>
         </div>,
         document.body,
       ) : null}
+    </div>
+  );
+}
+
+function PlusMenuGroup({
+  label,
+  hideLabel = false,
+  children,
+}: {
+  label: string;
+  hideLabel?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="plus-menu__group" role="group" aria-label={label}>
+      {hideLabel ? null : <div className="plus-menu__group-label">{label}</div>}
+      {children}
     </div>
   );
 }
@@ -795,6 +978,7 @@ function PlusSubmenuRow({
   open,
   onOpen,
   onClose,
+  flyoutStyle,
   flyoutClassName,
   testId,
   children,
@@ -804,6 +988,7 @@ function PlusSubmenuRow({
   open: boolean;
   onOpen: (row: HTMLDivElement | null) => void;
   onClose: () => void;
+  flyoutStyle?: CSSProperties | null;
   /** Extra class on the flyout, e.g. the wide plugins-preview variant. */
   flyoutClassName?: string;
   testId?: string;
@@ -826,7 +1011,7 @@ function PlusSubmenuRow({
         aria-expanded={open}
         onClick={() => (open ? onClose() : onOpen(rowRef.current))}
       >
-        <Icon name={icon} size={15} className="plus-menu__item-icon" />
+        <Icon name={icon} size={14} className="plus-menu__item-icon" />
         <span>{label}</span>
         <Icon name="chevron-right" size={13} className="plus-menu__chevron" />
       </button>
@@ -834,6 +1019,7 @@ function PlusSubmenuRow({
         <div
           className={`plus-menu__flyout${flyoutClassName ? ` ${flyoutClassName}` : ''}`}
           role="menu"
+          style={flyoutStyle ?? undefined}
           onMouseEnter={() => onOpen(rowRef.current)}
           onMouseLeave={onClose}
         >

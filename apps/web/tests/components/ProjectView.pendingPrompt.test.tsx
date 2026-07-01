@@ -303,6 +303,41 @@ describe('ProjectView pending prompt seeding', () => {
     expect(onClearPendingPrompt).toHaveBeenCalledTimes(1);
   });
 
+  it('auto-sends the Home-carried workspace context with the first user message', async () => {
+    const projectId = 'with-context';
+    const workspaceItem = {
+      id: 'project:reference-a',
+      kind: 'project',
+      label: 'Reference A',
+      title: 'Reference A',
+      path: 'reference-a',
+      absolutePath: '/tmp/open-design/missing-reference-a',
+    };
+    window.sessionStorage.setItem(`od:auto-send-first:${projectId}`, '1');
+    window.sessionStorage.setItem(
+      `od:auto-send-context:${projectId}`,
+      JSON.stringify({ workspaceItems: [workspaceItem] }),
+    );
+
+    renderProjectView(project(projectId, 'Use the reference project'));
+
+    await waitFor(() => {
+      expect(mockedSaveMessage).toHaveBeenCalled();
+    });
+    const userMessageCall = mockedSaveMessage.mock.calls.find(
+      ([, , message]) => message.role === 'user',
+    );
+    expect(userMessageCall?.[0]).toBe(projectId);
+    expect(userMessageCall?.[1]).toBe(`conv-${projectId}`);
+    expect(userMessageCall?.[2]).toEqual(expect.objectContaining({
+      role: 'user',
+      content: 'Use the reference project',
+      runContext: {
+        workspaceItems: [workspaceItem],
+      },
+    }));
+  });
+
   it('does not prefill when re-entering a project after the pending prompt was cleared', async () => {
     renderProjectView(project('cleared'));
 

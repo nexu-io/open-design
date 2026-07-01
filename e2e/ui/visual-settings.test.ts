@@ -1,4 +1,5 @@
 import { expect, test } from '@/playwright/suite';
+import { T } from '@/timeouts';
 import {
   captureVisual,
   captureVisualTarget,
@@ -11,6 +12,8 @@ import {
   VISUAL_CLI_AGENTS,
   waitForVisualFonts,
 } from '@/playwright/visual';
+
+test.describe.configure({ timeout: T.xlong });
 
 test('[P2] captures the settings execution surface', async ({ page }) => {
   await configureVisualPage(page);
@@ -25,7 +28,7 @@ test('[P2] captures the settings execution surface', async ({ page }) => {
 });
 
 test('[P1] captures the settings Open Design account balance surface', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(T.xlong);
 
   await configureVisualPage(page, {
     agents: [VISUAL_AMR_AGENT, ...VISUAL_CLI_AGENTS],

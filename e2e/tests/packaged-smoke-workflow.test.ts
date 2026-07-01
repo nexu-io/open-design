@@ -73,6 +73,35 @@ function sectionBetween(content: string, start: string, end: string): string {
   return content.slice(startIndex, endIndex);
 }
 
+function extractWorkflowRunScript(workflow: string, stepName: string): string {
+  const marker = `      - name: ${stepName}`;
+  const start = workflow.indexOf(marker);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const next = workflow.indexOf("\n      - ", start + marker.length);
+  const step = workflow.slice(start, next === -1 ? workflow.length : next);
+  const runStart = step.indexOf("        run: |\n");
+  expect(runStart).toBeGreaterThanOrEqual(0);
+  return step
+    .slice(runStart + "        run: |\n".length)
+    .split("\n")
+    .map((line) => line.replace(/^          /, ""))
+    .join("\n")
+    .trimEnd();
+}
+
+function parseGithubOutput(raw: string): Record<string, string> {
+  return Object.fromEntries(
+    raw
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => {
+        const sep = line.indexOf("=");
+        expect(sep).toBeGreaterThan(0);
+        return [line.slice(0, sep), line.slice(sep + 1)];
+      }),
+  );
+}
+
 async function gitPatchId(mode: "--stable" | "--verbatim", diff: string): Promise<string> {
   return await new Promise((resolve, reject) => {
     const child = execFile("git", ["patch-id", mode], { cwd: workspaceRoot, encoding: "utf8" }, (error, stdout, stderr) => {
@@ -397,6 +426,8 @@ describe("packaged smoke workflow", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("github.event_name == 'workflow_dispatch'");
     expect(workflow).toContain("github.event.workflow_run.conclusion == 'success'");
+    expect(workflow).toContain("github.repository == 'nexu-io/open-design'");
+    expect(workflow).not.toContain("github.event.workflow_run.conclusion != 'cancelled'");
 
     // It mints the privileged release App token for label deletion, branch push, PR + merge-queue.
     expect(workflow).toContain("actions/create-github-app-token");
@@ -428,10 +459,206 @@ describe("packaged smoke workflow", () => {
     expect(workflow).toContain("--add-reviewer nexu-io/core-maintainers");
     expect(workflow).toContain("--squash --auto --match-head-commit");
     expect(workflow).toContain("head_sha=$(git rev-parse HEAD)");
+    expect(workflow).toContain("git ls-remote --exit-code --heads origin \"$BRANCH\"");
 
     // The shipped release's backport label is cleaned up (tolerant of an already-deleted label).
     expect(workflow).toContain('label="backport release/v$VERSION"');
     expect(workflow).toContain("gh label delete");
+  });
+
+  it("[P2] resolves finalize-release shipped versions from the real workflow shell step", async () => {
+    const workflow = await readFile(finalizeReleaseWorkflowPath, "utf8");
+    const script = extractWorkflowRunScript(
+      workflow,
+      "Resolve the shipped version (latest published stable, or the dispatch tag)",
+    );
+
+    async function runResolve(args: {
+      event: "workflow_dispatch" | "workflow_run";
+      inputTag?: string;
+      state?: string;
+      ghExit?: boolean;
+    }): Promise<{ output: Record<string, string>; ghArgs: string[] }> {
+      const dir = await mkdtemp(join(tmpdir(), "od-finalize-resolve-"));
+      const ghPath = join(dir, "gh");
+      const jqPath = join(dir, "jq");
+      const outputPath = join(dir, "github-output");
+      const ghLogPath = join(dir, "gh-args.log");
+      await writeFile(
+        ghPath,
+        `#!/usr/bin/env node
+const fs = require("node:fs");
+fs.appendFileSync(process.env.FAKE_GH_LOG, process.argv.slice(2).join(" ") + "\\n");
+if (process.env.FAKE_GH_EXIT === "1") process.exit(1);
+process.stdout.write(process.env.FAKE_GH_STATE || "");
+`,
+      );
+      await chmod(ghPath, 0o755);
+      await writeFile(
+        jqPath,
+        `#!/usr/bin/env node
+const selector = process.argv[process.argv.length - 1];
+let input = "";
+process.stdin.on("data", (chunk) => { input += chunk; });
+process.stdin.on("end", () => {
+  const data = JSON.parse(input);
+  const key = selector.startsWith(".") ? selector.slice(1) : selector;
+  process.stdout.write(String(data[key]) + "\\n");
+});
+`,
+      );
+      await chmod(jqPath, 0o755);
+
+      try {
+        await execFileAsync("bash", ["-c", script], {
+          cwd: dir,
+          env: {
+            ...process.env,
+            EVENT: args.event,
+            INPUT_TAG: args.inputTag ?? "",
+            GITHUB_OUTPUT: outputPath,
+            PATH: `${dir}${delimiter}${process.env.PATH ?? ""}`,
+            FAKE_GH_LOG: ghLogPath,
+            FAKE_GH_STATE: args.state ?? "",
+            FAKE_GH_EXIT: args.ghExit ? "1" : "0",
+          },
+        });
+        const [rawOutput, rawGhArgs] = await Promise.all([
+          readFile(outputPath, "utf8").catch(() => ""),
+          readFile(ghLogPath, "utf8").catch(() => ""),
+        ]);
+        return {
+          output: parseGithubOutput(rawOutput),
+          ghArgs: rawGhArgs.split(/\r?\n/).filter(Boolean),
+        };
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    }
+
+    await expect(
+      runResolve({
+        event: "workflow_dispatch",
+        inputTag: "0.12.0",
+        state: JSON.stringify({ tagName: "open-design-v0.12.0", isDraft: false, isPrerelease: false }),
+      }),
+    ).resolves.toMatchObject({
+      output: {
+        skip: "false",
+        version: "0.12.0",
+        next: "0.12.1",
+        branch: "release-bot/bump-main-v0.12.1",
+      },
+      ghArgs: [expect.stringContaining("release view open-design-v0.12.0")],
+    });
+
+    await expect(
+      runResolve({
+        event: "workflow_dispatch",
+        inputTag: "open-design-v1.2.3",
+        state: JSON.stringify({ tagName: "open-design-v1.2.3", isDraft: false, isPrerelease: false }),
+      }),
+    ).resolves.toMatchObject({
+      output: { skip: "false", version: "1.2.3", next: "1.2.4" },
+      ghArgs: [expect.stringContaining("release view open-design-v1.2.3")],
+    });
+
+    for (const state of [
+      { tagName: "open-design-v0.12.0", isDraft: true, isPrerelease: false },
+      { tagName: "open-design-v0.12.0", isDraft: false, isPrerelease: true },
+      { tagName: "open-design-v0.12.0-beta.1", isDraft: false, isPrerelease: false },
+    ]) {
+      await expect(runResolve({ event: "workflow_run", state: JSON.stringify(state) })).resolves.toMatchObject({
+        output: { skip: "true" },
+      });
+    }
+
+    await expect(runResolve({ event: "workflow_run", ghExit: true })).resolves.toMatchObject({
+      output: { skip: "true" },
+    });
+  });
+
+  it("[P2] bumps only synchronized workspace manifests in finalize-release", async () => {
+    const workflow = await readFile(finalizeReleaseWorkflowPath, "utf8");
+    const script = extractWorkflowRunScript(workflow, "Bump main's synchronized workspace versions");
+    const dir = await mkdtemp(join(tmpdir(), "od-finalize-bump-"));
+    const outputPath = join(dir, "github-output");
+    const writeJson = (relativePath: string, value: unknown) =>
+      writeFile(join(dir, relativePath), `${JSON.stringify(value, null, 2)}\n`);
+
+    try {
+      await Promise.all([
+        mkdir(join(dir, "apps", "web"), { recursive: true }),
+        mkdir(join(dir, "apps", "telemetry-worker"), { recursive: true }),
+        mkdir(join(dir, "packages", "platform"), { recursive: true }),
+        mkdir(join(dir, "packages", "components"), { recursive: true }),
+        mkdir(join(dir, "tools", "dev"), { recursive: true }),
+        mkdir(join(dir, "e2e"), { recursive: true }),
+      ]);
+      await Promise.all([
+        writeJson("package.json", { name: "root", version: "0.12.0", dependencies: { untouched: "0.12.0" } }),
+        writeJson("apps/web/package.json", { name: "@open-design/web", version: "0.12.0" }),
+        writeJson("apps/telemetry-worker/package.json", { name: "telemetry-worker", version: "0.1.0" }),
+        writeJson("packages/platform/package.json", { name: "@open-design/platform", version: "0.12.0" }),
+        writeJson("packages/components/package.json", { name: "@open-design/components", version: "0.5.0" }),
+        writeJson("tools/dev/package.json", { name: "@open-design/dev", version: "0.12.0" }),
+        writeJson("e2e/package.json", { name: "@open-design/e2e", version: "0.12.0" }),
+      ]);
+
+      await execFileAsync("bash", ["-c", script], {
+        cwd: dir,
+        env: { ...process.env, NEXT: "0.12.1", GITHUB_OUTPUT: outputPath },
+      });
+
+      await expect(readFile(outputPath, "utf8")).resolves.toContain("changed=true");
+      await expect(readFile(join(dir, "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.12.1",
+        dependencies: { untouched: "0.12.0" },
+      });
+      await expect(readFile(join(dir, "apps", "web", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.12.1",
+      });
+      await expect(readFile(join(dir, "packages", "platform", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.12.1",
+      });
+      await expect(readFile(join(dir, "tools", "dev", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.12.1",
+      });
+      await expect(readFile(join(dir, "e2e", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.12.1",
+      });
+      await expect(readFile(join(dir, "apps", "telemetry-worker", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.1.0",
+      });
+      await expect(readFile(join(dir, "packages", "components", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.5.0",
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("[P2] keeps finalize-release version bumps forward-only", async () => {
+    const workflow = await readFile(finalizeReleaseWorkflowPath, "utf8");
+    const script = extractWorkflowRunScript(workflow, "Bump main's synchronized workspace versions");
+    const dir = await mkdtemp(join(tmpdir(), "od-finalize-bump-noop-"));
+    const outputPath = join(dir, "github-output");
+
+    try {
+      await writeFile(join(dir, "package.json"), `${JSON.stringify({ name: "root", version: "0.12.2" }, null, 2)}\n`);
+
+      await execFileAsync("bash", ["-c", script], {
+        cwd: dir,
+        env: { ...process.env, NEXT: "0.12.1", GITHUB_OUTPUT: outputPath },
+      });
+
+      await expect(readFile(outputPath, "utf8")).resolves.toContain("changed=false");
+      await expect(readFile(join(dir, "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.12.2",
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("[P2] keeps the backport patch-equivalence gate whitespace-sensitive", async () => {
@@ -709,6 +936,7 @@ describe("packaged smoke workflow", () => {
       "ui/project-management-flows.test.ts",
       "ui/workspace-keyboard-flows.test.ts",
     ]);
+    expect(uiP0Groups["project-workspace"].workers).toBe(1);
     expect(visual).toContain("fromJSON(needs.runners.outputs.runs_on).visual_hot");
     expect(visual).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).visual_hot)");
     expect(workflow).not.toContain("needs.runners.outputs.contabo_control");

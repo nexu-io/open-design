@@ -78,10 +78,8 @@ describe('Toast', () => {
 
   it('renders an optional action button', () => {
     const onAction = vi.fn();
-    render(<Toast message="Saving page snapshot" actionLabel="Cancel" onAction={onAction} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-
+    render(<Toast message="Image saved" actionLabel="Open file" onAction={onAction} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open file' }));
     expect(onAction).toHaveBeenCalledTimes(1);
   });
 });

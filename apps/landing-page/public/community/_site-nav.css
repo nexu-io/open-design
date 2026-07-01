@@ -575,21 +575,6 @@
   letter-spacing: 0.04em;
 }
 
-/* AMR partner logo at the tail of the nav links (700×272 lockup scaled to
-   the bar). */
-.nav-links .nav-amr {
-  display: flex;
-  align-items: center;
-}
-.nav-amr-logo {
-  display: block;
-  height: 22px;
-  width: auto;
-  opacity: 0.85;
-  transition: opacity 0.18s ease;
-}
-.nav-amr a:hover .nav-amr-logo { opacity: 1; }
-
 /*
  * Product dropdown — CSS-only, no JS. The submenu is hidden by default and
  * revealed on `:hover` of the parent `li.has-dropdown`, or on `:focus-within`

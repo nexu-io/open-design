@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import type { ConnectorDetail } from '@open-design/contracts';
+import type { ChatSessionMode, ConnectorDetail } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import {
   DEFAULT_AUDIO_MODEL,
@@ -37,6 +37,20 @@ import type {
   PluginShareAction,
   PluginShareProjectOutcome,
 } from '../state/projects';
+
+type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
+  metadata?: CreateInput['metadata'];
+  pendingPrompt?: string;
+  pluginId?: string;
+  pluginType?: string;
+  appliedPluginSnapshotId?: string;
+  pluginInputs?: Record<string, unknown>;
+  conversationMode?: ChatSessionMode;
+  autoSendFirstMessage?: boolean;
+  requestId?: string;
+  pendingFiles?: File[];
+  userWorkingDirToken?: string;
+};
 
 interface Props {
   // Union of functional skills + design templates — used for id-based
@@ -91,16 +105,7 @@ interface Props {
   designSystemsLoading?: boolean;
   projectsLoading?: boolean;
   promptTemplatesLoading?: boolean;
-  onCreateProject: (
-    input: CreateInput & {
-      pendingPrompt?: string;
-      pluginId?: string;
-      appliedPluginSnapshotId?: string;
-      pluginInputs?: Record<string, unknown>;
-      autoSendFirstMessage?: boolean;
-      pendingFiles?: File[];
-    },
-  ) => Promise<boolean> | boolean | void;
+  onCreateProject: (input: EntryCreateProjectInput) => Promise<boolean> | boolean | void;
   onCreatePluginShareProject: (
     pluginId: string,
     action: PluginShareAction,

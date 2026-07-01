@@ -18,6 +18,7 @@ import type {
   InstalledPluginRecord,
   ProjectKind,
   AudioVoiceOption,
+  WorkspaceContextItem,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
 import { projectKindFromMetadataToTracking } from '@open-design/contracts/analytics';
@@ -57,7 +58,12 @@ import {
   mergeAihubmixImageModels,
   useAIHubMixImageModels,
 } from '../media/aihubmix-image-models';
-import { openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir } from '../providers/registry';
+import {
+  dirExists,
+  fetchRecentLinkedDirs,
+  openFolderDialog,
+  pushRecentLinkedDir,
+} from '../providers/registry';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type {
   DesignSystemSummary,
@@ -76,6 +82,7 @@ import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { consumePendingHomeChip, HOME_CHIP_INTENT_EVENT } from '../runtime/home-intent';
 import { navigate } from '../router';
 import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
+import { workspaceContextLinkedDirs } from './workspace-context';
 import {
   buildHomeMediaComposer,
   homeMediaSurfaceForChipId,
@@ -331,11 +338,12 @@ export function HomeView({
     text: string;
     chipId: string | null;
   } | null>(null);
-  const sessionMode: ChatSessionMode = 'design';
+  const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
   const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
+  const [contextWorkspaceItems, setContextWorkspaceItems] = useState<WorkspaceContextItem[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const [workingDir, setWorkingDir] = useState<string | null>(null);
   // Token paired with `workingDir` when picked through the desktop host's
@@ -681,10 +689,12 @@ export function HomeView({
       contextOnlyPlugins +
       contextOnlyMcp +
       contextOnlyConnectors +
+      contextWorkspaceItems.length +
       stagedFiles.length
     );
   }, [
     activeContextItemCount,
+    contextWorkspaceItems.length,
     selectedConnectorContexts,
     selectedMcpContexts,
     selectedPluginContexts,
@@ -1019,7 +1029,7 @@ export function HomeView({
       action: action === 'use-with-query' ? 'use_with_query' : 'use',
     });
     if (action === 'use-with-query') {
-      // "Replicate this content" seeds the composer with the SAME human-friendly
+      // Prompt-loading "Use" seeds the composer with the SAME human-friendly
       // text the Home example-prompt cards use (examplePresetSeedPrompt), NOT the
       // raw `od.useCase.query` — which for many plugins is a generator-facing
       // meta-instruction ("follow the en field verbatim; start from example.html")
@@ -1262,6 +1272,19 @@ export function HomeView({
     setStagedFiles((current) => current.filter((_, i) => i !== index));
   }
 
+  function addWorkspaceContext(item: WorkspaceContextItem) {
+    setContextWorkspaceItems((current) =>
+      current.some((candidate) => candidate.id === item.id)
+        ? current
+        : [...current, item],
+    );
+    setError(null);
+  }
+
+  function removeWorkspaceContext(id: string) {
+    setContextWorkspaceItems((current) => current.filter((item) => item.id !== id));
+  }
+
   async function handlePickWorkingDir(): Promise<boolean> {
     // On desktop the working-dir POST is gated behind a host-minted token, so
     // pick through the host bridge to capture { baseDir, token } together.
@@ -1304,6 +1327,27 @@ export function HomeView({
     setWorkingDir(dir);
     setWorkingDirToken(null);
     void rememberRecentDir(dir);
+  }
+
+  async function handlePickLocalCodeDir(): Promise<string | null> {
+    if (isOpenDesignHostAvailable()) {
+      const result = await pickHostWorkingDir();
+      if (result.ok) {
+        void rememberRecentDir(result.baseDir);
+        return result.baseDir;
+      }
+      if ('canceled' in result && result.canceled) return null;
+      setError(
+        `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Design and try again.`,
+      );
+      return null;
+    }
+    const picked = await openFolderDialog();
+    if (picked) {
+      void rememberRecentDir(picked);
+      return picked;
+    }
+    return null;
   }
 
   function updateActiveInputs(next: Record<string, unknown>) {
@@ -1851,6 +1895,23 @@ export function HomeView({
           status: item.connector.status,
           ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
         }));
+      // Referenced project / local-code folders are required user-selected
+      // inputs. If one disappears before submit, fail loudly instead of sending
+      // workspace text the daemon cannot back with `--add-dir` access.
+      const contextLinkedDirCandidates = workspaceContextLinkedDirs(contextWorkspaceItems);
+      const missingContextLinkedDirs =
+        contextLinkedDirCandidates.length === 0
+          ? []
+          : (
+              await Promise.all(
+                contextLinkedDirCandidates.map(async (dir) => ((await dirExists(dir)) ? null : dir)),
+              )
+            ).filter((dir): dir is string => Boolean(dir));
+      if (missingContextLinkedDirs.length > 0) {
+        setError('A selected reference folder is no longer available. Remove or re-pick it before starting the run.');
+        return;
+      }
+      const contextLinkedDirs = contextLinkedDirCandidates;
       const submittedProjectKind =
         submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
       const submittedProjectMetadata = submittedActive?.mediaSurface
@@ -1892,9 +1953,13 @@ export function HomeView({
         contextPlugins,
         contextMcpServers,
         contextConnectors,
+        ...(contextWorkspaceItems.length > 0
+          ? { initialRunContext: { workspaceItems: contextWorkspaceItems } }
+          : {}),
         attachments: stagedFiles,
         ...(workingDir ? { workingDir } : {}),
         ...(workingDirToken ? { workingDirToken } : {}),
+        ...(contextLinkedDirs.length > 0 ? { linkedDirs: contextLinkedDirs } : {}),
         conversationMode: sessionMode,
         ...(examplePromptToSend ? { examplePromptContext: examplePromptToSend } : {}),
       });
@@ -1913,6 +1978,7 @@ export function HomeView({
       setSelectedPluginContexts([]);
       setSelectedMcpContexts([]);
       setSelectedConnectorContexts([]);
+      setContextWorkspaceItems([]);
     } catch (err) {
       // A submit handler that throws (instead of resolving false) lands on
       // the same recovery path as a rejected creation.
@@ -1933,6 +1999,8 @@ export function HomeView({
         onPromptChange={handlePromptChange}
         onSubmit={submit}
         onSubmitScenario={submitScenario}
+        sessionMode={sessionMode}
+        onSessionModeChange={setSessionMode}
         submitting={sending}
         activePluginTitle={activeBadgeTitle}
         activePluginIsExplicit={activePluginIsExplicit}
@@ -1951,9 +2019,12 @@ export function HomeView({
         contextOnlyPlugins={selectedPluginContexts.filter((item) => !item.inlineBacked).map((item) => item.record)}
         contextOnlyMcpServers={selectedMcpContexts.filter((item) => !item.inlineBacked).map((item) => item.server)}
         contextOnlyConnectors={selectedConnectorContexts.filter((item) => !item.inlineBacked).map((item) => item.connector)}
+        contextWorkspaceItems={contextWorkspaceItems}
         onRemovePluginContext={removePluginContext}
         onRemoveMcpContext={removeMcpContext}
         onRemoveConnectorContext={removeConnectorContext}
+        onAddWorkspaceContext={addWorkspaceContext}
+        onRemoveWorkspaceContext={removeWorkspaceContext}
         onAddPlugin={onBrowseRegistry}
         onAddConnector={onOpenIntegrations}
         onAddMcp={onOpenMcp}
@@ -2002,6 +2073,7 @@ export function HomeView({
         recentDirs={recentDirs}
         onPickWorkingDir={handlePickWorkingDir}
         onSubmitManualWorkingDir={submitManualWorkingDir}
+        onPickLocalCodeDir={handlePickLocalCodeDir}
         onSelectRecentWorkingDir={(dir) => {
           setWorkingDir(dir);
           // Recents come from the browser-side picker only; they carry no

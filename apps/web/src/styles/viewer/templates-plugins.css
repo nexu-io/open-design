@@ -2052,7 +2052,7 @@
   max-height: 280px;
   white-space: pre-wrap;
 }
-/* Split "Use plugin / Replicate this content" button in the scenario footer —
+/* Split "Use / Use without prompt" button in the scenario footer —
    mirrors the PreviewModal primary-action split menu, but the popover opens
    upward since the footer sits at the bottom of the modal. */
 .plugin-details-modal__use-split {
