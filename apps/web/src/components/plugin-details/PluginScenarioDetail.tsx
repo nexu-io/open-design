@@ -45,7 +45,7 @@ export function PluginScenarioDetail({
   const localizedTitle = localizePluginTitle(locale, record);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   // The text/scenario fallback modal gets the same split "Use plugin /
-  // Replicate this content" affordance as the HTML/design/media variants, so a
+  // prompt-loading Use affordance as the HTML/design/media variants, so a
   // scenario plugin with an `od.useCase.query` still offers use-with-query.
   const useMenu = buildPluginUseMenu(record, onUse, t, onDuplicate);
   const [useMenuOpen, setUseMenuOpen] = useState(false);

@@ -610,7 +610,7 @@ test('[P1] home starters can browse registry and use a starter from Home', async
   await expect(page.getByTestId('home-hero')).toBeVisible();
   // Community is a gallery now (no inline Use button): open the starter's
   // detail modal and use it. This starter ships an example query, so the
-  // primary Use button replicates (seeds the prompt) while binding it as the
+  // primary Use button loads the prompt while binding it as the
   // active driver; this case only asserts the active-plugin chip, which
   // appears on either Use variant.
   await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
@@ -1070,12 +1070,12 @@ test('[P1] home starters Use plugin from the details modal applies the plugin to
   const dialog = page.getByRole('dialog', { name: /Detail Use Plugin preview/i });
   await expect(dialog).toBeVisible();
   // This fixture ships an example query, so the primary Use button now
-  // replicates (seeds the prompt). The structure-only path that keeps the
-  // composer freeform lives in the caret menu's "Use plugin only" option.
+  // loads the prompt. The structure-only path that keeps the
+  // composer freeform lives in the caret menu's "Use without prompt" option.
   await page.getByTestId('plugin-details-use-detail-use-plugin-menu').click();
   await page.getByTestId('plugin-details-use-option-detail-use-plugin').click();
   await expect(dialog).toHaveCount(0);
-  // "Use plugin only" routes the plugin as the active driver (its own pipeline
+  // "Use without prompt" routes the plugin as the active driver (its own pipeline
   // applies on submit) and surfaces the active-plugin chip, but does not
   // inject prompt text, so the editor stays empty.
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
@@ -1102,12 +1102,12 @@ test('[P0] @critical home starters Use-plugin-only routes the plugin as the acti
   const applyResponsePromise = page.waitForResponse('**/api/plugins/localized-plugin/apply');
   // Community is a gallery (no inline Use button): open the starter's detail
   // modal and use it from there. This starter ships an example query, so the
-  // primary Use button now replicates (seeds the prompt) — the structure-only
-  // freeform path lives in the caret menu's "Use plugin only" option.
+  // primary Use button now loads the prompt — the structure-only
+  // freeform path lives in the caret menu's "Use without prompt" option.
   await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
   await page.getByTestId('plugin-details-use-localized-plugin-menu').click();
   await page.getByTestId('plugin-details-use-option-localized-plugin').click();
-  // "Use plugin only" routes the starter as the active driver (active-plugin
+  // "Use without prompt" routes the starter as the active driver (active-plugin
   // chip) without seeding the prompt; the user can still type their own brief.
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
   await expect(input).toHaveText('');
@@ -1159,8 +1159,8 @@ test('[P1] home starters route the picked plugin as the active driver from its d
   const starterCard = page.locator('[data-plugin-id="localized-plugin"]').first();
   await starterCard.scrollIntoViewIfNeeded();
   // Community is a gallery: open the starter's detail modal and use it. This
-  // starter ships an example query, so the primary Use button replicates and
-  // binds the plugin as the active driver (active-plugin chip); this case only
+  // starter ships an example query, so the primary Use button loads the prompt
+  // and binds the plugin as the active driver (active-plugin chip); this case only
   // asserts that chip, which appears on either Use variant.
   await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
   await page.getByTestId('plugin-details-use-localized-plugin').click();
@@ -1184,8 +1184,8 @@ test('[P0] @critical home starters Use with query carries the hydrated starter p
   const input = page.getByTestId('home-hero-input');
   const home = await revealHomeTemplates(page);
   // Use the starter from its detail modal (gallery has no inline Use). This
-  // starter ships an example query, so the primary Use button replicates: it
-  // routes the plugin as the active run driver AND seeds the hydrated prompt.
+  // starter ships an example query, so the primary Use button loads the prompt:
+  // it routes the plugin as the active run driver AND seeds the hydrated prompt.
   // We still fill the same brief explicitly to keep the assertion robust to the
   // async apply→seed roundtrip (the value is identical either way).
   await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i, home);

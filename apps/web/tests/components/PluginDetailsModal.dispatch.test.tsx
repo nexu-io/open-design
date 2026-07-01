@@ -232,7 +232,7 @@ describe('PluginDetailsModal dispatch', () => {
 
   it('offers the use/use-with-query split menu in the scenario fallback when the plugin has a query', () => {
     // Regression (#3997 review): a text/scenario plugin with `od.useCase.query`
-    // must still offer "Use plugin only" vs "Replicate this content", same as the
+    // must still offer "Use without prompt" vs prompt-loading "Use", same as the
     // html/design/media variants — not a single plain `use` button.
     const html = render(
       make({

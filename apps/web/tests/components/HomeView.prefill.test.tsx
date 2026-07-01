@@ -1778,7 +1778,7 @@ describe('HomeView prompt handoff', () => {
     // The plugin's useCase.query is a generator-facing meta-instruction
     // ("follow the en field verbatim; start from example.html"). The Home
     // example-prompt cards surface the description instead; the detail modal's
-    // "Replicate this content" (use-with-query) must do the same rather than
+    // prompt-loading "Use" (use-with-query) must do the same rather than
     // dumping the meta-instruction into the composer.
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
