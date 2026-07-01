@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   byokAgentProviderId,
+  byokSessionModeForTracking,
   buildByokRunCreatedProps,
   buildByokRunFinishedProps,
   type ByokRunBaseInput,
@@ -64,6 +65,14 @@ describe('buildByokRunCreatedProps', () => {
     expect(buildByokRunCreatedProps({ ...BASE, model: null }).model_id).toBe('default');
     expect(buildByokRunCreatedProps({ ...BASE, model: '   ' }).model_id).toBe('default');
   });
+
+  it('preserves Plan mode from BYOK run props', () => {
+    const props = buildByokRunCreatedProps({
+      ...BASE,
+      sessionMode: byokSessionModeForTracking('plan'),
+    });
+    expect(props.session_mode).toBe('plan');
+  });
 });
 
 describe('buildByokRunFinishedProps', () => {
@@ -86,5 +95,17 @@ describe('buildByokRunFinishedProps', () => {
       agent_provider_id: 'anthropic',
       runtime_type: 'byok',
     });
+  });
+
+  it('preserves Plan mode on finished BYOK run props', () => {
+    const props = buildByokRunFinishedProps({
+      ...BASE,
+      sessionMode: byokSessionModeForTracking('plan'),
+      result: 'success',
+      artifactCount: 0,
+      askedUserQuestion: false,
+      totalDurationMs: 42,
+    });
+    expect(props.session_mode).toBe('plan');
   });
 });

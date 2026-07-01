@@ -222,6 +222,20 @@ type OnboardingProfileState = {
   email: string;
 };
 
+type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
+  metadata?: CreateInput['metadata'];
+  pendingPrompt?: string;
+  pluginId?: string;
+  pluginType?: string;
+  appliedPluginSnapshotId?: string;
+  pluginInputs?: Record<string, unknown>;
+  conversationMode?: ChatSessionMode;
+  autoSendFirstMessage?: boolean;
+  requestId?: string;
+  pendingFiles?: File[];
+  userWorkingDirToken?: string;
+};
+
 function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
   return defaultScenarioPluginIdForProjectMetadata(metadata);
 }
@@ -345,17 +359,7 @@ interface Props {
   // flip between system / light / dark without opening the full Settings
   // dialog. App owns persistence; this component just calls the callback.
   onThemeChange: (theme: AppTheme) => void;
-  onCreateProject: (
-    input: CreateInput & {
-      pendingPrompt?: string;
-      pluginId?: string;
-      appliedPluginSnapshotId?: string;
-      pluginInputs?: Record<string, unknown>;
-      conversationMode?: ChatSessionMode;
-      autoSendFirstMessage?: boolean;
-      pendingFiles?: File[];
-    },
-  ) => Promise<boolean> | boolean | void;
+  onCreateProject: (input: EntryCreateProjectInput) => Promise<boolean> | boolean | void;
   onCreatePluginShareProject: (
     pluginId: string,
     action: PluginShareAction,
@@ -496,7 +500,6 @@ export function EntryShell({
   const route = useRoute();
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
   const [newProjectOpen, setNewProjectOpen] = useState(false);
-  const [blankProjectCreating, setBlankProjectCreating] = useState(false);
   useEffect(() => {
     if (view !== 'design-systems') return;
     void onDesignSystemsRefresh?.();
@@ -590,23 +593,16 @@ export function EntryShell({
     setNewProjectOpen(true);
   }
 
-  async function startBlankProject() {
-    if (blankProjectCreating) return;
-    setBlankProjectCreating(true);
-    setNewProjectOpen(false);
-    try {
-      const { project } = await createProject({
+  function startBlankProjectFromRail() {
+    void Promise.resolve(
+      onCreateProject({
         name: t('common.untitled'),
         skillId: null,
         designSystemId: null,
-      });
-      await onOpenProject(project.id);
-    } catch (err) {
-      console.warn('Could not create a blank project', err);
-      throw err;
-    } finally {
-      setBlankProjectCreating(false);
-    }
+      }),
+    ).catch((err) => {
+      console.warn('Failed to create blank project from entry rail', err);
+    });
   }
 
   function handleCreate(input: CreateInput) {
@@ -914,7 +910,7 @@ export function EntryShell({
                 onOpenNewProject={(tab) => {
                   openNewProject(tab);
                 }}
-                onStartBlankProject={startBlankProject}
+                onStartBlankProject={startBlankProjectFromRail}
                 promptHandoff={homePromptHandoff}
                 skills={skills}
                 skillsLoading={skillsLoading}

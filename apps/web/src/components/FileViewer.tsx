@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
@@ -29,6 +29,13 @@ import {
 } from '../analytics/events';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
+import {
+  buildScrollAnchors,
+  extractMarkdownBlockLines,
+  mapScrollPosition,
+  measureEditorBlockOffsets,
+  measurePreviewBlockOffsets,
+} from './markdown-scroll-sync';
 import { useT, useI18n } from '../i18n';
 import type { Dict, Locale } from '../i18n/types';
 import {
@@ -313,9 +320,11 @@ const MAX_CACHED_PREVIEW_VIEWPORTS = 128;
 const HOVER_CARD_DISMISS_DELAY_MS = 80;
 const htmlPreviewViewportState = new Map<string, PreviewViewportId>();
 const MARKDOWN_CODE_BLOCK_ATTR = 'data-markdown-code-block';
+const MARKDOWN_CODE_LANGUAGE_ATTR = 'data-code-language';
 const MARKDOWN_COPY_BLOCK_ATTR = 'data-copy-code-block';
 const MARKDOWN_COPY_BUTTON_CLASS = 'markdown-code-copy';
 const MARKDOWN_COPY_TOAST_CLASS = 'markdown-code-toast';
+const ABSOLUTE_MARKDOWN_IMAGE_SOURCE_RE = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 
 const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
   {
@@ -462,8 +471,167 @@ function decorateMarkdownCodeBlocks(html: string): string {
   let blockIndex = 0;
   return html.replace(/<pre\b([^>]*)>([\s\S]*?)<\/pre>/g, (_match, attrs: string, content: string) => {
     const blockId = String(blockIndex++);
-    return `<div class="markdown-code-block" ${MARKDOWN_CODE_BLOCK_ATTR}="${blockId}"><pre${attrs}>${content}</pre></div>`;
+    const language = markdownCodeBlockLanguage(content);
+    const languageAttr = language ? ` ${MARKDOWN_CODE_LANGUAGE_ATTR}="${escapeHtmlAttribute(language.label)}"` : '';
+    return `<div class="markdown-code-block" ${MARKDOWN_CODE_BLOCK_ATTR}="${blockId}"${languageAttr}><pre${attrs}>${content}</pre></div>`;
   });
+}
+
+type MarkdownCodeLanguage = {
+  lang: string;
+  label: string;
+};
+
+function markdownCodeBlockLanguage(content: string): MarkdownCodeLanguage | null {
+  const codeMatch = content.match(/<code\b([^>]*)>/);
+  if (!codeMatch) return null;
+  const classMatch = codeMatch[1]?.match(/\bclass=(["'])(.*?)\1/);
+  const className = classMatch?.[2] ?? '';
+  const languageClass = className
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .find((item) => /^(?:language|lang)-/i.test(item));
+  if (!languageClass) return null;
+  const raw = languageClass.replace(/^(?:language|lang)-/i, '').replace(/[^a-z0-9+#.-]/gi, '');
+  if (!raw) return null;
+  const aliases: Record<string, MarkdownCodeLanguage> = {
+    bash: { lang: 'bash', label: 'Bash' },
+    c: { lang: 'c', label: 'C' },
+    cpp: { lang: 'cpp', label: 'C++' },
+    css: { lang: 'css', label: 'CSS' },
+    diff: { lang: 'diff', label: 'Diff' },
+    dockerfile: { lang: 'dockerfile', label: 'Dockerfile' },
+    go: { lang: 'go', label: 'Go' },
+    graphql: { lang: 'graphql', label: 'GraphQL' },
+    html: { lang: 'html', label: 'HTML' },
+    java: { lang: 'java', label: 'Java' },
+    js: { lang: 'javascript', label: 'JS' },
+    javascript: { lang: 'javascript', label: 'JS' },
+    json: { lang: 'json', label: 'JSON' },
+    jsx: { lang: 'jsx', label: 'JSX' },
+    markdown: { lang: 'markdown', label: 'Markdown' },
+    md: { lang: 'markdown', label: 'Markdown' },
+    php: { lang: 'php', label: 'PHP' },
+    py: { lang: 'python', label: 'Python' },
+    python: { lang: 'python', label: 'Python' },
+    rb: { lang: 'ruby', label: 'Ruby' },
+    ruby: { lang: 'ruby', label: 'Ruby' },
+    rust: { lang: 'rust', label: 'Rust' },
+    shell: { lang: 'shell', label: 'Shell' },
+    sh: { lang: 'shell', label: 'Shell' },
+    sql: { lang: 'sql', label: 'SQL' },
+    swift: { lang: 'swift', label: 'Swift' },
+    toml: { lang: 'toml', label: 'TOML' },
+    ts: { lang: 'typescript', label: 'TS' },
+    tsx: { lang: 'tsx', label: 'TSX' },
+    typescript: { lang: 'typescript', label: 'TS' },
+    xml: { lang: 'xml', label: 'XML' },
+    yaml: { lang: 'yaml', label: 'YAML' },
+    yml: { lang: 'yaml', label: 'YAML' },
+  };
+  return aliases[raw.toLowerCase()] ?? { lang: raw.toLowerCase(), label: raw.toUpperCase() };
+}
+
+async function highlightMarkdownCodeBlocks(html: string): Promise<string> {
+  if (typeof document === 'undefined') return html;
+  const root = document.createElement('div');
+  root.innerHTML = html;
+  const blocks = Array.from(root.querySelectorAll<HTMLElement>(`[${MARKDOWN_CODE_BLOCK_ATTR}]`));
+  if (blocks.length === 0) return html;
+  const { highlightCode } = await import('../runtime/shiki');
+  let changed = false;
+  await Promise.all(blocks.map(async (block) => {
+    const code = block.querySelector<HTMLElement>('pre > code');
+    if (!code) return;
+    const language = markdownCodeBlockLanguage(code.outerHTML);
+    if (!language) return;
+    const source = (code.textContent ?? '').replace(/\n$/, '');
+    const highlighted = await highlightCode(source, language.lang);
+    if (!highlighted) return;
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = highlighted;
+    const highlightedPre = wrapper.firstElementChild;
+    if (!(highlightedPre instanceof HTMLElement)) return;
+    highlightedPre.classList.add('markdown-shiki');
+    highlightedPre.setAttribute('data-lang', language.label);
+    code.closest('pre')?.replaceWith(highlightedPre);
+    block.setAttribute(MARKDOWN_CODE_LANGUAGE_ATTR, language.label);
+    changed = true;
+  }));
+  return changed ? root.innerHTML : html;
+}
+
+function rewriteMarkdownImageSources(html: string, projectId: string, markdownPath: string): string {
+  return html.replace(/<img\b([^>]*?)\bsrc="([^"]*)"([^>]*)>/g, (match, before: string, src: string, after: string) => {
+    const resolved = markdownImageSourceUrl(projectId, markdownPath, decodeHtmlAttribute(src));
+    if (!resolved) return match;
+    const attrs = `${before}${after}`;
+    const loadingAttr = /\sloading=/.test(attrs) ? '' : ' loading="lazy"';
+    return `<img${before}src="${escapeHtmlAttribute(resolved)}"${loadingAttr}${after}>`;
+  });
+}
+
+export function markdownImageSourceUrl(projectId: string, markdownPath: string, src: string): string | null {
+  const trimmed = src.trim();
+  if (!trimmed) return null;
+  if (ABSOLUTE_MARKDOWN_IMAGE_SOURCE_RE.test(trimmed)) return trimmed;
+  const relativePath = trimmed.startsWith('/')
+    ? normalizeMarkdownProjectPath(trimmed.slice(1))
+    : normalizeMarkdownProjectPath(`${markdownDirectory(markdownPath)}/${trimmed}`);
+  return relativePath ? projectFileUrl(projectId, relativePath) : null;
+}
+
+function markdownDirectory(path: string): string {
+  const normalized = normalizeMarkdownProjectPath(path);
+  const slash = normalized.lastIndexOf('/');
+  return slash > 0 ? normalized.slice(0, slash) : '';
+}
+
+function normalizeMarkdownProjectPath(path: string): string {
+  const parts: string[] = [];
+  for (const raw of path.replace(/\\/g, '/').split('/')) {
+    const part = raw.trim();
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      parts.pop();
+      continue;
+    }
+    parts.push(part);
+  }
+  return parts.join('/');
+}
+
+function markdownRelativeProjectPath(fromPath: string, targetPath: string): string {
+  const fromDir = markdownDirectory(fromPath);
+  const target = normalizeMarkdownProjectPath(targetPath);
+  if (!fromDir) return target;
+  if (target.startsWith(`${fromDir}/`)) return target.slice(fromDir.length + 1);
+  const fromParts = fromDir.split('/').filter(Boolean);
+  const targetParts = target.split('/').filter(Boolean);
+  let common = 0;
+  while (common < fromParts.length && common < targetParts.length && fromParts[common] === targetParts[common]) {
+    common += 1;
+  }
+  const up = Array.from({ length: fromParts.length - common }, () => '..');
+  const down = targetParts.slice(common);
+  return [...up, ...down].join('/') || target;
+}
+
+function decodeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 function setMarkdownCodeBlockCopiedState(block: HTMLElement, copied: boolean, t: TranslateFn) {
@@ -1055,7 +1223,13 @@ export function FileViewer({
     );
   }
   if (rendererMatch?.renderer.id === 'markdown') {
-    return <MarkdownViewer projectId={projectId} file={file} />;
+    return (
+      <MarkdownViewer
+        projectId={projectId}
+        file={file}
+        onFileSaved={onFileSaved}
+      />
+    );
   }
   if (rendererMatch?.renderer.id === 'svg') {
     return <SvgViewer projectId={projectId} file={file} />;
@@ -2674,17 +2848,6 @@ export function CommentSidePanel({
               </div>
             </div>
             <div className="composer-row comment-side-new-comment-actions">
-              <button
-                type="button"
-                className="icon-btn"
-                title={t('chat.cliSettingsTitle')}
-                aria-label={t('chat.cliSettingsAria')}
-                disabled
-              >
-                <span className="composer-tools-at" aria-hidden>
-                  @
-                </span>
-              </button>
               <button
                 type="button"
                 className="icon-btn"
@@ -10808,28 +10971,88 @@ function isJsonFile(file: ProjectFile): boolean {
   return file.name.toLowerCase().endsWith('.json') || file.mime.toLowerCase().startsWith('application/json');
 }
 
+type MarkdownViewerMode = 'edit' | 'split' | 'preview';
+type MarkdownSaveState = 'idle' | 'saving' | 'saved' | 'error';
+type MarkdownScrollPane = 'editor' | 'preview';
+type MarkdownSaveOptions = {
+  refreshFiles?: boolean;
+  showSaving?: boolean;
+};
+
+function markdownScrollRange(element: HTMLElement): number {
+  return Math.max(0, element.scrollHeight - element.clientHeight);
+}
+
+function markdownScrollRatio(element: HTMLElement): number {
+  const range = markdownScrollRange(element);
+  return range > 0 ? element.scrollTop / range : 0;
+}
+
+function markdownScrollTopForRatio(element: HTMLElement, ratio: number): number {
+  const clamped = Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0));
+  return markdownScrollRange(element) * clamped;
+}
+
+function mergeMarkdownSaveOptions(a: MarkdownSaveOptions, b: MarkdownSaveOptions): MarkdownSaveOptions {
+  return {
+    refreshFiles: a.refreshFiles !== false || b.refreshFiles !== false,
+    showSaving: a.showSaving !== false || b.showSaving !== false,
+  };
+}
+
 function MarkdownViewer({
   projectId,
   file,
+  onFileSaved,
 }: {
   projectId: string;
   file: ProjectFile;
+  onFileSaved?: () => Promise<void> | void;
 }) {
-  const t = useT();
+  const { t, locale } = useI18n();
   const [text, setText] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
   const [copied, setCopied] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+  const [mode, setMode] = useState<MarkdownViewerMode>('split');
+  const [saveState, setSaveState] = useState<MarkdownSaveState>('idle');
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [highlightedHtml, setHighlightedHtml] = useState<{ source: string; html: string; themeRevision: number } | null>(null);
+  const [highlightThemeRevision, setHighlightThemeRevision] = useState(0);
+  const [, bumpSavedRevision] = useState(0);
+  const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const markdownPreviewPaneRef = useRef<HTMLElement | null>(null);
   const markdownArticleRef = useRef<HTMLElement | null>(null);
   const copyBlockTimerRef = useRef<number | null>(null);
   const copiedMarkdownBlockRef = useRef<HTMLElement | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  const scrollSyncFrameRef = useRef<number | null>(null);
+  const programmaticScrollClearFrameRef = useRef<number | null>(null);
+  const pendingScrollSyncRef = useRef<{ sourcePane: MarkdownScrollPane; targetPane: MarkdownScrollPane } | null>(null);
+  const programmaticScrollRef = useRef<{ pane: MarkdownScrollPane; top: number } | null>(null);
+  const activeMarkdownScrollPaneRef = useRef<MarkdownScrollPane>('editor');
+  const editorBlockOffsetsRef = useRef<{ width: number; offsets: number[] } | null>(null);
+  const previousModeRef = useRef<MarkdownViewerMode>('split');
+  const saveInFlightRef = useRef(false);
+  const pendingSaveAfterFlightRef = useRef<MarkdownSaveOptions | null>(null);
+  const textRef = useRef('');
+  const lastSavedTextRef = useRef<string | null>(null);
+  const loadedFileKeyRef = useRef<string | null>(null);
+  const markdownFileKey = `${projectId}::${file.name}`;
   const status = file.artifactManifest?.status ?? 'complete';
   const isStreaming = status === 'streaming';
   const isError = status === 'error';
   const exportTitle = file.name.replace(/\.mdx?$/i, '') || file.name;
 
   useEffect(() => {
-    setText(null);
+    const sameLoadedFile = loadedFileKeyRef.current === markdownFileKey;
+    if (
+      sameLoadedFile &&
+      lastSavedTextRef.current !== null &&
+      textRef.current !== lastSavedTextRef.current
+    ) {
+      return undefined;
+    }
+    if (!sameLoadedFile) setText(null);
     copiedMarkdownBlockRef.current = null;
     if (copyBlockTimerRef.current) {
       window.clearTimeout(copyBlockTimerRef.current);
@@ -10837,12 +11060,37 @@ function MarkdownViewer({
     }
     let cancelled = false;
     void fetchProjectFileText(projectId, file.name).then((next) => {
-      if (!cancelled) setText(next ?? '');
+      if (cancelled) return;
+      if (
+        loadedFileKeyRef.current === markdownFileKey &&
+        lastSavedTextRef.current !== null &&
+        textRef.current !== lastSavedTextRef.current
+      ) {
+        return;
+      }
+      const loaded = next ?? '';
+      if (
+        sameLoadedFile &&
+        lastSavedTextRef.current !== null &&
+        textRef.current === lastSavedTextRef.current &&
+        loaded === lastSavedTextRef.current
+      ) {
+        loadedFileKeyRef.current = markdownFileKey;
+        pendingSaveAfterFlightRef.current = null;
+        setSaveState((current) => current === 'saved' ? current : 'idle');
+        return;
+      }
+      textRef.current = loaded;
+      lastSavedTextRef.current = loaded;
+      loadedFileKeyRef.current = markdownFileKey;
+      pendingSaveAfterFlightRef.current = null;
+      setSaveState('idle');
+      setText(loaded);
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, file.mtime, reloadKey]);
+  }, [projectId, file.name, file.mtime, markdownFileKey]);
 
   useEffect(() => {
     return () => {
@@ -10850,6 +11098,125 @@ function MarkdownViewer({
       if (copyBlockTimerRef.current) {
         window.clearTimeout(copyBlockTimerRef.current);
       }
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+      if (scrollSyncFrameRef.current) {
+        window.cancelAnimationFrame(scrollSyncFrameRef.current);
+        scrollSyncFrameRef.current = null;
+      }
+      if (programmaticScrollClearFrameRef.current) {
+        window.cancelAnimationFrame(programmaticScrollClearFrameRef.current);
+        programmaticScrollClearFrameRef.current = null;
+      }
+      pendingScrollSyncRef.current = null;
+      programmaticScrollRef.current = null;
+      activeMarkdownScrollPaneRef.current = 'editor';
+    };
+  }, []);
+
+  const saveMarkdownText = useCallback(
+    (value: string, options: MarkdownSaveOptions = {}) => {
+      const run = async (nextValue: string, saveOptions: MarkdownSaveOptions): Promise<void> => {
+        if (lastSavedTextRef.current === nextValue) {
+          const showSaving = saveOptions.showSaving !== false;
+          if (textRef.current === nextValue) setSaveState(showSaving ? 'saved' : 'idle');
+          if (saveOptions.refreshFiles !== false && onFileSaved) {
+            void Promise.resolve(onFileSaved()).catch(() => undefined);
+          }
+          return;
+        }
+        if (saveInFlightRef.current) {
+          pendingSaveAfterFlightRef.current = pendingSaveAfterFlightRef.current
+            ? mergeMarkdownSaveOptions(pendingSaveAfterFlightRef.current, saveOptions)
+            : saveOptions;
+          return;
+        }
+        saveInFlightRef.current = true;
+        const showSaving = saveOptions.showSaving !== false;
+        if (showSaving) setSaveState('saving');
+        try {
+          const saved = await writeProjectTextFile(projectId, file.name, nextValue);
+          if (!saved) throw new Error('write failed');
+          lastSavedTextRef.current = nextValue;
+          bumpSavedRevision((n) => n + 1);
+          setSavedAt(Date.now());
+          if (textRef.current === nextValue) setSaveState(showSaving ? 'saved' : 'idle');
+          if (saveOptions.refreshFiles !== false && onFileSaved) {
+            void Promise.resolve(onFileSaved()).catch(() => undefined);
+          }
+        } catch {
+          if (textRef.current === nextValue) setSaveState('error');
+        } finally {
+          saveInFlightRef.current = false;
+          const pending = pendingSaveAfterFlightRef.current;
+          if (pending) {
+            pendingSaveAfterFlightRef.current = null;
+            const latest = textRef.current;
+            if (latest !== lastSavedTextRef.current) {
+              void run(latest, pending);
+            } else {
+              const showPendingSaving = pending.showSaving !== false;
+              if (textRef.current === latest) setSaveState(showPendingSaving ? 'saved' : 'idle');
+              if (pending.refreshFiles !== false && onFileSaved) {
+                void Promise.resolve(onFileSaved()).catch(() => undefined);
+              }
+            }
+          }
+        }
+      };
+      void run(value, options);
+    },
+    [file.name, onFileSaved, projectId],
+  );
+
+  const flushPendingMarkdownSave = useCallback(() => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    const latest = textRef.current;
+    if (lastSavedTextRef.current !== null && latest !== lastSavedTextRef.current) {
+      saveMarkdownText(latest, { refreshFiles: false, showSaving: false });
+    }
+  }, [saveMarkdownText]);
+
+  useEffect(() => {
+    return () => {
+      flushPendingMarkdownSave();
+    };
+  }, [flushPendingMarkdownSave]);
+
+  useEffect(() => {
+    if (text === null) return undefined;
+    textRef.current = text;
+    if (text === lastSavedTextRef.current) return undefined;
+    setSaveState((current) => current === 'saved' ? 'idle' : current);
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      saveMarkdownText(textRef.current, { refreshFiles: false, showSaving: false });
+    }, 700);
+    return () => {
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
+  }, [saveMarkdownText, text]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const bump = () => setHighlightThemeRevision((revision) => revision + 1);
+    const observer = new MutationObserver(bump);
+    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+    media?.addEventListener('change', bump);
+    return () => {
+      observer.disconnect();
+      media?.removeEventListener('change', bump);
     };
   }, []);
 
@@ -10862,11 +11229,234 @@ function MarkdownViewer({
     }
   }
 
-  const html = useMemo(() => {
+  const insertTextAtSelection = useCallback((insert: string) => {
+    setText((current) => {
+      if (current === null) return current;
+      const editor = editorRef.current;
+      if (!editor) return `${current}${insert}`;
+      const start = editor.selectionStart;
+      const end = editor.selectionEnd;
+      const next = `${current.slice(0, start)}${insert}${current.slice(end)}`;
+      window.requestAnimationFrame(() => {
+        const nextCursor = start + insert.length;
+        editor.focus();
+        editor.setSelectionRange(nextCursor, nextCursor);
+      });
+      return next;
+    });
+  }, []);
+
+  const insertImageFiles = useCallback(
+    async (files: File[]): Promise<boolean> => {
+      const images = files.filter((item) => isMarkdownImageFile(item));
+      if (images.length === 0) return false;
+      const targetDir = markdownDirectory(file.name);
+      const result = await uploadProjectFiles(projectId, images, targetDir);
+      if (result.uploaded.length > 0) {
+        await onFileSaved?.();
+        const snippet = result.uploaded
+          .map((item) => {
+            const alt = markdownImageAlt(item.name);
+            const path = markdownRelativeProjectPath(file.name, item.path);
+            return `![${alt}](${path})`;
+          })
+          .join('\n');
+        insertTextAtSelection(`\n${snippet}\n`);
+      }
+      return true;
+    },
+    [file.name, insertTextAtSelection, onFileSaved, projectId],
+  );
+
+  function handleEditorPaste(event: ReactClipboardEvent<HTMLTextAreaElement>) {
+    const files = Array.from(event.clipboardData.files ?? []);
+    if (!files.some(isMarkdownImageFile)) return;
+    event.preventDefault();
+    void insertImageFiles(files);
+  }
+
+  function handleEditorDrop(event: ReactDragEvent<HTMLTextAreaElement>) {
+    const files = Array.from(event.dataTransfer.files ?? []);
+    if (!files.some(isMarkdownImageFile)) return;
+    event.preventDefault();
+    void insertImageFiles(files);
+  }
+
+  // The markdown doc auto-saves on a debounce, so the toolbar shows a passive
+  // status (when it last auto-saved) instead of a manual Save button that is
+  // disabled almost all the time. Typing stays quiet: the indicator keeps the
+  // last auto-saved time and only refreshes once the debounced save lands, so
+  // there is no per-keystroke "Saving…" flicker. `saving` is reserved for an
+  // explicit, foreground write (the error-retry path).
+  const autoSaveStatus: 'error' | 'saving' | 'saved' | 'idle' =
+    saveState === 'error'
+      ? 'error'
+      : saveState === 'saving'
+        ? 'saving'
+        : savedAt != null
+          ? 'saved'
+          : 'idle';
+  const autoSaveTime =
+    savedAt != null
+      ? new Date(savedAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+      : null;
+  const autoSaveLabel =
+    autoSaveStatus === 'error'
+      ? t('fileViewer.markdownSaveFailed')
+      : autoSaveStatus === 'saving'
+        ? t('fileViewer.markdownSaving')
+        : autoSaveStatus === 'saved' && autoSaveTime
+          ? t('fileViewer.markdownAutoSaved', { time: autoSaveTime })
+          : t('fileViewer.markdownAutoSaveHint');
+  const showEditor = mode === 'edit' || mode === 'split';
+  const showPreview = mode === 'preview' || mode === 'split';
+
+  const baseHtml = useMemo(() => {
     if (text === null) return null;
     const renderPartial = MarkdownRenderer.renderPartial ?? renderMarkdownToSafeHtml;
-    return decorateMarkdownCodeBlocks(renderPartial(text));
+    return rewriteMarkdownImageSources(decorateMarkdownCodeBlocks(renderPartial(text)), projectId, file.name);
+  }, [file.name, projectId, text]);
+  const html = highlightedHtml?.source === baseHtml && highlightedHtml.themeRevision === highlightThemeRevision
+    ? highlightedHtml.html
+    : baseHtml;
+  const markdownBlockLines = useMemo(() => extractMarkdownBlockLines(text ?? ''), [text]);
+
+  // The cached editor block offsets become stale whenever the source text
+  // changes (line positions move) — drop them so the next sync remeasures.
+  useEffect(() => {
+    editorBlockOffsetsRef.current = null;
   }, [text]);
+
+  useEffect(() => {
+    if (!baseHtml) {
+      setHighlightedHtml(null);
+      return undefined;
+    }
+    let cancelled = false;
+    highlightMarkdownCodeBlocks(baseHtml).then((nextHtml) => {
+      if (cancelled) return;
+      setHighlightedHtml(nextHtml === baseHtml ? null : { source: baseHtml, html: nextHtml, themeRevision: highlightThemeRevision });
+    }).catch(() => {
+      if (!cancelled) setHighlightedHtml(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [baseHtml, highlightThemeRevision]);
+
+  const clearProgrammaticScrollSoon = useCallback(() => {
+    if (programmaticScrollClearFrameRef.current) {
+      window.cancelAnimationFrame(programmaticScrollClearFrameRef.current);
+    }
+    programmaticScrollClearFrameRef.current = window.requestAnimationFrame(() => {
+      programmaticScrollClearFrameRef.current = window.requestAnimationFrame(() => {
+        programmaticScrollRef.current = null;
+        programmaticScrollClearFrameRef.current = null;
+      });
+    });
+  }, []);
+
+  const getEditorBlockOffsets = useCallback((): number[] | null => {
+    const editor = editorRef.current;
+    if (!editor || markdownBlockLines.length === 0) return null;
+    const width = editor.clientWidth;
+    const cached = editorBlockOffsetsRef.current;
+    if (cached && cached.width === width && cached.offsets.length === markdownBlockLines.length) {
+      return cached.offsets;
+    }
+    const offsets = measureEditorBlockOffsets(editor, markdownBlockLines, textRef.current);
+    if (!offsets) return null;
+    editorBlockOffsetsRef.current = { width, offsets };
+    return offsets;
+  }, [markdownBlockLines]);
+
+  // Align the panes by matching each top-level markdown block's source line to
+  // its rendered element, then interpolating scroll position between those
+  // anchors. Falls back to proportional (ratio) sync when block anchors are
+  // unavailable (e.g. raw-HTML blocks change the rendered child count).
+  const computeMarkdownSyncTarget = useCallback(
+    (sourcePane: MarkdownScrollPane, source: HTMLElement, target: HTMLElement): number => {
+      const previewPane = markdownPreviewPaneRef.current;
+      if (markdownBlockLines.length > 0 && previewPane) {
+        const editorOffsets = getEditorBlockOffsets();
+        const previewOffsets = editorOffsets
+          ? measurePreviewBlockOffsets(previewPane, markdownBlockLines.length)
+          : null;
+        if (editorOffsets && previewOffsets) {
+          const isEditorSource = sourcePane === 'editor';
+          const sourceOffsets = isEditorSource ? editorOffsets : previewOffsets;
+          const targetOffsets = isEditorSource ? previewOffsets : editorOffsets;
+          const sourceAnchors = buildScrollAnchors(sourceOffsets, source.scrollHeight);
+          const targetAnchors = buildScrollAnchors(targetOffsets, target.scrollHeight);
+          const mapped = mapScrollPosition(source.scrollTop, sourceAnchors, targetAnchors);
+          return Math.max(0, Math.min(markdownScrollRange(target), mapped));
+        }
+      }
+      return markdownScrollTopForRatio(target, markdownScrollRatio(source));
+    },
+    [getEditorBlockOffsets, markdownBlockLines],
+  );
+
+  const applyMarkdownScrollSync = useCallback(
+    (sourcePane: MarkdownScrollPane, targetPane: MarkdownScrollPane) => {
+      const source = sourcePane === 'editor' ? editorRef.current : markdownPreviewPaneRef.current;
+      const target = targetPane === 'editor' ? editorRef.current : markdownPreviewPaneRef.current;
+      if (mode !== 'split' || !source || !target) return;
+      const targetTop = computeMarkdownSyncTarget(sourcePane, source, target);
+      if (Math.abs(target.scrollTop - targetTop) < 1) return;
+      programmaticScrollRef.current = { pane: targetPane, top: targetTop };
+      target.scrollTop = targetTop;
+      clearProgrammaticScrollSoon();
+    },
+    [clearProgrammaticScrollSoon, computeMarkdownSyncTarget, mode],
+  );
+
+  const scheduleMarkdownScrollSync = useCallback(
+    (sourcePane: MarkdownScrollPane, targetPane: MarkdownScrollPane) => {
+      if (mode !== 'split') {
+        pendingScrollSyncRef.current = null;
+        return;
+      }
+      pendingScrollSyncRef.current = { sourcePane, targetPane };
+      if (scrollSyncFrameRef.current !== null) return;
+      scrollSyncFrameRef.current = window.requestAnimationFrame(() => {
+        scrollSyncFrameRef.current = null;
+        const pending = pendingScrollSyncRef.current;
+        pendingScrollSyncRef.current = null;
+        if (!pending) return;
+        applyMarkdownScrollSync(pending.sourcePane, pending.targetPane);
+      });
+    },
+    [applyMarkdownScrollSync, mode],
+  );
+
+  const shouldIgnoreMarkdownScroll = useCallback((pane: MarkdownScrollPane, element: HTMLElement): boolean => {
+    const programmatic = programmaticScrollRef.current;
+    if (programmatic?.pane !== pane) return false;
+    if (Math.abs(element.scrollTop - programmatic.top) > 1 && activeMarkdownScrollPaneRef.current === pane) {
+      return false;
+    }
+    programmaticScrollRef.current = null;
+    return true;
+  }, []);
+
+  const handleMarkdownEditorScroll = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor || shouldIgnoreMarkdownScroll('editor', editor)) return;
+    activeMarkdownScrollPaneRef.current = 'editor';
+    scheduleMarkdownScrollSync('editor', 'preview');
+  }, [scheduleMarkdownScrollSync, shouldIgnoreMarkdownScroll]);
+
+  const handleMarkdownPreviewScroll = useCallback(() => {
+    const previewPane = markdownPreviewPaneRef.current;
+    if (!previewPane || shouldIgnoreMarkdownScroll('preview', previewPane)) return;
+    if (activeMarkdownScrollPaneRef.current !== 'preview') return;
+    scheduleMarkdownScrollSync('preview', 'editor');
+  }, [scheduleMarkdownScrollSync, shouldIgnoreMarkdownScroll]);
+
+  const activateMarkdownScrollPane = useCallback((pane: MarkdownScrollPane) => {
+    activeMarkdownScrollPaneRef.current = pane;
+  }, []);
 
   useEffect(() => {
     const article = markdownArticleRef.current;
@@ -10877,6 +11467,28 @@ function MarkdownViewer({
     }
   }, [html, t]);
 
+  useEffect(() => {
+    if (mode !== 'split') {
+      if (scrollSyncFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollSyncFrameRef.current);
+        scrollSyncFrameRef.current = null;
+      }
+      if (programmaticScrollClearFrameRef.current !== null) {
+        window.cancelAnimationFrame(programmaticScrollClearFrameRef.current);
+        programmaticScrollClearFrameRef.current = null;
+      }
+      pendingScrollSyncRef.current = null;
+      programmaticScrollRef.current = null;
+      activeMarkdownScrollPaneRef.current = 'editor';
+      previousModeRef.current = mode;
+      return;
+    }
+    const sourcePane = activeMarkdownScrollPaneRef.current ?? (previousModeRef.current === 'preview' ? 'preview' : 'editor');
+    const targetPane = sourcePane === 'preview' ? 'editor' : 'preview';
+    scheduleMarkdownScrollSync(sourcePane, targetPane);
+    previousModeRef.current = mode;
+  }, [html, mode, scheduleMarkdownScrollSync]);
+
   async function handleMarkdownBodyClick(event: ReactMouseEvent<HTMLElement>) {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -10886,7 +11498,7 @@ function MarkdownViewer({
     if (!(block instanceof HTMLElement)) return;
     const pre = block.querySelector('pre');
     if (!pre) return;
-    const didCopy = await copyTextToClipboard(pre.textContent ?? '');
+    const didCopy = await copyTextToClipboard((pre.textContent ?? '').replace(/\n$/, ''));
     if (!didCopy) return;
     if (copiedMarkdownBlockRef.current && copiedMarkdownBlockRef.current !== block) {
       setMarkdownCodeBlockCopiedState(copiedMarkdownBlockRef.current, false, t);
@@ -10911,17 +11523,50 @@ function MarkdownViewer({
         <div className="viewer-toolbar-left">
           {isStreaming ? <span className="viewer-meta">{t('fileViewer.markdownStreamingMeta')}</span> : null}
           {isError ? <span className="viewer-meta">{t('fileViewer.markdownErrorMeta')}</span> : null}
+          <div className="viewer-tabs markdown-mode-tabs" role="tablist" aria-label={t('fileViewer.markdownViewMode')}>
+            {(['edit', 'split', 'preview'] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                role="tab"
+                aria-selected={mode === item}
+                className={`viewer-tab ${mode === item ? 'active' : ''}`}
+                onClick={() => setMode(item)}
+              >
+                {item === 'edit'
+                  ? t('fileViewer.source')
+                  : item === 'split'
+                    ? t('fileViewer.split')
+                    : t('fileViewer.preview')}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="viewer-toolbar-actions">
-          <button
-            type="button"
-            className="viewer-action"
-            onClick={() => setReloadKey((n) => n + 1)}
-            title={t('fileViewer.reloadDisk')}
-          >
-            <Icon name="reload" size={13} />
-            <span>{t('fileViewer.reload')}</span>
-          </button>
+          {autoSaveStatus === 'error' ? (
+            <button
+              type="button"
+              className="viewer-action markdown-autosave markdown-autosave-error"
+              onClick={() => {
+                if (text !== null) saveMarkdownText(text);
+              }}
+              title={t('fileViewer.save')}
+            >
+              <Icon name="alert-triangle" size={13} />
+              <span>{autoSaveLabel}</span>
+            </button>
+          ) : (
+            <span
+              className={`viewer-meta markdown-autosave markdown-autosave-${autoSaveStatus}`}
+            >
+              {autoSaveStatus === 'saving' ? (
+                <Icon name="spinner" size={13} className="icon-spin" />
+              ) : autoSaveStatus === 'saved' ? (
+                <Icon name="check" size={13} />
+              ) : null}
+              <span>{autoSaveLabel}</span>
+            </span>
+          )}
           <button
             type="button"
             className="viewer-action"
@@ -10963,25 +11608,74 @@ function MarkdownViewer({
           ) : null}
         </div>
       </div>
-      <div className="viewer-body">
-        {html === null ? (
+      <div className={`viewer-body markdown-workbench markdown-workbench-${mode}`}>
+        {text === null || html === null ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : (
           <>
-            {isStreaming ? <div className="markdown-status">{t('fileViewer.markdownStreamingStatus')}</div> : null}
-            {isError ? <div className="markdown-status markdown-status-error">{t('fileViewer.markdownErrorStatus')}</div> : null}
-            {/* Safe by contract: renderMarkdownToSafeHtml escapes raw HTML and rejects unsafe link protocols. */}
-            <article
-              ref={markdownArticleRef}
-              className="markdown-rendered"
-              onClick={(event) => void handleMarkdownBodyClick(event)}
-              dangerouslySetInnerHTML={{ __html: html }}
-            />
+            {showEditor ? (
+              <section className="markdown-editor-pane" aria-label={t('fileViewer.markdownEditor')}>
+                <textarea
+                  ref={editorRef}
+                  className="markdown-editor"
+                  value={text}
+                  aria-label={t('fileViewer.markdownEditor')}
+                  placeholder={t('fileViewer.markdownEditorPlaceholder')}
+                  spellCheck
+                  autoFocus
+                  onFocus={() => activateMarkdownScrollPane('editor')}
+                  onChange={(event) => {
+                    activateMarkdownScrollPane('editor');
+                    setText(event.currentTarget.value);
+                  }}
+                  onScroll={handleMarkdownEditorScroll}
+                  onPaste={handleEditorPaste}
+                  onDrop={handleEditorDrop}
+                />
+              </section>
+            ) : null}
+            {showPreview ? (
+              <div className="markdown-preview-pane-wrap">
+                <section
+                  ref={markdownPreviewPaneRef}
+                  className="markdown-preview-pane"
+                  aria-label={t('fileViewer.markdownPreview')}
+                  onPointerDown={() => activateMarkdownScrollPane('preview')}
+                  onWheel={() => activateMarkdownScrollPane('preview')}
+                  onTouchStart={() => activateMarkdownScrollPane('preview')}
+                  onKeyDown={() => activateMarkdownScrollPane('preview')}
+                  onFocus={() => activateMarkdownScrollPane('preview')}
+                  onScroll={handleMarkdownPreviewScroll}
+                >
+                  {isStreaming ? <div className="markdown-status">{t('fileViewer.markdownStreamingStatus')}</div> : null}
+                  {isError ? <div className="markdown-status markdown-status-error">{t('fileViewer.markdownErrorStatus')}</div> : null}
+                  {/* Safe by contract: renderMarkdownToSafeHtml escapes raw HTML and rejects unsafe link protocols. */}
+                  <article
+                    ref={markdownArticleRef}
+                    className="markdown-rendered"
+                    onClick={(event) => void handleMarkdownBodyClick(event)}
+                    dangerouslySetInnerHTML={{ __html: html }}
+                  />
+                </section>
+              </div>
+            ) : null}
           </>
         )}
       </div>
     </div>
   );
+}
+
+function isMarkdownImageFile(file: File): boolean {
+  return file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name);
+}
+
+function markdownImageAlt(name: string): string {
+  return name
+    .replace(/\.[^.]+$/, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || 'image';
 }
 
 function CodeWithLines({ text }: { text: string }) {

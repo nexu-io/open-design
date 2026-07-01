@@ -36,6 +36,7 @@ import {
   hasOdCard,
   splitOnOdCards,
   stripTrailingOpenOdCard,
+  type ChatSessionMode,
   type OdCard,
   type OdCardBrandBrowserAssist,
 } from "@open-design/contracts";
@@ -174,7 +175,7 @@ function SkillPluginCandidateCard({
   onRequestOpenFile,
 }: {
   block: SkillPluginCandidateBlock;
-  projectId: string | null;
+  projectId?: string | null;
   onRequestOpenFile?: (name: string) => void;
 }) {
   const t = useT();
@@ -313,7 +314,7 @@ interface Props {
   // duplicate per-message card.
   showConversationTodoCard?: boolean;
   conversationTodoInput?: unknown | null;
-  projectId: string | null;
+  projectId?: string | null;
   // Analytics context for the assistant_feedback_* events. Defaults
   // applied at the call site keep AssistantMessage usable in tests
   // that don't care about telemetry.
@@ -358,7 +359,7 @@ interface Props {
   onFeedback?: (change: ChatMessageFeedbackChange) => void;
   suppressDirectionForms?: boolean;
   hasDesignSystemContext?: boolean;
-  // "Next step" affordance handlers, surfaced under the last successful
+  // "Next step" affordance handlers, surfaced under the latest settled
   // assistant message. Omitting them hides the affordance entirely (e.g. in
   // tests that don't wire chat send).
   onArtifactShare?: (fileName: string) => void;
@@ -366,7 +367,10 @@ interface Props {
   // composer with an action / opening the toolbox both route through the
   // composer; see ChatPane's composer ref wiring.
   onToolboxAction?: (id: DesignToolboxActionId) => void;
-  onNextStepPromptAction?: (prompt: string) => void;
+  onNextStepPromptAction?: (
+    prompt: string,
+    options?: { sessionMode?: ChatSessionMode },
+  ) => void;
   onNextStepAiOptimize?: () => void;
   nextStepAiOptimizeBusy?: boolean;
   onNextStepContinueExtraction?: () => void;
@@ -463,7 +467,7 @@ function AssistantMessageImpl({
   liveToolInput,
   showConversationTodoCard = false,
   conversationTodoInput = null,
-  projectId,
+  projectId = null,
   projectKind = null,
   conversationId = null,
   projectFiles = [],
@@ -545,17 +549,30 @@ function AssistantMessageImpl({
   const fileOps = useMemo(() => deriveFileOps(displayEvents), [displayEvents]);
   const produced = message.producedFiles ?? [];
   const displayedProduced = useMemo(
-    () =>
-      produced.length > 0
-        ? produced
-        : inferProducedFilesFromTurn({
-            message,
-            projectFiles,
-            blocks,
-            fileOps,
-            streaming,
-          }),
-    [blocks, fileOps, message, produced, projectFiles, streaming],
+    () => {
+      const linkedFiles = recoverLinkedProjectFilesFromContent(
+        message.content,
+        projectFiles,
+        projectId,
+        message,
+      );
+      const baseFiles =
+        produced.length > 0
+          ? produced
+          : inferProducedFilesFromTurn({
+              message,
+              projectFiles,
+              blocks,
+              fileOps,
+              streaming,
+            });
+      return mergeProjectFiles(baseFiles, linkedFiles);
+    },
+    [blocks, fileOps, message, produced, projectFiles, projectId, streaming],
+  );
+  const turnFileOps = useMemo(
+    () => mergeProducedFilesIntoFileOps(fileOps, displayedProduced),
+    [displayedProduced, fileOps],
   );
   // The single artifact the "next step" affordance anchors to: prefer the HTML
   // produced by THIS turn; if the final turn emitted none (a summary / continue
@@ -565,13 +582,21 @@ function AssistantMessageImpl({
     () => pickPreviewableArtifact(displayedProduced) ?? pickLatestPreviewableArtifact(projectFiles),
     [displayedProduced, projectFiles],
   );
+  const planNextStepName = useMemo(
+    () => pickPlanDocument(displayedProduced) ?? pickLatestPlanDocument(projectFiles),
+    [displayedProduced, projectFiles],
+  );
+  const isPlanNextStep = nextStepVariant === 'plan' || message.sessionMode === 'plan';
+  const nextStepFileName = isPlanNextStep
+    ? (planNextStepName ?? nextStepArtifactName)
+    : nextStepArtifactName;
   const pluginActionFolders = useMemo(
     () =>
       !streaming && isLast && projectId
-        ? pluginFoldersTouchedThisTurn(projectFiles, fileOps, displayedProduced, message.content)
+        ? pluginFoldersTouchedThisTurn(projectFiles, turnFileOps, displayedProduced, message.content)
             .filter((folder) => !hiddenPluginActionPaths.has(folder.path))
         : [],
-    [displayedProduced, fileOps, hiddenPluginActionPaths, isLast, message.content, projectFiles, projectId, streaming],
+    [displayedProduced, hiddenPluginActionPaths, isLast, message.content, projectFiles, projectId, streaming, turnFileOps],
   );
   // Plugin action state lives at the AssistantMessage level (not inside
   // PluginActionPanel) so the success notice survives the unmount/remount
@@ -665,9 +690,7 @@ function AssistantMessageImpl({
   const runTerminal =
     !streaming &&
     (
-      message.runStatus === "succeeded" ||
-      message.runStatus === "failed" ||
-      message.runStatus === "canceled" ||
+      (message.runStatus ? isTerminalRunStatus(message.runStatus) : false) ||
       (!message.runStatus && !!message.endedAt) ||
       isBrandBrowserAssistMessage
     );
@@ -715,6 +738,8 @@ function AssistantMessageImpl({
           ? !!onNextStepContinueAiExtraction
         : effectiveNextStepVariant === 'design-system'
           ? !!onNextStepPromptAction
+          : effectiveNextStepVariant === 'plan'
+            ? !!onNextStepPromptAction
           : effectiveNextStepVariant === 'project-incomplete'
             ? !!onNextStepPromptAction ||
               !!onToolboxAction ||
@@ -729,14 +754,13 @@ function AssistantMessageImpl({
   // prompts or toolbox actions.
   const showNextStepActions =
     !streaming &&
-    !!projectId &&
     runTerminal &&
     ((!!isLast && hasNextStepPrimary) || showOpenDesignSubmission);
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
   // flips to "Working". The elapsed clock stays anchored to the persisted run
   // start so switching project tabs or remounting the message cannot restart it.
-  const hasContent = blocks.some((b) => b.kind !== "status") || fileOps.length > 0;
+  const hasContent = blocks.some((b) => b.kind !== "status") || turnFileOps.length > 0;
   const preparing = streaming && !hasContent;
   const preparingStatus = preparing && events.some((e) => e.kind === "status" && e.label === "thinking")
     ? "thinking"
@@ -844,15 +868,15 @@ function AssistantMessageImpl({
             ].join(":")}
           />
         ) : null}
-        {fileOps.length > 0 ? (
+        {turnFileOps.length > 0 ? (
           <FileOpsSummary
-            entries={fileOps}
+            entries={turnFileOps}
             streaming={streaming}
             projectFileNames={projectFileNames}
             onRequestOpenFile={onRequestOpenFile}
           />
         ) : null}
-        {!streaming && displayedProduced.length > 0 && projectId ? (
+        {!streaming && turnFileOps.length === 0 && displayedProduced.length > 0 && projectId ? (
           <ProducedFiles
             files={displayedProduced}
             projectId={projectId}
@@ -950,8 +974,10 @@ function AssistantMessageImpl({
         ) : null}
         {showNextStepActions ? (
           <NextStepActions
-            fileName={isLast ? nextStepArtifactName : null}
-            onShare={isLast && nextStepArtifactName ? onArtifactShare : undefined}
+            fileName={isLast ? nextStepFileName : null}
+            planFileName={isLast ? planNextStepName : null}
+            artifactFileName={isLast ? nextStepArtifactName : null}
+            onShare={isLast && nextStepArtifactName && !isPlanNextStep ? onArtifactShare : undefined}
             onToolboxAction={isLast ? onToolboxAction : undefined}
             onPromptAction={isLast ? onNextStepPromptAction : undefined}
             onAiOptimize={isLast ? onNextStepAiOptimize : undefined}
@@ -965,7 +991,7 @@ function AssistantMessageImpl({
             onCreateDesignSystem={isLast ? onNextStepCreateDesignSystem : undefined}
             createDesignSystemBusy={Boolean(isLast && nextStepCreateDesignSystemBusy)}
             onPickSkill={isLast ? onPickSkill : undefined}
-            onDownload={isLast && nextStepArtifactName ? onArtifactDownload : undefined}
+            onDownload={isLast && nextStepFileName ? onArtifactDownload : undefined}
             skills={isLast ? nextStepSkills : undefined}
             toolboxSkillNames={isLast ? toolboxSkillNames : undefined}
             onShareToOpenDesign={showOpenDesignSubmission ? onShareToOpenDesign : undefined}
@@ -1004,6 +1030,29 @@ function pickLatestPreviewableArtifact(files: ProjectFile[]): string | null {
   return latest ? latest.name : null;
 }
 
+const PLAN_DOCUMENT_EXCLUDES = new Set(['design.md', 'brand-system.md']);
+
+function isPlanDocument(f: ProjectFile): boolean {
+  const name = f.name.toLowerCase();
+  if (!/\.mdx?$/.test(name)) return false;
+  const basename = name.split('/').pop() ?? name;
+  return !PLAN_DOCUMENT_EXCLUDES.has(basename);
+}
+
+function pickPlanDocument(files: ProjectFile[]): string | null {
+  const doc = files.find(isPlanDocument);
+  return doc ? doc.name : null;
+}
+
+function pickLatestPlanDocument(files: ProjectFile[]): string | null {
+  let latest: ProjectFile | null = null;
+  for (const f of files) {
+    if (!isPlanDocument(f)) continue;
+    if (!latest || (f.mtime ?? 0) > (latest.mtime ?? 0)) latest = f;
+  }
+  return latest ? latest.name : null;
+}
+
 function inferProducedFilesFromTurn({
   message,
   projectFiles,
@@ -1032,6 +1081,220 @@ function inferProducedFilesFromTurn({
       return file.mtime >= start && file.mtime <= end;
     }),
   ).sort((a, b) => b.mtime - a.mtime);
+}
+
+function mergeProducedFilesIntoFileOps(
+  fileOps: FileOpEntry[],
+  produced: ProjectFile[],
+): FileOpEntry[] {
+  if (produced.length === 0) return fileOps;
+  const seen = new Set<string>();
+  for (const entry of fileOps) {
+    seen.add(normalizeTouchedPath(entry.path));
+    seen.add(normalizeTouchedPath(entry.fullPath));
+  }
+
+  const merged = [...fileOps];
+  for (const file of produced) {
+    const fullPath = file.path || file.name;
+    const path = file.name || fullPath;
+    if (!path || seen.has(normalizeTouchedPath(path)) || seen.has(normalizeTouchedPath(fullPath))) {
+      continue;
+    }
+    seen.add(normalizeTouchedPath(path));
+    seen.add(normalizeTouchedPath(fullPath));
+    merged.push({
+      path,
+      fullPath,
+      ops: ["write"],
+      opCounts: { read: 0, write: 1, edit: 0, delete: 0 },
+      total: 1,
+      status: "done",
+    });
+  }
+  return merged;
+}
+
+function normalizeTouchedPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function recoverLinkedProjectFilesFromContent(
+  content: string,
+  projectFiles: ProjectFile[],
+  projectId?: string | null,
+  message?: ChatMessage,
+): ProjectFile[] {
+  if (!content || projectFiles.length === 0) return [];
+  const projectFileNames = new Set<string>();
+  const byPath = new Map<string, ProjectFile>();
+  const basenameFiles = new Map<string, ProjectFile | null>();
+  for (const file of projectFiles) {
+    if (file.type === "dir") continue;
+    for (const value of [file.name, file.path, file.localPath]) {
+      if (!value) continue;
+      const normalized = normalizeTouchedPath(value);
+      projectFileNames.add(normalized);
+      byPath.set(normalized, file);
+      const basename = normalized.split("/").filter(Boolean).pop();
+      if (basename && basename !== normalized) {
+        basenameFiles.set(
+          basename,
+          basenameFiles.has(basename) ? null : file,
+        );
+      }
+    }
+  }
+  for (const [basename, file] of basenameFiles) {
+    if (!file) continue;
+    projectFileNames.add(basename);
+    byPath.set(basename, file);
+  }
+  if (projectFileNames.size === 0) return [];
+
+  const recovered = new Map<string, ProjectFile>();
+  for (const href of extractContentFileReferences(content, projectFileNames)) {
+    const filePath = asInProjectFilePath(href, projectFileNames, projectId);
+    if (!filePath) continue;
+    const file = byPath.get(normalizeTouchedPath(filePath));
+    if (!file) continue;
+    if (!shouldRecoverReferencedFile(content, href, file, message)) continue;
+    recovered.set(file.path || file.name, file);
+  }
+  return Array.from(recovered.values());
+}
+
+function extractContentFileReferences(
+  content: string,
+  projectFileNames: ReadonlySet<string>,
+): string[] {
+  const refs = new Set<string>();
+  for (const href of extractMarkdownLinkHrefs(content)) refs.add(href);
+  for (const ref of extractInlineCodeFileRefs(content)) refs.add(ref);
+  for (const ref of extractKnownProjectFileRefs(content, projectFileNames)) refs.add(ref);
+  return Array.from(refs);
+}
+
+function extractInlineCodeFileRefs(content: string): string[] {
+  const refs: string[] = [];
+  const codePattern = /`([^`\n]+)`/g;
+  let match: RegExpExecArray | null;
+  while ((match = codePattern.exec(content)) !== null) {
+    const raw = match[1]?.trim();
+    if (raw && looksLikeFileReference(raw)) refs.push(raw);
+  }
+  return refs;
+}
+
+function extractKnownProjectFileRefs(
+  content: string,
+  projectFileNames: ReadonlySet<string>,
+): string[] {
+  const refs: string[] = [];
+  const names = Array.from(projectFileNames)
+    .filter((name) => name.length > 0)
+    .sort((a, b) => b.length - a.length);
+  if (names.length === 0) return refs;
+  for (const line of content.split(/\r?\n/)) {
+    for (const name of names) {
+      if (lineContainsFileReference(line, name)) refs.push(name);
+    }
+  }
+  return refs;
+}
+
+function shouldRecoverReferencedFile(
+  content: string,
+  rawRef: string,
+  file: ProjectFile,
+  message?: ChatMessage,
+): boolean {
+  if (isFileMtimeInsideRun(file, message)) return true;
+  return contentHasOutputHintForFile(content, rawRef, file);
+}
+
+function isFileMtimeInsideRun(file: ProjectFile, message?: ChatMessage): boolean {
+  if (!message?.startedAt || !message.endedAt) return false;
+  const start = message.startedAt - 1_000;
+  const end = message.endedAt + 60_000;
+  return file.mtime >= start && file.mtime <= end;
+}
+
+function contentHasOutputHintForFile(
+  content: string,
+  rawRef: string,
+  file: ProjectFile,
+): boolean {
+  const refs = [
+    rawRef,
+    file.name,
+    file.path,
+    file.localPath,
+    file.name.split("/").filter(Boolean).pop(),
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+  return content.split(/\r?\n/).some((line) => {
+    if (!lineHasOutputFileHint(line)) return false;
+    return refs.some((ref) => lineContainsFileReference(line, normalizeTouchedPath(ref)));
+  });
+}
+
+function lineHasOutputFileHint(line: string): boolean {
+  return /(?:\b(?:add(?:ed)?|built|chang(?:e|ed)|creat(?:e|ed)|deliverable|edit(?:ed)?|file(?:s)?|generat(?:e|ed)|modif(?:y|ied)|output|produc(?:e|ed)|sav(?:e|ed)|updat(?:e|ed)|writ(?:e|ten|ing)|wrote)\b|产物|创建|生成|交付|输出|保存|文件|新增|更新|修改|完成|已创建|已生成|已写入|写入)/i.test(line);
+}
+
+function lineContainsFileReference(line: string, ref: string): boolean {
+  const normalizedLine = normalizeTouchedPath(line);
+  const normalizedRef = normalizeTouchedPath(ref);
+  if (!normalizedRef) return false;
+  const escaped = escapeRegExp(normalizedRef);
+  return new RegExp(`(^|[\\s\`"'“”‘’\\[\\]()<>{}:：,，.。;；!?！？])${escaped}($|[\\s\`"'“”‘’\\[\\]()<>{}:：,，.。;；!?！？])`).test(normalizedLine);
+}
+
+function looksLikeFileReference(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 240) return false;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return true;
+  return /(?:^|[/\\])[^/\\]+\.[a-z0-9]{1,12}(?:[#?].*)?$/i.test(trimmed);
+}
+
+function extractMarkdownLinkHrefs(content: string): string[] {
+  const hrefs: string[] = [];
+  const linkPattern = /(!?)\[[^\]\n]*\]\(([^)\n]+)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = linkPattern.exec(content)) !== null) {
+    if (match[1] === "!") continue;
+    const href = normalizeMarkdownHref(match[2] ?? "");
+    if (href) hrefs.push(href);
+  }
+  return hrefs;
+}
+
+function normalizeMarkdownHref(rawHref: string): string | null {
+  const trimmed = rawHref.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("<")) {
+    const end = trimmed.indexOf(">");
+    return end > 1 ? trimmed.slice(1, end).trim() : null;
+  }
+  const titled = /^(\S+)\s+(?:"[^"]*"|'[^']*'|\([^)]*\))$/.exec(trimmed);
+  return (titled?.[1] ?? trimmed).trim() || null;
+}
+
+function mergeProjectFiles(
+  first: ProjectFile[],
+  second: ProjectFile[],
+): ProjectFile[] {
+  if (first.length === 0) return second;
+  if (second.length === 0) return first;
+  const seen = new Set<string>();
+  const merged: ProjectFile[] = [];
+  for (const file of [...first, ...second]) {
+    const key = normalizeTouchedPath(file.path || file.name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(file);
+  }
+  return merged;
 }
 
 // A run that reached a terminal state — succeeded, failed, or canceled — has a

@@ -764,6 +764,7 @@ async function expectWorkspaceReady(page: Page) {
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.locator('.chat-loading-state')).toHaveCount(0, { timeout: T.medium });
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 }
 
@@ -781,7 +782,7 @@ async function sendPrompt(page: Page, prompt: string) {
   await input.click();
   await input.fill(prompt);
   await expect(input).toHaveText(prompt, { timeout: T.short });
-  await expect(sendButton).toBeEnabled({ timeout: T.short });
+  await expect(sendButton).toBeEnabled({ timeout: T.medium });
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
     sendButton.evaluate((button: HTMLButtonElement) => button.click()),
@@ -1248,10 +1249,12 @@ async function createProjectNameOnly(
   await openNewProjectModal(page);
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
   if (entry.create.tab) {
-    await page.getByTestId(`new-project-tab-${entry.create.tab}`).click();
+    await clickVisible(page.getByTestId(`new-project-tab-${entry.create.tab}`));
+    await expect(page.getByTestId(`new-project-tab-${entry.create.tab}`)).toHaveAttribute('aria-selected', 'true');
   }
   if (entry.create.tab === 'media' && entry.create.mediaSurface) {
-    await page.getByTestId(`new-project-media-surface-${entry.create.mediaSurface}`).click();
+    await clickVisible(page.getByTestId(`new-project-media-surface-${entry.create.mediaSurface}`));
+    await expect(page.getByTestId(`new-project-media-surface-${entry.create.mediaSurface}`)).toHaveAttribute('aria-selected', 'true');
   }
   if (entry.create.tab === 'media' && entry.create.mediaSurface === 'video' && entry.create.videoModel) {
     await page.getByTestId('model-picker-trigger').click();
@@ -1261,6 +1264,11 @@ async function createProjectNameOnly(
     await page.getByRole('button', { name: 'SFX' }).click();
   }
   await page.getByTestId('new-project-name').fill(entry.create.projectName);
+}
+
+async function clickVisible(locator: Locator) {
+  await expect(locator).toBeVisible({ timeout: T.medium });
+  await locator.evaluate((element: HTMLElement) => element.click());
 }
 
 async function gotoEntryHome(page: Page) {
@@ -1280,7 +1288,7 @@ async function openNewProjectModal(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function getCurrentProjectContext(

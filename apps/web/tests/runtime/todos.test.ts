@@ -121,6 +121,20 @@ describe('todo event helpers', () => {
     ]);
   });
 
+  it('accepts native task item text aliases used by different agents', () => {
+    expect(parseTodoWriteInput({
+      todos: [
+        { description: 'Inspect plan mode output', status: 'completed' },
+        { label: 'Render todo card', status: 'in_progress' },
+        { text: 'Run focused tests', status: 'pending' },
+      ],
+    })).toEqual([
+      { content: 'Inspect plan mode output', status: 'completed', activeForm: undefined },
+      { content: 'Render todo card', status: 'in_progress', activeForm: undefined },
+      { content: 'Run focused tests', status: 'pending', activeForm: undefined },
+    ]);
+  });
+
   it('uses lowercase todowrite as the latest todo truth over older TodoWrite events', () => {
     const events: AgentEvent[] = [
       { kind: 'tool_use', id: 'todo-1', name: 'TodoWrite', input: firstTodoInput },

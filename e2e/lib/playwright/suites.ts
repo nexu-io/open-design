@@ -37,6 +37,7 @@ export const uiP0Groups = {
   },
   "project-workspace": {
     grep: String.raw`\[P0\]`,
+    workers: 1,
     files: [
       "ui/app.test.ts",
       "ui/app-design-files.test.ts",

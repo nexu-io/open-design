@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { I18nProvider } from '../src/i18n';
 import { AnalyticsProvider } from '../src/analytics/provider';
+import '@excalidraw/excalidraw/index.css';
 import '../src/index.css';
 import '../src/styles/home/index.css';
 

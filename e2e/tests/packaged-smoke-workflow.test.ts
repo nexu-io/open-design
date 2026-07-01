@@ -936,6 +936,7 @@ process.stdin.on("end", () => {
       "ui/project-management-flows.test.ts",
       "ui/workspace-keyboard-flows.test.ts",
     ]);
+    expect(uiP0Groups["project-workspace"].workers).toBe(1);
     expect(visual).toContain("fromJSON(needs.runners.outputs.runs_on).visual_hot");
     expect(visual).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).visual_hot)");
     expect(workflow).not.toContain("needs.runners.outputs.contabo_control");

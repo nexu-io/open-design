@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { runErrorCard } from '@/playwright/chat';
-import type { Page, Request, Response } from '@playwright/test';
+import type { Locator, Page, Request, Response } from '@playwright/test';
 import {
   createFakeAgentRuntimes,
   FAKE_AGENT_RUNTIME_IDS,
@@ -37,7 +37,7 @@ test.beforeAll(async () => {
 });
 
 test.beforeEach(async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(T.xlong);
 
   await resetDaemonAppConfig(page);
 
@@ -515,7 +515,12 @@ async function dismissPrivacyDialog(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 30_000 });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+}
+
+async function clickVisible(locator: Locator) {
+  await expect(locator).toBeVisible({ timeout: T.medium });
+  await locator.evaluate((element: HTMLElement) => element.click());
 }
 
 async function configureFakeAgent(page: Page, agentId: FakeAgentId) {

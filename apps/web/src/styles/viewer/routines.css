@@ -218,6 +218,20 @@
   opacity: 0.85;
   font-weight: 400;
 }
+.od-toast-action {
+  margin-top: 8px;
+  background: color-mix(in srgb, var(--accent, #4f46e5) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #4f46e5) 34%, var(--border));
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+.od-toast-action:hover {
+  background: color-mix(in srgb, var(--accent, #4f46e5) 24%, transparent);
+}
 .od-toast.od-toast-browser-snapshot .od-toast-details {
   margin-top: 6px;
   font-size: 12px;
@@ -1269,7 +1283,7 @@
 .app .live-code-box {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg-fill-secondary);
+  background: transparent;
 }
 .app .live-code-box .live-code-head {
   cursor: default;

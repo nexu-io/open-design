@@ -1849,7 +1849,7 @@ export interface ChatPanelClickProps {
 // (the wire / DB value is `chat`; the UI labels it "Ask"); `design` is the
 // full design-agent run. Map the wire `chat` → `ask` at every emit site via
 // `sessionModeToTracking` so analytics speaks the product's language.
-export type TrackingSessionMode = 'ask' | 'design';
+export type TrackingSessionMode = 'ask' | 'design' | 'plan';
 
 // Toggling the ask/design switch in the chat composer.
 export interface ComposerSessionModeClickProps {
@@ -3405,14 +3405,16 @@ export type AnalyticsEventPayload =
 
 // ---- Enum mapping helpers (code ↔ CSV wire format) -----------------------
 
-// Map the wire `ChatSessionMode` ('design' | 'chat') to the analytics enum.
+// Map the wire `ChatSessionMode` ('design' | 'chat' | 'plan') to the analytics enum.
 // The composer's "Ask" mode is `chat` on the wire; analytics uses `ask` so
-// the dashboards read in the product's own language. Anything that isn't a
-// recognized design mode buckets into `ask` (the lighter default).
+// the dashboards read in the product's own language. Anything unrecognized
+// buckets into `ask` (the lighter default).
 export function sessionModeToTracking(
   mode: string | null | undefined,
 ): TrackingSessionMode {
-  return mode === 'design' ? 'design' : 'ask';
+  if (mode === 'design') return 'design';
+  if (mode === 'plan') return 'plan';
+  return 'ask';
 }
 
 // Code `ProjectKind` from packages/contracts/src/api/projects.ts:

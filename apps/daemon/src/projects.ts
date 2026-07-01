@@ -265,6 +265,7 @@ async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => 
     out.push({
       name: rel,
       path: rel,
+      localPath: path.resolve(full),
       type: 'file',
       size: st.size,
       mtime: st.mtimeMs,

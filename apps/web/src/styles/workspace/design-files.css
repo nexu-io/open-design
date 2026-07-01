@@ -18,6 +18,9 @@
   background: color-mix(in srgb, var(--bg) 70%, transparent);
   backdrop-filter: blur(1px);
 }
+.paste-text-dialog-backdrop.modal-backdrop {
+  z-index: 2000;
+}
 .df-main {
   position: relative;
   display: flex;

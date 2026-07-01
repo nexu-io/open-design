@@ -211,6 +211,25 @@
   font-size: 13px;
   outline: none;
 }
+.plus-menu__flyout .composer-design-toolbox-head + .plus-menu__search,
+.composer-toolbox-standalone-popup .composer-design-toolbox-head + .plus-menu__search {
+  height: 24px;
+  gap: 5px;
+  margin: 0 2px 4px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 88%, var(--bg-panel));
+}
+.plus-menu__flyout .composer-design-toolbox-head + .plus-menu__search svg,
+.composer-toolbox-standalone-popup .composer-design-toolbox-head + .plus-menu__search svg {
+  width: 11px;
+  height: 11px;
+}
+.plus-menu__flyout .composer-design-toolbox-head + .plus-menu__search input,
+.composer-toolbox-standalone-popup .composer-design-toolbox-head + .plus-menu__search input {
+  font-size: 12px;
+  line-height: 16px;
+}
 .plus-menu__list {
   display: flex;
   flex-direction: column;

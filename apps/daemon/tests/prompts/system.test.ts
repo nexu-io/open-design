@@ -97,6 +97,14 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('Keep machine-readable ids and object option `value` fields exact and unlocalized');
   });
 
+  it('keeps Plan mode tied to the real Todo card in filesystem runs', () => {
+    const prompt = composeSystemPrompt({ sessionMode: 'plan' });
+
+    expect(prompt).toContain('# Plan mode — editable document first');
+    expect(prompt).toContain('substantial plan-document work still starts with a real TodoWrite/task-list tool call');
+    expect(prompt).toContain('show progress through the Todo card');
+  });
+
   it('injects the converged verification policy (no mid-build screenshot looping)', () => {
     const prompt = composeSystemPrompt({});
 

@@ -5403,7 +5403,7 @@ export async function startServer({
         ? getConversation(db, conversationId)
         : null;
     const runSessionMode =
-      sessionMode === 'chat' || sessionMode === 'design'
+      sessionMode === 'chat' || sessionMode === 'design' || sessionMode === 'plan'
         ? normalizeConversationSessionMode(sessionMode)
         : normalizeConversationSessionMode(conversationSession?.sessionMode);
     const def = getAgentDef(agentId);

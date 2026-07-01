@@ -20,6 +20,7 @@
 // missing translation can't silently break the one-click create.
 
 import type { Dict } from '../../i18n/types';
+import type { ChatSessionMode } from '@open-design/contracts';
 
 // A scenario after its copy has been resolved through `t()`. Carousel display
 // and the submit path consume this shape.
@@ -30,6 +31,8 @@ export interface PlaceholderScenario {
   text: string;
   // Create-rail chip id the scenario binds on submit (the "template").
   chipId: string;
+  // Optional per-turn mode for in-project follow-up scenarios.
+  sessionMode?: ChatSessionMode;
 }
 
 // The data table: stable id + i18n key + bound template. HomeHero maps each

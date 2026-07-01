@@ -25,7 +25,13 @@ export function parseTodoWriteInput(input: unknown): TodoItem[] {
           ? record.content
           : typeof record.step === 'string'
             ? record.step
-            : '';
+            : typeof record.description === 'string'
+              ? record.description
+              : typeof record.label === 'string'
+                ? record.label
+                : typeof record.text === 'string'
+                  ? record.text
+                  : '';
       if (!content) return null;
       const status = normalizeTodoStatus(record.status);
       return {

@@ -2932,11 +2932,133 @@ describe('FileViewer SVG artifacts', () => {
 
     render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
+    const editor = await screen.findByRole('textbox', { name: /markdown editor/i }) as HTMLTextAreaElement;
+    expect(editor.placeholder).toBe('Type notes, requirements, or instructions for this document...');
+    expect(document.querySelector('.markdown-pane-bar')).toBeNull();
     expect(screen.queryByRole('button', { name: /^deploy$/i })).toBeNull();
     fireEvent.click(await screen.findByRole('button', { name: /^download$/i }));
 
     expect(screen.getByRole('menuitem', { name: /Export as Markdown/i })).toBeTruthy();
     expect(screen.queryByRole('menuitem', { name: /Deploy to Vercel/i })).toBeNull();
+  });
+
+  it('coalesces markdown split-pane scroll sync to one animation frame', async () => {
+    const file = baseFile({
+      name: 'notes.md',
+      path: 'notes.md',
+      mime: 'text/markdown',
+      kind: 'text',
+      artifactManifest: {
+        version: 1,
+        kind: 'markdown-document',
+        title: 'Notes',
+        entry: 'notes.md',
+        renderer: 'markdown',
+        exports: ['md'],
+      },
+    });
+    const frameCallbacks = new Map<number, FrameRequestCallback>();
+    let nextFrameId = 0;
+    const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+      const id = ++nextFrameId;
+      frameCallbacks.set(id, callback);
+      return id;
+    });
+    vi.stubGlobal('requestAnimationFrame', requestAnimationFrameMock);
+    vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => {
+      frameCallbacks.delete(id);
+    }));
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/raw/notes.md') {
+        return new Response('# Notes\n\n' + Array.from({ length: 40 }, (_, index) => `Line ${index}`).join('\n\n'));
+      }
+      return new Response('', { status: 404 });
+    }));
+    const flushFrames = () => {
+      const callbacks = Array.from(frameCallbacks.entries());
+      frameCallbacks.clear();
+      for (const [, callback] of callbacks) callback(16);
+    };
+
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+
+    const editor = await screen.findByRole('textbox') as HTMLTextAreaElement;
+    const preview = screen.getByLabelText(/markdown preview/i) as HTMLElement;
+    let editorTop = 0;
+    let previewTop = 0;
+    let previewSetCount = 0;
+    Object.defineProperties(editor, {
+      scrollHeight: { configurable: true, value: 4000 },
+      clientHeight: { configurable: true, value: 1000 },
+      scrollTop: {
+        configurable: true,
+        get: () => editorTop,
+        set: (value: number) => {
+          editorTop = value;
+        },
+      },
+    });
+    Object.defineProperties(preview, {
+      scrollHeight: { configurable: true, value: 7000 },
+      clientHeight: { configurable: true, value: 1000 },
+      scrollTop: {
+        configurable: true,
+        get: () => previewTop,
+        set: (value: number) => {
+          previewSetCount += 1;
+          previewTop = value;
+        },
+      },
+    });
+
+    for (let i = 0; i < 3; i += 1) {
+      await act(async () => {
+        flushFrames();
+        await Promise.resolve();
+      });
+    }
+    expect(frameCallbacks.size).toBe(0);
+    requestAnimationFrameMock.mockClear();
+    previewSetCount = 0;
+    previewTop = 0;
+
+    editor.scrollTop = 1500;
+    const originalText = editor.value;
+    fireEvent.change(editor, { target: { value: `${originalText}\n\nDraft 1` } });
+    fireEvent.change(editor, { target: { value: `${originalText}\n\nDraft 2` } });
+    fireEvent.change(editor, { target: { value: `${originalText}\n\nDraft 3` } });
+
+    expect(editor.scrollTop).toBe(1500);
+    expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
+    expect(previewTop).toBe(0);
+    expect(previewSetCount).toBe(0);
+    expect(frameCallbacks.size).toBe(1);
+
+    await act(async () => {
+      flushFrames();
+    });
+
+    expect(previewTop).toBe(3000);
+    expect(previewSetCount).toBe(1);
+
+    previewTop = 2800;
+    fireEvent.scroll(preview);
+    await act(async () => {
+      flushFrames();
+      flushFrames();
+    });
+
+    expect(editorTop).toBe(1500);
+
+    previewTop = 3600;
+    fireEvent.wheel(preview);
+    fireEvent.scroll(preview);
+    await act(async () => {
+      flushFrames();
+    });
+
+    expect(editorTop).toBe(1800);
   });
 
   it('shows failed copy feedback when deployed link copying is blocked', async () => {

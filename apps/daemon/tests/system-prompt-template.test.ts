@@ -48,6 +48,24 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toMatch(/do NOT emit `<question-form id="discovery">`/);
   });
 
+  it('pins Plan mode above default artifact discovery and suppresses artifact brief forms', () => {
+    const out = composeSystemPrompt({
+      sessionMode: 'plan',
+      metadata: { kind: 'prototype' },
+    });
+
+    const overrideIdx = out.indexOf('# Plan mode — editable document first');
+    const discoveryIdx = out.indexOf('# OD core directives');
+    expect(overrideIdx).toBeGreaterThanOrEqual(0);
+    expect(discoveryIdx).toBeGreaterThanOrEqual(0);
+    expect(overrideIdx).toBeLessThan(discoveryIdx);
+    expect(out).toContain('do NOT emit `<question-form id="discovery">`');
+    expect(out).toContain('`<question-form id="task-type">`');
+    expect(out).toContain('Quick brief — 30 seconds');
+    expect(out).toContain('<question-form id="plan-brief">');
+    expect(out).toContain('plan-document-specific questions');
+  });
+
   it('does not instruct agents to ask for a second visual-direction picker', () => {
     const out = composeSystemPrompt({
       metadata: { kind: 'prototype' },
@@ -484,6 +502,7 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('ElevenLabs voice options');
     expect(out).toContain('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
     expect(out).toContain('"type": "select"');
+    expect(out).toContain('"allowCustom": false');
     expect(out).toContain('"label": "Rachel — american · female"');
     expect(out).toContain('"value": "21m00Tcm4TlvDq8ikWAM"');
     expect(out).toContain('"label": "Adam — american · male"');

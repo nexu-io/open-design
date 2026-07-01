@@ -46,10 +46,18 @@ export interface SketchDocument {
   items: unknown[];
 }
 
+export interface ExcalidrawSketchScene {
+  elements: readonly unknown[];
+  appState: Record<string, unknown> | null;
+  files: Record<string, unknown>;
+}
+
 export interface ParsedSketchWorkspaceDocument {
   version: number;
   items: SketchItem[];
   rawItems: unknown[];
+  scene: ExcalidrawSketchScene;
+  format: 'legacy' | 'excalidraw' | 'empty';
 }
 
 const MAX_ABS_COORDINATE = 100_000;
@@ -58,6 +66,8 @@ const DEFAULT_SKETCH_COLOR = '#1c1b1a';
 const DEFAULT_SKETCH_SHAPE_SIZE = 2;
 const DEFAULT_SKETCH_TEXT_SIZE = 16;
 const DEFAULT_SKETCH_VERSION = 1;
+const EXCALIDRAW_DOCUMENT_VERSION = 2;
+const OPEN_DESIGN_EXCALIDRAW_SOURCE = 'https://open-design.ai/sketch';
 
 export function parseSketchDocument(text: string | null): SketchItem[] {
   return parseSketchWorkspaceDocument(text).items;
@@ -69,6 +79,16 @@ export function parseSketchWorkspaceDocument(
   if (!text) return emptyParsedSketchWorkspaceDocument();
   try {
     const parsed: unknown = JSON.parse(text);
+    const scene = normalizeExcalidrawSketchScene(parsed);
+    if (scene) {
+      return {
+        version: normalizeSketchVersion(isSketchRecord(parsed) ? parsed['version'] : undefined),
+        rawItems: [],
+        items: [],
+        scene,
+        format: 'excalidraw',
+      };
+    }
     if (!isSketchRecord(parsed) || !Array.isArray(parsed.items)) {
       return emptyParsedSketchWorkspaceDocument();
     }
@@ -80,6 +100,8 @@ export function parseSketchWorkspaceDocument(
         const normalized = normalizeSketchItem(item);
         return normalized ? [normalized] : [];
       }),
+      scene: emptySketchScene(),
+      format: rawItems.length > 0 ? 'legacy' : 'empty',
     };
   } catch {
     return emptyParsedSketchWorkspaceDocument();
@@ -121,6 +143,8 @@ function emptyParsedSketchWorkspaceDocument(): ParsedSketchWorkspaceDocument {
     version: DEFAULT_SKETCH_VERSION,
     items: [],
     rawItems: [],
+    scene: emptySketchScene(),
+    format: 'empty',
   };
 }
 
@@ -132,6 +156,48 @@ function normalizeSketchVersion(value: unknown): number {
 
 export function isSketchJsonFileName(name: string): boolean {
   return name.endsWith('.sketch.json');
+}
+
+export function emptySketchScene(name?: string): ExcalidrawSketchScene {
+  return {
+    elements: [],
+    appState: {
+      name: name ?? null,
+      viewBackgroundColor: '#ffffff',
+      gridSize: null,
+    },
+    files: {},
+  };
+}
+
+export function sketchSceneHasContent(scene: ExcalidrawSketchScene | null | undefined): boolean {
+  return Boolean(scene?.elements.some((element) => {
+    if (!isSketchRecord(element)) return false;
+    return element.isDeleted !== true;
+  }));
+}
+
+export function serializeExcalidrawSketchScene(
+  scene: ExcalidrawSketchScene,
+  name?: string,
+): string {
+  return JSON.stringify(buildExcalidrawSketchDocument(scene, name), null, 2);
+}
+
+export function buildExcalidrawSketchDocument(
+  scene: ExcalidrawSketchScene,
+  name?: string,
+): Record<string, unknown> {
+  const appState = sanitizeExcalidrawAppState(scene.appState);
+  if (name && typeof appState.name !== 'string') appState.name = name;
+  return {
+    type: 'excalidraw',
+    version: EXCALIDRAW_DOCUMENT_VERSION,
+    source: OPEN_DESIGN_EXCALIDRAW_SOURCE,
+    elements: cloneJsonArray(scene.elements),
+    appState,
+    files: cloneJsonRecord(scene.files),
+  };
 }
 
 export function computeSketchBounds(items: SketchItem[]): {
@@ -194,6 +260,54 @@ export function computeSketchBounds(items: SketchItem[]): {
   }
 
   return { minX, minY, maxX, maxY };
+}
+
+function normalizeExcalidrawSketchScene(value: unknown): ExcalidrawSketchScene | null {
+  if (!isSketchRecord(value) || !Array.isArray(value.elements)) return null;
+  return {
+    elements: cloneJsonArray(value.elements),
+    appState: isSketchRecord(value.appState) ? sanitizeExcalidrawAppState(value.appState) : null,
+    files: isSketchRecord(value.files) ? cloneJsonRecord(value.files) : {},
+  };
+}
+
+export function sanitizeExcalidrawAppState(value: Record<string, unknown> | null): Record<string, unknown> {
+  const appState = value ? cloneJsonRecord(value) : {};
+  delete appState.collaborators;
+  delete appState.contextMenu;
+  delete appState.draggingElement;
+  delete appState.editingElement;
+  delete appState.editingTextElement;
+  delete appState.frameToHighlight;
+  delete appState.newElement;
+  delete appState.openDialog;
+  delete appState.openMenu;
+  delete appState.openPopup;
+  // The library is disabled in the sketch editor; never persist or rehydrate an
+  // open sidebar so a saved scene cannot re-open the (now hidden) library panel.
+  delete appState.openSidebar;
+  delete appState.defaultSidebarDockedPreference;
+  delete appState.pendingImageElementId;
+  delete appState.resizingElement;
+  delete appState.selectionElement;
+  delete appState.suggestedBindings;
+  return appState;
+}
+
+function cloneJsonArray(value: readonly unknown[]): unknown[] {
+  return cloneJson(value, []);
+}
+
+function cloneJsonRecord(value: Record<string, unknown>): Record<string, unknown> {
+  return cloneJson(value, {});
+}
+
+function cloneJson<T>(value: unknown, fallback: T): T {
+  try {
+    return JSON.parse(JSON.stringify(value)) as T;
+  } catch {
+    return fallback;
+  }
 }
 
 export function clampSketchNumber(value: unknown): number {

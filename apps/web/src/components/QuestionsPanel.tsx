@@ -29,7 +29,7 @@ const viewedFormOccurrences = new Set<string>();
 // Once the form is actionable, the user has this long before we auto-continue
 // for them — submitting whatever they picked (unanswered questions count as
 // skipped) so generation never stalls waiting on a reply.
-const SKIP_COUNTDOWN_SECONDS = 120;
+const SKIP_COUNTDOWN_SECONDS = 10 * 60;
 const QUESTION_FORM_DRAFT_STORAGE_PREFIX = 'open-design:question-form-draft:';
 
 type QuestionFormAnswers = Record<string, string | string[]>;

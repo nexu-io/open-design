@@ -269,7 +269,7 @@
   word-break: break-all;
 }
 
-/* "Files this turn" summary — derived from Read/Write/Edit tool_use events
+/* "Files this turn" summary — derived from file operation tool_use events
    so users can scan every file the agent touched without expanding tool-
    group disclosures. Compact pill while streaming, full list once done. */
 .file-ops {
@@ -391,6 +391,11 @@
   color: #b26500;
   border-color: color-mix(in oklab, #b26500 35%, var(--border));
   background: color-mix(in oklab, #b26500 8%, var(--bg-subtle));
+}
+.file-ops-badge--delete {
+  color: #b42318;
+  border-color: color-mix(in oklab, #b42318 35%, var(--border));
+  background: color-mix(in oklab, #b42318 8%, var(--bg-subtle));
 }
 .file-ops-row-path {
   flex: 1;

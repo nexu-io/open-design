@@ -910,7 +910,7 @@ export function daemonSanitizeTitleInDoc(html: string): string {
 }
 
 function normalizeChatSessionMode(value: unknown): ChatSessionMode {
-  return value === 'chat' ? 'chat' : 'design';
+  return value === 'chat' || value === 'plan' ? value : 'design';
 }
 
 function isDesignSystemLikeProject(project: any): boolean {

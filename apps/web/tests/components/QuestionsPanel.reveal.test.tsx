@@ -233,4 +233,34 @@ describe('QuestionsPanel staggered reveal', () => {
 
     expect(textInputAt(0).value).toBe('');
   });
+
+  it('auto-submits only after the 10 minute countdown elapses', () => {
+    vi.useFakeTimers();
+    const onSubmit = vi.fn();
+
+    render(
+      <QuestionsPanel
+        form={form}
+        formKey="conv-1:assistant-3"
+        interactive
+        generating={false}
+        onSubmit={onSubmit}
+      />,
+    );
+    revealAll();
+
+    expect(document.querySelector('.questions-skip-timer')?.textContent).toBe('10:00');
+
+    act(() => {
+      vi.advanceTimersByTime(2 * 60 * 1000);
+    });
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(document.querySelector('.questions-skip-timer')?.textContent).toBe('8:00');
+
+    act(() => {
+      vi.advanceTimersByTime(8 * 60 * 1000);
+    });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0]?.[0]).toContain('[form answers — discovery]');
+  });
 });

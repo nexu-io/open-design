@@ -1,5 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
+import { T } from '@/timeouts';
 import type { Locator, Page, Request, Route } from '@playwright/test';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
 
@@ -1284,7 +1285,9 @@ test('[P0] @critical project detail share menu publish action opens the deploy f
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('heading', { name: /Deploy to Vercel/i })).toBeVisible();
   await expect(dialog.locator('select').first()).toHaveValue('vercel-self');
-  expect(deployConfigUrl).toContain('providerId=vercel-self');
+  await expect
+    .poll(() => deployConfigUrl ?? '', { timeout: T.medium })
+    .toContain('providerId=vercel-self');
 });
 
 test('[P1] home design card deletion supports cancel and confirm flows', async ({ page }) => {
@@ -2241,6 +2244,7 @@ async function expectWorkspaceReady(page: Page) {
   await expect(page.getByTestId('project-title')).toBeVisible();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.locator('.chat-loading-state')).toHaveCount(0, { timeout: T.medium });
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 }
 

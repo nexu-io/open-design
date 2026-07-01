@@ -354,7 +354,7 @@ describe('EntryShell design systems view', () => {
 });
 
 describe('EntryShell new project rail', () => {
-  it('opens the new project modal from the rail plus', async () => {
+  it('creates a blank project directly from the rail plus', async () => {
     window.localStorage.setItem('od.entry.railOpen', 'false');
     const fetchMock = vi.fn(
       async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
