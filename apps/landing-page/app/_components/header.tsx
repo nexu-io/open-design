@@ -28,6 +28,18 @@ const X_PROFILE = 'https://x.com/OpenDesignHQ';
 // dropdown entry, and the footer Partners column.
 const AMR_URL = 'https://open-design.ai/amr/';
 
+// Open Design Cloud (AMR / vela) endpoints for the header sign-in module.
+// Production defaults; overridable at build time via PUBLIC_* env so a
+// preview/staging build can point at a non-prod cloud. These are surfaced to
+// the runtime via `data-*` on `.nav-account` because the auth logic lives in
+// `header-enhancer.astro`'s `<script is:inline>` (NOT processed by Vite, so it
+// cannot read `import.meta.env` itself).
+const env = import.meta.env as Record<string, string | undefined>;
+const AMR_API_BASE = env.PUBLIC_AMR_API_BASE ?? 'https://amr-api.open-design.ai';
+const AMR_LOGIN_URL = env.PUBLIC_AMR_LOGIN_URL ?? 'https://open-design.ai/amr/login';
+const AMR_CONSOLE_URL =
+  env.PUBLIC_AMR_CONSOLE_URL ?? 'https://open-design.ai/amr?source=open_design';
+
 // Solution → Use cases / Roles. Hrefs mirror upstream main's header 1:1 and
 // pair positionally with the localized `useCaseItems` / `roleItems` tuples.
 const USE_CASE_HREFS = [
@@ -574,6 +586,65 @@ export function Header({
           >
             {headerCopy.download}
           </a>
+          {/*
+            Open Design Cloud (AMR) account entry. Renders BOTH states up front
+            and lets `header-enhancer.astro` toggle them at runtime: the
+            signed-out "Sign in" link is visible by default (so no-JS / pre-hydration
+            shows a working login link), and the signed-in avatar menu stays
+            `hidden` until the enhancer confirms a live cloud session via
+            `GET {api}/api/auth/get-session`. Config flows through `data-*`
+            because the enhancer script cannot read `import.meta.env`.
+          */}
+          <div
+            className='nav-account'
+            data-amr-account
+            data-amr-api={AMR_API_BASE}
+            data-amr-login={AMR_LOGIN_URL}
+            data-amr-console={AMR_CONSOLE_URL}
+            data-amr-home={href('/')}
+          >
+            <a className='nav-signin' href={AMR_LOGIN_URL} data-amr-signin>
+              {headerCopy.signIn}
+            </a>
+            <details className='nav-account-menu' data-amr-menu hidden>
+              <summary
+                className='nav-account-trigger'
+                aria-label={headerCopy.accountAria}
+                title={headerCopy.accountAria}
+              >
+                <img className='nav-avatar' alt='' data-amr-avatar />
+                <span
+                  className='nav-avatar-fallback'
+                  data-amr-avatar-fallback
+                  aria-hidden='true'
+                />
+              </summary>
+              <div className='nav-account-dropdown' role='menu'>
+                <div className='nav-account-id'>
+                  <span className='nav-account-name' data-amr-name />
+                  <span className='nav-account-email' data-amr-email />
+                </div>
+                <a
+                  className='nav-account-item'
+                  role='menuitem'
+                  href={AMR_CONSOLE_URL}
+                  target='_blank'
+                  rel='noreferrer noopener'
+                  data-amr-console-link
+                >
+                  {headerCopy.menuConsole}
+                </a>
+                <button
+                  type='button'
+                  className='nav-account-item nav-account-signout'
+                  role='menuitem'
+                  data-amr-signout
+                >
+                  {headerCopy.menuSignOut}
+                </button>
+              </div>
+            </details>
+          </div>
         </div>
       </div>
       {/*

@@ -226,6 +226,14 @@ export interface HeaderCopy {
   starAria: string;
   starTitle: string;
   starPrefix: string;
+  /** Open Design Cloud (AMR) account entry — see header-enhancer.astro. */
+  signIn: string;
+  /** aria-label for the signed-in avatar / account menu trigger. */
+  accountAria: string;
+  /** Avatar dropdown: open the Cloud console (AMR app). */
+  menuConsole: string;
+  /** Avatar dropdown: sign out of the Cloud session. */
+  menuSignOut: string;
 }
 
 export interface HeaderProductMenuCopy {
@@ -1635,6 +1643,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Star Open Design on GitHub',
       starTitle: 'Click to star us on GitHub',
       starPrefix: 'Star',
+      signIn: 'Sign in',
+      accountAria: 'Account menu',
+      menuConsole: 'Console',
+      menuSignOut: 'Sign out',
     },
   },
   zh: {
@@ -1677,6 +1689,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: '在 GitHub 为 Open Design 点 Star',
       starTitle: '去 GitHub 点 Star',
       starPrefix: 'Star',
+      signIn: '登录',
+      accountAria: '账户菜单',
+      menuConsole: '控制台',
+      menuSignOut: '退出登录',
     },
   },
   'zh-tw': {
@@ -1719,6 +1735,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: '在 GitHub 為 Open Design 按 Star',
       starTitle: '去 GitHub 按 Star',
       starPrefix: '點星',
+      signIn: '登入',
+      accountAria: '帳戶選單',
+      menuConsole: '控制台',
+      menuSignOut: '登出',
     },
   },
   ja: {
@@ -1761,6 +1781,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'GitHub で Open Design にスター',
       starTitle: 'GitHub でスターする',
       starPrefix: 'スター',
+      signIn: 'ログイン',
+      accountAria: 'アカウントメニュー',
+      menuConsole: 'コンソール',
+      menuSignOut: 'ログアウト',
     },
   },
   ko: {
@@ -1803,6 +1827,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'GitHub에서 Open Design에 스타 주기',
       starTitle: 'GitHub에서 스타 주기',
       starPrefix: '스타',
+      signIn: '로그인',
+      accountAria: '계정 메뉴',
+      menuConsole: '콘솔',
+      menuSignOut: '로그아웃',
     },
   },
   de: {
@@ -1845,6 +1873,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Open Design auf GitHub mit Stern markieren',
       starTitle: 'Auf GitHub sternen',
       starPrefix: 'Stern',
+      signIn: 'Anmelden',
+      accountAria: 'Kontomenü',
+      menuConsole: 'Konsole',
+      menuSignOut: 'Abmelden',
     },
   },
   fr: {
@@ -1887,6 +1919,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Ajouter une étoile à Open Design sur GitHub',
       starTitle: 'Mettre une étoile sur GitHub',
       starPrefix: 'Étoile',
+      signIn: 'Se connecter',
+      accountAria: 'Menu du compte',
+      menuConsole: 'Console',
+      menuSignOut: 'Se déconnecter',
     },
   },
   ru: {
@@ -1929,6 +1965,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Поставить звезду Open Design на GitHub',
       starTitle: 'Поставить звезду на GitHub',
       starPrefix: 'Звезда',
+      signIn: 'Войти',
+      accountAria: 'Меню аккаунта',
+      menuConsole: 'Консоль',
+      menuSignOut: 'Выйти',
     },
   },
   es: {
@@ -1971,6 +2011,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Dar Star a Open Design en GitHub',
       starTitle: 'Dar Star en GitHub',
       starPrefix: 'Estrella',
+      signIn: 'Iniciar sesión',
+      accountAria: 'Menú de cuenta',
+      menuConsole: 'Consola',
+      menuSignOut: 'Cerrar sesión',
     },
   },
   'pt-br': {
@@ -2013,6 +2057,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Dar Star no Open Design no GitHub',
       starTitle: 'Dar Star no GitHub',
       starPrefix: 'Estrela',
+      signIn: 'Entrar',
+      accountAria: 'Menu da conta',
+      menuConsole: 'Console',
+      menuSignOut: 'Sair',
     },
   },
   it: {
@@ -2055,6 +2103,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Metti una Star a Open Design su GitHub',
       starTitle: 'Metti una Star su GitHub',
       starPrefix: 'Stella',
+      signIn: 'Accedi',
+      accountAria: 'Menu account',
+      menuConsole: 'Console',
+      menuSignOut: 'Esci',
     },
   },
   vi: {
@@ -2097,6 +2149,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Star Open Design trên GitHub',
       starTitle: 'Star trên GitHub',
       starPrefix: 'Sao',
+      signIn: 'Đăng nhập',
+      accountAria: 'Menu tài khoản',
+      menuConsole: 'Bảng điều khiển',
+      menuSignOut: 'Đăng xuất',
     },
   },
   pl: {
@@ -2139,6 +2195,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Daj gwiazdkę Open Design na GitHubie',
       starTitle: 'Daj gwiazdkę na GitHubie',
       starPrefix: 'Gwiazdka',
+      signIn: 'Zaloguj się',
+      accountAria: 'Menu konta',
+      menuConsole: 'Konsola',
+      menuSignOut: 'Wyloguj się',
     },
   },
   id: {
@@ -2181,6 +2241,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Beri Star Open Design di GitHub',
       starTitle: 'Beri Star di GitHub',
       starPrefix: 'Bintang',
+      signIn: 'Masuk',
+      accountAria: 'Menu akun',
+      menuConsole: 'Konsol',
+      menuSignOut: 'Keluar',
     },
   },
   nl: {
@@ -2223,6 +2287,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Geef Open Design een Star op GitHub',
       starTitle: 'Star op GitHub',
       starPrefix: 'Ster',
+      signIn: 'Inloggen',
+      accountAria: 'Accountmenu',
+      menuConsole: 'Console',
+      menuSignOut: 'Uitloggen',
     },
   },
   ar: {
@@ -2265,6 +2333,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'ضع نجمة لـ Open Design على GitHub',
       starTitle: 'ضع نجمة على GitHub',
       starPrefix: 'نجمة',
+      signIn: 'تسجيل الدخول',
+      accountAria: 'قائمة الحساب',
+      menuConsole: 'لوحة التحكم',
+      menuSignOut: 'تسجيل الخروج',
     },
   },
   tr: {
@@ -2307,6 +2379,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: "GitHub'da Open Design'a Star ver",
       starTitle: "GitHub'da Star ver",
       starPrefix: 'Yıldız',
+      signIn: 'Giriş yap',
+      accountAria: 'Hesap menüsü',
+      menuConsole: 'Konsol',
+      menuSignOut: 'Çıkış yap',
     },
   },
   uk: {
@@ -2349,6 +2425,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Поставити зірку Open Design на GitHub',
       starTitle: 'Поставити зірку на GitHub',
       starPrefix: 'Зірка',
+      signIn: 'Увійти',
+      accountAria: 'Меню облікового запису',
+      menuConsole: 'Консоль',
+      menuSignOut: 'Вийти',
     },
   },
 };
