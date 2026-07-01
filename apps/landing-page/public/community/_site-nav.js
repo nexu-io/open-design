@@ -16,11 +16,13 @@
   const AMR_URL = 'https://open-design.ai/amr/';
   // Open Design Cloud (AMR) account entry — mirrors header.tsx defaults so the
   // static community pages show the same sign-in / account state as the main
-  // site. These pages default to the zh locale, so the post-login home is /zh/.
+  // site. The main header derives its post-login home from `href('/')`; these
+  // community pages are the default (English) locale with no locale prefix
+  // (`<html lang="en">`), so the equivalent home is the locale-neutral root `/`.
   const AMR_API_BASE = 'https://amr-api.open-design.ai';
   const AMR_LOGIN_URL = 'https://open-design.ai/amr/login';
   const AMR_CONSOLE_URL = 'https://open-design.ai/amr?source=open_design';
-  const AMR_HOME = '/zh/';
+  const AMR_HOME = '/';
 
   const renderSiteNav = () => `
     <div class="site-chrome" data-chrome-headroom>
