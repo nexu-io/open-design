@@ -345,7 +345,7 @@
 }
 
 .library-install-form .library-import-source-control {
-  grid-template-columns: repeat(2, auto);
+  grid-template-columns: repeat(3, auto);
 }
 
 .library-install-form .library-import-mode-control {
