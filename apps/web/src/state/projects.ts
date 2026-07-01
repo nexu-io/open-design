@@ -62,6 +62,27 @@ export async function getProject(id: string): Promise<Project | null> {
   }
 }
 
+export async function getProjectDetail(
+  id: string,
+  opts?: { ensureDir?: boolean },
+): Promise<{ project: Project; resolvedDir: string | null } | null> {
+  try {
+    // `ensureDir` asks the daemon to materialize a managed project's folder
+    // before resolving it, so referencing a brand-new (empty) project yields a
+    // real on-disk directory instead of a path that fails existence checks.
+    const query = opts?.ensureDir ? '?ensureDir=1' : '';
+    const resp = await fetch(`/api/projects/${encodeURIComponent(id)}${query}`);
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { project: Project; resolvedDir?: unknown };
+    return {
+      project: json.project,
+      resolvedDir: typeof json.resolvedDir === 'string' ? json.resolvedDir : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function createProject(input: {
   name: string;
   projectLocationId?: string;

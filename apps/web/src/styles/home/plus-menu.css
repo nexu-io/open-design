@@ -56,19 +56,37 @@
   bottom: auto;
   left: 0;
   z-index: 90;
-  min-width: min(190px, calc(100vw - 24px));
+  min-width: min(208px, calc(100vw - 24px));
   max-height: calc(100vh - 24px);
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 5px;
+  padding: 4px;
   border: 1px solid var(--border-strong, var(--border));
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.04),
     0 10px 28px -10px rgba(0, 0, 0, 0.18);
-  overflow: visible;
+  overflow-x: visible;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.plus-menu__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 1px 0 3px;
+}
+.plus-menu__group + .plus-menu__group {
+  border-top: 1px solid var(--border);
+}
+.plus-menu__group-label {
+  padding: 5px 8px 3px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.15;
 }
 .plus-menu__popup--flyout-contained {
   overflow-y: auto;
@@ -77,17 +95,17 @@
 .plus-menu__item {
   appearance: none;
   width: 100%;
-  min-height: 32px;
+  min-height: 28px;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 0 9px;
+  gap: 7px;
+  padding: 0 8px;
   border: 0;
   border-radius: var(--radius);
   background: transparent;
   color: var(--text-strong);
   font: inherit;
-  font-size: 13px;
+  font-size: 12.25px;
   text-align: left;
   cursor: pointer;
   transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -100,6 +118,37 @@
 .plus-menu__item:disabled {
   opacity: 0.5;
   cursor: default;
+}
+.plus-menu__split-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.plus-menu__split-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.plus-menu__learn {
+  appearance: none;
+  flex: 0 0 auto;
+  height: 24px;
+  max-width: 78px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 10.75px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.plus-menu__learn:hover,
+.plus-menu__learn:focus-visible {
+  outline: none;
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+  color: var(--text);
 }
 .plus-menu__item-icon {
   flex: 0 0 auto;
@@ -123,18 +172,19 @@
   position: relative;
 }
 .plus-menu__flyout {
-  position: absolute;
-  left: 100%;
-  top: -5px;
-  margin-left: 4px;
+  position: fixed;
+  left: auto;
+  right: auto;
+  top: auto;
+  bottom: auto;
   z-index: 91;
-  min-width: 220px;
-  max-width: 280px;
+  min-width: 204px;
+  max-width: calc(100vw - 24px);
   max-height: min(320px, var(--plus-menu-flyout-max-height, calc(100vh - 24px)));
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 5px;
+  padding: 4px;
   border: 1px solid var(--border-strong, var(--border));
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
@@ -144,14 +194,10 @@
   overflow-y: auto;
 }
 .plus-menu__popup--flyout-left .plus-menu__flyout {
-  left: auto;
-  right: 100%;
   margin-left: 0;
-  margin-right: 4px;
 }
 .plus-menu__popup--flyout-y-up .plus-menu__flyout {
   top: auto;
-  bottom: -5px;
 }
 /* Invisible bridge so the cursor can cross the gap into the flyout without
    triggering the row's mouseleave. */
@@ -177,7 +223,7 @@
   min-width: 0;
   max-width: none;
   max-height: min(320px, calc(100vh - 24px));
-  margin: 4px 0 0;
+  margin: 3px 0 0;
 }
 .plus-menu__popup--flyout-contained .plus-menu__flyout::before {
   display: none;
@@ -190,10 +236,10 @@
 .plus-menu__search {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 0 0 4px;
-  padding: 0 8px;
-  height: 30px;
+  gap: 5px;
+  margin: 0 0 3px;
+  padding: 0 7px;
+  height: 27px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
@@ -208,8 +254,14 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: 12.25px;
   outline: none;
+}
+.plus-menu__search input:focus,
+.plus-menu__search input:focus-visible {
+  outline: none;
+  border-color: transparent;
+  box-shadow: none;
 }
 .plus-menu__flyout .composer-design-toolbox-head + .plus-menu__search,
 .composer-toolbox-standalone-popup .composer-design-toolbox-head + .plus-menu__search {
@@ -235,19 +287,19 @@
   flex-direction: column;
   gap: 0;
   min-height: 0;
-  max-height: 240px;
+  max-height: 216px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
 .plus-menu__divider {
   height: 1px;
-  margin: 4px 6px;
+  margin: 3px 5px;
   background: var(--border);
 }
 .plus-menu__empty {
-  padding: 8px 9px;
+  padding: 7px 8px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11.5px;
 }
 /* ---------- Plugins flyout: list + hover-preview column ---------- */
 /* The plugins flyout is wider than the others: the left column is the
@@ -257,13 +309,13 @@
 .plus-menu__flyout--plugins {
   min-width: 0;
   max-width: none;
-  width: 466px;
+  width: 420px;
   max-width: calc(100vw - 24px);
   overflow: hidden;
 }
 .plus-menu__plugin-pane {
   display: flex;
-  gap: 8px;
+  gap: 7px;
   min-height: 0;
   flex: 1 1 auto;
 }
@@ -271,11 +323,11 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: 0 0 224px;
-  max-width: 224px;
+  flex: 0 0 194px;
+  max-width: 194px;
 }
 .plus-menu__plugin-main .plus-menu__list {
-  max-height: 248px;
+  max-height: 220px;
 }
 /* Base preview block — reused both as the plugins-flyout side column and
    inside the design-toolbox hover-detail panel, so it stays layout-neutral
@@ -284,12 +336,12 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
   overflow: hidden;
 }
 .plus-menu__plugin-pane .plus-menu__preview {
   flex: 1 1 auto;
-  padding-left: 8px;
+  padding-left: 7px;
   border-left: 1px solid var(--border);
 }
 .plus-menu__preview-hero {
@@ -305,7 +357,7 @@
 .plus-menu__preview-meta {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   min-height: 0;
 }
 .plus-menu__preview-title-row {
@@ -319,7 +371,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 12.25px;
   font-weight: 600;
   color: var(--text-strong);
 }
@@ -327,18 +379,18 @@
    Live artifact) — same taxonomy as the home Community chips. */
 .plus-menu__preview-kind {
   flex: 0 0 auto;
-  padding: 1px 7px;
+  padding: 1px 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: color-mix(in srgb, var(--accent) 78%, var(--text));
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 650;
   line-height: 1.5;
   white-space: nowrap;
 }
 .plus-menu__preview-desc {
   margin: 0;
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 1.45;
   color: var(--text-muted);
   /* Clamp to a few lines so a verbose manifest never blows out the panel. */
@@ -368,7 +420,7 @@
   border-left: 0;
   border-top: 1px solid var(--border);
   padding-left: 0;
-  padding-top: 8px;
+  padding-top: 7px;
 }
 .plus-menu__popup--flyout-contained .plus-menu__preview-hero .plugins-home__preview {
   max-height: 160px;
@@ -473,13 +525,13 @@
 .plus-menu__detail {
   position: fixed;
   z-index: 92;
-  width: 264px;
+  width: 248px;
   max-width: calc(100vw - 24px);
   max-height: calc(100vh - 24px);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
+  gap: 7px;
+  padding: 9px;
   border: 1px solid var(--border-strong, var(--border));
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
@@ -490,12 +542,12 @@
   scrollbar-width: thin;
 }
 .plus-menu__detail-title {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text-strong);
 }
 .plus-menu__detail-desc {
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 1.45;
   color: var(--text-muted);
   display: -webkit-box;
@@ -504,23 +556,23 @@
   overflow: hidden;
 }
 .plus-menu__detail-skill {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--accent, var(--text-muted));
 }
 .plus-menu__detail-badge {
   align-self: flex-start;
-  padding: 1px 7px;
+  padding: 1px 6px;
   border-radius: 999px;
   background: var(--bg-subtle);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 10.5px;
   line-height: 1.5;
 }
 /* Section headings inside the toolbox list (后续动作 / 资源). */
 .plus-menu__section-label {
-  padding: 6px 9px 4px;
+  padding: 5px 8px 3px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 650;
   letter-spacing: 0.02em;
 }

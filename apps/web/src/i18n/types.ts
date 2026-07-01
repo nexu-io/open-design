@@ -34,6 +34,35 @@ export interface Dict {
   'common.cancel': string;
   'chat.selectFromLibrary': string;
   'chat.importFigma': string;
+  'chat.plus.group.files': string;
+  'chat.plus.group.code': string;
+  'chat.plus.group.designs': string;
+  'chat.plus.group.other': string;
+  'chat.plus.attachFiles': string;
+  'chat.plus.referenceProject': string;
+  'chat.plus.linkLocalCode': string;
+  'chat.plus.uploadFig': string;
+  'chat.plus.learnHow': string;
+  'chat.plus.designSystem': string;
+  'chat.plus.skills': string;
+  'chat.plus.noSkills': string;
+  'chat.plus.connectors': string;
+  'chat.plus.plugins': string;
+  'chat.plus.mcp': string;
+  'chat.referenceProject.title': string;
+  'chat.referenceProject.search': string;
+  'chat.referenceProject.empty': string;
+  'chat.referenceProject.emptyAll': string;
+  'chat.referenceProject.loadFailed': string;
+  'chat.referenceProject.confirm': string;
+  'chat.contextPrompt.referenceProject': string;
+  'chat.contextPrompt.localCode': string;
+  'chat.figmaHelp.title': string;
+  'chat.figmaHelp.intro': string;
+  'chat.figmaHelp.step1': string;
+  'chat.figmaHelp.step2': string;
+  'chat.figmaHelp.step3': string;
+  'chat.figmaHelp.note': string;
   'designFiles.library.label': string;
   'designFiles.library.title': string;
   'libraryPicker.title': string;
@@ -2425,6 +2454,7 @@ export interface Dict {
   'chat.annotationAddingToInput': string;
   'chat.annotationQueue': string;
   'chat.annotationQueueing': string;
+  'chat.annotationSubmitOptions': string;
   'chat.annotationSending': string;
   'chat.annotationSendDisabledReason': string;
   'chat.annotationPreviewMissing': string;
@@ -2948,6 +2978,9 @@ export interface Dict {
   'chat.example3Title': string;
   'chat.example3Tag': string;
   'chat.example3Prompt': string;
+  'chat.example4Title': string;
+  'chat.example4Tag': string;
+  'chat.example4Prompt': string;
 
   // Preview modal
   'preview.usePlugin': string;

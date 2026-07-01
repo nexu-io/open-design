@@ -85,16 +85,21 @@ describe('PreviewDrawOverlay', () => {
     );
 
     const canvas = container.querySelector<HTMLCanvasElement>('canvas');
+    // The warning / attached-image strip / toolbar now share one bottom-anchored
+    // dock, so the responsive positioning lives on the dock and they never
+    // overlap regardless of how tall the toolbar wraps.
+    const dock = container.querySelector<HTMLElement>('.preview-draw-dock');
     const toolbar = container.querySelector<HTMLElement>('.preview-draw-toolbar');
     const toolCluster = container.querySelector<HTMLElement>('.preview-draw-tool-cluster');
     const noteActions = container.querySelector<HTMLElement>('.preview-draw-note-actions');
     const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input');
 
     expect(canvas?.style.zIndex).toBe('80');
-    expect(toolbar?.style.zIndex).toBe('91');
+    expect(dock?.style.zIndex).toBe('91');
+    expect(dock?.style.flexDirection).toBe('column');
+    expect(dock?.style.left).toBe('calc(50% - 52px)');
+    expect(dock?.style.maxWidth).toContain('100% - 144px');
     expect(toolbar?.style.flexWrap).toBe('wrap');
-    expect(toolbar?.style.left).toBe('calc(50% - 52px)');
-    expect(toolbar?.style.maxWidth).toContain('100% - 144px');
     expect(toolCluster?.style.flex).toBe('0 0 auto');
     expect(noteActions?.style.flex).toBe('1 1 360px');
     expect(noteActions?.style.minWidth).toBe('0px');
@@ -175,9 +180,12 @@ describe('PreviewDrawOverlay', () => {
       expect(input).toBeTruthy();
       fireEvent.change(input!, { target: { value: 'Please queue this note.' } });
 
+      // Send is the split button's default action; Queue and Add-to-input now
+      // live in its dropdown, opened via the chevron.
       const sendButton = getByRole('button', { name: 'Send' }) as HTMLButtonElement;
-      const queueButton = getByRole('button', { name: 'Queue' }) as HTMLButtonElement;
-      const addToInputButton = getByRole('button', { name: 'Add to input' }) as HTMLButtonElement;
+      fireEvent.click(getByRole('button', { name: 'Submit options' }));
+      const queueButton = getByRole('menuitemradio', { name: 'Queue' }) as HTMLButtonElement;
+      const addToInputButton = getByRole('menuitemradio', { name: 'Add to input' }) as HTMLButtonElement;
       expect(sendButton.disabled).toBe(true);
       expect(sendButton.title).toBe('Task running');
       expect(queueButton.disabled).toBe(false);
@@ -192,8 +200,10 @@ describe('PreviewDrawOverlay', () => {
       fireEvent.click(sendButton);
       expect(annotation).toHaveBeenCalledTimes(1);
 
+      // The dropdown stays open through this flow, so click the Queue item
+      // directly (re-clicking the chevron would just toggle it shut).
       fireEvent.change(input!, { target: { value: 'Queue another note.' } });
-      fireEvent.click(queueButton);
+      fireEvent.click(getByRole('menuitemradio', { name: 'Queue' }));
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(2));
     } finally {
       window.removeEventListener('opendesign:annotation', annotation);
@@ -218,7 +228,9 @@ describe('PreviewDrawOverlay', () => {
       expect(input).toBeTruthy();
       fireEvent.change(input!, { target: { value: 'Keep this in the input.' } });
 
-      fireEvent.click(getByRole('button', { name: 'Add to input' }));
+      // Add-to-input is now a choice in the submit dropdown.
+      fireEvent.click(getByRole('button', { name: 'Submit options' }));
+      fireEvent.click(getByRole('menuitemradio', { name: 'Add to input' }));
 
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
       expect(annotation.mock.calls[0]?.[0]).toMatchObject({
@@ -253,6 +265,79 @@ describe('PreviewDrawOverlay', () => {
     );
 
     await waitFor(() => expect(container.querySelector('canvas')).toBeNull());
+  });
+
+  it('accumulates multiple box selections and undoes them one at a time', () => {
+    const { container, getByRole } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 320, height: 200 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    // jsdom reports a zero-size rect; give the canvas real geometry so pointer
+    // fractions resolve to committable (non-degenerate) normalized boxes.
+    canvas.getBoundingClientRect = () =>
+      ({
+        x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const undo = getByRole('button', { name: 'Undo' }) as HTMLButtonElement;
+    expect(undo.disabled).toBe(true);
+
+    // Box-select is the default tool. Draw the first region.
+    fireEvent.pointerDown(canvas, { clientX: 10, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(canvas, { clientX: 60, clientY: 60, pointerId: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 60, clientY: 60, pointerId: 1 });
+    expect(undo.disabled).toBe(false);
+
+    // A second region must accumulate, not replace the first.
+    fireEvent.pointerDown(canvas, { clientX: 120, clientY: 120, pointerId: 1 });
+    fireEvent.pointerMove(canvas, { clientX: 170, clientY: 170, pointerId: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 170, clientY: 170, pointerId: 1 });
+
+    // First undo removes only the latest box; one still remains.
+    fireEvent.click(undo);
+    expect(undo.disabled).toBe(false);
+    // Second undo clears the remaining box.
+    fireEvent.click(undo);
+    expect(undo.disabled).toBe(true);
+  });
+
+  it('remembers the submit action chosen from the dropdown', async () => {
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (result: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active>
+          <div style={{ width: 320, height: 200 }} />
+        </PreviewDrawOverlay>,
+      );
+
+      const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input');
+      fireEvent.change(input!, { target: { value: 'ship it' } });
+
+      // Default main action is Send.
+      expect(getByRole('button', { name: 'Send' })).toBeTruthy();
+
+      // Pick Queue from the dropdown: it runs the action and becomes the new default.
+      fireEvent.click(getByRole('button', { name: 'Submit options' }));
+      fireEvent.click(getByRole('menuitemradio', { name: 'Queue' }));
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      expect(annotation.mock.calls[0]?.[0]).toMatchObject({
+        detail: expect.objectContaining({ action: 'queue' }),
+      });
+
+      // The split button's default action is now Queue.
+      await waitFor(() => expect(getByRole('button', { name: 'Queue' })).toBeTruthy());
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+    }
   });
 
   it('forwards wheel scrolling to the preview iframe while drawing', () => {

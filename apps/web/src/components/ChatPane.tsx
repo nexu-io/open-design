@@ -86,7 +86,7 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 // Starter sets are picked per project kind (and per video model) so a
 // fresh seedance video, a hyperframes html-in-canvas video, an image
 // project and an audio project each see relevant prompts instead of the
-// generic prototype trio. The default (prototype/deck/template/other/
+// generic starter set. The default (prototype/deck/template/other/
 // live-artifact) set stays i18n-translated via existing chat.example*
 // keys so the user-facing copy keeps its localizations. The new media
 // sets are inline English literals — they are technical agent prompts
@@ -122,6 +122,12 @@ const DEFAULT_STARTER_KEYS: Array<{
     titleKey: 'chat.example3Title',
     tagKey: 'chat.example3Tag',
     promptKey: 'chat.example3Prompt',
+  },
+  {
+    icon: '▶',
+    titleKey: 'chat.example4Title',
+    tagKey: 'chat.example4Tag',
+    promptKey: 'chat.example4Prompt',
   },
 ];
 
@@ -607,6 +613,7 @@ interface Props {
   projectMetadata?: ProjectMetadata;
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
   activeWorkspaceContext?: WorkspaceContextItem | null;
+  initialWorkspaceContexts?: WorkspaceContextItem[];
   workspaceContexts?: WorkspaceContextItem[];
   currentSkillId?: string | null;
   onProjectSkillChange?: (skillId: string | null) => void;
@@ -836,6 +843,7 @@ export function ChatPane({
   projectMetadata,
   onProjectMetadataChange,
   activeWorkspaceContext,
+  initialWorkspaceContexts = [],
   workspaceContexts = [],
   currentSkillId = null,
   onProjectSkillChange,
@@ -1989,6 +1997,7 @@ export function ChatPane({
       projectMetadata={projectMetadata}
       onProjectMetadataChange={onProjectMetadataChange}
       activeWorkspaceContext={activeWorkspaceContext}
+      initialWorkspaceContexts={initialWorkspaceContexts}
       workspaceContexts={workspaceContexts}
       byokApiProtocol={byokApiProtocol}
       byokImageModel={byokImageModel}
@@ -4083,6 +4092,8 @@ function workspaceContextOpenTarget(item: WorkspaceContextItem): string | null {
 function workspaceContextIcon(item: WorkspaceContextItem): IconName {
   if (item.kind === 'browser') return 'globe';
   if (item.kind === 'folder' || item.kind === 'design-files') return 'folder';
+  if (item.kind === 'project') return 'folder';
+  if (item.kind === 'local-code') return 'terminal';
   if (item.kind === 'terminal') return 'terminal';
   if (item.kind === 'side-chat') return 'comment';
   if (item.kind === 'design-system') return 'blocks';
@@ -4109,6 +4120,10 @@ function workspaceContextKindLabel(kind: WorkspaceContextItem['kind']): string {
       return 'Design system';
     case 'folder':
       return 'Folder';
+    case 'project':
+      return 'Project';
+    case 'local-code':
+      return 'Local code';
     case 'terminal':
       return 'Terminal';
     case 'side-chat':

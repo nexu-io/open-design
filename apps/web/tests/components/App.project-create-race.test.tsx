@@ -92,6 +92,20 @@ vi.mock('../../src/components/EntryView', () => ({
       <button
         type="button"
         onClick={() =>
+          onCreateProject({
+            name: 'Context dir project',
+            skillId: null,
+            designSystemId: null,
+            metadata: { kind: 'prototype', linkedDirs: ['/Users/me/existing'] },
+            linkedDirs: ['/Users/me/reference', ' /Users/me/reference ', '/Users/me/local-code'],
+          })
+        }
+      >
+        Create project with context dirs
+      </button>
+      <button
+        type="button"
+        onClick={() =>
           void onImportFolderResponse?.({
             conversationId: 'conv-import',
             entryFile: null,
@@ -917,6 +931,31 @@ describe('App project creation routing', () => {
     const replaceOrder = mockedReplaceProjectWorkingDir.mock.invocationCallOrder[0]!;
     const uploadOrder = mockedUploadProjectFiles.mock.invocationCallOrder[0]!;
     expect(replaceOrder).toBeLessThan(uploadOrder);
+  });
+
+  it('persists Home context linked dirs into the project create metadata', async () => {
+    mockedListProjects.mockResolvedValue([]);
+
+    render(<App />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Create project with context dirs' }),
+    );
+
+    await waitFor(() => {
+      expect(mockedCreateProject).toHaveBeenCalled();
+    });
+    expect(mockedCreateProject.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          linkedDirs: [
+            '/Users/me/existing',
+            '/Users/me/reference',
+            '/Users/me/local-code',
+          ],
+        }),
+      }),
+    );
   });
 
   it('short-circuits the upload + auto-send when the working-dir handoff fails', async () => {

@@ -61,6 +61,33 @@ function projectDetailResolvedDir(
   });
 }
 
+/**
+ * Materialize a *managed* project's folder before it is referenced as
+ * read-only context for another run.
+ *
+ * Invariant: after this resolves for a managed project, `PROJECTS_DIR/<id>`
+ * exists on disk. A brand-new project has a DB row but no on-disk directory
+ * until its first file write, so without this a reference resolves to a path
+ * that fails both the composer's existence probe and the daemon's
+ * all-or-nothing linkedDirs validation. External / imported roots (an absolute
+ * `metadata.baseDir`) are the user's own folders and are never created here.
+ * Materialization failures are required failures: callers must surface them
+ * instead of continuing with a resolvedDir that may not exist.
+ */
+export async function ensureReferencedProjectDir(
+  projectsRoot: string,
+  project: { id: string; metadata?: unknown },
+  ensureProject: (projectsRoot: string, projectId: string, metadata?: unknown) => Promise<string>,
+): Promise<void> {
+  const metadata = (project?.metadata ?? null) as { baseDir?: unknown } | null;
+  const baseDir = typeof metadata?.baseDir === 'string'
+    ? path.normalize(metadata.baseDir)
+    : null;
+  const managedRoot = !(baseDir && path.isAbsolute(baseDir));
+  if (!managedRoot) return;
+  await ensureProject(projectsRoot, project.id, project.metadata);
+}
+
 const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
 (function(){
   if (window.__odUrlScrollBridge) return;
@@ -1918,6 +1945,21 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     const locations = await configuredProjectLocations();
     if (!project || !projectVisibleForLocations(project, locations))
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    // When a caller is about to *reference* this project (add it as read-only
+    // context for another run), materialize its managed folder first so the
+    // reference resolves to a real directory. See ensureReferencedProjectDir.
+    if (req.query.ensureDir === '1' || req.query.ensureDir === 'true') {
+      try {
+        await ensureReferencedProjectDir(PROJECTS_DIR, project, ensureProject);
+      } catch (err: any) {
+        return sendApiError(
+          res,
+          500,
+          'PROJECT_DIR_MATERIALIZATION_FAILED',
+          String(err?.message || err),
+        );
+      }
+    }
     const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
     /** @type {import('@open-design/contracts').ProjectResponse} */
     const body = { project, resolvedDir };

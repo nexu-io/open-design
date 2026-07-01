@@ -947,9 +947,12 @@
 }
 
 .manual-edit-modal {
-  --manual-edit-field-bg: color-mix(in srgb, var(--bg-panel) 88%, var(--text) 12%);
-  --manual-edit-field-bg-hover: color-mix(in srgb, var(--bg-panel) 80%, var(--text) 20%);
-  --manual-edit-field-border: color-mix(in srgb, var(--border) 74%, var(--text) 16%);
+  /* Editable fields must read as crisp inputs, not disabled chips. Use an
+     elevated surface (white in light mode) with a defined border instead of a
+     gray text-color fill; semantic tokens flip cleanly across light/dark. */
+  --manual-edit-field-bg: var(--bg-elevated);
+  --manual-edit-field-bg-hover: var(--bg-muted);
+  --manual-edit-field-border: var(--border-strong);
   --manual-edit-field-text: var(--text);
   --manual-edit-field-muted: var(--text-muted);
   color: var(--text);

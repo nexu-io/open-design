@@ -135,6 +135,33 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(path.isAbsolute(detail.resolvedDir)).toBe(true);
   });
 
+  it('fails GET /api/projects/:id?ensureDir=1 when a managed folder cannot be materialized', async () => {
+    const projectId = `proj-ensure-fails-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Native fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const detailResp = await fetch(`${baseUrl}/api/projects/${projectId}`);
+    expect(detailResp.status).toBe(200);
+    const detail = (await detailResp.json()) as { resolvedDir: string };
+    tempDirs.push(detail.resolvedDir);
+    await writeFile(detail.resolvedDir, 'not a directory');
+
+    const ensureResp = await fetch(`${baseUrl}/api/projects/${projectId}?ensureDir=1`);
+    expect(ensureResp.status).toBe(500);
+    const body = (await ensureResp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('PROJECT_DIR_MATERIALIZATION_FAILED');
+    expect(body.error?.message).toMatch(/EEXIST|not a directory|file already exists/i);
+  });
+
   it('persists skipDiscoveryBrief for batch-created projects', async () => {
     const projectId = `proj-skip-discovery-${Date.now()}`;
     const createResp = await fetch(`${baseUrl}/api/projects`, {

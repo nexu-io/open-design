@@ -1163,6 +1163,8 @@ const WORKSPACE_CONTEXT_KINDS = new Set([
   'design-system',
   'file',
   'folder',
+  'project',
+  'local-code',
   'browser',
   'terminal',
   'side-chat',
@@ -1334,6 +1336,16 @@ function renderWorkspaceContextToolHints(items) {
       '- File and Design Files tabs: use project-relative paths exactly as shown. Read before editing, and keep generated screenshots/briefs/assets in Design Files when the user asks to capture or extract references.',
     );
   }
+  if (kinds.has('project')) {
+    hints.push(
+      '- Referenced projects: use the absolute path as a read-only reference project when present. Search and read relevant files before applying ideas to the current project; do not edit the referenced project unless the user explicitly asks.',
+    );
+  }
+  if (kinds.has('local-code')) {
+    hints.push(
+      '- Local code folders: use the absolute path as read-only implementation context. Inspect files under that folder when useful, align with its conventions, and make edits only in the active Open Design project unless the user explicitly asks otherwise.',
+    );
+  }
   if (kinds.has('live-artifact')) {
     hints.push(
       '- Live artifact tabs: treat the selected live artifact as the preview target. Inspect or modify its source files rather than editing generated runtime output when possible.',
@@ -1348,7 +1360,7 @@ function renderRunContextPrompt(selection, metadata) {
   if (Array.isArray(context.workspaceItems) && context.workspaceItems.length > 0) {
     lines.push('### Active workspace context');
     lines.push(
-      'The user did not manually choose this context; Open Design selected the currently focused workspace tab. Use it as the default target for phrases like "this", "current", "the browser", "the terminal", or "that file" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files.',
+      'The user selected these workspace contexts or Open Design inferred the currently focused workspace tab. Use them as the default target for phrases like "this", "current", "the browser", "the terminal", "that file", or "the referenced code/project" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files, and treat absolute local paths as reference context unless explicitly asked to edit them.',
     );
     lines.push(formatWorkspaceContextList(context.workspaceItems));
     const toolHints = renderWorkspaceContextToolHints(context.workspaceItems);

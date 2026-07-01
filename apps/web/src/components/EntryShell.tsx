@@ -26,6 +26,7 @@ import {
   type ChatSessionMode,
   type ConnectorDetail,
   type InstalledPluginRecord,
+  type RunContextSelection,
   type UpsertMemoryRequest,
 } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
@@ -229,11 +230,13 @@ type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   pluginType?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
+  initialRunContext?: RunContextSelection | null;
   conversationMode?: ChatSessionMode;
   autoSendFirstMessage?: boolean;
   requestId?: string;
   pendingFiles?: File[];
   userWorkingDirToken?: string;
+  linkedDirs?: string[] | null;
 };
 
 function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
@@ -646,6 +649,14 @@ export function EntryShell({
       payload.pluginTitle && payload.pluginTitle.trim().length > 0
         ? payload.pluginTitle.trim()
         : fallbackName;
+    const linkedDirs = Array.from(
+      new Set(
+        [
+          ...(payload.workingDir ? [payload.workingDir] : []),
+          ...(payload.linkedDirs ?? []),
+        ].map((dir) => dir.trim()).filter(Boolean),
+      ),
+    );
     const metadata: ProjectMetadata = {
       ...(payload.projectMetadata ?? {}),
       kind: payload.projectKind ?? payload.projectMetadata?.kind ?? 'prototype',
@@ -665,7 +676,7 @@ export function EntryShell({
       // project's `linkedDirs` rather than its `baseDir`/`userWorkingDir`:
       // Design Files stays the managed `.od/projects/<id>` artifact store,
       // independent of the user's local files.
-      ...(payload.workingDir ? { linkedDirs: [payload.workingDir] } : {}),
+      ...(linkedDirs.length > 0 ? { linkedDirs } : {}),
       ...(payload.examplePromptContext ? {
         examplePrompt: true,
         examplePromptTitle: payload.examplePromptContext.title,
@@ -684,6 +695,7 @@ export function EntryShell({
         ? { appliedPluginSnapshotId: payload.appliedPluginSnapshotId }
         : {}),
       ...(payload.pluginInputs ? { pluginInputs: payload.pluginInputs } : {}),
+      ...(payload.initialRunContext ? { initialRunContext: payload.initialRunContext } : {}),
       ...(payload.conversationMode ? { conversationMode: payload.conversationMode } : {}),
       ...(payload.attachments && payload.attachments.length > 0
         ? { pendingFiles: payload.attachments }

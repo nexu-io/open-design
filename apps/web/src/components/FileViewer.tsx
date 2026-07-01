@@ -9647,6 +9647,8 @@ function HtmlViewer({
                 <AnnotationHoverPopover
                   target={hoveredCommentTarget}
                   scale={overlayPreviewScale}
+                  bounds={previewBodySize}
+                  offset={{ x: overlayPreviewTransform.offsetX, y: overlayPreviewTransform.offsetY }}
                   onMouseEnter={() => {
                     hoverCardPinnedRef.current = true;
                     cancelHoverCardDismiss();

@@ -201,26 +201,80 @@ export function AnnotationStyleSummary({
   );
 }
 
-function annotationHoverAnchorStyle(target: PreviewCommentSnapshot, scale: number): CSSProperties {
+function annotationHoverAnchorStyle(
+  target: PreviewCommentSnapshot,
+  scale: number,
+  bounds?: PopoverBounds,
+  offset: PopoverOffset = { x: 0, y: 0 },
+  measuredSize?: PopoverSize,
+): CSSProperties {
   const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  const pad = 14;
   const anchor = target.hoverPoint ?? {
     x: target.position.x + Math.min(target.position.width, 24),
     y: target.position.y + Math.min(target.position.height, 24),
   };
+  const anchorX = offset.x + anchor.x * safeScale;
+  const anchorY = offset.y + anchor.y * safeScale;
+  const preferredLeft = anchorX + pad;
+  const preferredTop = anchorY + pad;
+  if (!bounds?.width || bounds.width <= 0) {
+    return {
+      left: clampPopoverCoordinate(preferredLeft, pad),
+      top: clampPopoverCoordinate(preferredTop, pad),
+    };
+  }
+  // Keep the card fully inside the preview viewport. The previous logic only
+  // clamped the top-left corner to a minimum, so a card near the right/bottom
+  // edge ran off-screen and its values were clipped. When the card would spill
+  // past an edge, flip it to the opposite side of the anchor; if it still does
+  // not fit, pin it to the last on-screen position.
+  const viewportLeft = Math.max(0, bounds.scrollLeft ?? 0);
+  const viewportTop = Math.max(0, bounds.scrollTop ?? 0);
+  const viewportRight = viewportLeft + bounds.width;
+  const viewportBottom = bounds.height ? viewportTop + bounds.height : Number.POSITIVE_INFINITY;
+  const cardWidth = measuredSize?.width && measuredSize.width > 0 ? measuredSize.width : 240;
+  const cardHeight = measuredSize?.height && measuredSize.height > 0 ? measuredSize.height : 132;
+  const minLeft = viewportLeft + pad;
+  const minTop = viewportTop + pad;
+  const maxLeft = Math.max(minLeft, viewportRight - cardWidth - pad);
+  let left = preferredLeft;
+  if (left > maxLeft) {
+    const flipped = anchorX - cardWidth - pad;
+    left = flipped >= minLeft ? flipped : maxLeft;
+  }
+  if (!Number.isFinite(viewportBottom)) {
+    return {
+      left: clampPopoverRange(left, minLeft, maxLeft),
+      top: clampPopoverCoordinate(preferredTop, minTop),
+    };
+  }
+  const maxTop = Math.max(minTop, viewportBottom - cardHeight - pad);
+  let top = preferredTop;
+  if (top > maxTop) {
+    const flipped = anchorY - cardHeight - pad;
+    top = flipped >= minTop ? flipped : maxTop;
+  }
   return {
-    left: clampPopoverCoordinate(anchor.x * safeScale + 14, 14),
-    top: clampPopoverCoordinate(anchor.y * safeScale + 14, 14),
+    left: clampPopoverRange(left, minLeft, maxLeft),
+    top: clampPopoverRange(top, minTop, maxTop),
   };
 }
 
 export function AnnotationHoverPopover({
   target,
   scale,
+  bounds,
+  offset,
   onMouseEnter,
   onMouseLeave,
 }: {
   target: PreviewCommentSnapshot;
   scale: number;
+  // The preview viewport rect and pan offset, so the card can clamp itself
+  // inside the visible canvas instead of overflowing the right/bottom edge.
+  bounds?: PopoverBounds;
+  offset?: PopoverOffset;
   // The card floats over the preview iframe at the cursor. Moving onto it pulls
   // the pointer off the iframe, which fires mouseout and would otherwise unmount
   // the card — the cursor then lands back on the iframe and re-triggers it,
@@ -230,12 +284,35 @@ export function AnnotationHoverPopover({
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
 }) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [cardSize, setCardSize] = useState<PopoverSize | undefined>(undefined);
+  useLayoutEffect(() => {
+    const node = cardRef.current;
+    if (!node) return;
+    const measure = () => {
+      const rect = node.getBoundingClientRect();
+      const next = { width: Math.ceil(rect.width), height: Math.ceil(rect.height) };
+      if (next.width <= 0 || next.height <= 0) return;
+      setCardSize((current) =>
+        current?.width === next.width && current.height === next.height ? current : next,
+      );
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    // Content-driven size changes (a different hovered element yields different
+    // rows) are reported by the observer, so a single stable observation covers
+    // every target without re-subscribing.
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
   return (
     <div
+      ref={cardRef}
       className="comment-popover annotation-hover-popover"
       data-testid="annotation-hover-popover"
       role="tooltip"
-      style={annotationHoverAnchorStyle(target, scale)}
+      style={annotationHoverAnchorStyle(target, scale, bounds, offset, cardSize)}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
