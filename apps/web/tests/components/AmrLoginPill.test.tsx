@@ -237,7 +237,7 @@ describe('AmrLoginPill', () => {
     expect(screen.queryByText('LOCAL')).toBeNull();
   });
 
-  it('uses the test-profile AMR console URL for signed-in users', () => {
+  it('uses the test-profile AMR management URL for signed-in users', () => {
     renderAccountControl({
       status: 'signed-in',
       email: 'leaf@example.com',
@@ -253,7 +253,7 @@ describe('AmrLoginPill', () => {
     );
   });
 
-  it('uses the local-profile AMR console URL for signed-in users', () => {
+  it('uses the local-profile AMR management URL for signed-in users', () => {
     renderAccountControl({
       status: 'signed-in',
       email: 'leaf@example.com',
@@ -268,7 +268,7 @@ describe('AmrLoginPill', () => {
     );
   });
 
-  it('uses the production AMR console URL by default', () => {
+  it('uses the production AMR management URL by default', () => {
     renderAccountControl({
       status: 'signed-in',
       email: 'leaf@example.com',
@@ -283,7 +283,7 @@ describe('AmrLoginPill', () => {
     );
   });
 
-  it('adds Open Design attribution to the signed-in console link on click', () => {
+  it('adds Open Design attribution to the signed-in management link on click', () => {
     const fetchMock = vi.fn(async () => new Response('{}', { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);
 

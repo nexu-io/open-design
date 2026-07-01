@@ -1205,6 +1205,9 @@
   align-items: stretch;
   min-width: 0;
 }
+.agent-card-installed:has(.agent-card-amr-auth) .agent-card-main {
+  flex-wrap: wrap;
+}
 .agent-card-select {
   flex: 1;
   min-width: 0;
@@ -1218,6 +1221,9 @@
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+.agent-card-installed:has(.agent-card-amr-auth) .agent-card-select {
+  flex: 1 1 420px;
 }
 .agent-card-test-btn {
   align-self: stretch;
@@ -1419,9 +1425,10 @@
 .agent-card-name--amr {
   align-items: center;
   gap: 8px;
-  flex-wrap: nowrap;
+  row-gap: 5px;
+  flex-wrap: wrap;
   max-width: 100%;
-  white-space: nowrap;
+  white-space: normal;
   overflow: hidden;
 }
 .agent-card-name.agent-card-name--amr .agent-card-title {
