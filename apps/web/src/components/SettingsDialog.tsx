@@ -921,6 +921,8 @@ function nextApiProtocolConfig(
       ...currentConfig,
       apiKey: '',
       apiVersion: protocol === 'azure' ? currentConfig.apiVersion : '',
+      nativeImageInputEnabled:
+        protocol === 'azure' ? currentConfig.nativeImageInputEnabled === true : undefined,
       apiProviderBaseUrl: null,
     };
   }
@@ -936,6 +938,8 @@ function currentApiProtocolConfig(config: AppConfig): ApiProtocolConfig {
     baseUrl: config.baseUrl,
     model: config.model,
     apiVersion: config.apiVersion ?? '',
+    nativeImageInputEnabled:
+      config.apiProtocol === 'azure' && config.nativeImageInputEnabled === true,
     apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
     byokImageModel: config.byokImageModel ?? '',
     byokVideoModel: config.byokVideoModel ?? '',
@@ -991,6 +995,8 @@ function applyApiProtocolConfig(
     model: apiConfig.model,
     apiProviderBaseUrl: apiConfig.apiProviderBaseUrl ?? null,
     apiVersion: protocol === 'azure' ? (apiConfig.apiVersion ?? '') : '',
+    nativeImageInputEnabled:
+      protocol === 'azure' ? apiConfig.nativeImageInputEnabled === true : undefined,
     // byokImageModel applies to the protocols that inject the daemon-side
     // generate_image tool (SenseAudio, AIHubMix) — flipping to another BYOK
     // tab shouldn't carry an image-model choice into, say, the OpenAI form.
@@ -1043,6 +1049,8 @@ export function updateCurrentApiProtocolConfig(
       ? { model: defaultModel }
       : {}),
   };
+  nextApiConfig.nativeImageInputEnabled =
+    protocol === 'azure' && nextApiConfig.nativeImageInputEnabled === true;
   return applyApiProtocolConfig(
     {
       ...config,
@@ -1280,6 +1288,7 @@ export function sanitizeSettingsSavePayload(
     apiKey: initial.apiKey,
     apiProtocol: initial.apiProtocol,
     apiVersion: initial.apiVersion,
+    nativeImageInputEnabled: initial.nativeImageInputEnabled,
     apiProtocolConfigs: initial.apiProtocolConfigs,
     byokProviderConfigDrafts: initial.byokProviderConfigDrafts,
     apiProviderBaseUrl: initial.apiProviderBaseUrl,
@@ -5222,16 +5231,35 @@ export function SettingsDialog({
                 </div>
               </details>
               {apiProtocol === 'azure' ? (
-                <label className="field">
-                  <span className="field-label">{t('settings.apiVersion')}</span>
-                  <input
-                    type="text"
-                    value={cfg.apiVersion ?? ''}
-                    placeholder="2024-10-21"
-                    onBlur={commitProviderModelsInputs}
-                    onChange={(e) => updateApiConfig({ apiVersion: e.target.value.trim() })}
-                  />
-                </label>
+                <>
+                  <label className="field">
+                    <span className="field-label">{t('settings.apiVersion')}</span>
+                    <input
+                      type="text"
+                      value={cfg.apiVersion ?? ''}
+                      placeholder="2024-10-21"
+                      onBlur={commitProviderModelsInputs}
+                      onChange={(e) => updateApiConfig({ apiVersion: e.target.value.trim() })}
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">
+                      <input
+                        type="checkbox"
+                        aria-label={t('settings.azureNativeImageInput')}
+                        checked={cfg.nativeImageInputEnabled === true}
+                        onChange={(e) =>
+                          updateApiConfig({ nativeImageInputEnabled: e.target.checked })
+                        }
+                      />
+                      {' '}
+                      {t('settings.azureNativeImageInput')}
+                    </span>
+                    <span className="field-hint">
+                      {t('settings.azureNativeImageInputHint')}
+                    </span>
+                  </label>
+                </>
               ) : null}
               {apiProtocol === 'senseaudio' || apiProtocol === 'aihubmix' ? (
                 <label className="field">

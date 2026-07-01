@@ -102,7 +102,8 @@ import {
 import {
   apiProtocolAgentId,
   apiProtocolModelLabel,
-  usesAnthropicProxy,
+  shouldOmitNativeImageAttachmentMetadata,
+  supportsNativeImageAttachmentSerialization,
 } from '../utils/apiProtocol';
 import { playSound, showCompletionNotification } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
@@ -5046,6 +5047,8 @@ export function ProjectView({
           }
         }
         const systemPrompt = await composedSystemPrompt(runSessionMode);
+        const nativeImageAttachments = supportsNativeImageAttachmentSerialization(config);
+        const omitNativeImageAttachments = shouldOmitNativeImageAttachmentMetadata(config);
         const apiHistory = await historyWithApiAttachmentContext(
           historyWithCommentAttachmentContext(
             historyWithWorkspaceContext(nextHistory, userMsg.id, runContext),
@@ -5054,7 +5057,7 @@ export function ProjectView({
           userMsg.id,
           project.id,
           projectFiles,
-          { omitNativeImageAttachments: usesAnthropicProxy(config) },
+          { omitNativeImageAttachments },
         );
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
         // BYOK runs stream client-side and never reach the daemon, so the
@@ -5143,6 +5146,7 @@ export function ProjectView({
           },
         }, {
           projectId: project.id,
+          nativeImageAttachments,
           // SenseAudio BYOK chat reads this to pre-fill the tool param's
           // default model. Prefer the live composer override; fall back
           // to the Settings default when the composer dropdown is on

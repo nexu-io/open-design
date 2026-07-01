@@ -382,6 +382,8 @@ export const uk: Dict = {
   'settings.azureCustomDeploymentName': 'Власна назва розгортання',
   'settings.azureDeploymentModelHint': 'Для Azure OpenAI це поле використовується як назва розгортання в /openai/deployments/<model>. Введіть назву розгортання, створену в Azure.',
   'settings.azureModelFetchHint': 'Введіть назву розгортання з вашого ресурсу Azure. Розгортання Azure не можна отримати автоматично.',
+  'settings.azureNativeImageInput': 'Увімкнути введення зображень для цього розгортання Azure',
+  'settings.azureNativeImageInputHint': 'Увімкніть це лише тоді, коли вибране розгортання Azure підтримує введення зображень. Для розгортань лише з текстом залиште вимкненим.',
   'settings.apiVersion': 'Версія API',
   'settings.byokImageModel': 'Модель генерації зображень',
   'settings.byokVideoModel': 'Модель генерації відео',

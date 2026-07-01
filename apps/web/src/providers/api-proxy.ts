@@ -4,12 +4,15 @@ import type {
   ProxyImageContentBlock,
   ProxyMessage,
   ProxyMessageContent,
+  ProxyOpenAIImageContentBlock,
   ProxyTextContentBlock,
 } from '@open-design/contracts';
 import { projectFileUrl } from './registry';
 import type { StreamHandlers } from './anthropic';
 import { parseSseFrame } from './sse';
 import { isAnthropicSupportedImagePath } from '../utils/apiProtocol';
+
+export type AnthropicMessageContent = string | Array<ProxyTextContentBlock | ProxyImageContentBlock>;
 
 /**
  * Optional per-request context that some protocols thread into the
@@ -25,6 +28,7 @@ import { isAnthropicSupportedImagePath } from '../utils/apiProtocol';
  */
 export interface ProxyContext {
   projectId?: string;
+  nativeImageAttachments?: boolean;
   byokImageModel?: string;
   byokVideoModel?: string;
   byokSpeechModel?: string;
@@ -134,15 +138,29 @@ export async function buildProxyMessages(
   history: ChatMessage[],
   context?: ProxyContext,
 ): Promise<ProxyMessage[]> {
-  if (!usesAnthropicMessagesPayload(endpoint) || !context?.projectId) {
+  if (!context?.projectId) {
     return history.map((m) => ({ role: m.role, content: m.content }));
   }
 
   const out: ProxyMessage[] = [];
   for (const message of history) {
+    if (usesAnthropicMessagesPayload(endpoint)) {
+      out.push({
+        role: message.role,
+        content: await buildAnthropicMessageContent(message, context.projectId),
+      });
+      continue;
+    }
+    if (usesOpenAICompatibleMessagesPayload(endpoint) && context.nativeImageAttachments !== false) {
+      out.push({
+        role: message.role,
+        content: await buildOpenAICompatibleMessageContent(message, context.projectId),
+      });
+      continue;
+    }
     out.push({
       role: message.role,
-      content: await buildAnthropicMessageContent(message, context.projectId),
+      content: message.content,
     });
   }
   return out;
@@ -152,10 +170,14 @@ function usesAnthropicMessagesPayload(endpoint: string): boolean {
   return endpoint.includes('/api/proxy/anthropic/');
 }
 
-async function buildAnthropicMessageContent(
+function usesOpenAICompatibleMessagesPayload(endpoint: string): boolean {
+  return endpoint.includes('/api/proxy/openai/') || endpoint.includes('/api/proxy/azure/');
+}
+
+export async function buildAnthropicMessageContent(
   message: ChatMessage,
   projectId: string,
-): Promise<ProxyMessageContent> {
+): Promise<AnthropicMessageContent> {
   const imageAttachments = sortAttachmentsByUserOrder(
     (message.attachments ?? []).filter((attachment) => attachment.kind === 'image'),
   );
@@ -170,6 +192,37 @@ async function buildAnthropicMessageContent(
 
   for (const attachment of imageAttachments) {
     const block = await readAnthropicImageBlock(projectId, attachment.path);
+    if (block) {
+      blocks.push(block);
+    } else if (isAnthropicSupportedImagePath(attachment.path)) {
+      blocks.push({
+        type: 'text',
+        text: `Attached image could not be sent as native image content: path: ${attachment.path} | name: ${attachment.name}`,
+      });
+    }
+  }
+
+  return blocks.length > 0 ? blocks : message.content;
+}
+
+async function buildOpenAICompatibleMessageContent(
+  message: ChatMessage,
+  projectId: string,
+): Promise<ProxyMessageContent> {
+  const imageAttachments = sortAttachmentsByUserOrder(
+    (message.attachments ?? []).filter((attachment) => attachment.kind === 'image'),
+  );
+  if (message.role !== 'user' || imageAttachments.length === 0) {
+    return message.content;
+  }
+
+  const blocks: Array<ProxyTextContentBlock | ProxyOpenAIImageContentBlock> = [];
+  if (message.content.trim()) {
+    blocks.push({ type: 'text', text: message.content });
+  }
+
+  for (const attachment of imageAttachments) {
+    const block = await readOpenAICompatibleImageBlock(projectId, attachment.path);
     if (block) {
       blocks.push(block);
     } else if (isAnthropicSupportedImagePath(attachment.path)) {
@@ -227,6 +280,32 @@ async function readAnthropicImageBlock(
   }
 }
 
+async function readOpenAICompatibleImageBlock(
+  projectId: string,
+  path: string,
+): Promise<ProxyOpenAIImageContentBlock | null> {
+  try {
+    const resp = await fetch(projectFileUrl(projectId, path), { cache: 'no-store' });
+    if (!resp.ok) return null;
+
+    const mediaType = supportedOpenAICompatibleImageMediaType(
+      resp.headers.get('content-type') ?? '',
+      path,
+    );
+    if (!mediaType) return null;
+
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    return {
+      type: 'image_url',
+      image_url: {
+        url: `data:${mediaType};base64,${bytesToBase64(bytes)}`,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 function supportedAnthropicImageMediaType(
   contentType: string,
   path: string,
@@ -246,6 +325,13 @@ function supportedAnthropicImageMediaType(
   if (lower.endsWith('.gif')) return 'image/gif';
   if (lower.endsWith('.webp')) return 'image/webp';
   return null;
+}
+
+function supportedOpenAICompatibleImageMediaType(
+  contentType: string,
+  path: string,
+): 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | null {
+  return supportedAnthropicImageMediaType(contentType, path);
 }
 
 function bytesToBase64(bytes: Uint8Array): string {

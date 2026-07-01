@@ -382,6 +382,8 @@ export const ja: Dict = {
   'settings.azureCustomDeploymentName': 'カスタムデプロイ名',
   'settings.azureDeploymentModelHint': 'Azure OpenAI では、このフィールドが /openai/deployments/<model> のデプロイ名として使われます。Azure で作成したデプロイ名を入力してください。',
   'settings.azureModelFetchHint': 'Azure リソースのデプロイ名を入力してください。Azure のデプロイは自動取得できません。',
+  'settings.azureNativeImageInput': 'この Azure デプロイで画像入力を有効にする',
+  'settings.azureNativeImageInputHint': '選択した Azure デプロイが画像入力に対応している場合にのみオンにしてください。テキストのみのデプロイではオフのままにします。',
   'settings.apiVersion': 'API バージョン',
   'settings.byokImageModel': '画像生成モデル',
   'settings.byokVideoModel': '動画生成モデル',

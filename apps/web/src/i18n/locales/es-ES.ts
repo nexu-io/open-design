@@ -382,6 +382,8 @@ export const esES: Dict = {
   'settings.azureCustomDeploymentName': 'Nombre de implementación personalizado',
   'settings.azureDeploymentModelHint': 'Para Azure OpenAI, este campo se usa como nombre del despliegue en /openai/deployments/<model>. Introduce el nombre del despliegue que creaste en Azure.',
   'settings.azureModelFetchHint': 'Introduce el nombre de la implementación de tu recurso de Azure. Las implementaciones de Azure no se pueden obtener automáticamente.',
+  'settings.azureNativeImageInput': 'Habilitar entrada de imágenes para esta implementación de Azure',
+  'settings.azureNativeImageInputHint': 'Activa esta opción solo cuando la implementación de Azure seleccionada admita entrada de imágenes. Las implementaciones solo de texto deben dejarla desactivada.',
   'settings.apiVersion': 'Versión de API',
   'settings.byokImageModel': 'Modelo de generación de imágenes',
   'settings.byokVideoModel': 'Modelo de generación de vídeo',

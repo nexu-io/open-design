@@ -382,6 +382,8 @@ export const hu: Dict = {
   'settings.azureCustomDeploymentName': 'Egyéni üzemelési név',
   'settings.azureDeploymentModelHint': 'Azure OpenAI esetén ez a mező a /openai/deployments/<model> deployment neveként szerepel. Add meg az Azure-ban létrehozott deployment nevét.',
   'settings.azureModelFetchHint': 'Add meg a telepítés nevét az Azure-erőforrásodból. Az Azure-telepítések nem kérhetők le automatikusan.',
+  'settings.azureNativeImageInput': 'Képbemenet engedélyezése ehhez az Azure-telepítéshez',
+  'settings.azureNativeImageInputHint': 'Csak akkor kapcsolja be, ha a kiválasztott Azure-telepítés támogatja a képbemenetet. A csak szöveges telepítéseknél hagyja kikapcsolva.',
   'settings.apiVersion': 'API-verzió',
   'settings.byokImageModel': 'Képgenerálási modell',
   'settings.byokVideoModel': 'Videógenerálási modell',

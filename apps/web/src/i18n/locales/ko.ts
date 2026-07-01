@@ -382,6 +382,8 @@ export const ko: Dict = {
   'settings.azureCustomDeploymentName': '사용자 지정 배포 이름',
   'settings.azureDeploymentModelHint': 'Azure OpenAI에서는 이 필드가 /openai/deployments/<model>의 배포 이름으로 사용됩니다. Azure에서 만든 배포 이름을 입력하세요.',
   'settings.azureModelFetchHint': 'Azure 리소스의 배포 이름을 입력하세요. Azure 배포는 자동으로 불러올 수 없습니다.',
+  'settings.azureNativeImageInput': '이 Azure 배포에 이미지 입력 사용',
+  'settings.azureNativeImageInputHint': '선택한 Azure 배포가 이미지 입력을 지원하는 경우에만 켜세요. 텍스트 전용 배포는 꺼진 상태로 두어야 합니다.',
   'settings.apiVersion': 'API 버전',
   'settings.byokImageModel': '이미지 생성 모델',
   'settings.byokVideoModel': '비디오 생성 모델',

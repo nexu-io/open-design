@@ -4,7 +4,7 @@ export type ProxyMessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
 export type ProxyMessageContent =
   | string
-  | Array<ProxyTextContentBlock | ProxyImageContentBlock>;
+  | Array<ProxyTextContentBlock | ProxyImageContentBlock | ProxyOpenAIImageContentBlock>;
 
 export interface ProxyTextContentBlock {
   type: 'text';
@@ -17,6 +17,13 @@ export interface ProxyImageContentBlock {
     type: 'base64';
     media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
     data: string;
+  };
+}
+
+export interface ProxyOpenAIImageContentBlock {
+  type: 'image_url';
+  image_url: {
+    url: string;
   };
 }
 

@@ -91,8 +91,18 @@ describe('buildProxyMessages', () => {
     );
   });
 
-  it('keeps non-Anthropic proxy messages as plain text', async () => {
-    vi.stubGlobal('fetch', vi.fn());
+  it('serializes OpenAI-compatible image attachments as image_url content blocks', async () => {
+    const pngBytes = new Uint8Array([137, 80, 78, 71]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: {
+          get: (name: string) => (name.toLowerCase() === 'content-type' ? 'image/png' : null),
+        },
+        arrayBuffer: async () => pngBytes.buffer,
+      }),
+    );
 
     const messages = await buildProxyMessages(
       '/api/proxy/openai/stream',
@@ -104,9 +114,114 @@ describe('buildProxyMessages', () => {
       { projectId: 'project-1' },
     );
 
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/projects/project-1/raw/references/logo.png',
+      { cache: 'no-store' },
+    );
+    expect(messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe the attached image' },
+          {
+            type: 'image_url',
+            image_url: { url: 'data:image/png;base64,iVBORw==' },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('serializes Azure image attachments as image_url content blocks', async () => {
+    const pngBytes = new Uint8Array([137, 80, 78, 71]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: {
+          get: (name: string) => (name.toLowerCase() === 'content-type' ? 'image/png' : null),
+        },
+        arrayBuffer: async () => pngBytes.buffer,
+      }),
+    );
+
+    const messages = await buildProxyMessages(
+      '/api/proxy/azure/stream',
+      [
+        userMessage('Describe the attached image', [
+          { path: 'references/logo.png', name: 'logo.png', kind: 'image', size: 4 },
+        ]),
+      ],
+      { projectId: 'project-1' },
+    );
+
+    expect(messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe the attached image' },
+          {
+            type: 'image_url',
+            image_url: { url: 'data:image/png;base64,iVBORw==' },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('keeps an OpenAI-compatible fallback when image_url content cannot be read', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        headers: { get: () => null },
+        arrayBuffer: async () => new ArrayBuffer(0),
+      }),
+    );
+
+    const messages = await buildProxyMessages(
+      '/api/proxy/openai/stream',
+      [
+        userMessage('Describe the attached image', [
+          { path: 'references/logo.png', name: 'logo.png', kind: 'image', size: 4 },
+        ]),
+      ],
+      { projectId: 'project-1' },
+    );
+
+    expect(messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe the attached image' },
+          {
+            type: 'text',
+            text: 'Attached image could not be sent as native image content: path: references/logo.png | name: logo.png',
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('keeps OpenAI-compatible image attachments as text when native images are disabled', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+
+    const messages = await buildProxyMessages(
+      '/api/proxy/openai/stream',
+      [
+        userMessage('Describe the attached image\n\n<attached-project-files>metadata</attached-project-files>', [
+          { path: 'references/logo.png', name: 'logo.png', kind: 'image', size: 4 },
+        ]),
+      ],
+      { projectId: 'project-1', nativeImageAttachments: false },
+    );
+
     expect(fetch).not.toHaveBeenCalled();
     expect(messages).toEqual([
-      { role: 'user', content: 'Describe the attached image' },
+      {
+        role: 'user',
+        content: 'Describe the attached image\n\n<attached-project-files>metadata</attached-project-files>',
+      },
     ]);
   });
 

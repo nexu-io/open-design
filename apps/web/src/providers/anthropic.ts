@@ -11,7 +11,11 @@ import Anthropic from '@anthropic-ai/sdk';
 import { effectiveMaxTokens } from '../state/maxTokens';
 import type { AppConfig, ChatMessage } from '../types';
 import { streamMessageAnthropicProxy } from './anthropic-compatible';
-import type { ProxyContext } from './api-proxy';
+import {
+  buildAnthropicMessageContent,
+  type AnthropicMessageContent,
+  type ProxyContext,
+} from './api-proxy';
 import { streamMessageAzure } from './azure-compatible';
 import { streamMessageGoogle } from './google-compatible';
 import { streamMessageOllama } from './ollama-compatible';
@@ -43,17 +47,12 @@ export async function streamMessage(
   history: ChatMessage[],
   signal: AbortSignal,
   handlers: StreamHandlers,
-  // Only the senseaudio / aihubmix branches read `context.projectId`
-  // today (so the daemon-side `generate_image` tool can write into the
-  // active project's folder). Other branches accept and ignore — keeping the
-  // signature uniform means the single call site in ProjectView passes
-  // the same shape regardless of protocol.
   context?: ProxyContext,
 ): Promise<void> {
   // Prefer the explicit Settings protocol; keep the legacy heuristic as a
   // fallback for configs saved before apiProtocol existed.
   if (cfg.apiProtocol === 'azure') {
-    return streamMessageAzure(cfg, system, history, signal, handlers);
+    return streamMessageAzure(cfg, system, history, signal, handlers, context);
   }
   if (cfg.apiProtocol === 'ollama') {
     return streamMessageOllama(cfg, system, history, signal, handlers);
@@ -74,7 +73,7 @@ export async function streamMessage(
     return;
   }
   if (cfg.apiProtocol === 'openai' || (!cfg.apiProtocol && isOpenAICompatible(cfg.model, cfg.baseUrl))) {
-    return streamMessageOpenAI(cfg, system, history, signal, handlers);
+    return streamMessageOpenAI(cfg, system, history, signal, handlers, context);
   }
 
   if (usesAnthropicProxy(cfg)) {
@@ -90,12 +89,13 @@ export async function streamMessage(
   let acc = '';
 
   try {
+    const messages = await buildNativeAnthropicMessages(history, context);
     const stream = client.messages.stream(
       {
         model: cfg.model,
         max_tokens: effectiveMaxTokens(cfg),
         system,
-        messages: history.map((m) => ({ role: m.role, content: m.content })),
+        messages,
       },
       { signal },
     );
@@ -111,4 +111,21 @@ export async function streamMessage(
     if ((err as Error).name === 'AbortError') return;
     handlers.onError(err instanceof Error ? err : new Error(String(err)));
   }
+}
+
+async function buildNativeAnthropicMessages(
+  history: ChatMessage[],
+  context?: ProxyContext,
+): Promise<Array<{ role: 'user' | 'assistant'; content: AnthropicMessageContent }>> {
+  const messages: Array<{ role: 'user' | 'assistant'; content: AnthropicMessageContent }> = [];
+  for (const message of history) {
+    if (message.role !== 'user' && message.role !== 'assistant') continue;
+    messages.push({
+      role: message.role,
+      content: context?.projectId
+        ? await buildAnthropicMessageContent(message, context.projectId)
+        : message.content,
+    });
+  }
+  return messages;
 }

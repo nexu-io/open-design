@@ -382,6 +382,8 @@ export const fr: Dict = {
   'settings.azureCustomDeploymentName': 'Nom de déploiement personnalisé',
   'settings.azureDeploymentModelHint': 'Pour Azure OpenAI, ce champ est utilisé comme nom du déploiement dans /openai/deployments/<model>. Saisissez le nom du déploiement créé dans Azure.',
   'settings.azureModelFetchHint': 'Pour Azure OpenAI, saisissez le nom du déploiement créé dans Azure. La découverte automatique des déploiements n’est pas disponible depuis ce point d’accès BYOK.',
+  'settings.azureNativeImageInput': 'Activer l’entrée d’images pour ce déploiement Azure',
+  'settings.azureNativeImageInputHint': 'Activez cette option uniquement lorsque le déploiement Azure sélectionné prend en charge l’entrée d’images. Les déploiements texte uniquement doivent la laisser désactivée.',
   'settings.apiVersion': 'Version API',
   'settings.byokImageModel': 'Modèle de génération d\'images',
   'settings.byokVideoModel': 'Modèle de génération de vidéo',

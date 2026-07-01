@@ -382,6 +382,8 @@ export const th: Dict = {
   'settings.azureCustomDeploymentName': 'ชื่อ deployment ที่กำหนดเอง',
   'settings.azureDeploymentModelHint': 'สำหรับ Azure OpenAI ฟิลด์นี้ใช้เป็นชื่อ Deployment ใน /openai/deployments/<model> ป้อนชื่อ Deployment ที่คุณสร้างใน Azure',
   'settings.azureModelFetchHint': 'กรอกชื่อ deployment จากทรัพยากร Azure ของคุณ Azure deployment ไม่สามารถดึงข้อมูลอัตโนมัติได้',
+  'settings.azureNativeImageInput': 'เปิดใช้งานการป้อนรูปภาพสำหรับการปรับใช้งาน Azure นี้',
+  'settings.azureNativeImageInputHint': 'เปิดตัวเลือกนี้เฉพาะเมื่อการปรับใช้งาน Azure ที่เลือกรองรับการป้อนรูปภาพ การปรับใช้งานแบบข้อความเท่านั้นควรปิดไว้',
   'settings.apiVersion': 'เวอร์ชัน API',
   'settings.byokImageModel': 'โมเดลสร้างภาพ',
   'settings.byokVideoModel': 'โมเดลสร้างวิดีโอ',

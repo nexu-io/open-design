@@ -382,6 +382,8 @@ export const ptBR: Dict = {
   'settings.azureCustomDeploymentName': 'Nome de deployment personalizado',
   'settings.azureDeploymentModelHint': 'No Azure OpenAI, este campo e usado como nome do deployment em /openai/deployments/<model>. Informe o nome do deployment criado no Azure.',
   'settings.azureModelFetchHint': 'Insira o nome da implantação do seu recurso do Azure. As implantações do Azure não podem ser obtidas automaticamente.',
+  'settings.azureNativeImageInput': 'Habilitar entrada de imagem para esta implantação do Azure',
+  'settings.azureNativeImageInputHint': 'Ative isto somente quando a implantação do Azure selecionada oferecer suporte a entrada de imagem. Implantações somente de texto devem deixá-la desativada.',
   'settings.apiVersion': 'Versão da API',
   'settings.byokImageModel': 'Modelo de geração de imagens',
   'settings.byokVideoModel': 'Modelo de geração de vídeo',

@@ -87,7 +87,7 @@ async function buildApiAttachmentContext(
       byPath.get(attachment.path) ??
       byName.get(attachment.path) ??
       byName.get(attachment.name);
-    if (options.omitNativeImageAttachments && canSendNativeAnthropicImage(attachment)) {
+    if (options.omitNativeImageAttachments && canSendNativeImage(attachment)) {
       continue;
     }
     if (remaining <= 0) {
@@ -169,7 +169,7 @@ async function renderApiAttachmentBlock(
   return { text, charsUsed: text.length };
 }
 
-function canSendNativeAnthropicImage(
+function canSendNativeImage(
   attachment: ChatAttachment,
 ): boolean {
   return attachment.kind === 'image' && isAnthropicSupportedImagePath(attachment.path);

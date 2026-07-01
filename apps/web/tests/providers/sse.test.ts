@@ -7,6 +7,7 @@ import {
   sanitizePriorAssistantTurnForTranscript,
   streamViaDaemon,
 } from '../../src/providers/daemon';
+import { streamMessageAzure } from '../../src/providers/azure-compatible';
 import { streamMessageOpenAI } from '../../src/providers/openai-compatible';
 import { parseSseFrame } from '../../src/providers/sse';
 
@@ -2055,6 +2056,69 @@ describe('streamMessageOpenAI', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/proxy/openai/stream', expect.any(Object));
     expect(handlers.onDelta).toHaveBeenCalledWith('hi');
     expect(handlers.onDone).toHaveBeenCalledWith('hi');
+  });
+
+  it('passes project context to the OpenAI proxy endpoint', async () => {
+    const handlers = createStreamHandlers();
+    const fetchMock = vi.fn(async (_input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) =>
+      sseResponse('event: end\ndata: {}\n\n'),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamMessageOpenAI(
+      {
+        mode: 'api',
+        apiKey: 'test-key',
+        baseUrl: 'https://example.test',
+        model: 'gpt-test',
+        agentId: null,
+        skillId: null,
+        designSystemId: null,
+      },
+      '',
+      [{ id: '1', role: 'user', content: 'hello' }],
+      new AbortController().signal,
+      handlers,
+      { projectId: 'project-1' },
+    );
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init).toBeDefined();
+    if (!init) throw new Error('expected proxy request init');
+    expect(JSON.parse(String(init.body))).toMatchObject({ projectId: 'project-1' });
+  });
+});
+
+describe('streamMessageAzure', () => {
+  it('passes project context to the Azure proxy endpoint', async () => {
+    const handlers = createStreamHandlers();
+    const fetchMock = vi.fn(async (_input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) =>
+      sseResponse('event: end\ndata: {}\n\n'),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamMessageAzure(
+      {
+        mode: 'api',
+        apiKey: 'test-key',
+        baseUrl: 'https://example.test',
+        model: 'gpt-test',
+        agentId: null,
+        skillId: null,
+        designSystemId: null,
+      },
+      '',
+      [{ id: '1', role: 'user', content: 'hello' }],
+      new AbortController().signal,
+      handlers,
+      { projectId: 'project-1' },
+    );
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init).toBeDefined();
+    if (!init) throw new Error('expected proxy request init');
+    expect(fetchMock).toHaveBeenCalledWith('/api/proxy/azure/stream', expect.any(Object));
+    expect(JSON.parse(String(init.body))).toMatchObject({ projectId: 'project-1' });
   });
 });
 

@@ -389,13 +389,14 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
-  it('keeps Azure API version in the Azure draft only', () => {
+  it('keeps Azure API version and image input opt-in in the Azure draft only', () => {
     const config: AppConfig = {
       ...baseConfig,
       apiProtocol: 'azure',
       apiKey: 'azure-key',
       model: 'deployment-one',
       apiVersion: '2024-10-21',
+      nativeImageInputEnabled: true,
     };
 
     const next = switchApiProtocolConfig(config, 'openai');
@@ -405,10 +406,20 @@ describe('SettingsDialog API protocol switching', () => {
       apiKey: '',
       apiVersion: '',
     });
+    expect(next.nativeImageInputEnabled).toBeUndefined();
     expect(next.apiProtocolConfigs?.azure).toMatchObject({
       apiKey: 'azure-key',
       model: 'deployment-one',
       apiVersion: '2024-10-21',
+      nativeImageInputEnabled: true,
+    });
+
+    const restored = switchApiProtocolConfig(next, 'azure');
+
+    expect(restored).toMatchObject({
+      apiProtocol: 'azure',
+      apiVersion: '2024-10-21',
+      nativeImageInputEnabled: true,
     });
   });
 });

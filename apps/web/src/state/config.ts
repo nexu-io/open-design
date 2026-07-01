@@ -108,6 +108,7 @@ export interface KnownProvider {
   model: string;
   /** Optional provider-specific model choices shown in Settings. */
   models?: string[];
+  imageCapableModels?: string[];
   /** Some local/self-hosted endpoints do not require bearer credentials. */
   requiresApiKey?: boolean;
 }
@@ -129,6 +130,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     baseUrl: 'https://api.anthropic.com',
     model: 'claude-sonnet-4-5',
     models: ['claude-sonnet-4-5', 'claude-opus-4-5', 'claude-haiku-4-5'],
+    imageCapableModels: ['claude-sonnet-4-5', 'claude-opus-4-5', 'claude-haiku-4-5'],
   },
   {
     label: 'DeepSeek — Anthropic',
@@ -162,7 +164,8 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     protocol: 'openai',
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-4o',
-    models: ['gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
+    models: ['gpt-5.5', 'gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
+    imageCapableModels: ['gpt-5.5', 'gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
   },
   {
     label: 'OpenRouter',
@@ -179,6 +182,13 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'deepseek/deepseek-chat',
       'deepseek/deepseek-r1',
     ],
+    imageCapableModels: [
+      'anthropic/claude-3.7-sonnet',
+      'anthropic/claude-3.5-sonnet',
+      'google/gemini-2.5-flash',
+      'google/gemini-2.5-pro',
+      'openai/gpt-4o',
+    ],
   },
   {
     label: 'Azure OpenAI',
@@ -193,6 +203,15 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     baseUrl: 'https://generativelanguage.googleapis.com',
     model: 'gemini-3.5-flash',
     models: [
+      'gemini-3.5-flash',
+      'gemini-3.1-pro-preview',
+      'gemini-3-flash-preview',
+      'gemini-3.1-flash-lite',
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+    ],
+    imageCapableModels: [
       'gemini-3.5-flash',
       'gemini-3.1-pro-preview',
       'gemini-3-flash-preview',
@@ -397,6 +416,14 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'qwen3.5:397b',
       'rnj-1:8b',
     ],
+    imageCapableModels: [
+      'gemini-3-flash-preview',
+      'gemma3:4b',
+      'gemma3:12b',
+      'gemma3:27b',
+      'qwen3-vl:235b',
+      'qwen3-vl:235b-instruct',
+    ],
   },
   {
     label: 'Ollama Self-hosted (local)',
@@ -404,6 +431,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     baseUrl: 'http://localhost:11434',
     model: 'gemma3:4b',
     models: ['gemma3:4b', 'gemma3:12b', 'gemma3:27b', 'gpt-oss:20b'],
+    imageCapableModels: ['gemma3:4b', 'gemma3:12b', 'gemma3:27b'],
     requiresApiKey: false,
   },
   {
@@ -444,6 +472,15 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'gemini-2.0-flash',
       'deepseek-chat',
       'deepseek-reasoner',
+    ],
+    imageCapableModels: [
+      'gpt-5.5',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'claude-opus-4-8',
+      'claude-sonnet-4-5',
+      'claude-haiku-4-5',
+      'gemini-2.0-flash',
     ],
   },
 ];

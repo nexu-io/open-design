@@ -382,6 +382,8 @@ export const ru: Dict = {
   'settings.azureCustomDeploymentName': 'Пользовательское имя развёртывания',
   'settings.azureDeploymentModelHint': 'Для Azure OpenAI это поле используется как имя развертывания в /openai/deployments/<model>. Укажите имя развертывания, созданного в Azure.',
   'settings.azureModelFetchHint': 'Введите имя развёртывания из вашего ресурса Azure. Развёртывания Azure нельзя получить автоматически.',
+  'settings.azureNativeImageInput': 'Включить ввод изображений для этого развертывания Azure',
+  'settings.azureNativeImageInputHint': 'Включайте этот параметр только если выбранное развертывание Azure поддерживает ввод изображений. Для текстовых развертываний его следует оставить выключенным.',
   'settings.apiVersion': 'Версия API',
   'settings.byokImageModel': 'Модель генерации изображений',
   'settings.byokVideoModel': 'Модель генерации видео',

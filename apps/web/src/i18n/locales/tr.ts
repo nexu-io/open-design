@@ -382,6 +382,8 @@ export const tr: Dict = {
   'settings.azureCustomDeploymentName': 'Özel dağıtım adı',
   'settings.azureDeploymentModelHint': 'Azure OpenAI icin bu alan /openai/deployments/<model> icindeki dagitim adi olarak kullanilir. Azureda olusturdugunuz dagitim adini girin.',
   'settings.azureModelFetchHint': 'Azure kaynağınızdaki dağıtım adını girin. Azure dağıtımları otomatik olarak getirilemez.',
+  'settings.azureNativeImageInput': 'Bu Azure dağıtımı için görüntü girişini etkinleştir',
+  'settings.azureNativeImageInputHint': 'Bunu yalnızca seçilen Azure dağıtımı görüntü girişini destekliyorsa açın. Yalnızca metin destekleyen dağıtımlarda kapalı bırakılmalıdır.',
   'settings.apiVersion': 'API sürümü',
   'settings.byokImageModel': 'Görüntü oluşturma modeli',
   'settings.byokVideoModel': 'Video oluşturma modeli',
