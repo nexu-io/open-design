@@ -8,6 +8,7 @@ import { EntryShell } from '../../src/components/EntryShell';
 import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
 import { I18nProvider } from '../../src/i18n';
 import type { AgentInfo, AppConfig } from '../../src/types';
+import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 
 const analyticsMocks = vi.hoisted(() => ({
   track: vi.fn(),
@@ -497,6 +498,36 @@ describe('EntryShell new project rail', () => {
       }),
       undefined,
     );
+  });
+});
+
+describe('EntryShell Home submit handoff', () => {
+  it('keeps the Home run button in sending state until project creation resolves', async () => {
+    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.endsWith('/api/plugins')) return jsonResponse({ plugins: [] });
+      if (url.endsWith('/api/mcp/servers')) return jsonResponse({ servers: [] });
+      if (url.endsWith('/api/community/discord')) return jsonResponse({ stale: true });
+      if (url.endsWith('/api/github/open-design')) return jsonResponse({ stale: true });
+      return jsonResponse({});
+    }) as typeof fetch;
+    let resolveCreate: (accepted: boolean) => void = () => undefined;
+    const onCreateProject = vi.fn(
+      () => new Promise<boolean>((resolve) => { resolveCreate = resolve; }),
+    );
+    renderHome({ onCreateProject });
+
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('Build a landing page');
+    const submit = await screen.findByTestId('home-hero-submit') as HTMLButtonElement;
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toContain('Sending…');
+
+    resolveCreate(true);
+    await waitFor(() => expect(submit.disabled).toBe(false));
   });
 });
 
