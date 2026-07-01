@@ -629,7 +629,7 @@ describe('FileWorkspace design-system project surface', () => {
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      return new Response(new Blob(['zip']), {
+      return new Response('zip', {
         status: 200,
         headers: { 'Content-Disposition': 'attachment; filename="acme.zip"' },
       });
