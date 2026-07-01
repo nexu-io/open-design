@@ -9,9 +9,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
 OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.override.yml"
+LINUX_OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.linux.yml"
 HEALTH_TIMEOUT=60
 
 COMPOSE_FILES=(-f "$COMPOSE_FILE")
+if [ "$(uname -s)" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
+  COMPOSE_FILES+=(-f "$LINUX_OVERRIDE_FILE")
+fi
 if [ -f "$OVERRIDE_FILE" ]; then
   COMPOSE_FILES+=(-f "$OVERRIDE_FILE")
 fi

@@ -469,13 +469,18 @@ if [ "$OS" = "Linux" ] && [ "$OPT_NO_SYSTEMD" = "0" ]; then
       echo "Type=oneshot"
       echo "RemainAfterExit=yes"
       echo "WorkingDirectory=${DEPLOY_DIR}"
-      if [ -f "$OVERRIDE_FILE" ]; then
-        echo "ExecStart=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} -f ${OVERRIDE_FILE} up -d --no-build"
-        echo "ExecStop=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} -f ${OVERRIDE_FILE} down"
-      else
-        echo "ExecStart=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} up -d --no-build"
-        echo "ExecStop=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} down"
+      # Build the compose -f list to match what the installer used at install
+      # time, so systemd restarts use the same file set (including the Linux
+      # host-network override when present).
+      _COMPOSE_ARGS="-f ${COMPOSE_FILE}"
+      if [ -f "$LINUX_OVERRIDE_FILE" ]; then
+        _COMPOSE_ARGS="${_COMPOSE_ARGS} -f ${LINUX_OVERRIDE_FILE}"
       fi
+      if [ -f "$OVERRIDE_FILE" ]; then
+        _COMPOSE_ARGS="${_COMPOSE_ARGS} -f ${OVERRIDE_FILE}"
+      fi
+      echo "ExecStart=${CONTAINER_BIN} compose ${_COMPOSE_ARGS} up -d --no-build"
+      echo "ExecStop=${CONTAINER_BIN} compose ${_COMPOSE_ARGS} down"
       echo "TimeoutStartSec=120"
       echo ""
       echo "[Install]"
