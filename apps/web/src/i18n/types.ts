@@ -939,6 +939,9 @@ export interface Dict {
   'entry.followXLabel': string;
   'entry.followThreadsLabel': string;
   'entry.youtubeLabel': string;
+  'entry.followInstagramLabel': string;
+  'entry.followLinkedinLabel': string;
+  'entry.followXiaohongshuLabel': string;
   'entry.resizeAria': string;
   'entry.loadingWorkspace': string;
   'entry.useEverywhereTitle': string;
@@ -2922,6 +2925,11 @@ export interface Dict {
   'designFiles.usefulInfoTip13': string;
   'designFiles.usefulInfoTip14': string;
   'designFiles.usefulInfoTip15': string;
+  'designFiles.usefulInfoTip16': string;
+  'designFiles.usefulInfoTip17': string;
+  'designFiles.usefulInfoTip18': string;
+  'designFiles.usefulInfoTip19': string;
+  'designFiles.usefulInfoTip20': string;
   'quickSwitcher.placeholder': string;
   'quickSwitcher.empty': string;
   'quickSwitcher.noMatches': string;
