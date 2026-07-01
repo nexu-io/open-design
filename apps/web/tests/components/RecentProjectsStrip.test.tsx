@@ -51,6 +51,7 @@ vi.mock('../../src/providers/registry', () => ({
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -67,7 +68,110 @@ function project(overrides: Partial<Project>): Project {
   };
 }
 
+function projects(count: number): Project[] {
+  return Array.from({ length: count }, (_, index) =>
+    project({
+      id: `project-${index + 1}`,
+      name: `Project ${index + 1}`,
+      updatedAt: count - index,
+    }),
+  );
+}
+
 describe('RecentProjectsStrip', () => {
+  it('shows seven projects when the row has room for a seventh card', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function getRect(this: HTMLElement) {
+      return {
+        x: 0,
+        y: 0,
+        width: this.classList.contains('recent-projects__row') ? 1332 : 180,
+        height: 100,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+        toJSON: () => ({}),
+      };
+    });
+
+    const { container } = render(
+      <RecentProjectsStrip
+        projects={projects(8)}
+        onOpen={() => {}}
+        onViewAll={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelectorAll('.recent-projects__card')).toHaveLength(7);
+    });
+  });
+
+  it('keeps six projects when the row is below the wide-card threshold', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function getRect(this: HTMLElement) {
+      return {
+        x: 0,
+        y: 0,
+        width: this.classList.contains('recent-projects__row') ? 1331 : 180,
+        height: 100,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+        toJSON: () => ({}),
+      };
+    });
+
+    const { container } = render(
+      <RecentProjectsStrip
+        projects={projects(8)}
+        onOpen={() => {}}
+        onViewAll={() => {}}
+      />,
+    );
+
+    expect(container.querySelectorAll('.recent-projects__card')).toHaveLength(6);
+  });
+
+  it('remeasures when projects arrive after the initial empty render', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 1400,
+    });
+
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function getRect(this: HTMLElement) {
+      return {
+        x: 0,
+        y: 0,
+        width: this.classList.contains('recent-projects__row') ? 1331 : 180,
+        height: 100,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+        toJSON: () => ({}),
+      };
+    });
+
+    const { container, rerender } = render(
+      <RecentProjectsStrip
+        projects={[]}
+        onOpen={() => {}}
+        onViewAll={() => {}}
+      />,
+    );
+
+    rerender(
+      <RecentProjectsStrip
+        projects={projects(8)}
+        onOpen={() => {}}
+        onViewAll={() => {}}
+      />,
+    );
+
+    expect(container.querySelectorAll('.recent-projects__card')).toHaveLength(6);
+  });
+
   it('matches project cards with previews and design-system tags', async () => {
     const { container } = render(
       <RecentProjectsStrip
