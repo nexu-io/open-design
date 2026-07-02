@@ -1,0 +1,134 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-social-instagram-carousel",
+  "title": "Instagram Carousel",
+  "title_i18n": {
+    "en": "Instagram Carousel",
+    "zh-CN": "Instagram 轮播图",
+    "zh-TW": "Instagram 輪播圖",
+    "ja": "Instagramカルーセル",
+    "ko": "인스타그램 캐러셀",
+    "de": "Instagram-Karussell",
+    "fr": "Carrousel Instagram",
+    "ru": "Карусель Instagram",
+    "es": "Carrusel de Instagram",
+    "pt-BR": "Carrossel do Instagram",
+    "it": "Carosello Instagram",
+    "vi": "Băng chuyền Instagram",
+    "pl": "Karuzela Instagram",
+    "id": "Korsel Instagram",
+    "nl": "Instagram-carrousel",
+    "ar": "دوّار Instagram",
+    "tr": "Instagram Karuseli",
+    "uk": "Карусель Instagram"
+  },
+  "version": "0.1.0",
+  "description": "Instagram-native carousel on the 4:5 (1080x1350) feed format: a hook cover, swipeable body slides, and a CTA end-card, with safe-area-aware layout and accessible contrast.",
+  "description_i18n": {
+    "en": "Instagram-native carousel on the 4:5 (1080x1350) feed format: a hook cover, swipeable body slides, and a CTA end-card, with safe-area-aware layout and accessible contrast.",
+    "zh-CN": "基于 4:5 (1080x1350) 信息流尺寸的 Instagram 轮播图: 钩子封面 + 可滑动正文页 + 行动号召尾页, 兼顾安全边距与无障碍对比度。",
+    "zh-TW": "基於 4:5 (1080x1350) 動態消息尺寸的 Instagram 輪播圖：鉤子封面、可滑動內文頁與行動呼籲尾頁，並顧及安全邊距與無障礙對比度。",
+    "ja": "4:5 (1080x1350) フィード形式のInstagramカルーセル: フックの表紙、スワイプ可能な本文スライド、CTAの最終カード。セーフエリアとアクセシブルなコントラストに対応。",
+    "ko": "4:5 (1080x1350) 피드 형식의 인스타그램 캐러셀: 후크 표지, 스와이프 본문 슬라이드, CTA 마지막 카드. 안전 영역과 접근성 대비를 고려합니다.",
+    "de": "Instagram-Karussell im 4:5-Feedformat (1080x1350): Hook-Cover, wischbare Inhaltsfolien und eine CTA-Endkarte, mit Safe-Area-Layout und barrierefreiem Kontrast.",
+    "fr": "Carrousel Instagram au format fil 4:5 (1080x1350) : une couverture accrocheuse, des diapositives de contenu défilables et une carte CTA finale, avec mise en page tenant compte des zones sûres et un contraste accessible.",
+    "ru": "Карусель Instagram в формате ленты 4:5 (1080x1350): цепляющая обложка, прокручиваемые слайды и финальная карточка с призывом к действию, с учётом безопасных зон и доступной контрастности.",
+    "es": "Carrusel de Instagram en formato de feed 4:5 (1080x1350): una portada gancho, diapositivas deslizables y una tarjeta final con CTA, con diseño que respeta las zonas seguras y contraste accesible.",
+    "pt-BR": "Carrossel do Instagram no formato de feed 4:5 (1080x1350): uma capa-gancho, slides deslizáveis e um cartão final com CTA, com layout que respeita as zonas seguras e contraste acessível.",
+    "it": "Carosello Instagram nel formato feed 4:5 (1080x1350): una copertina-gancio, slide scorrevoli e una card finale con CTA, con layout attento alle aree sicure e contrasto accessibile.",
+    "vi": "Băng chuyền Instagram theo định dạng bảng tin 4:5 (1080x1350): trang bìa thu hút, các trang nội dung vuốt được và thẻ CTA cuối, với bố cục tôn trọng vùng an toàn và độ tương phản dễ tiếp cận.",
+    "pl": "Karuzela Instagram w formacie 4:5 (1080x1350): przyciągająca okładka, przewijane slajdy i końcowa karta CTA, z układem uwzględniającym strefy bezpieczne i dostępnym kontrastem.",
+    "id": "Korsel Instagram dalam format feed 4:5 (1080x1350): sampul pengait, slide konten yang dapat digeser, dan kartu CTA akhir, dengan tata letak sadar area aman dan kontras yang mudah diakses.",
+    "nl": "Instagram-carrousel in 4:5-feedformaat (1080x1350): een pakkende cover, veegbare inhoudsdia's en een CTA-eindkaart, met safe-area-bewuste lay-out en toegankelijk contrast.",
+    "ar": "دوّار Instagram بتنسيق الخلاصة 4:5 (1080x1350): غلاف جذّاب، شرائح محتوى قابلة للتمرير، وبطاقة ختامية للحث على الإجراء، مع تخطيط يراعي المناطق الآمنة وتباين يسهل الوصول إليه.",
+    "tr": "4:5 (1080x1350) akış biçiminde Instagram karuseli: dikkat çekici kapak, kaydırılabilir içerik slaytları ve bir CTA kapanış kartı; güvenli alana duyarlı düzen ve erişilebilir kontrast ile.",
+    "uk": "Карусель Instagram у форматі стрічки 4:5 (1080x1350): обкладинка-гачок, прокручувані слайди та фінальна картка із закликом до дії, з урахуванням безпечних зон і доступним контрастом."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/social-instagram-carousel",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "marketing",
+    "web",
+    "desktop",
+    "instagram",
+    "social",
+    "carousel"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the Instagram Carousel template to turn my content into a swipeable 4:5 (1080x1350) Instagram carousel: a hook cover, 5-8 body slides, and a CTA end-card. Preserve the template's visual signature and safe areas, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「Instagram 轮播图」模板把我的内容做成可滑动的 4:5 (1080x1350) Instagram 轮播图: 钩子封面 + 5-8 张正文页 + 行动号召尾页。保持模板的视觉签名与安全边距，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Make designs feel expensive",
+          "title_i18n": {
+            "en": "Make designs feel expensive",
+            "zh-CN": "让设计显得高级"
+          }
+        },
+        {
+          "path": "./example-playstation.html",
+          "title": "PlayStation marketing",
+          "title_i18n": {
+            "en": "PlayStation marketing",
+            "zh-CN": "PlayStation 营销"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html",
+        "./example-playstation.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
