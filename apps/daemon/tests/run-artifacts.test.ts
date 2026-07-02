@@ -59,6 +59,40 @@ function pair(
   ];
 }
 
+// Helper: emit a sidechain (subagent-internal) tool_use+tool_result
+// pair. claude-stream tags both events with the dispatching Task/Agent
+// tool_use id as `parentToolUseId`; the web renderer hides these behind
+// the parent TaskCard, and the artifact counters must likewise treat
+// them as subagent-internal work, not main-run output.
+function sidechainPair(
+  name: string,
+  filePath: string,
+  parentToolUseId = 'toolu_task_parent',
+  id = freshId(),
+) {
+  return [
+    {
+      event: 'agent',
+      data: {
+        type: 'tool_use',
+        id,
+        name,
+        input: { file_path: filePath },
+        parentToolUseId,
+      },
+    },
+    {
+      event: 'agent',
+      data: {
+        type: 'tool_result',
+        toolUseId: id,
+        isError: false,
+        parentToolUseId,
+      },
+    },
+  ];
+}
+
 // Helper: emit a tool_use with no matching tool_result. Used to pin
 // the "tool still in flight" / "adapter swallowed result" behavior.
 function unfinished(name: string, filePath: string, id = freshId()) {
@@ -197,6 +231,35 @@ describe('countNewHtmlArtifacts', () => {
     ).toBe(1);
   });
 
+  it('does NOT count a sidechain (subagent) Write on a .html path', () => {
+    // A subagent's Write lands on disk, but it is subagent-internal
+    // work represented by the parent TaskCard — the web renderer hides
+    // it from the main transcript (AssistantMessage skips events with
+    // parentToolUseId) and the artifact funnel must stay aligned with
+    // what the run's main line produced.
+    expect(
+      countNewHtmlArtifacts(sidechainPair('Write', '/proj/index.html')),
+    ).toBe(0);
+  });
+
+  it('counts only main-line writes when main and sidechain touch different paths', () => {
+    expect(
+      countNewHtmlArtifacts([
+        ...pair('Write', '/proj/index.html'),
+        ...sidechainPair('Write', '/proj/research.html'),
+      ]),
+    ).toBe(1);
+  });
+
+  it('still counts a main-line write when a sidechain wrote the same path', () => {
+    expect(
+      countNewHtmlArtifacts([
+        ...sidechainPair('Write', '/proj/index.html'),
+        ...pair('Edit', '/proj/index.html'),
+      ]),
+    ).toBe(1);
+  });
+
   it('ignores Read / Grep / Bash even when their input names a .html file', () => {
     expect(
       countNewHtmlArtifacts([
@@ -229,6 +292,14 @@ describe('didRunCreateDesignSystemFile', () => {
     expect(
       didRunCreateDesignSystemFile([
         ...pair('Write', '/proj/DESIGN.md', true),
+      ]),
+    ).toBe(false);
+  });
+
+  it('is false when only a sidechain (subagent) wrote DESIGN.md', () => {
+    expect(
+      didRunCreateDesignSystemFile([
+        ...sidechainPair('Write', '/proj/DESIGN.md'),
       ]),
     ).toBe(false);
   });
@@ -278,6 +349,15 @@ describe('countDesignSystemPreviewModules', () => {
         ...pair('Write', '/proj/docs/intro.html'),
       ]),
     ).toBe(0);
+  });
+
+  it('skips sidechain (subagent) preview writes', () => {
+    expect(
+      countDesignSystemPreviewModules([
+        ...sidechainPair('Write', '/proj/preview/colors.html'),
+        ...pair('Write', '/proj/preview/typography.html'),
+      ]),
+    ).toBe(1);
   });
 
   it('skips preview writes whose tool_result reported isError', () => {
