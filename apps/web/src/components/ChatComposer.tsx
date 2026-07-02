@@ -44,6 +44,7 @@ import type {
   AppliedPluginSnapshot,
   ChatAnalyticsEntryFrom,
   ChatSessionMode,
+  ChatTeamSelection,
   ConnectorDetail,
   InstalledPluginRecord,
   PluginSourceKind,
@@ -373,19 +374,7 @@ export interface ChatSendMeta {
   /** Multi-agent team selected via @team mention. When present, the run
    *  should route through the multi-agent team module instead of the
    *  default single-agent path. */
-  team?: {
-    id: string;
-    mode: string;
-    name: string;
-    assignments: Array<{
-      agentId: string;
-      agentType: string;
-      agentName: string;
-      role: string;
-      score: number;
-      reason: string;
-    }>;
-  };
+  team?: ChatTeamSelection;
 }
 
 /**

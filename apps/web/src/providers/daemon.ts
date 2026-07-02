@@ -18,6 +18,7 @@ import type {
   ChatRunStatus,
   ChatRunStatusResponse,
   ChatRequest,
+  ChatTeamSelection,
   ChatSessionMode,
   ChatSseEvent,
   ChatSseStartPayload,
@@ -297,6 +298,8 @@ export interface DaemonStreamOptions {
   // (page_name / area / entry_from / DS context). Behavior never
   // depends on them.
   analyticsHints?: ChatAnalyticsHints;
+  /** Multi-agent team selection from @team mention. */
+  team?: ChatTeamSelection;
 }
 
 export interface DaemonReattachOptions {
@@ -587,6 +590,7 @@ export async function streamViaDaemon({
   onRunStatus,
   onRunEventId,
   analyticsHints,
+  team,
 }: DaemonStreamOptions): Promise<void> {
   const emitRunStatus = (status: ChatRunStatus) => {
     onRunStatus?.(status);
@@ -619,6 +623,7 @@ export async function streamViaDaemon({
     ...(mediaExecution ? { mediaExecution } : {}),
     ...(titleGeneration?.enabled ? { titleGeneration: { enabled: true } } : {}),
     ...(analyticsHints ? { analyticsHints } : {}),
+    ...(team ? { team } : {}),
   };
   const body = JSON.stringify(request);
 

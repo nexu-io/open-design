@@ -5004,6 +5004,7 @@ export function ProjectView({
           appliedPluginSnapshotId:
             meta?.appliedPluginSnapshotId ?? meta?.appliedPluginSnapshot?.snapshotId ?? null,
           research: meta?.research,
+          team: meta?.team,
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
