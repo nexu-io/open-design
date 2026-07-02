@@ -465,14 +465,12 @@ export function Header({
               </ul>
             </li>
 
-            {/* Community — Contributors / Ambassadors / Moderators anchor
-                into the `/community/` hub's sections (same destinations as
-                upstream main's header), not the standalone static pages.
-                The community pages are non-locale-aware, so no `href()`
-                localization here. */}
+            {/* Community — Contributors / Ambassadors / Moderators. These
+                pages are now localized Astro routes, so link through `href()`
+                to keep visitors on their language variant. */}
             <li className='has-dropdown'>
               <a
-                href='/community/'
+                href={href('/community/')}
                 className={active === 'community' ? 'is-active' : undefined}
               >
                 {productMenuCopy.community}
@@ -480,21 +478,21 @@ export function Header({
               </a>
               <ul className='nav-dropdown' aria-label={productMenuCopy.community}>
                 <li>
-                  <a href='/community/contributors/'>
+                  <a href={href('/community/contributors/')}>
                     <span className='dropdown-name'>
                       {productMenuCopy.communityItems.contributors}
                     </span>
                   </a>
                 </li>
                 <li>
-                  <a href='/community/ambassadors/'>
+                  <a href={href('/community/ambassadors/')}>
                     <span className='dropdown-name'>
                       {productMenuCopy.communityItems.ambassadors}
                     </span>
                   </a>
                 </li>
                 <li>
-                  <a href='/community/moderators/'>
+                  <a href={href('/community/moderators/')}>
                     <span className='dropdown-name'>
                       {productMenuCopy.communityItems.moderators}
                     </span>

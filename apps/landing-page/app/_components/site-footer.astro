@@ -127,6 +127,15 @@ const l = L[locale as keyof typeof L] ?? L.en;
       </div>
 
       <div class='sub-footer-col'>
+        <h5><a href={href('/community/')}>{menu.community}</a></h5>
+        <ul>
+          <li><a href={href('/community/contributors/')}>{menu.communityItems.contributors}</a></li>
+          <li><a href={href('/community/ambassadors/')}>{menu.communityItems.ambassadors}</a></li>
+          <li><a href={href('/community/moderators/')}>{menu.communityItems.moderators}</a></li>
+        </ul>
+      </div>
+
+      <div class='sub-footer-col'>
         <h5>{l.company}</h5>
         <ul>
           <li><a href={href('/about/')}>{l.about}</a></li>
