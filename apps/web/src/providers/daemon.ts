@@ -1233,7 +1233,17 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
     };
   }
   if (t === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
-    return { kind: 'tool_use', id: data.id, name: data.name, input: normalizeToolInput(data.input) };
+    return {
+      kind: 'tool_use',
+      id: data.id,
+      name: data.name,
+      input: normalizeToolInput(data.input),
+      // parentToolUseId marks a subagent-internal (sidechain) tool call so
+      // AssistantMessage.buildBlocks can hide it from the main transcript.
+      ...(typeof data.parentToolUseId === 'string' && data.parentToolUseId
+        ? { parentToolUseId: data.parentToolUseId }
+        : {}),
+    };
   }
   if (t === 'tool_result' && typeof data.toolUseId === 'string') {
     return {
@@ -1241,6 +1251,9 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
       toolUseId: data.toolUseId,
       content: String(data.content ?? ''),
       isError: Boolean(data.isError),
+      ...(typeof data.parentToolUseId === 'string' && data.parentToolUseId
+        ? { parentToolUseId: data.parentToolUseId }
+        : {}),
     };
   }
   if (t === 'usage') {
