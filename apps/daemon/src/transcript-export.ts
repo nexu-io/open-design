@@ -72,8 +72,8 @@ type PersistedAgentEvent =
   | { kind: 'status'; label: string; detail?: string }
   | { kind: 'text'; text: string }
   | { kind: 'thinking'; text: string }
-  | { kind: 'tool_use'; id: string; name: string; input: unknown }
-  | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  | { kind: 'tool_use'; id: string; name: string; input: unknown; parentToolUseId?: string }
+  | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean; parentToolUseId?: string }
   | { kind: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number; durationMs?: number }
   | { kind: 'raw'; line: string };
 
@@ -111,11 +111,17 @@ interface CommentAttachmentRef {
   comment: string;
 }
 
+// `parentToolUseId` marks sidechain (subagent-internal) tool activity —
+// claude-stream stamps the dispatching Task/Agent tool_use id on every
+// tool event a subagent emits. The export carries it verbatim so a
+// synthesis consumer can tell subagent work apart from the main agent's
+// own tool calls; the key is omitted (not `undefined`) for main-line
+// blocks to keep the JSONL lines compact.
 type Block =
   | { type: 'text'; text: string }
   | { type: 'thinking'; thinking: string }
-  | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | { type: 'tool_result'; toolUseId: string; content: string; isError: boolean };
+  | { type: 'tool_use'; id: string; name: string; input: unknown; parentToolUseId?: string }
+  | { type: 'tool_result'; toolUseId: string; content: string; isError: boolean; parentToolUseId?: string };
 
 export interface TranscriptExportOptions {
   now?: () => Date;
@@ -456,6 +462,9 @@ function coalesceBlocks(events: PersistedAgentEvent[]): Block[] {
           id: ev.id,
           name: ev.name,
           input: ev.input ?? null,
+          ...(typeof ev.parentToolUseId === 'string' && ev.parentToolUseId
+            ? { parentToolUseId: ev.parentToolUseId }
+            : {}),
         });
         break;
       }
@@ -466,6 +475,9 @@ function coalesceBlocks(events: PersistedAgentEvent[]): Block[] {
           toolUseId: ev.toolUseId,
           content: typeof ev.content === 'string' ? ev.content : String(ev.content ?? ''),
           isError: Boolean(ev.isError),
+          ...(typeof ev.parentToolUseId === 'string' && ev.parentToolUseId
+            ? { parentToolUseId: ev.parentToolUseId }
+            : {}),
         });
         break;
       }
