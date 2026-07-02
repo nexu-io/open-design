@@ -39,6 +39,7 @@ export function canManageWorkspaceScenario(s: DemoScenario): boolean {
 export type DemoPlan = 'free' | 'plus' | 'pro' | 'max' | 'team';
 export type DemoUseMode = 'cloud' | 'local';
 export type DemoPage = 'home' | 'onboarding';
+export type DemoWorkspaceLifecycle = 'active' | 'expired';
 
 export function isSoloPlan(p: DemoPlan): boolean {
   return p !== 'team';
@@ -53,6 +54,8 @@ interface Props {
   onScenario: (s: DemoScenario) => void;
   plan: DemoPlan;
   onPlan: (p: DemoPlan) => void;
+  workspaceLifecycle: DemoWorkspaceLifecycle;
+  onWorkspaceLifecycle: (lifecycle: DemoWorkspaceLifecycle) => void;
   useMode: DemoUseMode;
   onUseMode: (mode: DemoUseMode) => void;
   /** Fires the "积分不足" upgrade/top-up flow. */
@@ -78,14 +81,12 @@ const SCENARIO_CHIPS: Array<{ id: DemoScenario; label: string }> = [
 const ROLE_CHIPS: Array<{ id: DemoScenario; label: string; invite?: boolean }> = [
   { id: 'invite-editor-existing', label: '接受邀请网页端', invite: true },
   { id: 'invite-editor-new', label: '接受邀请客户端未注册', invite: true },
-  { id: 'invite-viewer', label: '接受邀请客户端已注册', invite: true },
 ];
 
 const VIEW_CHIPS: Array<{ id: DemoScenario; label: string }> = [
   { id: 'owner', label: 'Owner' },
-  { id: 'manager', label: 'Manager' },
-  { id: 'editor', label: 'Editor' },
-  { id: 'viewer', label: 'Viewer' },
+  { id: 'manager', label: 'Admin' },
+  { id: 'editor', label: 'Member' },
 ];
 
 const PLAN_CHIPS: Array<{ id: DemoPlan; label: string }> = [
@@ -94,6 +95,11 @@ const PLAN_CHIPS: Array<{ id: DemoPlan; label: string }> = [
   { id: 'pro',  label: 'Pro' },
   { id: 'max',  label: 'Max' },
   { id: 'team', label: 'team' },
+];
+
+const WORKSPACE_LIFECYCLE_CHIPS: Array<{ id: DemoWorkspaceLifecycle; label: string; desc: string }> = [
+  { id: 'active', label: '正常', desc: '团队版订阅有效，团队资产可进入和编辑' },
+  { id: 'expired', label: '到期降级', desc: '有效期结束后降级为个人 Workspace，团队共享资产锁定' },
 ];
 
 const USE_MODE_CHIPS: Array<{ id: DemoUseMode; label: string; desc: string }> = [
@@ -133,11 +139,15 @@ function labelForPlan(plan: DemoPlan): string {
   return PLAN_CHIPS.find((chip) => chip.id === plan)?.label ?? 'free';
 }
 
+function labelForWorkspaceLifecycle(lifecycle: DemoWorkspaceLifecycle): string {
+  return WORKSPACE_LIFECYCLE_CHIPS.find((chip) => chip.id === lifecycle)?.label ?? '正常';
+}
+
 function labelForUseMode(useMode: DemoUseMode): string {
   return USE_MODE_CHIPS.find((chip) => chip.id === useMode)?.label ?? 'Cloud';
 }
 
-function Bar({ page, onPage, scenario, onScenario, plan, onPlan, useMode, onUseMode, onLowCredits, onAutoRecharge, onAcceptInvite, onQueueDemo, onEditDemo }: Props) {
+function Bar({ page, onPage, scenario, onScenario, plan, onPlan, workspaceLifecycle, onWorkspaceLifecycle, useMode, onUseMode, onLowCredits, onAutoRecharge, onAcceptInvite, onQueueDemo, onEditDemo }: Props) {
   const [collapsed, setCollapsed] = useState(readCollapsedState);
   const availablePlans = useMode === 'local'
     ? PLAN_CHIPS.filter((chip) => chip.id !== 'team')
@@ -159,7 +169,7 @@ function Bar({ page, onPage, scenario, onScenario, plan, onPlan, useMode, onUseM
         >
           <span className="demo-bar__summary-dot" aria-hidden />
           <span className="demo-bar__summary-title">Control</span>
-          <span className="demo-bar__summary-meta">{labelForPage(page)} · {labelForUseMode(useMode)} · {labelForPlan(plan)}</span>
+          <span className="demo-bar__summary-meta">{labelForPage(page)} · {labelForUseMode(useMode)} · {labelForPlan(plan)} · {labelForWorkspaceLifecycle(workspaceLifecycle)}</span>
           <span className="demo-bar__summary-caret" aria-hidden>⌃</span>
         </button>
       </div>
@@ -271,6 +281,25 @@ function Bar({ page, onPage, scenario, onScenario, plan, onPlan, useMode, onUseM
                 type="button"
                 className={`demo-bar__chip${plan === c.id ? ' is-active' : ''}`}
                 onClick={() => onPlan(c.id)}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="demo-bar__divider" />
+
+        <div className="demo-bar__group">
+          <span className="demo-bar__label">Workspace 状态</span>
+          <div className="demo-bar__chips">
+            {WORKSPACE_LIFECYCLE_CHIPS.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={`demo-bar__chip${workspaceLifecycle === c.id ? ' is-active' : ''}${c.id === 'expired' ? ' demo-bar__chip--warning' : ''}`}
+                onClick={() => onWorkspaceLifecycle(c.id)}
+                title={c.desc}
               >
                 {c.label}
               </button>

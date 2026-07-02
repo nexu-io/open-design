@@ -159,7 +159,7 @@ import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { summarizeProjectNameFromPrompt } from '../utils/projectName';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
-import { DemoControlBar, canManageWorkspaceScenario, isInviteScenario, isSoloPlan, type DemoScenario, type DemoPage, type DemoPlan, type DemoUseMode, type InviteRole } from './DemoControlBar';
+import { DemoControlBar, canManageWorkspaceScenario, isInviteScenario, isSoloPlan, type DemoScenario, type DemoPage, type DemoPlan, type DemoUseMode, type DemoWorkspaceLifecycle, type InviteRole } from './DemoControlBar';
 import { InsufficientCreditsDialog } from './InsufficientCreditsDialog';
 import { InviteAcceptanceFlow } from './InviteAcceptanceFlow';
 import { Confetti } from './Confetti';
@@ -515,6 +515,7 @@ export function EntryShell({
   const [railOpen, setRailOpen] = useState<boolean>(readStoredRailOpen);
   const [demoScenario, setDemoScenario] = useState<DemoScenario>('home');
   const [demoPlan, setDemoPlan] = useState<DemoPlan>('free');
+  const [demoWorkspaceLifecycle, setDemoWorkspaceLifecycle] = useState<DemoWorkspaceLifecycle>('active');
   const [demoUseMode, setDemoUseMode] = useState<DemoUseMode>('cloud');
   const [localModeTipDismissed, setLocalModeTipDismissed] = useState<boolean>(readLocalModeTipDismissed);
   const [cloudSignInOnly, setCloudSignInOnly] = useState(false);
@@ -534,7 +535,9 @@ export function EntryShell({
   const isNewUser = demoScenario === 'onboarding-new';
   // Single-seat plans (免费版 / 个人版) drive solo behaviors: one team, only
   // the owner in the member list, and invite → upgrade gating.
-  const isSolo = isSoloPlan(demoPlan);
+  const cloudWorkspace = demoUseMode === 'cloud';
+  const workspaceExpired = cloudWorkspace && demoWorkspaceLifecycle === 'expired';
+  const isSolo = workspaceExpired || isSoloPlan(demoPlan);
   // Demo credits shown in the ✨ chip + popover, varying by plan. Every tier
   // below 团队版 surfaces an 升级 CTA (Plus→Pro/Max/Team, Pro→Max/Team, Max→Team).
   const demoCredits = (() => {
@@ -546,16 +549,18 @@ export function EntryShell({
       case 'max':
         return { planName: 'Max', tierLabel: 'Max', showUpgrade: true, balance: 30000, grantTip: 'Max 每日赠送 3,000 积分，可升级团队版' };
       case 'team':
+        if (workspaceExpired) {
+          return { planName: '团队版已到期', tierLabel: '已降级', showUpgrade: true, balance: 800, grantTip: '有效期结束后已降级为个人 Workspace；个人额度可用，团队共享资产需续费恢复' };
+        }
         return { planName: '团队版', tierLabel: '团队版', showUpgrade: false, balance: 60000, grantTip: '团队版每日赠送 6,000 积分，按席位共享' };
       case 'free':
       default:
         return { planName: '免费', tierLabel: '免费', showUpgrade: true, balance: 800, grantTip: '免费版每日赠送 300 积分，每天 08:00 刷新' };
     }
   })();
-  const cloudWorkspace = demoUseMode === 'cloud';
   const canManageWorkspace = cloudWorkspace && canManageWorkspaceScenario(demoScenario);
   const canOwnWorkspace = cloudWorkspace && (demoScenario === 'home' || demoScenario === 'owner');
-  const canEditTeamProjects = cloudWorkspace && demoScenario !== 'viewer' && demoScenario !== 'invite-viewer';
+  const canEditTeamProjects = cloudWorkspace && !workspaceExpired && demoScenario !== 'viewer' && demoScenario !== 'invite-viewer';
 
   useEffect(() => {
     if (cloudWorkspace) return;
@@ -956,6 +961,7 @@ export function EntryShell({
         if (page === 'onboarding') {
           setDemoScenario('onboarding-new');
           setDemoPlan('free');
+          setDemoWorkspaceLifecycle('active');
           window.history.replaceState(null, '', '/onboarding');
           navigate({ kind: 'home', view: 'onboarding' });
         } else {
@@ -965,12 +971,27 @@ export function EntryShell({
       }}
       scenario={demoScenario}
       plan={demoPlan}
-      onPlan={(plan) => setDemoPlan(demoUseMode === 'local' && plan === 'team' ? 'max' : plan)}
+      onPlan={(plan) => {
+        const nextPlan = demoUseMode === 'local' && plan === 'team' ? 'max' : plan;
+        setDemoPlan(nextPlan);
+        if (nextPlan !== 'team') setDemoWorkspaceLifecycle('active');
+      }}
+      workspaceLifecycle={demoWorkspaceLifecycle}
+      onWorkspaceLifecycle={(lifecycle) => {
+        setDemoWorkspaceLifecycle(lifecycle);
+        if (lifecycle === 'expired') {
+          setDemoUseMode('cloud');
+          setDemoPlan('team');
+        }
+      }}
       useMode={demoUseMode}
       onUseMode={(mode) => {
         setDemoUseMode(mode);
         if (mode === 'local' && demoPlan === 'team') {
           setDemoPlan('max');
+        }
+        if (mode === 'local') {
+          setDemoWorkspaceLifecycle('active');
         }
         if (mode === 'local' && (view === 'drafts' || view === 'all-projects' || view === 'members' || view === 'dashboard' || view === 'workspace-settings')) {
           navigate({ kind: 'home', view: 'home' });
@@ -981,7 +1002,7 @@ export function EntryShell({
         setLowCreditsOpen(true);
       }}
       onAutoRecharge={(scope) => {
-        setAutoRechargeTarget(scope === 'member' ? { kind: 'member', name: '李娜', role: 'Editor' } : { kind: 'team' });
+        setAutoRechargeTarget(scope === 'member' ? { kind: 'member', name: '李娜', role: 'Member' } : { kind: 'team' });
         setDemoPlan('team');
         setLowCreditsOpen(true);
       }}
@@ -1022,6 +1043,7 @@ export function EntryShell({
           setLowCreditsOpen(false);
           setAutoRechargeTarget(null);
           setDemoPlan(target);
+          if (target === 'team') setDemoWorkspaceLifecycle('active');
           fireCelebration('升级生效，额度已提升');
         }}
         onBuyPack={(packLabel) => {
@@ -1040,6 +1062,7 @@ export function EntryShell({
           // 开始协作 → land in the team workspace home as the invited member.
           setInviteFlowOpen(false);
           setDemoPlan('team');
+          setDemoWorkspaceLifecycle('active');
           setDemoScenario('home');
           navigate({ kind: 'home', view: 'home' });
           fireCelebration('已加入 Nexu 设计团队，开始协作');
@@ -1150,6 +1173,7 @@ export function EntryShell({
           canManageWorkspace={canManageWorkspace}
           canOwnWorkspace={canOwnWorkspace}
           cloudWorkspace={cloudWorkspace}
+          workspaceExpired={workspaceExpired}
         />
         <main className="entry-main entry-main--scroll" ref={entryMainScrollRef}>
           <div className="entry-main__topbar">
@@ -1186,6 +1210,7 @@ export function EntryShell({
                 executionSwitcher={view === 'home' ? homeExecutionSwitcher : undefined}
                 demoScenario={demoScenario}
                 demoUseMode={demoUseMode}
+                workspaceExpired={workspaceExpired}
               />
             </div>
             <div data-testid="entry-view-projects" data-active={view === 'projects' ? 'true' : 'false'} {...inactiveViewProps(view === 'projects')}>
@@ -1220,7 +1245,7 @@ export function EntryShell({
               />
             </div>
             <div data-testid="entry-view-plugins" data-active={view === 'plugins' ? 'true' : 'false'} {...inactiveViewProps(view === 'plugins')}>
-              <PluginMarketplaceDemo onTryPlugin={tryMarketplacePlugin} />
+              <PluginMarketplaceDemo onTryPlugin={tryMarketplacePlugin} workspaceExpired={workspaceExpired} />
             </div>
             <div data-testid="entry-view-community" data-active={view === 'community' ? 'true' : 'false'} {...inactiveViewProps(view === 'community')}>
               <CommunityView
@@ -1276,6 +1301,7 @@ export function EntryShell({
                   onRename={onRenameProject}
                   canAssignInviteRoles={canManageWorkspace}
                   canManageProjectCollection={canEditTeamProjects}
+                  workspaceExpired={workspaceExpired}
                 />
               )}
             </div>
@@ -1288,16 +1314,18 @@ export function EntryShell({
             <div data-testid="entry-view-dashboard" data-active={view === 'dashboard' ? 'true' : 'false'} {...inactiveViewProps(view === 'dashboard')}>
               <TeamDashboardView
                 isAdmin={canManageWorkspace}
-                isTeamPlan={demoPlan === 'team'}
+                isTeamPlan={demoPlan === 'team' && !workspaceExpired}
+                workspaceExpired={workspaceExpired}
                 onAutoRecharge={(target) => {
                   setAutoRechargeTarget(target);
                   setDemoPlan('team');
+                  setDemoWorkspaceLifecycle('active');
                   setLowCreditsOpen(true);
                 }}
               />
             </div>
             <div data-testid="entry-view-workspace-settings" data-active={view === 'workspace-settings' ? 'true' : 'false'} {...inactiveViewProps(view === 'workspace-settings')}>
-              <WorkspaceSettingsView hasActiveSubscription={demoPlan === 'team'} />
+              <WorkspaceSettingsView hasActiveSubscription={demoPlan === 'team' && !workspaceExpired} workspaceExpired={workspaceExpired} />
             </div>
             <div data-testid="entry-view-design-systems" data-active={view === 'design-systems' ? 'true' : 'false'} {...inactiveViewProps(view === 'design-systems')}>
               {designSystemsLoading ? (
@@ -1311,6 +1339,7 @@ export function EntryShell({
                     onCreate={onCreateDesignSystem}
                     onOpenSystem={onOpenDesignSystem}
                     onSystemsRefresh={onDesignSystemsRefresh}
+                    workspaceExpired={workspaceExpired}
                   />
                 </div>
               ) : (
@@ -1323,6 +1352,7 @@ export function EntryShell({
                     onCreate={onCreateDesignSystem}
                     onOpenSystem={onOpenDesignSystem}
                     onSystemsRefresh={onDesignSystemsRefresh}
+                    workspaceExpired={workspaceExpired}
                   />
                 </div>
               )}
@@ -1344,7 +1374,7 @@ export function EntryShell({
               />
             </div>
             <div data-testid="entry-view-integrations" data-active={view === 'integrations' ? 'true' : 'false'} {...inactiveViewProps(view === 'integrations')}>
-              <PluginMarketplaceDemo onTryPlugin={tryMarketplacePlugin} />
+              <PluginMarketplaceDemo onTryPlugin={tryMarketplacePlugin} workspaceExpired={workspaceExpired} />
             </div>
           </div>
         </main>

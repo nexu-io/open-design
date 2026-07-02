@@ -47,6 +47,7 @@ type MarketplaceTryItem = ((PluginDemo | SkillDemo) & {
 
 type PluginMarketplaceDemoProps = {
   onTryPlugin?: (plugin: MarketplaceTryItem) => void;
+  workspaceExpired?: boolean;
 };
 
 const PLUGIN_DEMOS: PluginDemo[] = [
@@ -447,7 +448,7 @@ function PluginLogo({ plugin }: { plugin: Pick<PluginDemo | SkillDemo, 'id' | 'n
   );
 }
 
-export function PluginMarketplaceDemo({ onTryPlugin }: PluginMarketplaceDemoProps = {}) {
+export function PluginMarketplaceDemo({ onTryPlugin, workspaceExpired = false }: PluginMarketplaceDemoProps = {}) {
   const [mode, setMode] = useState<MarketplaceMode>('plugins');
   const [source, setSource] = useState<PluginSource | 'All'>('Official');
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORY);
@@ -496,8 +497,13 @@ export function PluginMarketplaceDemo({ onTryPlugin }: PluginMarketplaceDemoProp
       return `${skill.name} ${skill.description} ${skill.category}`.toLowerCase().includes(q);
     });
   }, [categoryFilter, query, source]);
+  const isWorkspaceSourceLocked = (item: Pick<PluginDemo | SkillDemo, 'source'>) =>
+    workspaceExpired && item.source === 'Workspace';
 
   if (detailPlugin) {
+    if (isWorkspaceSourceLocked(detailPlugin)) {
+      return <MarketplaceLockedDetail title={detailPlugin.name} onBack={() => setDetailPlugin(null)} kind="专家套件" />;
+    }
     return (
       <PluginSuiteDetail
         plugin={detailPlugin}
@@ -523,6 +529,9 @@ export function PluginMarketplaceDemo({ onTryPlugin }: PluginMarketplaceDemoProp
   }
 
   if (detailSkill) {
+    if (isWorkspaceSourceLocked(detailSkill)) {
+      return <MarketplaceLockedDetail title={detailSkill.name} onBack={() => setDetailSkill(null)} kind="Skill" />;
+    }
     return (
       <SkillDetail
         skill={detailSkill}
@@ -547,6 +556,8 @@ export function PluginMarketplaceDemo({ onTryPlugin }: PluginMarketplaceDemoProp
           <button
             type="button"
             className="plugin-marketplace__create"
+            disabled={workspaceExpired}
+            title={workspaceExpired ? '团队版到期后不能新增团队 Plugin 或 Skill' : undefined}
             onClick={() => {
               setCreateKind(mode === 'skills' ? 'skill' : 'plugin');
               setCreateOpen(true);
@@ -589,6 +600,12 @@ export function PluginMarketplaceDemo({ onTryPlugin }: PluginMarketplaceDemoProp
           ? '专家套件是面向角色行业的工具套件，在对话框中输入 @ 或斜杠即可使用。'
           : '技能是可复用的任务流程和审查规则，可独立使用，也可以被专家套件组合调用。'}
       </p>
+      {workspaceExpired ? (
+        <div className="plugin-marketplace__expired-note" role="status">
+          <Icon name="lock" size={14} />
+          <span>团队版已到期，团队来源的 Plugin 和 Skill 会保留但锁定；个人和官方能力仍可继续使用。</span>
+        </div>
+      ) : null}
 
       <div className="plugin-marketplace__filter-block">
         <div className="plugin-marketplace__filters" aria-label="Marketplace source filters">
@@ -652,19 +669,22 @@ export function PluginMarketplaceDemo({ onTryPlugin }: PluginMarketplaceDemoProp
               {group.plugins
                 .map((plugin) => {
                   const isReady = isPluginReady(plugin.status);
+                  const locked = isWorkspaceSourceLocked(plugin);
                   const skillCount = plugin.skills?.length ?? 0;
                   const connectorCount = plugin.connector?.length ?? 0;
                   return (
                     <article
                       key={plugin.id}
-                      className="plugin-marketplace__item is-clickable"
-                      role="button"
-                      tabIndex={0}
+                      className={`plugin-marketplace__item${locked ? ' is-locked' : ' is-clickable'}`}
+                      role={locked ? undefined : 'button'}
+                      tabIndex={locked ? undefined : 0}
                       onClick={() => {
+                        if (locked) return;
                         setDetailPlugin(plugin);
                         setMenuId(null);
                       }}
                       onKeyDown={(event) => {
+                        if (locked) return;
                         if (event.key !== 'Enter' && event.key !== ' ') return;
                         event.preventDefault();
                         setDetailPlugin(plugin);
@@ -679,21 +699,23 @@ export function PluginMarketplaceDemo({ onTryPlugin }: PluginMarketplaceDemoProp
                           <span className="plugin-marketplace__row-stats">
                             <span>{skillCount} skills</span>
                             <span>{connectorCount} connectors</span>
+                            {locked ? <span className="plugin-marketplace__lock-badge"><Icon name="lock" size={11} /> 已锁定</span> : null}
                           </span>
                         </span>
                         <button
                           type="button"
                           className="plugin-marketplace__row-action"
+                          disabled={locked}
                           onClick={(event) => {
                             event.stopPropagation();
-                            if (isReady) {
+                            if (isReady && !locked) {
                               onTryPlugin?.(plugin);
                             }
                           }}
                         >
-                          {isReady ? 'Try it' : '安装'}
+                          {locked ? '已锁定' : isReady ? 'Try it' : '安装'}
                         </button>
-                        {isReady ? (
+                        {isReady && !locked ? (
                           <span className="plugin-marketplace__menu-wrap">
                             <button
                               type="button"
@@ -749,16 +771,21 @@ export function PluginMarketplaceDemo({ onTryPlugin }: PluginMarketplaceDemoProp
         <div className="plugin-marketplace__catalog">
           <div className="plugin-marketplace__rows">
             {filteredSkills.map((skill) => (
+              (() => {
+                const locked = isWorkspaceSourceLocked(skill);
+                return (
               <article
                 key={skill.id}
-                className="plugin-marketplace__item plugin-marketplace__item--skill is-clickable"
-                role="button"
-                tabIndex={0}
+                className={`plugin-marketplace__item plugin-marketplace__item--skill${locked ? ' is-locked' : ' is-clickable'}`}
+                role={locked ? undefined : 'button'}
+                tabIndex={locked ? undefined : 0}
                 onClick={() => {
+                  if (locked) return;
                   setDetailSkill(skill);
                   setMenuId(null);
                 }}
                 onKeyDown={(event) => {
+                  if (locked) return;
                   if (event.key !== 'Enter' && event.key !== ' ') return;
                   event.preventDefault();
                   setDetailSkill(skill);
@@ -770,20 +797,22 @@ export function PluginMarketplaceDemo({ onTryPlugin }: PluginMarketplaceDemoProp
                   <span className="plugin-marketplace__row-main">
                     <strong>{skill.name}</strong>
                     <small>{skill.description}</small>
+                    {locked ? <span className="plugin-marketplace__lock-badge"><Icon name="lock" size={11} /> 已锁定</span> : null}
                   </span>
                   <button
                     type="button"
                     className="plugin-marketplace__row-action"
+                    disabled={locked}
                     onClick={(event) => {
                       event.stopPropagation();
-                      if (isPluginReady(skill.status)) {
+                      if (isPluginReady(skill.status) && !locked) {
                         onTryPlugin?.({ ...skill, marketplaceKind: 'skill' });
                       }
                     }}
                   >
-                    {isPluginReady(skill.status) ? 'Try it' : '安装'}
+                    {locked ? '已锁定' : isPluginReady(skill.status) ? 'Try it' : '安装'}
                   </button>
-                  {isPluginReady(skill.status) ? (
+                  {isPluginReady(skill.status) && !locked ? (
                     <span className="plugin-marketplace__menu-wrap">
                       <button
                         type="button"
@@ -826,6 +855,8 @@ export function PluginMarketplaceDemo({ onTryPlugin }: PluginMarketplaceDemoProp
                   ) : null}
                 </div>
               </article>
+                );
+              })()
             ))}
           </div>
           {filteredSkills.length === 0 ? (
@@ -917,6 +948,32 @@ export function PluginMarketplaceDemo({ onTryPlugin }: PluginMarketplaceDemoProp
           </section>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function MarketplaceLockedDetail({
+  title,
+  kind,
+  onBack,
+}: {
+  title: string;
+  kind: string;
+  onBack: () => void;
+}) {
+  return (
+    <section className="plugin-marketplace plugin-marketplace__locked-detail" aria-labelledby="marketplace-locked-title">
+      <button type="button" className="plugin-suite-detail__back" onClick={onBack}>
+        <Icon name="arrow-left" size={15} />
+        返回
+      </button>
+      <div className="plugin-marketplace__locked-panel">
+        <span className="plugin-marketplace__locked-icon" aria-hidden>
+          <Icon name="lock" size={20} />
+        </span>
+        <h1 id="marketplace-locked-title">{title} 已锁定</h1>
+        <p>这个团队 {kind} 仍保留在原 Workspace 中，但团队版到期降级后不可打开或运行。Owner 续费后会恢复团队共享能力。</p>
+      </div>
     </section>
   );
 }

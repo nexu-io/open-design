@@ -5128,6 +5128,19 @@
   text-align: left;
 }
 .entry-nav-rail__team:hover { background: var(--bg-subtle); border-radius: var(--radius); }
+.entry-nav-rail__team.is-expired {
+  color: var(--text-muted);
+}
+.entry-nav-rail__team.is-expired .entry-nav-rail__team-avatar {
+  filter: grayscale(1);
+  opacity: 0.78;
+}
+.entry-nav-rail__team.is-locked {
+  cursor: not-allowed;
+}
+.entry-nav-rail__team.is-locked:hover {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
 .entry-nav-rail__team-avatar--alt { background: #6c3aa6; }
 .entry-nav-rail__team-plan {
   margin-left: auto;
@@ -5139,6 +5152,66 @@
 .entry-nav-rail__menu-item.is-current svg { color: var(--accent); }
 
 .entry-nav-rail__menu-item.is-current svg { margin-left: auto; }
+
+.entry-nav-rail__locked-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, #000 18%, transparent);
+}
+
+.entry-nav-rail__locked-modal {
+  width: min(360px, 100%);
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: 0 20px 60px color-mix(in srgb, #000 18%, transparent);
+}
+
+.entry-nav-rail__locked-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+}
+
+.entry-nav-rail__locked-modal h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 15px;
+}
+
+.entry-nav-rail__locked-modal p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.entry-nav-rail__locked-modal button {
+  grid-column: 2;
+  justify-self: start;
+  margin-top: 4px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
 
 /* Design-systems scope tabs lifted into the title area (你的 / 团队 / 官方). */
 .ds-top-scopes {

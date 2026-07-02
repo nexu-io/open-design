@@ -32,6 +32,42 @@
   box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 4%, transparent);
 }
 
+.workspace-settings__expired {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--amber) 24%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--amber) 7%, var(--bg-panel));
+}
+
+.workspace-settings__expired-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--bg-panel);
+  color: var(--text-soft);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.workspace-settings__expired strong {
+  color: var(--text-strong);
+  font-size: 14px;
+}
+
+.workspace-settings__expired p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 .workspace-settings__row {
   display: grid;
   grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);

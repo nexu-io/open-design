@@ -51,6 +51,8 @@ interface Props {
   canAssignInviteRoles?: boolean;
   /** Owner / Manager-only collection actions: invite, bulk delete, and team-space moves. */
   canManageProjectCollection?: boolean;
+  /** Demo-only: after Team expires, shared/team assets remain visible but locked. */
+  workspaceExpired?: boolean;
 }
 
 type BrowseTab = 'projects' | 'design-systems' | 'templates';
@@ -201,6 +203,7 @@ export function RecentProjectsStrip({
   collaborationEnabled = true,
   canAssignInviteRoles = true,
   canManageProjectCollection = true,
+  workspaceExpired = false,
 }: Props) {
   const t = useT();
   const [view, setView] = useState<'grid' | 'list'>('grid');
@@ -271,15 +274,28 @@ export function RecentProjectsStrip({
     .map(({ project }) => project.name);
   const canMoveToTeam = canManageProjectCollection && collaborationEnabled && space !== 'team';
   const canMoveToPersonal = canManageProjectCollection && collaborationEnabled && space !== 'drafts';
+  const frozenProjectIds = useMemo(() => {
+    if (!workspaceExpired || space === 'drafts') return new Set<string>();
+    return new Set(
+      visibleProjectCards
+        .filter(({ meta }) => space === 'team' || meta.badge === 'shared')
+        .map(({ project }) => project.id),
+    );
+  }, [space, visibleProjectCards, workspaceExpired]);
+  const showExpiredNotice = workspaceExpired && space !== 'drafts';
 
   useEffect(() => {
     setSelectedProjectIds((current) => {
       if (current.size === 0) return current;
-      const visibleIds = new Set(visibleProjectCards.map(({ project }) => project.id));
+      const visibleIds = new Set(
+        visibleProjectCards
+          .filter(({ project }) => !frozenProjectIds.has(project.id))
+          .map(({ project }) => project.id),
+      );
       const next = new Set([...current].filter((id) => visibleIds.has(id)));
       return next.size === current.size ? current : next;
     });
-  }, [visibleProjectCards]);
+  }, [frozenProjectIds, visibleProjectCards]);
 
   useEffect(() => {
     if (!menuOpenId) return;
@@ -403,6 +419,7 @@ export function RecentProjectsStrip({
   }
 
   function toggleSelection(projectId: string) {
+    if (frozenProjectIds.has(projectId)) return;
     setSelectedProjectIds((current) => {
       const next = new Set(current);
       if (next.has(projectId)) {
@@ -624,11 +641,22 @@ export function RecentProjectsStrip({
           </div>
         </div>
       ) : null}
+      {showExpiredNotice ? (
+        <div className="recent-projects__expired-note" role="status">
+          <Icon name="lock" size={14} />
+          <span>
+            {space === 'team'
+              ? '团队版已到期，团队项目保留但已锁定；Owner 续费后恢复进入和协作。'
+              : '团队版已到期，最近项目里的共享项目已锁定；个人项目仍可打开和管理。'}
+          </span>
+        </div>
+      ) : null}
       <div
         className={`recent-projects__row recent-projects__row--${view}${menuOpenId ? ' recent-projects__row--menu-open' : ''}${activeSelectionMode ? ' is-selecting' : ''}`}
         role="list"
       >
         {visibleProjectCards.map(({ project, meta }) => {
+          const frozen = frozenProjectIds.has(project.id);
           const cover = projectCover(project, coverByProject[project.id] ?? null);
           const projectMoveAction: 'to-team' | 'to-personal' =
             meta.badge === 'shared' ? 'to-personal' : 'to-team';
@@ -643,10 +671,10 @@ export function RecentProjectsStrip({
             <div
               key={project.id}
               role="listitem"
-              className={`recent-projects__card${designSystemProject ? ' is-design-system-project' : ''}${menuOpenId === project.id ? ' is-menu-open' : ''}${activeSelectionMode && selected ? ' is-selected' : ''}`}
+              className={`recent-projects__card${designSystemProject ? ' is-design-system-project' : ''}${menuOpenId === project.id ? ' is-menu-open' : ''}${activeSelectionMode && selected ? ' is-selected' : ''}${frozen ? ' is-frozen' : ''}`}
               data-project-id={project.id}
             >
-              {activeSelectionMode ? (
+              {activeSelectionMode && !frozen ? (
                 <button
                   type="button"
                   className="recent-projects__select-check"
@@ -663,14 +691,17 @@ export function RecentProjectsStrip({
               <button
                 type="button"
                 className="recent-projects__card-main"
+                disabled={frozen}
+                aria-disabled={frozen || undefined}
                 onClick={() => {
+                  if (frozen) return;
                   if (activeSelectionMode) {
                     toggleSelection(project.id);
                   } else {
                     onOpen(project.id);
                   }
                 }}
-                title={project.name}
+                title={frozen ? `${project.name}：团队版到期后需 Owner 续费恢复` : project.name}
               >
                 <div
                   className={`recent-projects__card-thumb recent-projects__card-thumb-${cover.kind}`}
@@ -709,6 +740,11 @@ export function RecentProjectsStrip({
                       共享
                     </span>
                   ) : null}
+                  {frozen ? (
+                    <span className="recent-projects__lock-badge">
+                      <Icon name="lock" size={11} /> 已锁定
+                    </span>
+                  ) : null}
                 </div>
                 <div className="recent-projects__card-meta">
                   <div className="recent-projects__card-name">{project.name}</div>
@@ -731,17 +767,17 @@ export function RecentProjectsStrip({
                   </div>
                 </div>
               </button>
-              {actionsAvailable && !selectionMode ? (
+              {actionsAvailable && !selectionMode && !frozen ? (
                 <div
                   className="recent-projects__card-menu-anchor"
                   ref={menuOpenId === project.id ? menuContainerRef : undefined}
                 >
                   <button
                     type="button"
-                  className="recent-projects__card-more"
-                  aria-label={t('designs.menuMore')}
-                  aria-haspopup="menu"
-                  aria-expanded={menuOpenId === project.id}
+                    className="recent-projects__card-more"
+                    aria-label={t('designs.menuMore')}
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpenId === project.id}
                     onClick={(event) => {
                       event.stopPropagation();
                       setMenuOpenId((current) => current === project.id ? null : project.id);

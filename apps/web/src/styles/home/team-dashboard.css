@@ -82,7 +82,8 @@
   white-space: nowrap;
 }
 
-.team-dashboard__recharge-callout {
+.team-dashboard__recharge-callout,
+.team-dashboard__expired-callout {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
@@ -91,6 +92,17 @@
   border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--accent) 6%, var(--bg-panel));
+}
+
+.team-dashboard__expired-callout {
+  border-color: color-mix(in srgb, var(--amber) 28%, var(--border));
+  background: color-mix(in srgb, var(--amber) 7%, var(--bg-panel));
+}
+
+.team-dashboard__expired-callout .team-dashboard__recharge-icon {
+  background: var(--bg-subtle);
+  color: var(--text-soft);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 
 .team-dashboard__recharge-icon {
@@ -104,14 +116,16 @@
   color: var(--accent-contrast);
 }
 
-.team-dashboard__recharge-callout h2 {
+.team-dashboard__recharge-callout h2,
+.team-dashboard__expired-callout h2 {
   margin: 0;
   color: var(--text-strong);
   font-size: 15px;
   line-height: 1.25;
 }
 
-.team-dashboard__recharge-callout p {
+.team-dashboard__recharge-callout p,
+.team-dashboard__expired-callout p {
   margin: 5px 0 0;
   color: var(--text-muted);
   font-size: 12.5px;
@@ -119,6 +133,7 @@
 }
 
 .team-dashboard__recharge-callout button,
+.team-dashboard__expired-callout button,
 .team-dashboard__credit-row button,
 .team-dashboard__member-credit button {
   height: 34px;

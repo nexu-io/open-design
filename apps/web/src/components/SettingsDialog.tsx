@@ -5087,6 +5087,8 @@ export function SettingsDialog({
             onPage={() => {}}
             scenario={demoScenario}
             plan={demoPlan}
+            workspaceLifecycle="active"
+            onWorkspaceLifecycle={() => {}}
             useMode={demoUseMode}
             onScenario={onDemoScenario}
             onPlan={onDemoPlan}

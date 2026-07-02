@@ -113,6 +113,23 @@
   box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
 }
+.recent-projects__card.is-frozen {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg-panel) 86%, var(--bg-subtle));
+  box-shadow: none;
+  opacity: 0.66;
+}
+.recent-projects__card.is-frozen:hover {
+  border-color: var(--border);
+  box-shadow: none;
+  transform: none;
+}
+.recent-projects__card.is-frozen .recent-projects__card-main {
+  cursor: not-allowed;
+}
+.recent-projects__card-main:disabled {
+  color: inherit;
+}
 .recent-projects__card.is-selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-tint), var(--shadow-sm);
@@ -547,6 +564,24 @@
 .recent-projects__bulkbar-actions button.ghost {
   color: var(--text-muted);
 }
+.recent-projects__expired-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  max-width: 760px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--amber) 24%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--amber) 7%, var(--bg-panel));
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.recent-projects__expired-note svg {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+}
 .recent-projects__filter-wrap {
   position: relative;
   display: inline-flex;
@@ -735,6 +770,25 @@
   color: #fff;
   font-size: 11px;
   font-weight: 600;
+}
+.recent-projects__lock-badge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 16px);
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 30%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  box-shadow: var(--shadow-xs);
 }
 .recent-projects__card-owner {
   width: 16px;

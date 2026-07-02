@@ -3,15 +3,18 @@ import { Icon } from './Icon';
 
 type WorkspaceSettingsViewProps = {
   hasActiveSubscription?: boolean;
+  workspaceExpired?: boolean;
+  workspaceCount?: number;
 };
 
-export function WorkspaceSettingsView({ hasActiveSubscription = false }: WorkspaceSettingsViewProps) {
+export function WorkspaceSettingsView({ hasActiveSubscription = false, workspaceExpired = false, workspaceCount = 1 }: WorkspaceSettingsViewProps) {
   const [workspaceName, setWorkspaceName] = useState('Nexu 团队');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteText, setDeleteText] = useState('');
   const [toast, setToast] = useState<string | null>(null);
   const [subscriptionActive, setSubscriptionActive] = useState(hasActiveSubscription);
   const canDelete = deleteText.trim() === workspaceName.trim();
+  const onlyWorkspace = workspaceCount <= 1;
 
   useEffect(() => {
     setSubscriptionActive(hasActiveSubscription);
@@ -19,6 +22,7 @@ export function WorkspaceSettingsView({ hasActiveSubscription = false }: Workspa
 
   function handleDelete() {
     if (subscriptionActive) return;
+    if (onlyWorkspace) return;
     if (!canDelete) return;
     setConfirmingDelete(false);
     setDeleteText('');
@@ -36,6 +40,28 @@ export function WorkspaceSettingsView({ hasActiveSubscription = false }: Workspa
       </header>
 
       {toast ? <div className="workspace-settings__toast">{toast}</div> : null}
+
+      {workspaceExpired ? (
+        <section className="workspace-settings__expired" aria-label="Workspace 到期状态">
+          <span className="workspace-settings__expired-icon" aria-hidden>
+            <Icon name="lock" size={18} />
+          </span>
+          <div>
+            <strong>团队版已到期，已降级为个人 Workspace</strong>
+            <p>Owner 仍可查看原 Workspace 内容；团队共享的项目、Design System、Plugin 和 Skill 会保留但锁定，续费后恢复团队协作。</p>
+          </div>
+          <button
+            type="button"
+            className="workspace-settings__secondary-btn"
+            onClick={() => {
+              setToast('Demo：进入续费充值流程后，团队资产将恢复可进入状态');
+              window.setTimeout(() => setToast(null), 2600);
+            }}
+          >
+            续费恢复
+          </button>
+        </section>
+      ) : null}
 
       <section className="workspace-settings__panel" aria-label="Workspace 基础信息">
         <div className="workspace-settings__row">
@@ -135,12 +161,49 @@ export function WorkspaceSettingsView({ hasActiveSubscription = false }: Workspa
                     className="workspace-settings__danger-btn"
                     onClick={() => {
                       setSubscriptionActive(false);
-                      setToast('Demo：订阅已取消，现在可以继续删除 Workspace');
+                      setToast('Demo：订阅已取消；到期后会降级为个人 Workspace，仍需保留至少一个 Workspace');
                       window.setTimeout(() => setToast(null), 2600);
                     }}
                   >
                     先取消订阅
                   </button>
+                </div>
+              </>
+            ) : onlyWorkspace ? (
+              <>
+                <div className="workspace-settings__subscription-block">
+                  <span className="workspace-settings__danger-icon" aria-hidden>
+                    <Icon name="lock" size={18} />
+                  </span>
+                  <div>
+                    <strong>必须保留至少一个 Workspace</strong>
+                    <p>{workspaceExpired ? '该 Workspace 已降级为个人 Workspace，是当前账号唯一可用空间，因此不能删除。' : '这是当前账号唯一 Workspace，不能删除。请先创建或切换到其他 Workspace。'}</p>
+                  </div>
+                </div>
+                <div className="workspace-settings__modal-actions">
+                  <button
+                    type="button"
+                    className="workspace-settings__secondary-btn"
+                    onClick={() => {
+                      setConfirmingDelete(false);
+                      setDeleteText('');
+                    }}
+                  >
+                    知道了
+                  </button>
+                  {workspaceExpired ? (
+                    <button
+                      type="button"
+                      className="workspace-settings__danger-btn"
+                      onClick={() => {
+                        setConfirmingDelete(false);
+                        setToast('Demo：请先续费恢复团队版，再管理 Workspace 生命周期');
+                        window.setTimeout(() => setToast(null), 2600);
+                      }}
+                    >
+                      续费恢复
+                    </button>
+                  ) : null}
                 </div>
               </>
             ) : (

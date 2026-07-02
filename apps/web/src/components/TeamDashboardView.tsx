@@ -14,16 +14,16 @@ const DASHBOARD_STATS = [
 
 const TOKEN_RANKING = [
   { name: '琼羽（你）', role: 'Owner', tokens: '1.42M', share: 100, color: '#c65b3a' },
-  { name: '张伟', role: 'Manager', tokens: '980K', share: 69, color: '#f97316' },
-  { name: '李娜', role: 'Editor', tokens: '640K', share: 45, color: '#6366f1' },
-  { name: '王芳', role: 'Reviewer', tokens: '420K', share: 30, color: '#10b981' },
+  { name: '张伟', role: 'Admin', tokens: '980K', share: 69, color: '#f97316' },
+  { name: '李娜', role: 'Member', tokens: '640K', share: 45, color: '#6366f1' },
+  { name: '王芳', role: 'Member', tokens: '420K', share: 30, color: '#10b981' },
 ] as const;
 
 const MEMBER_CREDITS = [
   { name: '琼羽（你）', role: 'Owner', remaining: '18,400', used: '41,600', status: '充足' },
-  { name: '张伟', role: 'Manager', remaining: '9,800', used: '24,200', status: '正常' },
-  { name: '李娜', role: 'Editor', remaining: '1,200', used: '18,900', status: '偏低' },
-  { name: '王芳', role: 'Viewer', remaining: '320', used: '6,700', status: '需续额' },
+  { name: '张伟', role: 'Admin', remaining: '9,800', used: '24,200', status: '正常' },
+  { name: '李娜', role: 'Member', remaining: '1,200', used: '18,900', status: '偏低' },
+  { name: '王芳', role: 'Member', remaining: '320', used: '6,700', status: '需续额' },
 ] as const;
 
 export type TeamDashboardAutoRechargeTarget =
@@ -33,21 +33,35 @@ export type TeamDashboardAutoRechargeTarget =
 type TeamDashboardViewProps = {
   isAdmin?: boolean;
   isTeamPlan?: boolean;
+  workspaceExpired?: boolean;
   onAutoRecharge?: (target: TeamDashboardAutoRechargeTarget) => void;
 };
 
-export function TeamDashboardView({ isAdmin = true, isTeamPlan = false, onAutoRecharge }: TeamDashboardViewProps) {
+export function TeamDashboardView({ isAdmin = true, isTeamPlan = false, workspaceExpired = false, onAutoRecharge }: TeamDashboardViewProps) {
   return (
     <div className="entry-section team-dashboard">
       <header className="entry-section__head team-dashboard__head">
         <div>
           <h1 className="entry-section__title">数据大盘</h1>
           <p className="team-dashboard__subtitle">
-            {isAdmin ? 'Owner / Manager 可见 · Nexu 团队最近 30 天' : 'Member 视角 · 仅查看自己的额度状态'}
+            {isAdmin ? 'Owner / Admin 可见 · Nexu 团队最近 30 天' : 'Member 视角 · 仅查看自己的额度状态'}
           </p>
         </div>
         <span className="team-dashboard__access">UC-10</span>
       </header>
+
+      {workspaceExpired ? (
+        <section className="team-dashboard__expired-callout" aria-label="团队版到期">
+          <span className="team-dashboard__recharge-icon" aria-hidden>
+            <Icon name="lock" size={17} />
+          </span>
+          <div>
+            <h2>团队版已到期，Workspace 已降级为个人空间</h2>
+            <p>成员、seat、团队额度和共享资产已冻结。Owner 仍可查看内容；完成续费充值后恢复团队协作和共享资产入口。</p>
+          </div>
+          <button type="button" onClick={() => onAutoRecharge?.({ kind: 'team' })}>续费恢复</button>
+        </section>
+      ) : null}
 
       {isTeamPlan && isAdmin ? (
         <section className="team-dashboard__recharge-callout" aria-label="自动充值引导">
@@ -63,14 +77,14 @@ export function TeamDashboardView({ isAdmin = true, isTeamPlan = false, onAutoRe
       ) : null}
 
       <section className="team-dashboard__hero" aria-label="UC-10 数据大盘">
-        <div className="team-dashboard__hero-copy">
-          <h2>Nexu 团队</h2>
-          <p>汇总团队产出、Design System 沉淀、活跃协作和 token 消耗结构。</p>
+          <div className="team-dashboard__hero-copy">
+            <h2>Nexu 团队</h2>
+          <p>{workspaceExpired ? '保留到期前团队产出快照；共享资产已冻结，续费后恢复协作。' : '汇总团队产出、Design System 沉淀、活跃协作和 token 消耗结构。'}</p>
         </div>
         <div className="team-dashboard__hero-meta" aria-label="数据范围">
-          <span>Owner / Manager</span>
+          <span>Owner / Admin</span>
           <span>最近 30 天</span>
-          <span>Demo data</span>
+          <span>{workspaceExpired ? 'Frozen snapshot' : 'Demo data'}</span>
         </div>
       </section>
 
@@ -81,7 +95,7 @@ export function TeamDashboardView({ isAdmin = true, isTeamPlan = false, onAutoRe
             <p>
               {isAdmin
                 ? '查看每位成员的剩余额度，并为额度不足的成员续额。'
-                : '当前额度不足时，请联系 Owner 或 Manager 帮你提升额度。'}
+                : '当前额度不足时，请联系 Owner 或 Admin 帮你提升额度。'}
             </p>
           </div>
           <span>{isAdmin ? 'Admin' : 'Member'}</span>
@@ -115,7 +129,7 @@ export function TeamDashboardView({ isAdmin = true, isTeamPlan = false, onAutoRe
         ) : (
           <div className="team-dashboard__member-credit">
             <strong>剩余额度 320</strong>
-            <p>你当前是 Member，不能自行续额度。需要更多额度时，请联系团队 Admin。</p>
+            <p>你当前是 Member，不能自行续额度。需要更多额度时，请联系团队 Owner 或 Admin。</p>
             <button type="button">提醒 Admin 提额</button>
           </div>
         )}

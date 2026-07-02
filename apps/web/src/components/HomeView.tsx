@@ -226,6 +226,7 @@ interface Props {
   executionSwitcher?: ReactNode;
   demoScenario?: DemoScenario;
   demoUseMode?: DemoUseMode;
+  workspaceExpired?: boolean;
 }
 
 const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
@@ -420,6 +421,7 @@ export function HomeView({
   executionSwitcher,
   demoScenario,
   demoUseMode = 'cloud',
+  workspaceExpired = false,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -2088,6 +2090,7 @@ export function HomeView({
         heading="最近项目"
         space="recent"
         collaborationEnabled={demoUseMode === 'cloud'}
+        workspaceExpired={workspaceExpired}
         {...(projectsLoading !== undefined ? { loading: projectsLoading } : {})}
         onOpen={(id) => {
           // P0 ui_click area=recent_projects element=project_card — emit

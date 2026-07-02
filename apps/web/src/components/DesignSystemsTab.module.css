@@ -41,6 +41,21 @@
   line-height: 1.35;
 }
 
+.expiredNotice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 820px;
+  margin: -6px 0 16px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--amber) 24%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--amber) 7%, var(--bg-panel));
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
 .headerTools {
   display: flex;
   align-items: center;
@@ -410,6 +425,20 @@
   border-color: color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
+.itemLocked,
+.itemLocked:hover,
+.itemLocked:disabled {
+  background: color-mix(in srgb, var(--bg-panel) 84%, var(--bg-subtle));
+  border-color: transparent;
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.itemLocked .itemThumb {
+  filter: grayscale(1);
+}
+
 .itemThumb {
   display: flex;
   flex: 0 0 auto;
@@ -494,6 +523,19 @@
   font-weight: 660;
   letter-spacing: 0.02em;
   text-transform: uppercase;
+}
+
+.lockBadge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 650;
 }
 
 /* Row wrapper holds the main button + the hover-revealed 私有/共享 toggle. */
@@ -617,6 +659,40 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
+}
+
+.previewFrozen {
+  min-height: 360px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 28px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.previewFrozenIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  color: var(--text-soft);
+}
+
+.previewFrozen h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 17px;
+}
+
+.previewFrozen p {
+  max-width: 440px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .detail {

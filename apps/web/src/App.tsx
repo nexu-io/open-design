@@ -16,7 +16,7 @@ import {
 } from '@open-design/contracts/analytics';
 import type { AmrModelsResponse, ChatSessionMode } from '@open-design/contracts';
 import { EntryView } from './components/EntryView';
-import { DemoControlBar, isInviteScenario, type DemoPlan, type DemoScenario, type DemoUseMode } from './components/DemoControlBar';
+import { DemoControlBar, isInviteScenario, type DemoPlan, type DemoScenario, type DemoUseMode, type DemoWorkspaceLifecycle } from './components/DemoControlBar';
 import type { IntegrationTab } from './components/integration-tabs';
 import { MarketplaceView } from './components/MarketplaceView';
 import { PluginDetailView } from './components/PluginDetailView';
@@ -437,6 +437,7 @@ function AppInner() {
   const [projectDemoScenario, setProjectDemoScenario] = useState<DemoScenario>('home');
   const [projectDemoPlan, setProjectDemoPlan] = useState<DemoPlan>('free');
   const [projectDemoUseMode, setProjectDemoUseMode] = useState<DemoUseMode>('cloud');
+  const [projectDemoWorkspaceLifecycle, setProjectDemoWorkspaceLifecycle] = useState<DemoWorkspaceLifecycle>('active');
   // Narrower flag dedicated to the Composio API key hydration. The key is
   // persisted by the daemon (and only reflected back via apiKeyConfigured
   // + apiKeyTail), so after a dev-server restart there is a window where
@@ -2310,6 +2311,7 @@ function AppInner() {
             if (page === 'onboarding') {
               setProjectDemoScenario('onboarding-new');
               setProjectDemoPlan('free');
+              setProjectDemoWorkspaceLifecycle('active');
               window.history.replaceState(null, '', '/onboarding');
               navigate({ kind: 'home', view: 'onboarding' });
             } else {
@@ -2319,13 +2321,26 @@ function AppInner() {
           }}
           scenario={projectDemoScenario}
           plan={projectDemoPlan}
-          onPlan={(plan) => setProjectDemoPlan(projectDemoUseMode === 'local' && plan === 'team' ? 'max' : plan)}
+          onPlan={(plan) => {
+            const nextPlan = projectDemoUseMode === 'local' && plan === 'team' ? 'max' : plan;
+            setProjectDemoPlan(nextPlan);
+            if (nextPlan !== 'team') setProjectDemoWorkspaceLifecycle('active');
+          }}
+          workspaceLifecycle={projectDemoWorkspaceLifecycle}
+          onWorkspaceLifecycle={(lifecycle) => {
+            setProjectDemoWorkspaceLifecycle(lifecycle);
+            if (lifecycle === 'expired') {
+              setProjectDemoUseMode('cloud');
+              setProjectDemoPlan('team');
+            }
+          }}
           useMode={projectDemoUseMode}
           onUseMode={(mode) => {
             setProjectDemoUseMode(mode);
             if (mode === 'local' && projectDemoPlan === 'team') {
               setProjectDemoPlan('max');
             }
+            if (mode === 'local') setProjectDemoWorkspaceLifecycle('active');
           }}
           onLowCredits={() => {}}
           onAcceptInvite={(role) => {
@@ -2337,6 +2352,7 @@ function AppInner() {
                   : 'invite-viewer';
             setProjectDemoScenario(scenario);
             setProjectDemoPlan(projectDemoUseMode === 'local' ? 'max' : 'team');
+            setProjectDemoWorkspaceLifecycle('active');
             window.history.replaceState(null, '', '/onboarding#invite');
             navigate({ kind: 'home', view: 'onboarding' });
           }}
@@ -2344,8 +2360,12 @@ function AppInner() {
           onEditDemo={() => window.dispatchEvent(new CustomEvent('open-design:demo-edit'))}
           onScenario={(scenario) => {
             setProjectDemoScenario(scenario);
-            if (scenario === 'onboarding-new') setProjectDemoPlan('free');
-            else if (scenario !== 'home') setProjectDemoPlan(projectDemoUseMode === 'local' ? 'max' : 'team');
+            if (scenario === 'onboarding-new') {
+              setProjectDemoPlan('free');
+              setProjectDemoWorkspaceLifecycle('active');
+            } else if (scenario !== 'home') {
+              setProjectDemoPlan(projectDemoUseMode === 'local' ? 'max' : 'team');
+            }
             if (scenario === 'home') {
               if (route.kind === 'home') {
                 navigate({ kind: 'home', view: 'home' });

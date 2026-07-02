@@ -63,6 +63,7 @@ interface Props {
   canManageWorkspace?: boolean;
   canOwnWorkspace?: boolean;
   cloudWorkspace?: boolean;
+  workspaceExpired?: boolean;
 }
 
 interface NavButtonProps {
@@ -90,7 +91,7 @@ function NavButton({ active, ariaLabel, tooltip, onClick, testId, children }: Na
   );
 }
 
-export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, footerExtra, footerNotice, solo = false, credits, onUpgrade, onOpenSettings, canManageWorkspace = true, canOwnWorkspace = true, cloudWorkspace = true }: Props) {
+export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, footerExtra, footerNotice, solo = false, credits, onUpgrade, onOpenSettings, canManageWorkspace = true, canOwnWorkspace = true, cloudWorkspace = true, workspaceExpired = false }: Props) {
   const t = useT();
   const brandLabel = t('app.brand');
   const homeLabel = t('entry.navHome');
@@ -101,6 +102,8 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
+  const [workspaceLockedOpen, setWorkspaceLockedOpen] = useState(false);
+  const workspaceAccessBlocked = workspaceExpired && !canOwnWorkspace;
 
   // Once opened the rail stays docked (Manus-style); navigating between
   // destinations no longer collapses it.
@@ -268,17 +271,26 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
             <div className="entry-nav-rail__team-wrap">
               <button
                 type="button"
-                className="entry-nav-rail__team"
-                onClick={() => setTeamOpen((v) => !v)}
-                aria-expanded={teamOpen}
+                className={`entry-nav-rail__team${workspaceExpired ? ' is-expired' : ''}${workspaceAccessBlocked ? ' is-locked' : ''}`}
+                onClick={() => {
+                  if (workspaceAccessBlocked) {
+                    setWorkspaceLockedOpen(true);
+                    return;
+                  }
+                  setTeamOpen((v) => !v);
+                }}
+                aria-expanded={workspaceAccessBlocked ? workspaceLockedOpen : teamOpen}
+                aria-haspopup={workspaceAccessBlocked ? 'dialog' : undefined}
+                aria-label={workspaceAccessBlocked ? 'Nexu 团队已锁定，需 Owner 续费后恢复团队协作' : undefined}
+                title={workspaceExpired ? '团队版已到期，需 Owner 续费后恢复团队协作' : undefined}
               >
                 <span className="entry-nav-rail__team-avatar" aria-hidden>
                   <img src="/logo.png" alt="" />
                 </span>
                 <span className="entry-nav-rail__team-name">Nexu 团队</span>
-                <Icon name="chevron-down" size={14} />
+                {workspaceExpired ? <Icon name="lock" size={13} /> : <Icon name="chevron-down" size={14} />}
               </button>
-              {teamOpen ? (
+              {teamOpen && !workspaceAccessBlocked ? (
                 <>
                   <div className="entry-nav-rail__menu-backdrop" onClick={() => setTeamOpen(false)} />
                   <div className="entry-nav-rail__team-menu" role="menu">
@@ -291,31 +303,36 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
                     <button type="button" className="entry-nav-rail__menu-item is-current" role="menuitem">
                       <span className="entry-nav-rail__team-avatar" aria-hidden>N</span>
                       Nexu 团队
-                      <Icon name="check" size={14} />
+                      {workspaceExpired ? <span className="entry-nav-rail__team-plan">已降级</span> : null}
+                      <Icon name={workspaceExpired ? 'lock' : 'check'} size={14} />
                     </button>
-                    <div className="entry-nav-rail__menu-divider" />
-                    <button
-                      type="button"
-                      className="entry-nav-rail__menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setTeamOpen(false);
-                        setInviteOpen(true);
-                      }}
-                    >
-                      <Icon name="share" size={15} /> 邀请同事
-                    </button>
-                    <button
-                      type="button"
-                      className="entry-nav-rail__menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setTeamOpen(false);
-                        setCreateTeamOpen(true);
-                      }}
-                    >
-                      <Icon name="plus" size={15} /> 新建团队
-                    </button>
+                    {!workspaceExpired ? (
+                      <>
+                        <div className="entry-nav-rail__menu-divider" />
+                        <button
+                          type="button"
+                          className="entry-nav-rail__menu-item"
+                          role="menuitem"
+                          onClick={() => {
+                            setTeamOpen(false);
+                            setInviteOpen(true);
+                          }}
+                        >
+                          <Icon name="share" size={15} /> 邀请同事
+                        </button>
+                        <button
+                          type="button"
+                          className="entry-nav-rail__menu-item"
+                          role="menuitem"
+                          onClick={() => {
+                            setTeamOpen(false);
+                            setCreateTeamOpen(true);
+                          }}
+                        >
+                          <Icon name="plus" size={15} /> 新建团队
+                        </button>
+                      </>
+                    ) : null}
                   </div>
                 </>
               ) : null}
@@ -432,6 +449,28 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
       />
       <CreateTeamDialog open={createTeamOpen} onClose={() => setCreateTeamOpen(false)} />
       <UpgradeTeamDialog open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+      {workspaceLockedOpen ? (
+        <div className="entry-nav-rail__locked-modal-backdrop" role="presentation" onClick={() => setWorkspaceLockedOpen(false)}>
+          <section
+            className="entry-nav-rail__locked-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Workspace 已锁定"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className="entry-nav-rail__locked-icon" aria-hidden>
+              <Icon name="lock" size={18} />
+            </span>
+            <div>
+              <h2>Nexu 团队已到期</h2>
+              <p>该 Workspace 已降级为 Owner 的个人 Workspace。必须由 Owner 完成续费充值后，团队成员才能恢复并重新进入。</p>
+            </div>
+            <button type="button" onClick={() => setWorkspaceLockedOpen(false)}>
+              知道了
+            </button>
+          </section>
+        </div>
+      ) : null}
     </nav>
   );
 }

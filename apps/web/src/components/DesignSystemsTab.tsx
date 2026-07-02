@@ -46,6 +46,7 @@ interface Props {
   onOpenSystem?: (id: string) => void;
   onSystemsRefresh?: () => Promise<void> | void;
   templates?: ProjectTemplate[];
+  workspaceExpired?: boolean;
 }
 
 const CATEGORY_ORDER = [
@@ -317,6 +318,7 @@ export function DesignSystemsTab({
   onCreate,
   onOpenSystem,
   onSystemsRefresh,
+  workspaceExpired = false,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -350,6 +352,10 @@ export function DesignSystemsTab({
   // Convert a personal design system to the team scope (demo-local): it moves
   // from「你的」into「团队」so teammates can use it.
   const convertToTeam = (system: DesignSystemSummary) => {
+    if (workspaceExpired) {
+      notifyAction('error', '团队版已到期，续费后才能转为团队设计系统');
+      return;
+    }
     setTeamSystemIds((prev) => new Set(prev).add(system.id));
     setDesignSystemCollection('team');
     notifyAction('success', `已将「${system.title}」转为团队设计系统`);
@@ -416,6 +422,11 @@ export function DesignSystemsTab({
     () => teamSystems.filter((s) => systemMatchesQuery(locale, s, q)),
     [teamSystems, locale, q],
   );
+  const frozenTeamSystemIds = useMemo(
+    () => workspaceExpired ? teamSystemIds : new Set<string>(),
+    [teamSystemIds, workspaceExpired],
+  );
+  const isFrozenTeamSystem = (system: DesignSystemSummary) => frozenTeamSystemIds.has(system.id);
 
   const userSearched = useMemo(
     () => userSystems.filter((s) => systemMatchesQuery(locale, s, q)),
@@ -494,8 +505,8 @@ export function DesignSystemsTab({
   }, [designSystemCollection, userSearched, teamSearched, filtered]);
 
   const activeIds = useMemo(() => {
-    return activeSystems.map((s) => s.id);
-  }, [activeSystems]);
+    return activeSystems.filter((s) => !frozenTeamSystemIds.has(s.id)).map((s) => s.id);
+  }, [activeSystems, frozenTeamSystemIds]);
 
   // Keep the previewed row valid as scopes / filters change: hold the current
   // pick when it still exists, otherwise fall back to the first row (mirrors
@@ -861,6 +872,12 @@ export function DesignSystemsTab({
           </button>
         ))}
       </div>
+      {workspaceExpired ? (
+        <div className={styles.expiredNotice} role="status">
+          <Icon name="lock" size={14} />
+          <span>团队版已到期，团队共享的 Design System 会保留但锁定；你的个人 Design System 仍可继续编辑和使用。</span>
+        </div>
+      ) : null}
       <div className={styles.root} data-testid="design-systems-tab">
         <aside className={styles.sidebar}>
         {showPresetFilters ? (
@@ -958,6 +975,7 @@ export function DesignSystemsTab({
         key={system.id}
         system={system}
         active={system.id === previewId}
+        locked={isFrozenTeamSystem(system)}
         isDefault={system.id === selectedId}
         categoryLabel={
           isUserSystem(system)
@@ -967,7 +985,10 @@ export function DesignSystemsTab({
             : localizeDesignSystemCategory(locale, system.category || 'Uncategorized')
         }
         statusLabel={(system.status ?? 'draft') === 'published' ? t('dsManager.statusPublished') : t('dsManager.statusDraft')}
-        onSelect={() => handleSelectSystem(system)}
+        onSelect={() => {
+          if (isFrozenTeamSystem(system)) return;
+          handleSelectSystem(system);
+        }}
       />
     ));
   }
@@ -980,6 +1001,18 @@ export function DesignSystemsTab({
           body={t('dsManager.enterpriseDsBody')}
           comingSoonLabel={t('dsManager.comingSoonBadge')}
         />
+      );
+    }
+
+    if (workspaceExpired && designSystemCollection === 'team') {
+      return (
+        <div className={styles.previewFrozen}>
+          <span className={styles.previewFrozenIcon} aria-hidden>
+            <Icon name="lock" size={18} />
+          </span>
+          <h2>团队设计系统已锁定</h2>
+          <p>这些体系仍保留在原 Workspace 中，但到期降级后不可打开、编辑、设为默认或下载。Owner 续费后会恢复团队共享能力。</p>
+        </div>
       );
     }
 
@@ -999,7 +1032,7 @@ export function DesignSystemsTab({
           onSystemsRefresh={onSystemsRefresh}
           onActionFeedback={notifyAction}
           isTeamSystem={teamSystemIds.has(selectedSystem.id)}
-          onConvertToTeam={convertToTeam}
+          onConvertToTeam={workspaceExpired ? undefined : convertToTeam}
           onMoveBackToPersonal={moveBackToPersonal}
         />
       );
@@ -1035,6 +1068,7 @@ function SkeletonBlock({
 interface SystemRowProps {
   system: DesignSystemSummary;
   active: boolean;
+  locked?: boolean;
   isDefault: boolean;
   categoryLabel: string;
   statusLabel: string;
@@ -1142,6 +1176,7 @@ function SystemRowLogo({ system }: { system: DesignSystemSummary }) {
 function SystemRow({
   system,
   active,
+  locked = false,
   isDefault,
   categoryLabel,
   statusLabel,
@@ -1155,9 +1190,12 @@ function SystemRow({
       <button
         type="button"
         data-testid={`design-system-card-${system.id}`}
-        className={`${styles.item} ${active ? styles.itemActive : ''}`}
+        className={`${styles.item} ${active ? styles.itemActive : ''} ${locked ? styles.itemLocked : ''}`}
         aria-pressed={active}
+        aria-disabled={locked || undefined}
+        disabled={locked}
         onClick={onSelect}
+        title={locked ? '团队版到期后需 Owner 续费恢复' : undefined}
       >
         <span className={styles.itemThumb}>
           <SystemRowLogo system={system} />
@@ -1166,6 +1204,11 @@ function SystemRow({
           <span className={styles.itemNameRow}>
             <span className={styles.itemName}>{system.title}</span>
             {isDefault ? <span className={styles.badgeDefault}>{t('dsManager.badgeDefault')}</span> : null}
+            {locked ? (
+              <span className={styles.lockBadge}>
+                <Icon name="lock" size={10} /> 已锁定
+              </span>
+            ) : null}
           </span>
           <span className={styles.itemSubRow}>
             <span className={styles.itemSub}>{categoryLabel}</span>
