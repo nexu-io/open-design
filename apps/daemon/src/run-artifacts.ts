@@ -92,6 +92,20 @@ function readToolResultIsError(data: unknown): boolean {
   return (data as { isError?: unknown }).isError === true;
 }
 
+// True iff the event is sidechain (subagent-internal) tool activity.
+// claude-stream stamps `parentToolUseId` (the dispatching Task/Agent
+// tool_use id) on every tool event a subagent emits. The web renderer
+// hides these behind the parent TaskCard (AssistantMessage skips events
+// carrying the tag), so the artifact counters must not treat them as
+// main-run output either — otherwise a future skill whose subagent
+// writes HTML would inflate `run_finished.artifact_count` relative to
+// what the transcript shows as the run's own work.
+function isSidechainToolEvent(data: unknown): boolean {
+  if (!data || typeof data !== 'object') return false;
+  const tag = (data as { parentToolUseId?: unknown }).parentToolUseId;
+  return typeof tag === 'string' && tag.length > 0;
+}
+
 // Generic write counter shared by all three predicates. Returns the
 // set of distinct paths the run successfully wrote / edited that
 // match `predicate`. Failure-pairing semantics match
@@ -118,6 +132,7 @@ function collectWrittenPathsMatching(
       | null
       | undefined;
     if (data?.type !== 'tool_use') continue;
+    if (isSidechainToolEvent(rec.data)) continue;
     if (typeof data.name !== 'string') continue;
     if (!WRITE_OR_EDIT_TOOL_NAMES.has(data.name)) continue;
     const path = extractToolFilePath(data.input);
@@ -180,6 +195,7 @@ export function countNewHtmlArtifacts(events: readonly RunEventLike[]): number {
       | null
       | undefined;
     if (data?.type !== 'tool_use') continue;
+    if (isSidechainToolEvent(rec.data)) continue;
     if (typeof data.name !== 'string') continue;
     if (!WRITE_OR_EDIT_TOOL_NAMES.has(data.name)) continue;
     const path = extractToolFilePath(data.input);
