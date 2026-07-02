@@ -54,10 +54,12 @@ export WEB_CLONE_SKILL_DIR="/absolute/path/to/skills/web-clone"
 ### Step 0 · 先建标准工程骨架
 
 ```bash
+export WEB_CLONE_ROOT="${WEB_CLONE_ROOT:-./website-clones}"
+export WEB_CLONE_PROJECT="$WEB_CLONE_ROOT/<站名>-clone"
 node "$WEB_CLONE_SKILL_DIR/scripts/init-clone.mjs" <站名> --url <原站URL>
 ```
 
-该脚本会创建 `./website-clones/<站名>-clone/`、`NOTES.md`、`RECON/screenshots/`，避免每次手工漏掉产物。
+该脚本会创建 `$WEB_CLONE_PROJECT/`、`NOTES.md`、`RECON/screenshots/`，避免每次手工漏掉产物。后续步骤继续使用同一个 `WEB_CLONE_PROJECT`，确保默认路径和 `WEB_CLONE_ROOT` 自定义路径一致。
 
 ### Step 1 · 先去 GitHub 搜源码，别急着抓站
 
@@ -73,41 +75,41 @@ SSL_CERT_FILE=/etc/ssl/cert.pem gh api "search/repositories?q=<关键词>" \
 
 ### Step 2 · 没找到源码 → 浏览器侦察（探针）
 
-加载 `Browser` skill 或 playwright MCP，跑探针抽信号（框架 / `window.THREE` / canvas 数 / 平滑滚动库 / 字体 / scrollHeight）。截图 1440/768/390 三档 + 侦察 JSON 存 `<站>/RECON/`。
+加载 `Browser` skill 或 playwright MCP，跑探针抽信号（框架 / `window.THREE` / canvas 数 / 平滑滚动库 / 字体 / scrollHeight）。截图 1440/768/390 三档 + 侦察 JSON 存 `$WEB_CLONE_PROJECT/RECON/`。
 
 优先用内置脚本跑标准侦察：
 
 ```bash
 node "$WEB_CLONE_SKILL_DIR/scripts/recon-site.mjs" \
   --url <原站URL> \
-  --out ./website-clones/<站名>-clone/RECON \
+  --out "$WEB_CLONE_PROJECT/RECON" \
   --label original
 
 node "$WEB_CLONE_SKILL_DIR/scripts/asset-harvest.mjs" \
-  --recon ./website-clones/<站名>-clone/RECON/original-recon.json \
-  --out ./website-clones/<站名>-clone/assets/original \
-  --manifest ./website-clones/<站名>-clone/RECON/asset-manifest.json
+  --recon "$WEB_CLONE_PROJECT/RECON/original-recon.json" \
+  --out "$WEB_CLONE_PROJECT/assets/original" \
+  --manifest "$WEB_CLONE_PROJECT/RECON/asset-manifest.json"
 
 node "$WEB_CLONE_SKILL_DIR/scripts/network-capture.mjs" \
   --url <原站URL> \
-  --out ./website-clones/<站名>-clone/RECON/network \
+  --out "$WEB_CLONE_PROJECT/RECON/network" \
   --label original
 
 node "$WEB_CLONE_SKILL_DIR/scripts/route-crawl.mjs" \
   --url <原站URL> \
-  --out ./website-clones/<站名>-clone/RECON/routes \
+  --out "$WEB_CLONE_PROJECT/RECON/routes" \
   --label original \
   --max-pages 25 \
   --max-depth 2
 
 node "$WEB_CLONE_SKILL_DIR/scripts/interaction-probe.mjs" \
   --url <原站URL> \
-  --out ./website-clones/<站名>-clone/RECON/interactions \
+  --out "$WEB_CLONE_PROJECT/RECON/interactions" \
   --label original
 
 node "$WEB_CLONE_SKILL_DIR/scripts/sourcemap-hunt.mjs" \
-  --recon ./website-clones/<站名>-clone/RECON/original-recon.json \
-  --out ./website-clones/<站名>-clone/RECON/sourcemaps
+  --recon "$WEB_CLONE_PROJECT/RECON/original-recon.json" \
+  --out "$WEB_CLONE_PROJECT/RECON/sourcemaps"
 ```
 
 > 登录态私域站才使用用户已授权的浏览器自动化环境；localhost / 无登录公开站用 `Browser` skill 或 Playwright。
@@ -120,8 +122,8 @@ node "$WEB_CLONE_SKILL_DIR/scripts/sourcemap-hunt.mjs" \
 
 ```bash
 node "$WEB_CLONE_SKILL_DIR/scripts/dna-scaffold.mjs" \
-  --recon ./website-clones/<站名>-clone/RECON/original-recon.json \
-  --out   ./website-clones/<站名>-clone/RECON/design-dna.json \
+  --recon "$WEB_CLONE_PROJECT/RECON/original-recon.json" \
+  --out   "$WEB_CLONE_PROJECT/RECON/design-dna.json" \
   --name  "<站名>"
 ```
 
@@ -146,7 +148,7 @@ L4-L6 复杂站按 `references/complex-playbooks.md` 走，不要只用普通官
 ### Step 4 · 在克隆中枢里搭工程
 
 ```bash
-cd ./website-clones/<站名>-clone
+cd "$WEB_CLONE_PROJECT"
 # git 源码：clone 进来；单文件：放进来。原始源码留一份只读基准 index-original.html
 # 检查 Node 版本（package.json engines），nvm use 对应版本，钉 .nvmrc
 ```
