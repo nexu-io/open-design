@@ -1911,9 +1911,10 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     renderSettingsDialog({ apiKey: 'sk-ant-test-provider' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Test' }));
-    expect(await screen.findByRole('button', { name: 'Retry test' })).toBeTruthy();
+    const retryButton = await screen.findByRole('button', { name: 'Retry test' });
+    expect(retryButton.classList.contains('is-icon-only')).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry test' }));
+    fireEvent.click(retryButton);
 
     expect(await screen.findByText(/Connected\. Replied in 18 ms/)).toBeTruthy();
     const testConnectionCalls = fetchMock.mock.calls.filter(

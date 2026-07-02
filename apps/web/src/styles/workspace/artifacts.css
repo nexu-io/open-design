@@ -1841,10 +1841,22 @@
   min-width: 0;
   text-align: right;
 }
+.settings-byok-connection-test-status > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .settings-byok-connection-test .settings-test-btn {
   flex: 0 0 auto;
   min-width: max-content;
   white-space: nowrap;
+}
+.settings-byok-connection-test .settings-test-btn.is-icon-only {
+  width: 32px;
+  min-width: 32px;
+  padding-inline: 0;
+  gap: 0;
 }
 .settings-byok-ready {
   color: var(--text-muted);

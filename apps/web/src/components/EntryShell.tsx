@@ -2455,25 +2455,17 @@ function OnboardingView({
               >
                 {t('settings.onboardingLocalTitle')}
               </button>
-              <span className="onboarding-cloud__alts-or">
-                {t('settings.onboardingCloudOr')}
-              </span>
               {deploymentProviderAvailable ? (
-                <>
-                  <button
-                    type="button"
-                    className="onboarding-cloud__secondary"
-                    onClick={() => {
-                      emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
-                      selectDeploymentProvider();
-                    }}
-                  >
-                    {deploymentProviderConfig?.label ?? t('settings.modeApi')}
-                  </button>
-                  <span className="onboarding-cloud__alts-or">
-                    {t('settings.onboardingCloudOr')}
-                  </span>
-                </>
+                <button
+                  type="button"
+                  className="onboarding-cloud__secondary"
+                  onClick={() => {
+                    emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
+                    selectDeploymentProvider();
+                  }}
+                >
+                  {deploymentProviderConfig?.label ?? t('settings.modeApi')}
+                </button>
               ) : null}
               <button
                 type="button"

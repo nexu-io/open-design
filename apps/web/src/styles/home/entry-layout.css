@@ -2028,19 +2028,16 @@
 .onboarding-cloud__alts {
   display: grid;
   justify-items: center;
-  gap: 8px;
+  gap: 6px;
+  width: min(280px, 100%);
   margin-top: 22px;
 }
 
 .onboarding-cloud__alts .onboarding-cloud__secondary {
   margin-top: 0;
+  width: 100%;
+  min-height: 30px;
   white-space: nowrap;
-}
-
-.onboarding-cloud__alts-or {
-  color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1;
 }
 
 .onboarding-cloud__error {
