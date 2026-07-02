@@ -752,4 +752,4 @@ Detailed provenance → [`docs/references.md`](docs/references.md).
 
 ## License
 
-Apache-2.0. The bundled `design-templates/guizang-ppt/` retains its original [LICENSE](design-templates/guizang-ppt/LICENSE) (MIT, [@op7418](https://github.com/op7418)). The bundled `design-templates/html-ppt/` retains its original [LICENSE](design-templates/html-ppt/LICENSE) (MIT, [@lewislulu](https://github.com/lewislulu)).
+Apache-2.0. Bundled skills and templates with their own `LICENSE` files retain those licenses, including `design-templates/guizang-ppt/` (MIT, [@op7418](https://github.com/op7418)), `design-templates/html-ppt/` (MIT, [@lewislulu](https://github.com/lewislulu)), and `skills/web-clone/` (MIT, [@Jane-xiaoer](https://github.com/Jane-xiaoer)).
