@@ -452,7 +452,7 @@ body::before {
   .locale-menu { animation: none; }
   .locale-trigger-caret { transition: none; }
 }
-/* ---------- Open Design Cloud (AMR) header account ---------- */
+/* ---------- Open Design Cloud header account ---------- */
 /*
  * Two mutually-exclusive states share this slot: the signed-out "Sign in"
  * link and the signed-in avatar menu. Both render in the markup; the avatar
@@ -509,10 +509,15 @@ body::before {
 /* Avatar menu — a borderless <details> whose summary is the avatar disc. */
 .nav-account-menu {
   position: relative;
+  display: inline-flex;
+  align-items: center;
 }
 .nav-account-trigger {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   cursor: pointer;
   list-style: none;
   border-radius: 999px;
@@ -529,6 +534,7 @@ body::before {
   width: 32px;
   height: 32px;
   border-radius: 50%;
+  display: block;
   flex-shrink: 0;
   object-fit: cover;
 }

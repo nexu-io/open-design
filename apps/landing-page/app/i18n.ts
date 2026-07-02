@@ -226,11 +226,11 @@ export interface HeaderCopy {
   starAria: string;
   starTitle: string;
   starPrefix: string;
-  /** Open Design Cloud (AMR) account entry — see header-enhancer.astro. */
+  /** Open Design Cloud account entry — see header-enhancer.astro. */
   signIn: string;
   /** aria-label for the signed-in avatar / account menu trigger. */
   accountAria: string;
-  /** Avatar dropdown: open the Cloud console (AMR app). */
+  /** Avatar dropdown: open the Cloud console. */
   menuConsole: string;
   /** Avatar dropdown: sign out of the Cloud session. */
   menuSignOut: string;

@@ -23,21 +23,25 @@ const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_DISCUSSIONS = `${REPO}/discussions`;
 const DISCORD = 'https://discord.gg/mHAjSMV6gz';
 const X_PROFILE = 'https://x.com/OpenDesignHQ';
-// AMR product page on the production site (this repo has no /amr/ route).
+// Open Design Cloud product surface on the production site.
 // Single destination for the Agent dropdown entry and cloud account surfaces.
-const AMR_URL = 'https://open-design.ai/amr/';
+const CLOUD_URL = 'https://open-design.ai/cloud/';
 
-// Open Design Cloud (AMR / vela) endpoints for the header sign-in module.
+// Open Design Cloud endpoints for the header sign-in module.
 // Production defaults; overridable at build time via PUBLIC_* env so a
 // preview/staging build can point at a non-prod cloud. These are surfaced to
 // the runtime via `data-*` on `.nav-account` because the auth logic lives in
 // `header-enhancer.astro`'s `<script is:inline>` (NOT processed by Vite, so it
 // cannot read `import.meta.env` itself).
 const env = import.meta.env as Record<string, string | undefined>;
-const AMR_API_BASE = env.PUBLIC_AMR_API_BASE ?? 'https://amr-api.open-design.ai';
-const AMR_LOGIN_URL = env.PUBLIC_AMR_LOGIN_URL ?? 'https://open-design.ai/amr/login';
-const AMR_CONSOLE_URL =
-  env.PUBLIC_AMR_CONSOLE_URL ?? 'https://open-design.ai/amr?source=open_design';
+const CLOUD_API_BASE =
+  env.PUBLIC_CLOUD_API_BASE ?? env.PUBLIC_AMR_API_BASE ?? 'https://amr-api.open-design.ai';
+const CLOUD_LOGIN_URL =
+  env.PUBLIC_CLOUD_LOGIN_URL ?? env.PUBLIC_AMR_LOGIN_URL ?? 'https://open-design.ai/cloud/login';
+const CLOUD_CONSOLE_URL =
+  env.PUBLIC_CLOUD_CONSOLE_URL ??
+  env.PUBLIC_AMR_CONSOLE_URL ??
+  'https://open-design.ai/cloud/wallet?source=open_design';
 
 // Solution → Use cases / Roles. Hrefs mirror upstream main's header 1:1 and
 // pair positionally with the localized `useCaseItems` / `roleItems` tuples.
@@ -328,7 +332,7 @@ export function Header({
                 aria-label={productMenuCopy.agent}
               >
                 <li>
-                  <a href={AMR_URL}>
+                  <a href={CLOUD_URL}>
                     <span className='dropdown-name'>{productMenuCopy.amrName}</span>
                     <span className='dropdown-blurb'>{productMenuCopy.amrBlurb}</span>
                   </a>
@@ -572,7 +576,7 @@ export function Header({
             {headerCopy.download}
           </a>
           {/*
-            Open Design Cloud (AMR) account entry. Renders BOTH states up front
+            Open Design Cloud account entry. Renders BOTH states up front
             and lets `header-enhancer.astro` toggle them at runtime: the
             signed-out "Sign in" link is visible by default (so no-JS / pre-hydration
             shows a working login link), and the signed-in avatar menu stays
@@ -583,12 +587,12 @@ export function Header({
           <div
             className='nav-account'
             data-amr-account
-            data-amr-api={AMR_API_BASE}
-            data-amr-login={AMR_LOGIN_URL}
-            data-amr-console={AMR_CONSOLE_URL}
+            data-amr-api={CLOUD_API_BASE}
+            data-amr-login={CLOUD_LOGIN_URL}
+            data-amr-console={CLOUD_CONSOLE_URL}
             data-amr-home={href('/')}
           >
-            <a className='nav-signin' href={AMR_LOGIN_URL} data-amr-signin>
+            <a className='nav-signin' href={CLOUD_LOGIN_URL} data-amr-signin>
               {headerCopy.signIn}
             </a>
             <details className='nav-account-menu' data-amr-menu hidden>
@@ -612,7 +616,7 @@ export function Header({
                 <a
                   className='nav-account-item'
                   role='menuitem'
-                  href={AMR_CONSOLE_URL}
+                  href={CLOUD_CONSOLE_URL}
                   target='_blank'
                   rel='noreferrer noopener'
                   data-amr-console-link
