@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "Joe Lazer Premium Homepage",
+  "entry": "joe-lazer-premium-homepage.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "primary": true,
+  "createdAt": "2026-07-01T12:29:21.771Z",
+  "updatedAt": "2026-07-02T07:28:43.872Z",
+  "metadata": {
+    "identifier": "joe-lazer-premium-homepage",
+    "artifactType": "text/html",
+    "inferred": false
+  }
+}

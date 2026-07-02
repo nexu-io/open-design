@@ -1,0 +1,161 @@
+{
+  "specVersion": "1.0.0",
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "name": "premium-personal-brand-homepage",
+  "title": "Premium Personal Brand Homepage",
+  "version": "0.1.0",
+  "description": "Create a premium, conversion-focused personal brand homepage for an author, speaker, consultant, founder, or expert operator using real proof assets, editorial hierarchy, and clear booking/subscription CTAs.",
+  "author": {
+    "name": "kokisanai",
+    "url": "https://github.com/kokisanai"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/kokisanai/premium-personal-brand-homepage",
+  "plugin": {
+    "repo": "kokisanai/premium-personal-brand-homepage"
+  },
+  "tags": [
+    "scenario",
+    "community",
+    "personal-brand",
+    "homepage",
+    "speaker",
+    "author",
+    "consultant",
+    "editorial"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "scenario",
+    "scenario": "premium-personal-brand-homepage",
+    "useCase": {
+      "query": "Create an optimized premium personal brand website homepage that uses real credibility assets, strong editorial composition, and clear conversion paths for booking, subscribing, buying, or contacting.",
+      "exampleOutputs": [
+        {
+          "title": "Joe Lazer Premium Homepage",
+          "path": "examples/joe-lazer-premium-homepage.html",
+          "kind": "html"
+        }
+      ]
+    },
+    "context": {
+      "examples": [
+        "examples/joe-lazer-premium-homepage.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "plan",
+          "atoms": [
+            "todo-write"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "media-image",
+            "live-artifact"
+          ]
+        },
+        {
+          "id": "critique",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        }
+      ]
+    },
+    "genui": {
+      "surfaces": [
+        {
+          "id": "personal-brand-brief",
+          "kind": "form",
+          "persist": "conversation",
+          "trigger": {
+            "stageId": "discovery",
+            "atom": "discovery-question-form"
+          },
+          "schema": {
+            "type": "object",
+            "properties": {
+              "person": {
+                "type": "string",
+                "title": "Person / brand"
+              },
+              "audience": {
+                "type": "string",
+                "title": "Primary audience"
+              },
+              "conversionGoal": {
+                "type": "string",
+                "title": "Primary conversion goal"
+              },
+              "referenceStyle": {
+                "type": "string",
+                "title": "Reference style or URL"
+              },
+              "assetSources": {
+                "type": "string",
+                "title": "Approved asset sources"
+              }
+            }
+          },
+          "prompt": "Lock the key personal-brand homepage inputs before generation."
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "prompt",
+        "label": "Homepage brief",
+        "type": "text",
+        "required": true,
+        "placeholder": "Describe the person, audience, positioning, offers, proof, and conversion goal."
+      },
+      {
+        "name": "referenceStyle",
+        "label": "Visual reference",
+        "type": "text",
+        "required": false,
+        "placeholder": "Reference image, site URL, or style notes."
+      },
+      {
+        "name": "assetSources",
+        "label": "Approved asset sources",
+        "type": "text",
+        "required": false,
+        "placeholder": "Official website, press kit, book pages, YouTube links, logos, or screenshots."
+      },
+      {
+        "name": "primaryConversion",
+        "label": "Primary conversion",
+        "type": "text",
+        "required": false,
+        "placeholder": "Book a keynote, subscribe, buy the book, contact, apply, etc."
+      }
+    ],
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write"
+    ]
+  }
+}

@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Joe Lazer — Storytelling for the AI Age</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&amp;family=Playfair+Display:ital,wght@0,500;0,650;1,650&amp;family=Work+Sans:wght@400;520;650;760&amp;display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#f7f3eb;
+      --paper:#fffaf1;
+      --surface:#fffdf7;
+      --ink:#090807;
+      --muted:#4e4a42;
+      --rule:#d5cec0;
+      --red:#ff3b2f;
+      --blue:#0754e8;
+      --yellow:#ffe100;
+      --green:#dcead8;
+      --font-display:"Playfair Display","Bodoni 72","Didot",Georgia,serif;
+      --font-body:"Work Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+      --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:var(--ink);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+    body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;background-image:radial-gradient(rgba(0,0,0,.08) .65px,transparent .7px);background-size:5px 5px;mix-blend-mode:multiply;opacity:.22}
+    a{color:inherit;text-decoration:none}
+    img{display:block;max-width:100%}
+    button,input{font:inherit}
+    .page{min-height:100vh;margin:0 auto;background:var(--bg);border:6px solid var(--ink);overflow:hidden}
+    .nav{position:sticky;top:0;z-index:30;display:grid;grid-template-columns:auto 1fr auto auto;gap:clamp(1rem,2.2vw,2.4rem);align-items:center;padding:1.1rem clamp(1rem,3.3vw,3.8rem);background:rgba(247,243,235,.9);border-bottom:1px solid rgba(9,8,7,.14);backdrop-filter:blur(18px)}
+    .mark{display:grid;gap:.15rem}
+    .mark strong{font-family:var(--font-mono);font-size:clamp(1.6rem,2.6vw,2.55rem);line-height:.9;letter-spacing:.16em;font-weight:700}
+    .mark span{color:var(--red);font-family:var(--font-mono);font-size:.66rem;letter-spacing:.42em;text-transform:uppercase;font-weight:700}
+    .nav-links{justify-self:center;display:flex;align-items:center;gap:clamp(1.1rem,2vw,2.2rem);font-family:var(--font-mono);font-size:.84rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+    .nav-links a{padding:.35rem 0;border-bottom:2px solid transparent}
+    .nav-links a:hover{border-color:var(--ink)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:.8rem;min-height:48px;padding:.84rem 1.45rem;border:1.5px solid var(--ink);background:transparent;color:var(--ink);font-family:var(--font-mono);font-size:.8rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:transform .16s ease,box-shadow .16s ease,background .16s ease}
+    .btn:hover{transform:translate(2px,-2px);box-shadow:-4px 4px 0 rgba(9,8,7,.18)}
+    .btn-red{border-color:var(--red);background:var(--red);color:#fff}
+    .btn-dark{background:var(--ink);color:#fff}
+    .link-row{display:flex;flex-wrap:wrap;gap:.55rem;margin-top:1.05rem}
+    .mini-link{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:.56rem .76rem;border:1.5px solid var(--ink);background:var(--surface);font-family:var(--font-mono);font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;transition:transform .16s ease,box-shadow .16s ease}
+    .mini-link:hover{transform:translate(2px,-2px);box-shadow:-4px 4px 0 rgba(9,8,7,.16)}
+    .mini-link.dark{background:var(--ink);color:#fff}.mini-link.red{background:var(--red);border-color:var(--red);color:#fff}.mini-link.blue{background:var(--blue);border-color:var(--blue);color:#fff}
+    .menu{display:none;width:46px;height:46px;border:0;background:transparent;place-items:center;cursor:pointer}
+    .menu span,.menu span:before,.menu span:after{content:"";display:block;width:28px;height:3px;background:var(--ink)}
+    .menu span:before{transform:translateY(-8px)}.menu span:after{transform:translateY(5px)}
+    .hero{position:relative;display:grid;grid-template-columns:minmax(23rem,.68fr) minmax(38rem,1.32fr);min-height:calc(100svh - 96px);padding:clamp(.8rem,1.7vw,1.8rem) clamp(1rem,3.3vw,3.8rem) 0;isolation:isolate;overflow:hidden}
+    .hero-copy{position:relative;z-index:7;padding-top:clamp(.25rem,.8vw,.75rem);max-width:43rem}
+    .eyebrow,.kicker{font-family:var(--font-mono);font-size:.82rem;line-height:1.5;letter-spacing:.08em;text-transform:uppercase;font-weight:700}
+    .eyebrow{margin-bottom:1.2rem}
+    .blue-swipe{width:9.4rem;height:18px;margin:.75rem 0 1rem;color:var(--blue)}
+    h1,h2,h3{margin:0;font-family:var(--font-display);font-weight:650;letter-spacing:-.025em;text-wrap:balance}
+    h1{max-width:8.6ch;font-size:clamp(4rem,7.35vw,8.75rem);line-height:.84}
+    h1 em{display:block;color:var(--red);font-style:italic}
+    .black-tag{display:inline-block;margin:1.25rem 0 1.1rem;padding:.18rem .55rem .26rem;background:var(--ink);color:#fff;font-family:var(--font-mono);font-size:clamp(.85rem,1.2vw,1.14rem);font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+    .lead{max-width:39rem;margin:0;color:#201d19;font-size:clamp(1.02rem,1.35vw,1.22rem);line-height:1.55}
+    .hero-actions{display:flex;flex-wrap:wrap;gap:1rem;margin-top:1.55rem}
+    .hero-spatial{z-index:1;opacity:.78;mix-blend-mode:multiply}
+    .collage{position:relative;z-index:2;min-height:720px;align-self:end}
+    .red-blob{position:absolute;right:8%;top:0;width:min(37rem,44vw);height:39rem;background:var(--red);clip-path:polygon(10% 9%,55% 0,91% 17%,100% 66%,74% 100%,19% 88%,0 45%);z-index:1}
+    .halftone{position:absolute;right:-4%;top:7%;width:42%;height:22rem;background:radial-gradient(circle,var(--ink) 1px,transparent 1.5px);background-size:7px 7px;opacity:.28;clip-path:polygon(0 8%,100% 0,98% 92%,12% 100%);z-index:0}
+    .joe-cutout{position:absolute;right:0;bottom:0;z-index:6;width:min(45vw,40rem);height:min(80vh,50rem);min-height:38rem;border:0;filter:drop-shadow(-18px 20px 0 var(--red))}
+    .joe-cutout img{width:100%;height:100%;object-fit:cover;object-position:50% 15%;clip-path:polygon(18% 0,89% 5%,100% 100%,0 100%,5% 28%)}
+    .paper,.speech,.diagram,.book-spread,.note,.method-scrap{position:absolute;z-index:4;border:1.5px solid var(--ink);background:var(--surface);box-shadow:10px 12px 0 rgba(9,8,7,.1)}
+    .paper{left:0;top:16%;width:min(20vw,18rem);padding:1.1rem 1.2rem;transform:rotate(-5deg);background:var(--green);font-family:var(--font-mono);font-size:.8rem}
+    .paper strong{letter-spacing:.08em;text-transform:uppercase}
+    .paper ol{margin:.7rem 0 0;padding-left:1.1rem}.paper li+li{margin-top:.28rem}
+    .speech{left:23%;top:2%;width:min(27vw,22rem);padding:1.25rem 1.45rem;transform:rotate(3deg);font-family:var(--font-display);font-size:clamp(1.75rem,2.9vw,3.15rem);line-height:.98}
+    .speech:before{content:"“";position:absolute;left:0;top:0;transform:translate(-35%,-35%);display:grid;place-items:center;width:3.1rem;height:3.1rem;background:var(--ink);color:#fff;font-family:Georgia,serif;font-size:2.2rem}
+    .speech b{color:var(--blue);font-weight:650}
+    .method-scrap{left:16%;top:43%;width:min(25vw,19rem);padding:1.15rem 1.2rem;transform:rotate(-3deg);background:#f4f1ea;font-family:var(--font-mono);font-size:.82rem}
+    .method-scrap div{display:grid;grid-template-columns:1.5rem 1fr;gap:.6rem;align-items:center}.method-scrap div+div{margin-top:.7rem}.method-scrap svg{width:1.25rem;height:1.25rem;stroke-width:1.8}
+    .diagram{left:42%;top:22%;width:min(27vw,22rem);height:22rem;padding:1rem;background:var(--ink);color:#fff;transform:rotate(4deg);overflow:hidden}
+    .diagram h3{font-family:var(--font-mono);font-size:.86rem;letter-spacing:.07em;text-transform:uppercase}
+    .rings{position:absolute;inset:23% 11% 14%}.rings span{position:absolute;display:grid;place-items:center;width:47%;aspect-ratio:1;border:3px solid currentColor;border-radius:50%;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase}.rings span:nth-child(1){left:27%;top:0;color:var(--yellow)}.rings span:nth-child(2){left:6%;top:34%;color:var(--red)}.rings span:nth-child(3){right:6%;top:34%;color:var(--blue)}
+    .book-spread{right:0;top:13%;width:min(22vw,18rem);min-height:25rem;padding:1rem;transform:rotate(7deg);background:linear-gradient(90deg,rgba(9,8,7,.08) 0 3%,transparent 3% 50%,rgba(9,8,7,.08) 50% 53%,transparent 53%),var(--surface)}
+    .hero-books{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;align-items:end;margin-top:3.2rem}
+    .hero-books img{width:100%;height:13.8rem;object-fit:contain;filter:drop-shadow(7px 9px 0 rgba(9,8,7,.14))}
+    .book-spread h3{font-size:clamp(2rem,2.7vw,3.1rem);line-height:.98}
+    .book-spread p{margin:.8rem 0 0;font-family:var(--font-mono);font-size:.75rem}
+    .note{right:1.2rem;top:4.4rem;z-index:8;width:9.6rem;padding:1.1rem;background:var(--yellow);transform:rotate(7deg);font-family:var(--font-mono);font-size:.85rem;font-weight:700;line-height:1.35}
+    .rip{position:absolute;left:-8%;right:-8%;bottom:0;z-index:3;height:88px;background:radial-gradient(70px 32px at 4% 38%,transparent 48%,var(--bg) 50%),radial-gradient(100px 44px at 17% 14%,transparent 48%,var(--bg) 50%),radial-gradient(125px 52px at 36% 75%,transparent 48%,var(--bg) 50%),radial-gradient(112px 44px at 56% 24%,transparent 48%,var(--bg) 50%),radial-gradient(145px 55px at 74% 68%,transparent 48%,var(--bg) 50%),radial-gradient(100px 44px at 92% 24%,transparent 48%,var(--bg) 50%),var(--bg);filter:drop-shadow(0 -9px 0 rgba(9,8,7,.09))}
+    .trust{display:grid;grid-template-columns:auto 1fr auto;gap:clamp(1rem,2vw,2rem);align-items:center;padding:1.05rem clamp(1rem,3.3vw,3.8rem);background:var(--ink);color:#fff}
+    .trust small,.trust a{font-family:var(--font-mono);font-size:.72rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}.trust a{color:var(--red)}
+    .logo-row{display:flex;align-items:center;justify-content:space-around;gap:1rem;min-width:0}.logo-shell{display:grid;place-items:center;min-width:8.2rem;height:3.2rem;padding:.55rem .8rem;background:#fff;border:1px solid rgba(255,255,255,.28)}.logo-shell img{max-width:100%;max-height:2.1rem;width:auto;height:auto;object-fit:contain}.logo-shell.ateam{background:#160041}.logo-shell.baldor{background:#fff}.text-proof{display:inline-grid;place-items:center;min-width:8.2rem;height:3.2rem;padding:.4rem .8rem;border:1px solid rgba(255,255,255,.22);font-family:var(--font-mono);font-size:.74rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;color:#fff}
+    .section{padding:clamp(3.3rem,6.7vw,7rem) clamp(1rem,3.3vw,3.8rem);border-top:1px solid var(--rule)}
+    .section-head{display:grid;grid-template-columns:minmax(0,.86fr) minmax(18rem,.5fr);gap:clamp(2rem,5vw,5rem);align-items:end;margin-bottom:clamp(2rem,4vw,3.4rem)}
+    .kicker{display:block;margin-bottom:.75rem;color:var(--red)}
+    h2{font-size:clamp(2.8rem,5.6vw,6.1rem);line-height:.9;max-width:12ch}
+    .offers-title{max-width:19ch}
+    .offers-title span{white-space:nowrap}
+    .books-title{max-width:17ch;font-size:clamp(4rem,5vw,5.65rem)}
+    .books-title span{white-space:nowrap}
+    .section-head p{margin:0;max-width:42rem;color:var(--muted);font-size:clamp(1rem,1.34vw,1.18rem)}
+    .cards{display:grid;grid-template-columns:1.1fr .95fr .95fr 1fr;gap:1.1rem}
+    .card{position:relative;min-height:23rem;padding:clamp(1.3rem,2vw,1.8rem);border:1.5px solid var(--rule);background:var(--surface);overflow:hidden}
+    .card .kicker,.card h3,.card p{position:relative;z-index:3}
+    .card h3{font-size:clamp(1.9rem,2.6vw,3rem);line-height:.95;max-width:10ch}
+    .card p{max-width:20rem;margin:1rem 0 0;padding:.62rem .75rem;color:#2b2721;background:var(--surface);border:1.5px solid color-mix(in srgb,var(--ink) 22%,transparent);box-shadow:5px 6px 0 rgba(9,8,7,.08)}
+    .card.blue{background:var(--blue);color:#fff;border-color:var(--blue)}.card.yellow{background:var(--yellow);border-color:var(--yellow)}
+    .card.blue p{color:#fff;background:var(--blue);border-color:rgba(255,255,255,.5);box-shadow:5px 6px 0 rgba(9,8,7,.18)}.card.yellow p{background:var(--yellow);border-color:rgba(9,8,7,.32)}.card .round{position:absolute;z-index:4;left:1.35rem;bottom:1.35rem;display:grid;place-items:center;width:46px;height:46px;border:0;border-radius:50%;background:var(--ink);color:#fff;cursor:pointer}
+    .card-photo{position:absolute;z-index:1;right:-2.2rem;bottom:-1.6rem;width:54%;height:62%;object-fit:cover;object-position:center bottom;filter:grayscale(1) contrast(1.12);mix-blend-mode:screen}
+    .card-shot{position:absolute;z-index:1;right:.75rem;bottom:.55rem;width:40%;border:1.5px solid var(--ink);background:#fff;box-shadow:-8px 9px 0 rgba(9,8,7,.14);transform:rotate(3deg);overflow:hidden}.card-shot img{width:100%;height:7.4rem;object-fit:cover}.card-shot figcaption{padding:.35rem .48rem;font-family:var(--font-mono);font-size:.58rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+    .mini-diagram{position:absolute;right:1.4rem;bottom:1.3rem;width:42%;font-family:var(--font-mono);font-size:.72rem;text-transform:uppercase}.mini-diagram span{display:block;padding:.32rem .5rem;border:1.5px solid var(--ink);background:var(--surface);transform:rotate(-2deg)}.mini-diagram span+span{margin-top:.38rem;transform:rotate(2deg)}.mini-diagram b{display:block;width:100%;margin-top:.45rem;padding:.35rem .5rem;background:var(--yellow);border:1.5px solid var(--ink)}
+    .consulting-card .mini-diagram{right:.75rem;bottom:.55rem;width:28%;font-size:.58rem;z-index:1}.consulting-card .mini-diagram span{padding:.24rem .42rem}.consulting-card .mini-diagram span+span{margin-top:.28rem}.consulting-card .mini-diagram b{margin-top:.32rem;padding:.28rem .42rem}.consulting-card p{max-width:18rem}
+    .mini-book{position:absolute;z-index:1;right:.7rem;bottom:.65rem;width:33%;max-height:58%;object-fit:contain;filter:drop-shadow(-10px 12px 0 rgba(9,8,7,.12))}
+    .problem{position:relative;display:grid;grid-template-columns:minmax(0,.88fr) minmax(20rem,.52fr);gap:clamp(2rem,5vw,5rem);align-items:start}
+    .story-thread{position:absolute;inset:2% 20% auto 6%;width:min(70rem,88vw);height:18rem;pointer-events:none;z-index:0;color:var(--blue);opacity:.72;mix-blend-mode:multiply}
+    .story-thread path{fill:none;stroke:currentColor;stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round}
+    .story-thread .thread-red{color:var(--red);stroke-width:5;opacity:.76}
+    .story-thread .thread-yellow{color:var(--yellow);stroke-width:7;opacity:.85;mix-blend-mode:multiply}
+    .manifesto{display:grid;gap:1rem;max-width:64rem}.manifesto p{margin:0;font-family:var(--font-display);font-size:clamp(2rem,3.8vw,4.9rem);line-height:.98;letter-spacing:-.025em}.manifesto em{color:var(--red);font-style:italic}.manifesto .problem-outcome{max-width:48rem;font-family:var(--font-body);font-size:clamp(1.55rem,2.15vw,2.35rem);font-weight:520;line-height:1.12;letter-spacing:-.015em;color:#2f2a25;text-wrap:balance}
+    .problem-aside{display:grid;gap:1.25rem}
+    .problem-orbit{position:relative;padding:1.8rem 1.4rem 1.4rem;isolation:isolate}
+    .spatial-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+    .noise-canvas{z-index:0;opacity:.48;mix-blend-mode:multiply}
+    .source-card{position:relative;z-index:2;padding:1.25rem;border:1.5px solid var(--ink);background:color-mix(in srgb,var(--green) 92%,#fff);box-shadow:12px 14px 0 rgba(9,8,7,.1);transform:rotate(-2deg);font-family:var(--font-mono);font-size:.88rem}.source-card strong{display:block;margin-bottom:.75rem;letter-spacing:.08em;text-transform:uppercase}
+    .method-board{display:grid;grid-template-columns:.78fr 1fr;gap:1.25rem}
+    .method-list{display:grid;gap:.85rem}.method-item{display:grid;grid-template-columns:2.4rem 1fr;gap:1rem;padding:1rem 0;border-bottom:1px solid var(--rule)}.method-item svg{width:2rem;stroke-width:1.8}.method-item h3{font-family:var(--font-body);font-size:1.04rem;letter-spacing:.025em;text-transform:uppercase}.method-item p{margin:.18rem 0 0;color:var(--muted)}
+    .chalk{position:relative;min-height:31rem;padding:.8rem;background:var(--ink);color:#fff;overflow:hidden;box-shadow:12px 14px 0 rgba(9,8,7,.12)}.chalk img{position:relative;z-index:1;display:block;width:100%;height:100%;min-height:29.4rem;object-fit:cover;border:1.5px solid rgba(255,255,255,.18);filter:saturate(.96) contrast(1.04)}.path-canvas{inset:.8rem;z-index:2;opacity:.5;mix-blend-mode:screen}.chalk figcaption{position:absolute;left:1.25rem;top:1.2rem;z-index:4;padding:.42rem .62rem;background:rgba(9,8,7,.82);border:1px solid rgba(255,255,255,.22);font-family:var(--font-mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:#fff}
+    .offers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1.5px solid var(--rule);background:var(--surface)}
+    .offer{position:relative;min-height:18rem;padding:clamp(1.45rem,2.3vw,2.2rem);border-right:1.5px solid var(--rule);cursor:pointer}.offer:last-child{border-right:0}.offer[aria-selected=true]{background:color-mix(in srgb,var(--yellow) 28%,var(--surface))}.offer.has-asset{padding-bottom:12.5rem}.offer-asset{position:absolute;left:clamp(1.45rem,2.3vw,2.2rem);right:clamp(1.45rem,2.3vw,2.2rem);bottom:7.15rem;height:5.25rem;border:1.5px solid var(--ink);background:#fff;overflow:hidden;box-shadow:7px 8px 0 rgba(9,8,7,.1)}a.offer-asset{display:block}.offer-asset img{width:100%;height:100%;object-fit:cover;object-position:center 42%}.offer-asset.video:after{content:"Watch talk";position:absolute;right:.5rem;bottom:.5rem;padding:.2rem .42rem;background:var(--red);color:#fff;font-family:var(--font-mono);font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+    .offer h3{font-size:clamp(2rem,3vw,3.45rem);line-height:.92}.offer p{margin:1rem 0 0;color:var(--muted)}.offer ul{margin:1.45rem 0 0;padding:0;list-style:none;font-family:var(--font-mono);font-size:.78rem}.offer li+li{margin-top:.4rem}.offer li:before{content:"-> ";color:var(--red);font-weight:700}
+    .featured-talk{position:relative;display:grid;grid-template-columns:minmax(18rem,.74fr) 1fr;gap:clamp(1.2rem,3vw,3rem);align-items:stretch;margin-bottom:1.1rem;border:2px solid var(--ink);background:var(--ink);color:#fff;box-shadow:14px 16px 0 rgba(9,8,7,.12);overflow:hidden}.featured-talk:before{content:"";position:absolute;right:-5rem;top:-6rem;width:18rem;height:18rem;background:var(--red);clip-path:polygon(9% 18%,93% 0,100% 72%,34% 100%,0 66%);opacity:.88}.talk-media{position:relative;min-height:22rem;border-right:2px solid var(--ink);background:#000;overflow:hidden}.talk-media img{width:100%;height:100%;object-fit:cover;object-position:center 42%;filter:saturate(1.03) contrast(1.06)}.talk-media:after{content:"YouTube";position:absolute;left:1rem;bottom:1rem;padding:.42rem .62rem;background:var(--red);color:#fff;font-family:var(--font-mono);font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.play-badge{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:5.3rem;height:5.3rem;border:2px solid #fff;border-radius:999px;background:rgba(255,59,47,.92);box-shadow:0 0 0 10px rgba(255,255,255,.16);display:grid;place-items:center}.play-badge:before{content:"";margin-left:.28rem;border-left:1.25rem solid #fff;border-top:.82rem solid transparent;border-bottom:.82rem solid transparent}.talk-copy{position:relative;z-index:1;display:grid;align-content:center;gap:1rem;padding:clamp(1.5rem,3.2vw,3rem)}.talk-copy .kicker{color:var(--yellow)}.talk-copy h3{max-width:11ch;color:#fff;font-size:clamp(3rem,5.2vw,6.6rem);line-height:.88;letter-spacing:-.03em}.talk-copy p{max-width:42rem;color:rgba(255,255,255,.82);font-size:clamp(1.05rem,1.35vw,1.25rem)}.talk-copy .link-row{margin-top:.25rem}.talk-copy .mini-link{border-color:#fff}.talk-copy .mini-link:not(.red){background:#fff;color:var(--ink)}
+    .books{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.1rem}.book-card{display:grid;grid-template-columns:minmax(12rem,.42fr) 1fr;gap:clamp(1.5rem,3vw,3rem);align-items:center;min-height:25rem;padding:clamp(1.4rem,3vw,2.5rem);border:1.5px solid var(--rule);background:var(--surface)}.book-card img{width:100%;max-height:21rem;object-fit:contain;filter:drop-shadow(16px 18px 0 rgba(9,8,7,.1))}.book-card h3{font-size:clamp(2.1rem,2.8vw,3.3rem);line-height:.94}.book-card p{color:var(--muted)}
+    .newsletter{position:relative;display:grid;grid-template-columns:minmax(0,.75fr) minmax(24rem,.65fr);gap:clamp(2rem,5vw,5rem);align-items:center;background:var(--yellow);border-top:4px solid var(--ink);border-bottom:4px solid var(--ink);overflow:hidden}
+    .newsletter-copy{position:relative;z-index:3;transform:translateY(clamp(-4.5rem,-4.2vw,-2.5rem))}
+    .newsletter-title{max-width:10.7ch;font-size:clamp(3.8rem,5.65vw,6.15rem)}
+    .newsletter-title span{white-space:nowrap}
+    .browser{position:relative;z-index:1;border:2px solid var(--ink);background:var(--surface);box-shadow:14px 16px 0 rgba(9,8,7,.16);transform:rotate(2deg);overflow:hidden}.newsletter .browser{top:clamp(.75rem,1.4vw,1.5rem)}.browser:before{content:"";display:block;height:2rem;background:var(--ink)}.browser img{width:100%;height:auto}
+    .signup{display:grid;grid-template-columns:1fr auto;gap:.75rem;margin-top:1.3rem;max-width:42rem}.signup label{grid-column:1/-1;font-family:var(--font-mono);font-size:.76rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.signup input{min-height:52px;border:1.5px solid var(--ink);background:var(--surface);padding:.9rem 1rem}.form-note{grid-column:1/-1;min-height:1.2rem;color:#3c362a;font-family:var(--font-mono);font-size:.78rem}
+    .proof-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:1.1rem;align-items:stretch}.quote-panel{min-height:24rem;padding:clamp(1.5rem,3vw,2.8rem);background:var(--ink);color:#fff;display:grid;align-content:space-between;gap:1.5rem}.quote-panel blockquote{margin:0;font-family:var(--font-display);font-size:clamp(1.65rem,2.5vw,3.35rem);line-height:1.03}.quote-panel cite{font-family:var(--font-mono);font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;font-style:normal}.quote-panel .quote-body{display:grid;gap:1rem}.quote-panel .quote-body p{margin:0;color:rgba(255,255,255,.88);font-size:clamp(1rem,1.25vw,1.18rem);line-height:1.62}.quote-panel .quote-lead{font-family:var(--font-display);font-size:clamp(2rem,3.45vw,4rem);line-height:.98;color:#fff}.proof-list{display:grid;gap:1rem;padding:clamp(1.5rem,3vw,2.4rem);border:1.5px solid var(--rule);background:var(--surface);font-family:var(--font-mono);font-size:.82rem;text-transform:uppercase}.proof-item{display:grid;grid-template-columns:6rem 1fr;gap:1rem;padding-bottom:1rem;border-bottom:1px solid var(--rule)}.proof-item:last-child{border-bottom:0}.proof-item b{color:var(--red)}.proof-item span{color:var(--muted);font-family:var(--font-body);font-size:1rem;text-transform:none}.proof-assets{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}.proof-logo-card,.proof-media-card{border:1.5px solid var(--ink);background:#fff;padding:.8rem;min-height:7rem;display:grid;align-items:center}.proof-logo-card img{max-width:100%;max-height:3.6rem;width:auto;height:auto;object-fit:contain}.proof-media-card{padding:0;overflow:hidden;color:inherit}.proof-media-card img{width:100%;height:8.2rem;object-fit:cover}.proof-media-card span{padding:.45rem .65rem;font-family:var(--font-mono);font-size:.64rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.testimonial-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.1rem;margin-top:1.1rem}.testimonial-card{position:relative;min-height:19rem;padding:clamp(1.25rem,2.2vw,2rem);border:1.5px solid var(--rule);background:var(--surface);display:grid;align-content:space-between;gap:1.4rem;overflow:hidden}.testimonial-card:before{content:"";position:absolute;right:-2.2rem;top:-2.5rem;width:8rem;height:8rem;background:var(--yellow);border:1.5px solid var(--ink);transform:rotate(13deg);z-index:0}.testimonial-card:nth-child(2):before{background:var(--green)}.testimonial-card:nth-child(3):before{background:var(--red);opacity:.9}.testimonial-card blockquote,.testimonial-card footer{position:relative;z-index:1}.testimonial-card blockquote{margin:0;font-size:clamp(1.05rem,1.35vw,1.28rem);line-height:1.48;color:#1f1b16}.testimonial-card footer{display:grid;gap:.35rem;font-style:normal}.testimonial-card strong{font-family:var(--font-mono);font-size:.78rem;letter-spacing:.07em;text-transform:uppercase}.testimonial-card span{color:var(--muted);font-size:.92rem;line-height:1.35}
+    .final{position:relative;display:grid;grid-template-columns:minmax(0,.82fr) minmax(22rem,.52fr);gap:clamp(2rem,5vw,6rem);align-items:center;min-height:72vh;background:var(--ink);color:#fff;overflow:hidden}.final:before{content:"";position:absolute;right:28%;bottom:-5rem;width:20rem;height:20rem;background:var(--red);clip-path:polygon(6% 7%,88% 0,100% 74%,42% 100%,0 63%);opacity:.9}.final h2,.final .kicker{position:relative;z-index:1}.final h2{color:#fff;max-width:15ch;font-size:clamp(3.35rem,6.2vw,7.25rem);line-height:.96}.final h2 span{display:block;white-space:nowrap}.final-stack{position:relative;z-index:1;display:grid;gap:1rem}.final-media{border:2px solid #fff;background:#fff;color:var(--ink);box-shadow:14px 16px 0 rgba(255,59,47,.72);overflow:hidden;transform:rotate(-1.5deg)}.final-media img{width:100%;height:13rem;object-fit:cover;object-position:center 38%}.final-media figcaption{padding:.55rem .75rem;font-family:var(--font-mono);font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase}.contact{position:relative;z-index:1;padding:1.45rem;color:var(--ink);background:var(--paper);border:2px solid #fff;box-shadow:14px 16px 0 var(--red)}.contact h3{font-size:2rem}.contact p{color:var(--muted)}.contact .link-row+.btn{margin-top:.95rem}.email-link{display:inline-flex;margin:.2rem 0 1rem;font-family:var(--font-mono);font-weight:700;color:var(--blue);text-decoration:underline;text-underline-offset:4px}
+    .footer{display:flex;justify-content:space-between;gap:1rem;padding:1.1rem clamp(1rem,3.3vw,3.8rem);background:var(--ink);color:rgba(255,255,255,.68);border-top:1px solid rgba(255,255,255,.1);font-family:var(--font-mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase}
+    .reveal{opacity:0;transform:translateY(20px);transition:opacity .55s ease,transform .55s ease}.reveal.in-view{opacity:1;transform:translateY(0)}
+    .motion-enhanced .reveal{transition:none}
+    @media(max-width:1180px){.nav{grid-template-columns:1fr auto}.nav-links{position:fixed;display:none;inset:82px 1rem auto;padding:1rem;background:var(--surface);border:2px solid var(--ink);box-shadow:10px 12px 0 rgba(9,8,7,.12);flex-direction:column;align-items:stretch}.nav.open .nav-links{display:flex}.nav>.btn{display:none}.menu{display:grid}.hero{grid-template-columns:1fr;min-height:auto}.collage{min-height:690px}.joe-cutout{width:min(62vw,38rem);right:1%}.book-spread{right:2%;width:min(30vw,17rem)}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.section-head,.problem,.method-board,.newsletter,.proof-grid,.final{grid-template-columns:1fr}.newsletter-copy{transform:none}.newsletter .browser{top:0}.testimonial-grid{grid-template-columns:1fr}.featured-talk{grid-template-columns:1fr}.talk-media{min-height:19rem;border-right:0;border-bottom:2px solid var(--ink)}.offers{grid-template-columns:1fr}.offer{min-height:0;border-right:0;border-bottom:1.5px solid var(--rule)}.offer:last-child{border-bottom:0}.books{grid-template-columns:1fr}}
+    @media(max-width:760px){.page{border-width:3px}.nav{padding:1rem}.mark strong{font-size:1.55rem}.mark span{font-size:.56rem;letter-spacing:.3em}.hero{padding:1.2rem 1rem 0}.eyebrow{font-size:.76rem}h1{font-size:clamp(3.25rem,16vw,5.2rem);line-height:.9;max-width:9ch}.black-tag{display:block}.btn{width:100%}.collage{min-height:570px;margin-top:.8rem}.joe-cutout{right:-5.6rem;width:31rem;min-height:34rem;height:37rem}.red-blob{right:-1rem;width:22rem;height:28rem}.paper{left:0;top:4%;width:12.7rem;font-size:.7rem}.speech{left:30%;top:0;width:13.4rem;font-size:1.75rem}.method-scrap{left:.4rem;top:38%;width:13.4rem;font-size:.7rem}.diagram{left:5%;top:59%;width:14.2rem;height:13rem}.diagram .rings{display:none}.book-spread,.note{display:none}.trust{grid-template-columns:1fr;text-align:left}.logo-row{justify-content:flex-start;overflow-x:auto;padding-bottom:.4rem}.section{padding:3.5rem 1rem}.section h2{font-size:clamp(2.5rem,13vw,4rem)}.offers-title span,.books-title span{white-space:normal}.cards{grid-template-columns:1fr}.card{min-height:20rem}.story-thread{display:none}.problem-orbit{padding:0}.spatial-canvas{display:none}.featured-talk{box-shadow:8px 10px 0 rgba(9,8,7,.12)}.talk-media{min-height:14rem}.play-badge{width:4rem;height:4rem}.talk-copy{padding:1.25rem}.talk-copy h3{font-size:clamp(2.5rem,12vw,4rem);max-width:12ch}.book-card{grid-template-columns:1fr;min-height:0}.book-card img{max-width:16rem}.signup{grid-template-columns:1fr}.proof-item{grid-template-columns:1fr}.footer{flex-direction:column}}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}.spatial-canvas{display:none}}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="nav" id="top">
+      <a class="mark" href="#top" aria-label="Joe Lazer home"><strong>JOE LAZER</strong><span>Story. Strategy. Impact.</span></a>
+      <nav class="nav-links" aria-label="Primary navigation"><a href="#about">About</a><a href="#offers">Keynotes</a><a href="#consulting">Consulting</a><a href="#books">Books</a><a href="#newsletter">Insights</a><a href="#contact">Contact</a></nav>
+      <a class="btn btn-red" href="https://joelazer.com/storytelling-keynotes-and-workshops" target="_blank" rel="noopener noreferrer">Book Joe to Speak <span>-&gt;</span></a>
+      <button class="menu" type="button" aria-label="Open navigation" aria-expanded="false"><span aria-hidden="true"></span></button>
+    </header>
+    <main>
+      <section class="hero" data-od-id="hero">
+        <canvas class="spatial-canvas hero-spatial" data-three-effect="hero-paths" aria-hidden="true"></canvas>
+        <div class="hero-copy reveal">
+          <div class="eyebrow">Author. Keynote speaker.<br>Business storytelling consultant.</div>
+          <svg class="blue-swipe" viewBox="0 0 220 28" fill="none" aria-hidden="true"><path d="M5 18c49-11 98-13 151-8 23 2 42 3 59 1" stroke="currentColor" stroke-width="6" stroke-linecap="round"></path><path d="M12 24c39-8 92-9 159-5" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path></svg>
+          <h1>Stories create <em>advantage.</em></h1>
+          <div class="black-tag">In the age of AI, story is your edge.</div>
+          <p class="lead">Joe Lazer helps leaders and organizations cut through complexity, inspire action, and build a future people believe in — with the power of story.</p>
+          <div class="hero-actions"><a class="btn btn-red" href="https://joelazer.com/storytelling-keynotes-and-workshops" target="_blank" rel="noopener noreferrer">Book Joe to Speak <span>-&gt;</span></a><a class="btn" href="#offers">Let’s Work Together <span>-&gt;</span></a></div>
+        </div>
+        <div class="collage" aria-label="Editorial collage based on the supplied reference image">
+          <div class="red-blob" aria-hidden="true"></div><div class="halftone" aria-hidden="true"></div>
+          <div class="paper"><strong>AI Prompt_</strong><ol><li>How do I build a story that drives change?</li><li>Who must believe it?</li><li>What makes it credible?</li></ol></div>
+          <div class="speech">The best story <b>wins the future.</b></div>
+          <div class="method-scrap"><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="7"></circle><path d="M12 8v4l3 2"></path></svg><span>Clarity</span></div><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM17 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM3 21a4 4 0 0 1 8 0M13 21a4 4 0 0 1 8 0"></path></svg><span>Connection</span></div><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3 4 7v5c0 5 3.4 8.7 8 9 4.6-.3 8-4 8-9V7l-8-4Z"></path><path d="m9 12 2 2 4-5"></path></svg><span>Credibility</span></div><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 19 19 5M8 5h11v11"></path></svg><span>Change</span></div></div>
+          <div class="diagram"><h3>The Story Advantage</h3><div class="rings" aria-hidden="true"><span>Meaning</span><span>Message</span><span>Audience</span></div></div>
+          <div class="book-spread"><h3>Author proof</h3><div class="hero-books"><img src="assets/storytelling-edge-cover.png" alt="The Storytelling Edge book cover"><img src="assets/super-skill-mockup.jpeg" alt="Super Skill book cover"></div><p>Real books, intact covers.</p></div>
+          <div class="note">New Rules.<br>New Tools.<br>Same Human Truth.</div>
+          <figure class="joe-cutout"><img src="assets/joe-headshot.jpg" alt="Joe Lazer portrait"></figure>
+          <div class="rip" aria-hidden="true"></div>
+        </div>
+      </section>
+      <section class="trust" aria-label="Trust proof" data-od-id="trust-bar"><small>Trusted by leaders at</small><div class="logo-row"><span class="logo-shell"><img src="assets/logo-contently.svg" alt="Contently logo"></span><span class="logo-shell ateam"><img src="assets/logo-ateam-og.webp" alt="A.Team logo"></span><span class="text-proof">Pepper</span><span class="text-proof">185K+ Readers</span><span class="text-proof">2 Books</span></div><a href="#proof">And more -&gt;</a></section>
+      <section class="section" id="about" data-od-id="entry-cards"><div class="cards">
+        <article class="card blue reveal"><h3>Ideas that move people to act.</h3><img class="card-photo" src="assets/joe-speaking-real.jpg" alt="Joe Lazer speaking on stage"><button class="round" type="button" data-jump="#offers" aria-label="View keynote offer">-&gt;</button></article>
+        <article class="card consulting-card reveal"><h3>Story strategy that drives results.</h3><div class="mini-diagram" aria-hidden="true"><span>Insight</span><b>Story</b><span>Strategy</span><span>Results</span></div><button class="round" type="button" data-jump="#offers" aria-label="View consulting offer">-&gt;</button></article>
+        <article class="card reveal"><h3>Books for a new era of leaders.</h3><img class="mini-book" src="assets/super-skill-mockup.jpeg" alt="Super Skill book mockup"><button class="round" type="button" data-jump="#books" aria-label="View books">-&gt;</button></article>
+        <article class="card yellow reveal"><h3>Fresh thinking on leadership, and AI.</h3><figure class="card-shot"><img src="assets/joe-newsletter-screenshot.png" alt="Joe Lazer newsletter screenshot"></figure><button class="round" type="button" data-jump="#newsletter" aria-label="View newsletter">-&gt;</button></article>
+      </div></section>
+      <section class="section" id="problem" data-od-id="problem"><div class="problem"><svg class="story-thread" viewBox="0 0 920 220" aria-hidden="true"><path class="thread-yellow" data-gsap-path="" d="M18 155 C154 82 248 210 383 124 S612 33 902 112"></path><path data-gsap-path="" d="M28 96 C180 24 273 134 401 88 S620 104 876 24"></path><path class="thread-red" data-gsap-path="" d="M60 184 C222 168 284 51 446 70 S710 177 860 82"></path></svg><div><span class="kicker">The problem</span><div class="manifesto reveal"><p>AI can generate more words than any team can read.</p><p><em>Story</em> is how leaders make meaning travel.</p><p class="problem-outcome">The organizations that win will not just explain change. They will make people believe it.</p></div></div><div class="problem-aside"><div class="problem-orbit reveal"><canvas class="spatial-canvas noise-canvas" data-three-effect="noise" aria-hidden="true"></canvas><aside class="source-card"><strong>Why Joe is credible here</strong><p>Best-selling author of <em>The Storytelling Edge</em> and <em>Super Skill</em>.</p><p>Eight years building Contently; later led marketing inside fast-growing AI startups A.Team and Pepper.</p><p>Newsletter audience: 185,000+ across Substack and LinkedIn.</p></aside></div></div></div></section>
+      <section class="section" id="offers" data-od-id="offers"><div class="section-head"><div><span class="kicker">Work with Joe</span><h2 class="offers-title"><span>Three ways to make</span><br><span>the story work.</span></h2></div><p>Each path is built around real organizational needs: a room to move, a team to train, or a strategy to sharpen.</p></div><article class="featured-talk reveal" aria-label="Featured YouTube talk"><a class="talk-media" href="https://www.youtube.com/watch?v=XO0pXv3Ntaw" target="_blank" rel="noopener noreferrer" aria-label="Watch Master the number one business skill of the AI Age: Storytelling on YouTube"><img src="assets/joe-video-thumb.jpg" alt="Joe Lazer YouTube talk thumbnail"><span class="play-badge" aria-hidden="true"></span></a><div class="talk-copy"><span class="kicker">Featured talk</span><h3>Master the #1 business skill of the AI Age: Storytelling</h3><p>Watch Joe frame why storytelling becomes more valuable as AI makes information cheaper, faster, and harder to trust.</p><div class="link-row"><a class="mini-link red" href="https://www.youtube.com/watch?v=XO0pXv3Ntaw" target="_blank" rel="noopener noreferrer">Watch on YouTube</a><a class="mini-link" href="https://joelazer.com/storytelling-keynotes-and-workshops" target="_blank" rel="noopener noreferrer">Book this talk</a></div></div></article><div class="offers" role="tablist" aria-label="Offer focus">
+        <article class="offer" role="tab" tabindex="0" aria-selected="true"><span class="kicker">01 · Keynotes</span><h3>Move the room.</h3><p>High-energy talks for leadership offsites, marketing events, founder gatherings, and teams facing change.</p><ul><li>AI-age storytelling</li><li>Leadership narrative</li><li>Memorable frameworks</li></ul></article>
+        <article class="offer" role="tab" tabindex="0" aria-selected="false"><span class="kicker">02 · Workshops</span><h3>Train the team.</h3><p>Hands-on sessions that help teams find sharper stories, stronger proof, and cleaner communication habits.</p><ul><li>Story architecture sprints</li><li>Messaging critique</li><li>Presentation coaching</li></ul></article>
+        <article class="offer" role="tab" tabindex="0" aria-selected="false"><span class="kicker">03 · Consulting</span><h3>Build the narrative.</h3><p>Strategic story work for launches, category creation, executive communication, and high-stakes positioning.</p><ul><li>Founder narrative</li><li>Product story systems</li><li>Market education</li></ul></article>
+      </div></section>
+      <section class="section" id="books" data-od-id="books"><div class="section-head"><div><span class="kicker">Books</span><h2 class="books-title"><span>Practical thinking</span><br><span>for modern storytellers.</span></h2></div><p>Real book imagery replaces the earlier placeholder covers, giving the page the concrete author proof the reference image had.</p></div><div class="books">
+        <article class="book-card reveal"><img src="assets/storytelling-edge-cover.png" alt="The Storytelling Edge book cover"><div><span class="kicker">Book 01</span><h3>The Storytelling Edge</h3><p>The best-selling guide to the art and science of business storytelling — beloved by marketers, creatives, founders, and business leaders.</p><div class="link-row" aria-label="Purchase The Storytelling Edge"><a class="mini-link dark" href="https://www.amazon.com/Storytelling-Edge-Transform-Business-Screaming/dp/1119483352/ref=tmm_hrd_swatch_0" target="_blank" rel="noopener noreferrer">Buy on Amazon</a></div></div></article>
+        <article class="book-card reveal"><img src="assets/super-skill-mockup.jpeg" alt="Super Skill book cover"><div><span class="kicker">Book 02</span><h3>Super Skill</h3><p>Why storytelling is the superpower of the AI age, and why human communication gets more valuable as tools get smarter.</p><div class="link-row" aria-label="Purchase Super Skill"><a class="mini-link red" href="https://amzn.to/3MvjpK3" target="_blank" rel="noopener noreferrer">Amazon</a><a class="mini-link" href="https://www.barnesandnoble.com/w/super-skill-joe-lazer/1148812179?ean=9781632261724" target="_blank" rel="noopener noreferrer">B&N</a><a class="mini-link" href="https://bookshop.org/p/books/super-skill-why-storytelling-is-the-superpower-of-the-ai-age-joe-lazer/b66f1472f0effa35?ean=9781632261724&amp;next=t" target="_blank" rel="noopener noreferrer">Bookshop</a><a class="mini-link blue" href="https://joelazer.com/superskill" target="_blank" rel="noopener noreferrer">Bonus offers</a></div></div></article>
+      </div></section>
+      <section class="section newsletter" id="newsletter" data-od-id="newsletter"><div class="newsletter-copy"><span class="kicker">Newsletter</span><h2 class="newsletter-title"><span>Field notes for leaders</span><br><span>building belief.</span></h2><p class="lead">Join 185,000+ marketers, creatives, founders, and operators reading Joe’s thinking on storytelling, AI, leadership, and human advantage.</p><form class="signup" novalidate=""><label for="email">Subscribe to Joe’s newsletter</label><input id="email" name="email" type="email" autocomplete="email" placeholder="you@company.com" required=""><button class="btn btn-dark" type="submit">Subscribe <span>-&gt;</span></button><div class="form-note" role="status" aria-live="polite">Prototype signup; use the official Substack link below for live subscriptions.</div></form><div class="link-row"><a class="mini-link dark" href="https://storytellingedge.substack.com/subscribe" target="_blank" rel="noopener noreferrer">Subscribe on Substack</a><a class="mini-link" href="https://storytellingedge.substack.com/" target="_blank" rel="noopener noreferrer">Read recent issues</a></div></div><div class="browser reveal"><img src="assets/joe-newsletter-screenshot.png" alt="Joe Lazer newsletter screenshot"></div></section>
+      <section class="section" id="proof" data-od-id="testimonials"><div class="section-head"><div><span class="kicker">Proof</span><h2>Built for rooms where the story matters.</h2></div><p>Joe’s original site separates workshop praise from broader testimonials. This section now carries both: the full Baldor workshop proof and a compact testimonial row for author, media, and event credibility.</p></div><div class="proof-grid"><div class="quote-panel reveal"><div class="quote-body"><blockquote class="quote-lead">“Joe’s workshop on leveraging generative AI tools for marketing transformed how our team approaches content creation.”</blockquote><p>He is incredibly knowledgeable on the latest tools and the best practices for using them, and his teachings significantly improved my team’s productivity while ensuring we maintained the highest quality and creativity.</p><p>What I especially loved about the workshop was that Joe customized the practical exercises to our brand’s unique challenges and KPIs — while keeping it fun. Our marketing team now confidently uses these tools as collaborative partners, saving hours on routine tasks.</p></div><cite>Margaret Magnarelli · CMO, Baldor Foods</cite></div><div class="proof-list reveal"><div class="proof-assets"><div class="proof-logo-card"><img src="assets/logo-baldor.png" alt="Baldor Specialty Foods logo"></div><div class="proof-logo-card"><img src="assets/logo-contently.svg" alt="Contently logo"></div><div class="proof-media-card"><img src="assets/joe-testimonials-screenshot.png" alt="Joe Lazer testimonials proof screenshot"><span>Workshop proof deck</span></div><a class="proof-media-card" href="https://www.youtube.com/watch?v=xtzwTpPybRM" target="_blank" rel="noopener noreferrer" aria-label="Watch Joe Lazer Super Skill video on YouTube"><img src="assets/joe-super-skill-deck-screenshot.png" alt="Super Skill talk proof screenshot"><span>Watch Super Skill video</span></a></div><div class="proof-item"><b>Author</b><span>Two books on storytelling, communication, and leadership.</span></div><div class="proof-item"><b>Speaker</b><span>Keynotes and workshops for teams navigating change.</span></div><div class="proof-item"><b>Builder</b><span>Contently, A.Team, Pepper, and narrative-led startup work.</span></div><div class="proof-item"><b>Audience</b><span>Newsletter read by 185,000+ marketers, creatives, founders, and operators.</span></div></div></div><div class="testimonial-grid" aria-label="Testimonials"><article class="testimonial-card reveal"><blockquote>“Once upon a time, storytelling was confused with talking at people. Not anymore. Shane and Joe will transform how you talk to other human beings to be more believable, relevant, compelling and unforgettable.”</blockquote><footer><strong>Brian Solis</strong><span>Best-Selling Author · Head of Global Innovation, ServiceNow</span></footer></article><article class="testimonial-card reveal"><blockquote>“Joe remains true to his word and work as a writer — someone who has so much care and love for the creative process — and continues to share some of the most poignant and thought-provoking ideas in this new era of marketing we’re in.”</blockquote><footer><strong>Alicia Esposito</strong><span>Director Content + Media Strategy, Future Commerce</span></footer></article><article class="testimonial-card reveal"><blockquote>“A riveting presentation — we had great feedback from attendees.”</blockquote><footer><strong>Tania Anderson</strong><span>Head of Content, Resonate</span></footer></article></div></section>
+      <section class="section final" id="contact" data-od-id="final-cta"><div><span class="kicker">Ready to make the story clear?</span><h2><span>Book Joe for your</span><span>next room.</span></h2></div><div class="final-stack reveal"><figure class="final-media"><img src="assets/joe-speaking-real.jpg" alt="Joe Lazer speaking to an audience"><figcaption>Real speaking asset · use to reinforce booking intent</figcaption></figure><div class="contact"><span class="kicker">Contact &amp; Booking</span><h3>Keynotes, workshops, consulting.</h3><p>For a keynote, team workshop, or narrative consulting project, start with a short note about the audience, the moment, and what needs to change.</p><a class="email-link" href="mailto:speaking@joelazer.com?subject=Booking%20inquiry%20for%20Joe%20Lazer">speaking@joelazer.com</a><div class="link-row"><a class="mini-link dark" href="https://joelazer.com/storytelling-keynotes-and-workshops" target="_blank" rel="noopener noreferrer">Speaking page</a><a class="mini-link" href="https://www.youtube.com/watch?v=XO0pXv3Ntaw" target="_blank" rel="noopener noreferrer">Watch keynote reel</a></div><button class="btn btn-red" type="button" id="copy-brief">Copy booking brief <span>-&gt;</span></button><div class="form-note" id="copy-note" role="status" aria-live="polite"></div></div></div></section>
+    </main>
+    <footer class="footer"><span>Joe Lazer · Storytelling for the AI Age</span><span>Official assets pulled from Joe’s current site; replace only if newer approved assets are supplied.</span></footer>
+  </div>
+  <script>
+    const joePage={init(){this.bindMenu();this.bindCards();this.bindOffers();this.bindNewsletter();this.bindBookingBrief();this.bindReveal()},bindMenu(){const nav=document.querySelector(".nav"),button=document.querySelector(".menu");if(!nav||!button)return;button.addEventListener("click",()=>{const open=nav.classList.toggle("open");button.setAttribute("aria-expanded",String(open))});nav.querySelectorAll(".nav-links a").forEach(link=>link.addEventListener("click",()=>{nav.classList.remove("open");button.setAttribute("aria-expanded","false")}))},bindCards(){document.querySelectorAll("[data-jump]").forEach(button=>button.addEventListener("click",()=>{const target=document.querySelector(button.getAttribute("data-jump"));if(target)window.scrollTo({top:target.getBoundingClientRect().top+window.scrollY-76,behavior:"smooth"})}))},bindOffers(){const offers=[...document.querySelectorAll(".offer")],focusOffer=selected=>offers.forEach(offer=>offer.setAttribute("aria-selected",offer===selected?"true":"false"));offers.forEach(offer=>{offer.addEventListener("click",()=>focusOffer(offer));offer.addEventListener("keydown",event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();focusOffer(offer)}})})},bindNewsletter(){const form=document.querySelector(".signup"),note=document.querySelector(".signup .form-note");if(!form||!note)return;form.addEventListener("submit",event=>{event.preventDefault();const input=form.querySelector('input[type="email"]'),valid=input&&input.value.trim()&&input.checkValidity();note.textContent=valid?"Thanks. This prototype would pass the address to Joe’s newsletter system.":"Enter a valid email address to continue.";note.style.color=valid?"#176f3d":"#b42318"})},bindBookingBrief(){const button=document.getElementById("copy-brief"),note=document.getElementById("copy-note");if(!button||!note)return;const brief=["Booking inquiry for Joe Lazer","","Audience / event:","Date and location:","Key challenge:","Desired format: keynote / workshop / consulting","What needs to change after the session:"].join("\n");button.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(brief);note.textContent="Booking brief copied. Send it to speaking@joelazer.com.";note.style.color="#176f3d"}catch(_){note.textContent=brief;note.style.color="#4e4a42"}})},bindReveal(){const items=document.querySelectorAll(".reveal");if(!("IntersectionObserver"in window)){items.forEach(item=>item.classList.add("in-view"));return}const observer=new IntersectionObserver(entries=>{entries.forEach(entry=>{if(entry.isIntersecting){entry.target.classList.add("in-view");observer.unobserve(entry.target)}})},{threshold:.12});items.forEach(item=>observer.observe(item))}};joePage.init();
+  </script>
+  <script src="https://unpkg.com/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://unpkg.com/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+  <script>
+    (function(){
+      const reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const compact=window.matchMedia("(max-width: 760px)").matches;
+      if(reduce||!window.gsap||!window.ScrollTrigger)return;
+      gsap.registerPlugin(ScrollTrigger);
+      document.documentElement.classList.add("motion-enhanced");
+      const ease="power3.out";
+      gsap.set(".reveal",{opacity:0,y:22});
+      gsap.timeline({defaults:{duration:.82,ease}})
+        .fromTo(".hero-copy > *",{opacity:0,y:26},{opacity:1,y:0,stagger:.07})
+        .fromTo(".collage > .paper, .collage > .speech, .collage > .method-scrap, .collage > .diagram, .collage > .book-spread, .collage > .note",{opacity:0,y:30},{opacity:1,y:0,stagger:.055,duration:.68},"-=.42");
+      gsap.fromTo(".logo-row > *",{opacity:0,y:16},{opacity:1,y:0,stagger:.055,duration:.58,ease,scrollTrigger:{trigger:".trust",start:"top 86%",once:true}});
+      gsap.utils.toArray(".reveal").forEach((el,index)=>{
+        gsap.to(el,{opacity:1,y:0,duration:.72,ease,delay:(index%3)*.035,scrollTrigger:{trigger:el,start:"top 84%",once:true}});
+      });
+      gsap.utils.toArray("[data-gsap-path]").forEach((path,index)=>{
+        const length=path.getTotalLength();
+        gsap.set(path,{strokeDasharray:length,strokeDashoffset:length});
+        gsap.to(path,{strokeDashoffset:0,duration:1.35+index*.22,ease:"power2.out",scrollTrigger:{trigger:"#problem",start:"top 70%",once:true}});
+      });
+      gsap.fromTo(".offer",{opacity:.72,y:28},{opacity:1,y:0,stagger:.08,duration:.7,ease,scrollTrigger:{trigger:"#offers",start:"top 76%",once:true}});
+      gsap.fromTo(".book-card img",{y:28,rotation:-2,opacity:.88},{y:0,rotation:0,opacity:1,stagger:.12,duration:.8,ease,scrollTrigger:{trigger:"#books",start:"top 76%",once:true}});
+      gsap.fromTo(".final-media, .contact",{opacity:.82,y:24},{opacity:1,y:0,stagger:.1,duration:.72,ease,scrollTrigger:{trigger:"#contact",start:"top 76%",once:true}});
+      if(!compact){
+        gsap.to(".hero-spatial",{opacity:.95,duration:1.2,ease:"sine.inOut",repeat:1,yoyo:true});
+      }
+    })();
+  </script>
+  <script src="https://unpkg.com/three@0.149.0/build/three.min.js"></script>
+  <script>
+    (function(){
+      const reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const compact=window.matchMedia("(max-width: 760px)").matches;
+      if(reduce||compact||!window.THREE)return;
+      const canvases=[...document.querySelectorAll("[data-three-effect]")];
+      if(!canvases.length)return;
+      const live=[];
+      function makeRenderer(canvas){
+        const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:"low-power"});
+        renderer.setClearColor(0x000000,0);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5));
+        return renderer;
+      }
+      function resize(state){
+        const box=state.canvas.getBoundingClientRect();
+        const w=Math.max(1,box.width),h=Math.max(1,box.height);
+        state.renderer.setSize(w,h,false);
+        state.camera.aspect=w/h;
+        state.camera.updateProjectionMatrix();
+      }
+      function buildNoise(canvas){
+        const renderer=makeRenderer(canvas),scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(42,1,.1,100);
+        camera.position.z=9;
+        const count=72,positions=new Float32Array(count*3);
+        for(let i=0;i<count;i++){positions[i*3]=(Math.random()-.5)*8;positions[i*3+1]=(Math.random()-.5)*5.4;positions[i*3+2]=(Math.random()-.5)*2.2}
+        const geo=new THREE.BufferGeometry();geo.setAttribute("position",new THREE.BufferAttribute(positions,3));
+        const points=new THREE.Points(geo,new THREE.PointsMaterial({color:0x090807,size:.055,transparent:true,opacity:.55}));
+        const lineGeo=new THREE.BufferGeometry();
+        const linePos=new Float32Array(36*2*3);
+        for(let i=0;i<36;i++){const a=Math.floor(Math.random()*count),b=Math.floor(Math.random()*count);linePos.set(positions.slice(a*3,a*3+3),i*6);linePos.set(positions.slice(b*3,b*3+3),i*6+3)}
+        lineGeo.setAttribute("position",new THREE.BufferAttribute(linePos,3));
+        const lines=new THREE.LineSegments(lineGeo,new THREE.LineBasicMaterial({color:0x0754e8,transparent:true,opacity:.16}));
+        scene.add(points,lines);
+        return {canvas,renderer,scene,camera,points,lines,active:false,draw(t){points.rotation.y=t*.00008;points.rotation.x=Math.sin(t*.00045)*.08;lines.rotation.copy(points.rotation);renderer.render(scene,camera)}};
+      }
+      function buildPathway(canvas){
+        const renderer=makeRenderer(canvas),scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(38,1,.1,100);
+        camera.position.z=7;
+        const nodes=[[-3,-1.25,0],[-1.8,.9,.15],[-.55,-.22,.1],[.9,.72,.2],[2.55,-.52,0]];
+        const nodeGeo=new THREE.SphereGeometry(.055,12,8);
+        nodes.forEach((p,i)=>{const dot=new THREE.Mesh(nodeGeo,new THREE.MeshBasicMaterial({color:i===nodes.length-1?0xffe100:0xffffff,transparent:true,opacity:i===nodes.length-1?.95:.58}));dot.position.set(...p);scene.add(dot)});
+        const curve=new THREE.CatmullRomCurve3(nodes.map(p=>new THREE.Vector3(...p)));
+        const pathGeo=new THREE.BufferGeometry().setFromPoints(curve.getPoints(84));
+        const path=new THREE.Line(pathGeo,new THREE.LineBasicMaterial({color:0xffe100,transparent:true,opacity:.44}));
+        const redPath=new THREE.Line(pathGeo.clone(),new THREE.LineBasicMaterial({color:0xff3b2f,transparent:true,opacity:.22}));
+        redPath.position.y=-.08;
+        scene.add(redPath,path);
+        const walker=new THREE.Mesh(new THREE.SphereGeometry(.09,16,10),new THREE.MeshBasicMaterial({color:0xff3b2f,transparent:true,opacity:.86}));
+        scene.add(walker);
+        return {canvas,renderer,scene,camera,curve,walker,path,redPath,active:false,draw(t){const p=curve.getPoint((t*.00008)%1);walker.position.copy(p);path.rotation.z=Math.sin(t*.00035)*.018;redPath.rotation.z=path.rotation.z;renderer.render(scene,camera)}};
+      }
+      function buildHeroPaths(canvas){
+        const renderer=makeRenderer(canvas),scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(36,1,.1,100);
+        camera.position.z=9.5;
+        const count=110,positions=new Float32Array(count*3);
+        for(let i=0;i<count;i++){
+          const cluster=i/count;
+          positions[i*3]=-5.2+Math.random()*10.4;
+          positions[i*3+1]=-2.8+Math.random()*5.6+(cluster>.62?Math.sin(i)*.28:0);
+          positions[i*3+2]=-1.3+Math.random()*2.6;
+        }
+        const pointGeo=new THREE.BufferGeometry();
+        pointGeo.setAttribute("position",new THREE.BufferAttribute(positions,3));
+        const points=new THREE.Points(pointGeo,new THREE.PointsMaterial({color:0x090807,size:.042,transparent:true,opacity:.34}));
+        scene.add(points);
+        const paths=[
+          {color:0xff3b2f,opacity:.54,y:-.95,offset:0},
+          {color:0x0754e8,opacity:.42,y:.05,offset:.22},
+          {color:0xffe100,opacity:.58,y:1.02,offset:.45}
+        ];
+        const curves=paths.map(spec=>{
+          const curve=new THREE.CatmullRomCurve3([
+            new THREE.Vector3(-5.6,spec.y-.2,-.15),
+            new THREE.Vector3(-3.2,spec.y+.58,.18),
+            new THREE.Vector3(-.65,spec.y-.38,.04),
+            new THREE.Vector3(2.25,spec.y+.42,.22),
+            new THREE.Vector3(5.45,spec.y-.1,-.08)
+          ]);
+          const geo=new THREE.BufferGeometry().setFromPoints(curve.getPoints(96));
+          const line=new THREE.Line(geo,new THREE.LineBasicMaterial({color:spec.color,transparent:true,opacity:spec.opacity}));
+          const pulse=new THREE.Mesh(new THREE.SphereGeometry(.105,16,10),new THREE.MeshBasicMaterial({color:spec.color,transparent:true,opacity:.88}));
+          scene.add(line,pulse);
+          return {curve,line,pulse,offset:spec.offset};
+        });
+        return {canvas,renderer,scene,camera,points,curves,active:false,draw(t){
+          points.rotation.y=Math.sin(t*.00018)*.08;
+          points.rotation.x=Math.cos(t*.00016)*.035;
+          curves.forEach(item=>{
+            const p=item.curve.getPoint((t*.000055+item.offset)%1);
+            item.pulse.position.copy(p);
+            item.line.rotation.z=Math.sin(t*.00022+item.offset)*.018;
+          });
+          renderer.render(scene,camera);
+        }};
+      }
+      canvases.forEach(canvas=>{
+        const effect=canvas.dataset.threeEffect;
+        live.push(effect==="hero-paths"?buildHeroPaths(canvas):effect==="pathway"?buildPathway(canvas):buildNoise(canvas));
+      });
+      live.forEach(resize);
+      const visibility=new IntersectionObserver(entries=>entries.forEach(entry=>{const item=live.find(state=>state.canvas===entry.target);if(item)item.active=entry.isIntersecting}),{threshold:.08});
+      live.forEach(state=>visibility.observe(state.canvas));
+      let raf=0;
+      function tick(t){live.forEach(state=>{if(state.active)state.draw(t)});raf=requestAnimationFrame(tick)}
+      window.addEventListener("resize",()=>live.forEach(resize),{passive:true});
+      raf=requestAnimationFrame(tick);
+      window.addEventListener("pagehide",()=>cancelAnimationFrame(raf),{once:true});
+    })();
+  </script>
+
+
+</body></html>
