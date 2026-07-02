@@ -1668,10 +1668,19 @@ export function HomeView({
         // for that. Migrate-group chips (From Figma, etc.) still carry
         // a meaningful prompt the user wants dropped in, so they keep
         // the historical behavior.
+        //
+        // Website clone is the one create chip that seeds the composer: the
+        // scenario is meaningless without a target URL, so an empty composer
+        // gets the localized "clone this site: <url>" scaffold instead of
+        // staying blank. A non-empty draft is the user's — leave it alone.
+        const promptSeed =
+          chip.id === 'web-clone' && prompt.trim().length === 0
+            ? t('homeHero.chip.webClonePromptSeed')
+            : null;
         if (chip.group === 'create') {
-          void usePlugin(record, undefined, {
+          void usePlugin(record, promptSeed ?? undefined, {
             ...pluginOptions,
-            suppressPromptUpdate: true,
+            suppressPromptUpdate: promptSeed === null,
             deferApply: true,
           });
         } else {

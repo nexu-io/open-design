@@ -1067,6 +1067,7 @@ export interface Dict {
   'homeHero.confirmReplaceBody': string;
   'homeHero.confirmReplace': string;
   'homeHero.chip.prototype': string;
+  'homeHero.chip.webClone': string;
   'homeHero.chip.liveArtifact': string;
   'homeHero.chip.deck': string;
   'homeHero.chip.image': string;
@@ -1089,6 +1090,7 @@ export interface Dict {
   'homeHero.chip.mobile': string;
   'homeHero.chip.document': string;
   'homeHero.chip.prototypeDesc': string;
+  'homeHero.chip.webCloneDesc': string;
   'homeHero.chip.wireframeDesc': string;
   'homeHero.chip.mobileDesc': string;
   'homeHero.chip.deckDesc': string;
@@ -1100,6 +1102,7 @@ export interface Dict {
   'homeHero.chip.liveArtifactDesc': string;
   'homeHero.chip.createBrandKitDesc': string;
   'homeHero.chip.prototypeNext': string;
+  'homeHero.chip.webCloneNext': string;
   'homeHero.chip.wireframeNext': string;
   'homeHero.chip.mobileNext': string;
   'homeHero.chip.deckNext': string;
@@ -1107,6 +1110,7 @@ export interface Dict {
   'homeHero.chip.imageNext': string;
   'homeHero.chip.videoNext': string;
   'homeHero.chip.audioNext': string;
+  'homeHero.chip.webClonePromptSeed': string;
   'homeWorkingDir.trigger': string;
   'homeWorkingDir.pick': string;
   'homeWorkingDir.replace': string;

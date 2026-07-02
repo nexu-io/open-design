@@ -691,6 +691,7 @@ export const zhCN: Dict = {
   "homeHero.confirmReplaceBody": "使用 {title} 会替换输入框中的现有文本。",
   "homeHero.confirmReplace": "替换",
   "homeHero.chip.prototype": "原型",
+  "homeHero.chip.webClone": "网站复刻",
   "homeHero.chip.liveArtifact": "实时看板",
   "homeHero.chip.deck": "幻灯片",
   "homeHero.chip.image": "图片",
@@ -716,6 +717,7 @@ export const zhCN: Dict = {
   "homeHero.chip.mobile": "移动应用",
   "homeHero.chip.document": "文档",
   "homeHero.chip.prototypeDesc": "可交互的应用原型",
+  "homeHero.chip.webCloneDesc": "按源码证据复刻网站",
   "homeHero.chip.wireframeDesc": "低保真屏幕与流程",
   "homeHero.chip.mobileDesc": "iOS 与安卓界面",
   "homeHero.chip.deckDesc": "演示文稿与路演稿",
@@ -728,6 +730,7 @@ export const zhCN: Dict = {
   "homeHero.chip.createBrandKitDesc": "从网站提取品牌设计系统",
   "homeHero.chip.prototypeNext":
     "打开对话,构建可逐轮打磨的高保真可点击网页原型。",
+  "homeHero.chip.webCloneNext": "打开使用 web-clone skill 的对话，先贴目标 URL，再侦察、复刻并审计产物。",
   "homeHero.chip.wireframeNext":
     "打开对话,先用低保真屏幕与流程验证结构,再做视觉设计。",
   "homeHero.chip.mobileNext": "打开对话,排布 iOS 与安卓的移动端界面。",
@@ -736,6 +739,7 @@ export const zhCN: Dict = {
   "homeHero.chip.imageNext": "打开对话,生成符合品牌的图片并持续迭代。",
   "homeHero.chip.videoNext": "打开对话,生成可继续打磨的短视频。",
   "homeHero.chip.audioNext": "打开对话,创建配音、音乐或音效。",
+  "homeHero.chip.webClonePromptSeed": "想要复刻的网站链接：",
   "homeWorkingDir.trigger": "选择工作目录",
   "homeWorkingDir.pick": "选择目录",
   "homeWorkingDir.replace": "修改工作目录",

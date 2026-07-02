@@ -4798,17 +4798,27 @@ export async function startServer({
     }
     const effectiveSkillId =
       typeof skillId === 'string' && skillId ? skillId : project?.skillId;
-    const designSystemSelection = resolveEffectiveDesignSystemSelection({
-      requestDesignSystemId: designSystemId,
-      pluginDesignSystemId,
-      projectDesignSystemId: project?.designSystemId,
-      appDefaultDesignSystemId: appConfigForPrompt?.designSystemId,
-      // A project row with designSystemId=null can mean the user picked
-      // "No design system"; do not reapply the global default behind their back.
-      allowAppDefault: project === null,
-    });
-    const effectiveDesignSystemId = designSystemSelection.id;
     const metadata = project?.metadata;
+    // Website Clone runs reproduce someone else's site: the fidelity target
+    // is the original page. Treating a project/app design system as
+    // authoritative would overwrite the cloned site's palette/typography
+    // with the user's brand, and universal craft rules would "improve"
+    // visual decisions the clone must preserve verbatim — so both prompt
+    // blocks are skipped for these runs. Step 6 of the skill (replace with
+    // the user's own content) is where brand application belongs.
+    const isWebCloneRun = metadata?.intent === 'web-clone';
+    const designSystemSelection = isWebCloneRun
+      ? { id: null, source: 'none' }
+      : resolveEffectiveDesignSystemSelection({
+          requestDesignSystemId: designSystemId,
+          pluginDesignSystemId,
+          projectDesignSystemId: project?.designSystemId,
+          appDefaultDesignSystemId: appConfigForPrompt?.designSystemId,
+          // A project row with designSystemId=null can mean the user picked
+          // "No design system"; do not reapply the global default behind their back.
+          allowAppDefault: project === null,
+        });
+    const effectiveDesignSystemId = designSystemSelection.id;
     let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntries> | null = null;
     const loadAllSkills = async () => {
       allSkillsPromise ??= listAllSkillLikeEntries();
@@ -5085,9 +5095,12 @@ export async function startServer({
     }
 
     const excludedCraft = new Set(designSystemCraftExemptions);
-    const requestedCraft = Array.from(
-      new Set([...skillCraftRequires, ...designSystemCraftApplies]),
-    ).filter((slug) => !excludedCraft.has(slug));
+    // Web-clone fidelity exemption — see `isWebCloneRun` above.
+    const requestedCraft = isWebCloneRun
+      ? []
+      : Array.from(
+          new Set([...skillCraftRequires, ...designSystemCraftApplies]),
+        ).filter((slug) => !excludedCraft.has(slug));
     if (requestedCraft.length > 0) {
       const loaded = await loadCraftSections(CRAFT_DIR, requestedCraft);
       if (loaded.body) {

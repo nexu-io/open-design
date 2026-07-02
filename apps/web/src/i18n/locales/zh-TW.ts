@@ -694,6 +694,7 @@ export const zhTW: Dict = {
   "homeHero.confirmReplaceBody": "使用 {title} 將取代目前輸入框中的文字。",
   "homeHero.confirmReplace": "取代",
   "homeHero.chip.prototype": "原型",
+  "homeHero.chip.webClone": "網站復刻",
   "homeHero.chip.liveArtifact": "即時看板",
   "homeHero.chip.deck": "簡報",
   "homeHero.chip.image": "圖片",
@@ -719,6 +720,7 @@ export const zhTW: Dict = {
   "homeHero.chip.mobile": "行動應用",
   "homeHero.chip.document": "文件",
   "homeHero.chip.prototypeDesc": "可互動的應用原型",
+  "homeHero.chip.webCloneDesc": "依原始碼證據復刻網站",
   "homeHero.chip.wireframeDesc": "低保真畫面與流程",
   "homeHero.chip.mobileDesc": "iOS 與 Android 畫面",
   "homeHero.chip.deckDesc": "簡報與提案簡報",
@@ -731,6 +733,7 @@ export const zhTW: Dict = {
   "homeHero.chip.createBrandKitDesc": "從網站擷取品牌設計系統",
   "homeHero.chip.prototypeNext":
     "開啟對話,建構可逐輪打磨的高保真可點擊網頁原型。",
+  "homeHero.chip.webCloneNext": "開啟使用 web-clone skill 的對話，先貼目標 URL，再偵察、復刻並稽核產物。",
   "homeHero.chip.wireframeNext":
     "開啟對話,先以低保真畫面與流程驗證結構,再進行視覺設計。",
   "homeHero.chip.mobileNext": "開啟對話,排版 iOS 與 Android 的行動端畫面。",
@@ -739,6 +742,7 @@ export const zhTW: Dict = {
   "homeHero.chip.imageNext": "開啟對話,產生符合品牌的圖片並持續迭代。",
   "homeHero.chip.videoNext": "開啟對話,產生可繼續打磨的短影片。",
   "homeHero.chip.audioNext": "開啟對話,建立配音、音樂或音效。",
+  "homeHero.chip.webClonePromptSeed": "想要復刻的網站連結：",
   "homeWorkingDir.trigger": "選擇工作目錄",
   "homeWorkingDir.pick": "選擇目錄",
   "homeWorkingDir.replace": "修改工作目錄",
