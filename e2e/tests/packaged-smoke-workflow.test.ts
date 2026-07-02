@@ -36,6 +36,7 @@ const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workfl
 const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
 const releasePrereleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-prerelease.yml");
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
+const releaseStableNotesScriptPath = join(workspaceRoot, ".github", "scripts", "release", "github", "stable-notes.sh");
 const releasePreviewScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-preview.ts");
 const releaseStableScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-stable.ts");
 const releaseBetaScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-beta.ts");
@@ -1407,6 +1408,8 @@ process.stdin.on("end", () => {
     expect(workflow).toContain("default: metadata");
     expect(workflow).not.toContain("inputs.channel");
     expect(workflow).toContain("OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run == 'publish' && 'false' || inputs.dry_run }}");
+    expect(workflow).toContain("RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}");
+    expect(workflow).toContain("run: bash .github/scripts/release/github/stable-notes.sh");
     expect(workflow).toContain("dry_run: ${{ steps.stable.outputs.dry_run }}");
     expect(workflow).toContain("dry_run_mode: ${{ steps.stable.outputs.dry_run_mode }}");
     expect(workflow).toContain("if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}");
@@ -1418,6 +1421,43 @@ process.stdin.on("end", () => {
     expect(script).toContain('setOutput("dry_run_mode", stableDryRunMode);');
     expect(script).toContain('setOutput("run_prepublish_jobs", runPrepublishJobs ? "true" : "false");');
     expect(script).toContain('setOutput("publish_side_effects_enabled", publishSideEffectsEnabled ? "true" : "false");');
+  });
+
+  it("[P2] writes stable release notes from the release public origin variable", async () => {
+    for (const [envName, origin] of [
+      ["RELEASE_PUBLIC_ORIGIN", "https://releases.open-design.ai/current/"],
+      ["CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN", "https://releases.open-design.ai/legacy/"],
+    ] as const) {
+      const runnerTemp = await mkdtemp(join(tmpdir(), "od-stable-notes-"));
+      const outputPath = join(runnerTemp, "github-output.txt");
+
+      try {
+        await execFileAsync("bash", [releaseStableNotesScriptPath], {
+          cwd: workspaceRoot,
+          env: {
+            ...process.env,
+            BRANCH_NAME: "release/v0.13.0",
+            CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: envName === "CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN" ? origin : "",
+            GITHUB_OUTPUT: outputPath,
+            GITHUB_REPOSITORY: "nexu-io/open-design",
+            GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
+            RELEASE_CHANNEL: "stable",
+            RELEASE_PUBLIC_ORIGIN: envName === "RELEASE_PUBLIC_ORIGIN" ? origin : "",
+            RELEASE_SIGNED: "true",
+            RELEASE_VERSION: "0.13.0",
+            RUNNER_TEMP: runnerTemp,
+            VERSION_TAG: "open-design-v0.13.0",
+          },
+        });
+
+        const outputs = parseGithubOutput(await readFile(outputPath, "utf8"));
+        const notes = await readFile(outputs.notes_file ?? "", "utf8");
+        expect(notes).toContain(`R2 metadata: ${origin.replace(/\/+$/, "")}/stable/latest/metadata.json`);
+        expect(notes).toContain(`E2E report: ${origin.replace(/\/+$/, "")}/stable/versions/0.13.0/report.zip`);
+      } finally {
+        await rm(runnerTemp, { force: true, recursive: true });
+      }
+    }
   });
 
   it("[P2] validates stable dry-run prerelease metadata from a release branch", async () => {

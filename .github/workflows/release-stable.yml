@@ -1261,6 +1261,8 @@ jobs:
       - name: Write stable release notes
         id: notes
         if: ${{ needs.metadata.outputs.github_release_enabled == 'true' }}
+        env:
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         run: bash .github/scripts/release/github/stable-notes.sh
 
       - name: Create draft release with tag
