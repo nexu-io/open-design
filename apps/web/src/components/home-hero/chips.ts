@@ -117,6 +117,23 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
+    id: 'web-clone',
+    label: 'Website clone',
+    icon: 'globe',
+    group: 'create',
+    description: 'Recreate an existing website',
+    hint: 'Paste a site URL and recreate its structure, visuals, and interactions from real source evidence.',
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'example-web-clone',
+      projectKind: 'prototype',
+      projectMetadata: {
+        kind: 'prototype',
+        intent: 'web-clone',
+      },
+    },
+  },
+  {
     id: 'wireframe',
     label: 'Wireframe',
     icon: 'layout',
@@ -338,6 +355,7 @@ export function chipsForGroup(group: ChipGroup): HomeHeroChip[] {
 // rather than seeding a scenario plugin. Any create chip not listed keeps its
 // catalog order after the explicit entries (see `orderedCreateChips`).
 export const CREATE_RAIL_ORDER = [
+  'web-clone',
   'deck',
   'prototype',
   'wireframe',
@@ -354,7 +372,7 @@ export const CREATE_RAIL_ORDER = [
 // Video and Audio are the trailing pure-media outputs in CREATE_RAIL_ORDER and
 // the least central to the design-system story, so they are the first to drop
 // when keeping the teaser chips to a single tidy row.
-const ONBOARDING_ARTIFACT_OMIT = new Set<string>(['video', 'audio']);
+const ONBOARDING_ARTIFACT_OMIT = new Set<string>(['web-clone', 'video', 'audio']);
 
 // The artifact chips shown on the onboarding "build a design system" step — a
 // curated single-row subset of the create rail. Derived from CREATE_RAIL_ORDER

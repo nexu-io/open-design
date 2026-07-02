@@ -89,6 +89,9 @@ type JsonRecord = Record<string, unknown>;
 type ApiRequest = Request<Record<string, string>, unknown, JsonRecord>;
 type ApiResponse = Response<unknown>;
 type ProjectMetadata = (Partial<ContractProjectMetadata> & JsonRecord) | null | undefined;
+type ScenarioProjectMetadata = Pick<ContractProjectMetadata, 'kind'> & {
+  intent?: NonNullable<ContractProjectMetadata['intent']>;
+};
 type AgentCliEnv = Parameters<typeof agentCliEnvForAgent>[0];
 type RunDeliveryTarget = 'managed-project' | 'external-project' | 'none';
 
@@ -359,12 +362,19 @@ function toProjectFiles(value: unknown): ProjectFileEntry[] {
 
 function toScenarioProjectMetadata(
   metadata: ProjectMetadata,
-): Pick<ContractProjectMetadata, 'kind' | 'intent'> | null {
+): ScenarioProjectMetadata | null {
   if (!metadata || typeof metadata.kind !== 'string') return null;
-  return {
+
+  const result: ScenarioProjectMetadata = {
     kind: metadata.kind as ContractProjectMetadata['kind'],
-    ...(metadata.intent === 'live-artifact' ? { intent: metadata.intent } : {}),
   };
+  const intent = metadata.intent;
+
+  if (typeof intent === 'string' && intent.length > 0) {
+    result.intent = intent as NonNullable<ContractProjectMetadata['intent']>;
+  }
+
+  return result;
 }
 
 type DesignSystemSelectionSource = 'request' | 'plugin' | 'project' | 'app-default' | 'none';

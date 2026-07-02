@@ -1609,6 +1609,7 @@ export function HomeView({
           });
           return;
         }
+        const promptSeed = homePromptSeedForChip(chip.id, t, prompt);
         const pluginOptions = {
           projectKind: chip.action.projectKind,
           chipId: chip.id,
@@ -1623,9 +1624,9 @@ export function HomeView({
         // a meaningful prompt the user wants dropped in, so they keep
         // the historical behavior.
         if (chip.group === 'create') {
-          void usePlugin(record, undefined, {
+          void usePlugin(record, promptSeed ?? undefined, {
             ...pluginOptions,
-            suppressPromptUpdate: true,
+            suppressPromptUpdate: promptSeed === null,
             deferApply: true,
           });
         } else {
@@ -2259,6 +2260,16 @@ function defaultPluginIdForChip(chipId: string | null): string | null {
     return chip.action.pluginId;
   }
   return null;
+}
+
+function homePromptSeedForChip(
+  chipId: string,
+  t: (key: 'homeHero.chip.webClonePromptSeed') => string,
+  currentPrompt: string,
+): string | null {
+  if (chipId !== 'web-clone') return null;
+  if (currentPrompt.trim().length > 0) return null;
+  return t('homeHero.chip.webClonePromptSeed');
 }
 
 export function shouldShowActivePluginChip(active: ActivePlugin | null): boolean {

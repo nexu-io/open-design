@@ -105,16 +105,18 @@ export type TrackingSettingsPage = 'settings';
 
 export type TrackingProjectKind =
   | 'prototype'
-  // `wireframe` / `mobile` / `live_artifact` are prototype-kind projects the
+  // `web_clone` / `wireframe` / `mobile` / `live_artifact` are prototype-kind projects the
   // Home task rail (task_chip) offers as their own cards. They all reuse the
   // web-prototype seed (so the product `metadata.kind` stays `prototype`), but
   // the analytics dimension splits them out so a created project's
   // `project_kind` lines up 1:1 with the card the user picked:
+  //   - `web_clone`     ← metadata.intent === 'web-clone'
   //   - `wireframe`     ← metadata.fidelity === 'wireframe'
   //   - `mobile`        ← metadata.platform/platformTargets is a mobile surface
   //   - `live_artifact` ← metadata.intent === 'live-artifact'
-  // Derivation precedence (a prototype that matches several): live_artifact >
+  // Derivation precedence (a prototype that matches several): web_clone > live_artifact >
   // wireframe > mobile. See `projectKindToTracking`.
+  | 'web_clone'
   | 'wireframe'
   | 'mobile'
   | 'live_artifact'
@@ -3453,8 +3455,9 @@ export function projectKindToTracking(
   switch (kind) {
     case 'prototype':
       // Prototype subtypes share `kind: 'prototype'` but carry a distinguishing
-      // metadata field. Precedence (a prototype matching several): live_artifact
-      // > wireframe > mobile, then plain prototype.
+      // metadata field. Precedence (a prototype matching several): web_clone >
+      // live_artifact > wireframe > mobile, then plain prototype.
+      if (hints?.intent === 'web-clone') return 'web_clone';
       if (hints?.intent === 'live-artifact') return 'live_artifact';
       if (hints?.fidelity === 'wireframe') return 'wireframe';
       if (isMobileSurface(hints)) return 'mobile';
@@ -3480,6 +3483,9 @@ export function projectKindToTracking(
     case 'live-artifact':
     case 'live_artifact':
       return 'live_artifact';
+    case 'web-clone':
+    case 'web_clone':
+      return 'web_clone';
     default:
       return null;
   }

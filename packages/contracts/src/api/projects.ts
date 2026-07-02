@@ -92,11 +92,13 @@ export interface DesignSystemReviewEntry {
 export interface ProjectMetadata {
   kind: ProjectKind;
   // `live-artifact`: the data-backed live dashboard flow (drives the
-  // live-artifact skill/system-prompt path). `document`: resume/report/PDF
+  // live-artifact skill/system-prompt path). `web-clone`: website reproduction
+  // projects from the Home `网站复刻` card, stored as prototypes for preview
+  // behavior but split into their own analytics kind. `document`: resume/report/PDF
   // projects from the Home `document` card — an analytics-only discriminator
   // (no product behavior keys off it) so a created `other`-kind project reports
   // `project_kind: 'document'` instead of generic `other`.
-  intent?: 'live-artifact' | 'document';
+  intent?: 'live-artifact' | 'web-clone' | 'document';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
   slideCount?: string;

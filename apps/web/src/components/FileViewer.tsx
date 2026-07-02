@@ -5553,6 +5553,10 @@ function HtmlViewer({
     () => source != null && htmlNeedsFocusGuard(source),
     [source],
   );
+  const hasProjectRootAssetRefs = useMemo(
+    () => source != null && hasRootRelativeProjectAssetRefs(source),
+    [source],
+  );
   const [urlSelectionBridgeReady, setUrlSelectionBridgeReady] = useState(false);
   const urlLoadDecision: UrlLoadDecision = {
     mode,
@@ -5563,7 +5567,7 @@ function HtmlViewer({
     urlModeBridge,
     inspectMode,
     drawMode: drawOverlayOpen,
-    forceInline: forceInline || needsSandboxShim,
+    forceInline: forceInline || needsSandboxShim || hasProjectRootAssetRefs,
     needsFocusGuard,
   };
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview(urlLoadDecision) && !manualEditRequiresSrcDoc;
@@ -10421,15 +10425,54 @@ function isBlockedPreviewAssetScheme(assetRef: string): boolean {
   return /^(?:javascript|data):/i.test(clean);
 }
 
+const PROJECT_ROOT_ASSET_PREFIXES = new Set([
+  '_next',
+  'asset',
+  'assets',
+  'assets-cdn',
+  'audio',
+  'css',
+  'favicon',
+  'file',
+  'files',
+  'flower',
+  'flowers',
+  'font',
+  'fonts',
+  'icon',
+  'icons',
+  'image',
+  'images',
+  'img',
+  'install-screenshots',
+  'js',
+  'media',
+  'public',
+  'reference-assets',
+  'script',
+  'scripts',
+  'static',
+  'video',
+  'videos',
+]);
+
+const HOST_ROOT_PREFIXES = new Set(['api', 'artifacts', 'frames']);
+
 function hasRelativeAssetRefs(html: string): boolean {
-  const attr = /\s(?:src|href)\s*=\s*["']([^"']+)["']/gi;
+  const attr = /\s(?:src|href|poster|data-src|data-tool-chip-src)\s*=\s*["']([^"']+)["']/gi;
   let match: RegExpExecArray | null;
   while ((match = attr.exec(html)) !== null) {
     const value = match[1]?.trim();
     if (!value) continue;
+    if (isRootRelativeProjectAssetRef(value)) return true;
     if (/^(?:https?:|data:|blob:|mailto:|tel:|#|\/)/i.test(value)) continue;
     return true;
   }
+  const srcsetAttr = /\ssrcset\s*=\s*["']([^"']+)["']/gi;
+  while ((match = srcsetAttr.exec(html)) !== null) {
+    if (srcsetHasProjectAssetRef(match[1] ?? '')) return true;
+  }
+  if (hasRootRelativeProjectAssetRefs(html)) return true;
   return false;
 }
 
@@ -10445,14 +10488,14 @@ async function inlineRelativeAssets(
     const href = readHtmlAttr(tag, 'href');
     if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
     replacements.push(
-      fetchProjectRelativeText(projectId, fileName, href).then((css) =>
-        css == null
+      fetchProjectTextAsset(projectId, fileName, href).then((asset) =>
+        asset == null
           ? null
           : {
               from: tag,
               to:
                 `<style data-od-inline-asset="${escapeHtmlAttr(href)}">\n` +
-                `${css.replace(/<\/style/gi, '<\\/style')}\n</style>`,
+                `${rewriteCssAssetRefs(asset.text, projectId, asset.filePath).replace(/<\/style/gi, '<\\/style')}\n</style>`,
             },
       ),
     );
@@ -10463,8 +10506,8 @@ async function inlineRelativeAssets(
     const src = readHtmlAttr(tag, 'src');
     if (!src) continue;
     replacements.push(
-      fetchProjectRelativeText(projectId, fileName, src).then((js) => {
-        if (js == null) return null;
+      fetchProjectTextAsset(projectId, fileName, src).then((asset) => {
+        if (asset == null) return null;
         const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
         const attrs = open
           .replace(/^<script/i, '')
@@ -10472,7 +10515,7 @@ async function inlineRelativeAssets(
           .replace(/\ssrc\s*=\s*(['"])[\s\S]*?\1/i, '');
         return {
           from: tag,
-          to: `<script${attrs}>\n${js.replace(/<\/script/gi, '<\\/script')}\n</script>`,
+          to: `<script${attrs}>\n${rewriteScriptRootAssetRefs(asset.text, projectId).replace(/<\/script/gi, '<\\/script')}\n</script>`,
         };
       }),
     );
@@ -10481,20 +10524,21 @@ async function inlineRelativeAssets(
   const resolved = (await Promise.all(replacements)).filter(
     (item): item is { from: string; to: string } => item !== null,
   );
-  return resolved.reduce((next, { from, to }) => next.replace(from, () => to), html);
+  const inlined = resolved.reduce((next, { from, to }) => next.replace(from, () => to), html);
+  return rewritePreviewProjectAssetRefs(inlined, projectId);
 }
 
-async function fetchProjectRelativeText(
+async function fetchProjectTextAsset(
   projectId: string,
   ownerFileName: string,
   assetRef: string,
-): Promise<string | null> {
+): Promise<{ filePath: string; text: string } | null> {
   const filePath = resolveProjectRelativePath(ownerFileName, assetRef);
   if (!filePath) return null;
   try {
     const resp = await fetch(projectRawUrl(projectId, filePath));
     if (!resp.ok) return null;
-    return await resp.text();
+    return { filePath, text: await resp.text() };
   } catch {
     return null;
   }
@@ -10502,6 +10546,8 @@ async function fetchProjectRelativeText(
 
 function resolveProjectRelativePath(ownerFileName: string, assetRef: string): string | null {
   if (isBlockedPreviewAssetScheme(assetRef)) return null;
+  const rootPath = rootRelativeProjectAssetPath(assetRef);
+  if (rootPath) return rootPath;
   if (/^(?:https?:|data:|blob:|mailto:|tel:|#|\/)/i.test(assetRef)) return null;
   try {
     const url = new URL(assetRef, `https://od.local/${baseDirFor(ownerFileName)}`);
@@ -10513,6 +10559,154 @@ function resolveProjectRelativePath(ownerFileName: string, assetRef: string): st
   } catch {
     return null;
   }
+}
+
+function hasRootRelativeProjectAssetRefs(html: string): boolean {
+  const attr = /\s(?:src|href|poster|data-src|data-tool-chip-src)\s*=\s*["']([^"']+)["']/gi;
+  let match: RegExpExecArray | null;
+  while ((match = attr.exec(html)) !== null) {
+    if (isRootRelativeProjectAssetRef(match[1] ?? '')) return true;
+  }
+
+  const srcsetAttr = /\ssrcset\s*=\s*["']([^"']+)["']/gi;
+  while ((match = srcsetAttr.exec(html)) !== null) {
+    if (srcsetHasProjectAssetRef(match[1] ?? '')) return true;
+  }
+
+  const cssUrl = /url\(\s*(['"]?)(\/(?!\/)[^'")]+)\1\s*\)/gi;
+  while ((match = cssUrl.exec(html)) !== null) {
+    if (isRootRelativeProjectAssetRef(match[2] ?? '')) return true;
+  }
+
+  return false;
+}
+
+function srcsetHasProjectAssetRef(srcset: string): boolean {
+  return srcset
+    .split(',')
+    .some((candidate) => isRootRelativeProjectAssetRef(candidate.trim().split(/\s+/)[0] ?? ''));
+}
+
+function isRootRelativeProjectAssetRef(value: string): boolean {
+  return rootRelativeProjectAssetPath(value) !== null;
+}
+
+function rootRelativeProjectAssetPath(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return null;
+  const pathOnly = trimmed.split(/[?#]/, 1)[0]?.replace(/^\/+/, '').replace(/\\/g, '/') ?? '';
+  if (!pathOnly) return null;
+
+  let decodedPath = pathOnly;
+  try {
+    decodedPath = decodeURIComponent(pathOnly);
+  } catch {
+    // Keep the original path. projectRawUrl will encode it segment-by-segment.
+  }
+
+  const parts = decodedPath.split('/');
+  if (parts.some((part) => part.trim() === '..')) return null;
+  const first = parts[0]?.toLowerCase();
+  if (!first || HOST_ROOT_PREFIXES.has(first)) return null;
+  if (PROJECT_ROOT_ASSET_PREFIXES.has(first)) return decodedPath;
+
+  const basename = parts.at(-1) ?? '';
+  if (/\.[a-z0-9][a-z0-9_-]{0,15}$/i.test(basename)) return decodedPath;
+  return null;
+}
+
+function rewritePreviewProjectAssetRefs(html: string, projectId: string): string {
+  let next = rewriteCssRootRelativeRefs(html, projectId);
+  next = next.replace(
+    /(\s)(src|poster|data-src|data-tool-chip-src)\s*=\s*(['"])([\s\S]*?)\3/gi,
+    (match: string, space: string, name: string, quote: string, value: string) => {
+      const rewritten = rewriteRootRelativeProjectAssetRef(value, projectId);
+      if (rewritten === value) return match;
+      return `${space}${name}=${quote}${rewritten}${quote}`;
+    },
+  );
+  next = next.replace(
+    /(\s)srcset\s*=\s*(['"])([\s\S]*?)\2/gi,
+    (match: string, space: string, quote: string, value: string) => {
+      const rewritten = rewriteSrcsetProjectAssetRefs(value, projectId);
+      if (rewritten === value) return match;
+      return `${space}srcset=${quote}${rewritten}${quote}`;
+    },
+  );
+  next = next.replace(/<link\b[^>]*>/gi, (tag) =>
+    tag.replace(
+      /(\shref\s*=\s*)(['"])([\s\S]*?)\2/i,
+      (match: string, prefix: string, quote: string, value: string) => {
+        const rewritten = rewriteRootRelativeProjectAssetRef(value, projectId);
+        if (rewritten === value) return match;
+        return `${prefix}${quote}${rewritten}${quote}`;
+      },
+    ),
+  );
+  return next;
+}
+
+function rewriteCssAssetRefs(css: string, projectId: string, ownerFileName: string): string {
+  return css.replace(
+    /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi,
+    (match: string, quote: string, value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed || /^(?:https?:|data:|blob:|mailto:|tel:|#)/i.test(trimmed)) return match;
+      const rootRewritten = rewriteRootRelativeProjectAssetRef(trimmed, projectId);
+      const filePath = rootRewritten === trimmed ? resolveProjectRelativePath(ownerFileName, trimmed) : null;
+      const suffix = trimmed.match(/^[^?#]*([?#][\s\S]*)$/)?.[1] ?? '';
+      const rewritten = filePath ? `${projectRawUrl(projectId, filePath)}${suffix}` : rootRewritten;
+      if (rewritten === trimmed) return match;
+      const q = quote || '';
+      return `url(${q}${rewritten}${q})`;
+    },
+  );
+}
+
+function rewriteCssRootRelativeRefs(css: string, projectId: string): string {
+  return css.replace(
+    /url\(\s*(['"]?)(\/(?!\/)[^'")]+)\1\s*\)/gi,
+    (match: string, quote: string, value: string) => {
+      const rewritten = rewriteRootRelativeProjectAssetRef(value, projectId);
+      if (rewritten === value) return match;
+      const q = quote || '';
+      return `url(${q}${rewritten}${q})`;
+    },
+  );
+}
+
+function rewriteScriptRootAssetRefs(js: string, projectId: string): string {
+  return js.replace(
+    /(['"`])(\/(?!\/)[^'"`\s]+)\1/g,
+    (match: string, quote: string, value: string) => {
+      if (/[{}$]/.test(value)) return match;
+      const rewritten = rewriteRootRelativeProjectAssetRef(value, projectId);
+      if (rewritten === value) return match;
+      return `${quote}${rewritten}${quote}`;
+    },
+  );
+}
+
+function rewriteSrcsetProjectAssetRefs(srcset: string, projectId: string): string {
+  return srcset
+    .split(',')
+    .map((candidate) => {
+      const leading = candidate.match(/^\s*/)?.[0] ?? '';
+      const trailing = candidate.match(/\s*$/)?.[0] ?? '';
+      const body = candidate.trim();
+      if (!body) return candidate;
+      const [url, ...descriptors] = body.split(/\s+/);
+      const rewritten = rewriteRootRelativeProjectAssetRef(url ?? '', projectId);
+      return `${leading}${[rewritten, ...descriptors].join(' ')}${trailing}`;
+    })
+    .join(',');
+}
+
+function rewriteRootRelativeProjectAssetRef(value: string, projectId: string): string {
+  const filePath = rootRelativeProjectAssetPath(value);
+  if (!filePath) return value;
+  const suffix = value.match(/^[^?#]*([?#][\s\S]*)$/)?.[1] ?? '';
+  return `${projectRawUrl(projectId, filePath)}${suffix}`;
 }
 
 function readHtmlAttr(tag: string, name: string): string | null {

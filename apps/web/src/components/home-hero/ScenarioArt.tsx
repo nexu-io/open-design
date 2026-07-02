@@ -53,6 +53,22 @@ function PrototypeArt() {
   );
 }
 
+function WebCloneArt() {
+  // Two browser frames with an accent transfer line: source site -> local clone.
+  return (
+    <Frame>
+      <rect x="7" y="8" width="28" height="20" rx="3" stroke={INK} strokeWidth="2" strokeOpacity="0.55" />
+      <line x1="7" y1="15" x2="35" y2="15" stroke={INK} strokeWidth="2" strokeOpacity="0.55" />
+      <rect x="25" y="14" width="28" height="20" rx="3" fill={SURFACE} stroke={INK} strokeWidth="2" />
+      <line x1="25" y1="21" x2="53" y2="21" stroke={INK} strokeWidth="2" />
+      <rect x="30" y="25" width="10" height="4" rx="1.5" fill={ACCENT} />
+      <line x1="42" y1="26" x2="49" y2="26" stroke={INK} strokeWidth="2" />
+      <path d="M17 33 H32" stroke={ACCENT} strokeWidth="2.5" />
+      <path d="M29 30 L33 33 L29 36" stroke={ACCENT} strokeWidth="2.5" />
+    </Frame>
+  );
+}
+
 function WireframeArt() {
   // Lo-fi greybox screen: a dashed frame (the wireframe tell) over placeholder
   // blocks and an accent CTA placeholder.
@@ -186,6 +202,7 @@ function AudioArt() {
 
 const ART_BY_CHIP: Record<string, () => ReactElement> = {
   prototype: PrototypeArt,
+  'web-clone': WebCloneArt,
   wireframe: WireframeArt,
   mobile: MobileArt,
   deck: DeckArt,

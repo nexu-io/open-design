@@ -44,6 +44,7 @@ export type DefaultScenarioPluginId =
   | 'od-figma-migration'
   | 'od-code-migration'
   | 'od-tune-collab'
+  | 'example-web-clone'
   | 'example-live-artifact'
   | 'example-simple-deck'
   | 'example-web-prototype';
@@ -85,6 +86,7 @@ export function defaultScenarioPluginIdForKind(
 export function defaultScenarioPluginIdForProjectMetadata(
   metadata: Pick<ProjectMetadata, 'kind' | 'intent'> | null | undefined,
 ): DefaultScenarioPluginId | null {
+  if (metadata?.intent === 'web-clone') return 'example-web-clone';
   if (metadata?.intent === 'live-artifact') return 'example-live-artifact';
   return defaultScenarioPluginIdForKind(metadata?.kind);
 }

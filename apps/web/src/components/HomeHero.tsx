@@ -3196,6 +3196,7 @@ function ShortcutsMenu({
 function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): string {
   switch (chipId) {
     case 'prototype': return t('homeHero.chip.prototypeDesc');
+    case 'web-clone': return t('homeHero.chip.webCloneDesc');
     case 'wireframe': return t('homeHero.chip.wireframeDesc');
     case 'mobile': return t('homeHero.chip.mobileDesc');
     case 'deck': return t('homeHero.chip.deckDesc');
@@ -3235,6 +3236,7 @@ function fallbackPlaceholderScenarioText(
 function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): string {
   switch (chip.id) {
     case 'prototype': return t('homeHero.chip.prototypeNext');
+    case 'web-clone': return t('homeHero.chip.webCloneNext');
     case 'wireframe': return t('homeHero.chip.wireframeNext');
     case 'mobile': return t('homeHero.chip.mobileNext');
     case 'deck': return t('homeHero.chip.deckNext');
@@ -3333,6 +3335,8 @@ export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: 
   switch (chipId) {
     case 'prototype':
       return has('prototype') || hasPart('web-prototype');
+    case 'web-clone':
+      return has('web-clone', 'website-clone', 'site-clone') || hasPart('web-clone', 'website-clone', 'reproduce-site');
     case 'wireframe':
       // Lo-fi / sketch / whiteboard explorations (e.g. wireframe-sketch).
       return (
@@ -4385,6 +4389,8 @@ function briefForChipId(chipId: string): Record<string, string> {
   switch (chipId) {
     case 'prototype':
       return { artifact_type: 'web prototype', audience: 'product evaluators', fidelity: 'high-fidelity' };
+    case 'web-clone':
+      return { artifact_type: 'website clone', source: 'target URL', fidelity: 'source-first visual reproduction' };
     case 'wireframe':
       return { artifact_type: 'lo-fi wireframe', audience: 'product team', fidelity: 'wireframe' };
     case 'mobile':
