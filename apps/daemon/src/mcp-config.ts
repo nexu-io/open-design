@@ -15,6 +15,7 @@
 // users can copy-paste between Marketing AX and other tools without
 // translation.
 
+import { realpathSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -510,7 +511,7 @@ function buildOpenCodeExternalDirectoryAllowlist(
       (directories ?? [])
         .filter((dir) => typeof dir === 'string' && dir.trim().length > 0)
         .filter((dir) => path.isAbsolute(dir))
-        .map((dir) => normalizeAllowedDirectory(dir)),
+        .flatMap((dir) => allowedDirectorySpellings(dir)),
     ),
   );
   if (normalized.length === 0) return null;
@@ -522,6 +523,31 @@ function buildOpenCodeExternalDirectoryAllowlist(
     allowlist[joinPermissionGlob(dir, '**')] = 'allow';
   }
   return allowlist;
+}
+
+/**
+ * Every granted directory must be allowlisted under BOTH its spawn-time
+ * spelling and its symlink-resolved (realpath) spelling when the two
+ * differ. The agent's runtime view of its cwd is always the resolved form
+ * — `process.cwd()` reports the physical path, so on macOS a daemon data
+ * dir under `/var/...` (a symlink to `/private/var/...`) is observed by
+ * the child as `/private/var/...` even though the daemon spawned it with
+ * the unresolved path. Meanwhile the daemon's prompts advertise the
+ * unresolved spelling, so a run can legitimately reference either form.
+ * Emitting allow rules for both keeps OpenCode's permission matching from
+ * rejecting paths on the symlinked half. Directories that cannot be
+ * resolved (e.g. not yet created) keep only the unresolved spelling.
+ */
+function allowedDirectorySpellings(dir: string): string[] {
+  const normalized = normalizeAllowedDirectory(dir);
+  let resolved: string | null = null;
+  try {
+    resolved = normalizeAllowedDirectory(realpathSync.native(normalized));
+  } catch {
+    resolved = null;
+  }
+  if (resolved && resolved !== normalized) return [normalized, resolved];
+  return [normalized];
 }
 
 function normalizeAllowedDirectory(dir: string): string {
