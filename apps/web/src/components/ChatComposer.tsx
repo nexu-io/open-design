@@ -87,6 +87,8 @@ import {
   mentionTokenPresent,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
+import { generateTeams, type GeneratedTeam } from '../utils/teamGenerator';
+import { useWaitTeamEnabled } from './Theater';
 import { workspaceContextLinkedDir, workspaceContextLinkedDirs } from './workspace-context';
 import {
   LexicalComposerInput,
@@ -138,7 +140,7 @@ function trackedWorkspaceLinkedDirsForContexts(
 
 type ToolsTab = 'plugins' | 'skills' | 'mcp' | 'import';
 
-type MentionTab = 'all' | 'tabs' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
+type MentionTab = 'all' | 'tabs' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors' | 'teams';
 
 const USER_PLUGIN_SOURCE_KINDS = new Set<PluginSourceKind>([
   'user',
@@ -498,6 +500,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const activeWorkspaceContextId = activeWorkspaceContext?.id ?? null;
     const previousWorkspaceContextIdRef = useRef<string | null>(activeWorkspaceContextId);
     const [dragActive, setDragActive] = useState(false);
+    // Multi-agent team: scan local CLI agents and generate preset teams
+    // when the waiteam toggle is enabled.
+    const waitTeamEnabled = useWaitTeamEnabled();
+    const [generatedTeams, setGeneratedTeams] = useState<GeneratedTeam[]>([]);
+    const [stagedTeam, setStagedTeam] = useState<GeneratedTeam | null>(null);
     // Lexical owns the caret, so the mention/slash trigger state only carries
     // the typed query — no cursor offset.
     const [mention, setMention] = useState<{ q: string } | null>(null);
@@ -692,6 +699,28 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       saveComposerDraft(draftStorageKey, draft);
     }, [draftStorageKey, draft]);
 
+    // Scan local CLI agents and generate preset teams when waiteam is enabled.
+    useEffect(() => {
+      if (!waitTeamEnabled) {
+        setGeneratedTeams([]);
+        setStagedTeam(null);
+        return;
+      }
+      let cancelled = false;
+      void fetch('/api/agents')
+        .then((res) => res.json())
+        .then((data: { agents?: Array<{ id: string; name: string; available: boolean }> }) => {
+          if (cancelled) return;
+          const agents = data.agents ?? [];
+          const teams = generateTeams(agents);
+          if (!cancelled) setGeneratedTeams(teams);
+        })
+        .catch(() => {
+          if (!cancelled) setGeneratedTeams([]);
+        });
+      return () => { cancelled = true; };
+    }, [waitTeamEnabled]);
+
     useEffect(() => {
       if (previousWorkspaceContextIdRef.current === activeWorkspaceContextId) return;
       previousWorkspaceContextIdRef.current = activeWorkspaceContextId;
@@ -832,9 +861,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           plugins: pluginsForComposer,
           skills,
           staged,
+          teams: waitTeamEnabled ? generatedTeams : [],
           workspaceContexts: selectedWorkspaceContexts,
         }),
-      [connectors, enabledMcpServers, pluginsForComposer, projectFiles, selectedWorkspaceContexts, skills, staged],
+      [connectors, enabledMcpServers, generatedTeams, pluginsForComposer, projectFiles, selectedWorkspaceContexts, skills, staged, waitTeamEnabled],
     );
     // Resolve which tabs to surface in the consolidated tools popover.
     // Plugins is always visible while a project is active so users can
@@ -2165,13 +2195,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         const showSkills = mentionTab === 'all' || mentionTab === 'skills';
         const showMcp = mentionTab === 'all' || mentionTab === 'mcp';
         const showConnectors = mentionTab === 'all' || mentionTab === 'connectors';
+        const showTeams = mentionTab === 'all' || mentionTab === 'teams';
         const total =
           (showFiles ? filteredFiles.length : 0) +
           (showTabs ? filteredWorkspaceContexts.length : 0) +
           (showPlugins ? filteredPlugins.length : 0) +
           (showSkills ? filteredSkills.length : 0) +
           (showMcp ? filteredMcpServers.length : 0) +
-          (showConnectors ? filteredConnectors.length : 0);
+          (showConnectors ? filteredConnectors.length : 0) +
+          (showTeams ? filteredTeams.length : 0);
         if (total > 0) {
           if (key === 'ArrowDown') {
             setMentionIndex((i) => (i + 1) % total);
@@ -2236,6 +2268,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           insertConnectorMention(filteredConnectors[i]!);
           return;
         }
+        i -= filteredConnectors.length;
+      }
+      if (mentionTab === 'all' || mentionTab === 'teams') {
+        if (i < filteredTeams.length) {
+          insertTeamMention(filteredTeams[i]!);
+          return;
+        }
       }
     }
 
@@ -2291,6 +2330,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       editorRef.current?.insertMention({
         token: inlineMentionToken(item.label),
         entity: { id: item.id, kind: 'workspace', label: item.label },
+      });
+      setMention(null);
+    }
+
+    function insertTeamMention(team: GeneratedTeam) {
+      setStagedTeam(team);
+      editorRef.current?.insertMention({
+        token: inlineMentionToken(team.name),
+        entity: { id: team.id, kind: 'team', label: team.name },
       });
       setMention(null);
     }
@@ -2478,6 +2526,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         .filter((s) => skillMatchesQuery(s, mentionQuery))
         .sort((a, b) => skillMentionRank(a, mentionQuery) - skillMentionRank(b, mentionQuery));
     }, [mention, mentionQuery, skills, stagedSkills]);
+    const filteredTeams = useMemo(() => {
+      if (!mention || !waitTeamEnabled) return [];
+      const q = mention.q.toLowerCase();
+      return generatedTeams.filter((team) =>
+        team.name.toLowerCase().includes(q) || team.mode.toLowerCase().includes(q),
+      );
+    }, [mention, waitTeamEnabled, generatedTeams]);
     const liveCommentAttachments = currentCommentAttachments();
     const placeholderCarouselActive =
       !streaming
@@ -3055,6 +3110,7 @@ function buildComposerMentionEntities({
   plugins,
   skills,
   staged,
+  teams,
   workspaceContexts,
 }: {
   connectors: ConnectorDetail[];
@@ -3063,6 +3119,7 @@ function buildComposerMentionEntities({
   plugins: InstalledPluginRecord[];
   skills: SkillSummary[];
   staged: ChatAttachment[];
+  teams: GeneratedTeam[];
   workspaceContexts: WorkspaceContextItem[];
 }): InlineMentionEntity[] {
   const entities: InlineMentionEntity[] = [];
@@ -3166,6 +3223,15 @@ function buildComposerMentionEntities({
       label: attachment.path,
       token: inlineMentionToken(attachment.path),
       title: `File: ${attachment.path}`,
+    });
+  }
+  for (const team of teams) {
+    entities.push({
+      id: team.id,
+      kind: 'team',
+      label: team.name,
+      token: inlineMentionToken(team.name),
+      title: `Team: ${team.name} — ${team.description}`,
     });
   }
   return entities;
