@@ -3649,7 +3649,7 @@ a.ds-source-link-open:focus-visible {
   border-top: 1px solid var(--border);
 }
 .ds-project-review-item .ds-project-inline-preview {
-  height: clamp(300px, 36vw, 520px);
+  height: var(--ds-project-inline-preview-height, clamp(300px, 36vw, 520px));
   border: 0;
   border-radius: 0;
   box-shadow: none;
@@ -3659,11 +3659,11 @@ a.ds-source-link-open:focus-visible {
   grid-column: 1 / -1;
 }
 .ds-project-review-item--ui-kit .ds-project-inline-preview {
-  height: clamp(560px, 64vw, 920px);
+  height: var(--ds-project-inline-preview-height, clamp(560px, 64vw, 920px));
   background: #d8d8d8;
 }
 .ds-project-review-item--asset .ds-project-inline-preview {
-  height: clamp(260px, 30vw, 420px);
+  height: var(--ds-project-inline-preview-height, clamp(260px, 30vw, 420px));
 }
 .ds-project-review-item .ds-project-review-notice,
 .ds-project-review-item .ds-project-last-feedback,

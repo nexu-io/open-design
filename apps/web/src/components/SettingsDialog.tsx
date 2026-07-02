@@ -7158,6 +7158,7 @@ function MediaProvidersSection({
           const requiresCredentials = provider.credentialsRequired !== false;
           const clearable = isStoredMediaProviderEntryPresent(entry);
           const apiKeyVisible = visibleApiKeys.has(provider.id);
+          const connection = provider.id === 'codex' ? entry.connection : undefined;
           return (
             <div key={provider.id} className="media-provider-row">
               <div className="media-provider-head">
@@ -7185,8 +7186,32 @@ function MediaProvidersSection({
                           : t('settings.connectorsSaved')}
                       </span>
                     ) : null}
+                    {connection ? (
+                      <span
+                        className={[
+                          'field-status-badge',
+                          'field-status-badge--inline',
+                          'media-provider-connection-badge',
+                          connection.connected ? 'is-connected' : 'is-disconnected',
+                        ].join(' ')}
+                        title={
+                          connection.connected
+                            ? 'Local Codex CLI login is working'
+                            : 'Local Codex CLI login was not detected'
+                        }
+                      >
+                        {connection.connected ? 'Connected' : 'Not connected'}
+                      </span>
+                    ) : null}
                   </div>
                   <span className="media-provider-hint">{provider.hint}</span>
+                  {connection ? (
+                    <span className="media-provider-connection-note">
+                      {connection.connected
+                        ? 'Local Codex CLI login is working'
+                        : 'Sign in with the local Codex CLI to use this provider'}
+                    </span>
+                  ) : null}
                 </div>
                 {/*
                   Right-side badges deliberately omitted now: every row

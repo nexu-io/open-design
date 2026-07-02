@@ -177,6 +177,49 @@ describe('DesignKitView iframe sandboxing', () => {
     expect(screen.queryByRole('menuitem', { name: 'Open full system' })).toBeNull();
   });
 
+  it('shows a sticky contents rail for the in-project design-system kit view', () => {
+    render(
+      <I18nProvider initial="en">
+        <DesignKitView
+          kit={previewKit()}
+          stickyHeader
+          designMd={{
+            body: '# Preview Kit',
+            onSave: async () => {},
+            saving: false,
+          }}
+        />
+      </I18nProvider>,
+    );
+
+    const contents = screen.getByRole('navigation', { name: 'Design system contents' });
+    expect(contents.textContent).toContain('Contents');
+    expect(contents.querySelector('a[href="#design-kit-section-typography"]')?.textContent).toContain('Typography');
+    expect(contents.querySelector('a[href="#design-kit-section-palette"]')?.textContent).toContain('Palette');
+    expect(contents.querySelector('a[href="#design-kit-section-design-system"]')?.textContent).toContain('Design system');
+  });
+
+  it('places the contents rail before top-slot cards so navigation starts at the top of the view', () => {
+    render(
+      <I18nProvider initial="en">
+        <DesignKitView
+          kit={previewKit()}
+          stickyHeader
+          topSlot={<div data-testid="design-kit-top-slot">Extraction complete</div>}
+          designMd={{
+            body: '# Preview Kit',
+            onSave: async () => {},
+            saving: false,
+          }}
+        />
+      </I18nProvider>,
+    );
+
+    const contents = screen.getByRole('navigation', { name: 'Design system contents' });
+    const topSlot = screen.getByTestId('design-kit-top-slot');
+    expect(contents.compareDocumentPosition(topSlot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('renders sticky header action loading state in the overflow menu', () => {
     render(
       <I18nProvider initial="en">

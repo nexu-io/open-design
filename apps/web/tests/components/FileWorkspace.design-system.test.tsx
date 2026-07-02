@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { FileWorkspace } from '../../src/components/FileWorkspace';
+import { DESIGN_FILES_TAB, DESIGN_SYSTEM_TAB, FileWorkspace } from '../../src/components/FileWorkspace';
 import type { AgentEvent, DesignSystemSummary, ProjectFile } from '../../src/types';
 
 const registryMocks = vi.hoisted(() => ({
@@ -62,6 +62,7 @@ afterEach(() => {
   }
   host?.remove();
   host = null;
+  window.localStorage.clear();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -125,6 +126,94 @@ function todoWrite(
 }
 
 describe('FileWorkspace design-system project surface', () => {
+  it('opens file-rich design-system projects on Design Files so imported files are visible', async () => {
+    const onTabsStateChange = vi.fn();
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('ui_kits/website/HomePage.jsx'),
+          workspaceFile('ui_kits/website/AboutPage.jsx'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={onTabsStateChange}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await flushKit();
+
+    const designFilesTab = container.querySelector<HTMLElement>('[data-testid="design-files-tab"]');
+    const designSystemTab = container.querySelector<HTMLElement>('[data-testid="design-system-project-tab"]');
+    expect(designFilesTab?.getAttribute('aria-selected')).toBe('true');
+    expect(designSystemTab?.getAttribute('aria-selected')).toBe('false');
+    expect(container.textContent).toContain('ui_kits/website/HomePage.jsx');
+    expect(container.textContent).toContain('ui_kits/website/AboutPage.jsx');
+  });
+
+  it('migrates stale saved Design system tabs to Design Files for file-rich imports', async () => {
+    const onTabsStateChange = vi.fn();
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('ui_kits/website/HomePage.jsx'),
+          workspaceFile('ui_kits/website/AboutPage.jsx'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: DESIGN_SYSTEM_TAB }}
+        onTabsStateChange={onTabsStateChange}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="design-files-tab"]')?.getAttribute('aria-selected')).toBe('true');
+    });
+    expect(onTabsStateChange).toHaveBeenCalledWith({
+      tabs: [],
+      active: DESIGN_FILES_TAB,
+    });
+  });
+
+  it('does not let an old browser migration marker keep stale Design system tabs active', async () => {
+    window.localStorage.setItem('open-design:file-rich-design-system-tab-migrated:v1:ds-acme', '1');
+    const onTabsStateChange = vi.fn();
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="ds-acme"
+        projectKind="prototype"
+        files={[
+          workspaceFile('DESIGN.md'),
+          workspaceFile('ui_kits/website/AboutPage.jsx'),
+        ]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: DESIGN_SYSTEM_TAB }}
+        onTabsStateChange={onTabsStateChange}
+        designSystemProject={designSystem()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="design-files-tab"]')?.getAttribute('aria-selected')).toBe('true');
+    });
+    expect(onTabsStateChange).toHaveBeenCalledWith({
+      tabs: [],
+      active: DESIGN_FILES_TAB,
+    });
+  });
+
   it('renders the brand.html-style kit modules from the project DESIGN.md', async () => {
     registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, name: string) => {
       if (name === 'DESIGN.md') {
@@ -540,7 +629,7 @@ describe('FileWorkspace design-system project surface', () => {
           headers: { 'Content-Type': 'application/json' },
         });
       }
-      return new Response(new Blob(['zip']), {
+      return new Response('zip', {
         status: 200,
         headers: { 'Content-Disposition': 'attachment; filename="acme.zip"' },
       });

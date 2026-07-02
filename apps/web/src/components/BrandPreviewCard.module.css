@@ -458,6 +458,79 @@
 }
 
 /* ── Detail sections ──────────────────────────────────────────────── */
+.contentStack,
+.contentsMain {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+
+.contentsLayout {
+  display: grid;
+  grid-template-columns: minmax(168px, 210px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.contentsRail {
+  position: sticky;
+  top: 66px;
+  max-height: calc(100vh - 92px);
+  overflow: auto;
+  padding: 8px 12px 10px 0;
+  border-right: 1px solid var(--border);
+}
+
+.contentsTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 720;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.contentsLinks {
+  display: grid;
+  gap: 2px;
+}
+
+.contentsLinks a {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.25;
+  text-decoration: none;
+}
+
+.contentsLinks a:hover,
+.contentsLinks a:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+
+.contentsLinks a:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.contentsDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--green);
+}
+
 .section {
   display: flex;
   flex-direction: column;
@@ -466,6 +539,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-subtle);
+  scroll-margin-top: 68px;
 }
 
 .sectionEditFocus {
@@ -1922,6 +1996,33 @@
 .uploadBtn:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+@media (max-width: 920px) {
+  .contentsLayout {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .contentsRail {
+    position: static;
+    max-height: none;
+    padding: 0 0 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .contentsLinks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .contentsLinks a {
+    min-height: 30px;
+    padding: 5px 8px;
+  }
 }
 
 @keyframes designKitActionSpin {

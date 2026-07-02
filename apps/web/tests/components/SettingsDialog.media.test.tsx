@@ -43,6 +43,29 @@ describe('SettingsDialog media providers', () => {
     expect(screen.queryByLabelText('Codex Subscription Base URL')).toBeNull();
   });
 
+  it('shows Codex Subscription as connected when the daemon sees local Codex auth', () => {
+    renderDialog({
+      ...DEFAULT_CONFIG,
+      mediaProviders: {
+        codex: {
+          apiKey: '',
+          baseUrl: '',
+          connection: {
+            connected: true,
+            source: 'codex-subscription',
+          },
+        } as any,
+      },
+    });
+
+    const codexRow = screen.getByText('Codex Subscription').closest('.media-provider-row') as HTMLElement | null;
+    if (!codexRow) throw new Error('Expected Codex Subscription media provider row');
+
+    expect(within(codexRow).getByText('Connected')).toBeTruthy();
+    expect(within(codexRow).getByText('Local Codex CLI login is working')).toBeTruthy();
+    expect(screen.queryByLabelText('Codex Subscription API key')).toBeNull();
+  });
+
   it('shows daemon fallback notice and reloads media providers from daemon', async () => {
     const reloadMock = vi.fn(async () => ({
       openai: {

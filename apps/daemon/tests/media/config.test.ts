@@ -184,6 +184,19 @@ describe('media-config OpenAI auth-file fallback', () => {
     });
   });
 
+  it('includes Codex subscription connection status in masked config', async () => {
+    await writeHomeJson('.codex/auth.json', {
+      auth_mode: 'chatgpt',
+    });
+
+    const masked = await readMaskedConfig(projectRoot);
+
+    expect((masked.providers.codex as any).connection).toEqual({
+      connected: true,
+      source: 'codex-subscription',
+    });
+  });
+
   it('detects Codex OAuth tokens as subscription availability', async () => {
     await writeHomeJson('.codex/auth.json', {
       tokens: { access_token: 'codex-oauth-token' },
