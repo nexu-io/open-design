@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { projectKindToTracking } from '../src/analytics/events.js';
+import {
+  projectKindFromMetadataToTracking,
+  projectKindToTracking,
+} from '../src/analytics/events.js';
 
 describe('projectKindToTracking', () => {
   it('maps the base project kinds to their tracking enum', () => {
@@ -31,5 +34,62 @@ describe('projectKindToTracking', () => {
     // videoModel without a video kind must not leak into other kinds.
     expect(projectKindToTracking('image', 'hyperframes-html')).toBe('image');
     expect(projectKindToTracking('prototype', 'hyperframes-html')).toBe('prototype');
+  });
+
+  it('splits prototype subtypes out via the metadata discriminators', () => {
+    // Each Home task card persists a distinguishing metadata field; the
+    // analytics kind must line up with the card the user picked.
+    expect(projectKindToTracking('prototype', null, { fidelity: 'wireframe' })).toBe('wireframe');
+    expect(projectKindToTracking('prototype', null, { platform: 'mobile-ios' })).toBe('mobile');
+    expect(
+      projectKindToTracking('prototype', null, { platformTargets: ['mobile-ios', 'mobile-android'] }),
+    ).toBe('mobile');
+    expect(projectKindToTracking('prototype', null, { intent: 'live-artifact' })).toBe('live_artifact');
+    // A bare prototype (no discriminators) stays prototype.
+    expect(projectKindToTracking('prototype', null, {})).toBe('prototype');
+    expect(projectKindToTracking('prototype', null, { platform: 'web-desktop' })).toBe('prototype');
+  });
+
+  it('applies the live_artifact > wireframe > mobile precedence', () => {
+    expect(
+      projectKindToTracking('prototype', null, {
+        intent: 'live-artifact',
+        fidelity: 'wireframe',
+        platform: 'mobile-ios',
+      }),
+    ).toBe('live_artifact');
+    expect(
+      projectKindToTracking('prototype', null, { fidelity: 'wireframe', platform: 'mobile-ios' }),
+    ).toBe('wireframe');
+  });
+
+  it('splits document out of generic other via intent', () => {
+    expect(projectKindToTracking('other', null, { intent: 'document' })).toBe('document');
+    expect(projectKindToTracking('other', null, {})).toBe('other');
+    // The discriminators are scoped to their owning kind: a non-prototype kind
+    // must not pick up wireframe/mobile, and document only applies to `other`.
+    expect(projectKindToTracking('image', null, { fidelity: 'wireframe' })).toBe('image');
+    expect(projectKindToTracking('deck', null, { intent: 'document' })).toBe('slide_deck');
+  });
+
+  it('derives the fine kind straight from a metadata object', () => {
+    expect(
+      projectKindFromMetadataToTracking({ kind: 'prototype', fidelity: 'wireframe' }),
+    ).toBe('wireframe');
+    expect(
+      projectKindFromMetadataToTracking({
+        kind: 'prototype',
+        platformTargets: ['mobile-ios', 'mobile-android'],
+      }),
+    ).toBe('mobile');
+    expect(
+      projectKindFromMetadataToTracking({ kind: 'prototype', intent: 'live-artifact' }),
+    ).toBe('live_artifact');
+    expect(projectKindFromMetadataToTracking({ kind: 'other', intent: 'document' })).toBe('document');
+    expect(projectKindFromMetadataToTracking({ kind: 'video', videoModel: 'hyperframes-html' })).toBe(
+      'hyperframes',
+    );
+    expect(projectKindFromMetadataToTracking({ kind: 'deck' })).toBe('slide_deck');
+    expect(projectKindFromMetadataToTracking(null)).toBeNull();
   });
 });

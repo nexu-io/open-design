@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { Project } from '../api/projects.js';
 import { PluginManifestSchema } from './manifest.js';
 import {
   MarketplaceTrustSchema,
@@ -76,6 +77,23 @@ export const ProjectPluginFolderInstallRequestSchema = z.object({
 });
 
 export type ProjectPluginFolderInstallRequest = z.infer<typeof ProjectPluginFolderInstallRequestSchema>;
+
+export interface PluginDuplicateProjectRequest {
+  name?: string;
+}
+
+export interface PluginDuplicateProjectResponse {
+  ok: true;
+  projectId: string;
+  conversationId: string;
+  relPath: string;
+  project: Project;
+  sourcePluginId: string;
+  sourceEntry: string;
+  copiedFiles: number;
+  skippedFiles: number;
+  warnings: string[];
+}
 
 // Re-export TrustTier so consumers can pull every plugin contract from one
 // barrel without hopping through marketplace.ts.

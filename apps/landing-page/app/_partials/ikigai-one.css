@@ -95,8 +95,10 @@
 .v4herotop{display:grid;grid-template-columns:1.45fr 1fr;gap:56px;align-items:start}
 .v4snap{border:1px solid rgba(255,255,255,.7);border-radius:16px;background:rgba(255,255,255,.66);backdrop-filter:blur(16px) saturate(1.5);-webkit-backdrop-filter:blur(16px) saturate(1.5);padding:24px 26px;box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 28px 56px -30px rgba(38,38,38,.30)}
 .v4snap-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
-.v4snap-logo{flex:0 0 auto;width:38px;height:38px;border-radius:10px;background:var(--ink);color:var(--coral);font-weight:800;font-size:19px;display:flex;align-items:center;justify-content:center}
+.v4snap-logo{flex:0 0 auto;width:38px;height:38px;border-radius:10px;object-fit:cover;display:block}
 .v4snap-name{font-size:18px;font-weight:700;color:var(--ink);line-height:1.15}
+.v4snap-name a{color:inherit;text-decoration:none}
+.v4snap-name a:hover{text-decoration:underline}
 .v4snap-desc{font-size:13.5px;line-height:1.55;color:var(--ink-soft);margin:0}
 .v4snap-chips{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 0}
 .v4chip{font-size:12.5px;font-weight:600;color:var(--ink-soft);background:rgba(255,255,255,.55);border:1px solid var(--line);border-radius:999px;padding:6px 13px}

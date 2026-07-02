@@ -1,0 +1,240 @@
+---
+/*
+ * /solutions/ai-prototype-generator/ — Tool page: AI prototype generator.
+ *
+ * Part of the `/solutions/ai-<x>-generator/` tool-page family (Pixelcut /
+ * Figma "tool SEO" model adapted to OD), built from the same template as the
+ * wireframe generator. Reuses the `.solution-page` layout. Hero art is a public-path
+ * illustration (od-site-illustration), not the imageAsset pipeline, so the
+ * tool pages don't depend on the marketing image build. Copy lives in
+ * `solution-pages-i18n` under the `aiPrototypeGenerator` key (English +
+ * Simplified Chinese; other locales fall back to English).
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import LazyImg from '../../../_components/lazy-img.astro';
+import { getInfoPageCopy } from '../../../info-page-i18n';
+import { getSolutionPageCopy } from '../../../solution-pages-i18n';
+import { getCommonCopy, localeFromPath, localizedHref, localePath, stripLocaleFromPath } from '../../../i18n';
+
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const REPO_RELEASES = `${REPO}/releases`;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const common = getInfoPageCopy(locale).common;
+const page = getSolutionPageCopy(locale, 'aiPrototypeGenerator');
+
+const title = page.title;
+const description = page.description;
+
+// Related tools / pages for the cross-link matrix (Figma's SEO win). Copy lives
+// in solution-pages-i18n so labels localize; links point at surfaces that exist
+// today, and sibling generator pages join the list as they ship.
+const relatedTitle = page.relatedTitle ?? 'Related tools & guides';
+const relatedTools = page.related ?? [];
+
+const pagePath = localePath(locale, stripLocaleFromPath(Astro.url.pathname).pathname);
+const pageUrl = new URL(pagePath, SITE).toString();
+const solutionsHref = href('/solutions/');
+const solutionsLabel = getCommonCopy(locale).header.nav.solution;
+const solutionsUrl = new URL(localePath(locale, '/solutions/'), SITE).toString();
+
+const faq = page.faq;
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 2, name: solutionsLabel, item: solutionsUrl },
+      { '@type': 'ListItem', position: 3, name: page.breadcrumb, item: pageUrl },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: title,
+    description,
+    url: pageUrl,
+    isPartOf: { '@id': `${SITE}#website` },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faq.map(({ q, a }) => ({
+      '@type': 'Question',
+      name: q,
+      acceptedAnswer: { '@type': 'Answer', text: a },
+    })),
+  },
+];
+---
+
+<Layout title={title} description={description} active="solution" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={solutionsHref}>{solutionsLabel}</a>
+    <span>/</span>
+    <span aria-current="page">{page.breadcrumb}</span>
+  </nav>
+
+  <article class="info-page solution-page">
+    <div class="solution-hero-band">
+      <header class="catalog-head">
+        <span class="label">{page.label}</span>
+        <h1 class="display">{page.heading}</h1>
+        <p class="lead">{page.lead}</p>
+        <div class="solution-hero-cta">
+          <a class="btn btn-primary" href={href('/download/')}>{common.downloadDesktop}</a>
+          <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+        </div>
+      </header>
+      <figure class="solution-hero">
+        <LazyImg
+          src="/solutions/ai-prototype-generator-hero.webp"
+          alt={page.heroImageAlt}
+          loading="priority"
+          width={1280}
+          height={853}
+        />
+      </figure>
+    </div>
+
+    <div class="tldr-card">
+      <h3>{page.tldrTitle}</h3>
+      <p>{page.tldrBody}</p>
+    </div>
+
+    <section class="info-section" id="how">
+      <h2>{page.stepsTitle}</h2>
+      <ol class="solution-steps">
+        {page.steps.map((step, idx) => (
+          <li class="solution-step">
+            <span class="solution-step-index">{String(idx + 1).padStart(2, '0')}</span>
+            <div class="solution-step-text">
+              <h3>{step.title}</h3>
+              <p>{step.body}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <section class="info-section" id="features">
+      <h2>{page.featuresTitle}</h2>
+      <ul class="tool-feature-grid">
+        {page.features.map((f) => (
+          <li class="tool-feature-card">
+            <h3>{f.title}</h3>
+            <p>{f.body}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-section" id="compare">
+      <h2>{page.tableTitle}</h2>
+      <div class="compare-table-wrap">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>{page.tableColCapability}</th>
+              <th>{page.tableColWithOd}</th>
+              <th>{page.tableColWithout}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {page.tableRows.map((row) => (
+              <tr>
+                <th scope="row">{row.capability}</th>
+                <td class="yes"><span class="check ri" aria-hidden="true">&#xeb7b;</span>{row.withOd}</td>
+                <td>{row.without}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="info-section" id="browse">
+      <p>{page.galleryLead}</p>
+      <p>
+        <a class="inline-link" href={href(page.exampleHref)}>{page.exampleLinkLabel} →</a>
+      </p>
+    </section>
+
+    <section class="info-section" id="faq">
+      <h2>{page.faqTitle}</h2>
+      <ol class="faq-list">
+        {faq.map(({ q, a }, idx) => (
+          <li class="faq-item">
+            <details>
+              <summary>
+                <span class="faq-index">{String(idx + 1).padStart(2, '0')}</span>
+                <span class="faq-q">{q}</span>
+                <span class="faq-toggle" aria-hidden="true">+</span>
+              </summary>
+              <p class="faq-a">{a}</p>
+            </details>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    {relatedTools.length > 0 && (
+      <section class="info-section" id="related">
+        <h2>{relatedTitle}</h2>
+        <ul class="related-tools">
+          {relatedTools.map((t) => (
+            <li><a class="inline-link" href={href(t.href)}>{t.label} →</a></li>
+          ))}
+        </ul>
+      </section>
+    )}
+
+    <section class="info-cta" aria-label="Open Design call to action">
+      <div>
+        <h2>{page.ctaTitle}</h2>
+        <p>{page.ctaBody}</p>
+      </div>
+      <div class="info-cta-actions">
+        <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+        <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+      </div>
+      <div class="info-cta-meta">
+        <span class="stamp">● {common.apache}</span>
+        <span>{common.localFirst} · {common.byok}</span>
+        <span>{common.macWinLinux}</span>
+      </div>
+    </section>
+  </article>
+</Layout>
+
+<style>
+  .tool-feature-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+  }
+  .tool-feature-card {
+    border: 1px solid var(--hairline, rgba(0, 0, 0, 0.1));
+    border-radius: 12px;
+    padding: 1.1rem 1.2rem;
+    background: var(--surface, #fff);
+  }
+  .tool-feature-card h3 {
+    margin: 0 0 0.35rem;
+    font-size: 1.02rem;
+  }
+  .tool-feature-card p {
+    margin: 0;
+    color: var(--muted, #555);
+    font-size: 0.94rem;
+    line-height: 1.5;
+  }
+</style>

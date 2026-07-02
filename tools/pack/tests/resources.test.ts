@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import process from "node:process";
 
+import { domToPptxBundleResource } from "../src/dom-to-pptx-resource.js";
 import { copyBundledResourceTrees } from "../src/resources.js";
 import { copyOptionalVelaCliBinary, resolveOptionalVelaCliBinary } from "../src/vela-cli.js";
 
@@ -27,6 +28,29 @@ async function writeFakeOpenCodeCompanion(
   await chmod(companion, 0o755);
   return companion;
 }
+
+describe("domToPptxBundleResource", () => {
+  it("derives the vendored bundle path from the workspace root, not the caller cwd", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-resource-"));
+    const workspaceRoot = join(root, "workspace");
+    const callerCwd = join(root, "caller");
+    const previousCwd = process.cwd();
+
+    try {
+      await mkdir(workspaceRoot, { recursive: true });
+      await mkdir(callerCwd, { recursive: true });
+      process.chdir(callerCwd);
+
+      expect(domToPptxBundleResource({ workspaceRoot })).toEqual({
+        from: join(workspaceRoot, "apps", "desktop", "vendor", "dom-to-pptx", "dom-to-pptx.bundle.js.gz"),
+        to: "dom-to-pptx.bundle.js.gz",
+      });
+    } finally {
+      process.chdir(previousCwd);
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
 
 describe("copyBundledResourceTrees", () => {
   it("includes daemon resource trees", async () => {

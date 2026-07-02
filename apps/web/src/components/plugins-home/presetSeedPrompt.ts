@@ -2,7 +2,7 @@
 // hook that lands in the composer when a user picks a plugin's example.
 //
 // This is the SINGLE source of truth for that seed so the Home example-prompt
-// cards (HomeHero) and the plugin detail modal's "Replicate this content"
+// cards (HomeHero) and the plugin detail modal's prompt-loading "Use"
 // action (HomeView) stay in lockstep. They used to diverge: the cards surfaced
 // a friendly description while the detail modal dumped the raw
 // `od.useCase.query` — which for many plugins is a generator-facing

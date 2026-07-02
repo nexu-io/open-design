@@ -28,7 +28,7 @@ const PRS_URL = `${REPO}/pulls`;
 const RELEASES_URL = `${REPO}/releases`;
 const LATEST_RELEASE_URL = `${REPO}/releases/latest`;
 const X_URL = 'https://x.com/OpenDesignHQ';
-const DISCORD_URL = 'https://discord.gg/9ptkbbqRu';
+const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 
 const ext = { target: '_blank', rel: 'noreferrer noopener' } as const;
 

@@ -35,6 +35,7 @@ import {
   type ReportContext,
   type RuntimeInfo,
   type TelemetrySinkConfig,
+  type TraceObjectSummary,
   type ToolCallSummary,
   type TurnInfo,
 } from './langfuse-trace.js';
@@ -55,7 +56,7 @@ import {
 import { classifyRunFailure } from './run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { buildTraceObjectManifests } from './trace-object-manifest.js';
-import type { TraceArtifactObjectSource } from './trace-object-manifest.js';
+import type { TraceArtifactObjectSource, TraceObjectUploadManifests } from './trace-object-manifest.js';
 
 interface DaemonRunRecord {
   id: string;
@@ -719,7 +720,7 @@ function buildTraceSafeManifests(args: {
   projectId: string | null | undefined;
   runId: string;
   attachmentsRaw: unknown;
-  producedFilesRaw: unknown;
+  traceObjectFilesRaw: unknown;
 }): TraceSafeManifestResult {
   const attachmentManifest: AttachmentManifestEntry[] = [];
   const artifactManifest: ArtifactManifestEntry[] = [];
@@ -782,8 +783,8 @@ function buildTraceSafeManifests(args: {
     unavailable = true;
   }
 
-  if (Array.isArray(args.producedFilesRaw)) {
-    for (const [index, raw] of args.producedFilesRaw.entries()) {
+  if (Array.isArray(args.traceObjectFilesRaw)) {
+    for (const [index, raw] of args.traceObjectFilesRaw.entries()) {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
         partial = true;
         continue;
@@ -851,7 +852,7 @@ function buildTraceSafeManifests(args: {
         approved_by: null,
       });
     }
-  } else if (args.producedFilesRaw !== undefined && args.producedFilesRaw !== null) {
+  } else if (args.traceObjectFilesRaw !== undefined && args.traceObjectFilesRaw !== null) {
     unavailable = true;
   }
 
@@ -859,6 +860,45 @@ function buildTraceSafeManifests(args: {
     attachmentManifest,
     artifactManifest,
     completeness: unavailable ? 'unavailable' : partial ? 'partial' : 'complete',
+  };
+}
+
+function traceObjectFilesForTelemetry(traceObjectFilesRaw: unknown, producedFilesRaw: unknown): unknown {
+  return Array.isArray(traceObjectFilesRaw) ? traceObjectFilesRaw : producedFilesRaw;
+}
+
+function buildTraceObjectSummary(args: {
+  traceObjectFilesRaw: unknown;
+  uploaded?: FinalTraceSafeManifests | TraceObjectUploadManifests;
+}): TraceObjectSummary {
+  const files = Array.isArray(args.traceObjectFilesRaw)
+    ? args.traceObjectFilesRaw.filter((item) => item && typeof item === 'object' && !Array.isArray(item)) as Array<Record<string, unknown>>
+    : [];
+  const byReason = (reason: string) =>
+    files.filter((file) => file.traceObjectReason === reason).length;
+  const entries = args.uploaded?.artifactManifest ?? [];
+  const skipReasons: Record<string, number> = {};
+  let uploadedCount = 0;
+  for (const entry of entries) {
+    if (entry.status === 'ok' && entry.stored_in_open_design === true) {
+      uploadedCount += 1;
+      continue;
+    }
+    const reason = entry.reason ?? entry.status;
+    skipReasons[reason] = (skipReasons[reason] ?? 0) + 1;
+  }
+  if (files.length > 0 && entries.length === 0) {
+    skipReasons.object_upload_unavailable = files.length;
+  }
+  return {
+    new_file_count: byReason('new'),
+    modified_file_count: byReason('modified'),
+    recovered_file_count: byReason('recovered'),
+    candidate_file_count: files.length,
+    uploaded_file_count: uploadedCount,
+    skipped_file_count: Math.max(0, entries.length - uploadedCount) +
+      (entries.length === 0 ? files.length : 0),
+    skip_reasons: skipReasons,
   };
 }
 
@@ -904,6 +944,7 @@ export async function reportRunCompletedFromDaemon(
 
     let messageContent = '';
     let producedFilesRaw: unknown = undefined;
+    let traceObjectFilesRaw: unknown = undefined;
     let attachmentsRaw: unknown = undefined;
     if (run.conversationId && run.assistantMessageId) {
       try {
@@ -922,6 +963,7 @@ export async function reportRunCompletedFromDaemon(
           messageContent = typeof m.content === 'string' ? m.content : '';
           // listMessages returns producedFiles already parsed (db.ts:965).
           producedFilesRaw = m.producedFiles;
+          traceObjectFilesRaw = traceObjectFilesForTelemetry(m.traceObjectFiles, producedFilesRaw);
           attachmentsRaw = collectPriorUserAttachments(allMessages, assistantIndex);
         }
       } catch (err) {
@@ -984,7 +1026,7 @@ export async function reportRunCompletedFromDaemon(
       ...getRuntimeInfo(opts.appVersion ?? null),
       ...(run.clientType ? { clientType: run.clientType } : {}),
     };
-    const artifacts = summarizeProducedFiles(producedFilesRaw);
+    const artifacts = summarizeProducedFiles(traceObjectFilesRaw);
     const diagnostics = summarizeRunDiagnosticsForAnalytics({
       events: run.events,
       exitCode: run.exitCode ?? null,
@@ -997,7 +1039,7 @@ export async function reportRunCompletedFromDaemon(
       projectId: run.projectId,
       runId: run.id,
       attachmentsRaw,
-      producedFilesRaw,
+      traceObjectFilesRaw,
     });
     const objectManifestOptions = {
       installationId,
@@ -1006,12 +1048,18 @@ export async function reportRunCompletedFromDaemon(
       projectsRoot: path.join(dataDir, 'projects'),
       ...(run.projectMetadata ? { projectMetadata: run.projectMetadata } : {}),
       ...(run.projectAttachmentPaths ? { attachmentPaths: run.projectAttachmentPaths } : {}),
-      artifacts: buildTraceObjectArtifactSources(producedFilesRaw),
+      artifacts: buildTraceObjectArtifactSources(traceObjectFilesRaw),
       prompt: telemetryPrompt,
       prefs,
       ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
     } satisfies Parameters<typeof buildTraceObjectManifests>[0];
-    const buildContext = (finalManifests: FinalTraceSafeManifests): ReportContext => ({
+    const buildContext = (
+      finalManifests: FinalTraceSafeManifests,
+      traceObjectSummary = buildTraceObjectSummary({
+        traceObjectFilesRaw,
+        uploaded: finalManifests,
+      }),
+    ): ReportContext => ({
       installationId,
       projectId: run.projectId ?? '',
       conversationId: run.conversationId ?? '',
@@ -1047,6 +1095,7 @@ export async function reportRunCompletedFromDaemon(
         ? { inputTextSnapshotManifest: finalManifests.inputTextSnapshotManifest }
         : {}),
       manifestCompleteness: finalManifests.completeness,
+      traceObjectSummary,
       tools: collectToolCalls(run.events, startedAt, endedAt),
       agentEvents: collectAgentEvents(run.events, startedAt, endedAt, run.agentId),
       eventsSummary: summarizeEvents(run.events, durationMs),
@@ -1073,7 +1122,10 @@ export async function reportRunCompletedFromDaemon(
     const uploadedManifests = await buildTraceObjectManifests(objectManifestOptions);
     const finalManifests = mergeTraceSafeManifests(manifests, uploadedManifests);
     return await reportRunCompleted(
-      buildContext(finalManifests),
+      buildContext(finalManifests, buildTraceObjectSummary({
+        traceObjectFilesRaw,
+        ...(uploadedManifests ? { uploaded: uploadedManifests } : {}),
+      })),
       opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {},
     );
   } catch (err) {

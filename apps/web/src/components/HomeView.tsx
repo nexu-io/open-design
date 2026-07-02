@@ -18,9 +18,10 @@ import type {
   InstalledPluginRecord,
   ProjectKind,
   AudioVoiceOption,
+  WorkspaceContextItem,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
-import { projectKindToTracking } from '@open-design/contracts/analytics';
+import { projectKindFromMetadataToTracking } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackCommunityGalleryClick,
@@ -37,6 +38,7 @@ import {
 import {
   applyPlugin,
   createProject,
+  duplicatePluginAsProject,
   listPlugins,
   patchProject,
   renderPluginBriefTemplate,
@@ -56,7 +58,12 @@ import {
   mergeAihubmixImageModels,
   useAIHubMixImageModels,
 } from '../media/aihubmix-image-models';
-import { openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir } from '../providers/registry';
+import {
+  dirExists,
+  fetchRecentLinkedDirs,
+  openFolderDialog,
+  pushRecentLinkedDir,
+} from '../providers/registry';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type {
   DesignSystemSummary,
@@ -74,6 +81,8 @@ import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { consumePendingHomeChip, HOME_CHIP_INTENT_EVENT } from '../runtime/home-intent';
 import { navigate } from '../router';
+import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
+import { workspaceContextLinkedDirs } from './workspace-context';
 import {
   buildHomeMediaComposer,
   homeMediaSurfaceForChipId,
@@ -89,6 +98,7 @@ import {
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
 import { PluginDetailsModal } from './PluginDetailsModal';
+import { SkillDetailsModal } from './SkillDetailsModal';
 import { HomeTemplatesReveal } from './HomeTemplatesReveal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
@@ -205,9 +215,10 @@ interface Props {
   designSystems?: DesignSystemSummary[];
   defaultDesignSystemId?: string | null;
   onSubmit: (payload: PluginLoopSubmit) => Promise<boolean> | boolean | void;
-  onOpenProject: (id: string) => void;
+  onOpenProject: (id: string, fileName?: string) => void;
   onViewAllProjects: () => void;
   onDeleteProject?: (id: string) => Promise<boolean | void> | boolean | void;
+  onDuplicateProject?: (id: string) => Promise<void> | void;
   onRenameProject?: (id: string, name: string) => void;
   onBrowseRegistry?: () => void;
   onOpenIntegrations?: () => void;
@@ -216,6 +227,7 @@ interface Props {
   // HomeView itself never imports them; EntryShell threads them
   // through so the dispatcher can stay declarative.
   onOpenNewProject?: (tab: 'template') => void;
+  onStartBlankProject?: () => Promise<void> | void;
   promptHandoff?: HomePromptHandoff | null;
   skills?: SkillSummary[];
   skillsLoading?: boolean;
@@ -229,6 +241,46 @@ const EMPTY_SKILLS: SkillSummary[] = [];
 const EMPTY_CONNECTORS: ConnectorDetail[] = [];
 const EMPTY_PROMPT_TEMPLATES: PromptTemplateSummary[] = [];
 
+// The Home composer lives inside EntryView, which App.tsx fully UNMOUNTS the
+// moment the user opens a project tab (the single `appMain` slot swaps
+// EntryView → ProjectView). Plain useState would therefore be discarded on
+// every tab switch, so a half-typed prompt and the chosen design system vanish
+// when the user steps away and comes back. Persist those two serializable,
+// user-visible fields to localStorage so they survive the unmount/remount,
+// mirroring ChatComposer's draft persistence. Object-valued selections (active
+// template, skill, staged files, working directory) are intentionally NOT
+// persisted here — they reference live catalogue records / File handles / a
+// desktop auth token that cannot round-trip through JSON safely.
+const HOME_COMPOSER_PROMPT_KEY = 'open-design:home-composer:prompt';
+const HOME_COMPOSER_DESIGN_SYSTEM_KEY = 'open-design:home-composer:design-system';
+
+function readHomeComposerDraft(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeHomeComposerDraft(key: string, value: string | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (value) window.localStorage.setItem(key, value);
+    else window.localStorage.removeItem(key);
+  } catch {
+    // Storage unavailable (private mode / quota exceeded) — degrade silently to
+    // in-memory-only state; the composer still works for this session.
+  }
+}
+
+// Drop the persisted draft once a run is actually created, so the just-sent
+// prompt and pick don't resurrect the next time the Home tab mounts.
+function clearHomeComposerDraft(): void {
+  writeHomeComposerDraft(HOME_COMPOSER_PROMPT_KEY, null);
+  writeHomeComposerDraft(HOME_COMPOSER_DESIGN_SYSTEM_KEY, null);
+}
+
 export function HomeView({
   isActive = true,
   projects,
@@ -239,11 +291,13 @@ export function HomeView({
   onOpenProject,
   onViewAllProjects,
   onDeleteProject,
+  onDuplicateProject,
   onRenameProject,
   onBrowseRegistry,
   onOpenIntegrations,
   onOpenMcp,
   onOpenNewProject,
+  onStartBlankProject,
   promptHandoff,
   skills = EMPTY_SKILLS,
   skillsLoading = false,
@@ -264,6 +318,7 @@ export function HomeView({
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [pluginsLoading, setPluginsLoading] = useState(true);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
+  const [pendingDuplicatePluginId, setPendingDuplicatePluginId] = useState<string | null>(null);
   const [pendingChipId, setPendingChipId] = useState<string | null>(null);
   const [pendingAuthoringChipId, setPendingAuthoringChipId] = useState<string | null>(null);
   const [pendingAuthoringPrompt, setPendingAuthoringPrompt] = useState(PLUGIN_AUTHORING_PROMPT);
@@ -288,6 +343,7 @@ export function HomeView({
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
   const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
+  const [contextWorkspaceItems, setContextWorkspaceItems] = useState<WorkspaceContextItem[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const [workingDir, setWorkingDir] = useState<string | null>(null);
   // Token paired with `workingDir` when picked through the desktop host's
@@ -301,10 +357,27 @@ export function HomeView({
   // Personal default and re-seeded if that resolves async, until the user picks
   // one explicitly (tracked by `designSystemTouchedRef` so a later default
   // change never clobbers an explicit selection).
+  // Read the persisted composer draft exactly once per mount (see the module
+  // note above). Restoring here is what makes the prompt + design-system pick
+  // survive a tab switch, since the whole view is torn down on every switch.
+  const restoredDraftRef = useRef<{
+    prompt: string;
+    designSystemId: string | null;
+  } | null>(null);
+  if (restoredDraftRef.current === null) {
+    restoredDraftRef.current = {
+      prompt: readHomeComposerDraft(HOME_COMPOSER_PROMPT_KEY) ?? '',
+      designSystemId: readHomeComposerDraft(HOME_COMPOSER_DESIGN_SYSTEM_KEY),
+    };
+  }
+  const restoredDraft = restoredDraftRef.current;
   const [designSystemId, setDesignSystemId] = useState<string | null>(() =>
+    restoredDraft.designSystemId ??
     homeDefaultDesignSystemId(designSystems, defaultDesignSystemId),
   );
-  const designSystemTouchedRef = useRef(false);
+  // A restored pick counts as user-touched so the async default re-seed effect
+  // below does not overwrite it once the catalogue resolves.
+  const designSystemTouchedRef = useRef(restoredDraft.designSystemId != null);
   // Global most-recently-used working directories, surfaced in the picker's
   // "Recent folders" submenu. Loaded from the daemon's app-config and bumped
   // whenever the user picks a folder.
@@ -327,8 +400,21 @@ export function HomeView({
   }, []);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [mcpLoading, setMcpLoading] = useState(true);
-  const [prompt, setPrompt] = useState('');
-  const [promptEditedByUser, setPromptEditedByUser] = useState(false);
+  const [prompt, setPrompt] = useState(() => restoredDraft.prompt);
+  // Treat a restored non-empty prompt as user-edited so the plugin/skill
+  // replacement guard still asks before clobbering it.
+  const [promptEditedByUser, setPromptEditedByUser] = useState(
+    () => restoredDraft.prompt.trim().length > 0,
+  );
+  // Persist the composer draft on every change so it survives the unmount that
+  // a tab switch triggers (see the module note above). Empty values clear the
+  // key rather than storing "".
+  useEffect(() => {
+    writeHomeComposerDraft(HOME_COMPOSER_PROMPT_KEY, prompt);
+  }, [prompt]);
+  useEffect(() => {
+    writeHomeComposerDraft(HOME_COMPOSER_DESIGN_SYSTEM_KEY, designSystemId);
+  }, [designSystemId]);
   const [figmaModalOpen, setFigmaModalOpen] = useState(false);
   const examplePromptInfoRef = useRef<ExamplePromptInfo | null>(null);
   const handleExamplePromptStatusChange = useCallback((info: ExamplePromptInfo | null) => {
@@ -350,6 +436,7 @@ export function HomeView({
   const [elevenLabsVoicesLoaded, setElevenLabsVoicesLoaded] = useState(false);
   const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
   const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
+  const [detailsSkill, setDetailsSkill] = useState<SkillSummary | null>(null);
   const [pendingReplacement, setPendingReplacement] = useState<PendingReplacement | null>(null);
   // Surface_view fires when the replacement modal becomes visible. Tied
   // to the {before, after} pair so reopening with the same pair after a
@@ -602,10 +689,12 @@ export function HomeView({
       contextOnlyPlugins +
       contextOnlyMcp +
       contextOnlyConnectors +
+      contextWorkspaceItems.length +
       stagedFiles.length
     );
   }, [
     activeContextItemCount,
+    contextWorkspaceItems.length,
     selectedConnectorContexts,
     selectedMcpContexts,
     selectedPluginContexts,
@@ -940,7 +1029,7 @@ export function HomeView({
       action: action === 'use-with-query' ? 'use_with_query' : 'use',
     });
     if (action === 'use-with-query') {
-      // "Replicate this content" seeds the composer with the SAME human-friendly
+      // Prompt-loading "Use" seeds the composer with the SAME human-friendly
       // text the Home example-prompt cards use (examplePresetSeedPrompt), NOT the
       // raw `od.useCase.query` — which for many plugins is a generator-facing
       // meta-instruction ("follow the en field verbatim; start from example.html")
@@ -1096,11 +1185,30 @@ export function HomeView({
     focusPromptAtEnd();
   }
 
+  async function duplicateExamplePlugin(record: InstalledPluginRecord) {
+    setError(null);
+    setPendingDuplicatePluginId(record.id);
+    try {
+      const result = await duplicatePluginAsProject(record.id, {
+        name: localizePluginTitle(locale, record),
+      });
+      onOpenProject(result.projectId, result.relPath);
+    } catch {
+      setError(t('pluginCard.duplicateFailed'));
+    } finally {
+      setPendingDuplicatePluginId(null);
+    }
+  }
+
   // "…or start a blank project": create an empty project directly — no dialog,
   // no design system, template, prompt, or plugin — and enter it.
   async function startBlankProject() {
     setError(null);
     try {
+      if (onStartBlankProject) {
+        await onStartBlankProject();
+        return;
+      }
       const { project } = await createProject({
         name: t('common.untitled'),
         skillId: null,
@@ -1164,6 +1272,19 @@ export function HomeView({
     setStagedFiles((current) => current.filter((_, i) => i !== index));
   }
 
+  function addWorkspaceContext(item: WorkspaceContextItem) {
+    setContextWorkspaceItems((current) =>
+      current.some((candidate) => candidate.id === item.id)
+        ? current
+        : [...current, item],
+    );
+    setError(null);
+  }
+
+  function removeWorkspaceContext(id: string) {
+    setContextWorkspaceItems((current) => current.filter((item) => item.id !== id));
+  }
+
   async function handlePickWorkingDir() {
     // On desktop the working-dir POST is gated behind a host-minted token, so
     // pick through the host bridge to capture { baseDir, token } together.
@@ -1173,11 +1294,11 @@ export function HomeView({
         setWorkingDir(result.baseDir);
         setWorkingDirToken(result.token);
         void rememberRecentDir(result.baseDir);
-        return;
+        return result.baseDir;
       }
       // The user explicitly cancelled the host picker — respect that and do
       // not pop a second dialog.
-      if ('canceled' in result && result.canceled) return;
+      if ('canceled' in result && result.canceled) return null;
       // The host is present but could not service the pick (mixed-version
       // upgrade where the preload lacks `project.pickWorkingDir`, or a host
       // error). We must NOT fall back to openFolderDialog() here: the browser
@@ -1188,7 +1309,7 @@ export function HomeView({
       setError(
         `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Design and try again.`,
       );
-      return;
+      return null;
     }
     // Pure web path: no desktop host, so there is no token gate — the raw
     // browser folder path is the expected, working input.
@@ -1197,7 +1318,30 @@ export function HomeView({
       setWorkingDir(picked);
       setWorkingDirToken(null);
       void rememberRecentDir(picked);
+      return picked;
     }
+    return null;
+  }
+
+  async function handlePickLocalCodeDir() {
+    if (isOpenDesignHostAvailable()) {
+      const result = await pickHostWorkingDir();
+      if (result.ok) {
+        void rememberRecentDir(result.baseDir);
+        return result.baseDir;
+      }
+      if ('canceled' in result && result.canceled) return null;
+      setError(
+        `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Design and try again.`,
+      );
+      return null;
+    }
+    const picked = await openFolderDialog();
+    if (picked) {
+      void rememberRecentDir(picked);
+      return picked;
+    }
+    return null;
   }
 
   function updateActiveInputs(next: Record<string, unknown>) {
@@ -1261,6 +1405,59 @@ export function HomeView({
   }
 
   function clearActivePlugin() {
+    if (active?.explicitPick && active.chipId) {
+      const chip = findChip(active.chipId);
+      const action = chip?.action;
+      if (
+        chip &&
+        (
+          action?.kind === 'apply-scenario' ||
+          action?.kind === 'apply-figma-migration'
+        )
+      ) {
+        const record = plugins.find((p) => p.id === action.pluginId);
+        if (record) {
+          const mediaSurface = homeMediaSurfaceForChipId(chip.id);
+          setPromptEditedByUser(prompt.trim().length > 0);
+          if (mediaSurface) {
+            const composer = buildHomeMediaComposer(
+              mediaSurface,
+              promptTemplates,
+              action.inputs,
+              elevenLabsVoices,
+              {
+                elevenLabsVoiceWarning,
+                elevenLabsVoicesLoading,
+                imageModels: composerImageModels,
+              },
+            );
+            void usePlugin(record, undefined, {
+              projectKind: composer.projectKind,
+              chipId: chip.id,
+              inputs: composer.inputs,
+              inputFields: composer.fields,
+              queryTemplate: composer.queryTemplate,
+              mediaSurface,
+              projectMetadata: metadataForHomeMediaComposer(mediaSurface, composer.inputs, promptTemplates),
+              editableInputNames: composer.editableFieldNames,
+              preserveInputFields: true,
+              suppressPromptUpdate: true,
+              deferApply: true,
+            });
+            return;
+          }
+          void usePlugin(record, undefined, {
+            projectKind: action.projectKind,
+            chipId: chip.id,
+            inputs: action.inputs,
+            projectMetadata: action.projectMetadata ?? null,
+            suppressPromptUpdate: true,
+            deferApply: true,
+          });
+          return;
+        }
+      }
+    }
     activePluginApplyRequestRef.current += 1;
     setActive(null);
     setFallbackProjectKind(null);
@@ -1490,6 +1687,7 @@ export function HomeView({
         // Brands merged into Design systems: brand extraction now starts from
         // the unified design-system create wizard (which carries the
         // "start from a brand" picker), rather than a separate Brand Kit tab.
+        setPendingDesignSystemCreateEntry('home_card');
         navigate({ kind: 'design-system-create' });
         return;
       }
@@ -1691,6 +1889,23 @@ export function HomeView({
           status: item.connector.status,
           ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
         }));
+      // Referenced project / local-code folders are required user-selected
+      // inputs. If one disappears before submit, fail loudly instead of sending
+      // workspace text the daemon cannot back with `--add-dir` access.
+      const contextLinkedDirCandidates = workspaceContextLinkedDirs(contextWorkspaceItems);
+      const missingContextLinkedDirs =
+        contextLinkedDirCandidates.length === 0
+          ? []
+          : (
+              await Promise.all(
+                contextLinkedDirCandidates.map(async (dir) => ((await dirExists(dir)) ? null : dir)),
+              )
+            ).filter((dir): dir is string => Boolean(dir));
+      if (missingContextLinkedDirs.length > 0) {
+        setError('A selected reference folder is no longer available. Remove or re-pick it before starting the run.');
+        return;
+      }
+      const contextLinkedDirs = contextLinkedDirCandidates;
       const submittedProjectKind =
         submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
       const submittedProjectMetadata = submittedActive?.mediaSurface
@@ -1732,9 +1947,13 @@ export function HomeView({
         contextPlugins,
         contextMcpServers,
         contextConnectors,
+        ...(contextWorkspaceItems.length > 0
+          ? { initialRunContext: { workspaceItems: contextWorkspaceItems } }
+          : {}),
         attachments: stagedFiles,
         ...(workingDir ? { workingDir } : {}),
         ...(workingDirToken ? { workingDirToken } : {}),
+        ...(contextLinkedDirs.length > 0 ? { linkedDirs: contextLinkedDirs } : {}),
         conversationMode: sessionMode,
         ...(examplePromptToSend ? { examplePromptContext: examplePromptToSend } : {}),
       });
@@ -1744,11 +1963,16 @@ export function HomeView({
       }
       // Create accepted — now it is safe to spend the one-shot marker.
       if (examplePromptToSend) localStorage.setItem(examplePromptKey, '1');
+      // The draft has become a real run; drop it synchronously (before the
+      // navigation unmounts us) so the sent prompt + pick don't reappear the
+      // next time the Home tab mounts.
+      clearHomeComposerDraft();
       // Only drop the staged contexts once the run actually started — a
       // rejected creation keeps them so the retry sends the same payload.
       setSelectedPluginContexts([]);
       setSelectedMcpContexts([]);
       setSelectedConnectorContexts([]);
+      setContextWorkspaceItems([]);
     } catch (err) {
       // A submit handler that throws (instead of resolving false) lands on
       // the same recovery path as a rejected creation.
@@ -1769,12 +1993,15 @@ export function HomeView({
         onPromptChange={handlePromptChange}
         onSubmit={submit}
         onSubmitScenario={submitScenario}
+        sessionMode={sessionMode}
+        onSessionModeChange={setSessionMode}
         submitting={sending}
         activePluginTitle={activeBadgeTitle}
         activePluginIsExplicit={activePluginIsExplicit}
         activePluginRecord={active?.record ?? null}
         activeSkillId={activeSkill?.id ?? null}
         activeSkillTitle={activeSkill ? localizeSkillName(locale, activeSkill) : null}
+        activeSkillRecord={activeSkill}
         activeChipId={active?.chipId ?? null}
         showActivePluginChip={showActivePluginChip}
         onClearActivePlugin={clearActivePlugin}
@@ -1786,13 +2013,17 @@ export function HomeView({
         contextOnlyPlugins={selectedPluginContexts.filter((item) => !item.inlineBacked).map((item) => item.record)}
         contextOnlyMcpServers={selectedMcpContexts.filter((item) => !item.inlineBacked).map((item) => item.server)}
         contextOnlyConnectors={selectedConnectorContexts.filter((item) => !item.inlineBacked).map((item) => item.connector)}
+        contextWorkspaceItems={contextWorkspaceItems}
         onRemovePluginContext={removePluginContext}
         onRemoveMcpContext={removeMcpContext}
         onRemoveConnectorContext={removeConnectorContext}
+        onAddWorkspaceContext={addWorkspaceContext}
+        onRemoveWorkspaceContext={removeWorkspaceContext}
         onAddPlugin={onBrowseRegistry}
         onAddConnector={onOpenIntegrations}
         onAddMcp={onOpenMcp}
         onOpenPluginDetails={setDetailsRecord}
+        onOpenSkillDetails={setDetailsSkill}
         pluginInputFields={(active?.inputFields ?? []).filter(
           (field) => !ARTIFACT_FOOTER_FIELD_NAMES.has(field.name),
         )}
@@ -1824,6 +2055,8 @@ export function HomeView({
         }
         onPickPlugin={(record, nextPrompt) => addPluginContext(record, nextPrompt)}
         onPickExamplePlugin={useExamplePlugin}
+        onDuplicateExamplePlugin={duplicateExamplePlugin}
+        pendingDuplicatePluginId={pendingDuplicatePluginId}
         onPickSkill={useSkill}
         onPickMcp={useMcpServer}
         onPickConnector={useConnector}
@@ -1833,6 +2066,7 @@ export function HomeView({
         workingDir={workingDir}
         recentDirs={recentDirs}
         onPickWorkingDir={handlePickWorkingDir}
+        onPickLocalCodeDir={handlePickLocalCodeDir}
         onSelectRecentWorkingDir={(dir) => {
           setWorkingDir(dir);
           // Recents come from the browser-side picker only; they carry no
@@ -1845,9 +2079,9 @@ export function HomeView({
           setWorkingDirToken(null);
         }}
         onExamplePromptStatusChange={handleExamplePromptStatusChange}
-        onStartBlankProject={startBlankProject}
-        sessionMode={sessionMode}
-        onSessionModeChange={setSessionMode}
+        onStartBlankProject={() => {
+          void startBlankProject();
+        }}
         executionSwitcher={executionSwitcher}
       />
 
@@ -1860,7 +2094,7 @@ export function HomeView({
           // before navigation so the event isn't lost when the host
           // re-renders into the project view.
           const project = projects.find((p) => p.id === id);
-          const projectKind = projectKindToTracking(project?.metadata?.kind, project?.metadata?.videoModel);
+          const projectKind = projectKindFromMetadataToTracking(project?.metadata);
           trackRecentProjectsClick(analytics.track, {
             page_name: 'home',
             area: 'recent_projects',
@@ -1879,6 +2113,7 @@ export function HomeView({
           onViewAllProjects();
         }}
         {...(onDeleteProject ? { onDelete: onDeleteProject } : {})}
+        {...(onDuplicateProject ? { onDuplicate: onDuplicateProject } : {})}
         {...(onRenameProject ? { onRename: onRenameProject } : {})}
       />
 
@@ -1890,7 +2125,9 @@ export function HomeView({
           loading={pluginsLoading}
           activePluginId={active?.record.id ?? null}
           pendingApplyId={pendingApplyId}
+          pendingDuplicateId={pendingDuplicatePluginId}
           onUse={(record, action) => void routePluginUse(record, action)}
+          onDuplicate={(record) => void duplicateExamplePlugin(record)}
           onOpenDetails={handleCommunityOpenDetails}
           onBrowseRegistry={onBrowseRegistry}
           preferDefaultFacet={false}
@@ -1927,6 +2164,10 @@ export function HomeView({
               });
               void routePluginUse(record, action);
             }}
+            onDuplicate={(record) => {
+              setDetailsRecord(null);
+              void duplicateExamplePlugin(record);
+            }}
             isApplying={pendingApplyId === detailsRecord.id}
             onSharePopoverItemClick={(item) =>
               trackPluginDetailModalSharePopoverClick(analytics.track, {
@@ -1936,6 +2177,13 @@ export function HomeView({
                 plugin_id: detailsRecord.sourceMarketplaceEntryName ?? detailsRecord.id,
                 plugin_type: detailsRecord.marketplaceTrust ?? 'official',
               })}
+          />
+        ) : null}
+        {detailsSkill ? (
+          <SkillDetailsModal
+            skillId={detailsSkill.id}
+            summary={detailsSkill}
+            onClose={() => setDetailsSkill(null)}
           />
         ) : null}
         {figmaModalOpen ? (

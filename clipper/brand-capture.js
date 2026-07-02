@@ -1004,6 +1004,32 @@
     const surfaceRole = byRole('surface', '#ffffff');
     const mutedRole = byRole('muted', '#57564f');
     const borderRole = byRole('border', '#e7e5dc');
+
+    // Theme-aware surface for the logo / header mark / asset backdrops. A
+    // light-themed brand must paint these on a light surface and a dark one on a
+    // dark surface — never let a single mis-derived dark `background` role paint
+    // the logo region black on an otherwise-light kit. We vote the cast across
+    // the neutral roles (background + surface + inverted foreground) so one
+    // mis-measured swatch can't flip the theme, then pick a neutral that keeps
+    // the mark visible: a light brand gets a near-white paper, a dark brand
+    // keeps its dark canvas.
+    const isLightHex = (hex) => {
+      const c = parseRgb(hex);
+      return !c || luminance(c) > 0.42;
+    };
+    const lightVotes =
+      (isLightHex(background) ? 1 : 0) +
+      (isLightHex(surfaceRole) ? 1 : 0) +
+      (isLightHex(foreground) ? 0 : 1);
+    const kitLight = lightVotes >= 2;
+    const logoSurface = kitLight
+      ? (isLightHex(surfaceRole) ? surfaceRole : isLightHex(background) ? background : '#FFFFFF')
+      : !isLightHex(background)
+        ? background
+        : isLightHex(surfaceRole)
+          ? '#1A1A18'
+          : surfaceRole;
+
     // The captured component styles drive the kit + templates so each site's
     // design system looks like itself, not a shared template.
     const atoms = deriveAtoms(data.components || {}, {
@@ -1053,7 +1079,7 @@
 
     // --- Header identity mark ---
     const headerMark = logo
-      ? `<span class="id-mark" style="background:${escapeHtml(background)}"><img src="${escapeHtml(logo.src)}" alt="" /></span>`
+      ? `<span class="id-mark" style="background:${escapeHtml(logoSurface)}"><img src="${escapeHtml(logo.src)}" alt="" /></span>`
       : `<span class="id-mark initial">${initial}</span>`;
 
     // --- Hero band (first representative image) ---
@@ -1072,7 +1098,7 @@
             .join('')}</div>`
         : '';
     const logoBlock = logo
-      ? `<div class="logo-stage" style="background:${escapeHtml(background)}"><img id="od-logo-img" src="${escapeHtml(logo.src)}" alt="${escapeHtml(logo.label || content.title)}" /></div>${logoThumbs}`
+      ? `<div class="logo-stage" style="background:${escapeHtml(logoSurface)}"><img id="od-logo-img" src="${escapeHtml(logo.src)}" alt="${escapeHtml(logo.label || content.title)}" /></div>${logoThumbs}`
       : `<div class="logo-stage empty"><span class="logo-initial">${initial}</span><span class="logo-empty-note">${escapeHtml(tr('brandNoLogoFound'))}</span></div>`;
 
     // --- Typography ---
@@ -1282,6 +1308,9 @@
     --ink-faint: #8a887f;
     --line: #e7e5dc;
     --line-soft: #efeee7;
+    /* Theme-aware backdrop for logo / asset iframes (light brand → near-white,
+       dark brand → dark) so the logo region never paints black on a light kit. */
+    --asset-surface: ${logoSurface};
     --accent: ${accent};
     --accent-ink: ${ink};
     --on-accent: ${onAccent};
@@ -1553,7 +1582,7 @@
   .asset:hover { border-color: var(--accent); transform: translateY(-1px); }
   .asset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .asset-frame { display: block; aspect-ratio: 16 / 10; background: var(--line-soft); position: relative; overflow: hidden; }
-  .asset-frame iframe { position: absolute; top: 0; left: 0; width: 200%; height: 200%; border: 0; transform: scale(.5); transform-origin: top left; pointer-events: none; background: #fff; }
+  .asset-frame iframe { position: absolute; top: 0; left: 0; width: 200%; height: 200%; border: 0; transform: scale(.5); transform-origin: top left; pointer-events: none; background: var(--asset-surface, #fff); }
   .asset-meta { display: block; padding: 11px 13px; }
   .asset-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; }
   .asset-open { font-size: 11px; color: var(--accent-ink); font-weight: 500; }

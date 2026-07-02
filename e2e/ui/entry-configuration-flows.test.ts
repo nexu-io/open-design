@@ -1,5 +1,5 @@
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
+import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 import type { Locator, Page } from '@playwright/test';
@@ -119,10 +119,7 @@ test('[P1] prompt template retry preserves the edited body in project metadata',
   });
 
   await gotoEntryHome(page);
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModal(page);
   await page.getByTestId('new-project-tab-media').click();
   await page.getByTestId('new-project-media-surface-image').click();
   await page.getByTestId('new-project-name').fill('Prompt template retry metadata');
@@ -164,10 +161,7 @@ test('[P1] live artifact empty connector CTA opens the gated connector setup pat
   await routeComposioConfig(page, { configured: false, apiKeyTail: '' });
 
   await gotoEntryHome(page);
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModal(page);
   await page.getByTestId('new-project-tab-live-artifact').click();
   await expect(page.getByTestId('new-project-connectors')).toBeVisible();
 

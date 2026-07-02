@@ -180,19 +180,19 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const protocol = body.protocol;
     if (
       typeof protocol !== 'string' ||
-      !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix'].includes(protocol)
+      !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock'].includes(protocol)
     ) {
       return sendApiError(
         res,
         400,
         'BAD_REQUEST',
-        'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix',
+        'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
       );
     }
     // AIHubMix's catalogue (GET /api/v1/models?type=llm) is public, so its
     // model list loads without a key. Every other protocol needs the key to
     // hit its /v1/models endpoint.
-    const apiKeyRequired = protocol !== 'aihubmix';
+    const apiKeyRequired = protocol !== 'aihubmix' && protocol !== 'bedrock';
     if (
       typeof body.baseUrl !== 'string' ||
       typeof body.apiKey !== 'string' ||
@@ -258,28 +258,31 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         const protocol = body.protocol;
         if (
           typeof protocol !== 'string' ||
-          !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix'].includes(protocol)
+          !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock'].includes(protocol)
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix',
+            'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
           );
         }
+        const apiKeyRequired = protocol !== 'bedrock';
         if (
           typeof body.baseUrl !== 'string' ||
           typeof body.apiKey !== 'string' ||
           typeof body.model !== 'string' ||
           !body.baseUrl.trim() ||
-          !body.apiKey.trim() ||
+          (apiKeyRequired && !body.apiKey.trim()) ||
           !body.model.trim()
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'baseUrl, apiKey, and model are required',
+            apiKeyRequired
+              ? 'baseUrl, apiKey, and model are required'
+              : 'baseUrl and model are required',
           );
         }
         const reasoningDenial = authorizeReasoningEgress({

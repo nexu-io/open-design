@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import type { AppConfig } from '../types';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackIntegrationsConnectorsTabClick,
-  trackIntegrationsSkillsTabClick,
   trackIntegrationsTabClick,
   trackPageView,
   trackSettingsConnectorAuthResult,
@@ -11,6 +11,7 @@ import {
 import { ConnectorSection } from './SettingsDialog';
 import { Icon } from './Icon';
 import { McpClientSection } from './McpClientSection';
+import { SkillsSection } from './SkillsSection';
 import { UseEverywhereGuidePanel } from './UseEverywhereModal';
 import { useT } from '../i18n';
 
@@ -20,7 +21,10 @@ interface Props {
   config: AppConfig;
   initialTab?: IntegrationTab;
   composioConfigLoading?: boolean;
+  onConfigPersist: (config: AppConfig) => Promise<void> | void;
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
+  onSkillsRefresh?: () => Promise<void> | void;
+  onSkillsChanged?: (affectedSkillId?: string) => void;
 }
 
 const INTEGRATION_TABS: ReadonlyArray<{
@@ -43,7 +47,10 @@ export function IntegrationsView({
   config,
   initialTab = 'mcp',
   composioConfigLoading = false,
+  onConfigPersist,
   onPersistComposioKey,
+  onSkillsRefresh,
+  onSkillsChanged,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -55,17 +62,30 @@ export function IntegrationsView({
   }, [analytics.track]);
   const [activeTab, setActiveTab] = useState<IntegrationTab>(initialTab);
   const [localConfig, setLocalConfig] = useState<AppConfig>(config);
+  const localConfigRef = useRef(localConfig);
 
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
 
   useEffect(() => {
-    setLocalConfig((curr) => ({
-      ...curr,
-      composio: config.composio,
-    }));
-  }, [config.composio]);
+    localConfigRef.current = config;
+    setLocalConfig(config);
+  }, [config]);
+
+  const updateLocalConfig = useCallback<Dispatch<SetStateAction<AppConfig>>>(
+    (nextConfig) => {
+      const base = localConfigRef.current;
+      const resolved =
+        typeof nextConfig === 'function'
+          ? (nextConfig as (current: AppConfig) => AppConfig)(base)
+          : nextConfig;
+      localConfigRef.current = resolved;
+      setLocalConfig(resolved);
+      void onConfigPersist(resolved);
+    },
+    [onConfigPersist],
+  );
 
   const liveDaemonUrl =
     typeof window !== 'undefined' ? window.location.origin : undefined;
@@ -148,7 +168,14 @@ export function IntegrationsView({
           />
         ) : null}
 
-        {activeTab === 'skills' ? <SkillsComingSoonPanel /> : null}
+        {activeTab === 'skills' ? (
+          <SkillsSection
+            cfg={localConfig}
+            setCfg={updateLocalConfig}
+            onSkillsRefresh={onSkillsRefresh}
+            onSkillsChanged={onSkillsChanged}
+          />
+        ) : null}
 
         {activeTab === 'use-everywhere' ? (
           <div className="integrations-view__use-everywhere">
@@ -158,35 +185,6 @@ export function IntegrationsView({
             />
           </div>
         ) : null}
-      </div>
-    </section>
-  );
-}
-
-function SkillsComingSoonPanel() {
-  const t = useT();
-  const analytics = useAnalytics();
-  return (
-    <section
-      className="integrations-view__coming-soon"
-      aria-labelledby="integration-skills-title"
-      onClick={() =>
-        trackIntegrationsSkillsTabClick(analytics.track, {
-          page_name: 'integrations',
-          area: 'skills_tab',
-          element: 'coming_soon',
-        })
-      }
-    >
-      <div className="integrations-view__coming-icon" aria-hidden="true">
-        <Icon name="sparkles" size={22} />
-      </div>
-      <div>
-        <p className="integrations-view__coming-kicker">{t('tasks.comingSoon')}</p>
-        <h2 id="integration-skills-title">{t('integrations.skillsTitle')}</h2>
-        <p>
-          {t('integrations.skillsBody')}
-        </p>
       </div>
     </section>
   );
@@ -205,7 +203,7 @@ function integrationTabHint(id: IntegrationTab, t: ReturnType<typeof useT>): str
   switch (id) {
     case 'mcp': return t('integrations.tabHint.mcp');
     case 'connectors': return t('integrations.tabHint.connectors');
-    case 'skills': return t('tasks.comingSoon');
+    case 'skills': return t('settings.skillsHint');
     case 'use-everywhere': return t('integrations.tabHint.useEverywhere');
   }
 }

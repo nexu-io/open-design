@@ -17,7 +17,7 @@
  */
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import GoogleAnalytics from '../../_components/google-analytics.astro';
+import SiteAnalytics from '../../_components/site-analytics.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
 import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
@@ -52,7 +52,9 @@ const datePublished = new Date('2026-06-25');
 const fallbackSite = 'https://open-design.ai/';
 const origin = Astro.site?.toString() ?? fallbackSite;
 const pageUrl = new URL(Astro.url.pathname, Astro.site ?? fallbackSite).toString();
-const ogImage = new URL('/stories/ikigai-one-cover.webp', Astro.site ?? fallbackSite).toString();
+// Dedicated social share card (X/OG/Twitter). Intentionally separate from the
+// in-article figures — swapping this does not change any image in the story body.
+const ogImage = new URL('/stories/ikigai-one-og.jpg', Astro.site ?? fallbackSite).toString();
 
 // Breadcrumb trail (Open Design → Ikigai One). SeoHead emits the Article
 // JSON-LD; this adds the SERP breadcrumb. There is no Stories index yet, so
@@ -93,7 +95,7 @@ const headerHtml = renderToStaticMarkup(
       image={ogImage}
     />
     <script is:inline type='application/ld+json' set:html={JSON.stringify(breadcrumbJsonLd)} />
-    <GoogleAnalytics />
+    <SiteAnalytics />
   </head>
   <body>
     <div class='shell'>
