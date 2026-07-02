@@ -831,6 +831,55 @@ function statusToKind(status: number, detailText = ''): ConnectionTestKind {
   return 'unknown';
 }
 
+function isNvidiaDegradedProviderError(detailText: string): boolean {
+  return /\bDEGRADED\b/i.test(detailText) && /\bfunction\s+id\b/i.test(detailText);
+}
+
+function providerHttpErrorOverride(
+  protocol: ConnectionTestProtocol,
+  hostname: string,
+  status: number,
+  detailText: string,
+): { kind: ConnectionTestKind; detail: string } | null {
+  if (
+    protocol === 'openai' &&
+    status === 400 &&
+    hostname.toLowerCase() === 'integrate.api.nvidia.com' &&
+    isNvidiaDegradedProviderError(detailText)
+  ) {
+    return {
+      kind: 'upstream_unavailable',
+      detail:
+        'The selected NVIDIA model instance is currently unavailable at the provider. Try a different model or retry later.',
+    };
+  }
+  return null;
+}
+
+function classifyProviderHttpFailure(
+  protocol: ConnectionTestProtocol,
+  hostname: string,
+  status: number,
+  detailText: string,
+  secrets: string[],
+): { kind: ConnectionTestKind; detail: string } {
+  const redactedDetail = redactSecrets(detailText.slice(0, 240), secrets);
+  const override = providerHttpErrorOverride(
+    protocol,
+    hostname,
+    status,
+    redactedDetail,
+  );
+  if (override) return override;
+  const kind = statusToKind(status, redactedDetail);
+  const detail =
+    redactedDetail ||
+    (status === 404
+      ? 'HTTP 404 from provider; check the Base URL path.'
+      : '');
+  return { kind, detail };
+}
+
 function extractOpenAiModelIds(data: unknown): string[] {
   const items = (data as { data?: unknown }).data;
   if (!Array.isArray(items)) return [];
@@ -1344,15 +1393,13 @@ export async function testProviderConnection(
         });
         latencyMs = Date.now() - start;
       } else {
-        const redactedDetail = redactSecrets(detailText.slice(0, 240), [
-          input.apiKey,
-        ]);
-        const kind = statusToKind(response.status, redactedDetail);
-        const detail =
-          redactedDetail ||
-          (response.status === 404
-            ? 'HTTP 404 from provider; check the Base URL path.'
-            : '');
+        const { kind, detail } = classifyProviderHttpFailure(
+          input.protocol,
+          validated.parsed.hostname,
+          response.status,
+          detailText,
+          [input.apiKey],
+        );
         console.warn(
           `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${kind})${detail ? ` ${detail}` : ''}`,
         );
@@ -1478,15 +1525,13 @@ export async function testProviderConnection(
     } catch {
       // Ignore — we still report the status code.
     }
-    const redactedDetail = redactSecrets(detailText.slice(0, 240), [
-      input.apiKey,
-    ]);
-    const kind = statusToKind(response.status, redactedDetail);
-    const detail =
-      redactedDetail ||
-      (response.status === 404
-        ? 'HTTP 404 from provider; check the Base URL path.'
-        : '');
+    const { kind, detail } = classifyProviderHttpFailure(
+      input.protocol,
+      validated.parsed.hostname,
+      response.status,
+      detailText,
+      [input.apiKey],
+    );
     console.warn(
       `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${kind})${detail ? ` ${detail}` : ''}`,
     );

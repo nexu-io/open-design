@@ -2649,8 +2649,12 @@ export function SettingsDialog({
         return t('settings.testInvalidBaseUrl');
       case 'rate_limited':
         return t('settings.testRateLimited');
-      case 'upstream_unavailable':
-        return t('settings.testUpstream', { status: result.status ?? 0 });
+      case 'upstream_unavailable': {
+        const baseMessage = t('settings.testUpstream', {
+          status: result.status ?? 0,
+        });
+        return result.detail ? `${baseMessage} ${result.detail}` : baseMessage;
+      }
       case 'timeout':
         return t('settings.testTimeout', { ms });
       case 'agent_not_installed':

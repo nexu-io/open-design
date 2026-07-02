@@ -1623,6 +1623,41 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(testConnectionCalls).toHaveLength(1);
   });
 
+  it('shows provider upstream detail for failed BYOK connection tests', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          kind: 'upstream_unavailable',
+          latencyMs: 42,
+          status: 400,
+          detail:
+            'The selected NVIDIA model instance is currently unavailable at the provider. Try a different model or retry later.',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog({ apiKey: 'sk-ant-test-provider' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    expect(
+      await screen.findByText(
+        /Provider returned 400\. Try again in a moment\. The selected NVIDIA model instance is currently unavailable/,
+      ),
+    ).toBeTruthy();
+  });
+
   it('blocks an obvious OpenAI key in the Anthropic tab before testing', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (input.toString() === '/api/memory') {
