@@ -91,9 +91,12 @@ const MCP_INSTALL_STRING_FLAGS = new Set([
   'daemon-url',
   'name',
 ]);
+const MCP_INSTALL_CLI_PROBE_FLAG = 'open-design-cli-probe';
+const MCP_INSTALL_CLI_PROBE_TOKEN = 'open-design-cli:mcp-install:v1';
 const MCP_INSTALL_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
+  MCP_INSTALL_CLI_PROBE_FLAG,
   'json',
   'print',
   'dry-run',
@@ -1276,6 +1279,10 @@ async function runMcpInstall(args) {
     console.error(err.message);
     printMcpInstallHelp();
     process.exit(2);
+  }
+  if (flags[MCP_INSTALL_CLI_PROBE_FLAG]) {
+    console.log(MCP_INSTALL_CLI_PROBE_TOKEN);
+    return;
   }
   if (flags.help || flags.h) {
     printMcpInstallHelp();
