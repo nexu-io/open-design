@@ -16,7 +16,7 @@
 import {
   createDesignTokenEvidenceCollector,
   type DesignExtractReport,
-} from './design-token-evidence.js';
+} from './design-systems/token-evidence.js';
 
 /** A single measurable trait of a design. Score is 0..100 (higher = healthier). */
 export interface SignatureStrand {
