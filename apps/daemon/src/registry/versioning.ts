@@ -93,7 +93,15 @@ function resolveRequestedVersion(
       const parsed = parseSemver(version);
       if (!parsed) return false;
       if (range.startsWith('^')) {
-        return parsed.major === base.major && compareSemver(parsed, base) >= 0;
+        // npm caret locks the leftmost non-zero component: `^1.2.3` allows
+        // `<2.0.0`, but `^0.2.3` only `<0.3.0` and `^0.0.3` only `<0.0.4`.
+        // Locking major alone wrongly resolves `^0.2.0` to a breaking `0.3.0`.
+        if (parsed.major !== base.major) return false;
+        if (base.major === 0) {
+          if (parsed.minor !== base.minor) return false;
+          if (base.minor === 0 && parsed.patch !== base.patch) return false;
+        }
+        return compareSemver(parsed, base) >= 0;
       }
       return parsed.major === base.major &&
         parsed.minor === base.minor &&

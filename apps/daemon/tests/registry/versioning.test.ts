@@ -93,6 +93,34 @@ describe('resolveMarketplaceEntryVersion', () => {
     expect(resolved?.source).toBe('s120');
   });
 
+  it('locks the minor for a 0.x caret range (^0.2.0 excludes 0.3.0)', () => {
+    // npm caret semantics special-case a zero major: `^0.2.0` means
+    // `>=0.2.0 <0.3.0`, so 0.3.0 is a breaking release that must be excluded.
+    const e = entry({
+      version: '0.3.0',
+      versions: [
+        { version: '0.2.0', source: 's020' },
+        { version: '0.2.5', source: 's025' },
+        { version: '0.3.0', source: 's030' },
+      ],
+    });
+    const resolved = resolveMarketplaceEntryVersion(e, '^0.2.0');
+    expect(resolved?.version).toBe('0.2.5');
+    expect(resolved?.source).toBe('s025');
+  });
+
+  it('locks the patch for a 0.0.x caret range (^0.0.3 excludes 0.0.4)', () => {
+    // For `^0.0.3` npm resolves `>=0.0.3 <0.0.4`, i.e. only 0.0.3.
+    const e = entry({
+      version: '0.0.4',
+      versions: [
+        { version: '0.0.3', source: 's003' },
+        { version: '0.0.4', source: 's004' },
+      ],
+    });
+    expect(resolveMarketplaceEntryVersion(e, '^0.0.3')?.version).toBe('0.0.3');
+  });
+
   it('respects tilde ranges (locks minor)', () => {
     const e = entry({
       version: '1.2.5',
