@@ -54,6 +54,8 @@ import { entry as e_open_design_vibe_coders_dream_sean_kochel } from './tutorial
 import { entry as e_open_design_vs_claude_design_better_stack } from './tutorials-longform/open-design-vs-claude-design-better-stack';
 import { entry as e_open_design_vs_claude_design_comparison_panda_making_money } from './tutorials-longform/open-design-vs-claude-design-comparison-panda-making-money';
 import { entry as e_open_design_windows_wsl_installation_setup_ai_automation } from './tutorials-longform/open-design-windows-wsl-installation-setup-ai-automation';
+import { entry as e_open_design_open_design_vs_claude_design_jeremy_de_campos } from './tutorials-longform/open-design-open-design-vs-claude-design-jeremy-de-campos';
+import { entry as e_open_design_claude_design_rebuild_beginner_assets_parth_jadav } from './tutorials-longform/open-design-claude-design-rebuild-beginner-assets-parth-jadav';
 
 export const tutorialsLongformI18n: TutorialLongformI18n = {
   "open-design-31-skills-72-systems-popular-ai": e_open_design_31_skills_72_systems_popular_ai,
@@ -87,6 +89,8 @@ export const tutorialsLongformI18n: TutorialLongformI18n = {
   "open-design-vs-claude-design-better-stack": e_open_design_vs_claude_design_better_stack,
   "open-design-vs-claude-design-comparison-panda-making-money": e_open_design_vs_claude_design_comparison_panda_making_money,
   "open-design-windows-wsl-installation-setup-ai-automation": e_open_design_windows_wsl_installation_setup_ai_automation,
+  "open-design-open-design-vs-claude-design-jeremy-de-campos": e_open_design_open_design_vs_claude_design_jeremy_de_campos,
+  "open-design-claude-design-rebuild-beginner-assets-parth-jadav": e_open_design_claude_design_rebuild_beginner_assets_parth_jadav,
 };
 
 export function getLocalizedTutorial(
