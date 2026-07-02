@@ -71,7 +71,10 @@ export function ToolCard({
   if (name === 'Grep') return <GrepCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'WebFetch' || name === 'web_fetch') return <WebFetchCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'WebSearch' || name === 'web_search') return <WebSearchCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
-  if (name === 'Task') return <TaskCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
+  // claude CLI 2.1+ renamed the subagent dispatch tool Task→Agent (input shape unchanged);
+  // older CLI versions still emit `Task`, so match both.
+  if (name === 'Task' || name === 'Agent')
+    return <TaskCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (isAskUserQuestionName(name))
     return <LegacyAskUserQuestionCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   return <GenericCard name={name} input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;

@@ -49,6 +49,35 @@ describe('Task tool rendering + sidechain hiding', () => {
     expect(card!.querySelector('.op-card-head')!.textContent).not.toContain('general-purpose');
   });
 
+  it('renders an Agent tool_use (claude CLI 2.1+ renamed Task→Agent) as a TaskCard with its description', () => {
+    const { container } = render(
+      <AssistantMessage
+        projectKind="prototype"
+        conversationId="conv-1"
+        message={messageWithEvents([
+          {
+            kind: 'tool_use',
+            id: 'toolu_agent_1',
+            name: 'Agent',
+            input: {
+              description: '리서치 서브에이전트',
+              prompt: 'Read research-subagent.md and …',
+              subagent_type: 'general-purpose',
+            },
+          },
+        ])}
+        streaming={false}
+        projectId="project-1"
+      />,
+    );
+
+    const card = container.querySelector('.op-task');
+    expect(card).not.toBeNull();
+    expect(card!.textContent).toContain('리서치 서브에이전트');
+    // The raw prompt JSON must NOT leak into the card head (GenericCard did).
+    expect(card!.querySelector('.op-card-head')!.textContent).not.toContain('general-purpose');
+  });
+
   it('hides sidechain tool_use events from the main transcript', () => {
     const { container } = render(
       <AssistantMessage
