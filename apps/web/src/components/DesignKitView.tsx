@@ -375,6 +375,10 @@ function DesignKitViewInner({
   const designMdInputRef = useRef<HTMLInputElement | null>(null);
   const stickyHeaderRef = useRef<HTMLElement | null>(null);
   const logoSectionRef = useRef<HTMLElement | null>(null);
+  const assetPreviewKeysSignature = useMemo(
+    () => (kit.assets ?? []).map(assetPreviewKey).join('\n'),
+    [kit.assets],
+  );
 
   useBrandFonts(kit.projectId, kit.fonts);
 
@@ -548,7 +552,7 @@ function DesignKitViewInner({
   }, [lightboxIndex, lightboxItems.length]);
 
   useEffect(() => {
-    const assetKeys = (kit.assets ?? []).map(assetPreviewKey);
+    const assetKeys = assetPreviewKeysSignature ? assetPreviewKeysSignature.split('\n') : [];
     setLoadedAssetPreviews(new Set());
     setAssetPreviewRevealArmed(false);
     if (assetKeys.length === 0) return undefined;
@@ -563,7 +567,7 @@ function DesignKitViewInner({
       window.clearTimeout(armTimer);
       window.clearTimeout(revealTimer);
     };
-  }, [kit.assets]);
+  }, [assetPreviewKeysSignature]);
 
   useEffect(() => {
     if (
