@@ -48,7 +48,7 @@ describe('normalizeColor', () => {
   });
 });
 
-describe('computeDesignSignature — shape and ordering', () => {
+describe('computeDesignSignature, shape and ordering', () => {
   it('always returns the four strands in canonical order', () => {
     const sig = computeDesignSignatureFromText('<div></div>');
     expect(sig.strands.map((s) => s.key)).toEqual(['palette', 'rhythm', 'cadence', 'density']);
