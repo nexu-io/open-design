@@ -38,7 +38,11 @@ function cleanSlug(input) {
     .replace(/^-+|-+$/g, "");
 }
 
-function notesTemplate({ name, url, mode, level }) {
+function shellQuote(value) {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function notesTemplate({ name, url, mode, level, projectPath }) {
   return `# ${name} · 克隆笔记
 
 ## 源信息
@@ -61,7 +65,7 @@ function notesTemplate({ name, url, mode, level }) {
 
 ## 跑起来
 \`\`\`bash
-cd ./website-clones/${name}
+cd ${shellQuote(projectPath)}
 python3 -m http.server 8123
 \`\`\`
 
@@ -128,6 +132,7 @@ try {
       url: args.url,
       mode: args.mode,
       level: args.level,
+      projectPath: project,
     })
   );
   fs.writeFileSync(path.join(project, ".gitignore"), "node_modules/\n.DS_Store\n");
