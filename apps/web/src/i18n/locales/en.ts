@@ -3674,7 +3674,7 @@ export const en: Dict = {
   'automations.tpl.liveStatusBoard.title': 'Keep a live status artifact fresh.',
   'automations.tpl.liveStatusBoard.desc': 'Updates one persistent artifact instead of creating a new report each run.',
   'dsManager.areaAria': 'Design systems area',
-  'dsManager.tabDesignSystem': 'Design system',
+  'dsManager.tabDesignSystem': 'Design System',
   'dsManager.tabTemplate': 'Template',
   'dsManager.sourceAria': 'Design system source',
   'dsManager.templateSourceAria': 'Template source',
