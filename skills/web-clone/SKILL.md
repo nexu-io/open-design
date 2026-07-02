@@ -164,41 +164,41 @@ cd ./website-clones/<站名>-clone
 ```bash
 node "$WEB_CLONE_SKILL_DIR/scripts/recon-site.mjs" \
   --url http://127.0.0.1:<端口>/ \
-  --out ./website-clones/<站名>-clone/RECON \
+  --out ./RECON \
   --label clone
 
 node "$WEB_CLONE_SKILL_DIR/scripts/route-crawl.mjs" \
   --url http://127.0.0.1:<端口>/ \
-  --out ./website-clones/<站名>-clone/RECON/routes-clone \
+  --out ./RECON/routes-clone \
   --label clone \
   --max-pages 25 \
   --max-depth 2
 
 node "$WEB_CLONE_SKILL_DIR/scripts/interaction-probe.mjs" \
   --url http://127.0.0.1:<端口>/ \
-  --out ./website-clones/<站名>-clone/RECON/interactions-clone \
+  --out ./RECON/interactions-clone \
   --label clone
 
 node "$WEB_CLONE_SKILL_DIR/scripts/visual-diff.mjs" \
-  --original ./website-clones/<站名>-clone/RECON/screenshots/original-1440.png \
-  --clone ./website-clones/<站名>-clone/RECON/screenshots/clone-1440.png \
-  --out ./website-clones/<站名>-clone/RECON/visual-diff-1440.json \
-  --diff ./website-clones/<站名>-clone/RECON/screenshots/visual-diff-1440.png
+  --original ./RECON/screenshots/original-1440.png \
+  --clone ./RECON/screenshots/clone-1440.png \
+  --out ./RECON/visual-diff-1440.json \
+  --diff ./RECON/screenshots/visual-diff-1440.png
 
 node "$WEB_CLONE_SKILL_DIR/scripts/compare-recon.mjs" \
-  --original ./website-clones/<站名>-clone/RECON/original-recon.json \
-  --clone ./website-clones/<站名>-clone/RECON/clone-recon.json \
-  --visual-diff ./website-clones/<站名>-clone/RECON/visual-diff-1440.json \
-  --original-routes ./website-clones/<站名>-clone/RECON/routes/original-route-map.json \
-  --clone-routes ./website-clones/<站名>-clone/RECON/routes-clone/clone-route-map.json \
-  --original-interactions ./website-clones/<站名>-clone/RECON/interactions/original-interactions.json \
-  --clone-interactions ./website-clones/<站名>-clone/RECON/interactions-clone/clone-interactions.json \
-  --out ./website-clones/<站名>-clone/CLONE_REPORT.md
+  --original ./RECON/original-recon.json \
+  --clone ./RECON/clone-recon.json \
+  --visual-diff ./RECON/visual-diff-1440.json \
+  --original-routes ./RECON/routes/original-route-map.json \
+  --clone-routes ./RECON/routes-clone/clone-route-map.json \
+  --original-interactions ./RECON/interactions/original-interactions.json \
+  --clone-interactions ./RECON/interactions-clone/clone-interactions.json \
+  --out ./CLONE_REPORT.md
 
 node "$WEB_CLONE_SKILL_DIR/scripts/audit-clone.mjs" \
-  --project ./website-clones/<站名>-clone \
+  --project . \
   --brand "<原站品牌名>" \
-  --out ./website-clones/<站名>-clone/CLONE_AUDIT.md
+  --out ./CLONE_AUDIT.md
 ```
 
 ### Step 6 · 替换成用户自己的东西
