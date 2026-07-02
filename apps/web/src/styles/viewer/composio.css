@@ -332,6 +332,7 @@
   padding: 6px 12px;
   font-size: 12px;
   background: var(--bg-elevated);
+  color: var(--text);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   cursor: pointer;
