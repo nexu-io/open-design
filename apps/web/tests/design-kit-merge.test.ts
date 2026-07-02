@@ -143,10 +143,10 @@ function brandFixture(overrides: Partial<Brand> = {}): Brand {
 describe('brandToKit — design asset tiles', () => {
   it('uses brand designAssets when present', () => {
     const brand = brandFixture() as Brand & {
-      designAssets: Array<{ kind: string; label: string; href: string; available?: boolean }>;
+      designAssets: Array<{ kind: string; label: string; href: string; viewport?: string; available?: boolean }>;
     };
     brand.designAssets = [
-      { kind: 'ui-kit-home', label: 'Home Page', href: 'ui_kits/website/01-home.html' },
+      { kind: 'ui-kit-home', label: 'Home Page', href: 'ui_kits/website/01-home.html', viewport: '1280x720' },
       { kind: 'ui-kit-contact', label: 'Contact Page', href: 'ui_kits/website/05-contact.html' },
       { kind: 'ui-kit-draft', label: 'Unavailable Draft', href: 'ui_kits/website/draft.html', available: false },
     ];
@@ -162,11 +162,15 @@ describe('brandToKit — design asset tiles', () => {
         kind: 'ui-kit-home',
         label: 'Home Page',
         url: '/api/projects/brand-acme/raw/ui_kits/website/01-home.html',
+        previewWidth: 1280,
+        previewHeight: 720,
       },
       {
         kind: 'ui-kit-contact',
         label: 'Contact Page',
         url: '/api/projects/brand-acme/raw/ui_kits/website/05-contact.html',
+        previewWidth: 1280,
+        previewHeight: 760,
       },
     ]);
   });

@@ -1252,10 +1252,10 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 200%;
-  height: 200%;
+  width: var(--asset-preview-width, 200%);
+  height: var(--asset-preview-height, 200%);
   border: 0;
-  transform: scale(0.5);
+  transform: scale(var(--asset-preview-scale, 0.5));
   transform-origin: top left;
   pointer-events: none;
   background: #fff;

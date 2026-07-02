@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type CSSProperties,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
@@ -44,6 +45,7 @@ import styles from './BrandPreviewCard.module.css';
 
 const IMAGE_CAP = 8;
 const DESIGN_KIT_PREVIEW_SANDBOX = 'allow-scripts allow-popups';
+const ASSET_PREVIEW_TARGET_WIDTH = 243;
 
 type DesignMdModuleId = 'identity' | 'typography' | 'palette' | 'voice' | 'imageryLayout' | 'designSystem';
 
@@ -62,6 +64,16 @@ export type DesignKitEditFocusModule = 'logo';
 export interface DesignKitEditFocusRequest {
   module: DesignKitEditFocusModule;
   nonce: number;
+}
+
+function assetPreviewStyle(asset: NonNullable<DesignKit['assets']>[number]): CSSProperties | undefined {
+  if (!asset.previewWidth || !asset.previewHeight) return undefined;
+  const scale = ASSET_PREVIEW_TARGET_WIDTH / asset.previewWidth;
+  return {
+    '--asset-preview-width': `${asset.previewWidth}px`,
+    '--asset-preview-height': `${asset.previewHeight}px`,
+    '--asset-preview-scale': String(scale),
+  } as CSSProperties;
 }
 
 // ── Logo with fallback chain ────────────────────────────────────────
@@ -1631,7 +1643,7 @@ function DesignKitViewInner({
                       }
                     }}
                   >
-                    <div className={styles.assetFrame}>
+                    <div className={styles.assetFrame} style={assetPreviewStyle(a)}>
                       <iframe
                         src={a.url}
                         loading="lazy"

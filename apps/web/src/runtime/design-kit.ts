@@ -94,12 +94,15 @@ export interface KitAsset {
   kind: string;
   label: string;
   url: string;
+  previewWidth?: number;
+  previewHeight?: number;
 }
 
 interface BrandDesignAsset {
   kind?: unknown;
   label?: unknown;
   href?: unknown;
+  viewport?: unknown;
   available?: unknown;
 }
 
@@ -154,6 +157,16 @@ function slugFromAssetLabel(label: string, href: string): string {
     .replace(/^-+|-+$/g, '') || 'asset';
 }
 
+function parseAssetViewport(viewport: unknown): Pick<KitAsset, 'previewWidth' | 'previewHeight'> | null {
+  if (typeof viewport !== 'string') return null;
+  const match = viewport.trim().match(/^(\d{3,5})x(\d{3,5})$/i);
+  if (!match) return null;
+  const previewWidth = Number(match[1]);
+  const previewHeight = Number(match[2]);
+  if (!Number.isFinite(previewWidth) || !Number.isFinite(previewHeight)) return null;
+  return { previewWidth, previewHeight };
+}
+
 function brandDesignAssets(
   brand: Brand,
   resolveAssetUrl: (rel: string) => string | null,
@@ -179,7 +192,12 @@ function brandDesignAssets(
       suffix += 1;
     }
     seen.add(kind);
-    out.push({ kind, label, url });
+    out.push({
+      kind,
+      label,
+      url,
+      ...(parseAssetViewport(item.viewport) ?? { previewWidth: 1280, previewHeight: 760 }),
+    });
   }
   return out.length > 0 ? out : null;
 }
