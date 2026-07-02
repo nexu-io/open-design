@@ -43,7 +43,17 @@ const PLUS_MENU_FLYOUT_MAX_HEIGHT = 320;
 export type PlusMenuPlacementPreference = 'auto' | 'down' | 'up';
 type PlusMenuFlyoutPlacement = 'right' | 'left' | 'contained';
 type PlusMenuFlyoutVerticalPlacement = 'down' | 'up';
-type PlusMenuSubmenu = 'connectors' | 'plugins' | 'skills' | 'mcp' | 'toolbox';
+export type PlusMenuSubmenu = 'connectors' | 'plugins' | 'skills' | 'mcp' | 'toolbox';
+
+// Analytics mapping for the submenu flyouts: which resource list each
+// submenu carries. `toolbox` is intentionally absent — the project composer
+// tracks it separately as `design_toolbox_open`.
+export const PLUS_SUBMENU_RESOURCE_KIND = {
+  connectors: 'connector',
+  plugins: 'plugin',
+  skills: 'skill',
+  mcp: 'mcp',
+} as const;
 type PlusMenuPopupStyle = CSSProperties & Record<'--plus-menu-flyout-max-height', string>;
 
 function getFlyoutBoundary(anchor: HTMLElement): Pick<DOMRect, 'left' | 'right'> {
@@ -204,6 +214,21 @@ export interface ComposerPlusMenuProps {
   onOpen?: () => void;
 
   /**
+   * Notified when a submenu flyout actually opens (the active submenu
+   * changes; repeated hovers over the same open row don't re-fire). Callers
+   * use it for analytics; `toolbox` is reported too, and the project
+   * composer filters it out because its panel tracks its own open.
+   */
+  onSubmenuOpen?: (submenu: PlusMenuSubmenu) => void;
+
+  /**
+   * Notified once per submenu-open session when the user starts typing in
+   * that flyout's search box. Carries which list was searched, never the
+   * query text.
+   */
+  onSearchUsed?: (submenu: 'plugins' | 'skills' | 'mcp') => void;
+
+  /**
    * Home opens below the trigger like Claude Design's project picker, while
    * the bottom project composer opens upward so it stays attached to the chat
    * bar. `auto` preserves the older viewport-driven fallback for tests and
@@ -277,6 +302,8 @@ export function ComposerPlusMenu({
   toolboxLabel,
   triggerTestId,
   onOpen,
+  onSubmenuOpen,
+  onSearchUsed,
   placementPreference = 'auto',
 }: ComposerPlusMenuProps) {
   const t = useT();
@@ -298,6 +325,8 @@ export function ComposerPlusMenu({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
   const submenuCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Whether onSearchUsed already fired for the current submenu-open session.
+  const searchUsedRef = useRef(false);
 
   // The plugin and MCP flyouts share one `query`, but it is scoped to whichever
   // submenu is open. Reset it whenever the active submenu changes so a stale
@@ -307,6 +336,7 @@ export function ComposerPlusMenu({
     setQuery('');
     setHoveredPluginId(null);
     setHoveredSkillId(null);
+    searchUsedRef.current = false;
   }, [submenu]);
 
   useEffect(() => () => {
@@ -410,7 +440,20 @@ export function ComposerPlusMenu({
   ) {
     cancelSubmenuClose();
     updateFlyoutGeometry(row, next);
+    if (submenu !== next) onSubmenuOpen?.(next);
     setSubmenu(next);
+  }
+
+  function handleQueryChange(value: string) {
+    if (
+      !searchUsedRef.current &&
+      value.trim() &&
+      (submenu === 'plugins' || submenu === 'skills' || submenu === 'mcp')
+    ) {
+      searchUsedRef.current = true;
+      onSearchUsed?.(submenu);
+    }
+    setQuery(value);
   }
 
   useEffect(() => {
@@ -721,7 +764,7 @@ export function ComposerPlusMenu({
                   <Icon name="search" size={13} />
                   <input
                     value={query}
-                    onChange={(event) => setQuery(event.target.value)}
+                    onChange={(event) => handleQueryChange(event.target.value)}
                     placeholder={t('entry.navPlugins')}
                     aria-label={t('entry.navPlugins')}
                   />
@@ -794,7 +837,7 @@ export function ComposerPlusMenu({
                     <Icon name="search" size={13} />
                     <input
                       value={query}
-                      onChange={(event) => setQuery(event.target.value)}
+                      onChange={(event) => handleQueryChange(event.target.value)}
                       placeholder={t('settings.skills')}
                       aria-label={t('settings.skills')}
                     />
@@ -848,7 +891,7 @@ export function ComposerPlusMenu({
               <Icon name="search" size={13} />
               <input
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => handleQueryChange(event.target.value)}
                 placeholder="MCP"
                 aria-label="MCP"
               />

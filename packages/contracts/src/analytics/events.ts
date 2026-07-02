@@ -1324,6 +1324,14 @@ export interface HomeChatComposerClickProps {
     | 'plus_menu_open'
     | 'plus_pick'
     | 'plus_add'
+    // A "+"-menu submenu flyout opened (hover or click) — the funnel head
+    // for "opened the list but picked nothing". `resource_kind` carries
+    // which list (connector / plugin / skill / mcp). The Design-toolbox row
+    // has its own `design_toolbox_open` and is excluded.
+    | 'plus_submenu_open'
+    // First keystroke in a submenu flyout's search box, once per open
+    // (`resource_kind`: plugin / skill / mcp). The query text is never sent.
+    | 'plus_search'
     // The "how to download a .fig" help row beside the "+" menu's Figma
     // import entry. Mirrors the chat_panel composer's `figma_help`.
     | 'figma_help'
@@ -1933,6 +1941,10 @@ export interface ComposerBarClickProps {
     | 'plus_menu_open'
     | 'plus_pick'
     | 'plus_add'
+    // A "+"-menu submenu flyout opened / first search keystroke in a flyout.
+    // Same semantics as the home composer's elements of the same names.
+    | 'plus_submenu_open'
+    | 'plus_search'
     // Opening the design-system picker from the "+" menu's Designs group
     // (programmatically clicks the composer DS trigger); the actual switch
     // stays `design_system_switch` below.
