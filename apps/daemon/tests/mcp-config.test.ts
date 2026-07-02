@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -438,6 +438,46 @@ describe('buildOpenCodeMcpConfigContent', () => {
       '/tmp/od-skills/*': 'allow',
       '/tmp/od-skills/**': 'allow',
     });
+  });
+
+  it('allowlists both the spawn-time and symlink-resolved spellings of a granted dir', async () => {
+    // Reproduces the macOS /var -> /private/var mismatch deterministically on
+    // every platform: the daemon spawns agents with the unresolved (symlink)
+    // path, but the child's process.cwd() reports the resolved physical path,
+    // so OpenCode's permission matching sees the resolved spelling at runtime.
+    // Both spellings must therefore carry allow rules.
+    const scratch = await mkdtemp(path.join(tmpdir(), 'od-opencode-allow-'));
+    try {
+      const realDir = path.join(scratch, 'real-project');
+      const linkDir = path.join(scratch, 'linked-project');
+      await mkdir(realDir);
+      await symlink(realDir, linkDir, process.platform === 'win32' ? 'junction' : 'dir');
+      // tmpdir() itself can sit behind a symlink (macOS): resolve the fixture
+      // paths so the expected keys are the true physical spellings.
+      const resolvedRealDir = await realpath(realDir);
+
+      const raw = buildOpenCodeMcpConfigContent(
+        [],
+        {},
+        { allowedDirectories: [linkDir] },
+      );
+
+      expect(raw).not.toBeNull();
+      const parsed = JSON.parse(raw as string) as {
+        permission?: { external_directory?: Record<string, string> };
+      };
+
+      expect(parsed.permission?.external_directory).toEqual({
+        [linkDir]: 'allow',
+        [`${linkDir}${path.sep}*`]: 'allow',
+        [`${linkDir}${path.sep}**`]: 'allow',
+        [resolvedRealDir]: 'allow',
+        [`${resolvedRealDir}${path.sep}*`]: 'allow',
+        [`${resolvedRealDir}${path.sep}**`]: 'allow',
+      });
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
   });
 
   it('merges MCP servers and granted external_directory rules into one payload', () => {
