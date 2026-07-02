@@ -55,11 +55,10 @@ export WEB_CLONE_SKILL_DIR="/absolute/path/to/skills/web-clone"
 
 ```bash
 export WEB_CLONE_ROOT="${WEB_CLONE_ROOT:-./website-clones}"
-export WEB_CLONE_PROJECT="$WEB_CLONE_ROOT/<站名>-clone"
-node "$WEB_CLONE_SKILL_DIR/scripts/init-clone.mjs" <站名> --url <原站URL>
+export WEB_CLONE_PROJECT="$(node "$WEB_CLONE_SKILL_DIR/scripts/init-clone.mjs" <站名> --url <原站URL>)"
 ```
 
-该脚本会创建 `$WEB_CLONE_PROJECT/`、`NOTES.md`、`RECON/screenshots/`，避免每次手工漏掉产物。后续步骤继续使用同一个 `WEB_CLONE_PROJECT`，确保默认路径和 `WEB_CLONE_ROOT` 自定义路径一致。
+该脚本会创建 `$WEB_CLONE_PROJECT/`、`NOTES.md`、`RECON/screenshots/`，避免每次手工漏掉产物。`WEB_CLONE_PROJECT` 必须来自脚本输出，因为 `init-clone.mjs` 会规范化站名（空格、大小写、URL、非 ASCII 等都会清洗成 slug）；后续步骤继续使用同一个 `WEB_CLONE_PROJECT`，确保实际创建路径、默认路径和 `WEB_CLONE_ROOT` 自定义路径一致。
 
 ### Step 1 · 先去 GitHub 搜源码，别急着抓站
 
