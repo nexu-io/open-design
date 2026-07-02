@@ -549,6 +549,7 @@
 .plugin-marketplace__expired-note {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   max-width: 760px;
   margin: -4px 0 16px;
@@ -559,6 +560,20 @@
   color: var(--text-muted);
   font-size: 12.5px;
   line-height: 1.4;
+}
+
+.plugin-marketplace__expired-note button,
+.plugin-marketplace__locked-panel button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
 }
 
 .plugin-marketplace__more {
@@ -894,6 +909,14 @@
   margin: 0;
   font-size: 13px;
   line-height: 1.55;
+}
+
+.plugin-marketplace__locked-panel button {
+  height: 34px;
+  padding-inline: 14px;
+  margin-top: 4px;
+  border-radius: 10px;
+  font-size: 12.5px;
 }
 
 .plugin-suite-detail {

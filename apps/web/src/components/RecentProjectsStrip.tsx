@@ -53,6 +53,7 @@ interface Props {
   canManageProjectCollection?: boolean;
   /** Demo-only: after Team expires, shared/team assets remain visible but locked. */
   workspaceExpired?: boolean;
+  onRenewWorkspace?: () => void;
 }
 
 type BrowseTab = 'projects' | 'design-systems' | 'templates';
@@ -204,6 +205,7 @@ export function RecentProjectsStrip({
   canAssignInviteRoles = true,
   canManageProjectCollection = true,
   workspaceExpired = false,
+  onRenewWorkspace,
 }: Props) {
   const t = useT();
   const [view, setView] = useState<'grid' | 'list'>('grid');
@@ -649,6 +651,11 @@ export function RecentProjectsStrip({
               ? '团队版已到期，团队项目保留但已锁定；Owner 续费后恢复进入和协作。'
               : '团队版已到期，最近项目里的共享项目已锁定；个人项目仍可打开和管理。'}
           </span>
+          {onRenewWorkspace ? (
+            <button type="button" onClick={onRenewWorkspace}>
+              续费恢复
+            </button>
+          ) : null}
         </div>
       ) : null}
       <div

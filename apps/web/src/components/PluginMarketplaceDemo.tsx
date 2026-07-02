@@ -48,6 +48,7 @@ type MarketplaceTryItem = ((PluginDemo | SkillDemo) & {
 type PluginMarketplaceDemoProps = {
   onTryPlugin?: (plugin: MarketplaceTryItem) => void;
   workspaceExpired?: boolean;
+  onRenewWorkspace?: () => void;
 };
 
 const PLUGIN_DEMOS: PluginDemo[] = [
@@ -448,7 +449,7 @@ function PluginLogo({ plugin }: { plugin: Pick<PluginDemo | SkillDemo, 'id' | 'n
   );
 }
 
-export function PluginMarketplaceDemo({ onTryPlugin, workspaceExpired = false }: PluginMarketplaceDemoProps = {}) {
+export function PluginMarketplaceDemo({ onTryPlugin, workspaceExpired = false, onRenewWorkspace }: PluginMarketplaceDemoProps = {}) {
   const [mode, setMode] = useState<MarketplaceMode>('plugins');
   const [source, setSource] = useState<PluginSource | 'All'>('Official');
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORY);
@@ -502,7 +503,14 @@ export function PluginMarketplaceDemo({ onTryPlugin, workspaceExpired = false }:
 
   if (detailPlugin) {
     if (isWorkspaceSourceLocked(detailPlugin)) {
-      return <MarketplaceLockedDetail title={detailPlugin.name} onBack={() => setDetailPlugin(null)} kind="专家套件" />;
+      return (
+        <MarketplaceLockedDetail
+          title={detailPlugin.name}
+          onBack={() => setDetailPlugin(null)}
+          onRenewWorkspace={onRenewWorkspace}
+          kind="专家套件"
+        />
+      );
     }
     return (
       <PluginSuiteDetail
@@ -530,7 +538,14 @@ export function PluginMarketplaceDemo({ onTryPlugin, workspaceExpired = false }:
 
   if (detailSkill) {
     if (isWorkspaceSourceLocked(detailSkill)) {
-      return <MarketplaceLockedDetail title={detailSkill.name} onBack={() => setDetailSkill(null)} kind="Skill" />;
+      return (
+        <MarketplaceLockedDetail
+          title={detailSkill.name}
+          onBack={() => setDetailSkill(null)}
+          onRenewWorkspace={onRenewWorkspace}
+          kind="Skill"
+        />
+      );
     }
     return (
       <SkillDetail
@@ -604,6 +619,11 @@ export function PluginMarketplaceDemo({ onTryPlugin, workspaceExpired = false }:
         <div className="plugin-marketplace__expired-note" role="status">
           <Icon name="lock" size={14} />
           <span>团队版已到期，团队来源的 Plugin 和 Skill 会保留但锁定；个人和官方能力仍可继续使用。</span>
+          {onRenewWorkspace ? (
+            <button type="button" onClick={onRenewWorkspace}>
+              续费恢复
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -956,10 +976,12 @@ function MarketplaceLockedDetail({
   title,
   kind,
   onBack,
+  onRenewWorkspace,
 }: {
   title: string;
   kind: string;
   onBack: () => void;
+  onRenewWorkspace?: () => void;
 }) {
   return (
     <section className="plugin-marketplace plugin-marketplace__locked-detail" aria-labelledby="marketplace-locked-title">
@@ -973,6 +995,11 @@ function MarketplaceLockedDetail({
         </span>
         <h1 id="marketplace-locked-title">{title} 已锁定</h1>
         <p>这个团队 {kind} 仍保留在原 Workspace 中，但团队版到期降级后不可打开或运行。Owner 续费后会恢复团队共享能力。</p>
+        {onRenewWorkspace ? (
+          <button type="button" onClick={onRenewWorkspace}>
+            续费恢复
+          </button>
+        ) : null}
       </div>
     </section>
   );

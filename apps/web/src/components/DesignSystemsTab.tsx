@@ -47,6 +47,7 @@ interface Props {
   onSystemsRefresh?: () => Promise<void> | void;
   templates?: ProjectTemplate[];
   workspaceExpired?: boolean;
+  onRenewWorkspace?: () => void;
 }
 
 const CATEGORY_ORDER = [
@@ -319,6 +320,7 @@ export function DesignSystemsTab({
   onOpenSystem,
   onSystemsRefresh,
   workspaceExpired = false,
+  onRenewWorkspace,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -876,6 +878,11 @@ export function DesignSystemsTab({
         <div className={styles.expiredNotice} role="status">
           <Icon name="lock" size={14} />
           <span>团队版已到期，团队共享的 Design System 会保留但锁定；你的个人 Design System 仍可继续编辑和使用。</span>
+          {onRenewWorkspace ? (
+            <button type="button" onClick={onRenewWorkspace}>
+              续费恢复
+            </button>
+          ) : null}
         </div>
       ) : null}
       <div className={styles.root} data-testid="design-systems-tab">
@@ -1012,6 +1019,11 @@ export function DesignSystemsTab({
           </span>
           <h2>团队设计系统已锁定</h2>
           <p>这些体系仍保留在原 Workspace 中，但到期降级后不可打开、编辑、设为默认或下载。Owner 续费后会恢复团队共享能力。</p>
+          {onRenewWorkspace ? (
+            <button type="button" onClick={onRenewWorkspace}>
+              续费恢复
+            </button>
+          ) : null}
         </div>
       );
     }

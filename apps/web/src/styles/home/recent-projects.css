@@ -567,6 +567,7 @@
 .recent-projects__expired-note {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   align-self: flex-start;
   max-width: 760px;
@@ -581,6 +582,18 @@
 .recent-projects__expired-note svg {
   flex: 0 0 auto;
   color: var(--text-soft);
+}
+.recent-projects__expired-note button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
 }
 .recent-projects__filter-wrap {
   position: relative;

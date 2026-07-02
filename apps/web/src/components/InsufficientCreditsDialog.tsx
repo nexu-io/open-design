@@ -56,6 +56,7 @@ interface Props {
   onBuyPack: (packLabel: string) => void;
   autoRechargeScope?: 'team' | 'member';
   autoRechargeMemberName?: string;
+  renewWorkspace?: boolean;
 }
 
 export function InsufficientCreditsDialog({
@@ -66,10 +67,12 @@ export function InsufficientCreditsDialog({
   onBuyPack,
   autoRechargeScope = 'team',
   autoRechargeMemberName = '李娜',
+  renewWorkspace = false,
 }: Props) {
   const targets = UPGRADE_TARGETS[plan];
   const isTopTier = targets.length === 0;
   const isMemberRecharge = autoRechargeScope === 'member';
+  const isWorkspaceRenewal = renewWorkspace && plan === 'team' && !isMemberRecharge;
 
   const [selectedTier, setSelectedTier] = useState<DemoPlan>(targets[0]?.plan ?? 'team');
   const [selectedLimit, setSelectedLimit] = useState<AutoRechargeLimit>('unlimited');
@@ -89,16 +92,47 @@ export function InsufficientCreditsDialog({
         <div className="credit-upgrade__badge" aria-hidden>
           <Icon name="sparkles" size={20} />
         </div>
-        <h2 className="credit-upgrade__title">{isTopTier ? '自动充值' : '积分已用尽'}</h2>
+        <h2 className="credit-upgrade__title">
+          {isWorkspaceRenewal ? '续费恢复团队版' : isTopTier ? '自动充值' : '积分已用尽'}
+        </h2>
         <p className="credit-upgrade__subtitle">
-          {isTopTier
+          {isWorkspaceRenewal
+            ? '当前 Workspace 已到期并降级为 Owner 的个人空间。完成续费后，团队成员、共享项目、Design System、Plugin 和 Skill 会恢复可进入状态。'
+            : isTopTier
             ? isMemberRecharge
               ? `为 ${autoRechargeMemberName} 单独开启额度。保存配置不会立即扣费；该成员余额低于阈值时才会自动补充。`
               : '默认为所有员工开启额度。保存配置不会立即扣费；团队余额低于阈值时才会自动补充。'
             : '继续使用需要更多积分。升级到更高版本可立即提升额度，费用按当前周期已使用天数补差价。'}
         </p>
 
-        {isTopTier ? (
+        {isWorkspaceRenewal ? (
+          <div className="credit-upgrade__auto">
+            <div className="credit-upgrade__payment">
+              <span>续费 Workspace</span>
+              <strong>Nexu 团队 · 团队版</strong>
+            </div>
+            <div className="credit-upgrade__payment">
+              <span>将使用订阅绑定的默认支付方式，可在付款前管理。</span>
+              <button
+                type="button"
+                className="credit-upgrade__payment-button"
+              >
+                <Icon name="external-link" size={14} /> 管理支付方式
+              </button>
+            </div>
+            <div className="credit-upgrade__auto-card">
+              <h3 className="credit-upgrade__section-title">续费确认</h3>
+              <div className="credit-upgrade__payment">
+                <span>套餐</span>
+                <strong>团队版 · ¥99/月/席（年付）</strong>
+              </div>
+              <div className="credit-upgrade__payment">
+                <span>恢复范围</span>
+                <strong>成员席位、团队额度和所有共享资产入口</strong>
+              </div>
+            </div>
+          </div>
+        ) : isTopTier ? (
           <div className="credit-upgrade__auto">
             <div className="credit-upgrade__payment">
               <span>作用范围</span>
@@ -185,7 +219,15 @@ export function InsufficientCreditsDialog({
           <button type="button" className="entry-invite__btn" onClick={onClose}>
             {isTopTier ? '返回' : '取消'}
           </button>
-          {isTopTier ? (
+          {isWorkspaceRenewal ? (
+            <button
+              type="button"
+              className="entry-invite__btn is-primary"
+              onClick={() => onBuyPack('团队版续费已完成')}
+            >
+              确认续费并恢复
+            </button>
+          ) : isTopTier ? (
             <button
               type="button"
               className="entry-invite__btn is-primary"

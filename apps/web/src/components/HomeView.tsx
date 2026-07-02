@@ -227,6 +227,7 @@ interface Props {
   demoScenario?: DemoScenario;
   demoUseMode?: DemoUseMode;
   workspaceExpired?: boolean;
+  onRenewWorkspace?: () => void;
 }
 
 const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
@@ -422,6 +423,7 @@ export function HomeView({
   demoScenario,
   demoUseMode = 'cloud',
   workspaceExpired = false,
+  onRenewWorkspace,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -2091,6 +2093,7 @@ export function HomeView({
         space="recent"
         collaborationEnabled={demoUseMode === 'cloud'}
         workspaceExpired={workspaceExpired}
+        onRenewWorkspace={onRenewWorkspace}
         {...(projectsLoading !== undefined ? { loading: projectsLoading } : {})}
         onOpen={(id) => {
           // P0 ui_click area=recent_projects element=project_card — emit

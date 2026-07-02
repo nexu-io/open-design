@@ -532,6 +532,11 @@ export function EntryShell({
     window.setTimeout(() => setCelebrate(false), 2600);
     window.setTimeout(() => setDemoToast(null), 3200);
   }
+  function openWorkspaceRenewal() {
+    setAutoRechargeTarget({ kind: 'team' });
+    setDemoPlan('team');
+    setLowCreditsOpen(true);
+  }
   const isNewUser = demoScenario === 'onboarding-new';
   // Single-seat plans (免费版 / 个人版) drive solo behaviors: one team, only
   // the owner in the member list, and invite → upgrade gating.
@@ -1047,12 +1052,19 @@ export function EntryShell({
           fireCelebration('升级生效，额度已提升');
         }}
         onBuyPack={(packLabel) => {
+          const wasWorkspaceRenewal = workspaceExpired && autoRechargeTarget?.kind !== 'member';
           setLowCreditsOpen(false);
           setAutoRechargeTarget(null);
+          if (wasWorkspaceRenewal) {
+            setDemoWorkspaceLifecycle('active');
+            fireCelebration('续费成功，团队 Workspace 已恢复');
+            return;
+          }
           fireCelebration(packLabel.includes('自动充值') ? packLabel : `${packLabel}已到账，额度已提升`);
         }}
         autoRechargeScope={autoRechargeTarget?.kind ?? 'team'}
         autoRechargeMemberName={autoRechargeTarget?.kind === 'member' ? autoRechargeTarget.name : undefined}
+        renewWorkspace={workspaceExpired && autoRechargeTarget?.kind !== 'member'}
       />
       <InviteAcceptanceFlow
         open={inviteFlowOpen}
@@ -1211,6 +1223,7 @@ export function EntryShell({
                 demoScenario={demoScenario}
                 demoUseMode={demoUseMode}
                 workspaceExpired={workspaceExpired}
+                onRenewWorkspace={openWorkspaceRenewal}
               />
             </div>
             <div data-testid="entry-view-projects" data-active={view === 'projects' ? 'true' : 'false'} {...inactiveViewProps(view === 'projects')}>
@@ -1245,7 +1258,7 @@ export function EntryShell({
               />
             </div>
             <div data-testid="entry-view-plugins" data-active={view === 'plugins' ? 'true' : 'false'} {...inactiveViewProps(view === 'plugins')}>
-              <PluginMarketplaceDemo onTryPlugin={tryMarketplacePlugin} workspaceExpired={workspaceExpired} />
+              <PluginMarketplaceDemo onTryPlugin={tryMarketplacePlugin} workspaceExpired={workspaceExpired} onRenewWorkspace={openWorkspaceRenewal} />
             </div>
             <div data-testid="entry-view-community" data-active={view === 'community' ? 'true' : 'false'} {...inactiveViewProps(view === 'community')}>
               <CommunityView
@@ -1302,6 +1315,7 @@ export function EntryShell({
                   canAssignInviteRoles={canManageWorkspace}
                   canManageProjectCollection={canEditTeamProjects}
                   workspaceExpired={workspaceExpired}
+                  onRenewWorkspace={openWorkspaceRenewal}
                 />
               )}
             </div>
@@ -1319,13 +1333,16 @@ export function EntryShell({
                 onAutoRecharge={(target) => {
                   setAutoRechargeTarget(target);
                   setDemoPlan('team');
-                  setDemoWorkspaceLifecycle('active');
                   setLowCreditsOpen(true);
                 }}
               />
             </div>
             <div data-testid="entry-view-workspace-settings" data-active={view === 'workspace-settings' ? 'true' : 'false'} {...inactiveViewProps(view === 'workspace-settings')}>
-              <WorkspaceSettingsView hasActiveSubscription={demoPlan === 'team' && !workspaceExpired} workspaceExpired={workspaceExpired} />
+              <WorkspaceSettingsView
+                hasActiveSubscription={demoPlan === 'team' && !workspaceExpired}
+                workspaceExpired={workspaceExpired}
+                onRenewWorkspace={openWorkspaceRenewal}
+              />
             </div>
             <div data-testid="entry-view-design-systems" data-active={view === 'design-systems' ? 'true' : 'false'} {...inactiveViewProps(view === 'design-systems')}>
               {designSystemsLoading ? (
@@ -1340,6 +1357,7 @@ export function EntryShell({
                     onOpenSystem={onOpenDesignSystem}
                     onSystemsRefresh={onDesignSystemsRefresh}
                     workspaceExpired={workspaceExpired}
+                    onRenewWorkspace={openWorkspaceRenewal}
                   />
                 </div>
               ) : (
@@ -1353,6 +1371,7 @@ export function EntryShell({
                     onOpenSystem={onOpenDesignSystem}
                     onSystemsRefresh={onDesignSystemsRefresh}
                     workspaceExpired={workspaceExpired}
+                    onRenewWorkspace={openWorkspaceRenewal}
                   />
                 </div>
               )}
@@ -1374,7 +1393,7 @@ export function EntryShell({
               />
             </div>
             <div data-testid="entry-view-integrations" data-active={view === 'integrations' ? 'true' : 'false'} {...inactiveViewProps(view === 'integrations')}>
-              <PluginMarketplaceDemo onTryPlugin={tryMarketplacePlugin} workspaceExpired={workspaceExpired} />
+              <PluginMarketplaceDemo onTryPlugin={tryMarketplacePlugin} workspaceExpired={workspaceExpired} onRenewWorkspace={openWorkspaceRenewal} />
             </div>
           </div>
         </main>

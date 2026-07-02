@@ -5,9 +5,10 @@ type WorkspaceSettingsViewProps = {
   hasActiveSubscription?: boolean;
   workspaceExpired?: boolean;
   workspaceCount?: number;
+  onRenewWorkspace?: () => void;
 };
 
-export function WorkspaceSettingsView({ hasActiveSubscription = false, workspaceExpired = false, workspaceCount = 1 }: WorkspaceSettingsViewProps) {
+export function WorkspaceSettingsView({ hasActiveSubscription = false, workspaceExpired = false, workspaceCount = 1, onRenewWorkspace }: WorkspaceSettingsViewProps) {
   const [workspaceName, setWorkspaceName] = useState('Nexu 团队');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteText, setDeleteText] = useState('');
@@ -53,10 +54,7 @@ export function WorkspaceSettingsView({ hasActiveSubscription = false, workspace
           <button
             type="button"
             className="workspace-settings__secondary-btn"
-            onClick={() => {
-              setToast('Demo：进入续费充值流程后，团队资产将恢复可进入状态');
-              window.setTimeout(() => setToast(null), 2600);
-            }}
+            onClick={onRenewWorkspace}
           >
             续费恢复
           </button>
@@ -197,8 +195,7 @@ export function WorkspaceSettingsView({ hasActiveSubscription = false, workspace
                       className="workspace-settings__danger-btn"
                       onClick={() => {
                         setConfirmingDelete(false);
-                        setToast('Demo：请先续费恢复团队版，再管理 Workspace 生命周期');
-                        window.setTimeout(() => setToast(null), 2600);
+                        onRenewWorkspace?.();
                       }}
                     >
                       续费恢复
