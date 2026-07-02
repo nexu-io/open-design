@@ -2695,6 +2695,9 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       continue;
     }
     if (ev.kind === "tool_use") {
+      // Sidechain (subagent-internal) tool calls are represented by their
+      // parent TaskCard; rendering them inline would read as main-agent work.
+      if (ev.parentToolUseId) continue;
       const result = resultByToolId.get(ev.id);
       const item: ToolItem = result ? { use: ev, result } : { use: ev };
       const last = out[out.length - 1];

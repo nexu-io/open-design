@@ -36,10 +36,10 @@ od:
 
 1. **Intake** — 활성 `design-systems/<brand>/DESIGN.md` Read. 보이스·금지어·카테고리·CTA·면책 내부 확인. 요청 원문 기록.
 2. **Interview** — `<question-form>` 아티팩트로만 (AskUserQuestion·인라인폼 금지). 축: 주제(필수)·타겟 독자·카테고리(브랜드 DESIGN.md가 정의하면 그 목록)·타겟 키워드(롱테일, 선택)·톤. ※ 썸네일/이미지 질문 없음.
-3. **Research(경량)** — WebSearch로 사실·1차 출처 수집. 브랜드 출처 정책 준수(예: 네이버 블로그/카페/지식iN 금지). 라이브 SERP 도구 없음.
-4. **Plan/brief + 컨펌 게이트** — 기획(제목+롱테일 키워드 첫15자 배치, 섹션 heading+요지, 타겟 키워드, sources, CTA 매핑, 카테고리)을 마크다운 카드로 제시 → `<question-form>` 컨펌/반려 → 컨펌 시 `brief.md`를 **프로젝트 cwd에 Write**(기본정보/인터뷰결정/기획/출처/SEO).
+3. **Research(서브에이전트)** — dispatch 도구 있으면 **반드시** 분리: `references/research-subagent.md` Read 후 그 지시대로 리서치 서브에이전트에 위임(입력: 주제·키워드·독자·DESIGN.md 경로·cwd). 서브에이전트가 WebSearch로 1차 출처 수집 → `research.md`를 cwd에 Write → 핵심 사실 ≤10줄만 반환(SERP 덤프는 research.md에 격리). dispatch 불가 런타임은 같은 절차 인라인(산출물 계약 동일). 브랜드 출처 정책 준수(예: 네이버 블로그/카페/지식iN 금지). 라이브 SERP 도구 없음.
+4. **Plan/brief + 컨펌 게이트** — 기획(제목+롱테일 키워드 첫15자 배치, 섹션 heading+요지, 타겟 키워드, sources(research.md 참조), CTA 매핑, 카테고리)을 마크다운 카드로 제시 → `<question-form>` 컨펌/반려 → 컨펌 시 `brief.md`를 **프로젝트 cwd에 Write**(기본정보/인터뷰결정/기획/출처/SEO).
 5. **Produce** — `craft/naver-blog-html.md` + 활성 DESIGN.md Read 후 `<slug>.html`을 **cwd에 Write**. 슬러그 정규식 `[^a-z0-9가-힣]+`(가-힣 보존). 네이버 SmartEditor 페이스트용 HTML.
-6. **Self-review** — craft 13 HTML룰 + SEO 5항목 자가채점 + 브랜드 anti-pattern + 팩트체크(본문 수치·기관을 sources와 대조; 1차 매핑 실패 시 정성 완화). 점수 게이트 ≥80 발행 / 60~79 수정 / <60 재기획. P0 발견 시 수정 후 재확인.
-7. **Handoff** — 파일 경로 보고 + "네이버 에디터 붙여넣기 후 수동 30초"(Ctrl+A → 나눔고딕 13pt → 헤딩 인용구2) 안내. 발행 후 순위확인은 수동.
+6. **Review(서브에이전트 검수)** — dispatch 도구 있으면 **반드시** 신선한 컨텍스트 검수자에게 위임: `references/review-subagent.md` Read 후 지시대로(검수자가 craft·DESIGN.md·brief.md·research.md·`<slug>.html` 직접 Read). 검수자는 **report-only** — craft 13 HTML룰 + SEO 5항목 + 브랜드 anti-pattern + 팩트체크(research.md 대조) 채점표와 P0/P1 목록만 반환. 수정은 메인이 반영 후 재검수 1회. 게이트 ≥80 발행 / 60~79 수정 / <60 재기획 — 재검수 후에도 <80이면 사용자 보고·판단 위임. dispatch 불가 시 인라인 자가검수(같은 채점표).
+7. **Handoff** — 파일 경로 보고 + 안내. 미리보기 툴바 **"네이버용 서식 복사"** 버튼이 나눔고딕 13px·인용구2 제목바·표 서식을 블록별 인라인으로 박아 클립보드에 담으므로 네이버 에디터에 **그대로 붙여넣기만** 하면 된다(수동 Ctrl+A→나눔고딕 13pt 불필요). 리치 복사 미지원 환경 폴백: "붙여넣기 후 수동 30초"(Ctrl+A → 나눔고딕 13pt → 헤딩 인용구2). 발행 후 순위확인은 수동.
 
 > 인터뷰·컨펌은 전부 제네릭 `<question-form>` → Questions 탭 → 다음 user 메시지로 답 회수. 신규 폼 배선 없음.

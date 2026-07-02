@@ -2687,6 +2687,10 @@ export interface Dict {
   'fileViewer.screenshotClipboardDenied': string;
   'fileViewer.screenshotPreviewLoading': string;
   'fileViewer.screenshotCaptureFailed': string;
+  'fileViewer.copyForNaver': string;
+  'fileViewer.copyForNaverDone': string;
+  'fileViewer.copyForNaverFailed': string;
+  'fileViewer.copyCode': string;
   'fileViewer.exportPdf': string;
   'fileViewer.exportPdfAllSlides': string;
   'fileViewer.exportPptxBusy': string;
@@ -2887,6 +2891,7 @@ export interface Dict {
   'tool.grep': string;
   'tool.fetch': string;
   'tool.search': string;
+  'tool.task': string;
   'tool.lines': string;
   'tool.changeSingular': string;
   'tool.changePlural': string;

@@ -80,6 +80,8 @@ import {
   type ImageExportFormat,
 } from '../runtime/exports';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
+import { isNaverBlogHtml, copyNaverStyledHtml } from '../runtime/naver-clipboard';
+import { isBrazeIamHtml } from '../runtime/braze-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { shouldConsumeSlideNav } from '../runtime/slide-nav';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
@@ -4975,6 +4977,7 @@ function HtmlViewer({
   const imageExportSnapshotDataUrlRef = useRef<string | null>(null);
   const imageExportPrepareIdRef = useRef(0);
   const screenshotInFlightRef = useRef(false);
+  const naverCopyInFlightRef = useRef(false);
   const [exportToast, setExportToast] = useState<
     { message: string; tone: 'default' | 'success' | 'error' | 'loading' } | null
   >(null);
@@ -7364,6 +7367,57 @@ function HtmlViewer({
     }
   }, [captureExportImageSnapshot, t]);
 
+  // 네이버 블로그 산출물(나눔고딕 + 인용구2 마커)일 때만 "네이버용 서식 복사" 노출.
+  const isNaverPost = useMemo(
+    () => typeof source === 'string' && isNaverBlogHtml(source),
+    [source],
+  );
+
+  // 미리보기 HTML 을 블록별 인라인 나눔고딕 13px 로 변환해 리치(text/html) 클립보드에 복사 —
+  // 네이버 에디터 붙여넣기 후 수동 Ctrl+A→나눔고딕 13pt 단계를 없앤다.
+  const handleCopyNaverStyled = useCallback(async () => {
+    if (naverCopyInFlightRef.current || typeof source !== 'string') return;
+    naverCopyInFlightRef.current = true;
+    try {
+      const result = await copyNaverStyledHtml(source);
+      setExportToast(
+        result === 'copied'
+          ? { message: t('fileViewer.copyForNaverDone'), tone: 'success' }
+          : {
+              message: t(
+                result === 'denied'
+                  ? 'fileViewer.screenshotClipboardDenied'
+                  : 'fileViewer.copyForNaverFailed',
+              ),
+              tone: 'error',
+            },
+      );
+    } catch (err) {
+      console.warn('[handleCopyNaverStyled] failed:', err);
+      setExportToast({ message: t('fileViewer.copyForNaverFailed'), tone: 'error' });
+    } finally {
+      naverCopyInFlightRef.current = false;
+    }
+  }, [source, t]);
+
+  // Braze Custom-HTML IAM 산출물(brazeBridge 마커)일 때만 "소스 복사" 노출.
+  const isBrazePost = useMemo(
+    () => typeof source === 'string' && isBrazeIamHtml(source),
+    [source],
+  );
+
+  // raw HTML 소스를 평문으로 클립보드에 복사 — Braze 대시보드 Custom HTML 에디터에
+  // 코드 그대로 붙여넣기 위함. 변환 없이 원본 그대로.
+  const handleCopyBrazeSource = useCallback(async () => {
+    if (typeof source !== 'string') return;
+    const ok = await copyToClipboard(source);
+    setExportToast(
+      ok
+        ? { message: t('fileViewer.copied'), tone: 'success' }
+        : { message: t('fileViewer.copyForNaverFailed'), tone: 'error' },
+    );
+  }, [source, t]);
+
   const prepareImageExportBlob = useCallback(async (format: ImageExportFormat) => {
     const prepareId = imageExportPrepareIdRef.current + 1;
     imageExportPrepareIdRef.current = prepareId;
@@ -8079,6 +8133,34 @@ function HtmlViewer({
                   onClick={handleCopyScreenshot}
                 >
                   <RemixIcon name="screenshot-2-line" size={15} />
+                </button>
+              ) : null}
+              {isNaverPost && mode === 'preview' ? (
+                <button
+                  type="button"
+                  className="viewer-action viewer-action-icon od-tooltip"
+                  data-testid="copy-for-naver-button"
+                  data-tooltip={t('fileViewer.copyForNaver')}
+                  data-tooltip-placement="bottom"
+                  title={t('fileViewer.copyForNaver')}
+                  aria-label={t('fileViewer.copyForNaver')}
+                  onClick={handleCopyNaverStyled}
+                >
+                  <RemixIcon name="clipboard-line" size={15} />
+                </button>
+              ) : null}
+              {isBrazePost && mode === 'preview' ? (
+                <button
+                  type="button"
+                  className="viewer-action viewer-action-icon od-tooltip"
+                  data-testid="copy-braze-source-button"
+                  data-tooltip={t('fileViewer.copyCode')}
+                  data-tooltip-placement="bottom"
+                  title={t('fileViewer.copyCode')}
+                  aria-label={t('fileViewer.copyCode')}
+                  onClick={handleCopyBrazeSource}
+                >
+                  <RemixIcon name="code-line" size={15} />
                 </button>
               ) : null}
               <div className="artifact-tool-menu-anchor">

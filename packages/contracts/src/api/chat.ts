@@ -396,8 +396,8 @@ export type PersistedAgentEvent =
       refreshedSourceCount?: number;
       error?: string;
     }
-  | { kind: 'tool_use'; id: string; name: string; input: unknown }
-  | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  | { kind: 'tool_use'; id: string; name: string; input: unknown; parentToolUseId?: string }
+  | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean; parentToolUseId?: string }
   | {
       kind: 'plugin_candidate';
       candidateId: string;

@@ -86,7 +86,16 @@ export type DaemonAgentPayload =
   | { type: 'thinking_start' }
   | LiveArtifactSsePayload
   | LiveArtifactRefreshSsePayload
-  | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | {
+      type: 'tool_use';
+      id: string;
+      name: string;
+      input: unknown;
+      /** Present when this tool call happened inside a subagent (sidechain);
+       *  value is the parent Task tool_use id. UI renders sidechain activity
+       *  distinctly (or hides it) instead of mixing it into the main flow. */
+      parentToolUseId?: string;
+    }
   /**
    * Live-only incremental tool-input fragment, emitted while the model is still
    * streaming a tool call's JSON arguments (Claude `input_json_delta`). `delta`
@@ -98,7 +107,7 @@ export type DaemonAgentPayload =
    * `daemonAgentPayloadToPersistedAgentEvent`.
    */
   | { type: 'tool_input_delta'; id: string; name: string; delta: string }
-  | { type: 'tool_result'; toolUseId: string; content: string; isError?: boolean }
+  | { type: 'tool_result'; toolUseId: string; content: string; isError?: boolean; parentToolUseId?: string }
   | { type: 'usage'; usage?: { input_tokens?: number; output_tokens?: number }; costUsd?: number; durationMs?: number }
   | { type: 'fabricated_role_marker'; marker: string; messageId?: string }
   | { type: 'raw'; line: string };

@@ -1973,6 +1973,96 @@ describe('streamViaDaemon', () => {
     expect(statusLabels).not.toContain('waiting_for_first_output');
     expect(statusLabels).not.toContain('tool_call_update');
   });
+
+  // Regression for the live SSE mapper: parentToolUseId marks a tool call as
+  // subagent-internal (sidechain) so AssistantMessage.buildBlocks can hide it
+  // from the main transcript. The mapper used to rebuild tool_use/tool_result
+  // events field-by-field and silently dropped this optional field, so
+  // sidechain tool calls leaked into the main transcript as visible cards.
+  it('preserves parentToolUseId on tool_use events so sidechain calls can be hidden', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          'event: agent\ndata: {"type":"tool_use","id":"x","name":"WebSearch","input":{},"parentToolUseId":"toolu_parent"}\n\n' +
+            'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        ),
+      ));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onAgentEvent).toHaveBeenCalledWith({
+      kind: 'tool_use',
+      id: 'x',
+      name: 'WebSearch',
+      input: {},
+      parentToolUseId: 'toolu_parent',
+    });
+  });
+
+  it('preserves parentToolUseId on tool_result events so sidechain calls can be hidden', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          'event: agent\ndata: {"type":"tool_result","toolUseId":"x","content":"c","isError":false,"parentToolUseId":"toolu_parent"}\n\n' +
+            'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        ),
+      ));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onAgentEvent).toHaveBeenCalledWith({
+      kind: 'tool_result',
+      toolUseId: 'x',
+      content: 'c',
+      isError: false,
+      parentToolUseId: 'toolu_parent',
+    });
+  });
+
+  it('omits parentToolUseId on tool_use/tool_result events when the daemon does not send it', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(
+        sseResponse(
+          'event: agent\ndata: {"type":"tool_use","id":"x","name":"WebSearch","input":{}}\n\n' +
+            'event: agent\ndata: {"type":"tool_result","toolUseId":"x","content":"c","isError":false}\n\n' +
+            'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        ),
+      ));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const toolEvents = handlers.onAgentEvent.mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.kind === 'tool_use' || event.kind === 'tool_result');
+    expect(toolEvents).toHaveLength(2);
+    for (const event of toolEvents) {
+      expect(event).not.toHaveProperty('parentToolUseId');
+    }
+  });
 });
 
 describe('streamMessageOpenAI', () => {

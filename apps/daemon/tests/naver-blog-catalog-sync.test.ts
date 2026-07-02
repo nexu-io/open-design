@@ -21,6 +21,8 @@ const SHARED = [
   'example.html',
   'references/blog-structure.md',
   'references/worked-example.md',
+  'references/research-subagent.md',
+  'references/review-subagent.md',
 ];
 
 describe('naver-blog catalog mirror is in sync', () => {

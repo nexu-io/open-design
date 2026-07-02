@@ -1,5 +1,18 @@
 # Decisions Log
 
+## 2026-07-02 — naver-blog 리서치·검수 서브에이전트 분리 (설계+플랜 완료, 구현 0/6)
+- A안(스킬 지시문 레벨, child Claude Code Task tool 활용) 채택. C안(daemon 파이프라인 스테이지 실행기, `pipeline.stages` 승격)는 규모 초과로 별도 스펙 분리 — 근거: `docs/superpowers/specs/2026-07-02-naver-blog-subagent-stages-design.md`
+- daemon 사이드체인 가드(`claude-stream.ts`의 `parent_tool_use_id` 미처리 → 서브에이전트 `stop_reason: end_turn`이 메인 turn 종료로 오인돼 stdin 조기 close)를 스킬 개정의 필수 선행으로 결정 — 검증 없이 배포하면 서브에이전트 dispatch가 run을 죽일 위험
+- 검수 서브에이전트는 report-only, 수정은 메인이 반영 후 재검수 1회 — 수정자=검수자면 객관성 약화
+- 비-claude 런타임은 인라인 fallback(산출물 계약 동일: research.md 포맷·채점표 포맷) — 서브에이전트(Task tool)는 claude 계열 CLI만 지원
+- 플랜: `docs/superpowers/plans/2026-07-02-naver-blog-subagent-stages.md` (6태스크, 커밋 `49fbe02fb`)
+
+## 2026-07-02 — M-AX → OD 하드포크 전략 반전 (같은 날 번복)
+- 당초 결정(같은 날 앞선 세션): "OD는 레퍼런스/콘텐츠 광산만, 제품은 별도 레포 `~/Project/Marketing-AX`(electron-vite) 재구축, 하드포크 안 함"
+- 번복: **M-AX가 제대로 동작하지 않아 OD 하드포크 기반 리팩토링이 더 수월하다고 판단** — OD가 제품 베이스로 전환
+- 근거: M-AX(단계형 워크플로우 UX, 132커밋·B2 도그푸딩)가 동작 불량. OD는 무겁지만(1,855 TS 파일, 멀티 CLI 25종) 이미 돌아가는 daemon/stream/preview 인프라 보유 — 깎아내는 게 새로 짓기보다 빠르다는 판단
+- 하드포크 세부(포크 시점·레포 위치·upstream 정책·deweight 범위)는 미정 — 착수 전 확인 필요. 상세: 메모리 `od-vs-marketing-ax-strategy.md`
+
 ## 2026-06-26 — P1 (startChatRun 정리) = `shouldRunReview()` 명명 헬퍼 (SDD+TDD, 정찰 선행)
 - 정찰(p1-recon 워크플로 5에이전트): P1 구조적 의도는 **상류 머지로 이미 ~90% 충족**. prompt-builder closure = `composeDaemonSystemPrompt`(명명 async, server.ts:7561)로 상류 `3fb849d04`(2026-04-30)서 추출 — 스펙(6/22)보다 앞섬. lockstep 3곳은 `critiqueShouldRun` 단일소스로 이미 수렴(상류 Critique Theater Phase 5 `bb2015766a` 2026-05-07). 스펙 line번호(7925/7984/9995)·"shouldRunReview()"는 stale/개념명칭 (출처: git blame + 5병렬 정찰)
 - 사용자 결정(AskUserQuestion) = **잔여만 구현**(close-as-done도 god-function 공략도 아님). 잔여 = 인라인 5항 eligibility를 순수 명명 헬퍼로 추출(스펙 문구 "명명 헬퍼/단일 수렴" 선언적 충족)

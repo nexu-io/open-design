@@ -53,10 +53,17 @@ export function createClaudeStreamHandler(
 
   // Per-content-block scratch, keyed by `${messageId}:${blockIndex}`.
   const blocks = new Map<string, BlockState>();
-  // Tool uses already emitted from streamed `input_json_delta` data.
-  // Claude Code still repeats them in the final assistant wrapper, often with
-  // empty `{}` inputs, so we suppress that duplicate emission.
-  const streamedToolUseIds = new Set<string>();
+  // Ids of main-line tool_use events already emitted via `emitToolUse`.
+  // Claude Code can repeat the same tool_use block across the streamed
+  // `content_block_stop` path AND the final assistant wrapper, and — observed
+  // live with CLI 2.1.198 plus the daemon's stream flags — can also re-send
+  // the assistant wrapper itself carrying the same id twice (most visibly for
+  // Task/Agent dispatches, which showed up in the UI as a duplicate pair
+  // collapsing into a "호출 중 ×2" group pill instead of the single
+  // TaskCard). Dedupe is enforced once, centrally, inside `emitToolUse` so
+  // every call site (streamed and wrapper) is covered no matter how many
+  // times the id resurfaces.
+  const emittedToolUseIds = new Set<string>();
   // Most recent assistant message id so content_block_* events without an id
   // can be attributed correctly.
   let currentMessageId: string | null = null;
@@ -173,6 +180,12 @@ export function createClaudeStreamHandler(
 
   function emitToolUse(id: unknown, name: unknown, input: unknown): void {
     if (emitCanonicalTaskSnapshot(id, name, input)) return;
+    // Idempotent per id: see `emittedToolUseIds` above for why the CLI can
+    // drive this function more than once for the same dispatch.
+    if (typeof id === 'string') {
+      if (emittedToolUseIds.has(id)) return;
+      emittedToolUseIds.add(id);
+    }
     if (isFileWriteToolUse(name, input)) {
       suppressNextArtifactText = true;
       const content = fileWriteContent(input);
@@ -377,6 +390,21 @@ export function createClaudeStreamHandler(
   function handleObject(obj: unknown) {
     if (!isRecord(obj)) return;
 
+    // Sidechain guard. Claude Code emits subagent-internal traffic in the
+    // parent stream tagged with a top-level `parent_tool_use_id`. Those
+    // lines must not drive main-line state: a subagent's final
+    // `stop_reason: end_turn` would emit `turn_end` and close stream-json
+    // stdin mid-run, and sidechain text would feed the artifact parser.
+    // Surface only tagged tool activity so the UI can tell it apart.
+    const parentToolUseId =
+      typeof obj.parent_tool_use_id === 'string' && obj.parent_tool_use_id.length > 0
+        ? obj.parent_tool_use_id
+        : null;
+    if (parentToolUseId) {
+      handleSidechainLine(obj, parentToolUseId);
+      return;
+    }
+
     if (obj.type === 'system' && obj.subtype === 'init') {
       onEvent({
         type: 'status',
@@ -423,10 +451,9 @@ export function createClaudeStreamHandler(
       for (const block of obj.message.content) {
         if (!isRecord(block)) continue;
         if (block.type === 'tool_use') {
-          if (typeof block.id === 'string' && streamedToolUseIds.has(block.id)) {
-            streamedToolUseIds.delete(block.id);
-            continue;
-          }
+          // `emitToolUse` is idempotent per id, so a repeated wrapper (or one
+          // that follows an already-streamed content_block_stop) is a no-op
+          // rather than a duplicate emission.
           emitToolUse(block.id, block.name, block.input ?? null);
         } else if (
           !textAlreadyStreamed &&
@@ -506,6 +533,44 @@ export function createClaudeStreamHandler(
     return parts.join('\n').trim();
   }
 
+  // Subagent-internal lines: emit only tagged tool activity. Text, thinking,
+  // status, and stop_reason signals from the sidechain are intentionally
+  // dropped — the Task tool_result on the main line already carries the
+  // subagent's final answer. Bypasses emitToolUse on purpose: the artifact
+  // duplicate-suppression bookkeeping there tracks MAIN-line Write contents.
+  function handleSidechainLine(obj: Record<string, unknown>, parentToolUseId: string) {
+    if (obj.type === 'assistant' && isRecord(obj.message) && Array.isArray(obj.message.content)) {
+      for (const block of obj.message.content) {
+        if (!isRecord(block)) continue;
+        if (block.type === 'tool_use' && typeof block.id === 'string' && typeof block.name === 'string') {
+          onEvent({
+            type: 'tool_use',
+            id: block.id,
+            name: block.name,
+            input: block.input ?? null,
+            parentToolUseId,
+          });
+        }
+      }
+      return;
+    }
+    if (obj.type === 'user' && isRecord(obj.message) && Array.isArray(obj.message.content)) {
+      for (const block of obj.message.content) {
+        if (!isRecord(block)) continue;
+        if (block.type === 'tool_result') {
+          onEvent({
+            type: 'tool_result',
+            toolUseId: block.tool_use_id,
+            content: stringifyToolResult(block.content),
+            isError: Boolean(block.is_error),
+            parentToolUseId,
+          });
+        }
+      }
+    }
+    // stream_event / system / result lines from the sidechain: drop.
+  }
+
   function handleStreamEvent(ev: Record<string, unknown>) {
     if (ev.type === 'message_start') {
       flushPendingArtifactText();
@@ -574,7 +639,6 @@ export function createClaudeStreamHandler(
       if (state && state.type === 'tool_use' && typeof state.id === 'string' && state.input.trim()) {
         try {
           emitToolUse(state.id, state.name, JSON.parse(state.input));
-          streamedToolUseIds.add(state.id);
         } catch {
           // Fall through to the final assistant wrapper's input if the
           // streamed JSON is malformed or incomplete.
@@ -586,7 +650,6 @@ export function createClaudeStreamHandler(
         state.inputValue !== undefined
       ) {
         emitToolUse(state.id, state.name, state.inputValue);
-        streamedToolUseIds.add(state.id);
       }
       blocks.delete(key);
       return;
