@@ -229,19 +229,99 @@ a { color: inherit; text-decoration: none; }
 .list-clean li::before { content: ""; position: absolute; left: 0; top: 9px; width: 9px; height: 9px; background: var(--accent); }
 .list-clean li strong { color: var(--fg); }
 
+/* Palette + type scale */
+.token-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 24px; margin-bottom: 64px; }
+.swatch-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.swatch-card { padding: 14px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--elev-raised); }
+.swatch-chip { height: 88px; margin-bottom: 12px; border: 1px solid var(--border); }
+.swatch-meta { display: grid; gap: 5px; }
+.swatch-meta strong { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.swatch-meta span { color: var(--fg-2); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; }
+.scale-card { padding: 20px 22px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--tm-shadow-hard); }
+.scale-list { display: grid; gap: 16px; }
+.scale-row { padding-bottom: 14px; border-bottom: 1px solid var(--border-soft); }
+.scale-row:last-child { padding-bottom: 0; border-bottom: none; }
+.scale-kicker { display: block; margin-bottom: 8px; color: var(--muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; }
+.scale-display { display: block; }
+.scale-display.display { font-size: clamp(2.2rem, 4vw, 4.2rem); line-height: 0.96; letter-spacing: -0.04em; font-weight: 700; text-transform: uppercase; }
+.scale-display.section { font-size: 26px; line-height: 1.1; letter-spacing: -0.03em; font-weight: 700; text-transform: uppercase; }
+.scale-display.body { font-size: 15px; line-height: 1.65; font-weight: 400; color: var(--fg-2); }
+.scale-display.mono { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+
 @media (max-width: 980px) {
+    .token-grid { grid-template-columns: 1fr; }
     .pricing-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
     .container { width: min(100% - 24px, var(--container-max)); }
     .section { padding: var(--section-y-phone) 0; }
     .feature-3col { grid-template-columns: 1fr; }
+    .swatch-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
 <body>
 
 <div class="container" style="padding-top: 48px; padding-bottom: 48px;">
+
+    <!-- PALETTE + TYPE SCALE -->
+    <div class="section-head">
+        <p class="eyebrow">Tokens</p>
+        <h2>Palette & <span class="title-highlight">Type Scale</span></h2>
+        <p>Neutral canvas, one vermillion accent, zero-radius geometry, and a Geist-led hierarchy that keeps the system sharp and technical.</p>
+    </div>
+    <div class="token-grid">
+        <div class="swatch-grid">
+            <article class="swatch-card">
+                <div class="swatch-chip" style="background:#fafafa;"></div>
+                <div class="swatch-meta">
+                    <strong>Canvas</strong>
+                    <span>#fafafa / neutral page background</span>
+                </div>
+            </article>
+            <article class="swatch-card">
+                <div class="swatch-chip" style="background:#ffffff;"></div>
+                <div class="swatch-meta">
+                    <strong>Surface</strong>
+                    <span>#ffffff / cards and panels</span>
+                </div>
+            </article>
+            <article class="swatch-card">
+                <div class="swatch-chip" style="background:#27272a;"></div>
+                <div class="swatch-meta">
+                    <strong>Ink</strong>
+                    <span>#27272a / primary text and dark actions</span>
+                </div>
+            </article>
+            <article class="swatch-card">
+                <div class="swatch-chip" style="background:#ff5a00;"></div>
+                <div class="swatch-meta">
+                    <strong>Accent</strong>
+                    <span>#ff5a00 / single vermillion highlight</span>
+                </div>
+            </article>
+        </div>
+        <aside class="scale-card">
+            <div class="scale-list">
+                <div class="scale-row">
+                    <span class="scale-kicker">Display / Geist Sans / 700</span>
+                    <span class="scale-display display">Tom Modern</span>
+                </div>
+                <div class="scale-row">
+                    <span class="scale-kicker">Section / Geist Sans / Uppercase</span>
+                    <span class="scale-display section">Structured Editorial-Technical</span>
+                </div>
+                <div class="scale-row">
+                    <span class="scale-kicker">Body / Geist Sans / 400</span>
+                    <span class="scale-display body">A restrained system with hard borders, controlled rhythm, and a single accent used only where emphasis matters.</span>
+                </div>
+                <div class="scale-row">
+                    <span class="scale-kicker">Mono / Geist Mono</span>
+                    <span class="scale-display mono">labels / metadata / technical notes</span>
+                </div>
+            </div>
+        </aside>
+    </div>
 
     <!-- BUTTONS -->
     <div class="section-head">
