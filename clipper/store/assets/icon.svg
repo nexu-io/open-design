@@ -1,0 +1,18 @@
+<svg width="93" height="93" viewBox="0 0 93 93" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Open Design squircle brand mark -->
+  <path d="M93 46.19c0 40.35-6.15 46.5-46.5 46.5C6.15 92.69 0 86.54 0 46.19 0 5.84 6.15-.31 46.5-.31 86.85-.31 93 5.84 93 46.19Z" fill="#202020"/>
+  <path fill-rule="evenodd" clip-rule="evenodd" d="M46.38 17.5c15.85 0 28.7 12.85 28.7 28.7 0 15.85-12.85 28.7-28.7 28.7H21.5a3.82 3.82 0 0 1-3.82-3.82V46.19c0-15.85 12.85-28.7 28.7-28.7Zm0 5.74c-12.68 0-22.96 10.28-22.96 22.96 0 12.68 10.28 22.96 22.96 22.96 12.68 0 22.96-10.28 22.96-22.96 0-12.68-10.28-22.96-22.96-22.96Z" fill="#fff"/>
+  <path d="M44.59 59.66 35.84 36.64a.94.94 0 0 1 1.18-1.19l23.04 8.91c.95.37.69 1.78-.33 1.78H46.36v13.19c0 1.03-1.41 1.29-1.77.33Z" fill="#fff"/>
+
+  <!-- Capture accent badge (bottom-right): ember disc + camera glyph.
+       Halo ring in the squircle color separates the badge from the white mark. -->
+  <circle cx="70.5" cy="70.5" r="22.5" fill="#202020"/>
+  <circle cx="70.5" cy="70.5" r="18" fill="#c96442"/>
+  <g fill="#fff">
+    <rect x="59.5" y="65.8" width="22" height="13.4" rx="3.1"/>
+    <rect x="64.6" y="62.6" width="7.2" height="4.2" rx="1.3"/>
+  </g>
+  <circle cx="70.5" cy="72.7" r="4.2" fill="#c96442"/>
+  <circle cx="70.5" cy="72.7" r="1.7" fill="#fff"/>
+  <circle cx="77.6" cy="69" r="1.15" fill="#c96442"/>
+</svg>

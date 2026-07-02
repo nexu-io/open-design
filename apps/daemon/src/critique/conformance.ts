@@ -1,7 +1,7 @@
 /**
  * Adapter conformance harness (Phase 10).
  *
- * The plan asks the nightly cycle to feed every production adapter the
+ * The plan asks the prerelease cycle to feed every production adapter the
  * same 10 brief templates and classify each run as `shipped`, `degraded`,
  * or `failed`. The harness sits one level below that schedule: it knows
  * how to take an `AsyncIterable<string>` (everything a real adapter
@@ -88,7 +88,7 @@ export type ConformanceOutcome =
       /**
        * Artifact bytes the parser handed back via the `onArtifact`
        * callback for the SHIP event. Callers that want to pin
-       * MIME / byte-length / hash on the nightly cycle read this
+       * MIME / byte-length / hash on the prerelease cycle read this
        * directly. Always set on `shipped` because the parser rejects
        * a missing-artifact SHIP with `MissingArtifactError` upstream
        * (lefarcen P2 on PR #1317: previously captured-but-never-

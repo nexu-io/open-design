@@ -271,7 +271,7 @@ CLA は求めません。Apache-2.0 でカバーされます。あなたのコ�
 tl;dr：良い PR を出し、丁寧にレビューし、[Discussions][discussions] / [Discord][discord] に顔を出していれば、あとは自然と道が開けます。
 
 [discussions]: https://github.com/nexu-io/open-design/discussions
-[discord]: https://discord.gg/qhbcCH8Am4
+[discord]: https://discord.gg/mHAjSMV6gz
 
 ---
 

@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { ensureRailOpen } from '@/playwright/rail';
+import { expect, test } from '@/playwright/suite';
+import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import type { Locator, Page, Response } from '@playwright/test';
 import { applyStandardMocks } from '@/playwright/mock-factory';
 
@@ -109,7 +109,13 @@ test('[P0] workspace tab launcher creates a Browser tab on the reference board h
   await page.getByTestId('workspace-add-tab').click();
   await expect(page.getByTestId('tab-launcher-menu')).toBeVisible();
   await expect(page.getByTestId('tab-launcher-search')).toBeFocused();
-  await page.getByRole('button', { name: /New Browser/i }).click();
+  // Scope to the launcher menu: the reference-board home now also renders a
+  // "New Browser" empty-state CTA (design-files-empty-open-browser), so an
+  // unscoped /New Browser/i matches two buttons.
+  await page
+    .getByTestId('tab-launcher-menu')
+    .getByRole('button', { name: /New Browser/i })
+    .click();
 
   const browserTab = page.getByTestId('file-workspace').getByRole('tab', { name: /^Browser\b/i });
   await expect(browserTab).toBeVisible();
@@ -451,10 +457,7 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openNewProjectModal(page: Page) {
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModalFromProjects(page);
 }
 
 async function expectProjectsView(page: Page) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { recoverHtmlArtifactFromPrecedingDocument, recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument } from '../../src/artifacts/recover';
+import { recoverHtmlArtifactFromPrecedingDocument, recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument, resolvePersistedArtifactHtml } from '../../src/artifacts/recover';
 
 const completeHtml = '<!doctype html><html><head><title>Demo</title></head><body><main><h1>Recovered artifact</h1></main></body></html>';
 
@@ -80,6 +80,36 @@ describe('recoverStandaloneHtmlDocument', () => {
 
   it('does not recover document-shaped output missing a closing html tag', () => {
     expect(recoverStandaloneHtmlDocument('<!doctype html><html><body><main><h1>Missing close</h1></main></body>')).toBeNull();
+  });
+});
+
+describe('resolvePersistedArtifactHtml', () => {
+  // The persist path and the same-turn dedup lookup MUST resolve to the same
+  // document, or the lookup compares a prose summary against the real file and
+  // the duplicate slips through (#4318).
+  it('resolves to the recovered document for a prose-only artifact', () => {
+    const sourceText = `${completeHtml}\n<artifact identifier="demo" type="text/html">summary only</artifact>`;
+    expect(resolvePersistedArtifactHtml({
+      artifactHtml: 'summary only',
+      identifier: 'demo',
+      sourceText,
+    })).toBe(completeHtml);
+  });
+
+  it('resolves to the artifact body when it is already a complete document', () => {
+    expect(resolvePersistedArtifactHtml({
+      artifactHtml: completeHtml,
+      identifier: 'demo',
+      sourceText: `${completeHtml}\n<artifact identifier="demo">ignored</artifact>`,
+    })).toBe(completeHtml);
+  });
+
+  it('resolves to the artifact body when there is no recoverable preceding document', () => {
+    expect(resolvePersistedArtifactHtml({
+      artifactHtml: 'summary only',
+      identifier: 'demo',
+      sourceText: `${completeHtml}\nThis is an explanation.\n<artifact identifier="demo">summary only</artifact>`,
+    })).toBe('summary only');
   });
 });
 

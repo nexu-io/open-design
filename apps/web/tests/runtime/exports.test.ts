@@ -7,19 +7,267 @@ import {
   buildDesignManifestContent,
   downloadImageDataUrl,
   buildSandboxedPreviewDocument,
+  downloadDesignSystemArchive,
+  downloadProjectArchive,
   exportAsImage,
   exportAsMd,
   exportAsPdf,
+  isUsablePrintSize,
+  reportPrintSizeWhenStable,
   exportProjectAsHtml,
   exportProjectAsPdf,
+  exportProjectAsPptx,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
+  planDeckImageCapture,
   requestPreviewSnapshot,
+  sourceLooksLikeExportableDeck,
 } from '../../src/runtime/exports';
+
+describe('planDeckImageCapture (#4604 current-slide capture for runtime decks)', () => {
+  it('whole-deck capture renders off-screen with no index (stitch all)', () => {
+    expect(planDeckImageCapture({ deck: true, wholeDeck: true, trackedActive: 3 })).toEqual({
+      useOffscreen: true,
+      index: undefined,
+    });
+  });
+
+  it('Export-as-image of an ordinary page renders the whole page off-screen', () => {
+    expect(planDeckImageCapture({ deck: false, wholeDeck: true, trackedActive: null })).toEqual({
+      useOffscreen: true,
+      index: undefined,
+    });
+  });
+
+  it('current-view capture of an ordinary page stays viewport-based (host snapshot)', () => {
+    // Copy screenshot / captureViewport annotation must reflect what the user is
+    // looking at, NOT an off-screen full-page render of the whole document.
+    expect(planDeckImageCapture({ deck: false, wholeDeck: false, trackedActive: null })).toEqual({
+      useOffscreen: false,
+      index: undefined,
+    });
+  });
+
+  it('tracked deck current-slide renders off-screen at the active index', () => {
+    expect(planDeckImageCapture({ deck: true, wholeDeck: false, trackedActive: 4 })).toEqual({
+      useOffscreen: true,
+      index: 4,
+    });
+  });
+
+  it('runtime-managed deck (no tracked active) skips off-screen → host snapshot, NOT index 0', () => {
+    // The viewer doesn't track a deck-stage / data-screen-label deck's active
+    // slide, so a current-slide capture must use the visible host snapshot rather
+    // than off-screen-rendering slide 0.
+    expect(planDeckImageCapture({ deck: true, wholeDeck: false, trackedActive: null })).toEqual({
+      useOffscreen: false,
+      index: undefined,
+    });
+  });
+});
 
 function mockResponse(headers: Record<string, string>): Response {
   return { headers: new Headers(headers) } as Response;
 }
+
+describe('sourceLooksLikeExportableDeck (#4604 horizontal deck export)', () => {
+  // Runtime-managed decks (`<deck-stage>` web component with slotted
+  // `<section data-screen-label>` children) carry NO literal class="slide", so
+  // the viewer's `.slide`-only nav heuristic misses them and export would force a
+  // single page-mode capture of slide 1. This broader signal recognizes them so
+  // image/PDF capture every slide.
+  it('detects a <deck-stage> runtime deck (no class="slide")', () => {
+    const src =
+      '<deck-stage width="1920" height="1080">' +
+      '<section class="s-cover" data-screen-label="01 Cover">A</section>' +
+      '<section class="s-grid" data-screen-label="02 Grid">B</section>' +
+      '</deck-stage>';
+    expect(sourceLooksLikeExportableDeck(src)).toBe(true);
+  });
+
+  it('detects data-screen-label slide surfaces on their own', () => {
+    expect(
+      sourceLooksLikeExportableDeck('<section data-screen-label="01 Intro">x</section>'),
+    ).toBe(true);
+  });
+
+  it('detects explicit deck slide classes, but not plain .slide', () => {
+    expect(sourceLooksLikeExportableDeck('<div class="slide">x</div>')).toBe(false);
+    expect(sourceLooksLikeExportableDeck('<section class="slide">x</section>')).toBe(false);
+    expect(sourceLooksLikeExportableDeck('<div class="s-cover deck-slide">x</div>')).toBe(true);
+    expect(sourceLooksLikeExportableDeck('<div class="ppt-slide">x</div>')).toBe(true);
+  });
+
+  it('detects legacy html-ppt slide structure without treating every .slide as a deck', () => {
+    expect(
+      sourceLooksLikeExportableDeck('<section class="slide" data-title="Cover">x</section>'),
+    ).toBe(true);
+    expect(
+      sourceLooksLikeExportableDeck('<section data-title="Cover" class="slide is-active">x</section>'),
+    ).toBe(true);
+    expect(
+      sourceLooksLikeExportableDeck('<div class="deck"><section class="slide">x</section></div>'),
+    ).toBe(true);
+  });
+
+  it('does NOT treat an ordinary page as a deck', () => {
+    expect(
+      sourceLooksLikeExportableDeck('<main><h1>Landing</h1><p>Hello</p></main>'),
+    ).toBe(false);
+    // `slideshow` is not a `slide` class token.
+    expect(sourceLooksLikeExportableDeck('<div class="slideshow">x</div>')).toBe(false);
+  });
+
+  it('returns false for empty / nullish source', () => {
+    expect(sourceLooksLikeExportableDeck('')).toBe(false);
+    expect(sourceLooksLikeExportableDeck(null)).toBe(false);
+    expect(sourceLooksLikeExportableDeck(undefined)).toBe(false);
+  });
+});
+
+describe('isUsablePrintSize (#4458)', () => {
+  // The print-ready handshake reports the artifact's own content size so the
+  // desktop bridge can size the PDF page to it. When that size is zero or
+  // invalid, the desktop path falls back to measuring the wrapper viewport,
+  // which (per inferPageSize's own docs) blanks artifacts whose visible
+  // content sits below the fold. Gating on a usable size prevents that.
+  it('treats positive finite dimensions as usable', () => {
+    expect(isUsablePrintSize(1440, 2000)).toBe(true);
+    expect(isUsablePrintSize(1, 1)).toBe(true);
+  });
+
+  it('rejects zero, negative, non-finite, or non-number dimensions', () => {
+    expect(isUsablePrintSize(0, 2000)).toBe(false);
+    expect(isUsablePrintSize(1440, 0)).toBe(false);
+    expect(isUsablePrintSize(-5, 100)).toBe(false);
+    expect(isUsablePrintSize(Number.NaN, 100)).toBe(false);
+    expect(isUsablePrintSize(Number.POSITIVE_INFINITY, 100)).toBe(false);
+    expect(isUsablePrintSize('1440' as unknown as number, 2000)).toBe(false);
+    expect(isUsablePrintSize(undefined as unknown as number, undefined as unknown as number)).toBe(false);
+  });
+});
+
+describe('reportPrintSizeWhenStable (#4458)', () => {
+  it('reports only once the content has a usable size, polling animation frames', () => {
+    // Simulate content that has not finished layout: size is 0 for the first
+    // frames, then becomes positive once laid out. The handshake must not
+    // report the early zero size (which would blank the PDF).
+    const sizes = [
+      { width: 0, height: 0 },
+      { width: 0, height: 0 },
+      { width: 1440, height: 2000 },
+    ];
+    let call = 0;
+    const measure = (): { width: number; height: number } => sizes[Math.min(call++, sizes.length - 1)]!;
+    const reported: Array<{ width: number; height: number }> = [];
+    const raf = (cb: () => void): void => cb(); // run synchronously
+    reportPrintSizeWhenStable(measure, (s) => reported.push(s), 30, raf);
+    expect(reported).toEqual([{ width: 1440, height: 2000 }]);
+  });
+
+  it('reports the last measured size when frames are exhausted (genuinely empty content)', () => {
+    // A truly empty artifact never gains a usable size; rather than hang
+    // forever, report best-effort after the frame budget so the desktop
+    // path is not left waiting on the readiness handshake indefinitely.
+    const measure = (): { width: number; height: number } => ({ width: 0, height: 0 });
+    const reported: Array<{ width: number; height: number }> = [];
+    const raf = (cb: () => void): void => cb();
+    reportPrintSizeWhenStable(measure, (s) => reported.push(s), 3, raf);
+    expect(reported).toEqual([{ width: 0, height: 0 }]);
+  });
+});
+
+describe('injected print-ready parent cache script — runtime behavior (#4458)', () => {
+  // Issue #4458 calls out that the existing coverage only proves script
+  // *strings* are injected, never that the injected script *behaves*. These
+  // specs extract the real parent-cache <script> from a live export, run it,
+  // and drive it with postMessage to assert the runtime size gate: a usable
+  // size is cached for the desktop inferPageSize(); a zero or non-finite size
+  // is rejected so it cannot blank the page (viewport fallback) or poison it.
+  async function extractCacheScript(): Promise<{ body: string; nonce: string }> {
+    const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({ host: { pdf: { print: printPdfMock } } });
+    try {
+      await exportAsPdf('<div style="height:4000px">tall artifact</div>', 'Cache Eval');
+    } finally {
+      restoreHost();
+    }
+    const htmlArg = printPdfMock.mock.calls[0]![0] as string;
+    const match = /<script>(window\.__odPrintReady=false;[\s\S]*?)<\/script>/.exec(htmlArg);
+    if (!match) throw new Error('parent cache script not found in exported HTML');
+    const body = match[1]!;
+    const nonceMatch = /nonce===['"]([^'"]+)['"]/.exec(body);
+    if (!nonceMatch) throw new Error('nonce not found in parent cache script');
+    return { body, nonce: nonceMatch[1]! };
+  }
+
+  // This suite runs in the node environment (no DOM), so we drive the real
+  // injected script against a minimal fake `window`: a plain object with a
+  // message-listener registry. The script wires its handler through
+  // `window.addEventListener('message', …)`, so dispatching a message means
+  // invoking the registered handler with a `{ data, source }` event — exactly
+  // what a real `postMessage` delivers, including the source-identity check.
+  type FakeWindow = Record<string, unknown> & {
+    __odPrintReady?: unknown;
+    __odPrintSize?: unknown;
+  };
+
+  function loadCache(body: string): { win: FakeWindow; fire: (event: unknown) => void } {
+    const handlers: Array<(event: unknown) => void> = [];
+    const win: FakeWindow = {
+      addEventListener: (type: string, fn: (event: unknown) => void) => {
+        if (type === 'message') handlers.push(fn);
+      },
+      removeEventListener: () => undefined,
+    };
+    win.frames = [win];
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
+    new Function('window', body)(win);
+    return { win, fire: (event) => handlers.slice().forEach((h) => h(event)) };
+  }
+
+  function readyEvent(
+    nonce: string,
+    width: unknown,
+    height: unknown,
+    source: unknown,
+  ): { data: unknown; source: unknown } {
+    return { data: { type: 'OD_PRINT_READY', nonce, width, height }, source };
+  }
+
+  it('caches a usable content size so the desktop bridge sizes the page to the artifact', async () => {
+    const { body, nonce } = await extractCacheScript();
+    const { win, fire } = loadCache(body);
+    fire(readyEvent(nonce, 1440, 2000, win));
+    expect(win.__odPrintReady).toBe(true);
+    expect(win.__odPrintSize).toEqual({ width: 1440, height: 2000 });
+  });
+
+  it('rejects a zero size so the page does not fall back to the wrapper viewport and blank', async () => {
+    const { body, nonce } = await extractCacheScript();
+    const { win, fire } = loadCache(body);
+    fire(readyEvent(nonce, 0, 0, win));
+    // Readiness still resolves (so the desktop bridge never hangs), but the
+    // size is withheld so inferPageSize cannot adopt a blank wrapper viewport.
+    expect(win.__odPrintReady).toBe(true);
+    expect(win.__odPrintSize).toBeNull();
+  });
+
+  it('rejects a non-finite size so Infinity cannot poison the page size', async () => {
+    const { body, nonce } = await extractCacheScript();
+    const { win, fire } = loadCache(body);
+    fire(readyEvent(nonce, Number.POSITIVE_INFINITY, 100, win));
+    expect(win.__odPrintSize).toBeNull();
+  });
+
+  it('ignores a print-ready message carrying the wrong nonce (anti-spoof)', async () => {
+    const { body } = await extractCacheScript();
+    const { win, fire } = loadCache(body);
+    fire(readyEvent('not-the-real-nonce', 1440, 2000, win));
+    expect(win.__odPrintReady).toBe(false);
+    expect(win.__odPrintSize).toBeNull();
+  });
+});
 
 describe('archiveRootFromFilePath', () => {
   it('returns the top-level directory name when present', () => {
@@ -324,6 +572,243 @@ describe('exportProjectAsHtml', () => {
   });
 });
 
+describe('binary project/design-system downloads', () => {
+  let capturedBlob: Blob | undefined;
+  let capturedFilename: string | undefined;
+
+  beforeEach(() => {
+    capturedBlob = undefined;
+    capturedFilename = undefined;
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob: Blob) => {
+        capturedBlob = blob;
+        return 'blob:test';
+      },
+      revokeObjectURL: () => {},
+    });
+    vi.stubGlobal('document', {
+      createElement: () => {
+        const anchor = { href: '', click: () => {} } as { href: string; download?: string; click: () => void };
+        Object.defineProperty(anchor, 'download', {
+          set(value: string) {
+            capturedFilename = value;
+          },
+          get() {
+            return capturedFilename ?? '';
+          },
+        });
+        return anchor;
+      },
+      body: { appendChild: () => {}, removeChild: () => {} },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('POSTs to the pptx export route and downloads the returned bytes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('PK-fake-pptx', { status: 200 })),
+    );
+
+    const res = await exportProjectAsPptx({ projectId: 'proj 1', fileName: 'decks/pitch.html' });
+
+    expect(res.ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/pptx', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fileName: 'decks/pitch.html', deck: true }),
+    });
+    expect(capturedFilename).toBe('pitch.pptx');
+    expect(await capturedBlob!.text()).toBe('PK-fake-pptx');
+  });
+
+  it('requests editable PPTX when the caller selects native shapes and text', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('PK-editable-pptx', { status: 200 })),
+    );
+
+    const res = await exportProjectAsPptx({
+      projectId: 'proj 1',
+      fileName: 'decks/pitch.html',
+      editable: true,
+    });
+
+    expect(res.ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/pptx', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fileName: 'decks/pitch.html', deck: true, editable: true }),
+    });
+    expect(capturedFilename).toBe('pitch.pptx');
+    expect(await capturedBlob!.text()).toBe('PK-editable-pptx');
+  });
+
+  it('honors the server UTF-8 Content-Disposition filename over the local fallback', async () => {
+    // Production always returns a Content-Disposition (title/RFC-5987 based); the
+    // happy-path test above only exercises the no-header fallback. This pins the
+    // branch the download actually uses in the desktop runtime.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('PK-fake-pptx', {
+            status: 200,
+            headers: {
+              'content-disposition':
+                "attachment; filename=\"Caf_ Deck __.pptx\"; filename*=UTF-8''Caf%C3%A9%20Deck%20%E7%AE%80%E6%8A%A5.pptx",
+            },
+          }),
+      ),
+    );
+
+    const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'decks/pitch.html', title: 'Café Deck 简报' });
+
+    expect(res.ok).toBe(true);
+    expect(capturedFilename).toBe('Café Deck 简报.pptx');
+  });
+
+  it('routes pdf format to the raster pdf-image endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('%PDF-fake', { status: 200 })));
+
+    await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html', format: 'pdf' });
+
+    expect(fetch).toHaveBeenCalledWith('/api/projects/p/export/pdf-image', expect.anything());
+    expect(capturedFilename).toBe('deck.pdf');
+  });
+
+  it('reports 501 (no off-screen renderer) as unavailable, not a semantic error', async () => {
+    // The caller may fall back to the vector/browser PDF only on genuine
+    // unavailability — so 501 must surface as `unavailable`, with no error.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: { message: 'desktop only' } }), { status: 501 })),
+    );
+
+    const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html' });
+
+    expect(res).toEqual({ ok: false, unavailable: true });
+  });
+
+  it('surfaces a semantic failure (non-501) as an error, not unavailable', async () => {
+    // A bad-deck 422 / renderer 502 must NOT be masked as "fall back to vector";
+    // it carries the daemon message so the caller can surface it.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: { message: 'this artifact is not a slide deck' } }), { status: 422 })),
+    );
+
+    const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html' });
+
+    expect(res).toEqual({ ok: false, error: 'this artifact is not a slide deck' });
+  });
+
+  it('treats a transport failure as unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+
+    const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html' });
+
+    expect(res).toEqual({ ok: false, unavailable: true });
+  });
+
+  it('a post-response failure (renderer already produced bytes) is an error, not unavailable', async () => {
+    // The 200 came back — a failure reading the body / triggering the download
+    // must NOT be reported as `unavailable`, or the caller silently downgrades to
+    // the lower-fidelity vector PDF instead of surfacing the failure.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        blob: async () => {
+          throw new Error('corrupt response body');
+        },
+      })),
+    );
+
+    const res = await exportProjectAsPptx({ projectId: 'p', fileName: 'deck.html', format: 'pdf' });
+
+    expect(res).toEqual({ ok: false, error: 'corrupt response body' });
+  });
+
+  it('fetches the design-system archive endpoint and downloads the daemon-named zip', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('PKzip-bytes', {
+      status: 200,
+      headers: {
+        'content-type': 'application/zip',
+        'content-disposition': "attachment; filename=\"Acme.zip\"; filename*=UTF-8''Acme.zip",
+      },
+    })));
+
+    const ok = await downloadDesignSystemArchive({
+      designSystemId: 'user:acme brand',
+      fallbackTitle: 'Acme Brand',
+    });
+
+    expect(ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/design-systems/user%3Aacme%20brand/archive');
+    expect(capturedFilename).toBe('Acme.zip');
+    expect(await capturedBlob!.text()).toContain('zip-bytes');
+  });
+
+  it('returns false and does not download when the request fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('not found', { status: 404 })));
+
+    const ok = await downloadDesignSystemArchive({
+      designSystemId: 'user:missing',
+      fallbackTitle: 'Missing',
+    });
+
+    expect(ok).toBe(false);
+    expect(capturedBlob).toBeUndefined();
+  });
+
+  it('downloads the backing project archive with the daemon filename', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('project-zip', {
+      status: 200,
+      headers: {
+        'content-type': 'application/zip',
+        'content-disposition': "attachment; filename=\"Project.zip\"; filename*=UTF-8''Project.zip",
+      },
+    })));
+
+    const ok = await downloadProjectArchive({
+      projectId: 'project 123',
+      fallbackTitle: 'Fallback Project',
+    });
+
+    expect(ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/projects/project%20123/archive');
+    expect(capturedFilename).toBe('Project.zip');
+    expect(await capturedBlob!.text()).toContain('project-zip');
+  });
+
+  it('passes an optional root when downloading a project subfolder archive', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('folder-zip', {
+      status: 200,
+      headers: {
+        'content-type': 'application/zip',
+      },
+    })));
+
+    const ok = await downloadProjectArchive({
+      projectId: 'project-1',
+      fallbackTitle: 'Fallback Project',
+      root: '/system/',
+    });
+
+    expect(ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/projects/project-1/archive?root=system');
+    expect(capturedFilename).toBe('system.zip');
+  });
+});
+
 // `exportAsMd` is a pass-through (the file body is the artifact source
 // verbatim, only the extension and Content-Type flip). Tests exercise it
 // end-to-end by stubbing the few DOM globals `triggerDownload` touches —
@@ -503,6 +988,24 @@ describe('sandboxed preview Blob exports', () => {
     expect(wrapper).toContain('page-break-after: always;');
   });
 
+  it('waits for the injected print-ready cache before calling window.print() in the browser fallback', async () => {
+    await exportAsPdf('<div><img src="https://example.com/slow.png" alt="slow"/></div>', 'Ready PDF');
+
+    expect(capturedBlob).toBeDefined();
+    const wrapper = await capturedBlob!.text();
+    expect(wrapper).toContain('__odPrintReady');
+    expect(wrapper).toContain('__odPrintReadyStarted');
+    expect(wrapper).toContain("window.__odPrintReady===true");
+    expect(wrapper).toContain("window.__odPrintReadyStarted===false");
+    expect(wrapper).toContain("e.data.type==='OD_PRINT_READY'");
+    expect(wrapper).toContain("e.data.type==='OD_PRINT_READY_STARTED'");
+    expect(wrapper).toContain('window.addEventListener(\'message\'');
+    expect(wrapper).toContain('document.fonts');
+    expect(wrapper).toContain('waitForCssBackgroundImages');
+    expect(wrapper).toContain("setTimeout(doPrint,300)");
+    expect(wrapper).toContain('window.print()');
+  });
+
   it('allows explicit trusted PDF opt-out without changing the secure default', async () => {
     await exportAsPdf('<main>Trusted local document</main>', 'Trusted PDF', {
       sandboxedPreview: false,
@@ -515,6 +1018,8 @@ describe('sandboxed preview Blob exports', () => {
     const doc = await capturedBlob!.text();
     expect(doc).not.toContain('sandbox="allow-scripts allow-modals"');
     expect(doc).toContain('<main>Trusted local document</main>');
+    expect(doc).toContain('__odPrintReady');
+    expect(doc).toContain("window.__odPrintReady===true");
   });
 
   it('shows an alert and revokes the blob URL when the popup is blocked', async () => {
@@ -600,6 +1105,8 @@ describe('sandboxed preview Blob exports', () => {
     // In the sandboxed wrapper the srcdoc attribute is HTML-escaped, so the
     // handshake script content is present as unescaped JS fragments.
     expect(htmlArg).toContain('document.images');
+    expect(htmlArg).toContain("img.loading==='lazy'");
+    expect(htmlArg).toContain("img.loading='eager'");
     expect(htmlArg).toContain("img.addEventListener('load'");
     expect(htmlArg).toContain("img.addEventListener('error'");
     expect(htmlArg).toContain('img.complete');
@@ -647,17 +1154,25 @@ describe('sandboxed preview Blob exports', () => {
     expect(htmlArg).toContain('document.documentElement');
     expect(htmlArg).toContain('scrollHeight');
     expect(htmlArg).toContain('offsetHeight');
-    // ...and it ships the size alongside the readiness signal.
-    expect(htmlArg).toContain('width:w');
-    expect(htmlArg).toContain('height:h');
+    // ...and it ships that size to the parent, but only once the content has a
+    // usable (non-zero) size, by driving the measurement through
+    // reportPrintSizeWhenStable. The polling/gating behavior itself is covered
+    // by the reportPrintSizeWhenStable unit tests above (real-logic behavior
+    // assertions, not string presence); here we assert the handshake is wired
+    // to it so a heavier artifact that lays out late is not reported at size 0,
+    // which would blank the PDF (#4458).
+    expect(htmlArg).toContain('reportPrintSizeWhenStable');
+    expect(htmlArg).toContain('width:size.width');
+    expect(htmlArg).toContain('height:size.height');
     // The parent wrapper caches the reported size for inferPageSize() to read,
-    // validating it as a positive finite number so a malformed/oversized message
+    // gating it through isUsablePrintSize so a malformed/oversized message
     // cannot poison the page size. The finite check matters: `Infinity > 0` is
     // true, so a bare `typeof === 'number'` guard would cache a non-finite
-    // dimension and let it leak into the page size.
+    // dimension and let it leak into the page size. (isUsablePrintSize's own
+    // boundary behavior is covered by its unit tests above.)
     expect(htmlArg).toContain('window.__odPrintSize');
-    expect(htmlArg).toContain('Number.isFinite(e.data.width)');
-    expect(htmlArg).toContain('Number.isFinite(e.data.height)');
+    expect(htmlArg).toContain('__odUsable(e.data.width,e.data.height)');
+    expect(htmlArg).toContain('Number.isFinite(width)');
   });
 
   it('injects the readiness cache for non-sandboxed desktop exports too', async () => {

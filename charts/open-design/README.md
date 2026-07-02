@@ -58,7 +58,7 @@ This chart adheres to strict security defaults:
 | Name               | Description                               | Value                        |
 | ------------------ | ----------------------------------------- | ---------------------------- |
 | `commonLabels`     | Custom labels injected into all resources | `{app.kubernetes.io/environment: production}`  |
-| `image.repository` | Open Design image repository              | `vanjayak/open-design`       |
+| `image.repository` | Open Design image repository              | `ghcr.io/nexu-io/od`        |
 | `image.pullPolicy` | Image pull policy                         | `IfNotPresent`               |
 | `image.tag`        | Image tag (overrides AppVersion)          | `latest`                     |
 

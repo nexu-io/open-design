@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test';
-import { ensureRailOpen } from '@/playwright/rail';
+import { expect, test } from '@/playwright/suite';
+import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
@@ -7,7 +7,7 @@ import { T } from '@/timeouts';
 const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 
-test.describe.configure({ timeout: 30_000 });
+test.describe.configure({ timeout: T.long });
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -164,12 +164,22 @@ async function selectPreviewElementThroughBridge(
   section: string,
 ) {
   await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
-  await frame.locator(selector).click();
+  // Entering manual-edit mode re-injects the edit bridge and re-emits its targets
+  // for a beat (`setTimeout(postTargets, 0)` in edit-mode/bridge.ts), and the
+  // preview iframe can still settle (srcDoc swap / target re-emit) at the moment we
+  // click. That occasionally swallows the first click, which then hangs on
+  // Playwright's post-click stability check until the 30s test timeout. Retry the
+  // click until the element is actually marked selected, with a short per-attempt
+  // timeout so a single dropped click rides through the settle window instead of
+  // failing the whole run.
+  await expect(async () => {
+    await frame.locator(selector).click({ timeout: 5_000 });
+    await expect(frame.locator(`${selector}[data-od-edit-selected="true"]`)).toHaveCount(1, { timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
   await expect(page.locator('.manual-edit-modal')).toContainText(section);
-  await expect(frame.locator(`${selector}[data-od-edit-selected="true"]`)).toHaveCount(1);
 }
 
-test('preview toolbar keeps share, download, comment, and zoom actions reachable', async ({ page }) => {
+test('[P0] @critical preview toolbar keeps share, download, comment, and zoom actions reachable', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Preview toolbar smoke');
   await seedHtmlArtifact(page, projectId, 'toolbar-preview.html', manualEditHtml());
@@ -194,8 +204,10 @@ test('preview toolbar keeps share, download, comment, and zoom actions reachable
   await expect(downloadMenu).toBeVisible();
   await expect(downloadMenu.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
   await expect(downloadMenu.getByRole('menuitem', { name: /Download as \.zip/ })).toBeVisible();
-  await expect(downloadMenu.getByRole('menuitem', { name: /Export as standalone HTML/ })).toBeVisible();
-  await page.keyboard.press('Escape');
+  const htmlDownload = page.waitForEvent('download');
+  await downloadMenu.getByRole('menuitem', { name: /Export as standalone HTML/ }).click();
+  const download = await htmlDownload;
+  expect(download.suggestedFilename()).toMatch(/toolbar-preview.*\.html$/i);
   await expect(downloadMenu).toHaveCount(0);
 
   await page.getByRole('button', { name: /^Comment$/ }).click();
@@ -210,6 +222,78 @@ test('preview toolbar keeps share, download, comment, and zoom actions reachable
   await expect(zoomMenu).toBeVisible();
   await zoomMenu.getByRole('menuitem', { name: '150%' }).click();
   await expect(zoomButton).toHaveText('150%');
+});
+
+test('[P1] preview toolbar exports PDF and PPTX through the daemon contracts', async ({ page }) => {
+  test.setTimeout(60_000);
+
+  await routeMockAgents(page);
+  const projectId = await createProjectViaApi(page, 'Preview export contract');
+
+  const pdfRequests: Array<Record<string, unknown>> = [];
+  await page.route(`**/api/projects/${projectId}/export/pdf`, async (route) => {
+    pdfRequests.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: '{"ok":true}',
+    });
+  });
+
+  await seedHtmlArtifact(page, projectId, 'export-page.html', manualEditHtml());
+  await page.goto(`/projects/${projectId}/files/export-page.html`);
+  await openDesignFile(page, 'export-page.html');
+
+  await page.getByRole('button', { name: /^Download$/ }).click();
+  await page.locator('.share-menu-popover[role="menu"]').getByRole('menuitem', { name: /Export as PDF/ }).click();
+
+  await expect
+    .poll(() => pdfRequests.length, { timeout: 10_000 })
+    .toBe(1);
+  expect(pdfRequests[0]).toMatchObject({
+    deck: false,
+    fileName: 'export-page.html',
+    title: 'export-page',
+  });
+
+  const pptxRequests: Array<Record<string, unknown>> = [];
+  await page.route(`**/api/projects/${projectId}/export/pptx`, async (route) => {
+    pptxRequests.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'content-disposition': 'attachment; filename="contract-deck.pptx"',
+      },
+      body: 'PK\u0003\u0004contract-pptx',
+    });
+  });
+
+  await seedDeckArtifact(page, projectId, 'contract-deck.html', 'Contract Deck', ['Intro', 'Details']);
+  await page.goto(`/projects/${projectId}/files/contract-deck.html`);
+  await openDesignFile(page, 'contract-deck.html');
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: 'Intro' })).toBeVisible();
+
+  await page.getByRole('button', { name: /^Download$/ }).click();
+  await page.locator('.share-menu-popover[role="menu"]').getByRole('menuitem', { name: /Export as PPTX/ }).click();
+  const dialog = page.getByRole('dialog', { name: /Export as PPTX/ });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('radio', { name: /^Export as PPTX \(editable\)/i })).toBeChecked();
+
+  const pptxDownload = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: /Export/i }).click();
+  const download = await pptxDownload;
+
+  expect(download.suggestedFilename()).toBe('contract-deck.pptx');
+  await expect
+    .poll(() => pptxRequests.length, { timeout: 10_000 })
+    .toBe(1);
+  expect(pptxRequests[0]).toMatchObject({
+    deck: true,
+    editable: true,
+    fileName: 'contract-deck.html',
+    title: 'contract-deck',
+  });
 });
 
 test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit workflows', async ({ page }) => {
@@ -381,6 +465,102 @@ test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML
   await expect(frame.getByText('Slide Two')).toBeVisible();
 });
 
+test('[P0] deck host navigation advances one slide when the deck also handles slide messages', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Deck keyboard single step');
+  await seedDeckArtifact(
+    page,
+    projectId,
+    'keyboard-deck.html',
+    'Keyboard Deck',
+    ['Slide One', 'Slide Two', 'Slide Three'],
+    { stopsSlideMessagePropagation: true },
+  );
+  await page.goto(`/projects/${projectId}/files/keyboard-deck.html`);
+  await openDesignFile(page, 'keyboard-deck.html');
+
+  const frame = artifactPreviewFrame(page);
+  await expect(frame.getByText('Slide One')).toBeVisible();
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Slide Two')).toBeVisible();
+  await expect(frame.getByText('Slide Three')).toBeHidden();
+});
+
+test('[P0] focused deck keyboard navigation advances one slide when the deck handles keys', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Deck iframe keyboard single step');
+  await seedDeckArtifact(
+    page,
+    projectId,
+    'iframe-keyboard-deck.html',
+    'Iframe Keyboard Deck',
+    ['Slide One', 'Slide Two', 'Slide Three'],
+    { frameworkDeck: true, handlesKeyboard: true, stopsSlideMessagePropagation: true },
+  );
+  await page.goto(`/projects/${projectId}/files/iframe-keyboard-deck.html`);
+  await openDesignFile(page, 'iframe-keyboard-deck.html');
+
+  const frame = artifactPreviewFrame(page);
+  await expect(frame.getByText('Slide One')).toBeVisible();
+  await frame.locator('body').click();
+  await page.keyboard.press('ArrowRight');
+  await expect(frame.getByText('Slide Two')).toBeVisible();
+  await expect(frame.getByText('Slide Three')).toBeHidden();
+});
+
+test('[P0] deck host navigation works when deck content only mentions slide messages', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Deck protocol text');
+  await seedDeckArtifact(
+    page,
+    projectId,
+    'protocol-text-deck.html',
+    'Protocol Text Deck',
+    ['Slide One', 'Slide Two'],
+    { mentionsSlideMessageProtocol: true },
+  );
+  await page.goto(`/projects/${projectId}/files/protocol-text-deck.html`);
+  await openDesignFile(page, 'protocol-text-deck.html');
+
+  const frame = artifactPreviewFrame(page);
+  await expect(frame.getByText('Slide One')).toBeVisible();
+  await expect(frame.getByText('Protocol token: od:slide')).toBeVisible();
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Slide Two')).toBeVisible();
+  await expect(frame.getByText('Slide One')).toBeHidden();
+});
+
+test('[P0] deck host counter stays synced when a self-handling deck stops slide messages', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Deck stopped message sync');
+  await seedDeckArtifact(
+    page,
+    projectId,
+    'stopped-message-deck.html',
+    'Stopped Message Deck',
+    ['Slide One', 'Slide Two', 'Slide Three'],
+    { stopsSlideMessagePropagation: true },
+  );
+  await page.goto(`/projects/${projectId}/files/stopped-message-deck.html`);
+  await openDesignFile(page, 'stopped-message-deck.html');
+
+  const frame = artifactPreviewFrame(page);
+  const hostCounter = page.locator('.deck-nav-counter');
+  await expect(frame.getByText('Slide One')).toBeVisible();
+  await expect(hostCounter).toHaveText('1 / 3');
+  await expect(frame.locator('#deck-cur')).toHaveText('01');
+
+  await page.getByLabel('Next slide').click();
+  await expect(frame.getByText('Slide Two')).toBeVisible();
+  await expect(hostCounter).toHaveText('2 / 3');
+  await expect(frame.locator('#deck-cur')).toHaveText('02');
+
+  await page.getByLabel('Previous slide').click();
+  await expect(frame.getByText('Slide One')).toBeVisible();
+  await expect(hostCounter).toHaveText('1 / 3');
+  await expect(frame.locator('#deck-cur')).toHaveText('01');
+});
+
 
 test('[P0] simple deck keeps the active slide stable across preview mode switches', async ({ page }) => {
   await routeMockAgents(page);
@@ -437,6 +617,69 @@ test('[P0] @critical HTML preview stays rendered after switching from Preview to
   ).toBeVisible();
 });
 
+test('[P0] @critical edited HTML file restores selected tab, source, and preview after reload', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'File edit restore smoke');
+  await seedHtmlArtifact(page, projectId, 'restore-edit.html', manualEditHtml());
+  await seedHtmlArtifact(
+    page,
+    projectId,
+    'secondary-preview.html',
+    '<!doctype html><html><body><main><h1>Secondary Preview</h1></main></body></html>',
+  );
+  await page.goto(`/projects/${projectId}/files/secondary-preview.html`);
+  await openDesignFile(page, 'secondary-preview.html');
+  await expect(tabBySuffix(page, 'secondary-preview.html')).toHaveAttribute('aria-selected', 'true');
+
+  await page
+    .getByRole('tablist', { name: 'Design Files' })
+    .getByRole('tab', { name: /^Design Files$/ })
+    .click();
+  await openDesignFile(page, 'restore-edit.html');
+
+  const restoreTab = tabBySuffix(page, 'restore-edit.html');
+  const secondaryTab = tabBySuffix(page, 'secondary-preview.html');
+  await expect(restoreTab).toBeVisible();
+  await expect(restoreTab).toHaveAttribute('aria-selected', 'true');
+  await expect(secondaryTab).toBeVisible();
+  await expect(secondaryTab).toHaveAttribute('aria-selected', 'false');
+
+  const frame = artifactPreviewFrame(page);
+  await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  await selectPreviewElementThroughBridge(page, frame, '[data-od-id="hero-title"]', 'TYPOGRAPHY');
+  const fontSizeInput = inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Size' }).locator('input');
+  await expect(fontSizeInput).toBeVisible();
+  await fontSizeInput.fill('52');
+  await inspectorSection(page, 'TYPOGRAPHY').locator('.cc-row').filter({ hasText: 'Color' }).locator('input').fill('#2563eb');
+  await inspectSaveButton(page).click({ force: true });
+  await expectFileSource(page, projectId, 'restore-edit.html', ['font-size: 52px', 'color:']);
+
+  await page.getByTestId('manual-edit-mode-toggle').click();
+  const viewModeTabs = page.getByRole('tablist', { name: 'View mode' });
+  await viewModeTabs.getByRole('tab', { name: 'Code' }).click();
+  await expect(page.locator('.viewer-source')).toContainText('font-size: 52px');
+  await expect(restoreTab).toHaveAttribute('aria-selected', 'true');
+  await expect(secondaryTab).toHaveAttribute('aria-selected', 'false');
+
+  await page.reload();
+  await waitForLoadingToClear(page);
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
+  const restoredTab = tabBySuffix(page, 'restore-edit.html');
+  await expect(restoredTab).toBeVisible();
+  await expect(restoredTab).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tablist', { name: 'View mode' }).getByRole('tab', { name: 'Code' }).click();
+  await expect(page.locator('.viewer-source')).toContainText('font-size: 52px');
+
+  await page.getByRole('tablist', { name: 'View mode' }).getByRole('tab', { name: 'Preview' }).click();
+  await expect(artifactPreview(page)).toBeVisible();
+  const restoredFrame = artifactPreviewFrame(page);
+  const restoredTitle = restoredFrame.getByRole('heading', { name: 'Original Hero' });
+  await expect(restoredTitle).toBeVisible();
+  await expect.poll(async () => restoredTitle.evaluate((el) => getComputedStyle(el).fontSize)).toBe('52px');
+  await expect(restoredTitle).toHaveCSS('color', 'rgb(37, 99, 235)');
+});
+
 async function routeMockAgents(page: Page) {
   await routeAgents(page, [
     {
@@ -463,6 +706,26 @@ async function createEmptyProject(page: Page, name: string): Promise<string> {
   return projectId;
 }
 
+async function createProjectViaApi(page: Page, name: string): Promise<string> {
+  await gotoEntryHome(page);
+  const id = `playwright-export-${Date.now()}`;
+  const response = await page.request.post('/api/projects', {
+    data: {
+      id,
+      name,
+      skillId: null,
+      designSystemId: null,
+      metadata: { kind: 'prototype' },
+    },
+    timeout: 15_000,
+  });
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as { project?: { id?: string } };
+  const projectId = body.project?.id;
+  if (!projectId) throw new Error(`project create response missing id: ${JSON.stringify(body)}`);
+  return projectId;
+}
+
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
@@ -476,10 +739,7 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openNewProjectModal(page: Page) {
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModalFromProjects(page);
 }
 
 async function seedHtmlArtifact(page: Page, projectId: string, fileName: string, content: string) {
@@ -573,23 +833,87 @@ async function seedDeckArtifact(
   fileName: string,
   title: string,
   slides: string[],
+  options: {
+    selfHandlesSlideMessages?: boolean;
+    mentionsSlideMessageProtocol?: boolean;
+    stopsSlideMessagePropagation?: boolean;
+    handlesKeyboard?: boolean;
+    frameworkDeck?: boolean;
+  } = {},
 ) {
   const slideHtml = slides
     .map((slide, index) => `<section class="slide" data-od-id="slide-${index + 1}"${index === 0 ? '' : ' hidden'}><h1>${slide}</h1></section>`)
     .join('\n');
+  const deckHtml = options.frameworkDeck
+    ? `<div class="deck-stage" id="deck-stage">${slideHtml}</div>`
+    : slideHtml;
+  const deckChrome = options.stopsSlideMessagePropagation
+    ? '<nav><span id="deck-cur">01</span> / <span id="deck-total">03</span></nav>'
+    : '';
+  const slideScript =
+    options.selfHandlesSlideMessages || options.stopsSlideMessagePropagation || options.handlesKeyboard
+    ? `<script>
+    (() => {
+      let active = 0;
+      const slides = Array.from(document.querySelectorAll('.slide'));
+      function render() {
+        slides.forEach((slide, index) => {
+          slide.style.display = index === active ? '' : 'none';
+          slide.toggleAttribute('hidden', index !== active);
+        });
+        const cur = document.getElementById('deck-cur');
+        const total = document.getElementById('deck-total');
+        if (cur) cur.textContent = String(active + 1).padStart(2, '0');
+        if (total) total.textContent = String(slides.length).padStart(2, '0');
+      }
+      window.addEventListener('message', (event) => {
+        if (!event.data || event.data.type !== 'od:slide') return;
+        ${options.stopsSlideMessagePropagation ? 'event.stopImmediatePropagation();' : ''}
+        if (event.data.action === 'next') active = Math.min(slides.length - 1, active + 1);
+        if (event.data.action === 'prev') active = Math.max(0, active - 1);
+        if (event.data.action === 'first') active = 0;
+        if (event.data.action === 'last') active = slides.length - 1;
+        if (event.data.action === 'go' && typeof event.data.index === 'number') {
+          active = Math.max(0, Math.min(slides.length - 1, event.data.index));
+        }
+        render();
+        ${options.stopsSlideMessagePropagation ? '' : "window.parent.postMessage({ type: 'od:slide-state', active, count: slides.length }, '*');"}
+      });
+      ${
+        options.handlesKeyboard
+          ? `function onKey(event) {
+        if (event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        active = Math.min(slides.length - 1, active + 1);
+        render();
+      }
+      window.addEventListener('keydown', onKey, true);
+      document.addEventListener('keydown', onKey, true);
+      document.body.setAttribute('tabindex', '-1');
+      document.body.focus();`
+          : ''
+      }
+      render();
+      ${options.stopsSlideMessagePropagation ? '' : "window.parent.postMessage({ type: 'od:slide-state', active, count: slides.length }, '*');"}
+    })();
+    </script>`
+    : '';
+  const protocolText = options.mentionsSlideMessageProtocol
+    ? '<p>Protocol token: od:slide</p>'
+    : '';
   const resp = await page.request.post(
     `/api/projects/${projectId}/files`,
     {
       data: {
         name: fileName,
-        content: `<!doctype html><html><body>${slideHtml}</body></html>`,
+        content: `<!doctype html><html><body>${deckChrome}${deckHtml}${protocolText}${slideScript}</body></html>`,
         artifactManifest: {
           version: 1,
           kind: 'deck',
           title,
           entry: fileName,
           renderer: 'deck-html',
-          exports: ['html', 'pptx'],
+          exports: ['html', 'pdf'],
         },
       },
       timeout: 15_000,
@@ -600,34 +924,42 @@ async function seedDeckArtifact(
 
 async function openDesignFile(page: Page, fileName: string) {
   const preview = artifactPreview(page);
-  try {
-    await preview.waitFor({ state: 'visible', timeout: 5_000 });
+  await waitForLoadingToClear(page);
+  const activePath = new URL(page.url()).pathname;
+  if (activePath.endsWith(`/files/${encodeURIComponent(fileName)}`) && await preview.isVisible().catch(() => false)) {
     return;
-  } catch {
-    // Not yet visible; try opening via tab or file list
   }
-
   const filePattern = new RegExp(fileName.replace(/\./g, '\\.'), 'i');
   const fileTabButton = page.getByRole('tab', { name: filePattern }).first();
   let tabFound = true;
   try {
-    await fileTabButton.waitFor({ state: 'visible', timeout: 2_000 });
+    await fileTabButton.waitFor({ state: 'visible', timeout: 5_000 });
   } catch {
     tabFound = false;
   }
 
   if (tabFound) {
-    await fileTabButton.click();
+    const isSelected = await fileTabButton.getAttribute('aria-selected');
+    if (isSelected !== 'true') {
+      await fileTabButton.click();
+    }
   } else {
-    const fileButton = page.getByRole('button', { name: filePattern });
+    const fileButton = page.getByRole('button', { name: filePattern }).first();
     await fileButton.click();
-    await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+    if (!(await preview.isVisible().catch(() => false))) {
+      const openButton = page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' });
+      if (await openButton.isVisible().catch(() => false)) {
+        await openButton.click();
+      } else {
+        await fileButton.dblclick();
+      }
+    }
   }
   await expect(preview).toBeVisible();
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function expectFileSource(page: Page, projectId: string, fileName: string, snippets: string[]) {
@@ -662,6 +994,19 @@ function inspectorSection(page: Page, title: string) {
 
 function inspectSaveButton(page: Page) {
   return page.locator('.manual-edit-modal').getByRole('button', { name: /^Save$/ });
+}
+
+function tabBySuffix(page: Page, name: string) {
+  return page
+    .getByRole('tab')
+    .filter({
+      hasText: new RegExp(`${escapeRegExp(name)}$`),
+    })
+    .first();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function manualEditHtml(): string {

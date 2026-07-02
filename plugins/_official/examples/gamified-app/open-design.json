@@ -24,7 +24,7 @@
     "en": "Gamified App"
   },
   "version": "0.1.0",
-  "description": "A multi-frame gamified mobile-app prototype — three phone frames on a dark\nshowcase stage. Frame 1: cover / poster, Frame 2: today's quests with XP\nribbons and a level bar, Frame 3: quest detail. Vivid quest tiles, level\nribbon, bottom tab bar. Use when the brief asks for a \"gamified app\",\n\"habit tracker\", \"RPG-style life app\", \"level-up app\", \"daily quests\",\n\"XP / streak app\", or \"ELI5-style explainer app\".",
+  "description": "A multi-frame gamified mobile-app prototype — three phone frames on a dark showcase stage. Frame 1: cover / poster, Frame 2: today's quests with XP ribbons and a level bar, Frame 3: quest detail. Vivid quest tiles, level ribbon, bottom tab bar. Use when the brief asks for a \"gamified app\", \"habit tracker\", \"RPG-style life app\", \"level-up app\", \"daily quests\", \"XP / streak app\", or \"ELI5-style explainer app\".",
   "description_i18n": {
     "zh-CN": "三屏手机原型展示游戏化应用界面：封面海报、每日任务与经验值进度条、任务详情。适用于游戏化应用、习惯追踪、RPG 风格生活应用、升级系统、每日任务、XP/连击应用等需求。",
     "zh-TW": "三屏手機原型展示遊戲化應用介面：封面海報、每日任務與經驗值進度條、任務詳情。適用於遊戲化應用、習慣追蹤、RPG 風格生活應用、升級系統、每日任務、XP/連擊應用等需求。",
@@ -43,7 +43,7 @@
     "ar": "نموذج تطبيق جوال مُلَعَّب من ثلاث شاشات: الغلاف، مهام اليوم مع أشرطة XP وشريط المستوى، تفاصيل المهمة. مناسب لتطبيقات اللعب، متتبعات العادات، تطبيقات الحياة بأسلوب RPG، تطبيقات الترقية، المهام اليومية وتطبيقات XP/السلاسل.",
     "tr": "Üç ekranlı oyunlaştırılmış mobil uygulama prototipi: kapak, XP şeritleri ve seviye çubuğu ile günlük görevler, görev detayı. Oyunlaştırılmış uygulamalar, alışkanlık takipçileri, RPG tarzı yaşam uygulamaları, seviye atlama uygulamaları, günlük görevler ve XP/seri uygulamaları için idealdir.",
     "uk": "Триекранний прототип ігрового мобільного додатка: обкладинка, щоденні квести зі стрічками XP та шкалою рівня, деталі квесту. Підходить для ігрових додатків, трекерів звичок, RPG-додатків для життя, додатків з прокачкою, щоденними квестами та системою XP/стріків.",
-    "en": "A multi-frame gamified mobile-app prototype — three phone frames on a dark\nshowcase stage. Frame 1: cover / poster, Frame 2: today's quests with XP\nribbons and a level bar, Frame 3: quest detail. Vivid quest tiles, level\nribbon, bottom tab bar. Use when the brief asks for a \"gamified app\",\n\"habit tracker\", \"RPG-style life app\", \"level-up app\", \"daily quests\",\n\"XP / streak app\", or \"ELI5-style explainer app\"."
+    "en": "A multi-frame gamified mobile-app prototype — three phone frames on a dark showcase stage. Frame 1: cover / poster, Frame 2: today's quests with XP ribbons and a level bar, Frame 3: quest detail. Vivid quest tiles, level ribbon, bottom tab bar. Use when the brief asks for a \"gamified app\", \"habit tracker\", \"RPG-style life app\", \"level-up app\", \"daily quests\", \"XP / streak app\", or \"ELI5-style explainer app\"."
   },
   "license": "MIT",
   "author": {

@@ -1,14 +1,20 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { rmSync } from 'node:fs';
-
 import { skillCwdAliasSegment, SKILLS_CWD_ALIAS } from '../src/cwd-aliases.js';
-import { readFileSync } from 'node:fs';
 import {
   deleteUserSkill,
   importUserSkill,
@@ -41,6 +47,116 @@ type SkillCatalogEntry = {
 
 function fresh(): string {
   return mkdtempSync(path.join(tmpdir(), 'od-skills-'));
+}
+
+function writeFakePlaywrightCli(file: string) {
+  writeFileSync(
+    file,
+    [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      'printf "%s\\n" "$*" >> "$PLAYWRIGHT_CALL_LOG"',
+      'case "${1:-}" in',
+      '  install)',
+      '    [[ "${2:-}" == "chromium" ]] || exit 64',
+      '    exit 0',
+      '    ;;',
+      '  screenshot)',
+      '    if [[ "${FAKE_PLAYWRIGHT_SCREENSHOT_EXIT:-0}" != "0" ]]; then',
+      '      exit "$FAKE_PLAYWRIGHT_SCREENSHOT_EXIT"',
+      '    fi',
+      '    target="${@: -1}"',
+      '    mkdir -p "$(dirname "$target")"',
+      '    printf "png" > "$target"',
+      '    exit 0',
+      '    ;;',
+      '  *)',
+      '    exit 65',
+      '    ;;',
+      'esac',
+      '',
+    ].join('\n'),
+  );
+  chmodSync(file, 0o755);
+}
+
+function runHtmlPptRenderWithFakePlaywright(options: { screenshotExitCode?: number } = {}) {
+  const root = fresh();
+  const html = path.join(root, 'deck.html');
+  const out = path.join(root, 'deck.png');
+  const log = path.join(root, 'playwright.log');
+  const fakePlaywright = path.join(root, 'fake-playwright.sh');
+  writeFileSync(
+    html,
+    '<!doctype html><html><body><section class="slide">Slide</section></body></html>',
+  );
+  writeFakePlaywrightCli(fakePlaywright);
+
+  const result = spawnSync(
+    path.join(designTemplatesRoot, 'html-ppt', 'scripts', 'render.sh'),
+    [html, '1', out],
+    {
+      cwd: root,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PLAYWRIGHT_CLI: fakePlaywright,
+        PLAYWRIGHT_CALL_LOG: log,
+        FAKE_PLAYWRIGHT_SCREENSHOT_EXIT: String(options.screenshotExitCode ?? 0),
+      },
+    },
+  );
+  const calls = readFileSync(log, 'utf8').trim().split('\n').filter(Boolean);
+  return { calls, result, root };
+}
+
+function runHtmlPptRenderWithLocalPlaywrightFromOutsideCwd() {
+  const root = fresh();
+  const repo = path.join(root, 'repo');
+  const script = path.join(repo, 'design-templates', 'html-ppt', 'scripts', 'render.sh');
+  const localPlaywright = path.join(repo, 'node_modules', '.bin', 'playwright');
+  const fakeBin = path.join(root, 'bin');
+  const fakeNpx = path.join(fakeBin, 'npx');
+  const outsideCwd = path.join(root, 'outside');
+  const html = path.join(root, 'input', 'deck.html');
+  const out = path.join(root, 'deck.png');
+  const log = path.join(root, 'playwright.log');
+
+  mkdirSync(path.dirname(script), { recursive: true });
+  mkdirSync(path.dirname(localPlaywright), { recursive: true });
+  mkdirSync(path.dirname(html), { recursive: true });
+  mkdirSync(fakeBin, { recursive: true });
+  mkdirSync(outsideCwd, { recursive: true });
+  copyFileSync(path.join(designTemplatesRoot, 'html-ppt', 'scripts', 'render.sh'), script);
+  chmodSync(script, 0o755);
+  writeFakePlaywrightCli(localPlaywright);
+  writeFileSync(
+    fakeNpx,
+    [
+      '#!/usr/bin/env bash',
+      'set -euo pipefail',
+      'printf "npx %s\\n" "$*" >> "$PLAYWRIGHT_CALL_LOG"',
+      'exit 66',
+      '',
+    ].join('\n'),
+  );
+  chmodSync(fakeNpx, 0o755);
+  writeFileSync(
+    html,
+    '<!doctype html><html><body><section class="slide">Slide</section></body></html>',
+  );
+
+  const result = spawnSync(script, [html, '1', out], {
+    cwd: outsideCwd,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ''}`,
+      PLAYWRIGHT_CALL_LOG: log,
+    },
+  });
+  const calls = readFileSync(log, 'utf8').trim().split('\n').filter(Boolean);
+  return { calls, result, root };
 }
 
 function writeSkill(
@@ -180,6 +296,62 @@ describe('listSkills', () => {
     expect(skill.body).toContain('misinterpreted as daemon startup');
     expect(skill.body).toContain('trap cleanup_agent_browser EXIT INT TERM');
     expect(skill.body).toContain('pkill -f -- "--user-data-dir=${CHROME_USER_DATA_DIR}"');
+  });
+
+  it('keeps html-ppt PNG export on one managed Chromium screenshot path', async () => {
+    const skills = await listSkills(designTemplatesRoot);
+    const skill = skills.find((entry: { id: string }) => entry.id === 'html-ppt');
+    const renderScript = readFileSync(
+      path.join(designTemplatesRoot, 'html-ppt', 'scripts', 'render.sh'),
+      'utf8',
+    );
+
+    if (!skill) throw new Error('html-ppt skill not found');
+    expect(skill.body).toContain("Playwright's managed Chromium");
+    expect(skill.body).toContain('If the managed renderer fails once');
+    expect(skill.body).not.toContain('/Applications/Google Chrome.app');
+    expect(renderScript).toContain('install chromium');
+    expect(renderScript).toContain('playwright@${PLAYWRIGHT_VERSION}');
+    expect(renderScript).toContain('not retrying and not falling back to system Google Chrome');
+    expect(renderScript).not.toContain('/Applications/Google Chrome.app');
+    expect(renderScript).not.toContain('--headless');
+    expect(renderScript).not.toContain('--screenshot');
+    expect(renderScript).not.toContain('--remote-debugging-port');
+
+    const success = runHtmlPptRenderWithFakePlaywright();
+    try {
+      expect(success.result.status, success.result.stderr).toBe(0);
+      expect(success.calls[0]).toBe('install chromium');
+      expect(success.calls.filter((call) => call.startsWith('screenshot '))).toHaveLength(1);
+      expect(success.calls.join('\n')).not.toContain('/Applications/Google Chrome.app');
+      expect(success.calls.join('\n')).not.toContain('--headless');
+      expect(success.calls.join('\n')).not.toContain('--remote-debugging-port');
+    } finally {
+      rmSync(success.root, { recursive: true, force: true });
+    }
+
+    const outsideCwd = runHtmlPptRenderWithLocalPlaywrightFromOutsideCwd();
+    try {
+      expect(outsideCwd.result.status, outsideCwd.result.stderr).toBe(0);
+      expect(outsideCwd.calls[0]).toBe('install chromium');
+      expect(outsideCwd.calls.filter((call) => call.startsWith('screenshot '))).toHaveLength(1);
+      expect(outsideCwd.calls.some((call) => call.startsWith('npx '))).toBe(false);
+    } finally {
+      rmSync(outsideCwd.root, { recursive: true, force: true });
+    }
+
+    const failure = runHtmlPptRenderWithFakePlaywright({ screenshotExitCode: 23 });
+    try {
+      expect(failure.result.status).not.toBe(0);
+      expect(failure.result.stderr).toContain(
+        'not retrying and not falling back to system Google Chrome',
+      );
+      expect(failure.calls[0]).toBe('install chromium');
+      expect(failure.calls.filter((call) => call.startsWith('screenshot '))).toHaveLength(1);
+      expect(failure.calls.join('\n')).not.toContain('/Applications/Google Chrome.app');
+    } finally {
+      rmSync(failure.root, { recursive: true, force: true });
+    }
   });
 
   it('includes the DCF valuation, X research, and Last30Days research skills', async () => {

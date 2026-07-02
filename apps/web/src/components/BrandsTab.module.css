@@ -1,0 +1,322 @@
+/* Master-detail Brands layout: a compact brand list on the left and a live
+   preview of the selected brand on the right. The page uses a single scroll
+   context (the entry scroll container); the left sidebar stays pinned via
+   `position: sticky`. The right preview itself is owned by BrandPreviewCard
+   (`BrandPreviewCard.module.css`); this file owns the page shell + sidebar. */
+.root {
+  display: grid;
+  grid-template-columns: 288px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+  width: 100%;
+}
+
+/* ── Left sidebar ─────────────────────────────────────────────────── */
+.sidebar {
+  position: sticky;
+  top: var(--entry-topbar-h, 44px);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - var(--entry-topbar-h, 44px) - 48px);
+  min-height: 0;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+}
+
+.sidebarHead {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+
+.newBtn {
+  width: 100%;
+  justify-content: center;
+}
+
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 11px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.search {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px 0 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 13.5px;
+  transition: border-color var(--dur-quick) var(--ease-out),
+    box-shadow var(--dur-quick) var(--ease-out);
+}
+
+.search::placeholder {
+  color: var(--text-faint);
+}
+
+.search:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  margin: 0 -6px -6px;
+  padding: 2px 6px 6px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out);
+}
+
+.item:hover {
+  background: var(--bg-subtle);
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.itemActive,
+.itemActive:hover {
+  background: var(--accent-tint);
+  border-color: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.itemThumb {
+  --logo-display-surface:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(246, 242, 232, 0.96)),
+    conic-gradient(
+      from 45deg,
+      rgba(25, 23, 19, 0.07) 0 25%,
+      rgba(255, 255, 255, 0.42) 0 50%,
+      rgba(25, 23, 19, 0.07) 0 75%,
+      rgba(255, 255, 255, 0.42) 0
+    )
+      0 0 / 16px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, #fff 28%);
+  border-radius: var(--radius-sm);
+  background: var(--logo-display-surface);
+  overflow: hidden;
+}
+
+.itemLogo {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.45));
+}
+
+.itemLogoFallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-xs);
+  background: var(--bg-muted);
+  color: var(--text-soft);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.itemMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.itemName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.itemHost {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.statusDot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+}
+
+.statusDotBusy {
+  background: var(--amber);
+  animation: dotPulse 1.4s ease-in-out infinite;
+}
+
+.statusDotFailed {
+  background: var(--red);
+}
+
+@keyframes dotPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* List loading skeleton */
+.listLoading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.skeletonRow {
+  height: 56px;
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.sidebarEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  padding: 24px 12px;
+  text-align: center;
+}
+
+.sidebarEmptyText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── Right preview pane ───────────────────────────────────────────── */
+/* No own scroll container: the right content flows naturally and the whole
+   page scrolls through the outer entry scroll container. The inner card
+   markup + styling lives in BrandPreviewCard. */
+.preview {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+}
+
+/* ── Empty-library reference picker pane ──────────────────────────── */
+.pickerPane {
+  padding: 28px;
+}
+
+/* ── Empty preview state ──────────────────────────────────────────── */
+.previewEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 420px;
+  padding: 40px;
+  text-align: center;
+}
+
+.previewEmptyMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+  color: var(--text-faint);
+}
+
+.previewEmptyText {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* ── Responsive: stack panes on narrow viewports ──────────────────── */
+@media (max-width: 860px) {
+  .root {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: static;
+    max-height: none;
+  }
+  .list {
+    max-height: 320px;
+  }
+}

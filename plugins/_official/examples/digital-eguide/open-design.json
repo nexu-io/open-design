@@ -24,7 +24,7 @@
     "en": "Digital Eguide"
   },
   "version": "0.1.0",
-  "description": "A two-spread digital e-guide preview — page 1 is a cover (display title,\nauthor, \"What's inside\" stats, table of contents teaser); page 2 is a\nspread (lesson body with pull-quote and a step list). Lifestyle / creator\nbrand tone. Use when the brief asks for an \"e-guide\", \"digital guide\",\n\"lookbook\", \"lead magnet\", \"creator guide\", \"playbook\", \"PDF guide\",\nor \"电子指南\".",
+  "description": "A two-spread digital e-guide preview — page 1 is a cover (display title, author, \"What's inside\" stats, table of contents teaser); page 2 is a spread (lesson body with pull-quote and a step list). Lifestyle / creator brand tone. Use when the brief asks for an \"e-guide\", \"digital guide\", \"lookbook\", \"lead magnet\", \"creator guide\", \"playbook\", \"PDF guide\", or \"电子指南\".",
   "description_i18n": {
     "zh-CN": "双页数字电子指南预览——第1页为封面（显示标题、作者、'内含什么'统计信息、目录预览）；第2页为内页（课程正文含引用语和步骤列表）。生活方式/创作者品牌风格。适用于需要'电子指南'、'数字指南'、'lookbook'、'引流素材'、'创作者指南'、'手册'或'PDF指南'的需求。",
     "zh-TW": "雙頁數位電子指南預覽——第1頁為封面（顯示標題、作者、『內含什麼』統計資訊、目錄預覽）；第2頁為內頁（課程正文含引用語和步驟清單）。生活風格/創作者品牌調性。適用於需要『電子指南』、『數位指南』、『lookbook』、『引流素材』、『創作者指南』、『手冊』或『PDF指南』的需求。",
@@ -43,7 +43,7 @@
     "ar": "معاينة دليل رقمي من صفحتين — الصفحة 1 غلاف (العنوان، المؤلف، إحصائيات 'ما بالداخل'، معاينة المحتويات)؛ الصفحة 2 صفحة مزدوجة (نص الدرس مع اقتباس وقائمة خطوات). نبرة نمط حياة / علامة تجارية للمبدعين. يُستخدم عند طلب 'e-guide' أو 'دليل رقمي' أو 'lookbook' أو 'lead magnet' أو 'دليل المبدع' أو 'playbook' أو 'دليل PDF' أو '电子指南'.",
     "tr": "İki sayfalık dijital rehber önizlemesi — sayfa 1 kapak (başlık, yazar, 'İçinde neler var' istatistikleri, içindekiler tanıtımı); sayfa 2 açılım (alıntı ve adım listesi içeren ders metni). Yaşam tarzı / içerik üreticisi marka tonu. 'E-guide', 'dijital rehber', 'lookbook', 'lead magnet', 'içerik üreticisi rehberi', 'playbook', 'PDF rehber' veya '电子指南' istendiğinde kullanın.",
     "uk": "Попередній перегляд двосторінкового цифрового гіда — сторінка 1: обкладинка (назва, автор, статистика 'Що всередині', анонс змісту); сторінка 2: розворот (текст уроку з цитатою та списком кроків). Стиль lifestyle / бренд креатора. Використовуйте для запитів 'e-guide', 'digital guide', 'lookbook', 'lead magnet', 'creator guide', 'playbook', 'PDF guide' або '电子指南'.",
-    "en": "A two-spread digital e-guide preview — page 1 is a cover (display title,\nauthor, \"What's inside\" stats, table of contents teaser); page 2 is a\nspread (lesson body with pull-quote and a step list). Lifestyle / creator\nbrand tone. Use when the brief asks for an \"e-guide\", \"digital guide\",\n\"lookbook\", \"lead magnet\", \"creator guide\", \"playbook\", \"PDF guide\",\nor \"电子指南\"."
+    "en": "A two-spread digital e-guide preview — page 1 is a cover (display title, author, \"What's inside\" stats, table of contents teaser); page 2 is a spread (lesson body with pull-quote and a step list). Lifestyle / creator brand tone. Use when the brief asks for an \"e-guide\", \"digital guide\", \"lookbook\", \"lead magnet\", \"creator guide\", \"playbook\", \"PDF guide\", or \"电子指南\"."
   },
   "license": "MIT",
   "author": {

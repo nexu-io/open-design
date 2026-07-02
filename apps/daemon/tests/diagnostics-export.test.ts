@@ -1,5 +1,5 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { tmpdir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -227,5 +227,119 @@ describe('diagnostics export handler — run event logs', () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it('keeps failed run forensics useful while redacting credentials and user paths', async () => {
+    const root = join(tmpdir(), `od-diag-runs-sensitive-${randomUUID()}`);
+    const runsDir = join(root, 'runs');
+    const runLogPath = join(runsDir, 'run-sensitive', 'events.jsonl');
+    const username = userInfo().username;
+    const homePath = `/Users/${username}/open-design/project`;
+    const secretBearer = 'od_bearer_secret_12345';
+    const secretQuery = 'query-token-secret';
+    const secretApiKey = 'api-key-secret';
+    const stderrMarker = 'Agent failed while calling upstream provider';
+    try {
+      await mkdir(dirname(runLogPath), { recursive: true });
+      await writeFile(
+        runLogPath,
+        [
+          {
+            event: 'stderr',
+            data: {
+              chunk: stderrMarker,
+            },
+          },
+          {
+            event: 'stderr',
+            data: {
+              chunk: `Authorization: Bearer ${secretBearer}`,
+            },
+          },
+          {
+            event: 'stderr',
+            data: {
+              chunk: `GET https://provider.example/v1/models?access_token=${secretQuery}`,
+            },
+          },
+          {
+            event: 'stderr',
+            data: {
+              chunk: `provider api_key=${secretApiKey}`,
+            },
+          },
+          {
+            event: 'stderr',
+            data: {
+              chunk: `cwd ${homePath}`,
+            },
+          },
+          {
+            event: 'error',
+            data: {
+              message: 'Provider rejected the request after auth forwarding.',
+              code: 'AGENT_EXECUTION_FAILED',
+            },
+          },
+          {
+            event: 'diagnostic',
+            data: {
+              type: 'agent_runtime',
+              phase: 'agent-call',
+              stderr_present: true,
+            },
+          },
+        ].map((entry) => JSON.stringify(entry)).join('\n') + '\n',
+        'utf8',
+      );
+
+      const handler = createDiagnosticsExportHandler({
+        runtime: null,
+        projectRoot: '/tmp/test-project',
+        runsDir,
+      });
+      const res = mockResponse();
+      await handler({} as never, res as never, () => undefined);
+
+      expect(res.capturedStatus).toBe(200);
+      const zip = await JSZip.loadAsync(res.capturedPayload!);
+      const runEntry = zip.file('runs/run-sensitive/events.jsonl');
+      expect(runEntry).not.toBeNull();
+      const runLog = await runEntry!.async('string');
+      expect(runLog).toContain(stderrMarker);
+      expect(runLog).toContain('AGENT_EXECUTION_FAILED');
+      expect(runLog).toContain('agent_runtime');
+      expect(runLog).toContain('Bearer [REDACTED]');
+      expect(runLog).toContain('access_token=[REDACTED]');
+      expect(runLog).toContain('api_key=[REDACTED]');
+      expect(runLog).toContain('/Users/<USER>/open-design/project');
+      expect(runLog).not.toContain(secretBearer);
+      expect(runLog).not.toContain(secretQuery);
+      expect(runLog).not.toContain(secretApiKey);
+      expect(runLog).not.toContain(homePath);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('warns when runsDir is set but no per-run event logs were found', async () => {
+    // An empty/absent runs dir adds no manifest file entries, so without an
+    // explicit warning an empty bundle is indistinguishable from a healthy run
+    // — exactly the gap that made an AMR loop look like "nothing happened."
+    const runsDir = join(tmpdir(), `od-diag-empty-runs-${randomUUID()}`);
+    const handler = createDiagnosticsExportHandler({
+      runtime: null,
+      projectRoot: '/tmp/test-project',
+      runsDir,
+    });
+    const res = mockResponse();
+    await handler({} as never, res as never, () => undefined);
+
+    expect(res.capturedStatus).toBe(200);
+    const zip = await JSZip.loadAsync(res.capturedPayload!);
+    const manifest = JSON.parse(await zip.file('summary/manifest.json')!.async('string')) as {
+      warnings: string[];
+    };
+    expect(manifest.warnings.some((w) => w.includes('No per-run event logs found'))).toBe(true);
   });
 });

@@ -98,10 +98,12 @@
   appearance: none;
   display: none;
 }
-/* Reset the global `button { ... }` defaults (padding 6/12, border,
-   radius-sm) so the 18×18 hit target actually fits the icon glyph
-   instead of clipping it down to zero. */
-.plugins-home__search-clear {
+/* Override the shared <Button> component's own padding (6/12) and sizing.
+   The reset must be scoped under `.plugins-home__search` so it out-specifies
+   the Button CSS-module class (`.button_button__…`); a bare
+   `.plugins-home__search-clear` only ties that class and loses, leaving the
+   24px horizontal padding to crush the X glyph down to zero width. */
+.plugins-home__search .plugins-home__search-clear {
   position: absolute;
   right: 5px;
   display: inline-flex;
@@ -109,17 +111,18 @@
   justify-content: center;
   width: 20px;
   height: 20px;
+  min-width: 0;
   padding: 0;
   border-radius: 50%;
   color: var(--text-muted);
   transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
-.plugins-home__search-clear:hover {
+.plugins-home__search .plugins-home__search-clear:hover {
   background: var(--border-soft, var(--border));
   border-color: transparent;
   color: var(--text);
 }
-.plugins-home__search-clear:focus-visible {
+.plugins-home__search .plugins-home__search-clear:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -497,26 +500,48 @@
   outline-offset: 2px;
   border-radius: 4px;
 }
-.plugins-home__gallery-open {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  color: var(--text-muted);
-  text-decoration: none;
-}
-.plugins-home__gallery-open:hover {
-  background: var(--bg-panel);
-  color: var(--accent);
-}
 .plugins-home__gallery-frame {
   position: relative;
   height: 300px;
   background: #fff;
   overflow: hidden;
+}
+.plugins-home__gallery-actions {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 4;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition:
+    opacity 180ms var(--ease-out),
+    transform 180ms var(--ease-out);
+}
+.plugins-home__card--gallery:hover .plugins-home__gallery-actions,
+.plugins-home__card--gallery:focus-within .plugins-home__gallery-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.plugins-home__gallery-actions .plugins-home__action {
+  min-width: 0;
+  flex: 1;
+  height: 38px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 650;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+}
+.plugins-home__gallery-actions .plugins-home__action span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* PreviewSurface fills the fixed-height gallery frame instead of its
    default 4/3 aspect box. */
@@ -538,6 +563,26 @@
    modal rather than being swallowed by the embedded page. */
 .plugins-home__card--gallery:hover .plugins-home__html-iframe {
   top: -404px;
+}
+/* Decks ship a fixed 16:9 stage that scales itself to its viewport. The tall
+   scroll-preview viewport above would letterbox that stage, leaving a dark
+   --stage-bg band above/below the slide. Give deck tiles a 16:9 frame and let
+   the iframe fill it natively (no transform), so the stage fits edge-to-edge
+   with no band, and skip the scroll-pan (there is nothing below to reveal). */
+.plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__gallery-frame {
+  /* Replace the fixed 300px scroll-preview frame with a 16:9 box so the deck
+     stage fills it exactly — no dark letterbox band, and no leftover white
+     strip below the slide. */
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+.plugins-home__card--gallery[data-od-mode="deck"] .plugins-home__html-iframe,
+.plugins-home__card--gallery[data-od-mode="deck"]:hover .plugins-home__html-iframe {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  transition: none;
 }
 
 /* ---------- Hero preview surface ---------- */
@@ -1075,12 +1120,41 @@ button.plugins-home__use-menu-item:focus-visible {
   opacity: 0.55;
   cursor: progress;
 }
+.plugins-home__gallery-actions .plugins-home__action--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-panel);
+}
+.plugins-home__gallery-actions .plugins-home__action--primary:hover:not(:disabled),
+.plugins-home__gallery-actions .plugins-home__action--primary:focus-visible {
+  background: color-mix(in srgb, var(--accent) 88%, #fff);
+  border-color: color-mix(in srgb, var(--accent) 88%, #fff);
+  color: var(--bg-panel);
+}
+.plugins-home__gallery-actions .plugins-home__action--secondary {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(17, 17, 17, 0.12);
+  color: #111;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.plugins-home__gallery-actions .plugins-home__action--secondary:hover:not(:disabled),
+.plugins-home__gallery-actions .plugins-home__action--secondary:focus-visible {
+  background: #fff;
+  border-color: rgba(17, 17, 17, 0.18);
+  color: #111;
+}
 
 /* Touch/coarse-pointer fallback — overlays should be visible
    without hover so phone/tablet users can still see metadata. */
 @media (hover: none) {
   .plugins-home__card-overlay {
     opacity: 1;
+    pointer-events: auto;
+  }
+  .plugins-home__gallery-actions {
+    opacity: 1;
+    transform: translateY(0);
     pointer-events: auto;
   }
 }

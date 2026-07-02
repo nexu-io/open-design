@@ -231,6 +231,57 @@ describe('ChatPane streaming state', () => {
     expect(css).toContain('width: 24px;');
     expect(css).toContain('height: 24px;');
     expect(css).toContain('.chat-queued-send-overflow');
+    expect(css).toContain('.chat-log.is-balanced-transcript > .msg:first-of-type');
+    expect(css).toContain('margin-top: auto;');
+  });
+
+  it('balances finished transcripts near the composer without affecting active turns', () => {
+    const baseProps = {
+      projectKindForTracking: 'prototype' as const,
+      streaming: false,
+      error: null,
+      projectId: 'project-1',
+      projectFiles: [],
+      onEnsureProject: async () => 'project-1',
+      onSend: vi.fn(),
+      onStop: vi.fn(),
+      conversations,
+      activeConversationId: 'conv-1',
+      onSelectConversation: vi.fn(),
+      onDeleteConversation: vi.fn(),
+      projectMetadata,
+    };
+    const { container, rerender } = render(
+      <ChatPane
+        {...baseProps}
+        messages={[
+          { id: 'user-1', role: 'user', content: 'Make the landing page', createdAt: 1 },
+          { id: 'assistant-1', role: 'assistant', content: 'Done', createdAt: 2 },
+        ]}
+      />,
+    );
+
+    expect(container.querySelector('.chat-log')?.className).toContain('is-balanced-transcript');
+
+    rerender(
+      <ChatPane
+        {...baseProps}
+        streaming
+        messages={[
+          { id: 'user-1', role: 'user', content: 'Make the landing page', createdAt: 1 },
+          { id: 'assistant-1', role: 'assistant', content: 'Done', createdAt: 2 },
+          {
+            id: 'assistant-2',
+            role: 'assistant',
+            content: '',
+            createdAt: 3,
+            runStatus: 'running',
+          },
+        ]}
+      />,
+    );
+
+    expect(container.querySelector('.chat-log')?.className).not.toContain('is-balanced-transcript');
   });
 
   it('keeps composer popovers above the chat jump button', () => {
@@ -313,11 +364,13 @@ describe('ChatPane streaming state', () => {
     expect(copied).toContain('error_code: AGENT_EXECUTION_FAILED');
     expect(copied).toContain('project_id: project-1');
     expect(copied).toContain('conversation_id: conv-1');
-    expect(copied).toContain('json-rpc id 4: Connection reset by server');
+    expect(copied).toMatch(/^json-rpc id 4: Connection reset by server\n\nOpen Design run error diagnostics/);
+    expect(copied).not.toContain('raw_error:');
+    expect(copied).not.toContain('\nerror:\n');
   });
 
   it('formats run error diagnostics with a raw error when guidance copy differs', () => {
-    expect(buildRunErrorDiagnosticText({
+    const text = buildRunErrorDiagnosticText({
       message: 'Service unavailable. Try again.',
       rawMessage: 'json-rpc id 4: Connection reset by server',
       errorCode: 'UPSTREAM_UNAVAILABLE',
@@ -326,7 +379,30 @@ describe('ChatPane streaming state', () => {
       conversationId: 'conv-1',
       assistantMessageId: 'assistant-1',
       agentId: 'amr',
-    })).toContain('raw_error:\njson-rpc id 4: Connection reset by server');
+    });
+
+    expect(text).toMatch(/^json-rpc id 4: Connection reset by server\n\nOpen Design run error diagnostics/);
+    expect(text).not.toContain('raw_error:');
+    expect(text).toContain('error_code: UPSTREAM_UNAVAILABLE');
+    expect(text).not.toContain('\nerror:\n');
+  });
+
+  it('falls back to the display message when raw error text is unavailable', () => {
+    const text = buildRunErrorDiagnosticText({
+      message: 'Connection dropped. Try again.',
+      rawMessage: '  ',
+      errorCode: 'AGENT_CONNECTION_DROPPED',
+      traceId: 'run-abc',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      agentId: 'amr',
+    });
+
+    expect(text).toMatch(/^Connection dropped\. Try again\.\n\nOpen Design run error diagnostics/);
+    expect(text).not.toContain('raw_error:');
+    expect(text).toContain('error_code: AGENT_CONNECTION_DROPPED');
+    expect(text).not.toContain('\nerror:\n');
   });
 
   it('renders user turns with the chat bubble styling hook', () => {

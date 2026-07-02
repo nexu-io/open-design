@@ -3,16 +3,15 @@ name: ci
 on:
   pull_request:
   merge_group:
-  # Release validation is owned by the release workflows rather than this CI
-  # workflow: `release-stable` has a verify job before publishing, and
-  # `release-beta` builds from its selected release commit. Keep this trigger
-  # focused on PRs, main, and manual reruns instead of duplicating tag/release
-  # events that would run after those release workflows have already selected
-  # or validated their commit.
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      ci_mode:
+        description: Validation strength for this manual run
+        type: choice
+        options:
+          - full
+          - hot
+        default: full
 
 permissions:
   actions: read
@@ -20,137 +19,145 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}
   # Prefer current-head signal over preserving superseded logs: PR authors often
   # push fixups while this workflow is still running, and stale runs can report
   # failures for commits reviewers no longer need to evaluate. Release workflows
   # use cancel-in-progress: false where preserving build evidence matters more.
+  # Manual comparison runs need isolated groups so queued/stuck experiments do
+  # not block the next measurement on this branch.
   cancel-in-progress: true
 
 jobs:
-  change_scopes:
-    name: Detect CI change scopes
-    runs-on: ubuntu-latest
+  runners:
+    name: Resolve runner profiles
+    runs-on: ubuntu-24.04
     outputs:
+      runs_on: ${{ steps.runners.outputs.runs_on }}
+      decision: ${{ steps.runners.outputs.decision }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Resolve runner profiles
+        id: runners
+        env:
+          OD_CI_RUNNER_MODE: ${{ vars.OD_CI_RUNNER_MODE }}
+        run: python3 .github/scripts/runners.py
+
+  scopes:
+    name: Detect validation scopes
+    needs: [runners]
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
+    outputs:
+      ci_mode: ${{ steps.detect.outputs.ci_mode }}
       daemon_tests_required: ${{ steps.detect.outputs.daemon_tests_required }}
       web_tests_required: ${{ steps.detect.outputs.web_tests_required }}
       tools_dev_tests_required: ${{ steps.detect.outputs.tools_dev_tests_required }}
       tools_pack_tests_required: ${{ steps.detect.outputs.tools_pack_tests_required }}
       nix_validation_required: ${{ steps.detect.outputs.nix_validation_required }}
-      ui_p0_pr_required: ${{ steps.detect.outputs.ui_p0_pr_required }}
+      ui_p0_validation_required: ${{ steps.detect.outputs.ui_p0_validation_required }}
+      visual_validation_required: ${{ steps.detect.outputs.visual_validation_required }}
+      docker_validation_required: ${{ steps.detect.outputs.docker_validation_required }}
       workspace_validation_required: ${{ steps.detect.outputs.workspace_validation_required }}
-
-    steps:
-      - name: Detect workspace and app test scopes
-        id: detect
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          daemon_tests_required=false
-          web_tests_required=false
-          tools_dev_tests_required=false
-          tools_pack_tests_required=false
-          nix_validation_required=false
-          ui_p0_pr_required=false
-          workspace_validation_required=false
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            gh api --paginate \
-              "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
-              --jq '.[].filename' > "$RUNNER_TEMP/changed-files.txt"
-            while IFS= read -r file; do
-              if [[ "$file" == "apps/daemon/"* || "$file" == "packages/contracts/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
-                daemon_tests_required=true
-              fi
-              if [[ "$file" == "apps/web/"* || "$file" == "packages/components/"* || "$file" == "packages/contracts/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
-                web_tests_required=true
-              fi
-              if [[ "$file" == "scripts/"* || "$file" == "assets/"* || "$file" == "skills/"* || "$file" == "prompt-templates/"* || "$file" == "design-systems/"* || "$file" == "design-templates/"* || "$file" == "craft/"* ]]; then
-                daemon_tests_required=true
-                web_tests_required=true
-              fi
-              if [[ "$file" == "tools/dev/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
-                tools_dev_tests_required=true
-              fi
-              if [[ "$file" == "tools/pack/"* || "$file" == "apps/packaged/"* || "$file" == "apps/desktop/"* || "$file" == "packages/components/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
-                tools_pack_tests_required=true
-              fi
-              if [[ "$file" == "package.json" || "$file" == "apps/daemon/package.json" || "$file" == "apps/web/package.json" || "$file" == "apps/desktop/package.json" || "$file" == "apps/packaged/package.json" || "$file" == "packages/"*/"package.json" || "$file" == "tools/"*/"package.json" || "$file" == "e2e/package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" ]]; then
-                daemon_tests_required=true
-                web_tests_required=true
-                tools_dev_tests_required=true
-                tools_pack_tests_required=true
-              fi
-              if [[ "$file" == "apps/web/"* || "$file" == "apps/daemon/"* || "$file" == "packages/components/"* || "$file" == "packages/contracts/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* || "$file" == "e2e/ui/"* || "$file" == "e2e/lib/"* || "$file" == "e2e/resources/"* || "$file" == "e2e/scripts/"* || "$file" == "e2e/package.json" || "$file" == "e2e/playwright.config.ts" || "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/actions/setup-playwright/"* || "$file" == ".github/actions/setup-workspace/"* || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/ui-extended-main.yml" || "$file" == ".github/workflows/ui-p0-pr.yml" ]]; then
-                ui_p0_pr_required=true
-              fi
-              # Keep this filter in sync with flake.nix daemonWorkspacePaths / webWorkspacePaths.
-              if [[ "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == "flake.nix" || "$file" == "flake.lock" || "$file" == "nix/"* || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/nix-check.yml" || "$file" == ".github/workflows/nix-hash-autofix.yml" || "$file" == "apps/daemon/"* || "$file" == "apps/web/"* || "$file" == "packages/components/"* || "$file" == "packages/contracts/"* || "$file" == "packages/registry-protocol/"* || "$file" == "packages/agui-adapter/"* || "$file" == "packages/plugin-runtime/"* || "$file" == "packages/sidecar-proto/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/platform/"* || "$file" == "packages/diagnostics/"* || "$file" == "packages/host/"* || "$file" == "assets/"* || "$file" == "plugins/"* || "$file" == "skills/"* || "$file" == "design-systems/"* || "$file" == "design-templates/"* || "$file" == "craft/"* || "$file" == "prompt-templates/"* || "$file" == "scripts/update-nix-pnpm-deps-hash.ts" ]]; then
-                nix_validation_required=true
-              fi
-              case "$file" in
-                *.md|*.mdx|*.txt|LICENSE|.gitignore|.editorconfig|.vscode/*|.idea/*|docs/*|.github/ISSUE_TEMPLATE/*|.github/CODEOWNERS)
-                  ;;
-                apps/landing-page/*|flake.nix|flake.lock|nix/*|.github/workflows/nix-check.yml|.github/workflows/landing-page-ci.yml|.github/workflows/landing-page-staging.yml|.github/workflows/landing-page-production.yml|.github/workflows/blog-indexing-on-deploy.yml|.github/workflows/blog-indexing-monitor.yml|.github/workflows/blog-3day-report.yml|.github/workflows/seo-daily-report.yml|.github/workflows/actionlint.yml|.github/workflows/visual-pr-capture.yml|.github/workflows/visual-pr-comment.yml)
-                  ;;
-                *)
-                  workspace_validation_required=true
-                  ;;
-              esac
-              if [ "$daemon_tests_required" = "true" ] \
-                && [ "$web_tests_required" = "true" ] \
-                && [ "$tools_dev_tests_required" = "true" ] \
-                && [ "$tools_pack_tests_required" = "true" ] \
-                && [ "$nix_validation_required" = "true" ] \
-                && [ "$ui_p0_pr_required" = "true" ] \
-                && [ "$workspace_validation_required" = "true" ]; then
-                break
-              fi
-            done < "$RUNNER_TEMP/changed-files.txt"
-            if [ "$daemon_tests_required" = "true" ] \
-              || [ "$web_tests_required" = "true" ] \
-              || [ "$tools_dev_tests_required" = "true" ] \
-              || [ "$tools_pack_tests_required" = "true" ]; then
-              workspace_validation_required=true
-            fi
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            daemon_tests_required=true
-            web_tests_required=true
-            tools_dev_tests_required=true
-            tools_pack_tests_required=true
-            # Main already runs .github/workflows/nix-check.yml, so keep this
-            # workflow's push path focused on the non-Nix workspace signal.
-            nix_validation_required=false
-            workspace_validation_required=true
-          else
-            daemon_tests_required=true
-            web_tests_required=true
-            tools_dev_tests_required=true
-            tools_pack_tests_required=true
-            nix_validation_required=true
-            workspace_validation_required=true
-          fi
-          {
-            echo "daemon_tests_required=$daemon_tests_required"
-            echo "web_tests_required=$web_tests_required"
-            echo "tools_dev_tests_required=$tools_dev_tests_required"
-            echo "tools_pack_tests_required=$tools_pack_tests_required"
-            echo "nix_validation_required=$nix_validation_required"
-            echo "ui_p0_pr_required=$ui_p0_pr_required"
-            echo "workspace_validation_required=$workspace_validation_required"
-          } >> "$GITHUB_OUTPUT"
-
-  blob_guard:
-    name: Guard changed file sizes
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+      run_docker_build: ${{ steps.detect.outputs.run_docker_build }}
+      run_e2e_vitest: ${{ steps.detect.outputs.run_e2e_vitest }}
+      run_nix_validation: ${{ steps.detect.outputs.run_nix_validation }}
+      run_playwright_critical: ${{ steps.detect.outputs.run_playwright_critical }}
+      run_playwright_visual: ${{ steps.detect.outputs.run_playwright_visual }}
+      run_preflight: ${{ steps.detect.outputs.run_preflight }}
+      run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}
+      run_web_workspace_tests: ${{ steps.detect.outputs.run_web_workspace_tests }}
+      run_windows_tools_pack_payload_tests: ${{ steps.detect.outputs.run_windows_tools_pack_payload_tests }}
+      run_workspace_unit_tests: ${{ steps.detect.outputs.run_workspace_unit_tests }}
+      ui_p0_matrix: ${{ steps.detect.outputs.ui_p0_matrix }}
+      visual_matrix: ${{ steps.detect.outputs.visual_matrix }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
         with:
-          fetch-depth: 0
+          node-version-file: package.json
+
+      - name: Detect workspace and app test scopes
+        id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node --experimental-strip-types scripts/scopes.ts github-output
+
+      - name: Create visual report handoff
+        id: visual_report_handoff
+        if: ${{ github.event_name == 'pull_request' && steps.detect.outputs.run_playwright_visual == 'true' }}
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          handoff_id="visual-pr"
+          handoff_root="$RUNNER_TEMP/handoff-report-$handoff_id"
+          handoff_dir="$(python3 .github/scripts/handoff.py dir report "$handoff_id" --root "$handoff_root")"
+          mkdir -p "$handoff_dir"
+          jq -n \
+            --arg kind "report" \
+            --arg id "$handoff_id" \
+            --arg head "$HEAD_SHA" \
+            --arg base "$BASE_SHA" \
+            --arg report_type "visual-pr" \
+            --arg artifact_pattern "visual-pr-capture-$PR_NUMBER-$RUN_ID-*" \
+            --arg output_comment_id "visual-pr-report" \
+            --arg marker "<!-- visual-regression-bot -->" \
+            --argjson schema_version 1 \
+            --argjson pr_number "$PR_NUMBER" \
+            --argjson run_id "$RUN_ID" \
+            '{schema_version: $schema_version, kind: $kind, id: $id, pr_number: $pr_number, head_sha: $head, base_sha: $base, run_id: $run_id, report_type: $report_type, artifact_pattern: $artifact_pattern, output_comment_id: $output_comment_id, marker: $marker}' \
+            > "$handoff_dir/metadata.json"
+          python3 .github/scripts/handoff.py validate report "$handoff_dir" >/dev/null
+          {
+            echo "name=$(python3 .github/scripts/handoff.py artifact-name report "$handoff_id")"
+            echo "path=$handoff_root"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload visual report handoff
+        if: ${{ steps.visual_report_handoff.outputs.name != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.visual_report_handoff.outputs.name }}
+          path: ${{ steps.visual_report_handoff.outputs.path }}
+          if-no-files-found: error
+          retention-days: 7
+
+  static_gate:
+    name: Static gate
+    needs: [runners]
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
+    timeout-minutes: 10
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Install actionlint
+        run: |
+          case "$(uname -m)" in
+            x86_64) actionlint_arch=amd64 ;;
+            aarch64|arm64) actionlint_arch=arm64 ;;
+            *) echo "Unsupported actionlint architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${actionlint_arch}.tar.gz" \
+            | tar -xz actionlint
+          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+
+      - name: Check workflow files
+        run: actionlint -color
 
       - name: Check changed tracked file sizes
         env:
@@ -167,20 +174,13 @@ jobs:
               "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
               --jq '.[].filename' > "$changed_files"
           elif [ "${{ github.event_name }}" = "merge_group" ]; then
-            git diff --name-only --diff-filter=AMR \
-              "${{ github.event.merge_group.base_sha }}" \
-              "${{ github.event.merge_group.head_sha }}" > "$changed_files"
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            before="${{ github.event.before }}"
-            after="${{ github.sha }}"
-            if [[ "$before" =~ ^0+$ ]]; then
-              git ls-files > "$changed_files"
-            else
-              git diff --name-only --diff-filter=AMR "$before" "$after" > "$changed_files"
-            fi
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && git rev-parse --verify origin/main >/dev/null 2>&1; then
-            base="$(git merge-base origin/main HEAD)"
-            git diff --name-only --diff-filter=AMR "$base" HEAD > "$changed_files"
+            gh api --paginate \
+              "repos/${{ github.repository }}/compare/${{ github.event.merge_group.base_sha }}...${{ github.event.merge_group.head_sha }}" \
+              --jq '(.files // [])[] | select(.status != "removed") | .filename' > "$changed_files"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            gh api --paginate \
+              "repos/${{ github.repository }}/compare/main...${{ github.sha }}" \
+              --jq '(.files // [])[] | select(.status != "removed") | .filename' > "$changed_files"
           else
             git ls-files > "$changed_files"
           fi
@@ -216,10 +216,12 @@ jobs:
 
   nix_validation:
     name: Validate Nix flake
-    needs: [change_scopes]
-    if: ${{ needs.change_scopes.outputs.nix_validation_required == 'true' }}
-    runs-on: ubuntu-latest
+    needs: [scopes, runners]
+    if: ${{ needs.scopes.outputs.run_nix_validation == 'true' }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).general_medium }}
     timeout-minutes: 45
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -271,12 +273,107 @@ jobs:
 
           echo "status=$status" >> "$GITHUB_OUTPUT"
 
-      - name: Upload Nix hash refresh artifact
+      - name: Create Nix hash refresh handoffs
+        id: nix_handoff
         if: ${{ github.event_name == 'pull_request' && steps.flake_check.outcome == 'failure' && steps.hash_refresh.outputs.status != 'no-change' }}
+        env:
+          HASH_REFRESH_STATUS: ${{ steps.hash_refresh.outputs.status }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir="$RUNNER_TEMP/nix-hash-refresh"
+          echo "comment_created=false" >> "$GITHUB_OUTPUT"
+          echo "autofix_created=false" >> "$GITHUB_OUTPUT"
+
+          if [ "$HASH_REFRESH_STATUS" = "patch-generated" ] && [ "$HEAD_REPOSITORY" = "$REPOSITORY" ]; then
+            handoff_id="nix-pnpm-deps"
+            handoff_root="$RUNNER_TEMP/handoff-autofix-$handoff_id"
+            handoff_dir="$(python3 .github/scripts/handoff.py dir autofix "$handoff_id" --root "$handoff_root")"
+            mkdir -p "$handoff_dir"
+            cp "$source_dir/nix-pnpm-deps.patch" "$handoff_dir/patch.diff"
+            jq -n \
+              --arg kind "autofix" \
+              --arg id "$handoff_id" \
+              --arg head "$HEAD_SHA" \
+              --arg base "$BASE_SHA" \
+              --arg message "chore(nix): refresh pnpm deps hash" \
+              --argjson schema_version 1 \
+              --argjson pr_number "$PR_NUMBER" \
+              --argjson run_id "$RUN_ID" \
+              --argjson allowed_paths '["nix/pnpm-deps.nix"]' \
+              '{schema_version: $schema_version, kind: $kind, id: $id, pr_number: $pr_number, head_sha: $head, base_sha: $base, run_id: $run_id, allowed_paths: $allowed_paths, commit_message: $message}' \
+              > "$handoff_dir/metadata.json"
+            python3 .github/scripts/handoff.py validate autofix "$handoff_dir" >/dev/null
+            {
+              echo "autofix_created=true"
+              echo "autofix_name=$(python3 .github/scripts/handoff.py artifact-name autofix "$handoff_id")"
+              echo "autofix_path=$handoff_root"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$HASH_REFRESH_STATUS" != "patch-generated" ] || [ "$HEAD_REPOSITORY" != "$REPOSITORY" ]; then
+            handoff_id="nix-hash-refresh"
+            handoff_root="$RUNNER_TEMP/handoff-comment-$handoff_id"
+            handoff_dir="$(python3 .github/scripts/handoff.py dir comment "$handoff_id" --root "$handoff_root")"
+            mkdir -p "$handoff_dir"
+            marker="<!-- nix-hash-refresh -->"
+            body_path="$handoff_dir/body.md"
+            {
+              printf '%s\n' "$marker"
+              if [ "$HASH_REFRESH_STATUS" = "patch-generated" ]; then
+                printf "A generated Nix hash refresh is available for this PR.\n\n"
+                printf "Apply the diff below with \`git apply\`:\n\n"
+                printf '```diff\n'
+                cat "$source_dir/nix-pnpm-deps.patch"
+                printf '\n```\n'
+              else
+                printf "The failed \`ci\` run attempted to refresh \`nix/pnpm-deps.nix\`, but it could not produce a hash-only patch.\n\n"
+                printf "Inspect the \`update.log\` file in the failed CI run artifacts for details.\n"
+              fi
+            } > "$body_path"
+            jq -n \
+              --arg kind "comment" \
+              --arg id "$handoff_id" \
+              --arg head "$HEAD_SHA" \
+              --arg base "$BASE_SHA" \
+              --arg marker "$marker" \
+              --argjson schema_version 1 \
+              --argjson pr_number "$PR_NUMBER" \
+              --argjson run_id "$RUN_ID" \
+              '{schema_version: $schema_version, kind: $kind, id: $id, pr_number: $pr_number, head_sha: $head, base_sha: $base, run_id: $run_id, marker: $marker}' \
+              > "$handoff_dir/metadata.json"
+            if [ -f "$source_dir/update.log" ]; then
+              cp "$source_dir/update.log" "$handoff_dir/update.log"
+            fi
+            python3 .github/scripts/handoff.py validate comment "$handoff_dir" >/dev/null
+            {
+              echo "comment_created=true"
+              echo "comment_name=$(python3 .github/scripts/handoff.py artifact-name comment "$handoff_id")"
+              echo "comment_path=$handoff_root"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload Nix hash autofix handoff
+        if: ${{ steps.nix_handoff.outputs.autofix_created == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: nix-hash-refresh
-          path: ${{ runner.temp }}/nix-hash-refresh
+          name: ${{ steps.nix_handoff.outputs.autofix_name }}
+          path: ${{ steps.nix_handoff.outputs.autofix_path }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Nix hash comment handoff
+        if: ${{ steps.nix_handoff.outputs.comment_created == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.nix_handoff.outputs.comment_name }}
+          path: ${{ steps.nix_handoff.outputs.comment_path }}
           if-no-files-found: error
           retention-days: 14
 
@@ -292,12 +389,13 @@ jobs:
               cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           ## Generated Nix hash refresh
 
-          CI regenerated a patch for `nix/pnpm-deps.nix` and uploaded it as the
-          `nix-hash-refresh` artifact for this run.
+          CI regenerated a hash-only patch for `nix/pnpm-deps.nix` and uploaded
+          it through the shared handoff contract.
 
-          - same-repo PRs: the follow-up `nix-hash-autofix` workflow will try to
-            push the hash-only patch back to the PR branch automatically;
-          - fork PRs: a PR comment will include the patch and artifact guidance.
+          - same-repo PRs: `autofix.atom.yml` will try to push the patch back to the
+            PR branch automatically and will publish patch guidance only if the
+            trusted writer cannot complete the autofix;
+          - fork PRs: `comment.atom.yml` will publish patch guidance on the PR.
           EOF
               ;;
             no-change)
@@ -314,28 +412,42 @@ jobs:
           ## Nix hash refresh failed
 
           `nix flake check` failed and the helper could not generate a hash-only
-          patch. See the `nix-hash-refresh` artifact for `update.log`.
+          patch. `comment.atom.yml` will publish the generated guidance when a
+          comment handoff is available.
           EOF
               ;;
           esac
 
       - name: Fail when Nix validation fails
-        if: ${{ steps.flake_check.outcome == 'failure' }}
+        # Enforced everywhere EXCEPT pull_request. A stale `nix/pnpm-deps.nix` hash is the routine,
+        # self-healing consequence of any `pnpm-lock.yaml` change: the steps above already regenerate
+        # the hash and hand it to `autofix.atom.yml`, which pushes the refresh back to the PR branch.
+        # Failing the job on the PR turns a transient, auto-fixed hash drift into a red required-ish
+        # check that reads as a real CI failure downstream (BLOCKED mergeStateStatus / ci_status=failure
+        # to the review bot) — the same deadlock the `needs-validation` gate documents below. So the PR
+        # check stays green while the autofix lands, and the real gate runs at merge time: merge_group
+        # (and manual full runs) still fail closed, so a genuinely broken Nix build can never reach main.
+        if: ${{ steps.flake_check.outcome == 'failure' && github.event_name != 'pull_request' }}
         run: exit 1
 
   preflight:
     name: Preflight
-    needs: [change_scopes]
-    if: ${{ needs.change_scopes.outputs.workspace_validation_required == 'true' }}
-    runs-on: ubuntu-latest
+    needs: [scopes, runners]
+    if: ${{ needs.scopes.outputs.run_preflight == 'true' }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).general_medium }}
     timeout-minutes: 45
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).general_medium) }}
 
       # `scripts/postinstall.mjs` only prebuilds package/tool entrypoints that
       # are needed immediately after install for linked bins and shared
@@ -360,7 +472,7 @@ jobs:
 
       - name: Typecheck workspaces
         run: |
-          pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency=4 --if-present run typecheck
+          pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency="${OPEN_DESIGN_WORKSPACE_CONCURRENCY:-1}" --if-present run typecheck
           pnpm exec tsc -p scripts/tsconfig.json --noEmit
 
       - name: Check repository layout policies
@@ -371,17 +483,22 @@ jobs:
 
   workspace_unit_tests:
     name: Workspace unit tests
-    needs: [change_scopes]
-    if: ${{ needs.change_scopes.outputs.workspace_validation_required == 'true' }}
-    runs-on: ubuntu-latest
+    needs: [scopes, runners]
+    if: ${{ needs.scopes.outputs.run_workspace_unit_tests == 'true' }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).workspace_unit }}
     timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).workspace_unit) }}
 
       - name: Workspace unit tests
         run: |
@@ -390,18 +507,38 @@ jobs:
           pnpm --filter @open-design/platform test
           pnpm --filter @open-design/sidecar test
           pnpm --filter @open-design/sidecar-proto test
-          if [ "${{ needs.change_scopes.outputs.tools_dev_tests_required }}" = "true" ]; then
+          if [ "${{ needs.scopes.outputs.tools_dev_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/tools-dev test
           fi
-          if [ "${{ needs.change_scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
+          if [ "${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/tools-pack test
           fi
 
+      - name: Probe watcher environment
+        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e "const os=require('node:os'); console.log(JSON.stringify({node:process.version, platform:process.platform, arch:process.arch, tmpdir:os.tmpdir(), env:{NODE_ENV:process.env.NODE_ENV, VITEST:process.env.VITEST, CHOKIDAR_USEPOLLING:process.env.CHOKIDAR_USEPOLLING, CHOKIDAR_INTERVAL:process.env.CHOKIDAR_INTERVAL}}, null, 2))"
+          df -T /tmp "$RUNNER_TEMP" "$GITHUB_WORKSPACE" || true
+          mount | grep -E ' /tmp |/home/runner|_work' || true
+          cat /proc/sys/fs/inotify/max_user_watches /proc/sys/fs/inotify/max_user_instances || true
+
+      - name: Prebuild daemon entrypoint declarations
+        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+        run: pnpm --filter @open-design/daemon build
+
+      - name: Daemon workspace tests
+        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+        env:
+          OD_WATCHER_TEST_DEBUG: "1"
+        run: pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts
+
   windows_tools_pack_payload_tests:
     name: Windows tools-pack payload tests
-    needs: [change_scopes]
-    if: ${{ needs.change_scopes.outputs.tools_pack_tests_required == 'true' }}
-    runs-on: windows-latest
+    needs: [scopes, runners]
+    if: ${{ needs.scopes.outputs.run_windows_tools_pack_payload_tests == 'true' }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).windows_tools }}
     timeout-minutes: 20
 
     steps:
@@ -410,73 +547,30 @@ jobs:
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).windows_tools) }}
 
       - name: Windows launcher payload archive tests
         run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts
 
-  daemon_workspace_tests:
-    name: Daemon workspace tests (${{ matrix.shard }})
-    needs: [change_scopes]
-    if: ${{ needs.change_scopes.outputs.daemon_tests_required == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: ["1/3", "2/3", "3/3"]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-
-      - name: Setup workspace
-        uses: ./.github/actions/setup-workspace
-
-      - name: Prebuild daemon entrypoint declarations
-        run: pnpm --filter @open-design/daemon build
-
-      - name: Daemon workspace tests
-        run: pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts --shard ${{ matrix.shard }}
-
-  daemon_workspace_gate:
-    name: Daemon workspace tests
-    needs:
-      - change_scopes
-      - daemon_workspace_tests
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Check daemon workspace test shards
-        env:
-          DAEMON_REQUIRED: ${{ needs.change_scopes.outputs.daemon_tests_required }}
-          NEEDS_JSON: ${{ toJSON(needs) }}
-        run: |
-          set -euo pipefail
-          echo "$NEEDS_JSON" | jq .
-          shard_result="$(echo "$NEEDS_JSON" | jq -r '.daemon_workspace_tests.result')"
-          if [ "$DAEMON_REQUIRED" != "true" ] && [ "$shard_result" = "skipped" ]; then
-            exit 0
-          fi
-          if [ "$shard_result" != "success" ]; then
-            echo "Daemon workspace test shards failed: $shard_result"
-            exit 1
-          fi
-
   web_workspace_tests:
     name: Web workspace tests
-    needs: [change_scopes]
-    if: ${{ needs.change_scopes.outputs.web_tests_required == 'true' }}
-    runs-on: ubuntu-latest
+    needs: [scopes, runners]
+    if: ${{ needs.scopes.outputs.run_web_workspace_tests == 'true' }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).js_hot }}
     timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot) }}
 
       - name: Prebuild web sidecar declarations
         run: pnpm --filter @open-design/web build:sidecar
@@ -484,26 +578,31 @@ jobs:
       - name: Web workspace tests
         run: pnpm --filter @open-design/web test
 
-  browser_tests:
-    name: Browser tests
-    needs:
-      - change_scopes
-    if: ${{ needs.change_scopes.outputs.workspace_validation_required == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  e2e_vitest:
+    name: E2E Vitest
+    needs: [scopes, runners]
+    if: ${{ needs.scopes.outputs.run_e2e_vitest == 'true' }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).js_hot }}
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).js_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -511,28 +610,82 @@ jobs:
           pnpm --filter @open-design/desktop build
           pnpm --filter @open-design/web build:sidecar
 
-      - name: E2E vitest
+      - name: E2E Vitest
         run: pnpm --filter @open-design/e2e test
 
-      - name: Playwright critical
-        if: ${{ github.event_name != 'pull_request' || needs.change_scopes.outputs.ui_p0_pr_required != 'true' }}
-        run: |
-          pnpm -C e2e exec tsx scripts/playwright.ts clean
-          pnpm -C e2e run test:ui:critical
+  playwright_critical:
+    name: Playwright critical (${{ matrix.group }})
+    needs: [scopes, runners]
+    if: ${{ needs.scopes.outputs.run_playwright_critical == 'true' }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: a
+            files: ui/amr-onboarding.test.ts ui/app.test.ts ui/app-design-files.test.ts ui/app-manual-edit.test.ts ui/api-empty-response.test.ts
+          - group: b
+            files: ui/app-restoration.test.ts ui/entry-chrome-flows.test.ts ui/project-management-flows.test.ts ui/settings-api-protocol.test.ts ui/settings-local-cli-codex-fallback.test.ts ui/critical-smoke.test.ts ui/workspace-keyboard-flows.test.ts
 
-  build_workspaces:
-    name: Build workspaces
-    needs: [change_scopes]
-    if: ${{ needs.change_scopes.outputs.workspace_validation_required == 'true' }}
-    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
+
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
+        with:
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
+
+      - name: Prebuild workspace type declarations
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/web build:sidecar
+
+      - name: Clean Playwright state
+        run: pnpm -C e2e exec tsx scripts/playwright.ts clean
+
+      - name: Playwright critical
+        env:
+          OD_PLAYWRIGHT_FULLY_PARALLEL: "1"
+        run: pnpm -C e2e exec playwright test -c playwright.config.ts ${{ matrix.files }} --grep '@critical'
+
+  ui_p0_smoke:
+    name: UI P0 smoke
+    needs: [scopes, runners]
+    if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
     timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
+
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
+        with:
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -540,55 +693,377 @@ jobs:
           pnpm --filter @open-design/desktop build
           pnpm --filter @open-design/web build:sidecar
 
-      # Keep workspace builds serialized so generated dist output and local
-      # runtime artifacts are produced in a deterministic order. Parallel
-      # recursive builds would surface late-package failures sooner, but the
-      # current workspace is small enough that safer logs and fewer shared-FS
-      # races outweigh the lost parallelism; revisit if the package count grows.
-      - name: Build workspaces
-        run: pnpm -r --filter '!@open-design/landing-page' --workspace-concurrency=1 --if-present run build
+      - name: Clean Playwright state
+        run: pnpm -C e2e exec tsx scripts/playwright.ts clean
+
+      - name: Run UI shell smoke
+        run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group smoke
+
+      - name: Upload Playwright debug artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-p0-ci-${{ github.run_id }}-smoke
+          path: |
+            e2e/ui/reports/playwright-html-report
+            e2e/ui/reports/test-results
+            e2e/ui/reports/results.json
+            e2e/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ui_p0:
+    name: UI P0 (${{ matrix.name }})
+    needs: [scopes, runners]
+    if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.scopes.outputs.ui_p0_matrix) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
+
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
+        with:
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
+
+      - name: Prebuild workspace type declarations
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/web build:sidecar
+
+      - name: Clean Playwright state
+        run: pnpm -C e2e exec tsx scripts/playwright.ts clean
+
+      - name: Run UI P0 domain
+        run: pnpm -C e2e exec tsx scripts/playwright.ts run-ui-group ${{ matrix.shard }}
+
+      - name: Upload Playwright debug artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-p0-ci-${{ github.run_id }}-${{ matrix.name }}
+          path: |
+            e2e/ui/reports/playwright-html-report
+            e2e/ui/reports/test-results
+            e2e/ui/reports/results.json
+            e2e/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  playwright_visual:
+    name: Playwright visual (${{ matrix.name }})
+    needs: [scopes, runners]
+    if: ${{ needs.scopes.outputs.run_playwright_visual == 'true' }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).visual_hot }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.scopes.outputs.visual_matrix) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).visual_hot) }}
+
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
+        with:
+          package-json-path: e2e/package.json
+          install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).visual_hot) }}
+
+      - name: Prebuild workspace type declarations
+        run: |
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+          pnpm --filter @open-design/web build:sidecar
+
+      - name: Run strict visual Playwright suite
+        id: visual
+        continue-on-error: true
+        env:
+          OD_VISUAL_OUTPUT_DIR: ui/reports/visual-screenshots
+          OD_PLAYWRIGHT_FULLY_PARALLEL: "1"
+        run: |
+          pnpm -C e2e exec tsx scripts/playwright.ts clean
+          pnpm -C e2e exec playwright test -c playwright.visual.config.ts ${{ matrix.files }}
+
+      - name: Write capture manifest
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        run: |
+          mkdir -p e2e/ui/reports/visual-report
+          cat > e2e/ui/reports/visual-report/manifest.json <<'JSON'
+          {
+            "pr_number": "${{ github.event.pull_request.number }}",
+            "head_sha": "${{ github.event.pull_request.head.sha }}",
+            "base_sha": "${{ github.event.pull_request.base.sha }}",
+            "run_id": "${{ github.run_id }}",
+            "group": "${{ matrix.name }}",
+            "capture_outcome": "${{ steps.visual.outcome }}"
+          }
+          JSON
+
+      - name: Upload PR visual artifact
+        id: upload_visual_artifact
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-pr-capture-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ matrix.name }}
+          path: |
+            e2e/ui/reports/visual-screenshots
+            e2e/ui/reports/visual-results.json
+            e2e/ui/reports/visual-report/manifest.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload manual visual artifact
+        if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-ci-${{ github.run_id }}-${{ matrix.name }}
+          path: |
+            e2e/ui/reports/visual-screenshots
+            e2e/ui/reports/visual-results.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Fail when strict visual tests fail
+        if: ${{ steps.visual.outcome != 'success' }}
+        run: exit 1
+
+  docker_pr:
+    name: Docker image build
+    needs: [scopes, runners]
+    if: ${{ needs.scopes.outputs.run_docker_build == 'true' }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).general_medium }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/od
+          tags: |
+            type=sha,prefix=pr-${{ github.event.pull_request.number }}-sha-,format=short,enable=${{ github.event_name == 'pull_request' }}
+            type=sha,prefix=queue-sha-,format=short,enable=${{ github.event_name == 'merge_group' }}
+            type=sha,prefix=manual-sha-,format=short,enable=${{ github.event_name == 'workflow_dispatch' }}
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            NODE_IMAGE=public.ecr.aws/docker/library/node:24-alpine
+            RUNTIME_IMAGE=public.ecr.aws/docker/library/node:24-alpine
+          cache-from: type=gha
 
   validate:
-    # Legacy `ci` remains the current factual gate surface. Keep this job on
-    # `Validate workspace` until a later ruleset follow-up explicitly moves the
-    # required check over to `Validate workspace gate` from `ci-gate`.
     name: Validate workspace
     needs:
-      - change_scopes
-      - blob_guard
+      - scopes
+      - runners
+      - static_gate
       - preflight
       - nix_validation
       - workspace_unit_tests
       - windows_tools_pack_payload_tests
-      - daemon_workspace_gate
       - web_workspace_tests
-      - browser_tests
-      - build_workspaces
+      - e2e_vitest
+      - playwright_critical
+      - ui_p0_smoke
+      - ui_p0
+      - playwright_visual
+      - docker_pr
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     timeout-minutes: 5
 
     steps:
       - name: Check workspace validation jobs
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
+          # `nix_validation` is advisory on pull_request and enforced only at merge time (see the
+          # `Fail when Nix validation fails` step). The gate honors that split below: on pull_request a
+          # red Nix job is ignored, on merge_group / manual full runs it is a hard requirement.
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           echo "$NEEDS_JSON" | jq .
-          failures="$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key)=\(.value.result)"')"
+          failures="$(echo "$NEEDS_JSON" | jq -r --arg event "$EVENT_NAME" '
+            to_entries[]
+            | select(.value.result != "success" and .value.result != "skipped")
+            | select(.key != "nix_validation" or $event != "pull_request")
+            | "\(.key)=\(.value.result)"')"
           if [ -n "$failures" ]; then
             echo "Workspace validation failed:"
             echo "$failures"
             exit 1
           fi
 
-  runtime_trace:
-    name: Runtime trace
+          required_misses="$(echo "$NEEDS_JSON" | jq -r --arg event "$EVENT_NAME" '
+            . as $needs |
+            ($needs.scopes.outputs // {}) as $out |
+            def when($condition; $jobs): if $condition then $jobs else [] end;
+            (
+              ["scopes", "static_gate"]
+              + when($out.run_preflight == "true"; ["preflight"])
+              + when($out.run_workspace_unit_tests == "true"; ["workspace_unit_tests"])
+              + when($out.run_windows_tools_pack_payload_tests == "true"; ["windows_tools_pack_payload_tests"])
+              + when($out.run_web_workspace_tests == "true"; ["web_workspace_tests"])
+              + when($out.run_e2e_vitest == "true"; ["e2e_vitest"])
+              + when($out.run_playwright_critical == "true"; ["playwright_critical"])
+              + when($out.run_ui_p0 == "true"; ["ui_p0_smoke", "ui_p0"])
+              + when($out.run_playwright_visual == "true"; ["playwright_visual"])
+              + when($out.run_nix_validation == "true" and $event != "pull_request"; ["nix_validation"])
+              + when($out.run_docker_build == "true"; ["docker_pr"])
+            )[]
+            | select(($needs[.].result // "missing") != "success")
+            | "\(.)=\($needs[.].result // "missing")"
+          ')"
+          if [ -n "$required_misses" ]; then
+            echo "Required validation jobs did not succeed:"
+            echo "$required_misses"
+            exit 1
+          fi
+
+      - name: Block merge while the needs-validation label is present
+        # Hard gate: a PR that still carries `needs-validation` must not merge. Enforced ONLY in
+        # the merge_group (merge-queue) context — never on pull_request. main requires the merge
+        # queue, so every merge passes through merge_group; a needs-validation entry fails this
+        # step there and is ejected from the queue, so it can never land.
+        #
+        # Why not also fail on pull_request: that turns the PR's own required `Validate workspace`
+        # check red, and a deliberately-red required check is indistinguishable from a real CI
+        # failure to everything downstream — it flips the PR's mergeStateStatus to BLOCKED and
+        # reads as ci_status=failure to the review bot, which deadlocks the very QA/validation that
+        # is supposed to clear the label (QA never gets requested → label never removed → blocked
+        # forever). The merge_group run executes on the queue's transient ref, so this failure does
+        # NOT appear in the PR head's status rollup; the PR stays green until the label is cleared.
+        # Fails closed: any label-lookup error blocks rather than silently waving the merge through.
+        # Respects skip-validation implicitly (that override means needs-validation is never added).
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          # Resolving the queued PR via commits/<sha>/pulls alone is unreliable: the merge queue
+          # squashes, so the queued commits are NEW synthetic SHAs GitHub does not associate back
+          # to the PR — that found nothing and waved a needs-validation PR through (#4736). So we
+          # resolve each merge-group commit to a PR from several signals, per commit (see below).
+          MERGE_GROUP_REF: ${{ github.event.merge_group.head_ref }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "merge_group" ]; then
+            echo "needs-validation is gated at merge time in the merge_group context; nothing to enforce on $EVENT_NAME (PR check stays green)."
+          else
+            # Resolve EVERY merge-group commit to at least one real PR and check its labels.
+            # Each queued entry can be recovered from up to three signals:
+            #   1. ref `.../pr-<N>-<sha>` — names the (tip) entry only; squash-safe.
+            #   2. the commit subject's trailing `(#N)` — the queue appends each entry's own PR
+            #      number, so this recovers the NON-tip PRs of a batched group.
+            #   3. commits/<sha>/pulls — covers a non-squash queue where commits map back directly.
+            # A `(#N)` can also be a spurious reference — e.g. #4833, titled "... (#4828)", where
+            # 4828 is the fixed ISSUE, not a PR; `gh pr view 4828` then fails with "Could not
+            # resolve to a PullRequest". We must NOT fail closed on that (it ejected a clean,
+            # label-free PR from the queue forever) — but we must also NOT blindly skip it, or a
+            # batched non-tip PR whose only recovered number is such a reference would go unchecked
+            # and a needs-validation entry could slip through (#4736). So we resolve PER COMMIT:
+            # ignore a non-PR candidate only when its commit is still covered by another candidate
+            # that DOES resolve to a real PR; a commit that resolves to no PR fails closed.
+            compare_json="$(gh api "repos/$REPO/compare/$BASE_SHA...$HEAD_SHA")"
+            ref_prs="$(printf '%s\n' "$MERGE_GROUP_REF" | grep -oE 'pr-[0-9]+' | grep -oE '[0-9]+' || true)"
+            commit_shas="$(printf '%s' "$compare_json" | jq -r '.commits[].sha')"
+            if [ -z "$commit_shas" ]; then
+              echo "::error::merge_group compare $BASE_SHA...$HEAD_SHA returned no commits — cannot resolve queued PRs; blocking merge (fail closed)."
+              exit 1
+            fi
+            checked=""
+            for sha in $commit_shas; do
+              subject="$(printf '%s' "$compare_json" | jq -r --arg s "$sha" '.commits[] | select(.sha==$s) | .commit.message | split("\n")[0]')"
+              subj_prs="$(printf '%s' "$subject" | grep -oE '\(#[0-9]+\)' | grep -oE '[0-9]+' || true)"
+              # Required assignment (no `|| true`): a transient API failure must block, not
+              # silently shrink this commit's candidate set.
+              assoc_prs="$(gh api "repos/$REPO/commits/$sha/pulls" --jq '.[].number')"
+              ref_for_commit=""
+              [ "$sha" = "$HEAD_SHA" ] && ref_for_commit="$ref_prs"
+              candidates="$(printf '%s\n%s\n%s\n' "$subj_prs" "$assoc_prs" "$ref_for_commit" | grep -E '^[0-9]+$' | sort -u || true)"
+              covered=0
+              for pr in $candidates; do
+                if ! labels="$(gh pr view "$pr" --repo "$REPO" --json labels --jq '.labels[].name' 2>/tmp/pr_view_err)"; then
+                  if grep -q 'Could not resolve to a PullRequest' /tmp/pr_view_err; then
+                    echo "commit $sha: candidate #$pr is not a pull request (e.g. an issue reference) — ignoring this candidate."
+                    continue
+                  fi
+                  echo "::error::label lookup for #$pr (commit $sha) failed — blocking merge (fail closed):"
+                  cat /tmp/pr_view_err
+                  exit 1
+                fi
+                covered=1
+                case " $checked " in *" $pr "*) ;; *) checked="$checked $pr";; esac
+                if printf '%s\n' "$labels" | grep -qx 'needs-validation'; then
+                  echo "::error::PR #$pr still has 'needs-validation' — blocking merge."
+                  exit 1
+                fi
+                echo "PR #$pr: no needs-validation label."
+              done
+              if [ "$covered" -eq 0 ]; then
+                echo "::error::merge-group commit $sha resolved to no pull request (candidates: ${candidates:-none}) — cannot verify needs-validation; blocking merge (fail closed)."
+                exit 1
+              fi
+            done
+            echo "No 'needs-validation' label in the queued group ($checked ) — clear to merge."
+          fi
+
+  runtime_summary:
+    name: Runtime summary
     needs:
+      - runners
       - validate
-    if: ${{ always() && github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     timeout-minutes: 5
+    continue-on-error: true
 
     steps:
       - name: Summarize workflow runtime

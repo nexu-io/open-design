@@ -23,6 +23,7 @@ export type IconName =
   | 'eye-off'
   | 'file'
   | 'file-code'
+  | 'file-text'
   | 'folder'
   | 'folder-filled'
   | 'fork'
@@ -42,10 +43,14 @@ export type IconName =
   | 'kanban'
   | 'layers-filled'
   | 'languages'
+  | 'layout'
   | 'lightbulb'
   | 'link'
+  | 'log-out'
   | 'integrations-filled'
+  | 'maximize'
   | 'mic'
+  | 'minimize'
   | 'minus'
   | 'more-horizontal'
   | 'orbit'
@@ -58,6 +63,7 @@ export type IconName =
   | 'plus-filled'
   | 'puzzle'
   | 'star'
+  | 'swatchbook'
   | 'play'
   | 'present'
   | 'refresh'
@@ -67,6 +73,7 @@ export type IconName =
   | 'settings'
   | 'share'
   | 'sliders'
+  | 'smartphone'
   | 'spinner'
   | 'sparkles'
   | 'stop'
@@ -252,6 +259,14 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M15 3h6v6" />
           <path d="M10 14 21 3" />
           <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+        </svg>
+      );
+    case 'log-out':
+      return (
+        <svg {...common}>
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <path d="m16 17 5-5-5-5" />
+          <path d="M21 12H9" />
         </svg>
       );
     case 'file':
@@ -473,10 +488,10 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
       );
     case 'more-horizontal':
       return (
-        <svg {...common}>
-          <circle cx="5" cy="12" r="1.4" />
-          <circle cx="12" cy="12" r="1.4" />
-          <circle cx="19" cy="12" r="1.4" />
+        <svg {...common} fill="currentColor" stroke="none">
+          <circle cx="5.5" cy="12" r="1.75" />
+          <circle cx="12" cy="12" r="1.75" />
+          <circle cx="18.5" cy="12" r="1.75" />
         </svg>
       );
     case 'orbit':
@@ -524,6 +539,32 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
         <svg {...common}>
           <path d="M12 20h9" />
           <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z" />
+        </svg>
+      );
+    case 'layout':
+      // Dashboard/wireframe frame: outer card with a header band and a
+      // sidebar column — reads as "lo-fi screen layout" at small sizes.
+      return (
+        <svg {...common}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18" />
+          <path d="M9 21V9" />
+        </svg>
+      );
+    case 'smartphone':
+      return (
+        <svg {...common}>
+          <rect x="5" y="2" width="14" height="20" rx="2.5" />
+          <path d="M11 18h2" />
+        </svg>
+      );
+    case 'file-text':
+      return (
+        <svg {...common}>
+          <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+          <path d="M5 3h9l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+          <path d="M8 13h8" />
+          <path d="M8 17h6" />
         </svg>
       );
     case 'plus':
@@ -578,9 +619,8 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
       );
     case 'send':
       return (
-        <svg {...common}>
-          <path d="M22 2 11 13" />
-          <path d="m22 2-7 20-4-9-9-4z" />
+        <svg {...common} fill="currentColor" stroke="none">
+          <path d="M3.48 2.41a.75.75 0 0 0-.93.94l2.43 7.9h8.52a.75.75 0 0 1 0 1.5H4.98l-2.43 7.9a.75.75 0 0 0 .93.94 60.5 60.5 0 0 0 18.44-8.98.75.75 0 0 0 0-1.22A60.5 60.5 0 0 0 3.48 2.41Z" />
         </svg>
       );
     case 'settings':
@@ -636,8 +676,24 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
       );
     case 'stop':
       return (
+        <svg {...common} fill="currentColor" stroke="none">
+          {/* Fill ~58% of the viewBox (was 50% at 12/24) so the square reads at
+             a weight comparable to the send glyph in the composer's icon-only
+             button instead of looking like a tiny dot. */}
+          <rect x="5" y="5" width="14" height="14" rx="2" />
+        </svg>
+      );
+    case 'swatchbook':
+      // Lucide-style swatchbook — a folded swatch card peeling off a stacked
+      // base. Reads as "brand kit / palette card" rather than the generic
+      // `blocks` glyph, matching the Brand Kit nav destination and the
+      // "Create Brand Kit" home chip.
+      return (
         <svg {...common}>
-          <rect x="6" y="6" width="12" height="12" rx="1.5" />
+          <path d="M11 17a4 4 0 0 1-8 0V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2Z" />
+          <path d="M16.7 13H19a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H7" />
+          <path d="M7 17h.01" />
+          <path d="m11 8 2.3-2.3a2.4 2.4 0 0 1 3.404.004L18.6 7.6a2.4 2.4 0 0 1 .026 3.434L9.9 19.8" />
         </svg>
       );
     case 'sun':
@@ -719,6 +775,24 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M11 5 6 9H2v6h4l5 4z" />
           <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
           <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+        </svg>
+      );
+    case 'maximize':
+      return (
+        <svg {...common}>
+          <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+          <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+          <path d="M21 16v3a2 2 0 0 1-2 2h-3" />
+          <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+        </svg>
+      );
+    case 'minimize':
+      return (
+        <svg {...common}>
+          <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+          <path d="M16 3v3a2 2 0 0 0 2 2h3" />
+          <path d="M21 16h-3a2 2 0 0 0-2 2v3" />
+          <path d="M3 16h3a2 2 0 0 1 2 2v3" />
         </svg>
       );
     case 'zoom-in':

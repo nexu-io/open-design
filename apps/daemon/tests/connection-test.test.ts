@@ -22,7 +22,7 @@ import {
   validateBaseUrlResolved,
   type DnsLookupAddress,
 } from '../src/connectionTest.js';
-import { listProviderModels } from '../src/providerModels.js';
+import { listProviderModels } from '../src/integrations/provider-models.js';
 import { startServer } from '../src/server.js';
 import { rememberLiveModels } from '../src/runtimes/models.js';
 
@@ -204,6 +204,9 @@ describe('POST /api/provider/models', () => {
           { id: 'gpt-4o-mini', object: 'model' },
           { id: 'gpt-4o', object: 'model' },
           { id: 'gpt-4o', object: 'model' },
+          { id: 'wan2-1-14b-t2v-250225', object: 'model' },
+          { id: 'text-embedding-3-large', object: 'model' },
+          { id: 'dall-e-3', object: 'model' },
         ],
       });
     });
@@ -645,6 +648,38 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.status).toBe(401);
   });
 
+  it('maps NVIDIA DEGRADED errors to actionable upstream detail', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream((url) => {
+        expect(url).toBe('https://integrate.api.nvidia.com/v1/chat/completions');
+        return jsonResponse(
+          { error: { message: 'DEGRADED function id=abc123' } },
+          { status: 400 },
+        );
+      }),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://integrate.api.nvidia.com/v1',
+        apiKey: 'nvapi-test',
+        model: 'minimaxai/minimax-m3',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('upstream_unavailable');
+    expect(body.status).toBe(400);
+    expect(body.detail).toContain('selected NVIDIA model instance');
+    expect(body.detail).toContain('Try a different model');
+    expect(body.detail).not.toContain('function id');
+  });
+
   it('does not add a duplicate version segment for versioned OpenAI-compatible subpaths', async () => {
     const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
       const url = String(input);
@@ -677,6 +712,91 @@ describe('POST /api/test/connection provider mode', () => {
       'https://api.deepinfra.com/v1/openai/chat/completions',
       expect.anything(),
     );
+  });
+
+  it('returns static AWS Bedrock model seeds without calling upstream fetch', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({ error: 'unexpected upstream call' }, { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'bedrock',
+        baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+        apiKey: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      ok: true,
+      kind: 'success',
+    });
+    expect(body.models).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        }),
+      ]),
+    );
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => !String(input).startsWith(baseUrl),
+      ),
+    ).toBe(false);
+  });
+
+  it('rejects malformed AWS Bedrock model-list URLs before static seeds', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({ error: 'unexpected upstream call' }, { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'bedrock',
+        baseUrl: 'not-a-url',
+        apiKey: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      ok: false,
+      kind: 'invalid_base_url',
+    });
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => !String(input).startsWith(baseUrl),
+      ),
+    ).toBe(false);
+  });
+
+  it('rejects forbidden AWS Bedrock model-list URLs before static seeds', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({ error: 'unexpected upstream call' }, { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'bedrock',
+        baseUrl: 'http://10.0.0.8:8080',
+        apiKey: '',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      ok: false,
+      kind: 'forbidden',
+    });
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => !String(input).startsWith(baseUrl),
+      ),
+    ).toBe(false);
   });
 
   it('checks SenseAudio non-chat model availability without probing chat completions', async () => {
@@ -774,6 +894,36 @@ describe('POST /api/test/connection provider mode', () => {
       'https://api.senseaudio.cn/v1/chat/completions',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('reports AWS Bedrock connection tests as unsupported without calling upstream fetch', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({ error: 'unexpected upstream call' }, { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'bedrock',
+        baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+        apiKey: '',
+        model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      ok: false,
+      kind: 'unknown',
+      model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    });
+    expect(String(body.detail)).toContain('AWS Bedrock BYOK requires AWS credential signing');
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => !String(input).startsWith(baseUrl),
+      ),
+    ).toBe(false);
   });
 
   it('maps a 404 to not_found_model', async () => {
@@ -2141,11 +2291,9 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
 setImmediate(() => process.exit(0));
 `,
         async () => {
-          // CODEX_API_KEY only flows through when the user has also
-          // configured a custom OPENAI_BASE_URL — i.e. they intend to
-          // authenticate Codex CLI against a third-party gateway. Without
-          // the base URL, spawnEnvForAgent strips the credential so Codex
-          // CLI's own `codex login` wins (issue #2420).
+          // Settings -> Local CLI -> Advanced is an explicit low-level CLI
+          // env override. API keys configured there are passed to the child,
+          // while unrelated env keys remain filtered by app-config allowlists.
           const res = await realFetch(`${baseUrl}/api/test/connection`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -2186,11 +2334,15 @@ setImmediate(() => process.exit(0));
     }
   });
 
-  it('strips stale Codex API keys when no custom OPENAI_BASE_URL is configured', async () => {
+  it('preserves inherited Codex API keys during connection tests', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-codex-strip-'));
     const envFile = path.join(markerDir, 'env.json');
     const codexHome = path.join(markerDir, 'codex-home');
+    const previousOpenAiKey = process.env.OPENAI_API_KEY;
+    const previousCodexKey = process.env.CODEX_API_KEY;
     try {
+      process.env.OPENAI_API_KEY = 'sk-inherited-openai';
+      process.env.CODEX_API_KEY = 'sk-inherited-codex';
       await withFakeCodex(
         `
 const fs = require('node:fs');
@@ -2203,12 +2355,8 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
 setImmediate(() => process.exit(0));
 `,
         async () => {
-          // Simulates the user flow that triggered issue #2420: a stale
-          // BYOK OPENAI_API_KEY sat in agentCliEnv.codex from a previous
-          // session, the user cleared the BYOK dialog (which doesn't
-          // touch agentCliEnv) and switched back to Local CLI. Without
-          // an OPENAI_BASE_URL the daemon must keep the secret out of
-          // the spawn so Codex CLI's own `codex login` wins.
+          // These keys come from the process environment, not Open Design
+          // BYOK/agentCliEnv. Preserve them so local CLI API-key auth works.
           const res = await realFetch(`${baseUrl}/api/test/connection`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -2218,8 +2366,6 @@ setImmediate(() => process.exit(0));
               agentCliEnv: {
                 codex: {
                   CODEX_HOME: codexHome,
-                  OPENAI_API_KEY: 'sk-stale-byok',
-                  CODEX_API_KEY: 'sk-stale-byok',
                 },
               },
             }),
@@ -2233,13 +2379,150 @@ setImmediate(() => process.exit(0));
           await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
             JSON.stringify({
               CODEX_HOME: codexHome,
-              OPENAI_API_KEY: null,
-              CODEX_API_KEY: null,
+              OPENAI_API_KEY: 'sk-inherited-openai',
+              CODEX_API_KEY: 'sk-inherited-codex',
             }),
           );
         },
       );
     } finally {
+      if (previousOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousOpenAiKey;
+      if (previousCodexKey === undefined) delete process.env.CODEX_API_KEY;
+      else process.env.CODEX_API_KEY = previousCodexKey;
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('lets configured Codex API credentials override inherited auth during connection tests', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-codex-api-'));
+    const envFile = path.join(markerDir, 'env.json');
+    const previousOpenAiKey = process.env.OPENAI_API_KEY;
+    const previousCodexKey = process.env.CODEX_API_KEY;
+    try {
+      process.env.OPENAI_API_KEY = 'sk-inherited-openai';
+      process.env.CODEX_API_KEY = 'sk-inherited-codex';
+      await withFakeCodex(
+        `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || null,
+  CODEX_API_KEY: process.env.CODEX_API_KEY || null,
+  OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || null,
+}));
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+setImmediate(() => process.exit(0));
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'codex',
+              agentCliEnv: {
+                codex: {
+                  OPENAI_API_KEY: 'sk-configured-openai',
+                  CODEX_API_KEY: 'sk-configured-codex',
+                },
+              },
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Codex CLI',
+          });
+          await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
+            JSON.stringify({
+              OPENAI_API_KEY: 'sk-configured-openai',
+              CODEX_API_KEY: 'sk-configured-codex',
+              OPENAI_BASE_URL: null,
+            }),
+          );
+        },
+      );
+    } finally {
+      if (previousOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousOpenAiKey;
+      if (previousCodexKey === undefined) delete process.env.CODEX_API_KEY;
+      else process.env.CODEX_API_KEY = previousCodexKey;
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('lets configured Claude API credentials override inherited auth during connection tests', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-claude-api-'));
+    const envFile = path.join(markerDir, 'env.json');
+    const previousKey = process.env.ANTHROPIC_API_KEY;
+    const previousToken = process.env.ANTHROPIC_AUTH_TOKEN;
+    try {
+      process.env.ANTHROPIC_API_KEY = 'sk-inherited-stale';
+      process.env.ANTHROPIC_AUTH_TOKEN = 'sk-inherited-token';
+      await withFakeClaude(
+        `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || null,
+  ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || null,
+  ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL || null,
+}));
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  try {
+    JSON.parse(input.trim());
+    console.log(JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+      },
+    }));
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+});
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'claude',
+              agentCliEnv: {
+                claude: {
+                  ANTHROPIC_API_KEY: 'sk-configured',
+                  ANTHROPIC_AUTH_TOKEN: 'sk-configured-token',
+                },
+              },
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Claude Code',
+          });
+          await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
+            JSON.stringify({
+              ANTHROPIC_API_KEY: 'sk-configured',
+              ANTHROPIC_AUTH_TOKEN: 'sk-configured-token',
+              ANTHROPIC_BASE_URL: null,
+            }),
+          );
+        },
+      );
+    } finally {
+      if (previousKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = previousKey;
+      if (previousToken === undefined) delete process.env.ANTHROPIC_AUTH_TOKEN;
+      else process.env.ANTHROPIC_AUTH_TOKEN = previousToken;
       await fsp.rm(markerDir, { recursive: true, force: true });
     }
   });
@@ -2350,6 +2633,173 @@ process.stdin.on('end', () => {
           agentName: 'Claude Code',
           sample: 'ok',
         });
+      },
+    );
+  });
+
+  it('accepts Claude smoke tests that completed cleanly before a late exit 1', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  result: 'ok',
+  terminal_reason: 'completed',
+  duration_ms: 17,
+}));
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: true,
+          kind: 'success',
+          agentName: 'Claude Code',
+          sample: 'ok',
+        });
+        expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
+  });
+
+  it('rejects Claude smoke tests when a successful result is followed by a different termination', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  result: 'ok',
+  terminal_reason: 'completed',
+  duration_ms: 17,
+}));
+process.exit(137);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Claude Code',
+        });
+        expect(result.diagnostics?.phase).toBe('output_parse');
+        expect(result.diagnostics?.exitCode).toBe(137);
+      },
+    );
+  });
+
+  it('rejects Claude smoke tests when assistant end_turn is followed by exit 1 without a result frame', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Claude Code',
+        });
+        expect(result.diagnostics?.phase).toBe('output_parse');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
+  });
+
+  it('rejects Claude smoke tests when the result frame reports an error before a late exit 1', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  is_error: true,
+  result: 'tool failed',
+  terminal_reason: 'completed',
+  duration_ms: 17,
+}));
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Claude Code',
+        });
+        expect(result.diagnostics?.phase).toBe('output_parse');
+        expect(result.diagnostics?.exitCode).toBe(1);
+      },
+    );
+  });
+
+  it('rejects Claude smoke tests when the result subtype reports an execution error before a late exit 1', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  message: {
+    id: 'msg_1',
+    content: [{ type: 'text', text: 'ok' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  result: 'tool failed',
+  terminal_reason: 'completed',
+  duration_ms: 17,
+}));
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'Claude Code',
+        });
+        expect(result.diagnostics?.phase).toBe('output_parse');
+        expect(result.diagnostics?.exitCode).toBe(1);
       },
     );
   });
@@ -3223,6 +3673,18 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
       await withFakeCodex(
         `
 const fs = require('node:fs');
+if (process.argv[2] === '--version') {
+  console.log('codex-cli 9.9.9');
+  process.exit(0);
+}
+if (process.argv[2] === 'debug' && process.argv[3] === 'models') {
+  console.log(JSON.stringify({ models: [] }));
+  process.exit(0);
+}
+if (process.argv[2] === 'login' && process.argv[3] === 'status') {
+  console.log('Logged in using ChatGPT');
+  process.exit(0);
+}
 fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
 process.on('SIGTERM', () => {
   fs.writeFileSync(${JSON.stringify(termFile)}, 'term');

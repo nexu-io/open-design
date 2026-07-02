@@ -1,6 +1,993 @@
 import type { SolutionLocaleCopy } from './types';
 
 export const FR: SolutionLocaleCopy = {
+  aiWireframeGenerator: {
+    title: 'Générateur de wireframes IA — de l’invite au wireframe avec Open Design',
+    description:
+      'Un générateur de wireframes IA gratuit et open source qui transforme une invite en wireframes éditables et multi-écrans — et les mène jusqu’au code livré. Open Design s’exécute dans l’agent de code que vous utilisez déjà, si bien que le wireframe et le vrai produit partagent une seule source.',
+    breadcrumb: 'Générateur de wireframes IA',
+    label: 'Outil · Générateur de wireframes IA',
+    heading: 'Wireframez à la vitesse d’une invite',
+    lead: 'Décrivez l’écran ou le parcours et laissez votre agent générer un wireframe propre et éditable — disposition cohérente, vrais composants, plusieurs écrans. Puis continuez : le même artefact devient un prototype stylé et du code livré, dans l’agent que vous utilisez déjà.',
+    heroImageAlt:
+      'Illustration éditoriale d’une invite se transformant en wireframe éditable puis en interface finie, encadrée par une boîte de sélection verte',
+    tldrTitle: 'En une ligne',
+    tldrBody:
+      'La plupart des générateurs de wireframes IA vous remettent une image que vous reconstruisez ensuite. Open Design génère le wireframe dans votre agent de code et le porte de l’invite jusqu’au code livré — sans étape d’export, sans rupture de transmission, sans compteur par siège.',
+    stepsTitle: 'Comment fonctionne le générateur de wireframes IA',
+    steps: [
+      {
+        title: 'Décrivez l’écran',
+        body: 'Dites à votre agent ce qu’il faut wireframer en langage clair — "un tableau de bord avec une barre latérale, une rangée de statistiques et une table d’activité récente." Open Design charge la compétence de wireframe pour que l’agent organise structure et hiérarchie, pas seulement une image statique unique.',
+        imageAlt: 'Illustration d’une description d’écran en langage clair tapée dans un terminal',
+      },
+      {
+        title: 'Générez des wireframes éditables',
+        body: 'L’agent applique des motifs de disposition et des composants issus d’un système de design réutilisable, si bien que chaque écran partage espacement, grille et structure. Vous obtenez des wireframes éditables et cohérents — plusieurs écrans comme un ensemble, pas des boîtes déconnectées.',
+        imageAlt: 'Illustration de plusieurs écrans de wireframe apparaissant avec une grille de disposition cohérente',
+      },
+      {
+        title: 'Montez en fidélité',
+        body: 'Demandez à l’agent de porter le wireframe vers un prototype stylé et cliquable — typographie, couleur, vraies interactions. Le même artefact gagne en fidélité au lieu d’être redessiné, donc rien n’est jeté entre le basse fidélité et la haute fidélité.',
+        imageAlt: 'Illustration d’un wireframe basse fidélité se transformant en un écran haute fidélité soigné',
+      },
+      {
+        title: 'Livrez le code qui vous appartient',
+        body: 'Comme l’artefact vit dans votre projet, le wireframe et le code final partagent une seule source de vérité. Itérez en parlant à l’agent ; le résultat est du HTML/code qui vous appartient et que vous pouvez livrer — sans verrouillage fournisseur.',
+        imageAlt: 'Illustration d’un wireframe se transformant en code livré tenu dans un cadre de sélection vert',
+      },
+    ],
+    tableTitle: 'Open Design vs les générateurs de wireframes IA classiques',
+    tableColCapability: 'Ce dont vous avez besoin',
+    tableColWithOd: 'Avec Open Design',
+    tableColWithout: 'Générateurs de wireframes IA classiques',
+    tableRows: [
+      {
+        capability: 'Générer à partir d’une invite',
+        withOd: 'Une invite dans l’agent que vous avez déjà ouvert',
+        without: 'S’inscrire à un outil web séparé, générer dans leur cloud',
+      },
+      {
+        capability: 'Plusieurs écrans reliés',
+        withOd: 'Générés comme un ensemble avec disposition et composants partagés',
+        without: 'Souvent un écran à la fois',
+      },
+      {
+        capability: 'Du basse fidélité à la haute fidélité',
+        withOd: 'Le même artefact gagne en fidélité — wireframe → prototype → code',
+        without: 'Le wireframe est une impasse ; à reconstruire pour la haute fidélité et pour le code',
+      },
+      {
+        capability: 'Posséder le résultat',
+        withOd: 'Des fichiers et du code clairs dans votre dépôt, entièrement à vous',
+        without: 'Éditable seulement dans leur application ; export limité',
+      },
+      {
+        capability: 'Coût et verrouillage',
+        withOd: 'Open source, apportez vos propres clés, fonctionne en local',
+        without: 'Abonnement par siège ou par crédit, hébergé par le fournisseur',
+      },
+    ],
+    featuresTitle: 'Ce que vous pouvez wireframer',
+    features: [
+      {
+        title: 'Écrans d’application web',
+        body: 'Tableaux de bord, paramètres, parcours multi-écrans — wireframés comme un ensemble cohérent, puis menés au code.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Parcours d’application mobile',
+        body: 'Des parcours mobiles écran par écran avec une structure et des états cohérents.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Pages d’atterrissage SaaS',
+        body: 'Des dispositions de landing marketing et SaaS que vous pouvez wireframer, styliser et livrer.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Onboarding et formulaires',
+        body: 'Des parcours d’onboarding, d’inscription et de formulaire en plusieurs étapes, disposés avec une hiérarchie claire.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Tout goût visuel',
+        body: 'Commencez en basse fidélité, puis portez un style cohérent de bout en bout — éditorial, doux ou audacieux.',
+        thumb: 'example-gamified-app',
+      },
+      {
+        title: 'Atterrissage et conversion',
+        body: 'Des dispositions hero, tarifs et liste d’attente câblées et fidèles à la marque dès le premier jet.',
+        thumb: 'example-kami-landing',
+      },
+    ],
+    galleryTitle: 'Des wireframes créés avec Open Design',
+    galleryLead:
+      'Chacun a commencé par une invite et a été rendu en artefact éditable et cliquable. Choisissez un modèle proche de votre idée, décrivez votre variante, et l’agent l’adapte — du wireframe au code livré.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: 'Application web de rencontres — wireframe multi-écrans' },
+      { thumb: 'example-hr-onboarding', caption: 'Parcours d’onboarding RH' },
+      { thumb: 'example-kami-landing', caption: 'Disposition d’atterrissage produit' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Wireframe web au style doux' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Parcourir les modèles',
+    faqTitle: 'FAQ du générateur de wireframes IA',
+    faq: [
+      {
+        q: 'Le générateur de wireframes IA est-il gratuit ?',
+        a: 'Oui. Open Design est open source et s’exécute dans l’agent de code que vous utilisez déjà avec vos propres clés de fournisseur — il n’y a aucun compteur par siège ou par crédit sur le générateur de wireframes lui-même.',
+      },
+      {
+        q: 'Les wireframes sont-ils éditables, ou juste des images ?',
+        a: 'Éditables. Le résultat est du vrai HTML et du code, donc vous pouvez affiner disposition, composants et contenu en parlant à l’agent — pas des pixels figés dans une image que vous devriez reconstruire.',
+      },
+      {
+        q: 'Un wireframe peut-il devenir un prototype haute fidélité et du vrai code ?',
+        a: 'C’est tout l’intérêt. Le même artefact gagne en fidélité — du wireframe au prototype stylé jusqu’au code livré — parce qu’il vit dans votre projet, au lieu d’être redessiné à chaque étape.',
+      },
+      {
+        q: 'Avec quels agents fonctionne-t-il ?',
+        a: 'Open Design fonctionne avec Claude Code, Codex, Cursor Agent, Gemini CLI et une douzaine d’autres adaptateurs natifs. Vous apportez vos propres clés de fournisseur ; rien n’est hébergé pour vous.',
+      },
+    ],
+    ctaTitle: 'Générez votre premier wireframe ce soir',
+    ctaBody:
+      'Mettez une étoile au dépôt, installez Open Design, et transformez votre prochaine idée d’écran en un wireframe éditable — puis en code livré — dans l’agent que vous utilisez déjà.',
+    relatedTitle: 'Outils et guides associés',
+    related: [
+      { href: '/solutions/ai-ui-generator/', label: 'Générateur d’UI IA' },
+      { href: '/solutions/design-to-code/', label: 'Du design au code avec Open Design' },
+      { href: '/blog/design-to-code-tools/', label: 'Meilleurs outils de design au code' },
+      { href: '/solutions/prototype/', label: 'Prototypage avec Open Design' },
+    ],
+  },
+  aiUiGenerator: {
+    title: 'Générateur d’UI IA — de l’invite à l’UI de production avec Open Design',
+    description:
+      'Un générateur d’UI IA gratuit et open source qui transforme une invite en une vraie interface basée sur des composants — et la mène jusqu’au code livré. Open Design s’exécute dans l’agent de code que vous utilisez déjà, si bien que l’UI générée et le code de production sont le même artefact.',
+    breadcrumb: 'Générateur d’UI IA',
+    label: 'Outil · Générateur d’UI IA',
+    heading: 'Générez une UI que vous pouvez réellement livrer',
+    lead: 'Décrivez l’interface et laissez votre agent générer une vraie UI basée sur des composants — système de design cohérent, disposition responsive, états fonctionnels. Puis continuez : le même artefact devient du code livré, dans l’agent que vous utilisez déjà.',
+    heroImageAlt:
+      'Illustration éditoriale d’une invite se transformant en UI basée sur des composants puis en code de production, encadrée par une boîte de sélection verte',
+    tldrTitle: 'En une ligne',
+    tldrBody:
+      'La plupart des générateurs d’UI IA vous donnent une maquette ou un extrait React jetable. Open Design génère l’UI dans votre agent de code et la porte de l’invite jusqu’au code livré — de vrais composants, votre système de design, sans étape d’export, sans compteur par siège.',
+    stepsTitle: 'Comment fonctionne le générateur d’UI IA',
+    steps: [
+      {
+        title: 'Décrivez l’interface',
+        body: 'Dites à votre agent quoi construire en langage clair — "une page de paramètres avec une barre latérale, des sections à onglets et une barre d’enregistrement." Open Design charge la compétence d’UI pour que l’agent fasse appel à de vrais composants et à un système de design, pas à un écran unique.',
+        imageAlt: 'Illustration d’une description d’UI en langage clair tapée dans un terminal',
+      },
+      {
+        title: 'Générez une UI basée sur des composants',
+        body: 'L’agent assemble l’interface à partir de composants réutilisables et de tokens de design, si bien que l’espacement, l’échelle typographique et la couleur restent cohérents sur chaque écran. Vous obtenez une UI cohérente — pas un amas de styles en ligne à démêler.',
+        imageAlt: 'Illustration d’une UI s’assemblant à partir de blocs de composants réutilisables sur une grille',
+      },
+      {
+        title: 'Affinez en parlant',
+        body: 'Ajustez disposition, états et thème en conversation — "resserre l’espacement," "ajoute un état vide," "passe en sombre par défaut." L’artefact se met à jour sur place au lieu d’être régénéré de zéro.',
+        imageAlt: 'Illustration d’une UI affinée par le chat, avec de subtils états avant/après',
+      },
+      {
+        title: 'Livrez le code qui vous appartient',
+        body: 'Comme l’UI vit dans votre projet, le design et le code de production partagent une seule source de vérité. Le résultat est du HTML/code qui vous appartient et que vous pouvez livrer — sans verrouillage fournisseur, sans redessin entre design et build.',
+        imageAlt: 'Illustration d’une UI générée se transformant en code livré tenu dans un cadre de sélection vert',
+      },
+    ],
+    tableTitle: 'Open Design vs les générateurs d’UI IA classiques',
+    tableColCapability: 'Ce dont vous avez besoin',
+    tableColWithOd: 'Avec Open Design',
+    tableColWithout: 'Générateurs d’UI IA classiques',
+    tableRows: [
+      {
+        capability: 'Générer à partir d’une invite',
+        withOd: 'Une invite dans l’agent que vous avez déjà ouvert',
+        without: 'S’inscrire à un outil web séparé, générer dans leur cloud',
+      },
+      {
+        capability: 'De vrais composants',
+        withOd: 'Construits à partir d’un système de design réutilisable, cohérents sur tous les écrans',
+        without: 'Du balisage ponctuel ou des styles en ligne que vous refactorisez ensuite',
+      },
+      {
+        capability: 'Du design au code',
+        withOd: 'Le même artefact devient du code livré — sans redessin',
+        without: 'La maquette d’UI est une impasse ; à reconstruire pour la production',
+      },
+      {
+        capability: 'Posséder le résultat',
+        withOd: 'Des fichiers et du code clairs dans votre dépôt, entièrement à vous',
+        without: 'Éditable seulement dans leur application ; export limité',
+      },
+      {
+        capability: 'Coût et verrouillage',
+        withOd: 'Open source, apportez vos propres clés, fonctionne en local',
+        without: 'Abonnement par siège ou par crédit, hébergé par le fournisseur',
+      },
+    ],
+    featuresTitle: 'Ce que vous pouvez générer',
+    features: [
+      {
+        title: 'Interfaces d’application web',
+        body: 'Tableaux de bord, paramètres, tables de données — générés comme un ensemble cohérent de composants, puis menés au code.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'UI d’application mobile',
+        body: 'Des interfaces mobiles écran par écran avec des composants et des états cohérents.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Pages SaaS et marketing',
+        body: 'Des UI d’atterrissage, de tarifs et de marketing que vous pouvez générer, thémer et livrer.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Formulaires et parcours',
+        body: 'Des formulaires multi-étapes, de l’onboarding et des parcours d’authentification avec une hiérarchie et des états clairs.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Systèmes de design',
+        body: 'Générez une UI qui respecte un système de design partagé — tokens, composants, espacement.',
+        thumb: 'example-gamified-app',
+      },
+      {
+        title: 'Tout goût visuel',
+        body: 'Éditorial, doux ou audacieux — portez un style cohérent de bout en bout.',
+        thumb: 'example-kami-landing',
+      },
+    ],
+    galleryTitle: 'Des UI créées avec Open Design',
+    galleryLead:
+      'Chacune a commencé par une invite et a été rendue en artefact réel basé sur des composants. Choisissez un modèle proche de votre idée, décrivez votre variante, et l’agent l’adapte — de l’UI au code livré.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: 'Application web de rencontres — UI basée sur des composants' },
+      { thumb: 'example-hr-onboarding', caption: 'Parcours d’onboarding RH' },
+      { thumb: 'example-kami-landing', caption: 'UI d’atterrissage produit' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'UI web au style doux' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Parcourir les modèles',
+    faqTitle: 'FAQ du générateur d’UI IA',
+    faq: [
+      {
+        q: 'Le générateur d’UI IA est-il gratuit ?',
+        a: 'Oui. Open Design est open source et s’exécute dans l’agent de code que vous utilisez déjà avec vos propres clés de fournisseur — il n’y a aucun compteur par siège ou par crédit sur le générateur d’UI lui-même.',
+      },
+      {
+        q: 'Génère-t-il de vrais composants ou juste une maquette ?',
+        a: 'De vrais composants. Le résultat est du HTML et du code construits à partir d’un système de design réutilisable, donc vous affinez disposition, états et thème en parlant à l’agent au lieu de reconstruire une maquette plate.',
+      },
+      {
+        q: 'L’UI générée peut-elle devenir du code de production ?',
+        a: 'C’est l’intérêt. Le même artefact devient du code livré parce qu’il vit dans votre projet — il n’y a aucun redessin ni rupture de transmission entre l’UI générée et ce que vous déployez.',
+      },
+      {
+        q: 'Avec quels agents fonctionne-t-il ?',
+        a: 'Open Design fonctionne avec Claude Code, Codex, Cursor Agent, Gemini CLI et une douzaine d’autres adaptateurs natifs. Vous apportez vos propres clés de fournisseur ; rien n’est hébergé pour vous.',
+      },
+    ],
+    ctaTitle: 'Générez votre première UI ce soir',
+    ctaBody:
+      'Mettez une étoile au dépôt, installez Open Design, et transformez votre prochaine idée d’interface en une vraie UI basée sur des composants — puis en code livré — dans l’agent que vous utilisez déjà.',
+    relatedTitle: 'Outils et guides associés',
+    related: [
+      { href: '/solutions/ai-wireframe-generator/', label: 'Générateur de wireframes IA' },
+      { href: '/solutions/design-to-code/', label: 'Du design au code avec Open Design' },
+      { href: '/blog/best-ai-design-tools/', label: 'Meilleurs outils de design IA' },
+      { href: '/solutions/designer/', label: 'Open Design pour les designers' },
+    ],
+  },
+  designToCode: {
+    title: 'Du design au code — transformez un design en code livré avec Open Design',
+    description:
+      'Un workflow du design au code gratuit et open source qui transforme une invite ou un design en code réel et éditable — dans l’agent de code que vous utilisez déjà. Sans export, sans transmission : le design et le code de production sont un seul artefact que vous possédez et livrez.',
+    breadcrumb: 'Du design au code',
+    label: 'Outil · Du design au code',
+    heading: 'Du design au code, sans transmission',
+    lead: 'Décrivez l’écran, ou apportez un design, et laissez votre agent le transformer en code propre basé sur des composants — disposition responsive, vrais états, votre stack. Le design et le code sont le même artefact, donc rien n’est perdu à la traduction.',
+    heroImageAlt:
+      'Illustration éditoriale d’un design se transformant en code de production propre, encadré par une boîte de sélection verte',
+    tldrTitle: 'En une ligne',
+    tldrBody:
+      'La plupart des outils de design au code exportent un instantané unique que vous surveillez ensuite. Open Design garde le design et le code comme un seul artefact vivant dans votre agent — itérez en parlant, livrez du code qui vous appartient, sans compteur par siège.',
+    stepsTitle: 'Comment fonctionne le design au code',
+    steps: [
+      {
+        title: 'Partez d’une invite ou d’un design',
+        body: 'Décrivez l’écran en langage clair, ou orientez votre agent vers une direction de design. Open Design charge la bonne compétence pour que l’agent construise structure et composants, pas une conversion ponctuelle et fragile.',
+        imageAlt: 'Illustration d’un design et d’une invite alimentant un terminal',
+      },
+      {
+        title: 'Générez du code basé sur des composants',
+        body: 'L’agent produit du code propre et lisible construit à partir de composants réutilisables et de tokens de design — espacement, typographie et couleur cohérents — au lieu d’un mur de balisage généré que vous refactoriseriez.',
+        imageAlt: 'Illustration d’un design se convertissant en code structuré basé sur des composants',
+      },
+      {
+        title: 'Itérez en conversation',
+        body: 'Affinez disposition, états et comportement en parlant — "rends-le responsive," "câble le formulaire," "respecte nos tokens." Le code se met à jour sur place ; le design reste synchronisé parce qu’ils sont un seul artefact.',
+        imageAlt: 'Illustration de code affiné par le chat tandis que le design reste synchronisé',
+      },
+      {
+        title: 'Livrez le code qui vous appartient',
+        body: 'Le résultat est du HTML/code dans votre dépôt, entièrement à vous — sans étape d’export, sans éditeur verrouillé par un fournisseur, sans redessin entre design et build. Livrez-le, puis continuez à le faire évoluer dans l’agent.',
+        imageAlt: 'Illustration de code fini tenu dans un cadre de sélection vert, prêt à être livré',
+      },
+    ],
+    tableTitle: 'Open Design vs les outils de design au code classiques',
+    tableColCapability: 'Ce dont vous avez besoin',
+    tableColWithOd: 'Avec Open Design',
+    tableColWithout: 'Outils de design au code classiques',
+    tableRows: [
+      {
+        capability: 'Démarrer la conversion',
+        withOd: 'Une invite dans l’agent que vous avez déjà ouvert',
+        without: 'Installer un plugin ou téléverser vers un outil web séparé',
+      },
+      {
+        capability: 'Qualité du code',
+        withOd: 'Du code propre basé sur des composants issu d’un système de design',
+        without: 'Du balisage en position absolue ou ponctuel que vous réécrivez',
+      },
+      {
+        capability: 'Synchronisation design ↔ code',
+        withOd: 'Un seul artefact — design et code ne dérivent jamais',
+        without: 'Un export unique qui devient obsolète après la première modification',
+      },
+      {
+        capability: 'Posséder le résultat',
+        withOd: 'Des fichiers et du code clairs dans votre dépôt, entièrement à vous',
+        without: 'Verrouillé à leur éditeur ou à leur bibliothèque de composants',
+      },
+      {
+        capability: 'Coût et verrouillage',
+        withOd: 'Open source, apportez vos propres clés, fonctionne en local',
+        without: 'Abonnement par siège ou par crédit, hébergé par le fournisseur',
+      },
+    ],
+    featuresTitle: 'Ce que vous pouvez convertir',
+    features: [
+      {
+        title: 'De l’invite au code',
+        body: 'Décrivez un écran et obtenez du code propre basé sur des composants dans votre stack.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Du wireframe au code',
+        body: 'Portez un wireframe généré jusqu’au code livré — le même artefact.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'De l’UI à la production',
+        body: 'Transformez une UI générée en code de production responsive et à états réels.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Pages d’atterrissage',
+        body: 'Des sections hero, tarifs et liste d’attente converties en code propre et fidèle à la marque.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Formulaires et parcours',
+        body: 'Des formulaires multi-étapes et de l’onboarding câblés avec de vraies validations et de vrais états.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Tout goût visuel',
+        body: 'Éditorial, doux ou audacieux — le code porte un style cohérent de bout en bout.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Livré depuis le design avec Open Design',
+    galleryLead:
+      'Chacun a commencé par une invite ou un design et est devenu du code que vous pouvez livrer. Choisissez un modèle proche de votre idée, décrivez votre variante, et l’agent le convertit — du design au code, sans transmission.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: 'Application web de rencontres — du design au code' },
+      { thumb: 'example-hr-onboarding', caption: 'Parcours d’onboarding RH' },
+      { thumb: 'example-kami-landing', caption: 'Atterrissage produit en code' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Build web au style doux' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Parcourir les modèles',
+    faqTitle: 'FAQ du design au code',
+    faq: [
+      {
+        q: 'Le workflow du design au code est-il gratuit ?',
+        a: 'Oui. Open Design est open source et s’exécute dans l’agent de code que vous utilisez déjà avec vos propres clés de fournisseur — il n’y a aucun compteur par siège ou par crédit sur le workflow du design au code lui-même.',
+      },
+      {
+        q: 'Quel type de code produit-il ?',
+        a: 'Du HTML et du code propres, basés sur des composants et construits à partir d’un système de design réutilisable, donc vous pouvez le lire, l’affiner et le livrer — pas du balisage en position absolue que vous devriez réécrire.',
+      },
+      {
+        q: 'Le design et le code restent-ils synchronisés ?',
+        a: 'Oui — ils sont un seul artefact. Comme le design et le code vivent ensemble dans votre projet, il n’y a pas d’export unique qui devient obsolète après votre première modification.',
+      },
+      {
+        q: 'Avec quels agents fonctionne-t-il ?',
+        a: 'Open Design fonctionne avec Claude Code, Codex, Cursor Agent, Gemini CLI et une douzaine d’autres adaptateurs natifs. Vous apportez vos propres clés de fournisseur ; rien n’est hébergé pour vous.',
+      },
+    ],
+    ctaTitle: 'Transformez votre prochain design en code ce soir',
+    ctaBody:
+      'Mettez une étoile au dépôt, installez Open Design, et transformez votre prochain écran — invite, wireframe ou design — en code propre et livrable dans l’agent que vous utilisez déjà.',
+    relatedTitle: 'Outils et guides associés',
+    related: [
+      { href: '/solutions/ai-wireframe-generator/', label: 'Générateur de wireframes IA' },
+      { href: '/solutions/ai-ui-generator/', label: 'Générateur d’UI IA' },
+      { href: '/blog/design-to-code-tools/', label: 'Meilleurs outils de design au code' },
+      { href: '/solutions/engineering/', label: 'Open Design pour l’ingénierie' },
+    ],
+  },
+  aiLandingPageGenerator: {
+    title: 'Générateur de landing pages IA — de l’invite à une landing page à livrer',
+    description:
+      'Un générateur de landing pages IA gratuit et open source qui transforme une invite en une vraie landing page responsive — et la mène jusqu’au code livré. Open Design s’exécute dans l’agent de code que vous utilisez déjà, si bien que la page générée et la page déployée sont un seul artefact qui vous appartient.',
+    breadcrumb: 'Générateur de landing pages IA',
+    label: 'Outil · Générateur de landing pages IA',
+    heading: 'Générez une landing page prête à livrer',
+    lead: 'Décrivez l’offre et laissez votre agent générer une vraie landing page responsive — hero, fonctionnalités, tarifs, liste d’attente, à votre image. Puis continuez : le même artefact devient du code livré que vous déployez, dans l’agent que vous utilisez déjà.',
+    heroImageAlt:
+      'Illustration éditoriale d’une invite se transformant en une landing page responsive puis en code de production, encadrée par une boîte de sélection verte',
+    tldrTitle: 'En une ligne',
+    tldrBody:
+      'La plupart des générateurs de landing pages IA enferment votre page dans leur éditeur et la facturent au siège. Open Design génère la landing page dans votre agent de code et la porte de l’invite jusqu’au code livré — vraies sections, votre image de marque, sans étape d’export, sans compteur par siège.',
+    stepsTitle: 'Comment fonctionne le générateur de landing pages IA',
+    steps: [
+      {
+        title: 'Décrivez la page',
+        body: 'Dites à votre agent quoi construire en langage clair — "une page de lancement pour une appli de prise de notes : hero, trois fonctionnalités, tarifs et un formulaire de liste d’attente." Open Design charge la compétence landing-page pour que l’agent dispose de vraies sections avec une hiérarchie claire.',
+        imageAlt: 'Illustration d’un brief de landing page en langage clair tapé dans un terminal',
+      },
+      {
+        title: 'Générez une page responsive',
+        body: 'L’agent assemble la page à partir de sections réutilisables et de tokens de design, si bien qu’espacement, typographie et couleur restent cohérents et que le rendu est juste sur chaque écran. Vous obtenez une landing page cohérente et à votre image — pas un modèle que vous bataillez à personnaliser.',
+        imageAlt: 'Illustration d’une landing page s’assemblant à partir de sections hero, fonctionnalités et tarifs sur une grille',
+      },
+      {
+        title: 'Affinez et ajoutez de la conversion',
+        body: 'Ajustez le texte, les sections et les appels à l’action en conversation — "resserre le hero", "ajoute une preuve sociale", "branche le formulaire de liste d’attente." L’artefact se met à jour sur place au lieu d’être régénéré de zéro.',
+        imageAlt: 'Illustration d’une landing page affinée par le chat, ajoutant un témoignage et un formulaire',
+      },
+      {
+        title: 'Livrez le code qui vous appartient',
+        body: 'Comme la page vit dans votre projet, le design et la page déployée partagent une seule source de vérité. Le résultat est du HTML/code qui vous appartient et que vous pouvez héberger n’importe où — sans verrouillage fournisseur, sans redessin entre le design et le lancement.',
+        imageAlt: 'Illustration d’une landing page se transformant en code livré tenu dans un cadre de sélection vert',
+      },
+    ],
+    tableTitle: 'Open Design vs les générateurs de landing pages IA classiques',
+    tableColCapability: 'Ce dont vous avez besoin',
+    tableColWithOd: 'Avec Open Design',
+    tableColWithout: 'Générateurs de landing pages IA classiques',
+    tableRows: [
+      {
+        capability: 'Générer à partir d’une invite',
+        withOd: 'Une invite dans l’agent que vous avez déjà ouvert',
+        without: 'S’inscrire à un constructeur de site séparé, générer dans leur cloud',
+      },
+      {
+        capability: 'Vraies sections responsives',
+        withOd: 'Construites à partir d’un système de design réutilisable, cohérentes sur tous les points de rupture',
+        without: 'Un modèle verrouillé que vous personnalisez dans leur éditeur',
+      },
+      {
+        capability: 'Du design au code',
+        withOd: 'Le même artefact devient du code livré — hébergez-le n’importe où',
+        without: 'La page vit sur leur plateforme ; l’export est limité ou payant',
+      },
+      {
+        capability: 'Posséder le résultat',
+        withOd: 'Fichiers et code bruts dans votre dépôt, entièrement à vous',
+        without: 'Hébergée pour vous ; vous louez la page, vous ne la possédez pas',
+      },
+      {
+        capability: 'Coût et verrouillage',
+        withOd: 'Open source, apportez vos propres clés, s’exécute en local',
+        without: 'Abonnement par siège ou par page, hébergé chez le fournisseur',
+      },
+    ],
+    featuresTitle: 'Ce que vous pouvez générer',
+    features: [
+      {
+        title: 'Pages de lancement produit',
+        body: 'Hero, fonctionnalités, tarifs et une liste d’attente — générés comme une page cohérente, puis menés jusqu’au code.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Pages marketing SaaS',
+        body: 'Des mises en page de fonctionnalités et de tarifs que vous pouvez générer, thématiser et livrer sur votre propre domaine.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Liste d’attente et bientôt disponible',
+        body: 'Pages de capture à but unique avec un formulaire fonctionnel et un appel à l’action clair.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Pages d’événement et de campagne',
+        body: 'Mises en page de campagne limitées dans le temps, branchées et à votre image dès le premier jet.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Pages de téléchargement d’appli',
+        body: 'Pages mobile-first qui montrent le produit et poussent aux installations.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Tout goût visuel',
+        body: 'Éditorial, doux ou audacieux — portez un seul style cohérent de bout en bout.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Landing pages construites avec Open Design',
+    galleryLead:
+      'Chacune a démarré comme une invite et s’est rendue en un vrai artefact responsive. Choisissez un modèle proche de votre idée, décrivez votre variante, et l’agent l’adapte — de la landing page au code livré.',
+    gallery: [
+      { thumb: 'example-kami-landing', caption: 'Page de lancement produit' },
+      { thumb: 'example-saas-landing', caption: 'Page marketing SaaS' },
+      { thumb: 'example-hr-onboarding', caption: 'Parcours de capture de liste d’attente' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Landing au style doux' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Parcourir les modèles',
+    faqTitle: 'FAQ du générateur de landing pages IA',
+    faq: [
+      {
+        q: 'Le générateur de landing pages IA est-il gratuit ?',
+        a: 'Oui. Open Design est open source et s’exécute dans l’agent de code que vous utilisez déjà avec vos propres clés de fournisseur — il n’y a aucun compteur par siège ou par page sur le générateur de landing pages lui-même.',
+      },
+      {
+        q: 'Puis-je héberger la page n’importe où ?',
+        a: 'Oui. Le résultat est du vrai HTML et du code dans votre projet, vous pouvez donc le déployer chez n’importe quel hébergeur — sans verrouillage de plateforme et sans page louée qui disparaît quand vous arrêtez de payer.',
+      },
+      {
+        q: 'Les pages sont-elles responsives et à mon image ?',
+        a: 'Oui. L’agent construit à partir d’un système de design réutilisable, si bien que la page reste cohérente sur tous les points de rupture et correspond à votre image de marque — et vous l’affinez en parlant au lieu de vous battre avec un modèle.',
+      },
+      {
+        q: 'Avec quels agents fonctionne-t-il ?',
+        a: 'Open Design fonctionne avec Claude Code, Codex, Cursor Agent, Gemini CLI et une douzaine d’autres adaptateurs natifs. Vous apportez vos propres clés de fournisseur ; rien n’est hébergé pour vous.',
+      },
+    ],
+    ctaTitle: 'Générez votre première landing page ce soir',
+    ctaBody:
+      'Mettez une étoile au dépôt, installez Open Design, et transformez votre prochaine idée de lancement en une vraie landing page responsive — puis en code livré — dans l’agent que vous utilisez déjà.',
+    relatedTitle: 'Outils et guides connexes',
+    related: [
+      { href: '/solutions/ai-ui-generator/', label: 'Générateur d’UI IA' },
+      { href: '/solutions/design-to-code/', label: 'Du design au code avec Open Design' },
+      { href: '/solutions/marketing/', label: 'Open Design pour le marketing' },
+      { href: '/blog/best-ai-design-tools/', label: 'Meilleurs outils de design IA' },
+    ],
+  },
+  figmaToCode: {
+    title: 'Figma vers code — transformez vos designs Figma en code livré avec Open Design',
+    description:
+      'Un workflow Figma vers code gratuit et open source qui transforme un design Figma en code propre, à base de composants — dans l’agent de code que vous utilisez déjà, de Claude Code à Codex. Récupérez le design via le Figma MCP et laissez l’agent produire du vrai code qui vous appartient et que vous livrez, sans export verrouillé.',
+    breadcrumb: 'Figma vers code',
+    label: 'Outil · Figma vers code',
+    heading: 'Figma vers code, dans votre agent',
+    lead: 'Pointez votre agent de code sur un design Figma et laissez-le transformer les frames en code propre, à base de composants — disposition responsive, vrais états, votre stack. Avec le Figma MCP, Claude Code et d’autres agents lisent le design directement, si bien que rien n’est perdu dans un export ponctuel.',
+    heroImageAlt:
+      'Illustration éditoriale d’un design Figma se transformant en code de production propre à l’intérieur d’un agent de code, encadrée par une boîte de sélection verte',
+    tldrTitle: 'En une ligne',
+    tldrBody:
+      'La plupart des plugins Figma vers code exportent un instantané ponctuel de balisage positionné en absolu que vous réécrivez ensuite. Open Design garde le design et le code comme un seul artefact vivant dans votre agent — récupérez les frames via le Figma MCP, itérez en parlant, livrez du code qui vous appartient.',
+    stepsTitle: 'Comment fonctionne Figma vers code',
+    steps: [
+      {
+        title: 'Connectez Figma à votre agent',
+        body: 'Une fois le Figma MCP configuré, votre agent de code — Claude Code, Codex, Cursor Agent — peut lire un fichier Figma ou un frame sélectionné directement. Open Design charge la bonne compétence pour que l’agent transforme l’intention de design en structure, pas en une copie de pixels fragile.',
+        imageAlt: 'Illustration d’un frame Figma se connectant à un terminal via un lien MCP',
+      },
+      {
+        title: 'Générez du code à base de composants',
+        body: 'L’agent fait correspondre le frame à des composants réutilisables et à des tokens de design — espacement, typographie et couleur cohérents — et produit du code propre et lisible au lieu d’un mur de divs positionnés en absolu que vous refactoriseriez.',
+        imageAlt: 'Illustration d’un frame Figma se convertissant en code structuré, à base de composants',
+      },
+      {
+        title: 'Itérez en conversation',
+        body: 'Affinez la disposition, les états et le comportement en parlant — "rends-le responsive", "branche le formulaire", "aligne sur nos tokens." Le code se met à jour sur place, et comme l’agent lit Figma en direct, vous pouvez re-récupérer le dernier design au lieu de réexporter.',
+        imageAlt: 'Illustration de code affiné par le chat pendant qu’un frame Figma reste synchronisé',
+      },
+      {
+        title: 'Livrez le code qui vous appartient',
+        body: 'Le résultat est du HTML/code dans votre dépôt, entièrement à vous — sans éditeur verrouillé par le fournisseur, sans export qui se périme, sans redessin entre le design et la construction. Livrez-le, puis continuez à le faire évoluer dans l’agent.',
+        imageAlt: 'Illustration de code fini tenu dans un cadre de sélection vert, prêt à livrer',
+      },
+    ],
+    tableTitle: 'Open Design vs les outils Figma vers code classiques',
+    tableColCapability: 'Ce dont vous avez besoin',
+    tableColWithOd: 'Avec Open Design',
+    tableColWithout: 'Outils Figma vers code classiques',
+    tableRows: [
+      {
+        capability: 'Lire le design Figma',
+        withOd: 'Votre agent lit Figma en direct via le MCP',
+        without: 'Un plugin exporte un instantané ponctuel',
+      },
+      {
+        capability: 'Qualité du code',
+        withOd: 'Code propre, à base de composants issu d’un système de design',
+        without: 'Balisage positionné en absolu que vous réécrivez à la main',
+      },
+      {
+        capability: 'Synchronisation design ↔ code',
+        withOd: 'Re-récupérez le dernier frame ; itérez en parlant',
+        without: 'L’export se périme après la première modification Figma',
+      },
+      {
+        capability: 'Posséder le résultat',
+        withOd: 'Fichiers et code bruts dans votre dépôt, entièrement à vous',
+        without: 'Verrouillé à leur éditeur ou à leur bibliothèque de composants',
+      },
+      {
+        capability: 'Coût et verrouillage',
+        withOd: 'Open source, apportez vos propres clés, s’exécute en local',
+        without: 'Abonnement par siège ou par export, hébergé chez le fournisseur',
+      },
+    ],
+    featuresTitle: 'Ce que vous pouvez convertir',
+    features: [
+      {
+        title: 'Figma vers Claude Code',
+        body: 'Récupérez un frame Figma dans Claude Code via le MCP et obtenez du code propre, à base de composants.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Figma vers React / HTML',
+        body: 'Transformez les frames en code responsive avec de vrais états, dans la stack que vous utilisez déjà.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Écrans et parcours entiers',
+        body: 'Convertissez des parcours multi-écrans comme un ensemble, avec des composants partagés et une structure cohérente.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Landing pages',
+        body: 'Frames hero, tarifs et liste d’attente convertis en code propre et à votre image.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Formulaires et parcours',
+        body: 'Formulaires multi-étapes et onboarding branchés avec une vraie validation et de vrais états.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Tout goût visuel',
+        body: 'Éditorial, doux ou audacieux — le code porte le style du design de bout en bout.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Livré depuis Figma avec Open Design',
+    galleryLead:
+      'Chacun a démarré comme un frame Figma et est devenu du code que vous pouvez livrer. Choisissez un modèle proche de votre design, décrivez votre variante, et l’agent le convertit — Figma vers code, sans export verrouillé.',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: 'Frame d’appli web — Figma vers code' },
+      { thumb: 'example-mobile-app', caption: 'Parcours mobile vers code' },
+      { thumb: 'example-kami-landing', caption: 'Frame de landing en code' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Build web au style doux' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Parcourir les modèles',
+    faqTitle: 'FAQ Figma vers code',
+    faq: [
+      {
+        q: 'Comment Open Design transforme-t-il Figma en code ?',
+        a: 'Via le Figma MCP, votre agent de code — Claude Code, Codex, Cursor Agent — lit le fichier Figma ou un frame sélectionné directement et génère du code propre, à base de composants, au lieu d’exporter un instantané ponctuel depuis un plugin.',
+      },
+      {
+        q: 'Quel type de code produit-il ?',
+        a: 'Du HTML et du code propres, à base de composants, construits à partir d’un système de design réutilisable, si bien que vous pouvez le lire, l’affiner et le livrer — pas le balisage positionné en absolu que produisent la plupart des exportateurs Figma vers code.',
+      },
+      {
+        q: 'Est-ce gratuit ?',
+        a: 'Oui. Open Design est open source et s’exécute dans l’agent de code que vous utilisez déjà avec vos propres clés de fournisseur — il n’y a aucun compteur par siège ou par export sur le workflow Figma vers code lui-même.',
+      },
+      {
+        q: 'Avec quels agents fonctionne-t-il ?',
+        a: 'Open Design fonctionne avec Claude Code, Codex, Cursor Agent, Gemini CLI et une douzaine d’autres adaptateurs natifs. Vous apportez vos propres clés de fournisseur et votre propre configuration Figma MCP ; rien n’est hébergé pour vous.',
+      },
+    ],
+    ctaTitle: 'Transformez votre prochain frame Figma en code ce soir',
+    ctaBody:
+      'Mettez une étoile au dépôt, installez Open Design, connectez le Figma MCP, et transformez votre prochain design Figma en code propre et livrable dans l’agent que vous utilisez déjà.',
+    relatedTitle: 'Outils et guides connexes',
+    related: [
+      { href: '/solutions/design-to-code/', label: 'Du design au code avec Open Design' },
+      { href: '/solutions/ai-ui-generator/', label: 'Générateur d’UI IA' },
+      { href: '/agents/claude-code-design/', label: 'Open Design pour Claude Code' },
+      { href: '/solutions/engineering/', label: 'Open Design pour l’ingénierie' },
+    ],
+  },
+  screenshotToCode: {
+    title: 'Capture d’écran vers code — transformez une capture en code avec Open Design',
+    description:
+      'Un workflow capture d’écran vers code gratuit et open source qui transforme la capture de n’importe quelle UI en code propre, à base de composants — à l’intérieur de l’agent de code que vous utilisez déjà. Déposez une image, décrivez ce que vous voulez, et l’agent la reconstruit en vrai code que vous possédez et livrez, sans export verrouillé.',
+    breadcrumb: 'Capture d’écran vers code',
+    label: 'Outil · Capture d’écran vers code',
+    heading: 'Capture d’écran vers code, dans votre agent',
+    lead: 'Vous avez la capture d’écran d’une UI qui vous plaît ? Confiez-la à votre agent de code et laissez-le reconstruire l’écran en code propre, à base de composants — mise en page responsive, vrais états, votre stack. La capture est le brief ; le résultat est du code que vous possédez, pas un instantané jetable.',
+    heroImageAlt:
+      'Illustration éditoriale d’une capture d’écran d’UI se transformant en code de production propre à l’intérieur d’un agent de code, encadrée par une boîte de sélection verte',
+    tldrTitle: 'En une ligne',
+    tldrBody:
+      'La plupart des outils capture d’écran vers code recrachent un balisage ponctuel et positionné en absolu que vous réécrivez ensuite. Open Design reconstruit la capture à l’intérieur de votre agent de code en code propre, à base de composants — vraie structure, votre système de design, sans étape d’export, sans compteur par siège.',
+    stepsTitle: 'Comment fonctionne la capture d’écran vers code',
+    steps: [
+      {
+        title: 'Déposez la capture d’écran',
+        body: 'Donnez à votre agent une image de l’écran que vous voulez — la capture d’une appli, d’un site web ou d’un design. Open Design charge la bonne compétence pour que l’agent lise la mise en page et l’intention, pas seulement les pixels.',
+        imageAlt: 'Illustration d’une capture d’écran d’UI déposée dans un terminal',
+      },
+      {
+        title: 'Reconstruisez en code à base de composants',
+        body: 'L’agent associe la capture à des composants réutilisables et des tokens de design — espacement, typographie et couleur cohérents — et produit du code propre et lisible au lieu d’un mur de divs positionnés en absolu.',
+        imageAlt: 'Illustration d’une capture d’écran se convertissant en code structuré, à base de composants',
+      },
+      {
+        title: 'Affinez en conversant',
+        body: 'Ajustez la mise en page, les états et le comportement en parlant — « rends-le responsive », « branche le formulaire », « aligne sur nos tokens ». Le code se met à jour sur place ; vous n’êtes pas coincé avec une conversion ponctuelle figée.',
+        imageAlt: 'Illustration de code affiné par le chat à côté de la capture d’écran source',
+      },
+      {
+        title: 'Livrez le code que vous possédez',
+        body: 'Le résultat est du HTML/code dans votre dépôt, entièrement à vous — sans éditeur verrouillé par le fournisseur, sans export jetable, sans redessin entre la capture et la construction. Livrez-le, puis continuez à le faire évoluer dans l’agent.',
+        imageAlt: 'Illustration de code fini tenu dans un cadre de sélection vert, prêt à livrer',
+      },
+    ],
+    tableTitle: 'Open Design vs les outils capture d’écran vers code classiques',
+    tableColCapability: 'Ce dont vous avez besoin',
+    tableColWithOd: 'Avec Open Design',
+    tableColWithout: 'Outils capture d’écran vers code classiques',
+    tableRows: [
+      {
+        capability: 'Partir d’une image',
+        withOd: 'Déposez une capture dans l’agent déjà ouvert',
+        without: 'Téléversez vers un outil web séparé, convertissez dans leur cloud',
+      },
+      {
+        capability: 'Qualité du code',
+        withOd: 'Code propre, à base de composants issu d’un système de design',
+        without: 'Balisage positionné en absolu que vous réécrivez à la main',
+      },
+      {
+        capability: 'Itérer après conversion',
+        withOd: 'Affinez en parlant ; le code reste vivant dans votre projet',
+        without: 'Un instantané ponctuel figé que vous modifiez manuellement',
+      },
+      {
+        capability: 'Posséder le résultat',
+        withOd: 'Fichiers et code bruts dans votre dépôt, entièrement à vous',
+        without: 'Verrouillé à leur éditeur ou à leur format d’export',
+      },
+      {
+        capability: 'Coût et verrouillage',
+        withOd: 'Open source, apportez vos propres clés, s’exécute en local',
+        without: 'Abonnement par siège ou par crédit, hébergé chez le fournisseur',
+      },
+    ],
+    featuresTitle: 'Ce que vous pouvez convertir',
+    features: [
+      {
+        title: 'Capture d’écran vers code',
+        body: 'Transformez l’image de n’importe quel écran en code propre, à base de composants, dans votre stack.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Captures d’applis',
+        body: 'Reconstruisez l’écran d’une appli mobile ou web à partir d’une capture, avec de vrais états.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Captures de sites web',
+        body: 'Recréez en code responsive une landing ou une page marketing que vous avez capturée.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Captures de designs',
+        body: 'Transmettez la capture d’un design ou d’une maquette et récupérez du code livrable.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Formulaires et parcours',
+        body: 'Reconstruisez un formulaire ou un parcours multi-étapes à partir d’une capture avec une vraie validation.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Tout goût visuel',
+        body: 'Éditorial, doux ou audacieux — le code porte le style de la capture de bout en bout.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Reconstruit depuis une capture d’écran avec Open Design',
+    galleryLead:
+      'Chacun a démarré comme une image et est devenu du code que vous pouvez livrer. Choisissez un modèle proche de votre capture, décrivez votre variante, et l’agent le reconstruit — capture d’écran vers code, sans export verrouillé.',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: 'Écran d’appli web — capture d’écran vers code' },
+      { thumb: 'example-mobile-app', caption: 'Écran mobile vers code' },
+      { thumb: 'example-kami-landing', caption: 'Capture de landing en code' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Build web au style doux' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Parcourir les modèles',
+    faqTitle: 'FAQ capture d’écran vers code',
+    faq: [
+      {
+        q: 'Comment Open Design transforme-t-il une capture d’écran en code ?',
+        a: 'Vous donnez à votre agent de code une image de l’écran et Open Design charge la bonne compétence pour que l’agent la reconstruise en code propre, à base de composants — en lisant la mise en page et l’intention, pas seulement en calquant les pixels.',
+      },
+      {
+        q: 'Quel type de code produit-il ?',
+        a: 'Du HTML et du code propres, à base de composants, construits à partir d’un système de design réutilisable, si bien que vous pouvez le lire, l’affiner et le livrer — pas le balisage positionné en absolu que produisent la plupart des outils capture d’écran vers code.',
+      },
+      {
+        q: 'Est-ce gratuit ?',
+        a: 'Oui. Open Design est open source et s’exécute dans l’agent de code que vous utilisez déjà avec vos propres clés de fournisseur — il n’y a aucun compteur par siège ou par crédit sur le workflow capture d’écran vers code lui-même.',
+      },
+      {
+        q: 'Avec quels agents fonctionne-t-il ?',
+        a: 'Open Design fonctionne avec Claude Code, Codex, Cursor Agent, Gemini CLI et une douzaine d’autres adaptateurs natifs. Vous apportez vos propres clés de fournisseur ; rien n’est hébergé pour vous.',
+      },
+    ],
+    ctaTitle: 'Transformez votre prochaine capture d’écran en code ce soir',
+    ctaBody:
+      'Mettez une étoile au dépôt, installez Open Design, et transformez la capture de l’écran que vous voulez en code propre et livrable dans l’agent que vous utilisez déjà.',
+    relatedTitle: 'Outils et guides connexes',
+    related: [
+      { href: '/solutions/figma-to-code/', label: 'Figma vers code avec Open Design' },
+      { href: '/solutions/design-to-code/', label: 'Du design au code avec Open Design' },
+      { href: '/solutions/ai-ui-generator/', label: 'Générateur d’UI IA' },
+      { href: '/solutions/engineering/', label: 'Open Design pour l’ingénierie' },
+    ],
+  },
+  aiPrototypeGenerator: {
+    title: 'Générateur de prototypes IA — de l’invite à un prototype cliquable, puis au code',
+    description:
+      'Un générateur de prototypes IA gratuit et open source qui transforme une invite en un vrai prototype cliquable — plusieurs écrans, styles partagés, interactions en direct — et le mène jusqu’au code livré. Une alternative ouverte aux générateurs de prototypes de Figma, Cursor et Penpot qui s’exécute dans l’agent de code que vous utilisez déjà.',
+    breadcrumb: 'Générateur de prototypes IA',
+    label: 'Outil · Générateur de prototypes IA',
+    heading: 'Le générateur de prototypes IA qui livre du code',
+    lead: 'Décrivez le parcours et laissez votre agent générer un vrai prototype cliquable — écrans liés, styles cohérents, interactions fonctionnelles. Contrairement aux générateurs de prototypes qui s’arrêtent à une maquette, Open Design porte le même artefact jusqu’au code livré, dans l’agent que vous utilisez déjà.',
+    heroImageAlt:
+      'Illustration éditoriale d’une invite se transformant en un prototype cliquable multi-écrans puis en code de production, encadrée par une boîte de sélection verte',
+    tldrTitle: 'En une ligne',
+    tldrBody:
+      'La plupart des générateurs de prototypes IA (Figma, Cursor, Penpot) s’arrêtent à une maquette cliquable que vous reconstruisez ensuite. Open Design génère le prototype à l’intérieur de votre agent de code et le porte de l’invite jusqu’au code livré — sans étape d’export, sans rupture de transmission, sans compteur par siège.',
+    stepsTitle: 'Comment fonctionne le générateur de prototypes IA',
+    steps: [
+      {
+        title: 'Décrivez le parcours',
+        body: 'Décrivez le parcours à votre agent en langage clair — « un flux d’onboarding : inscription, sélecteur de forfait et tableau de bord ». Open Design charge la compétence de prototype pour que l’agent dispose des écrans liés, pas un unique frame statique.',
+        imageAlt: 'Illustration de la description d’un parcours en langage clair tapée dans un terminal',
+      },
+      {
+        title: 'Générez un prototype cliquable',
+        body: 'L’agent assemble des écrans liés à partir de composants réutilisables et de tokens de design, avec de vraies interactions — navigation, états, transitions. Vous obtenez un prototype cohérent et cliquable comme un ensemble, pas des frames déconnectés.',
+        imageAlt: 'Illustration d’écrans de prototype liés avec des flèches de navigation sur une grille',
+      },
+      {
+        title: 'Affinez en parlant',
+        body: 'Ajustez le parcours, les états et le style en conversant — « ajoute un état vide », « relie ce bouton au tableau de bord », « rends-le plus vif ». Le prototype se met à jour sur place au lieu d’être redessiné.',
+        imageAlt: 'Illustration d’un prototype affiné par le chat, ajoutant un écran et une transition',
+      },
+      {
+        title: 'Livrez le code que vous possédez',
+        body: 'Parce que le prototype vit dans votre projet, lui et le code final partagent une seule source de vérité. Le résultat est du HTML/code que vous possédez et pouvez livrer — sans verrouillage par le fournisseur, sans redessin entre le prototype et la construction.',
+        imageAlt: 'Illustration d’un prototype se transformant en code livré tenu dans un cadre de sélection vert',
+      },
+    ],
+    tableTitle: 'Open Design vs les générateurs de prototypes IA classiques',
+    tableColCapability: 'Ce dont vous avez besoin',
+    tableColWithOd: 'Avec Open Design',
+    tableColWithout: 'Générateurs de prototypes de Figma / Cursor / Penpot',
+    tableRows: [
+      {
+        capability: 'Générer depuis une invite',
+        withOd: 'Une seule invite dans l’agent déjà ouvert',
+        without: 'Générer dans leur appli ou un outil web séparé',
+      },
+      {
+        capability: 'Cliquable, multi-écrans',
+        withOd: 'Écrans liés avec de vraies interactions, comme un ensemble',
+        without: 'Cliquable, mais souvent piégé dans leur éditeur',
+      },
+      {
+        capability: 'Prototype vers code',
+        withOd: 'Le même artefact devient du code livré — sans redessin',
+        without: 'Le prototype est une impasse ; reconstruction pour la production',
+      },
+      {
+        capability: 'Posséder le résultat',
+        withOd: 'Fichiers et code bruts dans votre dépôt, entièrement à vous',
+        without: 'Modifiable uniquement dans leur appli ; export limité',
+      },
+      {
+        capability: 'Coût et verrouillage',
+        withOd: 'Open source, apportez vos propres clés, s’exécute en local',
+        without: 'Abonnement par siège ou par crédit, hébergé chez le fournisseur',
+      },
+    ],
+    featuresTitle: 'Ce que vous pouvez prototyper',
+    features: [
+      {
+        title: 'Parcours d’applis',
+        body: 'Onboarding, réglages et parcours multi-écrans générés comme un ensemble cliquable.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Prototypes d’applis web',
+        body: 'Tableaux de bord et outils avec une vraie navigation et de vrais états, puis menés jusqu’au code.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Parcours SaaS et landing',
+        body: 'Parcours du marketing à l’inscription que vous pouvez prototyper, styliser et livrer.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Onboarding et formulaires',
+        body: 'Onboarding multi-étapes et parcours de formulaires avec une hiérarchie et des états clairs.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Concepts interactifs',
+        body: 'Présentez vite un concept cliquable, puis gardez le même artefact jusqu’à la production.',
+        thumb: 'example-gamified-app',
+      },
+      {
+        title: 'Tout goût visuel',
+        body: 'Éditorial, doux ou audacieux — portez un style cohérent sur chaque écran.',
+        thumb: 'example-kami-landing',
+      },
+    ],
+    galleryTitle: 'Prototypes construits avec Open Design',
+    galleryLead:
+      'Chacun a démarré comme une invite et s’est rendu en un artefact cliquable et éditable. Choisissez un modèle proche de votre idée, décrivez votre variante, et l’agent l’adapte — du prototype au code livré.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: 'Appli web de rencontre — prototype cliquable' },
+      { thumb: 'example-hr-onboarding', caption: 'Parcours d’onboarding RH' },
+      { thumb: 'example-mobile-app', caption: 'Prototype d’appli mobile' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Prototype web au style doux' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Parcourir les modèles',
+    faqTitle: 'FAQ générateur de prototypes IA',
+    faq: [
+      {
+        q: 'Le générateur de prototypes IA est-il gratuit ?',
+        a: 'Oui. Open Design est open source et s’exécute dans l’agent de code que vous utilisez déjà avec vos propres clés de fournisseur — il n’y a aucun compteur par siège ou par crédit sur le générateur de prototypes lui-même.',
+      },
+      {
+        q: 'En quoi diffère-t-il des générateurs de prototypes de Figma, Cursor ou Penpot ?',
+        a: 'Ceux-ci s’arrêtent à une maquette cliquable dans leur appli. Open Design génère le prototype dans votre agent de code et porte le même artefact jusqu’au code livré que vous possédez — sans export, sans reconstruction pour la production.',
+      },
+      {
+        q: 'Les prototypes sont-ils cliquables et multi-écrans ?',
+        a: 'Oui. L’agent génère des écrans liés avec de vraies interactions — navigation, états, transitions — comme un ensemble cohérent, puis vous les affinez en parlant.',
+      },
+      {
+        q: 'Avec quels agents fonctionne-t-il ?',
+        a: 'Open Design fonctionne avec Claude Code, Codex, Cursor Agent, Gemini CLI et une douzaine d’autres adaptateurs natifs. Vous apportez vos propres clés de fournisseur ; rien n’est hébergé pour vous.',
+      },
+    ],
+    ctaTitle: 'Générez votre premier prototype ce soir',
+    ctaBody:
+      'Mettez une étoile au dépôt, installez Open Design, et transformez votre prochain parcours en un prototype cliquable — puis en code livré — dans l’agent que vous utilisez déjà.',
+    relatedTitle: 'Outils et guides connexes',
+    related: [
+      { href: '/solutions/prototype/', label: 'Prototypage avec Open Design' },
+      { href: '/solutions/ai-wireframe-generator/', label: 'Générateur de wireframes IA' },
+      { href: '/solutions/ai-ui-generator/', label: 'Générateur d’UI IA' },
+      { href: '/solutions/design-to-code/', label: 'Du design au code avec Open Design' },
+    ],
+  },
   prototype: {
     title: 'Créer des prototypes interactifs avec Open Design + Claude Code',
     description:

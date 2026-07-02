@@ -154,6 +154,10 @@ const script = `
     // Never auto-redirect away from a canonical-only page — its /<locale>/
     // variant does not exist, so a zh-preference visitor would hit a 404.
     if (isCanonicalOnly()) return;
+    // Pages that are localized but opt OUT of the on-load auto-redirect (e.g.
+    // design-system detail pages): keep the visitor on the URL they clicked.
+    // hreflang + manual language switching stay intact.
+    if (document.documentElement.getAttribute('data-locale-autoredirect') === 'off') return;
     if (currentFromPath() !== DEFAULT_LOCALE) return;
     let saved = null;
     try {
@@ -167,8 +171,20 @@ const script = `
     if (detected && detected !== DEFAULT_LOCALE) selectLocale(detected, false);
   };
 
-  bindSwitchers();
+  // Run the auto-redirect FIRST and synchronously: when this script is placed
+  // at the top of <head> (as on the homepage), a non-English visitor on the
+  // English root is redirected to their locale before the browser finishes
+  // streaming the document — aborting the wasted first-load of a page they were
+  // never going to keep. autoAdapt only reads location / navigator / storage
+  // and html attributes, all available before <body> exists.
   autoAdapt();
+  // bindSwitchers needs the switcher DOM, so defer it to DOMContentLoaded when
+  // this script runs in <head> (a no-op delay when it runs late in <body>).
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindSwitchers, { once: true });
+  } else {
+    bindSwitchers();
+  }
 })();
 `;
 ---

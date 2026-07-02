@@ -12,7 +12,7 @@
  *      script, which writes the same transcript to stdout. The CLI form
  *      lets the existing daemon CLI-spawn primitive treat this fake
  *      adapter identically to a real one (the path the plan calls out
- *      for the nightly matrix).
+ *      for the prerelease matrix).
  */
 
 import { readFileSync } from 'node:fs';

@@ -38,11 +38,11 @@ interface Props {
   loading: boolean;
   activePluginId: string | null;
   pendingApplyId: string | null;
+  pendingDuplicateId?: string | null;
   pendingShareAction?: { pluginId: string; action: PluginShareAction } | null;
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
+  onDuplicate?: (record: InstalledPluginRecord) => void;
   onOpenDetails: (record: InstalledPluginRecord) => void;
-  // Gallery only: ↗ opens the plugin's real example page in a new tab.
-  onOpenExternal?: (record: InstalledPluginRecord) => void;
   onPluginShareAction?: (
     record: InstalledPluginRecord,
     action: PluginShareAction,
@@ -62,10 +62,11 @@ export function PluginsHomeSection({
   loading,
   activePluginId,
   pendingApplyId,
+  pendingDuplicateId = null,
   pendingShareAction = null,
   onUse,
+  onDuplicate,
   onOpenDetails,
-  onOpenExternal,
   onPluginShareAction,
   onBrowseRegistry,
   preferDefaultFacet = true,
@@ -228,15 +229,17 @@ export function PluginsHomeSection({
                   isActive={activePluginId === p.id}
                   isPending={pendingApplyId === p.id}
                   pendingAny={pendingApplyId !== null}
+                  isDuplicatePending={pendingDuplicateId === p.id}
+                  pendingDuplicateAny={pendingDuplicateId !== null}
                   pendingShareAction={pendingShareAction}
                   isFeatured={isFeaturedPlugin(p)}
                   isSaved={savedPluginIds.has(p.id)}
                   onUse={onUse}
+                  onDuplicate={onDuplicate}
                   onOpenDetails={onOpenDetails}
                   onSave={handleSavePlugin}
                   onShareAction={onPluginShareAction}
                   layout={cardLayout}
-                  {...(onOpenExternal ? { onOpenExternal } : {})}
                 />
               ))}
               {hasMorePlugins ? (

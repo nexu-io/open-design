@@ -40,9 +40,12 @@
     perSystem = flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs {inherit system;};
       nodejs = pkgs.nodejs_24;
+      workspacePackageManifests = workspacePaths:
+        map (workspacePath: "${workspacePath}/package.json") workspacePaths;
       # Keep in sync with .github/workflows/ci.yml change_scopes
       # nix_validation_required filter.
       daemonWorkspacePaths = [
+        "packages/release"
         "packages/contracts"
         "packages/registry-protocol"
         "packages/agui-adapter"
@@ -56,6 +59,7 @@
       # Keep in sync with .github/workflows/ci.yml change_scopes
       # nix_validation_required filter.
       webWorkspacePaths = [
+        "packages/release"
         "packages/components"
         "packages/contracts"
         "packages/host"
@@ -85,6 +89,17 @@
         "tsconfig.json"
       ]
       ++ webWorkspacePaths);
+      pnpmDepsBaseInputs = [
+        "package.json"
+        "pnpm-lock.yaml"
+        "pnpm-workspace.yaml"
+      ];
+      daemonPnpmDepsSrc = filterProjectSource (
+        pnpmDepsBaseInputs ++ workspacePackageManifests daemonWorkspacePaths
+      );
+      webPnpmDepsSrc = filterProjectSource (
+        pnpmDepsBaseInputs ++ workspacePackageManifests webWorkspacePaths
+      );
 
       # nixpkgs ships pnpm 10.33.0; the repo's package.json declares
       # `engines.pnpm: ">=10.33.2 <11"` and pnpm refuses to install
@@ -109,11 +124,13 @@
       daemon = pkgs.callPackage ./nix/package-daemon.nix {
         inherit dream2nix nixpkgs system nodejs pnpm_10;
         src = daemonSrc;
+        pnpmDepsSrc = daemonPnpmDepsSrc;
         workspacePaths = daemonWorkspacePaths;
       };
       web = pkgs.callPackage ./nix/package-web.nix {
         inherit dream2nix nixpkgs system nodejs pnpm_10;
         src = webSrc;
+        pnpmDepsSrc = webPnpmDepsSrc;
         workspacePaths = webWorkspacePaths;
       };
     in {

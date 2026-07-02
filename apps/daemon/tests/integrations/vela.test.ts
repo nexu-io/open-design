@@ -16,12 +16,19 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  applyVelaLiveAccount,
+  clearAllVelaLiveAccounts,
   forgetVelaLogin,
+  peekVelaLiveAccount,
   readVelaCredentialRevision,
   readVelaLoginStatus,
   resolveAmrProfile,
+  setVelaLiveAccount,
   spawnVelaLogin,
+  velaLiveAccountCacheKey,
   amrConfigPath,
+  type VelaCredentialRevision,
+  type VelaLoginStatus,
 } from '../../src/integrations/vela.js';
 
 let originalHome: string | undefined;
@@ -438,5 +445,121 @@ describe('spawnVelaLogin', () => {
     const next = JSON.parse(readFileSync(file, 'utf8'));
     expect(next.profiles.local.user.email).toBe('settings-profile@example.com');
     expect(next.profiles.prod).toBeUndefined();
+  });
+});
+
+describe('applyVelaLiveAccount', () => {
+  const signedIn = (user: VelaLoginStatus['user']): VelaLoginStatus => ({
+    loggedIn: true,
+    loginInFlight: false,
+    profile: 'prod',
+    user,
+    configPath: '/tmp/x',
+  });
+
+  it('surfaces plan + balance on a separate field without fabricating a user', () => {
+    // VELA_RUNTIME_KEY / VELA_LINK_URL auth → readVelaLoginStatus returns
+    // loggedIn:true, user:null; the live billing data rides on `account` so the
+    // null identity (and the analytics `user.id` signal) is preserved.
+    const status = signedIn(null);
+    applyVelaLiveAccount(status, { plan: 'max', balanceUsd: '204.35' });
+    expect(status.user).toBeNull();
+    expect(status.account).toEqual({ plan: 'max', balanceUsd: '204.35' });
+  });
+
+  it('leaves an existing config-backed user identity untouched', () => {
+    const status = signedIn({ id: 'u1', email: 'a@b.c', plan: 'free' });
+    applyVelaLiveAccount(status, { plan: 'plus', balanceUsd: '10.00' });
+    expect(status.user).toEqual({ id: 'u1', email: 'a@b.c', plan: 'free' });
+    expect(status.account).toEqual({ plan: 'plus', balanceUsd: '10.00' });
+  });
+
+  it('is a no-op when signed out or when there is no account', () => {
+    const out: VelaLoginStatus = { ...signedIn(null), loggedIn: false };
+    applyVelaLiveAccount(out, { plan: 'max', balanceUsd: '1' });
+    expect(out.account).toBeUndefined();
+
+    const noAccount = signedIn(null);
+    applyVelaLiveAccount(noAccount, null);
+    expect(noAccount.account).toBeUndefined();
+  });
+});
+
+describe('velaLiveAccountCacheKey + clearAllVelaLiveAccounts', () => {
+  const rev = (
+    over: Partial<VelaCredentialRevision> = {},
+  ): VelaCredentialRevision => ({
+    authSource: 'file',
+    profile: 'prod',
+    loggedIn: true,
+    userId: 'u1',
+    userEmail: 'a@b.c',
+    configMtimeMs: 100,
+    credentialFingerprint: '',
+    ...over,
+  });
+
+  it('changes key after logout / account switch on the same profile', () => {
+    const signedInKey = velaLiveAccountCacheKey(rev());
+    const loggedOutKey = velaLiveAccountCacheKey(
+      rev({ loggedIn: false, userId: '', configMtimeMs: 200 }),
+    );
+    const otherUserKey = velaLiveAccountCacheKey(
+      rev({ userId: 'u2', configMtimeMs: 300 }),
+    );
+    expect(signedInKey).not.toBe(loggedOutKey);
+    expect(signedInKey).not.toBe(otherUserKey);
+  });
+
+  it('invalidates an env-backed key when the config account changes', () => {
+    // Env-backed auth (VELA_RUNTIME_KEY) has userId='' (user:null), so the
+    // config mtime is the ONLY signal that the underlying billing account
+    // changed — it must be part of the key or a switch leaks the prior
+    // account's plan/balance. readVelaCredentialRevision now keeps configMtimeMs
+    // for env auth so these differ.
+    const env = (mtime: number) =>
+      velaLiveAccountCacheKey(
+        rev({ authSource: 'env', userId: '', userEmail: '', configMtimeMs: mtime }),
+      );
+    expect(env(100)).not.toBe(env(200));
+  });
+
+  it('invalidates an env-backed key when the configured AMR credential changes', () => {
+    // Settings-backed VELA_RUNTIME_KEY can switch accounts without touching
+    // ~/.amr/config.json (same configMtimeMs, user:null), so the credential
+    // fingerprint is the only thing distinguishing account A from account B.
+    const base = {
+      authSource: 'env' as const,
+      userId: '',
+      userEmail: '',
+      configMtimeMs: 100,
+    };
+    const keyA = velaLiveAccountCacheKey(
+      rev({ ...base, credentialFingerprint: 'aaaaaaaaaaaaaaaa' }),
+    );
+    const keyB = velaLiveAccountCacheKey(
+      rev({ ...base, credentialFingerprint: 'bbbbbbbbbbbbbbbb' }),
+    );
+    expect(keyA).not.toBe(keyB);
+  });
+
+  it('never serves the previous account billing data after a switch', () => {
+    clearAllVelaLiveAccounts();
+    const oldKey = velaLiveAccountCacheKey(rev({ userId: 'u1' }));
+    setVelaLiveAccount(oldKey, { plan: 'max', balanceUsd: '999.00' });
+
+    // A different account logging in (rewritten config) gets a fresh key.
+    const newKey = velaLiveAccountCacheKey(
+      rev({ userId: 'u2', configMtimeMs: 999 }),
+    );
+    expect(peekVelaLiveAccount(newKey)).toBeNull();
+    expect(peekVelaLiveAccount(oldKey)).toEqual({
+      plan: 'max',
+      balanceUsd: '999.00',
+    });
+
+    // Logout wipes everything.
+    clearAllVelaLiveAccounts();
+    expect(peekVelaLiveAccount(oldKey)).toBeNull();
   });
 });
