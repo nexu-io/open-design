@@ -377,6 +377,21 @@ export function createClaudeStreamHandler(
   function handleObject(obj: unknown) {
     if (!isRecord(obj)) return;
 
+    // Sidechain guard. Claude Code emits subagent-internal traffic in the
+    // parent stream tagged with a top-level `parent_tool_use_id`. Those
+    // lines must not drive main-line state: a subagent's final
+    // `stop_reason: end_turn` would emit `turn_end` and close stream-json
+    // stdin mid-run, and sidechain text would feed the artifact parser.
+    // Surface only tagged tool activity so the UI can tell it apart.
+    const parentToolUseId =
+      typeof obj.parent_tool_use_id === 'string' && obj.parent_tool_use_id.length > 0
+        ? obj.parent_tool_use_id
+        : null;
+    if (parentToolUseId) {
+      handleSidechainLine(obj, parentToolUseId);
+      return;
+    }
+
     if (obj.type === 'system' && obj.subtype === 'init') {
       onEvent({
         type: 'status',
@@ -504,6 +519,44 @@ export function createClaudeStreamHandler(
       }
     }
     return parts.join('\n').trim();
+  }
+
+  // Subagent-internal lines: emit only tagged tool activity. Text, thinking,
+  // status, and stop_reason signals from the sidechain are intentionally
+  // dropped — the Task tool_result on the main line already carries the
+  // subagent's final answer. Bypasses emitToolUse on purpose: the artifact
+  // duplicate-suppression bookkeeping there tracks MAIN-line Write contents.
+  function handleSidechainLine(obj: Record<string, unknown>, parentToolUseId: string) {
+    if (obj.type === 'assistant' && isRecord(obj.message) && Array.isArray(obj.message.content)) {
+      for (const block of obj.message.content) {
+        if (!isRecord(block)) continue;
+        if (block.type === 'tool_use' && typeof block.id === 'string' && typeof block.name === 'string') {
+          onEvent({
+            type: 'tool_use',
+            id: block.id,
+            name: block.name,
+            input: block.input ?? null,
+            parentToolUseId,
+          });
+        }
+      }
+      return;
+    }
+    if (obj.type === 'user' && isRecord(obj.message) && Array.isArray(obj.message.content)) {
+      for (const block of obj.message.content) {
+        if (!isRecord(block)) continue;
+        if (block.type === 'tool_result') {
+          onEvent({
+            type: 'tool_result',
+            toolUseId: block.tool_use_id,
+            content: stringifyToolResult(block.content),
+            isError: Boolean(block.is_error),
+            parentToolUseId,
+          });
+        }
+      }
+    }
+    // stream_event / system / result lines from the sidechain: drop.
   }
 
   function handleStreamEvent(ev: Record<string, unknown>) {
