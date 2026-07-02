@@ -704,6 +704,7 @@
 .section-head .hint { margin-top: 2px; }
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field-label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.settings-divider { height: 1px; background: var(--border-soft); margin: 8px 0; border: none; }
 .memory-model-inline__select {
   width: 100%;
   min-width: 0;

@@ -168,6 +168,8 @@ import {
 import {
   setCritiqueTheaterEnabled,
   useCritiqueTheaterEnabled,
+  setWaitTeamEnabled,
+  useWaitTeamEnabled,
 } from './Theater';
 import {
   ACCENT_SWATCHES,
@@ -8137,6 +8139,7 @@ function CritiqueTheaterSection() {
   const { t } = useI18n();
   const analytics = useAnalytics();
   const enabled = useCritiqueTheaterEnabled();
+  const waitTeamEnabled = useWaitTeamEnabled();
   const route = useRoute();
   const activeProjectId = route.kind === 'project' ? route.projectId : null;
   return (
@@ -8184,6 +8187,24 @@ function CritiqueTheaterSection() {
             {t('critiqueTheater.settingsEnabledNoProjectHint')}
           </small>
         )}
+      </label>
+      <div className="settings-divider" aria-hidden="true" />
+      <label className="field">
+        <span className="field-label">
+          <input
+            type="checkbox"
+            checked={waitTeamEnabled}
+            onChange={(e) => {
+              const next = e.target.checked;
+              setWaitTeamEnabled(next);
+            }}
+          />
+          {' '}
+          {t('waiteam.settingsEnabledLabel')}
+        </span>
+        <small className="hint">
+          {t('waiteam.settingsEnabledDescription')}
+        </small>
       </label>
     </section>
   );
