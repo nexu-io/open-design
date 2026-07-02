@@ -52,8 +52,8 @@ type PersistedAgentEvent =
   | { kind: 'status'; label: string; detail?: string }
   | { kind: 'text'; text: string }
   | { kind: 'thinking'; text: string }
-  | { kind: 'tool_use'; id: string; name: string; input: unknown }
-  | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  | { kind: 'tool_use'; id: string; name: string; input: unknown; parentToolUseId?: string }
+  | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean; parentToolUseId?: string }
   | { kind: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number; durationMs?: number }
   | { kind: 'raw'; line: string };
 type ChatAttachment = { path: string; name: string; kind: string; size?: number };
@@ -237,6 +237,39 @@ describe('exportProjectTranscript', () => {
       { type: 'tool_result', toolUseId: 'tu_1', content: 'file contents', isError: false },
       { type: 'text', text: ' Done.' },
     ]);
+  });
+
+  it('carries parentToolUseId through tool_use / tool_result blocks and omits it when untagged', () => {
+    // Sidechain (subagent-internal) tool events persist with a
+    // `parentToolUseId` tag (packages/contracts/src/api/chat.ts). A
+    // synthesis consumer reading the transcript needs that tag to tell
+    // subagent work apart from main-agent work — without it a
+    // subagent's Write reads as the main agent's own tool call.
+    const { db, projectsRoot } = setup();
+    seedConversation(db, { id: 'c1', createdAt: 100 });
+    seedMessage(db, 'c1', {
+      id: 'm1',
+      role: 'assistant',
+      events: [
+        { kind: 'tool_use', id: 'tu_task', name: 'Task', input: { prompt: 'research' } },
+        { kind: 'tool_use', id: 'tu_side', name: 'Write', input: { file_path: '/proj/research.md' }, parentToolUseId: 'tu_task' },
+        { kind: 'tool_result', toolUseId: 'tu_side', content: 'ok', isError: false, parentToolUseId: 'tu_task' },
+        { kind: 'tool_result', toolUseId: 'tu_task', content: 'done', isError: false },
+      ],
+    });
+
+    const lines = readLines(exportProjectTranscript(db, projectsRoot, PROJECT_ID, { now: FIXED_NOW }).path);
+    const blocks = line(lines, 2).blocks as Record<string, unknown>[];
+    expect(blocks).toEqual([
+      { type: 'tool_use', id: 'tu_task', name: 'Task', input: { prompt: 'research' } },
+      { type: 'tool_use', id: 'tu_side', name: 'Write', input: { file_path: '/proj/research.md' }, parentToolUseId: 'tu_task' },
+      { type: 'tool_result', toolUseId: 'tu_side', content: 'ok', isError: false, parentToolUseId: 'tu_task' },
+      { type: 'tool_result', toolUseId: 'tu_task', content: 'done', isError: false },
+    ]);
+    // Untagged (main-line) blocks must not carry the key at all — the
+    // export is JSONL and every absent key keeps lines compact.
+    expect(blocks[0]).not.toHaveProperty('parentToolUseId');
+    expect(blocks[3]).not.toHaveProperty('parentToolUseId');
   });
 
   it('drops status / usage / raw telemetry events without breaking content', () => {
