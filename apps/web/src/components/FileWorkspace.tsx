@@ -48,7 +48,6 @@ import { parseDesignMd } from '../runtime/design-md-parse';
 import {
   deleteBrandImage,
   deleteBrandLogo,
-  readDesignMd,
   replaceDesignMdColorAtIndex,
   updateBrandColor,
 } from '../runtime/kit-edit';
@@ -3136,6 +3135,7 @@ function DesignSystemProjectPanel({
   const initialDesignMdRef = useRef<string | null>(null);
   const initialBrandJsonRef = useRef<string | null>(null);
   const initialBrandJsonLoadedRef = useRef(false);
+  const kitFileCacheKey = useMemo(() => designKitFileCacheKey(files, kitReloadKey), [files, kitReloadKey]);
   function emitDesignSystemProjectEditClick(
     element: DesignSystemEditClickProps['element'],
     module: DesignSystemEditClickProps['module'],
@@ -3167,8 +3167,14 @@ function DesignSystemProjectPanel({
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
-      readDesignMd(projectId),
-      fetchProjectFileText(projectId, 'brand.json', { cache: 'no-store' }),
+      fetchProjectFileText(projectId, 'DESIGN.md', {
+        cache: 'no-store',
+        cacheBustKey: kitFileCacheKey,
+      }).then((text) => text ?? ''),
+      fetchProjectFileText(projectId, 'brand.json', {
+        cache: 'no-store',
+        cacheBustKey: kitFileCacheKey,
+      }),
     ]).then(([designMd, brandJson]) => {
       if (cancelled) return;
       setDesignMdBody(designMd);
@@ -3181,7 +3187,7 @@ function DesignSystemProjectPanel({
     return () => {
       cancelled = true;
     };
-  }, [projectId, kitReloadKey]);
+  }, [projectId, kitFileCacheKey]);
   const kitHost = system.provenance?.sourceUrls?.[0]
     ? hostnameOf(system.provenance.sourceUrls[0])
     : undefined;
@@ -3209,7 +3215,7 @@ function DesignSystemProjectPanel({
     body: designMdBody,
     editable,
     host: kitHost,
-    reloadKey: kitReloadKey,
+    reloadKey: kitFileCacheKey,
   });
   async function persistDesignMd(nextBody: string) {
     const updated = await updateDesignSystemDraft(system.id, { body: nextBody });
@@ -4928,6 +4934,33 @@ function normalizeDesignSystemPath(path: string): string {
 
 function normalizeProjectFilePath(path: string): string {
   return path.replace(/\\/g, '/').split('/').filter(Boolean).join('/');
+}
+
+function isDesignKitCacheFile(path: string): boolean {
+  return (
+    path === 'brand.json' ||
+    path === 'DESIGN.md' ||
+    path.startsWith('assets/') ||
+    path.startsWith('components/') ||
+    path.startsWith('fonts/') ||
+    path.startsWith('system/') ||
+    path.startsWith('ui_kits/')
+  );
+}
+
+function designKitFileCacheKey(files: ProjectFile[], reloadKey: number): string {
+  let count = 0;
+  let latestMtime = 0;
+  let totalSize = 0;
+  for (const file of files) {
+    if (file.type === 'dir') continue;
+    const path = normalizeProjectFilePath(file.path ?? file.name);
+    if (!isDesignKitCacheFile(path)) continue;
+    count += 1;
+    latestMtime = Math.max(latestMtime, Math.round(file.mtime));
+    totalSize += file.size;
+  }
+  return `${reloadKey}-${count}-${latestMtime}-${totalSize}`;
 }
 
 function joinProjectFilePath(dir: string, name: string): string {

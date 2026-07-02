@@ -577,7 +577,7 @@ export interface DesignKitSource {
   editable: boolean;
   host?: string;
   /** Bump to force a brand.json re-read after an upload writes a module. */
-  reloadKey?: number;
+  reloadKey?: number | string;
 }
 
 function tryParseBrand(raw: string | null): Brand | null {
