@@ -516,6 +516,7 @@ export function EntryShell({
   const [demoScenario, setDemoScenario] = useState<DemoScenario>('home');
   const [demoPlan, setDemoPlan] = useState<DemoPlan>('free');
   const [demoWorkspaceLifecycle, setDemoWorkspaceLifecycle] = useState<DemoWorkspaceLifecycle>('active');
+  const [demoWorkspaceId, setDemoWorkspaceId] = useState<'nexu' | 'refly'>('nexu');
   const [demoUseMode, setDemoUseMode] = useState<DemoUseMode>('cloud');
   const [localModeTipDismissed, setLocalModeTipDismissed] = useState<boolean>(readLocalModeTipDismissed);
   const [cloudSignInOnly, setCloudSignInOnly] = useState(false);
@@ -541,8 +542,10 @@ export function EntryShell({
   // Single-seat plans (免费版 / 个人版) drive solo behaviors: one team, only
   // the owner in the member list, and invite → upgrade gating.
   const cloudWorkspace = demoUseMode === 'cloud';
-  const workspaceExpired = cloudWorkspace && demoWorkspaceLifecycle === 'expired';
-  const isSolo = workspaceExpired || isSoloPlan(demoPlan);
+  const nexuWorkspaceExpired = cloudWorkspace && demoWorkspaceLifecycle === 'expired';
+  const workspaceExpired = nexuWorkspaceExpired && demoWorkspaceId === 'nexu';
+  const isSoloPlanMode = isSoloPlan(demoPlan);
+  const isSolo = workspaceExpired || isSoloPlanMode;
   // Demo credits shown in the ✨ chip + popover, varying by plan. Every tier
   // below 团队版 surfaces an 升级 CTA (Plus→Pro/Max/Team, Pro→Max/Team, Max→Team).
   const demoCredits = (() => {
@@ -987,6 +990,7 @@ export function EntryShell({
         if (lifecycle === 'expired') {
           setDemoUseMode('cloud');
           setDemoPlan('team');
+          setDemoWorkspaceId('nexu');
         }
       }}
       useMode={demoUseMode}
@@ -997,6 +1001,7 @@ export function EntryShell({
         }
         if (mode === 'local') {
           setDemoWorkspaceLifecycle('active');
+          setDemoWorkspaceId('nexu');
         }
         if (mode === 'local' && (view === 'drafts' || view === 'all-projects' || view === 'members' || view === 'dashboard' || view === 'workspace-settings')) {
           navigate({ kind: 'home', view: 'home' });
@@ -1178,14 +1183,16 @@ export function EntryShell({
           onClose={() => setRailOpen(false)}
           footerExtra={railFooterActions}
           footerNotice={railFooterNotice}
-          solo={isSolo}
+          solo={isSoloPlanMode}
+          activeWorkspace={demoWorkspaceId}
+          onWorkspaceChange={setDemoWorkspaceId}
           credits={demoCredits}
           onUpgrade={() => setLowCreditsOpen(true)}
           onOpenSettings={() => onOpenSettings()}
           canManageWorkspace={canManageWorkspace}
           canOwnWorkspace={canOwnWorkspace}
           cloudWorkspace={cloudWorkspace}
-          workspaceExpired={workspaceExpired}
+          workspaceExpired={nexuWorkspaceExpired}
         />
         <main className="entry-main entry-main--scroll" ref={entryMainScrollRef}>
           <div className="entry-main__topbar">

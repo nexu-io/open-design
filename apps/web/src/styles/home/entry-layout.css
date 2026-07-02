@@ -882,6 +882,12 @@
   text-overflow: ellipsis;
 }
 .entry-nav-rail__team svg { color: var(--text-soft); }
+.entry-nav-rail__team-status-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
 
 /* Section label (e.g. 更多) */
 .entry-nav-rail__section {
@@ -5142,6 +5148,16 @@
   background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 .entry-nav-rail__team-avatar--alt { background: #6c3aa6; }
+.entry-nav-rail__menu-item.is-expired-workspace {
+  color: var(--text-muted);
+}
+.entry-nav-rail__menu-item.is-expired-workspace .entry-nav-rail__team-avatar {
+  filter: grayscale(1);
+  opacity: 0.78;
+}
+.entry-nav-rail__menu-item.is-expired-workspace svg {
+  color: var(--text-soft);
+}
 .entry-nav-rail__team-plan {
   margin-left: auto;
   font-size: 11px;

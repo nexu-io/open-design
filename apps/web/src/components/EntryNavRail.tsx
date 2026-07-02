@@ -64,7 +64,11 @@ interface Props {
   canOwnWorkspace?: boolean;
   cloudWorkspace?: boolean;
   workspaceExpired?: boolean;
+  activeWorkspace?: DemoWorkspaceId;
+  onWorkspaceChange?: (workspace: DemoWorkspaceId) => void;
 }
+
+type DemoWorkspaceId = 'nexu' | 'refly';
 
 interface NavButtonProps {
   active?: boolean;
@@ -91,7 +95,7 @@ function NavButton({ active, ariaLabel, tooltip, onClick, testId, children }: Na
   );
 }
 
-export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, footerExtra, footerNotice, solo = false, credits, onUpgrade, onOpenSettings, canManageWorkspace = true, canOwnWorkspace = true, cloudWorkspace = true, workspaceExpired = false }: Props) {
+export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, footerExtra, footerNotice, solo = false, credits, onUpgrade, onOpenSettings, canManageWorkspace = true, canOwnWorkspace = true, cloudWorkspace = true, workspaceExpired = false, activeWorkspace = 'nexu', onWorkspaceChange }: Props) {
   const t = useT();
   const brandLabel = t('app.brand');
   const homeLabel = t('entry.navHome');
@@ -103,7 +107,23 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [workspaceLockedOpen, setWorkspaceLockedOpen] = useState(false);
-  const workspaceAccessBlocked = workspaceExpired && !canOwnWorkspace;
+  const currentWorkspace = activeWorkspace === 'refly'
+    ? { id: 'refly' as const, name: 'Refly', avatar: 'R', expired: false }
+    : { id: 'nexu' as const, name: 'Nexu 团队', avatar: 'N', expired: workspaceExpired };
+  const workspaceMenuItems = [
+    ...(solo ? [] : [{ id: 'refly' as const, name: 'Refly', avatar: 'R', expired: false }]),
+    { id: 'nexu' as const, name: 'Nexu 团队', avatar: 'N', expired: workspaceExpired },
+  ];
+  const showCurrentWorkspaceExpired = currentWorkspace.expired;
+  function chooseWorkspace(item: { id: DemoWorkspaceId; expired: boolean }) {
+    if (item.expired) {
+      setTeamOpen(false);
+      setWorkspaceLockedOpen(true);
+      return;
+    }
+    onWorkspaceChange?.(item.id);
+    setTeamOpen(false);
+  }
 
   // Once opened the rail stays docked (Manus-style); navigating between
   // destinations no longer collapses it.
@@ -271,41 +291,46 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose, 
             <div className="entry-nav-rail__team-wrap">
               <button
                 type="button"
-                className={`entry-nav-rail__team${workspaceExpired ? ' is-expired' : ''}${workspaceAccessBlocked ? ' is-locked' : ''}`}
-                onClick={() => {
-                  if (workspaceAccessBlocked) {
-                    setWorkspaceLockedOpen(true);
-                    return;
-                  }
-                  setTeamOpen((v) => !v);
-                }}
-                aria-expanded={workspaceAccessBlocked ? workspaceLockedOpen : teamOpen}
-                aria-haspopup={workspaceAccessBlocked ? 'dialog' : undefined}
-                aria-label={workspaceAccessBlocked ? 'Nexu 团队已锁定，需 Owner 续费后恢复团队协作' : undefined}
-                title={workspaceExpired ? '团队版已到期，需 Owner 续费后恢复团队协作' : undefined}
+                className={`entry-nav-rail__team${showCurrentWorkspaceExpired ? ' is-expired' : ''}`}
+                onClick={() => setTeamOpen((v) => !v)}
+                aria-expanded={teamOpen}
+                aria-haspopup="menu"
+                aria-label={showCurrentWorkspaceExpired ? 'Nexu 团队已到期，打开 Workspace 切换菜单' : `打开 Workspace 切换菜单，当前 ${currentWorkspace.name}`}
+                title={showCurrentWorkspaceExpired ? '点击切换 Workspace；当前团队已到期' : '切换 Workspace'}
               >
                 <span className="entry-nav-rail__team-avatar" aria-hidden>
-                  <img src="/logo.png" alt="" />
+                  {currentWorkspace.id === 'nexu' ? <img src="/logo.png" alt="" /> : currentWorkspace.avatar}
                 </span>
-                <span className="entry-nav-rail__team-name">Nexu 团队</span>
-                {workspaceExpired ? <Icon name="lock" size={13} /> : <Icon name="chevron-down" size={14} />}
+                <span className="entry-nav-rail__team-name">{currentWorkspace.name}</span>
+                <span className="entry-nav-rail__team-status-icons" aria-hidden>
+                  {showCurrentWorkspaceExpired ? <Icon name="lock" size={13} /> : null}
+                  <Icon name="chevron-down" size={14} />
+                </span>
               </button>
-              {teamOpen && !workspaceAccessBlocked ? (
+              {teamOpen ? (
                 <>
                   <div className="entry-nav-rail__menu-backdrop" onClick={() => setTeamOpen(false)} />
                   <div className="entry-nav-rail__team-menu" role="menu">
-                    {solo ? null : (
-                      <button type="button" className="entry-nav-rail__menu-item" role="menuitem">
-                        <span className="entry-nav-rail__team-avatar entry-nav-rail__team-avatar--alt" aria-hidden>R</span>
-                        Refly
-                      </button>
-                    )}
-                    <button type="button" className="entry-nav-rail__menu-item is-current" role="menuitem">
-                      <span className="entry-nav-rail__team-avatar" aria-hidden>N</span>
-                      Nexu 团队
-                      {workspaceExpired ? <span className="entry-nav-rail__team-plan">已降级</span> : null}
-                      <Icon name={workspaceExpired ? 'lock' : 'check'} size={14} />
-                    </button>
+                    {workspaceMenuItems.map((item) => {
+                      const isCurrent = item.id === activeWorkspace;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={`entry-nav-rail__menu-item${isCurrent ? ' is-current' : ''}${item.expired ? ' is-expired-workspace' : ''}`}
+                          role="menuitem"
+                          onClick={() => chooseWorkspace(item)}
+                          title={item.expired ? '该 Workspace 已到期，需 Owner 续费后恢复进入' : undefined}
+                        >
+                          <span className={`entry-nav-rail__team-avatar${item.id === 'refly' ? ' entry-nav-rail__team-avatar--alt' : ''}`} aria-hidden>
+                            {item.avatar}
+                          </span>
+                          {item.name}
+                          {item.expired ? <span className="entry-nav-rail__team-plan">已降级</span> : null}
+                          <Icon name={item.expired ? 'lock' : isCurrent ? 'check' : 'chevron-right'} size={14} />
+                        </button>
+                      );
+                    })}
                     {!workspaceExpired ? (
                       <>
                         <div className="entry-nav-rail__menu-divider" />
