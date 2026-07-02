@@ -3294,6 +3294,12 @@ export const zhTW: Dict = {
   "critiqueTheater.replaySpeedFast": "快進",
   "critiqueTheater.settingsNav": "設計評審團",
   "critiqueTheater.settingsNavHint": "為代理執行啟用五人設計評審",
+  'advancedDesign.settingsNav': 'Advanced Design',
+  'advancedDesign.settingsNavHint': 'Design Jury and multi-agent team collaboration',
+  'advancedDesign.designJuryTitle': 'Design Jury',
+  'advancedDesign.multiAgentTitle': 'Multi-Agent Team',
+  'waiteam.settingsEnabledLabel': 'Enable multi-agent team mode (Design WaitTeams)',
+  'waiteam.settingsEnabledDescription': 'When enabled, agent runs use the multi-agent team collaboration module (7 modes + capability-based role assignment). Uncheck to use the default single-agent design mode.',
   "critiqueTheater.settingsEnabledLabel": "在代理執行期間顯示設計評審團",
   "critiqueTheater.settingsEnabledDescription":
     "啟用後，五人評審面板會在代理產生時同步進行，並在交付前為結果評分。可隨時中斷。",
