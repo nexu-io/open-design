@@ -94,7 +94,21 @@ export interface KitAsset {
   kind: string;
   label: string;
   url: string;
+  previewWidth?: number;
+  previewHeight?: number;
 }
+
+interface BrandDesignAsset {
+  kind?: unknown;
+  label?: unknown;
+  href?: unknown;
+  viewport?: unknown;
+  available?: unknown;
+}
+
+type BrandWithDesignAssets = Brand & {
+  designAssets?: BrandDesignAsset[];
+};
 
 export interface DesignKit {
   designSystemId?: string;
@@ -133,6 +147,69 @@ const ASSET_TILES: { kind: string; label: string; file: string }[] = [
   { kind: 'newsletter', label: 'Newsletter', file: 'system/artifacts/newsletter.html' },
   { kind: 'form', label: 'Form page', file: 'system/artifacts/form.html' },
 ];
+
+function slugFromAssetLabel(label: string, href: string): string {
+  const seed = label || href;
+  return seed
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'asset';
+}
+
+function parseAssetViewport(viewport: unknown): Pick<KitAsset, 'previewWidth' | 'previewHeight'> | null {
+  if (typeof viewport !== 'string') return null;
+  const match = viewport.trim().match(/^(\d{3,5})x(\d{3,5})$/i);
+  if (!match) return null;
+  const previewWidth = Number(match[1]);
+  const previewHeight = Number(match[2]);
+  if (!Number.isFinite(previewWidth) || !Number.isFinite(previewHeight)) return null;
+  return { previewWidth, previewHeight };
+}
+
+function brandDesignAssets(
+  brand: Brand,
+  resolveAssetUrl: (rel: string) => string | null,
+): KitAsset[] | null {
+  const custom = (brand as BrandWithDesignAssets).designAssets;
+  if (!Array.isArray(custom)) return null;
+  const out: KitAsset[] = [];
+  const seen = new Set<string>();
+  for (const item of custom) {
+    if (!item || typeof item !== 'object') continue;
+    if (item.available === false) continue;
+    if (typeof item.label !== 'string' || !item.label.trim()) continue;
+    if (typeof item.href !== 'string' || !item.href.trim()) continue;
+    const label = item.label.trim();
+    const href = item.href.trim();
+    const url = resolveAssetUrl(href);
+    if (!url) continue;
+    const rawKind = typeof item.kind === 'string' && item.kind.trim() ? item.kind.trim() : slugFromAssetLabel(label, href);
+    let kind = rawKind;
+    let suffix = 2;
+    while (seen.has(kind)) {
+      kind = `${rawKind}-${suffix}`;
+      suffix += 1;
+    }
+    seen.add(kind);
+    out.push({
+      kind,
+      label,
+      url,
+      ...(parseAssetViewport(item.viewport) ?? { previewWidth: 1280, previewHeight: 760 }),
+    });
+  }
+  return out.length > 0 ? out : null;
+}
+
+function defaultAssetTiles(resolveAssetUrl: (rel: string) => string | null): KitAsset[] {
+  return ASSET_TILES
+    .map((a) => {
+      const url = resolveAssetUrl(a.file);
+      return url ? { kind: a.kind, label: a.label, url } : null;
+    })
+    .filter((a): a is KitAsset => Boolean(a));
+}
 
 function fontList(typography: DesignKit['typography']): KitFont[] {
   return [typography.display, typography.body, typography.mono].filter(
@@ -350,7 +427,7 @@ export function brandToKit(brand: Brand, opts: BrandKitOptions): DesignKit {
         }
       : undefined,
     assets: showSystem
-      ? ASSET_TILES.map((a) => ({ kind: a.kind, label: a.label, url: asset(a.file)! }))
+      ? brandDesignAssets(brand, asset) ?? defaultAssetTiles(asset)
       : undefined,
     showcaseHtml: opts.showcaseHtml ?? null,
   };
@@ -480,7 +557,7 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
         }
       : undefined,
     assets: staticUrl
-      ? ASSET_TILES.map((a) => ({ kind: a.kind, label: a.label, url: staticUrl(a.file) }))
+      ? defaultAssetTiles(staticUrl)
       : undefined,
     showcaseHtml: opts.showcaseHtml ?? null,
   };
@@ -500,7 +577,7 @@ export interface DesignKitSource {
   editable: boolean;
   host?: string;
   /** Bump to force a brand.json re-read after an upload writes a module. */
-  reloadKey?: number;
+  reloadKey?: number | string;
 }
 
 function tryParseBrand(raw: string | null): Brand | null {

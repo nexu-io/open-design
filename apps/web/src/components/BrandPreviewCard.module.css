@@ -1245,20 +1245,54 @@
   position: relative;
   aspect-ratio: 16 / 10;
   overflow: hidden;
-  background: var(--bg);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+}
+
+.assetFrame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(100deg, transparent 0%, rgba(255, 255, 255, 0.08) 45%, transparent 70%),
+    radial-gradient(circle at 30% 28%, rgba(255, 255, 255, 0.12), transparent 34%),
+    rgba(255, 255, 255, 0.035);
+  background-size: 220% 100%, 100% 100%, 100% 100%;
+  opacity: 1;
+  transition: opacity 180ms ease;
+  animation: assetPreviewLoading 1.3s ease-in-out infinite;
+}
+
+.assetFrameLoaded::before {
+  opacity: 0;
+  animation: none;
 }
 
 .assetFrame iframe {
   position: absolute;
   top: 0;
   left: 0;
-  width: 200%;
-  height: 200%;
+  width: var(--asset-preview-width, 200%);
+  height: var(--asset-preview-height, 200%);
   border: 0;
-  transform: scale(0.5);
+  transform: scale(var(--asset-preview-scale, 0.5));
   transform-origin: top left;
   pointer-events: none;
   background: #fff;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.assetFrameLoaded iframe {
+  opacity: 1;
+}
+
+@keyframes assetPreviewLoading {
+  from {
+    background-position: 150% 0, 0 0, 0 0;
+  }
+  to {
+    background-position: -50% 0, 0 0, 0 0;
+  }
 }
 
 .assetMeta {

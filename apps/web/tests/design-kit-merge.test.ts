@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { mergeBrandKitWithDesignMd } from '../src/runtime/design-kit';
+import { brandToKit, mergeBrandKitWithDesignMd } from '../src/runtime/design-kit';
+import type { Brand } from '@open-design/contracts';
 import type { DesignKit } from '../src/runtime/design-kit';
 
 /**
@@ -98,5 +99,96 @@ describe('mergeBrandKitWithDesignMd — partial overlay preserves extracted data
   it('returns the kit untouched when DESIGN.md is empty', () => {
     const kit = extractedKit();
     expect(mergeBrandKitWithDesignMd(kit, '   ', { editable: true })).toBe(kit);
+  });
+});
+
+function brandFixture(overrides: Partial<Brand> = {}): Brand {
+  return {
+    name: 'Acme',
+    tagline: 'Build faster',
+    description: 'A practical design system.',
+    sourceUrl: 'https://example.com',
+    logo: { primary: null, alternates: [], notes: '' },
+    colors: [
+      { role: 'background', hex: '#ffffff', oklch: '', name: 'Background', usage: '' },
+      { role: 'foreground', hex: '#111111', oklch: '', name: 'Foreground', usage: '' },
+      { role: 'accent', hex: '#00d07e', oklch: '', name: 'Accent', usage: '' },
+    ],
+    typography: {
+      display: { family: 'Inter', fallbacks: [], weights: [700] },
+      body: { family: 'Inter', fallbacks: [], weights: [400] },
+    },
+    voice: {
+      adjectives: [],
+      tone: '',
+      messagingPillars: [],
+      vocabulary: { use: [], avoid: [] },
+    },
+    imagery: {
+      style: '',
+      subjects: [],
+      treatment: '',
+      avoid: [],
+    },
+    layout: {
+      radius: '8px',
+      borderWeight: '1px',
+      spacing: '8px',
+      postureRules: [],
+    },
+    ...overrides,
+  };
+}
+
+describe('brandToKit — design asset tiles', () => {
+  it('uses brand designAssets when present', () => {
+    const brand = brandFixture() as Brand & {
+      designAssets: Array<{ kind: string; label: string; href: string; viewport?: string; available?: boolean }>;
+    };
+    brand.designAssets = [
+      { kind: 'ui-kit-home', label: 'Home Page', href: 'ui_kits/website/01-home.html', viewport: '1280x720' },
+      { kind: 'ui-kit-contact', label: 'Contact Page', href: 'ui_kits/website/05-contact.html' },
+      { kind: 'ui-kit-draft', label: 'Unavailable Draft', href: 'ui_kits/website/draft.html', available: false },
+    ];
+
+    const kit = brandToKit(brand, {
+      projectId: 'brand-acme',
+      editable: true,
+      ready: true,
+    });
+
+    expect(kit.assets).toEqual([
+      {
+        kind: 'ui-kit-home',
+        label: 'Home Page',
+        url: '/api/projects/brand-acme/raw/ui_kits/website/01-home.html',
+        previewWidth: 1280,
+        previewHeight: 720,
+      },
+      {
+        kind: 'ui-kit-contact',
+        label: 'Contact Page',
+        url: '/api/projects/brand-acme/raw/ui_kits/website/05-contact.html',
+        previewWidth: 1280,
+        previewHeight: 760,
+      },
+    ]);
+  });
+
+  it('keeps default artifact tiles when designAssets are absent', () => {
+    const kit = brandToKit(brandFixture(), {
+      projectId: 'brand-acme',
+      editable: true,
+      ready: true,
+    });
+
+    expect(kit.assets?.map((asset) => asset.label)).toEqual([
+      'Landing page',
+      'Pitch deck',
+      'Poster',
+      'Email',
+      'Newsletter',
+      'Form page',
+    ]);
   });
 });
