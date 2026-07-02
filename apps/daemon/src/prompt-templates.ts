@@ -72,7 +72,11 @@ export async function listPromptTemplates(root: string): Promise<PromptTemplate[
 
 export async function readPromptTemplate(root: string, surface: string, id: string): Promise<PromptTemplate | null> {
   if (!isPromptTemplateSurface(surface)) return null;
-  const filePath = path.join(root, surface, `${id}.json`);
+  const dir = path.join(root, surface);
+  const filePath = path.join(dir, `${id}.json`);
+  // `id` comes straight from the request path; a value like `../secret` would
+  // resolve outside the surface directory. Only read a direct child of it.
+  if (path.dirname(filePath) !== dir) return null;
   try {
     const raw = await readFile(filePath, 'utf8');
     const parsed = JSON.parse(raw);
