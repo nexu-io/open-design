@@ -277,6 +277,46 @@ function browserHomeNavigationEntry(): BrowserNavigationEntry {
   return { title: 'Reference Board', url: EMPTY_URL };
 }
 
+function referenceGroupTitleKey(group: ReferenceGroup): keyof Dict {
+  return `designBrowser.reference.group.${group.id}` as keyof Dict;
+}
+
+function referenceSiteDetailKey(site: ReferenceSite): keyof Dict {
+  return `designBrowser.reference.site.${referenceSiteId(site.url)}.detail` as keyof Dict;
+}
+
+function localizedReferenceGroupTitle(
+  group: ReferenceGroup,
+  t?: (key: keyof Dict) => string,
+): string {
+  return t ? t(referenceGroupTitleKey(group)) : group.title;
+}
+
+function localizedReferenceSiteDetail(
+  site: ReferenceSite,
+  t?: (key: keyof Dict) => string,
+): string {
+  return t ? t(referenceSiteDetailKey(site)) : site.detail;
+}
+
+function browserViewportLabel(
+  t: (key: keyof Dict) => string,
+  viewport: BrowserViewportId,
+): string {
+  if (viewport === 'tablet') return t('fileViewer.viewportTablet');
+  if (viewport === 'mobile') return t('fileViewer.viewportMobile');
+  return t('fileViewer.viewportDesktop');
+}
+
+function browserViewportTitle(
+  t: (key: keyof Dict) => string,
+  viewport: BrowserViewportId,
+): string {
+  if (viewport === 'tablet') return t('fileViewer.viewportTabletTitle');
+  if (viewport === 'mobile') return t('fileViewer.viewportMobileTitle');
+  return t('fileViewer.viewportDesktopTitle');
+}
+
 function initialBrowserState(initialUrl?: string, initialTitle?: string): {
   addressValue: string;
   navigationIndex: number;
@@ -490,18 +530,23 @@ export function filterReferenceGroups(
   groups: ReferenceGroup[],
   category: string,
   query: string,
+  t?: (key: keyof Dict) => string,
 ): ReferenceGroup[] {
   const needle = query.trim().toLocaleLowerCase();
   return groups
     .filter((group) => category === 'all' || group.id === category)
     .map((group) => {
       if (!needle) return group;
-      if (group.title.toLocaleLowerCase().includes(needle)) return group;
+      const groupTitle = localizedReferenceGroupTitle(group, t);
+      if (`${group.title} ${groupTitle}`.toLocaleLowerCase().includes(needle)) return group;
       const sites = group.sites.filter(
         (site) =>
-          site.label.toLocaleLowerCase().includes(needle) ||
-          site.detail.toLocaleLowerCase().includes(needle) ||
-          hostnameFromUrl(site.url).toLocaleLowerCase().includes(needle),
+          [
+            site.label,
+            site.detail,
+            localizedReferenceSiteDetail(site, t),
+            hostnameFromUrl(site.url),
+          ].join(' ').toLocaleLowerCase().includes(needle),
       );
       return { ...group, sites };
     })
@@ -1229,11 +1274,12 @@ export function DesignBrowserPanel({
     const showDefaultSuggestions = addressEditing && currentUrl !== EMPTY_URL && sameUrl(addressValue.trim(), currentUrl);
     const referenceSuggestions = REFERENCE_GROUPS.flatMap((group) =>
       group.sites.map((site) => ({
-        detail: `${group.title} - ${site.detail}`,
+        detail: `${localizedReferenceGroupTitle(group, t)} - ${localizedReferenceSiteDetail(site, t)}`,
         id: `site:${site.url}`,
         iconUrl: referenceIconUrl(site.url),
         label: site.label,
-        type: 'Reference' as const,
+        type: 'reference' as const,
+        typeLabel: t('designBrowser.suggestion.reference'),
         url: site.url,
       })),
     );
@@ -1242,7 +1288,8 @@ export function DesignBrowserPanel({
       id: `history:${entry.url}`,
       iconUrl: entry.iconUrl || faviconUrl(entry.url),
       label: entry.title || labelFromUrl(entry.url),
-      type: 'History' as const,
+      type: 'history' as const,
+      typeLabel: t('designBrowser.suggestion.history'),
       url: entry.url,
     }));
     const all = [...historySuggestions, ...referenceSuggestions];
@@ -1252,7 +1299,7 @@ export function DesignBrowserPanel({
         `${item.label} ${item.url} ${item.detail}`.toLocaleLowerCase().includes(query),
       )
       .slice(0, HISTORY_SUGGESTION_LIMIT + referenceSuggestions.length);
-  }, [addressEditing, addressValue, currentUrl, history]);
+  }, [addressEditing, addressValue, currentUrl, history, t]);
 
   const pageHistoryEntry = history.find((entry) => sameUrl(entry.url, currentUrl));
   const pageTitle = pageHistoryEntry?.title || restoredTitleRef.current || labelFromUrl(currentUrl);
@@ -1429,7 +1476,7 @@ export function DesignBrowserPanel({
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
       );
       const dataUrl = await captureBrowserPageDataUrl();
-      if (!dataUrl) throw new Error('screenshot capture failed');
+      if (!dataUrl) throw new Error(t('designBrowser.status.screenshotFailed'));
       // Put the capture on the clipboard first so it is paste-ready (e.g. into
       // the chat composer) the instant it is taken; the project file is the
       // durable artifact, the clipboard is the fast path.
@@ -1440,7 +1487,7 @@ export function DesignBrowserPanel({
         browserFileName('browser-capture', currentUrl, 'png'),
         base64,
       );
-      if (!file) throw new Error('screenshot save failed');
+      if (!file) throw new Error(t('designBrowser.status.screenshotFailed'));
       await onRefreshFiles();
       // Stay on the browser so the confirmation toast is visible and the page
       // remains in view; the capture is reachable from Design Files. Show
@@ -1525,7 +1572,7 @@ export function DesignBrowserPanel({
         browserFileName('browser-brief', currentUrl, 'md'),
         pageBriefMarkdown(brief, currentUrl),
       );
-      if (!file) throw new Error('brief save failed');
+      if (!file) throw new Error(t('designBrowser.status.briefSaveFailed'));
       await onRefreshFiles();
       onOpenFile(file.name);
     } catch (error) {
@@ -1790,7 +1837,7 @@ export function DesignBrowserPanel({
 
   async function pickBrowserElement(tool: BrowserTool) {
     if (isBlank || !webviewNode) {
-      setStatusMessage('Open a page before using browser tools');
+      setStatusMessage(t('designBrowser.status.openPageBeforeTools'));
       return;
     }
     const requestId = pickerRequestIdRef.current + 1;
@@ -1805,7 +1852,11 @@ export function DesignBrowserPanel({
     setTextDraft('');
     setDrawOverlayOpen(false);
     setMenuOpen(false);
-    setStatusMessage(tool === 'comment' ? 'Click an element to comment' : 'Click an element to tune');
+    setStatusMessage(
+      tool === 'comment'
+        ? t('designBrowser.status.clickElementToComment')
+        : t('designBrowser.status.clickElementToTune'),
+    );
     try {
       await webviewNode.executeJavaScript(BROWSER_CANCEL_PICKER_SCRIPT, true);
       const result = await webviewNode.executeJavaScript<unknown>(
@@ -1815,7 +1866,7 @@ export function DesignBrowserPanel({
       if (pickerRequestIdRef.current !== requestId) return;
       const snapshot = browserSnapshotFromUnknown(result, browserFilePath);
       if (!snapshot) {
-        setStatusMessage('No browser element selected');
+        setStatusMessage(t('designBrowser.status.noElementSelected'));
         setActiveTool(null);
         return;
       }
@@ -1824,14 +1875,14 @@ export function DesignBrowserPanel({
       setActiveTool(tool);
       setStatusMessage(
         tool === 'comment'
-          ? 'Add a browser comment'
+          ? t('designBrowser.status.addBrowserComment')
           : editableProjectHtml
-            ? 'Tune the element, then save HTML'
-            : 'Tune is live only for non-project pages',
+            ? t('designBrowser.status.tuneElementThenSaveHtml')
+            : t('designBrowser.status.tuneLiveOnly'),
       );
     } catch (error) {
       if (pickerRequestIdRef.current !== requestId) return;
-      setStatusMessage(error instanceof Error ? error.message : 'Browser element picker failed');
+      setStatusMessage(error instanceof Error ? error.message : t('designBrowser.status.pickerFailed'));
       setActiveTool(null);
     }
   }
@@ -1885,7 +1936,7 @@ export function DesignBrowserPanel({
         await webviewNode.executeJavaScript(browserApplyStyleScript(target.selector, item, value), true);
       }
     } catch {
-      setStatusMessage('Could not apply style in browser page');
+      setStatusMessage(t('designBrowser.status.applyStyleFailed'));
     }
   }
 
@@ -1897,7 +1948,7 @@ export function DesignBrowserPanel({
     try {
       await webviewNode.executeJavaScript(browserApplyTextScript(target.selector, value), true);
     } catch {
-      setStatusMessage('Could not edit text in browser page');
+      setStatusMessage(t('designBrowser.status.editTextFailed'));
     }
   }
 
@@ -1905,18 +1956,18 @@ export function DesignBrowserPanel({
     if (!webviewNode) return;
     const relativePath = projectRelativePathFromBrowserUrl(currentUrl, resolvedDir);
     if (!relativePath) {
-      setStatusMessage('Only project-local HTML pages can be saved');
+      setStatusMessage(t('designBrowser.status.onlyProjectHtmlCanSave'));
       return;
     }
     setSavingDomEdit(true);
     try {
       const html = await webviewNode.executeJavaScript<string>(BROWSER_SERIALIZE_HTML_SCRIPT, true);
       const file = await writeProjectTextFile(projectId, relativePath, html);
-      if (!file) throw new Error('HTML save failed');
+      if (!file) throw new Error(t('designBrowser.status.htmlSaveFailed'));
       await onRefreshFiles();
-      setStatusMessage('HTML changes saved');
+      setStatusMessage(t('designBrowser.status.htmlSaved'));
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : 'HTML save failed');
+      setStatusMessage(error instanceof Error ? error.message : t('designBrowser.status.htmlSaveFailed'));
     } finally {
       setSavingDomEdit(false);
     }
@@ -1946,7 +1997,7 @@ export function DesignBrowserPanel({
 
   async function saveBrowserComment() {
     if (!activeCommentTarget || !onSavePreviewComment) {
-      setStatusMessage('Comment saving is unavailable');
+      setStatusMessage(t('designBrowser.status.commentSavingUnavailable'));
       return;
     }
     const note = commentDraft.trim();
@@ -1960,7 +2011,7 @@ export function DesignBrowserPanel({
         setQueuedCommentNotes([]);
         setBrowserImages([]);
         setBrowserPreviewIndex(null);
-        setStatusMessage('Browser comment saved');
+        setStatusMessage(t('designBrowser.status.commentSaved'));
       }
     } finally {
       setSendingComment(false);
@@ -1969,7 +2020,7 @@ export function DesignBrowserPanel({
 
   async function sendBrowserCommentBatch() {
     if (!activeCommentTarget || !onSendBoardCommentAttachments) {
-      setStatusMessage('Comment sending is unavailable');
+      setStatusMessage(t('designBrowser.status.commentSendingUnavailable'));
       return;
     }
     const notes = [...queuedCommentNotes];
@@ -2099,25 +2150,26 @@ export function DesignBrowserPanel({
   const showStatusMessage = Boolean(statusMessage) && !(statusIsPageSnapshot && onPageSnapshotToast);
 
   return (
-    <section className="design-browser" aria-label="Design Browser">
+    <section className="design-browser" aria-label={t('designBrowser.aria')}>
       <div className="db-chrome" ref={chromeRef}>
         <div className="db-nav">
           <IconTooltipButton
-            label="Go Back"
+            label={t('designBrowser.goBack')}
             disabled={!canGoBack}
             onClick={() => navigateHistoryBy(-1)}
           >
             <Icon name="chevron-left" size={16} />
           </IconTooltipButton>
           <IconTooltipButton
-            label="Go Forward"
+            label={t('designBrowser.goForward')}
             disabled={!canGoForward}
             onClick={() => navigateHistoryBy(1)}
           >
             <Icon name="chevron-right" size={16} />
           </IconTooltipButton>
           <IconTooltipButton
-            label={isLoading ? 'Stop loading' : 'Reload'}
+            label={isLoading ? t('designBrowser.stopLoading') : t('designBrowser.reload')}
+            className={isLoading ? 'is-spinning' : ''}
             disabled={isBlank}
             onClick={() => (isLoading ? stopLoading() : reload(false))}
           >
@@ -2156,8 +2208,8 @@ export function DesignBrowserPanel({
                 setSuggestionsOpen(false);
                 window.setTimeout(() => setAddressEditing(false), 80);
               }}
-              placeholder={addressDisplayParts.url ? '' : 'Enter URL or search...'}
-              aria-label="Browser address"
+              placeholder={addressDisplayParts.url ? '' : t('designBrowser.addressPlaceholder')}
+              aria-label={t('designBrowser.addressAria')}
               autoComplete="off"
               spellCheck={false}
             />
@@ -2186,7 +2238,7 @@ export function DesignBrowserPanel({
                 >
                   <span className="db-suggestion-icon">
                     <BrowserSiteIcon
-                      fallback={item.type === 'History' ? 'history' : 'globe'}
+                      fallback={item.type === 'history' ? 'history' : 'globe'}
                       iconUrl={item.iconUrl}
                     />
                   </span>
@@ -2194,7 +2246,7 @@ export function DesignBrowserPanel({
                     <span>{item.label}</span>
                     <small>{item.detail}</small>
                   </span>
-                  <span className="db-suggestion-type">{item.type}</span>
+                  <span className="db-suggestion-type">{item.typeLabel}</span>
                 </button>
               ))}
             </div>
@@ -2249,19 +2301,19 @@ export function DesignBrowserPanel({
             <div className="db-menu" role="menu">
               <button type="button" role="menuitem" onClick={takeScreenshot} disabled={isBlank || screenshotSaving}>
                 <Icon name="image" size={14} />
-                {t('designBrowser.copyScreenshot')}
+                {t('designBrowser.menu.copyScreenshot')}
               </button>
               <button type="button" role="menuitem" onClick={() => reload(true)} disabled={isBlank}>
                 <Icon name="reload" size={14} />
-                {t('designBrowser.hardReload')}
+                {t('designBrowser.menu.hardReload')}
               </button>
               <button type="button" role="menuitem" onClick={copyCurrentUrl} disabled={isBlank}>
                 <Icon name="copy" size={14} />
-                {t('designBrowser.copyUrl')}
+                {t('designBrowser.menu.copyUrl')}
               </button>
               <button type="button" role="menuitem" onClick={openCurrentExternally} disabled={isBlank || !isHttpLikeUrl(currentUrl)}>
                 <Icon name="external-link" size={14} />
-                {t('designBrowser.openExternal')}
+                {t('designBrowser.menu.openInBrowser')}
               </button>
               <span className="db-menu-separator" />
               <button
@@ -2277,19 +2329,19 @@ export function DesignBrowserPanel({
               </button>
               <button type="button" role="menuitem" onClick={savePageBrief} disabled={isBlank || briefSaving}>
                 <Icon name="file" size={14} />
-                {t('designBrowser.savePageBrief')}
+                {t('designBrowser.menu.savePageBrief')}
               </button>
               <button type="button" role="menuitem" onClick={clearHistoryOnly}>
                 <Icon name="history" size={14} />
-                {t('designBrowser.clearHistory')}
+                {t('designBrowser.menu.clearBrowsingHistory')}
               </button>
               <button type="button" role="menuitem" onClick={() => void clearCookies(false)}>
                 <Icon name="trash" size={14} />
-                {t('designBrowser.clearCookies')}
+                {t('designBrowser.menu.clearCookies')}
               </button>
               <button type="button" role="menuitem" onClick={() => void clearCookies(true)}>
                 <Icon name="trash" size={14} />
-                {t('designBrowser.clearAllData')}
+                {t('designBrowser.menu.clearAllData')}
               </button>
             </div>
           ) : null}
@@ -2381,7 +2433,9 @@ export function DesignBrowserPanel({
           </div>
           {!isBlank && activeTool && !activeCommentTarget ? (
             <div className="db-tool-hint" role="status">
-              {activeTool === 'comment' ? 'Click an element to comment' : 'Click an element to tune'}
+              {activeTool === 'comment'
+                ? t('designBrowser.status.clickElementToComment')
+                : t('designBrowser.status.clickElementToTune')}
             </div>
           ) : null}
         </PreviewDrawOverlay>
@@ -2500,6 +2554,7 @@ function BrowserViewportControls({
   onViewport: (viewport: BrowserViewportId) => void;
   viewport: BrowserViewportId;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const activePreset =
@@ -2524,7 +2579,7 @@ function BrowserViewportControls({
   return (
     <div className="db-viewport-switcher" ref={menuRef}>
       <IconTooltipButton
-        label={activePreset.title}
+        label={browserViewportTitle(t, activePreset.id)}
         disabled={disabled}
         className={open ? 'is-active' : ''}
         onClick={() => setOpen((value) => !value)}
@@ -2534,11 +2589,11 @@ function BrowserViewportControls({
           size={14}
           className="db-viewport-icon"
         />
-        <span className="db-viewport-label">{activePreset.label}</span>
+        <span className="db-viewport-label">{browserViewportLabel(t, activePreset.id)}</span>
         <RemixIcon name="arrow-down-s-line" size={13} />
       </IconTooltipButton>
       {open ? (
-        <div className="db-viewport-menu" role="listbox" aria-label="Browser viewport">
+        <div className="db-viewport-menu" role="listbox" aria-label={t('designBrowser.viewportAria')}>
           {BROWSER_VIEWPORT_PRESETS.map((preset) => (
             <button
               key={preset.id}
@@ -2553,7 +2608,7 @@ function BrowserViewportControls({
             >
               <span className="db-viewport-menu-label">
                 <RemixIcon name={browserViewportIcon(preset.id)} size={14} />
-                <span>{preset.label}</span>
+                <span>{browserViewportLabel(t, preset.id)}</span>
               </span>
               {preset.id === viewport ? <Icon name="check" size={13} /> : null}
             </button>
@@ -2575,9 +2630,10 @@ function BrowserCommentMarkers({
   liveTargets: Map<string, BrowserElementSnapshot>;
   onOpen: (comment: PreviewComment) => void;
 }) {
+  const t = useT();
   if (comments.length === 0) return null;
   return (
-    <div className="db-comment-layer" aria-label="Browser comments">
+    <div className="db-comment-layer" aria-label={t('designBrowser.comments.aria')}>
       {comments.map((comment, index) => {
         const snapshot = liveTargets.get(`comment:${comment.id}`) ?? browserSnapshotFromComment(comment, comment.filePath);
         const bounds = browserOverlayBounds(snapshot);
@@ -2595,7 +2651,7 @@ function BrowserCommentMarkers({
               height: bounds.height,
             }}
             title={`${index + 1}. ${label}: ${comment.note}`}
-            aria-label={`Open browser comment for ${label}`}
+            aria-label={t('designBrowser.comments.openFor', { label })}
             onClick={() => onOpen(comment)}
           >
             <span>{index + 1}</span>
@@ -2663,14 +2719,15 @@ function BrowserCommentComposer({
   sending: boolean;
   target: BrowserElementSnapshot;
 }) {
+  const t = useT();
   return (
-    <div className="comment-popover db-comment-popover" role="dialog" aria-label="Browser comment">
+    <div className="comment-popover db-comment-popover" role="dialog" aria-label={t('designBrowser.comment.dialog')}>
       <div className="comment-popover-head">
         <div>
-          <strong title={target.label}>{target.label || 'Browser element'}</strong>
+          <strong title={target.label}>{target.label || t('designBrowser.comment.elementFallback')}</strong>
           <span title={target.selector}>{target.selector}</span>
         </div>
-        <button type="button" className="ghost" onClick={onClose} aria-label="Close browser comment">
+        <button type="button" className="ghost" onClick={onClose} aria-label={t('designBrowser.comment.close')}>
           <Icon name="close" size={12} />
         </button>
       </div>
@@ -2680,35 +2737,35 @@ function BrowserCommentComposer({
             <div key={`${note}:${index}`} className="board-note-item">
               <span>{note}</span>
               <button type="button" className="ghost" onClick={() => onRemoveQueuedNote(index)}>
-                Remove
+                {t('common.delete')}
               </button>
             </div>
           ))}
         </div>
       ) : null}
       <textarea
-        aria-label="Browser comment note"
+        aria-label={t('designBrowser.comment.noteAria')}
         value={draft}
         onChange={(event) => onDraft(event.target.value)}
-        placeholder="Describe the change or issue..."
+        placeholder={t('designBrowser.comment.placeholder')}
       />
       <div className="comment-popover-actions">
         <div className="comment-popover-actions-start">
           {existing && onDeleteComment ? (
             <button type="button" className="ghost comment-popover-delete" disabled={sending} onClick={() => void onDeleteComment(existing.id)}>
-              Delete
+              {t('common.delete')}
             </button>
           ) : null}
           <button type="button" className="ghost" disabled={sending || !draft.trim()} onClick={onAddDraft}>
-            Add note
+            {t('designBrowser.comment.addNote')}
           </button>
         </div>
         <div className="comment-popover-actions-end">
           <button type="button" className="ghost" disabled={sending || (!draft.trim() && !existing)} onClick={onSaveComment}>
-            Save comment
+            {t('designBrowser.comment.saveComment')}
           </button>
           <button type="button" className="primary" disabled={sending || sendDisabled || (!draft.trim() && notes.length === 0 && !existing)} onClick={onSendBatch}>
-            {sending ? 'Sending...' : 'Send to chat'}
+            {sending ? t('designBrowser.comment.sending') : t('designBrowser.comment.sendToChat')}
           </button>
         </div>
       </div>
@@ -2737,6 +2794,7 @@ function BrowserInspectPanel({
   target: BrowserElementSnapshot;
   textDraft: string;
 }) {
+  const t = useT();
   const draft = browserStyleDraftFromTarget(target);
   const fontSize = parsePx(draft.fontSize, 16);
   const padding = parsePx(draft.paddingTop, 0);
@@ -2746,18 +2804,20 @@ function BrowserInspectPanel({
     <aside className="inspect-panel db-inspect-panel" data-testid="browser-inspect-panel">
       <header className="inspect-panel-head">
         <div className="inspect-panel-title">
-          <strong title={target.label}>{mode === 'edit' ? 'Edit HTML element' : 'Tune browser element'}</strong>
+          <strong title={target.label}>
+            {mode === 'edit' ? t('designBrowser.inspect.editTitle') : t('designBrowser.inspect.tuneTitle')}
+          </strong>
           <code title={target.selector}>{target.label || target.selector}</code>
         </div>
-        <button type="button" className="ghost" onClick={onClose} aria-label="Close browser tune">
+        <button type="button" className="ghost" onClick={onClose} aria-label={t('designBrowser.inspect.closeTune')}>
           <Icon name="close" size={12} />
         </button>
       </header>
 
       <section className="inspect-section">
-        <div className="inspect-section-label">Colors</div>
+        <div className="inspect-section-label">{t('designBrowser.inspect.colors')}</div>
         <div className="inspect-row">
-          <label htmlFor="db-inspect-color">Text</label>
+          <label htmlFor="db-inspect-color">{t('designBrowser.inspect.text')}</label>
           <input
             id="db-inspect-color"
             type="color"
@@ -2767,7 +2827,7 @@ function BrowserInspectPanel({
           <span className="inspect-row-value">{cssColorToHex(draft.color, '#1f1f1f')}</span>
         </div>
         <div className="inspect-row">
-          <label htmlFor="db-inspect-bg">Fill</label>
+          <label htmlFor="db-inspect-bg">{t('designBrowser.inspect.fill')}</label>
           <input
             id="db-inspect-bg"
             type="color"
@@ -2779,9 +2839,9 @@ function BrowserInspectPanel({
       </section>
 
       <section className="inspect-section">
-        <div className="inspect-section-label">Type</div>
+        <div className="inspect-section-label">{t('designBrowser.inspect.type')}</div>
         <div className="inspect-row">
-          <label htmlFor="db-inspect-font-size">Size</label>
+          <label htmlFor="db-inspect-font-size">{t('designBrowser.inspect.size')}</label>
           <input
             id="db-inspect-font-size"
             type="range"
@@ -2793,7 +2853,7 @@ function BrowserInspectPanel({
           <span className="inspect-row-value">{fontSize}px</span>
         </div>
         <div className="inspect-row">
-          <label htmlFor="db-inspect-weight">Weight</label>
+          <label htmlFor="db-inspect-weight">{t('designBrowser.inspect.weight')}</label>
           <select
             id="db-inspect-weight"
             value={draft.fontWeight}
@@ -2811,9 +2871,9 @@ function BrowserInspectPanel({
       </section>
 
       <section className="inspect-section">
-        <div className="inspect-section-label">Spacing</div>
+        <div className="inspect-section-label">{t('designBrowser.inspect.spacing')}</div>
         <div className="inspect-row">
-          <label htmlFor="db-inspect-padding">Pad</label>
+          <label htmlFor="db-inspect-padding">{t('designBrowser.inspect.pad')}</label>
           <input
             id="db-inspect-padding"
             type="range"
@@ -2825,7 +2885,7 @@ function BrowserInspectPanel({
           <span className="inspect-row-value">{padding}px</span>
         </div>
         <div className="inspect-row">
-          <label htmlFor="db-inspect-radius">Radius</label>
+          <label htmlFor="db-inspect-radius">{t('designBrowser.inspect.radius')}</label>
           <input
             id="db-inspect-radius"
             type="range"
@@ -2840,9 +2900,9 @@ function BrowserInspectPanel({
 
       {mode === 'edit' ? (
         <section className="inspect-section">
-          <div className="inspect-section-label">Content</div>
+          <div className="inspect-section-label">{t('designBrowser.inspect.content')}</div>
           <textarea
-            aria-label="Element text"
+            aria-label={t('designBrowser.inspect.elementText')}
             className="db-inspect-text"
             value={textDraft}
             onChange={(event) => onTextDraft(event.target.value)}
@@ -2851,9 +2911,13 @@ function BrowserInspectPanel({
       ) : null}
 
       <footer className="inspect-panel-footer">
-        <button type="button" className="ghost" onClick={onClose}>Close</button>
+        <button type="button" className="ghost" onClick={onClose}>{t('common.close')}</button>
         <button type="button" className="primary" disabled={!canSave || saving} onClick={onSave}>
-          {saving ? 'Saving...' : canSave ? 'Save HTML' : 'Live only'}
+          {saving
+            ? t('designBrowser.inspect.saving')
+            : canSave
+              ? t('designBrowser.inspect.saveHtml')
+              : t('designBrowser.inspect.liveOnly')}
         </button>
       </footer>
     </aside>
@@ -2988,6 +3052,7 @@ function DesignBrowserStart({
   onNavigate: (url: string) => void;
   projectId?: string;
 }) {
+  const t = useT();
   const analytics = useAnalytics();
   const [activeCategory, setActiveCategory] = useState<string>(REFERENCE_ALL_CATEGORY);
   const [query, setQuery] = useState('');
@@ -3002,8 +3067,8 @@ function DesignBrowserStart({
   }, [analytics.track, projectId]);
 
   const visibleGroups = useMemo(
-    () => filterReferenceGroups(REFERENCE_GROUPS, activeCategory, query),
-    [activeCategory, query],
+    () => filterReferenceGroups(REFERENCE_GROUPS, activeCategory, query, t),
+    [activeCategory, query, t],
   );
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
@@ -3040,12 +3105,10 @@ function DesignBrowserStart({
     <div className="db-start">
       <div className="db-start-hero">
         <div className="db-start-hero-copy">
-          <div className="db-kicker">Open Design browser</div>
-          <h2>Reference Board</h2>
+          <div className="db-kicker">{t('designBrowser.reference.kicker')}</div>
+          <h2>{t('designBrowser.reference.title')}</h2>
           <p className="db-start-sub">
-            A curated set of references across inspiration, real product UI,
-            motion, color, type, assets, and design systems. Open one to browse
-            it live while gathering design language for the next artifact.
+            {t('designBrowser.reference.subtitle')}
           </p>
         </div>
       </div>
@@ -3054,7 +3117,7 @@ function DesignBrowserStart({
         <div
           className="db-reference-chips"
           role="tablist"
-          aria-label="Reference category"
+          aria-label={t('designBrowser.reference.categoryAria')}
         >
           <button
             type="button"
@@ -3063,7 +3126,7 @@ function DesignBrowserStart({
             className={`db-reference-chip${activeCategory === REFERENCE_ALL_CATEGORY ? ' is-active' : ''}`}
             onClick={() => selectCategory(REFERENCE_ALL_CATEGORY)}
           >
-            All
+            {t('common.all')}
             <span className="db-reference-chip-count">{REFERENCE_TOTAL}</span>
           </button>
           {REFERENCE_GROUPS.map((group) => (
@@ -3075,7 +3138,7 @@ function DesignBrowserStart({
               className={`db-reference-chip${activeCategory === group.id ? ' is-active' : ''}`}
               onClick={() => selectCategory(group.id)}
             >
-              {group.title}
+              {localizedReferenceGroupTitle(group, t)}
               <span className="db-reference-chip-count">{group.sites.length}</span>
             </button>
           ))}
@@ -3106,14 +3169,14 @@ function DesignBrowserStart({
                 setQuery('');
               }
             }}
-            placeholder="Search references…"
-            aria-label="Search references"
+            placeholder={t('designBrowser.reference.searchPlaceholder')}
+            aria-label={t('designBrowser.reference.searchAria')}
           />
           {hasQuery ? (
             <button
               type="button"
               className="db-reference-search-clear"
-              aria-label="Clear search"
+              aria-label={t('designBrowser.reference.clearSearch')}
               onClick={() => {
                 setQuery('');
                 searchRef.current?.focus();
@@ -3128,14 +3191,14 @@ function DesignBrowserStart({
       {visibleGroups.length === 0 ? (
         <div className="db-reference-empty" role="status">
           <p className="db-reference-empty-title">
-            No references match “{trimmedQuery}”.
+            {t('designBrowser.reference.noMatches', { query: trimmedQuery })}
           </p>
           <button
             type="button"
             className="db-reference-empty-action"
             onClick={resetFilters}
           >
-            Clear filters
+            {t('designBrowser.reference.clearFilters')}
           </button>
         </div>
       ) : (
@@ -3143,7 +3206,7 @@ function DesignBrowserStart({
           {visibleGroups.map((group) => (
             <section key={group.id} className="db-reference-group">
               <h3>
-                {group.title}
+                {localizedReferenceGroupTitle(group, t)}
                 <span className="db-reference-group-count">{group.sites.length}</span>
               </h3>
               <div className="db-reference-list">
@@ -3164,11 +3227,11 @@ function DesignBrowserStart({
                         <small>{hostnameFromUrl(site.url)}</small>
                       </span>
                     </button>
-                    <p>{site.detail}</p>
+                    <p>{localizedReferenceSiteDetail(site, t)}</p>
                     <div className="db-reference-actions">
                       <button type="button" onClick={() => openSite(site)}>
                         <Icon name="globe" size={13} />
-                        Open
+                        {t('designBrowser.reference.open')}
                       </button>
                     </div>
                   </article>

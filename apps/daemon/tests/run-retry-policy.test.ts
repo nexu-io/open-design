@@ -89,6 +89,76 @@ describe('decideSafeRunRetry', () => {
     ).toBe(true);
   });
 
+  it('allows named transient process-exit details before side effects', () => {
+    for (const failure_detail of [
+      'agent_protocol_error',
+      'qoder_stop_sequence',
+      'session_resume_expired',
+      'stream_error',
+      'fatal_rpc_error',
+    ] as const) {
+      expect(
+        decide({
+          failure: {
+            failure_category: 'process_exit',
+            failure_detail,
+            failure_stage: 'child_close',
+            retryable: true,
+          },
+        }),
+      ).toMatchObject({
+        shouldRetry: true,
+        retryReason: 'transient_failure',
+      });
+    }
+  });
+
+  it('keeps upstream client errors out of the transient retry allowlist', () => {
+    expect(
+      decide({
+        failure: {
+          failure_category: 'upstream_unavailable',
+          failure_detail: 'upstream_client_error',
+          failure_stage: 'first_token_wait',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: false,
+      retrySuppressedReason: 'non_retryable_category',
+    });
+  });
+
+  it('uses unsafe_failure_stage for transient categories after unsafe output phases', () => {
+    expect(
+      decide({
+        failure: {
+          failure_category: 'empty_output',
+          failure_detail: 'empty_output',
+          failure_stage: 'artifact_write',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: false,
+      retrySuppressedReason: 'unsafe_failure_stage',
+    });
+
+    expect(
+      decide({
+        failure: {
+          failure_category: 'timeout',
+          failure_detail: 'inactivity_timeout',
+          failure_stage: 'child_close',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: false,
+      retrySuppressedReason: 'unsafe_failure_stage',
+    });
+  });
+
   it('does not retry successful or cancelled terminal results', () => {
     expect(decide({ result: 'success' })).toMatchObject({
       shouldRetry: false,
@@ -116,6 +186,18 @@ describe('decideSafeRunRetry', () => {
     });
   });
 
+  it('suppresses missing classifier signals separately from non-retryable failures', () => {
+    expect(
+      decideSafeRunRetry({
+        result: 'failed',
+        attemptCount: 0,
+      }),
+    ).toMatchObject({
+      shouldRetry: false,
+      retrySuppressedReason: 'missing_failure_signal',
+    });
+  });
+
   it('suppresses non-transient categories even when the classifier marks them retryable', () => {
     for (const failure_category of [
       'auth',
@@ -135,7 +217,7 @@ describe('decideSafeRunRetry', () => {
         }),
       ).toMatchObject({
         shouldRetry: false,
-        retrySuppressedReason: 'unsupported_category',
+        retrySuppressedReason: 'non_retryable_category',
       });
     }
   });

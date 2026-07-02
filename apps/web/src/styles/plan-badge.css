@@ -12,6 +12,7 @@
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1.3;
+  white-space: nowrap;
   text-transform: capitalize;
   color: var(--accent-strong);
   border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);

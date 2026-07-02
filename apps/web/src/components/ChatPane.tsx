@@ -86,7 +86,7 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 // Starter sets are picked per project kind (and per video model) so a
 // fresh seedance video, a hyperframes html-in-canvas video, an image
 // project and an audio project each see relevant prompts instead of the
-// generic prototype trio. The default (prototype/deck/template/other/
+// generic starter set. The default (prototype/deck/template/other/
 // live-artifact) set stays i18n-translated via existing chat.example*
 // keys so the user-facing copy keeps its localizations. The new media
 // sets are inline English literals — they are technical agent prompts
@@ -122,6 +122,12 @@ const DEFAULT_STARTER_KEYS: Array<{
     titleKey: 'chat.example3Title',
     tagKey: 'chat.example3Tag',
     promptKey: 'chat.example3Prompt',
+  },
+  {
+    icon: '▶',
+    titleKey: 'chat.example4Title',
+    tagKey: 'chat.example4Tag',
+    promptKey: 'chat.example4Prompt',
   },
 ];
 
@@ -607,6 +613,7 @@ interface Props {
   projectMetadata?: ProjectMetadata;
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
   activeWorkspaceContext?: WorkspaceContextItem | null;
+  initialWorkspaceContexts?: WorkspaceContextItem[];
   workspaceContexts?: WorkspaceContextItem[];
   currentSkillId?: string | null;
   onProjectSkillChange?: (skillId: string | null) => void;
@@ -836,6 +843,7 @@ export function ChatPane({
   projectMetadata,
   onProjectMetadataChange,
   activeWorkspaceContext,
+  initialWorkspaceContexts = [],
   workspaceContexts = [],
   currentSkillId = null,
   onProjectSkillChange,
@@ -968,9 +976,18 @@ export function ChatPane({
   const handleToolboxAction = useCallback((id: DesignToolboxActionId) => {
     composerRef.current?.applyDesignToolboxAction(id);
   }, []);
-  const handleNextStepPromptAction = useCallback((prompt: string) => {
-    composerRef.current?.setDraft(prompt);
-  }, []);
+  const handleNextStepPromptAction = useCallback((
+    prompt: string,
+    options?: { sessionMode?: ChatSessionMode },
+  ) => {
+    if (options?.sessionMode && options.sessionMode !== sessionMode) {
+      onSessionModeChange?.(options.sessionMode);
+    }
+    composerRef.current?.setDraft(prompt, {
+      entryFrom: 'next_step',
+      sessionMode: options?.sessionMode,
+    });
+  }, [onSessionModeChange, sessionMode]);
   const handlePickSkill = useCallback((skillId: string) => {
     composerRef.current?.applyDesignToolboxSkill(skillId);
   }, []);
@@ -981,15 +998,17 @@ export function ChatPane({
     }
     return null;
   }, [displayMessages]);
-  const nextStepVariant: NextStepActionsVariant = isDesignSystemNextStepProject(projectMetadata)
-    ? isBrandExtractionNextStepProject(projectMetadata)
-      ? brandExtractionComplete
-        ? 'brand-extraction'
-        : !latestAssistantForBrandState || isProgrammaticBrandAssistantMessage(latestAssistantForBrandState)
-          ? 'brand-programmatic-incomplete'
-          : 'brand-ai-incomplete'
-      : 'design-system'
-    : 'default';
+  const nextStepVariant: NextStepActionsVariant = sessionMode === 'plan'
+    ? 'plan'
+    : isDesignSystemNextStepProject(projectMetadata)
+      ? isBrandExtractionNextStepProject(projectMetadata)
+        ? brandExtractionComplete
+          ? 'brand-extraction'
+          : !latestAssistantForBrandState || isProgrammaticBrandAssistantMessage(latestAssistantForBrandState)
+            ? 'brand-programmatic-incomplete'
+            : 'brand-ai-incomplete'
+        : 'design-system'
+      : 'default';
   // The `@skill` shown in each featured row's hover detail — matched the same
   // way the composer matches it, using the raw skill name (what gets inlined
   // into the draft). Recomputed only when the skill list changes.
@@ -1017,11 +1036,30 @@ export function ChatPane({
         chipId: 'design-system',
       }));
     }
+    if (nextStepVariant === 'plan') {
+      return [
+        {
+          id: 'plan-generate-from-doc',
+          text: t('nextStep.planGeneratePrompt'),
+          chipId: 'plan',
+          sessionMode: 'design',
+        },
+        {
+          id: 'plan-improve-doc',
+          text: t('nextStep.planImprovePrompt'),
+          chipId: 'plan',
+          sessionMode: 'plan',
+        },
+      ];
+    }
     const promptPairs: Array<[string, string]> = [
       ['auto-match', t('chat.designToolbox.prompt.autoMatchIntro')],
       ['visual-polish', t('chat.designToolbox.prompt.visualPolish')],
+      ['asset-search', t('chat.designToolbox.prompt.assetSearch')],
+      ['icon-workflow', t('chat.designToolbox.prompt.iconWorkflow')],
       ['anti-ai-polish', t('chat.designToolbox.prompt.antiAiPolish')],
       ['motion-polish', t('chat.designToolbox.prompt.motionPolish')],
+      ['chart-gen', t('chat.designToolbox.prompt.chartGen')],
     ];
     return promptPairs.map(([id, text]) => ({
       id: `follow-up-${id}`,
@@ -1959,6 +1997,7 @@ export function ChatPane({
       projectMetadata={projectMetadata}
       onProjectMetadataChange={onProjectMetadataChange}
       activeWorkspaceContext={activeWorkspaceContext}
+      initialWorkspaceContexts={initialWorkspaceContexts}
       workspaceContexts={workspaceContexts}
       byokApiProtocol={byokApiProtocol}
       byokImageModel={byokImageModel}
@@ -2722,7 +2761,10 @@ function ChatRows({
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   onArtifactShare?: (fileName: string) => void;
   onToolboxAction?: (id: DesignToolboxActionId) => void;
-  onNextStepPromptAction?: (prompt: string) => void;
+  onNextStepPromptAction?: (
+    prompt: string,
+    options?: { sessionMode?: ChatSessionMode },
+  ) => void;
   onNextStepAiOptimize?: () => void;
   nextStepAiOptimizeBusy?: boolean;
   onNextStepContinueExtraction?: () => void;
@@ -3936,14 +3978,17 @@ function MessageSessionModeChip({
 }) {
   const label = mode === 'chat'
     ? t('chat.mode.chat.label')
-    : t('chat.mode.design.label');
+    : mode === 'plan'
+      ? t('chat.mode.plan.label')
+      : t('chat.mode.design.label');
+  const icon = mode === 'chat' ? 'comment' : mode === 'plan' ? 'file' : 'sparkles';
   return (
     <div
       className={`msg-mode-chip msg-mode-chip--${mode}`}
       data-testid="msg-session-mode-chip"
       title={label}
     >
-      <Icon name={mode === 'chat' ? 'comment' : 'sparkles'} size={12} />
+      <Icon name={icon} size={12} />
       <span>{label}</span>
     </div>
   );
@@ -4047,6 +4092,8 @@ function workspaceContextOpenTarget(item: WorkspaceContextItem): string | null {
 function workspaceContextIcon(item: WorkspaceContextItem): IconName {
   if (item.kind === 'browser') return 'globe';
   if (item.kind === 'folder' || item.kind === 'design-files') return 'folder';
+  if (item.kind === 'project') return 'folder';
+  if (item.kind === 'local-code') return 'terminal';
   if (item.kind === 'terminal') return 'terminal';
   if (item.kind === 'side-chat') return 'comment';
   if (item.kind === 'design-system') return 'blocks';
@@ -4073,6 +4120,10 @@ function workspaceContextKindLabel(kind: WorkspaceContextItem['kind']): string {
       return 'Design system';
     case 'folder':
       return 'Folder';
+    case 'project':
+      return 'Project';
+    case 'local-code':
+      return 'Local code';
     case 'terminal':
       return 'Terminal';
     case 'side-chat':

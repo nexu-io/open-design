@@ -10,7 +10,7 @@ function entry(partial: Partial<FileOpEntry> & { path: string }): FileOpEntry {
   return {
     fullPath: `/repo/${partial.path}`,
     ops: ['read'],
-    opCounts: { read: 1, write: 0, edit: 0 },
+    opCounts: { read: 1, write: 0, edit: 0, delete: 0 },
     total: 1,
     status: 'done',
     ...partial,
@@ -31,9 +31,10 @@ describe('FileOpsSummary', () => {
     render(
       <FileOpsSummary
         entries={[
-          entry({ path: 'a.ts', ops: ['read'], opCounts: { read: 2, write: 0, edit: 0 }, total: 2 }),
-          entry({ path: 'b.ts', ops: ['write'], opCounts: { read: 0, write: 1, edit: 0 } }),
-          entry({ path: 'c.ts', ops: ['edit'], opCounts: { read: 0, write: 0, edit: 3 }, total: 3 }),
+          entry({ path: 'a.ts', ops: ['read'], opCounts: { read: 2, write: 0, edit: 0, delete: 0 }, total: 2 }),
+          entry({ path: 'b.ts', ops: ['write'], opCounts: { read: 0, write: 1, edit: 0, delete: 0 } }),
+          entry({ path: 'c.ts', ops: ['edit'], opCounts: { read: 0, write: 0, edit: 3, delete: 0 }, total: 3 }),
+          entry({ path: 'gone.ts', ops: ['delete'], opCounts: { read: 0, write: 0, edit: 0, delete: 1 } }),
         ]}
         streaming
       />,
@@ -41,6 +42,7 @@ describe('FileOpsSummary', () => {
 
     expect(screen.getByText(/Write 1/)).toBeTruthy();
     expect(screen.getByText(/Edit 3/)).toBeTruthy();
+    expect(screen.getByText(/Delete 1/)).toBeTruthy();
     expect(screen.getByText(/Read 2/)).toBeTruthy();
     // While streaming we collapse the file list so the running pill stays compact.
     expect(screen.queryByTestId('file-ops-row-a.ts')).toBeNull();
@@ -52,8 +54,8 @@ describe('FileOpsSummary', () => {
     render(
       <FileOpsSummary
         entries={[
-          entry({ path: 'a.ts', ops: ['read', 'edit'], opCounts: { read: 1, write: 0, edit: 1 }, total: 2 }),
-          entry({ path: 'b.ts', ops: ['write'], opCounts: { read: 0, write: 1, edit: 0 } }),
+          entry({ path: 'a.ts', ops: ['read', 'edit'], opCounts: { read: 1, write: 0, edit: 1, delete: 0 }, total: 2 }),
+          entry({ path: 'b.ts', ops: ['write'], opCounts: { read: 0, write: 1, edit: 0, delete: 0 } }),
         ]}
         streaming={false}
       />,
@@ -101,6 +103,23 @@ describe('FileOpsSummary', () => {
 
     fireEvent.click(screen.getByTestId('file-ops-row-open-a.ts'));
     expect(onRequestOpenFile).toHaveBeenCalledWith('a.ts');
+  });
+
+  it('does not show the open button for deleted files', () => {
+    const onRequestOpenFile = vi.fn();
+    render(
+      <FileOpsSummary
+        entries={[
+          entry({ path: 'gone.ts', ops: ['delete'], opCounts: { read: 0, write: 0, edit: 0, delete: 1 } }),
+        ]}
+        streaming={false}
+        projectFileNames={new Set(['gone.ts'])}
+        onRequestOpenFile={onRequestOpenFile}
+      />,
+    );
+
+    expect(screen.getByTestId('file-ops-row-gone.ts')).toBeTruthy();
+    expect(screen.queryByTestId('file-ops-row-open-gone.ts')).toBeNull();
   });
 
   it('flags a row as running when its status is running and as error when isError', () => {

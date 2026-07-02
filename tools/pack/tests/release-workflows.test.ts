@@ -310,7 +310,9 @@ describe("release workflows", () => {
     expect(stable).toContain("type: choice");
     expect(stable).toContain("- metadata");
     expect(stable).toContain("- prepublish");
+    expect(stable).toContain("- publish");
     expect(stable).toContain("default: metadata");
+    expect(stable).toContain("OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run == 'publish' && 'false' || inputs.dry_run }}");
     expect(stable).toContain("run_prepublish_jobs: ${{ steps.stable.outputs.run_prepublish_jobs }}");
     expect(stable).toContain("publish_side_effects_enabled: ${{ steps.stable.outputs.publish_side_effects_enabled }}");
     expect(stable).toContain("if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}");

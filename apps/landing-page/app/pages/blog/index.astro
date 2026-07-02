@@ -192,6 +192,15 @@ const postImages: Record<string, { src: string; alt: string }> = {
   },
 };
 const getPostImage = (id: string) => postImages[id];
+// Prefer a per-locale readingTime when a localized bodyHtml differs in length
+// from the English body (mirrors the detail page in `[slug].astro`), so cards
+// on non-English blog indexes show an accurate estimate.
+const localizedReadingTime = (post: (typeof posts)[number]) =>
+  (
+    post.data as typeof post.data & {
+      i18n?: Record<string, { readingTime?: number }>;
+    }
+  ).i18n?.[locale]?.readingTime ?? post.data.readingTime;
 const localizedPostField = (
   post: (typeof posts)[number],
   field: 'title' | 'summary' | 'category',
@@ -283,7 +292,7 @@ const localizedPostField = (
                   <span class='blog-feature-meta'>
                     <span>{fmtDate(featuredPost.data.date)}</span>
                     <span>·</span>
-                    <span>{featuredPost.data.readingTime} {ui.blog.minRead}</span>
+                    <span>{localizedReadingTime(featuredPost)} {ui.blog.minRead}</span>
                     <span class='blog-feature-cta'>{ui.blog.readMore}</span>
                   </span>
                 </span>
@@ -349,7 +358,7 @@ const localizedPostField = (
                         <p class='blog-card-summary'>{localizedPostField(post, 'summary')}</p>
                         <span class='blog-card-foot'>
                           <span class='blog-card-date'>{fmtDate(post.data.date)}</span>
-                          <span class='blog-card-rt'>{post.data.readingTime} {ui.blog.minRead}</span>
+                          <span class='blog-card-rt'>{localizedReadingTime(post)} {ui.blog.minRead}</span>
                           <span class='blog-card-cta'>{ui.blog.read}</span>
                         </span>
                       </span>

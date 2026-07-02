@@ -4,6 +4,17 @@
    identity / logo / typography / palette read cleanly inside a narrow popover
    preview pane. */
 .previewInner {
+  --logo-display-surface:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(246, 242, 232, 0.96)),
+    conic-gradient(
+      from 45deg,
+      rgba(25, 23, 19, 0.07) 0 25%,
+      rgba(255, 255, 255, 0.42) 0 50%,
+      rgba(25, 23, 19, 0.07) 0 75%,
+      rgba(255, 255, 255, 0.42) 0
+    )
+      0 0 / 22px 22px;
+  --logo-display-border: color-mix(in srgb, var(--border) 72%, #fff 28%);
   display: flex;
   flex-direction: column;
   gap: 22px;
@@ -45,8 +56,7 @@
   padding: 32px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background:
-    radial-gradient(120% 140% at 50% -10%, var(--bg-subtle) 0%, var(--bg) 70%);
+  background: var(--logo-display-surface);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-strong) 4%, transparent);
 }
 
@@ -54,6 +64,9 @@
   max-width: 100%;
   max-height: 140px;
   object-fit: contain;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.45));
 }
 
 .coverLogoFallback {
@@ -143,15 +156,18 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--logo-display-border);
   border-radius: var(--radius-sm);
-  background: var(--bg-panel);
+  background: var(--logo-display-surface);
 }
 
 .previewHeadLogoImage {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.45));
 }
 
 .previewHeadLogoFallback {
@@ -267,7 +283,8 @@
 
 .previewActions {
   display: flex;
-  flex-shrink: 0;
+  flex: 1 1 320px;
+  min-width: 0;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
@@ -275,6 +292,11 @@
   /* Keep actions right-aligned whether they sit beside the identity column or
      wrap onto their own row beneath it. */
   margin-left: auto;
+}
+
+.previewActions > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .previewHeadSticky .previewActions {
@@ -589,9 +611,9 @@
   justify-content: center;
   min-height: 158px;
   padding: 28px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--logo-display-border);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--logo-display-surface);
 }
 
 .logoStageButton {
@@ -614,6 +636,9 @@
   max-width: 100%;
   max-height: 96px;
   object-fit: contain;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.45));
 }
 
 .logoThumbs {
@@ -629,9 +654,9 @@
   width: 46px;
   height: 46px;
   padding: 7px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--logo-display-border);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  background: var(--logo-display-surface);
   cursor: pointer;
   transition: border-color var(--dur-quick) var(--ease-out);
 }
@@ -649,6 +674,9 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.45));
 }
 
 .logoNotes {

@@ -17,7 +17,7 @@ import { migratePlugins } from './plugins/persistence.js';
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
 type JsonObject = Record<string, unknown>;
-type ChatSessionMode = 'design' | 'chat';
+type ChatSessionMode = 'design' | 'chat' | 'plan';
 
 let dbInstance: SqliteDb | null = null;
 let dbFile: string | null = null;
@@ -1078,7 +1078,7 @@ function normalizeConversation(r: DbRow) {
 }
 
 export function normalizeConversationSessionMode(value: unknown): ChatSessionMode {
-  return value === 'chat' ? 'chat' : 'design';
+  return value === 'chat' || value === 'plan' ? value : 'design';
 }
 
 function numberProperty(key: string, value: unknown) {
@@ -1898,11 +1898,11 @@ function normalizeMessage(row: DbRow) {
 }
 
 function normalizeMessageSessionMode(value: unknown): ChatSessionMode | undefined {
-  return value === 'chat' || value === 'design' ? value : undefined;
+  return value === 'chat' || value === 'design' || value === 'plan' ? value : undefined;
 }
 
 function normalizeMessageSessionModeForStorage(value: unknown): ChatSessionMode | null {
-  return value === 'chat' || value === 'design' ? value : null;
+  return value === 'chat' || value === 'design' || value === 'plan' ? value : null;
 }
 
 function parseJsonOrUndef(s: unknown): any {

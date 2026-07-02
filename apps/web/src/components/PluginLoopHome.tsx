@@ -5,6 +5,7 @@ import type {
   InstalledPluginRecord,
   ProjectKind,
   ProjectMetadata,
+  RunContextSelection,
 } from '@open-design/contracts';
 import {
   applyPlugin,
@@ -38,6 +39,7 @@ export interface PluginLoopSubmit {
   contextPlugins?: Array<{ id: string; title: string; description?: string }> | null;
   contextMcpServers?: Array<{ id: string; label?: string; transport?: string; url?: string; command?: string }> | null;
   contextConnectors?: Array<{ id: string; name: string; provider?: string; category?: string; status?: string; accountLabel?: string }> | null;
+  initialRunContext?: RunContextSelection | null;
   designSystemId?: string | null;
   // Stage B of plugin-driven-flow-plan: when the user picked a Home
   // chip the rail tells the submit handler which `ProjectKind` to
@@ -50,6 +52,7 @@ export interface PluginLoopSubmit {
   projectKind?: ProjectKind | null;
   projectMetadata?: ProjectMetadata | null;
   workingDir?: string | null;
+  linkedDirs?: string[] | null;
   // Single-use desktop token minted for `workingDir` when the folder was
   // chosen through the host's native picker. Spent (not persisted) on the
   // post-creation working-dir POST so the daemon's desktop-auth gate accepts

@@ -4,6 +4,7 @@ import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import type { Dict } from '../i18n/types';
+import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectFileUrl, projectRawUrl } from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind, ProjectFolder } from '../types';
@@ -324,7 +325,7 @@ export function DesignFilesPanel({
   const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
-  const MENU_ESTIMATED_HEIGHT = 145;
+  const MENU_ESTIMATED_HEIGHT = 180;
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
   const autoPreviewAppliedRef = useRef(false);
@@ -335,6 +336,7 @@ export function DesignFilesPanel({
   const [sharingFolder, setSharingFolder] = useState<string | null>(null);
   const [installNotice, setInstallNotice] = useState<ActionNotice | null>(null);
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
+  const [copiedLocalPath, setCopiedLocalPath] = useState<string | null>(null);
   const [currentDir, setCurrentDir] = useState<string>(() => navState?.currentDir ?? '');
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const projectMenuRef = useRef<HTMLDivElement | null>(null);
@@ -498,6 +500,19 @@ export function DesignFilesPanel({
   }, [menuPos]);
 
   useEffect(() => {
+    const onClipboardPaste = (event: ClipboardEvent) => {
+      if (shouldIgnoreClipboardFilePaste(event.target)) return;
+      const pastedFiles = filesFromClipboardData(event.clipboardData);
+      if (pastedFiles.length === 0) return;
+      event.preventDefault();
+      setDropReadError(null);
+      onClearUploadError?.();
+      onUploadFiles(pastedFiles);
+    };
+    window.addEventListener('paste', onClipboardPaste);
+    return () => window.removeEventListener('paste', onClipboardPaste);
+  }, [onClearUploadError, onUploadFiles]);
+  useEffect(() => {
     if (!projectMenuOpen) return;
     function handlePointerDown(event: PointerEvent) {
       const target = event.target;
@@ -514,7 +529,6 @@ export function DesignFilesPanel({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [projectMenuOpen]);
-
 
   function toggleSelect(name: string) {
     setSelected((prev) => {
@@ -555,6 +569,18 @@ export function DesignFilesPanel({
     const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
 
     setMenuPos({ name, top, left });
+  }
+
+  async function copyLocalPath(fileName: string) {
+    const localPath = files.find((file) => file.name === fileName)?.localPath;
+    if (!localPath) return;
+    const copied = await copyToClipboard(localPath);
+    if (copied) {
+      setCopiedLocalPath(fileName);
+      window.setTimeout(() => {
+        setCopiedLocalPath((current) => (current === fileName ? null : current));
+      }, 1600);
+    }
   }
 
   function startRename(name: string) {
@@ -873,7 +899,7 @@ export function DesignFilesPanel({
         <span>{t('designFiles.newSketch')}</span>
       </button>
       <button type="button" onClick={onPaste} title={t('designFiles.paste.title')}>
-        <Icon name="copy" size={13} />
+        <Icon name="file" size={13} />
         <span>{t('designFiles.paste.label')}</span>
       </button>
       <button
@@ -1107,18 +1133,16 @@ export function DesignFilesPanel({
                       <span>{t('workspace.newBrowser')}</span>
                     </button>
                   ) : null}
-                  {onCreateDesignSystem ? (
-                    <button
-                      type="button"
-                      className="df-empty-cta df-empty-cta-tertiary"
-                      data-testid="design-files-empty-create-design-system"
-                      onClick={onCreateDesignSystem}
-                      title={t('dsManager.createTitle')}
-                    >
-                      <Icon name="blocks" size={13} />
-                      <span>{t('dsManager.createTitle')}</span>
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    className="df-empty-cta df-empty-cta-tertiary"
+                    data-testid="design-files-empty-create-document"
+                    onClick={onPaste}
+                    title={t('designFiles.paste.title')}
+                  >
+                    <Icon name="file" size={13} />
+                    <span>{t('designFiles.paste.label')}</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1321,6 +1345,20 @@ export function DesignFilesPanel({
             }}
           >
             {t('common.rename')}
+          </button>
+          <button
+            type="button"
+            disabled={!files.some((file) => file.name === menuPos.name && file.localPath)}
+            onClick={(e) => {
+              e.stopPropagation();
+              const name = menuPos.name;
+              setMenuPos(null);
+              void copyLocalPath(name);
+            }}
+          >
+            {copiedLocalPath === menuPos.name
+              ? t('designFiles.copiedLocalPath')
+              : t('designFiles.copyLocalPath')}
           </button>
           <a
             href={projectFileUrl(projectId, menuPos.name)}
@@ -1527,6 +1565,46 @@ function categoryLabel(category: FileCategory, t: TranslateFn): string {
 function categoryGlyph(category: FileCategory): string {
   if (category === 'stylesheet') return '#';
   return kindGlyph(category);
+}
+
+function filesFromClipboardData(clipboardData: DataTransfer | null): File[] {
+  const files = Array.from(clipboardData?.files ?? []);
+  if (files.length > 0) return files.map(normalizePastedFile);
+  const items = Array.from(clipboardData?.items ?? []);
+  return items
+    .filter((item) => item.kind === 'file')
+    .flatMap((item) => {
+      const file = item.getAsFile();
+      return file ? [normalizePastedFile(file)] : [];
+    });
+}
+
+function normalizePastedFile(file: File): File {
+  if (file.name.trim()) return file;
+  const extension = extensionForMimeType(file.type);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  return new File([file], `pasted-${stamp}${extension}`, {
+    type: file.type,
+    lastModified: file.lastModified,
+  });
+}
+
+function extensionForMimeType(mimeType: string): string {
+  if (mimeType === 'image/png') return '.png';
+  if (mimeType === 'image/jpeg') return '.jpg';
+  if (mimeType === 'image/gif') return '.gif';
+  if (mimeType === 'image/webp') return '.webp';
+  if (mimeType === 'image/svg+xml') return '.svg';
+  if (mimeType === 'text/html') return '.html';
+  if (mimeType === 'text/plain') return '.txt';
+  return '';
+}
+
+function shouldIgnoreClipboardFilePaste(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.closest('[contenteditable="true"]')) return true;
+  const tagName = target.tagName.toLowerCase();
+  return tagName === 'input' || tagName === 'textarea' || tagName === 'select';
 }
 
 async function filesFromDataTransfer(dataTransfer: DataTransfer): Promise<File[]> {

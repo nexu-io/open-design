@@ -60,14 +60,14 @@ afterEach(() => {
 });
 
 describe('HomeView media composer options', () => {
-  it('hides the Home composer session-mode switcher and still defaults to Design mode', async () => {
+  it('shows the Home composer session-mode switcher and still defaults to Design mode', async () => {
     stubFetch();
     const onSubmit = vi.fn();
     renderHome({ onSubmit });
 
     await screen.findByTestId('home-hero-input');
 
-    expect(screen.queryByTestId('session-mode-trigger')).toBeNull();
+    expect(screen.getByTestId('session-mode-trigger').getAttribute('aria-label')).toBe('Design mode');
 
     await setHomePrompt('Create a clean loading animation');
     await submitHome();

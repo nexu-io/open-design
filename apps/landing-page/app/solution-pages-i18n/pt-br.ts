@@ -424,6 +424,570 @@ export const PT_BR: SolutionLocaleCopy = {
       { href: '/solutions/engineering/', label: 'Open Design para engenharia' },
     ],
   },
+  aiLandingPageGenerator: {
+    title: 'Gerador de landing page com IA — do prompt a uma landing page que você entrega',
+    description:
+      'Um gerador de landing page com IA gratuito e de código aberto que transforma um prompt em uma landing page real e responsiva — e a leva até o código pronto para entregar. O Open Design roda dentro do agente de programação que você já usa, então a página gerada e a página publicada são o mesmo artefato que é seu.',
+    breadcrumb: 'Gerador de landing page com IA',
+    label: 'Ferramenta · Gerador de landing page com IA',
+    heading: 'Gere uma landing page que você pode entregar',
+    lead: 'Descreva a oferta e deixe seu agente gerar uma landing page real e responsiva — hero, recursos, preços, lista de espera, alinhada à marca. Depois continue: o mesmo artefato vira código pronto para entregar que você publica, no agente que você já roda.',
+    heroImageAlt:
+      'Ilustração editorial de um prompt virando uma landing page responsiva e depois código de produção, emoldurada por uma caixa de seleção verde',
+    tldrTitle: 'Em uma linha',
+    tldrBody:
+      'A maioria dos construtores de landing page com IA prende a sua página dentro do editor deles e cobra por assento. O Open Design gera a landing page dentro do seu agente de programação e a leva do prompt ao código pronto — seções reais, a sua marca, sem etapa de exportação, sem cobrança por assento.',
+    stepsTitle: 'Como funciona o gerador de landing page com IA',
+    steps: [
+      {
+        title: 'Descreva a página',
+        body: 'Diga ao seu agente o que construir em linguagem simples — «uma página de lançamento para um app de anotações: hero, três recursos, preços e um formulário de lista de espera». O Open Design carrega a habilidade de landing page para que o agente disponha seções reais com hierarquia clara.',
+        imageAlt: 'Ilustração de um briefing de landing page em linguagem simples digitado em um terminal',
+      },
+      {
+        title: 'Gere uma página responsiva',
+        body: 'O agente monta a página a partir de seções reutilizáveis e tokens de design, então espaçamento, tipografia e cor permanecem consistentes e ela fica bem em qualquer tela. Você obtém uma landing page coerente e alinhada à marca — não um modelo com o qual você briga para personalizar.',
+        imageAlt: 'Ilustração de uma landing page sendo montada a partir de seções de hero, recursos e preços em um grid',
+      },
+      {
+        title: 'Refine e adicione conversão',
+        body: 'Ajuste textos, seções e chamadas para ação na conversa — «aperte o hero», «adicione prova social», «conecte o formulário de lista de espera». O artefato é atualizado no lugar, em vez de ser regenerado do zero.',
+        imageAlt: 'Ilustração de uma landing page sendo refinada por chat, adicionando um depoimento e um formulário',
+      },
+      {
+        title: 'Entregue o código que é seu',
+        body: 'Como a página vive no seu projeto, o design e a página publicada compartilham uma única fonte da verdade. A saída é HTML/código que é seu e que você pode hospedar em qualquer lugar — sem dependência de fornecedor, sem redesenho entre design e lançamento.',
+        imageAlt: 'Ilustração de uma landing page fluindo para o código entregue dentro de uma moldura de seleção verde',
+      },
+    ],
+    tableTitle: 'Open Design vs. construtores de landing page com IA tradicionais',
+    tableColCapability: 'O que você precisa',
+    tableColWithOd: 'Com o Open Design',
+    tableColWithout: 'Construtores de landing page com IA tradicionais',
+    tableRows: [
+      {
+        capability: 'Gerar a partir de um prompt',
+        withOd: 'Um prompt no agente que você já tem aberto',
+        without: 'Cadastrar-se em um construtor de sites separado e gerar na nuvem deles',
+      },
+      {
+        capability: 'Seções reais e responsivas',
+        withOd: 'Construídas a partir de um sistema de design reutilizável, consistentes entre breakpoints',
+        without: 'Um modelo travado que você personaliza dentro do editor deles',
+      },
+      {
+        capability: 'Do design ao código',
+        withOd: 'O mesmo artefato vira código pronto para entregar — hospede em qualquer lugar',
+        without: 'A página vive na plataforma deles; a exportação é limitada ou paga',
+      },
+      {
+        capability: 'Ter a propriedade da saída',
+        withOd: 'Arquivos e código simples no seu repositório, totalmente seus',
+        without: 'Hospedada para você; você aluga a página, não é dono dela',
+      },
+      {
+        capability: 'Custo e dependência',
+        withOd: 'Código aberto, traga suas próprias chaves, roda localmente',
+        without: 'Assinatura por assento ou por página, hospedada pelo fornecedor',
+      },
+    ],
+    featuresTitle: 'O que você pode gerar',
+    features: [
+      {
+        title: 'Páginas de lançamento de produto',
+        body: 'Hero, recursos, preços e uma lista de espera — geradas como uma página coerente, depois levadas ao código.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Páginas de marketing de SaaS',
+        body: 'Layouts de recursos e preços que você pode gerar, tematizar e entregar no seu próprio domínio.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Lista de espera e em breve',
+        body: 'Páginas de captura com propósito único, com um formulário funcional e uma chamada para ação clara.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Páginas de evento e campanha',
+        body: 'Layouts de campanha com prazo definido, já estruturados e alinhados à marca desde a primeira passagem.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Páginas de download de app',
+        body: 'Páginas mobile-first que mostram o produto e impulsionam instalações.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Qualquer gosto visual',
+        body: 'Editorial, suave ou marcante — mantenha um estilo coerente de ponta a ponta.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Landing pages feitas com o Open Design',
+    galleryLead:
+      'Cada uma começou como um prompt e foi renderizada em um artefato real e responsivo. Escolha um modelo próximo da sua ideia, descreva a sua variação e o agente a adapta — da landing page ao código entregue.',
+    gallery: [
+      { thumb: 'example-kami-landing', caption: 'Página de lançamento de produto' },
+      { thumb: 'example-saas-landing', caption: 'Página de marketing de SaaS' },
+      { thumb: 'example-hr-onboarding', caption: 'Fluxo de captura de lista de espera' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Layout de landing de estilo suave' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Explorar modelos',
+    faqTitle: 'Perguntas frequentes sobre o gerador de landing page com IA',
+    faq: [
+      {
+        q: 'O gerador de landing page com IA é gratuito?',
+        a: 'Sim. O Open Design é de código aberto e roda dentro do agente de programação que você já usa com as suas próprias chaves de provedor — não há cobrança por assento ou por página sobre o gerador de landing page em si.',
+      },
+      {
+        q: 'Posso hospedar a página em qualquer lugar?',
+        a: 'Sim. A saída é HTML e código reais no seu projeto, então você pode publicá-la em qualquer hospedagem — não há dependência de plataforma nem uma página alugada que some quando você para de pagar.',
+      },
+      {
+        q: 'As páginas são responsivas e alinhadas à marca?',
+        a: 'Sim. O agente constrói a partir de um sistema de design reutilizável, então a página permanece consistente entre breakpoints e combina com a sua marca — e você a refina conversando em vez de brigar com um modelo.',
+      },
+      {
+        q: 'Com quais agentes ele funciona?',
+        a: 'O Open Design funciona com Claude Code, Codex, Cursor Agent, Gemini CLI e mais de uma dezena de adaptadores nativos. Você traz as suas próprias chaves de provedor; nada é hospedado para você.',
+      },
+    ],
+    ctaTitle: 'Gere sua primeira landing page hoje à noite',
+    ctaBody:
+      'Dê uma estrela ao repositório, instale o Open Design e transforme sua próxima ideia de lançamento em uma landing page real e responsiva — e depois em código pronto para entregar — no agente que você já usa.',
+    relatedTitle: 'Ferramentas e guias relacionados',
+    related: [
+      { href: '/solutions/ai-ui-generator/', label: 'Gerador de UI com IA' },
+      { href: '/solutions/design-to-code/', label: 'Do design ao código com o Open Design' },
+      { href: '/solutions/marketing/', label: 'Open Design para marketing' },
+      { href: '/blog/best-ai-design-tools/', label: 'Melhores ferramentas de design com IA' },
+    ],
+  },
+  figmaToCode: {
+    title: 'Do Figma ao código — transforme designs do Figma em código entregue com o Open Design',
+    description:
+      'Um fluxo de Figma para código gratuito e de código aberto que transforma um design do Figma em código limpo e baseado em componentes — dentro do agente de programação que você já usa, do Claude Code ao Codex. Puxe o design pelo Figma MCP e deixe o agente construir código real que é seu e que você entrega, sem exportação presa a um fornecedor.',
+    breadcrumb: 'Do Figma ao código',
+    label: 'Ferramenta · Do Figma ao código',
+    heading: 'Do Figma ao código, no seu agente',
+    lead: 'Aponte seu agente de programação para um design do Figma e deixe-o transformar os frames em código limpo e baseado em componentes — layout responsivo, estados reais, a sua stack. Com o Figma MCP, o Claude Code e outros agentes leem o design diretamente, então nada se perde em uma exportação única.',
+    heroImageAlt:
+      'Ilustração editorial de um design do Figma virando código de produção limpo dentro de um agente de programação, emoldurada por uma caixa de seleção verde',
+    tldrTitle: 'Em uma linha',
+    tldrBody:
+      'A maioria dos plugins de Figma para código exporta um instantâneo único de marcação com posicionamento absoluto que você depois reescreve. O Open Design mantém o design e o código como um único artefato vivo dentro do seu agente — puxe frames pelo Figma MCP, itere conversando, entregue código que é seu.',
+    stepsTitle: 'Como funciona o Figma para código',
+    steps: [
+      {
+        title: 'Conecte o Figma ao seu agente',
+        body: 'Com o Figma MCP configurado, seu agente de programação — Claude Code, Codex, Cursor Agent — pode ler um arquivo do Figma ou um frame selecionado diretamente. O Open Design carrega a habilidade certa para que o agente transforme a intenção de design em estrutura, não em uma cópia frágil de pixels.',
+        imageAlt: 'Ilustração de um frame do Figma se conectando a um terminal por meio de um link MCP',
+      },
+      {
+        title: 'Gere código baseado em componentes',
+        body: 'O agente mapeia o frame para componentes reutilizáveis e tokens de design — espaçamento, tipografia e cor consistentes — e produz código limpo e legível em vez de uma parede de divs com posicionamento absoluto que você refatoraria.',
+        imageAlt: 'Ilustração de um frame do Figma se convertendo em código estruturado e baseado em componentes',
+      },
+      {
+        title: 'Itere na conversa',
+        body: 'Refine layout, estados e comportamento conversando — «deixe responsivo», «conecte o formulário», «use os nossos tokens». O código é atualizado no lugar e, como o agente lê o Figma ao vivo, você pode puxar de novo o design mais recente em vez de reexportar.',
+        imageAlt: 'Ilustração de código sendo refinado por chat enquanto um frame do Figma permanece em sincronia',
+      },
+      {
+        title: 'Entregue o código que é seu',
+        body: 'A saída é HTML/código no seu repositório, totalmente seu — sem editor preso a um fornecedor, sem exportação que fica desatualizada, sem redesenho entre design e construção. Entregue e continue evoluindo no agente.',
+        imageAlt: 'Ilustração de código finalizado dentro de uma moldura de seleção verde, pronto para entregar',
+      },
+    ],
+    tableTitle: 'Open Design vs. ferramentas de Figma para código tradicionais',
+    tableColCapability: 'O que você precisa',
+    tableColWithOd: 'Com o Open Design',
+    tableColWithout: 'Ferramentas de Figma para código tradicionais',
+    tableRows: [
+      {
+        capability: 'Ler o design do Figma',
+        withOd: 'Seu agente lê o Figma ao vivo pelo MCP',
+        without: 'Um plugin exporta um instantâneo único',
+      },
+      {
+        capability: 'Qualidade do código',
+        withOd: 'Código limpo e baseado em componentes a partir de um sistema de design',
+        without: 'Marcação com posicionamento absoluto que você reescreve à mão',
+      },
+      {
+        capability: 'Sincronia entre design e código',
+        withOd: 'Puxe de novo o frame mais recente; itere conversando',
+        without: 'A exportação fica desatualizada após a primeira edição no Figma',
+      },
+      {
+        capability: 'Ter a propriedade da saída',
+        withOd: 'Arquivos e código simples no seu repositório, totalmente seus',
+        without: 'Presos ao editor ou à biblioteca de componentes deles',
+      },
+      {
+        capability: 'Custo e dependência',
+        withOd: 'Código aberto, traga suas próprias chaves, roda localmente',
+        without: 'Assinatura por assento ou por exportação, hospedada pelo fornecedor',
+      },
+    ],
+    featuresTitle: 'O que você pode converter',
+    features: [
+      {
+        title: 'Do Figma ao Claude Code',
+        body: 'Puxe um frame do Figma para o Claude Code pelo MCP e obtenha código limpo e baseado em componentes.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Do Figma ao React / HTML',
+        body: 'Transforme frames em código responsivo e com estados reais na stack que você já usa.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Telas e fluxos inteiros',
+        body: 'Converta fluxos de várias telas como um conjunto, com componentes compartilhados e estrutura consistente.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Landing pages',
+        body: 'Frames de hero, preços e lista de espera convertidos em código limpo e alinhado à marca.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Formulários e fluxos',
+        body: 'Formulários em várias etapas e onboarding conectados com validação e estados reais.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Qualquer gosto visual',
+        body: 'Editorial, suave ou marcante — o código carrega o estilo do design de ponta a ponta.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Entregue a partir do Figma com o Open Design',
+    galleryLead:
+      'Cada um começou como um frame do Figma e virou código que você pode entregar. Escolha um modelo próximo do seu design, descreva a sua variação e o agente o converte — do Figma ao código, sem exportação presa a um fornecedor.',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: 'Frame de web app — do Figma ao código' },
+      { thumb: 'example-mobile-app', caption: 'Fluxo mobile em código' },
+      { thumb: 'example-kami-landing', caption: 'Frame de landing em código' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Construção web de estilo suave' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Explorar modelos',
+    faqTitle: 'Perguntas frequentes sobre Figma para código',
+    faq: [
+      {
+        q: 'Como o Open Design transforma o Figma em código?',
+        a: 'Pelo Figma MCP, seu agente de programação — Claude Code, Codex, Cursor Agent — lê o arquivo do Figma ou um frame selecionado diretamente e gera código limpo e baseado em componentes, em vez de exportar um instantâneo único de um plugin.',
+      },
+      {
+        q: 'Que tipo de código ele produz?',
+        a: 'HTML e código limpos e baseados em componentes, construídos a partir de um sistema de design reutilizável, então você pode ler, refinar e entregar — não a marcação com posicionamento absoluto que a maioria dos exportadores de Figma para código produz.',
+      },
+      {
+        q: 'É gratuito?',
+        a: 'Sim. O Open Design é de código aberto e roda dentro do agente de programação que você já usa com as suas próprias chaves de provedor — não há cobrança por assento ou por exportação sobre o fluxo de Figma para código em si.',
+      },
+      {
+        q: 'Com quais agentes ele funciona?',
+        a: 'O Open Design funciona com Claude Code, Codex, Cursor Agent, Gemini CLI e mais de uma dezena de adaptadores nativos. Você traz as suas próprias chaves de provedor e a sua própria configuração do Figma MCP; nada é hospedado para você.',
+      },
+    ],
+    ctaTitle: 'Transforme seu próximo frame do Figma em código hoje à noite',
+    ctaBody:
+      'Dê uma estrela ao repositório, instale o Open Design, conecte o Figma MCP e transforme seu próximo design do Figma em código limpo e pronto para entregar no agente que você já usa.',
+    relatedTitle: 'Ferramentas e guias relacionados',
+    related: [
+      { href: '/solutions/design-to-code/', label: 'Do design ao código com o Open Design' },
+      { href: '/solutions/ai-ui-generator/', label: 'Gerador de UI com IA' },
+      { href: '/agents/claude-code-design/', label: 'Open Design para Claude Code' },
+      { href: '/solutions/engineering/', label: 'Open Design para engenharia' },
+    ],
+  },
+  screenshotToCode: {
+    title: 'Screenshot para código — transforme uma captura de tela em código com o Open Design',
+    description:
+      'Um fluxo de screenshot para código gratuito e de código aberto que transforma a captura de tela de qualquer UI em código limpo e baseado em componentes — dentro do agente de programação que você já usa. Solte uma imagem, descreva o que você quer e o agente a reconstrói como código real que você possui e entrega, sem exportação amarrada.',
+    breadcrumb: 'Screenshot para código',
+    label: 'Ferramenta · Screenshot para código',
+    heading: 'Screenshot para código, no seu agente',
+    lead: 'Tem uma captura de tela de uma UI de que você gosta? Entregue-a ao seu agente de programação e deixe-o reconstruir a tela como código limpo e baseado em componentes — layout responsivo, estados reais, a sua stack. A captura de tela é o briefing; o resultado é código que você possui, não um instantâneo descartável.',
+    heroImageAlt:
+      'Ilustração editorial de uma captura de tela de UI virando código de produção limpo dentro de um agente de programação, emoldurada por uma caixa de seleção verde',
+    tldrTitle: 'Em uma linha',
+    tldrBody:
+      'A maioria das ferramentas de screenshot para código cospe uma marcação única de posicionamento absoluto que você depois reescreve. O Open Design reconstrói a captura de tela dentro do seu agente de programação como código limpo e baseado em componentes — estrutura real, o seu sistema de design, sem etapa de exportação, sem cobrança por assento.',
+    stepsTitle: 'Como o screenshot para código funciona',
+    steps: [
+      {
+        title: 'Solte a captura de tela',
+        body: 'Entregue ao seu agente uma imagem da tela que você quer — uma captura de tela de um app, de um site ou de um design. O Open Design carrega a habilidade certa para que o agente leia o layout e a intenção, não apenas os pixels.',
+        imageAlt: 'Ilustração de uma captura de tela de UI sendo solta em um terminal',
+      },
+      {
+        title: 'Reconstrua como código baseado em componentes',
+        body: 'O agente mapeia a captura de tela para componentes reutilizáveis e tokens de design — espaçamento, tipografia e cor consistentes — e produz código limpo e legível em vez de uma parede de divs com posicionamento absoluto.',
+        imageAlt: 'Ilustração de uma captura de tela sendo convertida em código estruturado e baseado em componentes',
+      },
+      {
+        title: 'Refine em conversa',
+        body: 'Ajuste layout, estados e comportamento conversando — "deixe responsivo", "conecte o formulário", "combine com os nossos tokens". O código se atualiza no lugar; você não fica preso a uma conversão única e congelada.',
+        imageAlt: 'Ilustração de código sendo refinado por chat ao lado da captura de tela de origem',
+      },
+      {
+        title: 'Entregue o código que você possui',
+        body: 'O resultado é HTML/código no seu repositório, totalmente seu — sem editor amarrado a fornecedor, sem exportação descartável, sem redesenho entre a captura de tela e a construção. Entregue e continue evoluindo no agente.',
+        imageAlt: 'Ilustração de código finalizado dentro de uma moldura de seleção verde, pronto para entregar',
+      },
+    ],
+    tableTitle: 'Open Design vs. ferramentas típicas de screenshot para código',
+    tableColCapability: 'O que você precisa',
+    tableColWithOd: 'Com o Open Design',
+    tableColWithout: 'Ferramentas típicas de screenshot para código',
+    tableRows: [
+      {
+        capability: 'Começar por uma imagem',
+        withOd: 'Solte uma captura de tela no agente que você já tem aberto',
+        without: 'Fazer upload para uma ferramenta web separada, converter na nuvem delas',
+      },
+      {
+        capability: 'Qualidade do código',
+        withOd: 'Código limpo e baseado em componentes a partir de um sistema de design',
+        without: 'Marcação com posicionamento absoluto que você reescreve à mão',
+      },
+      {
+        capability: 'Iterar após a conversão',
+        withOd: 'Refine conversando; o código continua vivo no seu projeto',
+        without: 'Um instantâneo único e congelado que você edita manualmente',
+      },
+      {
+        capability: 'Possuir o resultado',
+        withOd: 'Arquivos e código simples no seu repositório, totalmente seus',
+        without: 'Preso ao editor ou ao formato de exportação deles',
+      },
+      {
+        capability: 'Custo e amarração',
+        withOd: 'Código aberto, use as suas próprias chaves, roda localmente',
+        without: 'Assinatura por assento ou por crédito, hospedada pelo fornecedor',
+      },
+    ],
+    featuresTitle: 'O que você pode converter',
+    features: [
+      {
+        title: 'Screenshot para código',
+        body: 'Transforme a imagem de qualquer tela em código limpo e baseado em componentes na sua stack.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Capturas de tela de apps',
+        body: 'Reconstrua a tela de um app mobile ou web a partir de uma captura de tela, com estados reais.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Capturas de tela de sites',
+        body: 'Recrie como código responsivo uma landing ou página de marketing que você capturou.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Capturas de tela de designs',
+        body: 'Entregue uma captura de tela de um design ou mockup e receba de volta código pronto para entregar.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'Formulários e fluxos',
+        body: 'Reconstrua um formulário ou fluxo de várias etapas a partir de uma captura de tela, com validação real.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Qualquer gosto visual',
+        body: 'Editorial, suave ou marcante — o código carrega o estilo da captura de tela de ponta a ponta.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Reconstruído a partir de uma captura de tela com o Open Design',
+    galleryLead:
+      'Cada um começou como uma imagem e virou código que você pode entregar. Escolha um modelo próximo da sua captura de tela, descreva a sua variação e o agente a reconstrói — screenshot para código, sem exportação amarrada.',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: 'Tela de app web — screenshot para código' },
+      { thumb: 'example-mobile-app', caption: 'Tela mobile para código' },
+      { thumb: 'example-kami-landing', caption: 'Captura de tela de landing em código' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Construção web de estilo suave' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Explorar modelos',
+    faqTitle: 'Perguntas frequentes sobre screenshot para código',
+    faq: [
+      {
+        q: 'Como o Open Design transforma uma captura de tela em código?',
+        a: 'Você entrega ao seu agente de programação uma imagem da tela e o Open Design carrega a habilidade certa para que o agente a reconstrua como código limpo e baseado em componentes — lendo o layout e a intenção, não apenas traçando pixels.',
+      },
+      {
+        q: 'Que tipo de código ele produz?',
+        a: 'HTML e código limpos e baseados em componentes, construídos a partir de um sistema de design reutilizável, para que você possa ler, refinar e entregar — não a marcação de posicionamento absoluto que a maioria das ferramentas de screenshot para código gera.',
+      },
+      {
+        q: 'É gratuito?',
+        a: 'Sim. O Open Design é de código aberto e roda dentro do agente de programação que você já usa com as suas próprias chaves de provedor — não há cobrança por assento ou por crédito sobre o fluxo de screenshot para código em si.',
+      },
+      {
+        q: 'Com quais agentes ele funciona?',
+        a: 'O Open Design funciona com Claude Code, Codex, Cursor Agent, Gemini CLI e mais de uma dezena de adaptadores nativos. Você traz as suas próprias chaves de provedor; nada é hospedado para você.',
+      },
+    ],
+    ctaTitle: 'Transforme sua próxima captura de tela em código hoje à noite',
+    ctaBody:
+      'Dê uma estrela ao repositório, instale o Open Design e transforme uma captura de tela da tela que você quer em código limpo e pronto para entregar no agente que você já usa.',
+    relatedTitle: 'Ferramentas e guias relacionados',
+    related: [
+      { href: '/solutions/figma-to-code/', label: 'Do Figma ao código com o Open Design' },
+      { href: '/solutions/design-to-code/', label: 'Do design ao código com o Open Design' },
+      { href: '/solutions/ai-ui-generator/', label: 'Gerador de UI com IA' },
+      { href: '/solutions/engineering/', label: 'Open Design para engenharia' },
+    ],
+  },
+  aiPrototypeGenerator: {
+    title: 'Gerador de protótipos com IA — do prompt a um protótipo clicável, depois ao código',
+    description:
+      'Um gerador de protótipos com IA gratuito e de código aberto que transforma um prompt em um protótipo real e clicável — várias telas, estilos compartilhados, interações ao vivo — e o leva até o código entregue. Uma alternativa aberta aos geradores de protótipos do Figma, Cursor e Penpot que roda dentro do agente de programação que você já usa.',
+    breadcrumb: 'Gerador de protótipos com IA',
+    label: 'Ferramenta · Gerador de protótipos com IA',
+    heading: 'O gerador de protótipos com IA que entrega código',
+    lead: 'Descreva o fluxo e deixe seu agente gerar um protótipo real e clicável — telas conectadas, estilos consistentes, interações funcionais. Diferente dos geradores de protótipos que param no mockup, o Open Design leva o mesmo artefato até o código entregue, no agente que você já executa.',
+    heroImageAlt:
+      'Ilustração editorial de um prompt virando um protótipo clicável de várias telas e, em seguida, código de produção, emoldurada por uma caixa de seleção verde',
+    tldrTitle: 'Em uma linha',
+    tldrBody:
+      'A maioria dos geradores de protótipos com IA (Figma, Cursor, Penpot) para em um mockup clicável que você depois reconstrói. O Open Design gera o protótipo dentro do seu agente de programação e o leva do prompt até o código entregue — sem etapa de exportação, sem lacuna de handoff, sem cobrança por assento.',
+    stepsTitle: 'Como o gerador de protótipos com IA funciona',
+    steps: [
+      {
+        title: 'Descreva o fluxo',
+        body: 'Conte ao seu agente a jornada em linguagem simples — "um fluxo de onboarding: cadastro, seletor de plano e um dashboard". O Open Design carrega a habilidade de protótipo para que o agente disponha telas conectadas, não um único frame estático.',
+        imageAlt: 'Ilustração de uma descrição de fluxo em linguagem simples digitada em um terminal',
+      },
+      {
+        title: 'Gere um protótipo clicável',
+        body: 'O agente monta telas conectadas a partir de componentes reutilizáveis e tokens de design, com interações reais — navegação, estados, transições. Você recebe um protótipo coerente e clicável como um conjunto, não frames desconectados.',
+        imageAlt: 'Ilustração de telas de protótipo conectadas com setas de navegação em uma grade',
+      },
+      {
+        title: 'Refine conversando',
+        body: 'Ajuste fluxo, estados e estilo em conversa — "adicione um estado vazio", "conecte este botão ao dashboard", "faça parecer mais ágil". O protótipo se atualiza no lugar em vez de ser redesenhado.',
+        imageAlt: 'Ilustração de um protótipo sendo refinado por chat, adicionando uma tela e uma transição',
+      },
+      {
+        title: 'Entregue o código que você possui',
+        body: 'Como o protótipo vive no seu projeto, ele e o código final compartilham uma única fonte de verdade. O resultado é HTML/código que você possui e pode entregar — sem amarração a fornecedor, sem redesenho entre protótipo e construção.',
+        imageAlt: 'Ilustração de um protótipo fluindo para código entregue dentro de uma moldura de seleção verde',
+      },
+    ],
+    tableTitle: 'Open Design vs. geradores típicos de protótipos com IA',
+    tableColCapability: 'O que você precisa',
+    tableColWithOd: 'Com o Open Design',
+    tableColWithout: 'Geradores de protótipos do Figma / Cursor / Penpot',
+    tableRows: [
+      {
+        capability: 'Gerar a partir de um prompt',
+        withOd: 'Um prompt no agente que você já tem aberto',
+        without: 'Gerar dentro do app deles ou em uma ferramenta web separada',
+      },
+      {
+        capability: 'Clicável, de várias telas',
+        withOd: 'Telas conectadas com interações reais, como um conjunto',
+        without: 'Clicável, mas muitas vezes preso no editor deles',
+      },
+      {
+        capability: 'Do protótipo ao código',
+        withOd: 'O mesmo artefato vira código entregue — sem redesenho',
+        without: 'O protótipo é um beco sem saída; reconstrua para produção',
+      },
+      {
+        capability: 'Possuir o resultado',
+        withOd: 'Arquivos e código simples no seu repositório, totalmente seus',
+        without: 'Editável apenas dentro do app deles; exportação limitada',
+      },
+      {
+        capability: 'Custo e amarração',
+        withOd: 'Código aberto, use as suas próprias chaves, roda localmente',
+        without: 'Assinatura por assento ou por crédito, hospedada pelo fornecedor',
+      },
+    ],
+    featuresTitle: 'O que você pode prototipar',
+    features: [
+      {
+        title: 'Fluxos de app',
+        body: 'Onboarding, configurações e jornadas de várias telas geradas como um conjunto clicável.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'Protótipos de app web',
+        body: 'Dashboards e ferramentas com navegação e estados reais, depois levados ao código.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Fluxos de SaaS e landing',
+        body: 'Fluxos de marketing até cadastro que você pode prototipar, estilizar e entregar.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: 'Onboarding e formulários',
+        body: 'Onboarding de várias etapas e fluxos de formulário com hierarquia e estados claros.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: 'Conceitos interativos',
+        body: 'Apresente um conceito clicável rápido e mantenha o mesmo artefato até a produção.',
+        thumb: 'example-gamified-app',
+      },
+      {
+        title: 'Qualquer gosto visual',
+        body: 'Editorial, suave ou marcante — carregue um estilo coerente em todas as telas.',
+        thumb: 'example-kami-landing',
+      },
+    ],
+    galleryTitle: 'Protótipos criados com o Open Design',
+    galleryLead:
+      'Cada um começou como um prompt e foi renderizado em um artefato clicável e editável. Escolha um modelo próximo da sua ideia, descreva a sua variação e o agente a adapta — do protótipo ao código entregue.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: 'App web de namoro — protótipo clicável' },
+      { thumb: 'example-hr-onboarding', caption: 'Fluxo de onboarding de RH' },
+      { thumb: 'example-mobile-app', caption: 'Protótipo de app mobile' },
+      { thumb: 'example-web-prototype-taste-soft', caption: 'Protótipo web de estilo suave' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: 'Explorar modelos',
+    faqTitle: 'Perguntas frequentes sobre o gerador de protótipos com IA',
+    faq: [
+      {
+        q: 'O gerador de protótipos com IA é gratuito?',
+        a: 'Sim. O Open Design é de código aberto e roda dentro do agente de programação que você já usa com as suas próprias chaves de provedor — não há cobrança por assento ou por crédito sobre o gerador de protótipos em si.',
+      },
+      {
+        q: 'Como ele difere dos geradores de protótipos do Figma, Cursor ou Penpot?',
+        a: 'Esses param em um mockup clicável dentro do app deles. O Open Design gera o protótipo no seu agente de programação e leva o mesmo artefato até o código entregue que você possui — sem exportação, sem reconstrução para produção.',
+      },
+      {
+        q: 'Os protótipos são clicáveis e de várias telas?',
+        a: 'Sim. O agente gera telas conectadas com interações reais — navegação, estados, transições — como um conjunto coerente, e depois você as refina conversando.',
+      },
+      {
+        q: 'Com quais agentes ele funciona?',
+        a: 'O Open Design funciona com Claude Code, Codex, Cursor Agent, Gemini CLI e mais de uma dezena de adaptadores nativos. Você traz as suas próprias chaves de provedor; nada é hospedado para você.',
+      },
+    ],
+    ctaTitle: 'Gere seu primeiro protótipo hoje à noite',
+    ctaBody:
+      'Dê uma estrela ao repositório, instale o Open Design e transforme seu próximo fluxo em um protótipo clicável — e depois em código entregue — no agente que você já usa.',
+    relatedTitle: 'Ferramentas e guias relacionados',
+    related: [
+      { href: '/solutions/prototype/', label: 'Prototipagem com o Open Design' },
+      { href: '/solutions/ai-wireframe-generator/', label: 'Gerador de wireframes com IA' },
+      { href: '/solutions/ai-ui-generator/', label: 'Gerador de UI com IA' },
+      { href: '/solutions/design-to-code/', label: 'Do design ao código com o Open Design' },
+    ],
+  },
   prototype: {
     title: 'Crie protótipos interativos com Open Design + Claude Code',
     description:

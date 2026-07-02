@@ -504,7 +504,7 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
   await expect(settings.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
   await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-amr-switch@example.com');
   await expect(settings.locator('.agent-card-amr-profile-badge')).toContainText(/test/i);
-  await expect(settings.getByRole('link', { name: /Console|控制台/i })).toBeVisible();
+  await expect(settings.getByRole('link', { name: /Manage|管理/i })).toBeVisible();
 
   await settings.getByRole('combobox', { name: 'Model', exact: true }).click();
   let modelPopover = page.getByTestId('settings-agent-model-popover-amr');
@@ -521,7 +521,7 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
   await expect(settings.getByTestId('settings-agent-select-amr')).toHaveAttribute('aria-pressed', 'true');
   await expect(settings.getByTestId('settings-agent-select-amr')).toContainText('settings-amr-switch@example.com');
   await expect(settings.locator('.agent-card-amr-profile-badge')).toContainText(/test/i);
-  const amrConsole = settings.getByRole('link', { name: /Console|控制台/i });
+  const amrConsole = settings.getByRole('link', { name: /Manage|管理/i });
   await expect(amrConsole).toBeVisible();
   await expect(amrConsole).toHaveAttribute('href', /source=open_design/);
 

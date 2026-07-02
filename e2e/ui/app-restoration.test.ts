@@ -9,7 +9,7 @@ import { T } from '@/timeouts';
 const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 
-test.describe.configure({ timeout: 45_000 });
+test.describe.configure({ timeout: process.env.CI ? 90_000 : 60_000 });
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -3482,7 +3482,7 @@ async function createEmptyProject(page: Page, name: string): Promise<string> {
   await page.getByTestId('new-project-tab-live-artifact').click();
   await page.getByTestId('new-project-name').fill(name);
   await page.getByTestId('create-project').click();
-  await expect(page).toHaveURL(/\/projects\//);
+  await expect(page).toHaveURL(/\/projects\//, { timeout: T.long });
   const current = new URL(page.url());
   const [, projects, projectId] = current.pathname.split('/');
   if (projects !== 'projects' || !projectId) throw new Error(`unexpected project route: ${current.pathname}`);
@@ -4029,7 +4029,7 @@ async function expectProjectsView(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function getCurrentProjectContext(

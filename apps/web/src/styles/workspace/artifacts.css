@@ -1205,6 +1205,9 @@
   align-items: stretch;
   min-width: 0;
 }
+.agent-card-installed:has(.agent-card-amr-auth) .agent-card-main {
+  flex-wrap: wrap;
+}
 .agent-card-select {
   flex: 1;
   min-width: 0;
@@ -1218,6 +1221,9 @@
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+.agent-card-installed:has(.agent-card-amr-auth) .agent-card-select {
+  flex: 1 1 420px;
 }
 .agent-card-test-btn {
   align-self: stretch;
@@ -1262,9 +1268,15 @@
       color-mix(in srgb, var(--accent-tint) 10%, var(--bg-panel))
     );
 }
+.agent-card-installed:has(.agent-card-amr-auth) .agent-card-main {
+  flex-wrap: nowrap;
+}
 .agent-card-installed.active .agent-card-select {
   min-height: 78px;
   padding: 14px 18px 12px 22px;
+}
+.agent-card-installed:has(.agent-card-amr-auth) .agent-card-select {
+  flex: 1;
 }
 .agent-card-installed.active .agent-icon {
   border-radius: var(--radius-md);
@@ -1415,22 +1427,33 @@
   gap: 8px;
   row-gap: 5px;
   flex-wrap: wrap;
+  max-width: 100%;
   white-space: normal;
-  overflow: visible;
+  overflow: hidden;
 }
 .agent-card-name.agent-card-name--amr .agent-card-title {
-  flex: 0 0 auto;
-  overflow: visible;
-  text-overflow: clip;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .agent-card-benefits {
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   gap: 5px;
-  min-width: min(100%, 220px);
-  overflow: visible;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+.agent-card-plan-badge-slot {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+.agent-card-plan-badge {
+  flex: 0 0 auto;
 }
 .agent-card-benefit {
   display: inline-flex;

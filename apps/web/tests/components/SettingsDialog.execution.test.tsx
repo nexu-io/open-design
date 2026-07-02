@@ -1623,6 +1623,41 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(testConnectionCalls).toHaveLength(1);
   });
 
+  it('shows provider upstream detail for failed BYOK connection tests', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          kind: 'upstream_unavailable',
+          latencyMs: 42,
+          status: 400,
+          detail:
+            'The selected NVIDIA model instance is currently unavailable at the provider. Try a different model or retry later.',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog({ apiKey: 'sk-ant-test-provider' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    expect(
+      await screen.findByText(
+        /Provider returned 400\. Try again in a moment\. The selected NVIDIA model instance is currently unavailable/,
+      ),
+    ).toBeTruthy();
+  });
+
   it('blocks an obvious OpenAI key in the Anthropic tab before testing', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (input.toString() === '/api/memory') {
@@ -2105,14 +2140,14 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
   it('lets users switch to Local CLI, select an installed agent, and autosave', async () => {
     const installed = availableAgents[0]!;
     const unavailable: AgentInfo = {
-      id: 'gemini',
-      name: 'Gemini CLI',
-      bin: 'gemini',
+      id: 'kimi',
+      name: 'Kimi CLI',
+      bin: 'kimi',
       available: false,
       version: null,
       models: [],
-      installUrl: 'https://github.com/google-gemini/gemini-cli',
-      docsUrl: 'https://github.com/google-gemini/gemini-cli/blob/main/README.md',
+      installUrl: 'https://github.com/MoonshotAI/kimi-cli',
+      docsUrl: 'https://www.kimi.com/code/docs/en/kimi-cli/guides/getting-started.html?aff=open-design',
     };
     const { onPersist } = renderSettingsDialog(
       { mode: 'daemon', agentId: null },
@@ -2127,12 +2162,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(installGroupSummary.closest('details')?.hasAttribute('open')).toBe(false);
     const codexCard = screen.getByRole('button', { name: /Codex CLI/i }) as HTMLButtonElement;
     fireEvent.click(installGroupSummary);
-    const geminiGroup = screen.getByRole('group', { name: /Gemini CLI/i });
-    expect(within(geminiGroup).getByText('Google official CLI')).toBeTruthy();
+    const kimiGroup = screen.getByRole('group', { name: /Kimi CLI/i });
+    expect(within(kimiGroup).getByText('Moonshot Kimi CLI')).toBeTruthy();
     expect(
-      (within(geminiGroup).getByRole('link', { name: en['settings.agentInstall.install'] }) as HTMLAnchorElement).getAttribute('href'),
+      (within(kimiGroup).getByRole('link', { name: en['settings.agentInstall.install'] }) as HTMLAnchorElement).getAttribute('href'),
     ).toBe(
-      'https://github.com/google-gemini/gemini-cli',
+      'https://github.com/MoonshotAI/kimi-cli',
     );
     expect(
       screen.getByText(en['settings.agentInstall.stepAuth']),
@@ -2441,13 +2476,13 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
   it('rescans automatically when returning after opening an install link', async () => {
     const unavailable: AgentInfo = {
-      id: 'gemini',
-      name: 'Gemini CLI',
-      bin: 'gemini',
+      id: 'kimi',
+      name: 'Kimi CLI',
+      bin: 'kimi',
       available: false,
       version: null,
       models: [],
-      installUrl: 'https://github.com/google-gemini/gemini-cli',
+      installUrl: 'https://github.com/MoonshotAI/kimi-cli',
     };
     const onRefreshAgents = vi.fn(async () => availableAgents);
 
@@ -2574,7 +2609,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(screen.queryByText(/vela/i)).toBeNull();
     expect(screen.queryByText(/Not signed in/i)).toBeNull();
     expect(screen.getByText('Official')).toBeTruthy();
-    expect(screen.getByText('Lower cost')).toBeTruthy();
+    expect(screen.queryByText('Lower cost')).toBeNull();
     expect(screen.getByText('Many models')).toBeTruthy();
     expect(screen.queryByText('Limited bonus: +100%')).toBeNull();
     expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
@@ -2896,6 +2931,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
               email: 'signed-in@example.com',
               name: 'Signed In User',
             },
+            account: { plan: 'pro' },
             configPath: '/Users/test/.amr/config.json',
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
@@ -2914,12 +2950,63 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^Open Design\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Plan pro/ })).toBeTruthy();
     expect(screen.getByText('signed-in@example.com')).toBeTruthy();
     expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
     expect(screen.queryByText(/^vela$/i)).toBeNull();
   });
 
-  it('shows the Settings AMR wallet fallback balance for old Vela CLI status payloads', async () => {
+  it('keeps the AMR plan badge on the account row outside the clipped benefits row', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: true,
+            profile: 'local',
+            user: {
+              id: 'user-1',
+              email: 'signed-in@example.com',
+              name: 'Signed In User',
+            },
+            account: { plan: 'pro' },
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+
+    const amrCardButton = await screen.findByRole('button', { name: /Plan pro/ });
+    const planBadge = within(amrCardButton).getByText('pro');
+    const benefits = amrCardButton.querySelector('.agent-card-benefits');
+    const planSlot = planBadge.closest('.agent-card-plan-badge-slot');
+    const accountRow = planBadge.closest('.agent-card-amr-email');
+
+    expect(benefits).toBeTruthy();
+    expect(planSlot).toBeTruthy();
+    expect(accountRow).toBeTruthy();
+    expect(accountRow?.textContent).toContain('signed-in@example.com');
+    expect(planSlot?.getAttribute('aria-hidden')).toBe('true');
+    expect(benefits?.contains(planBadge)).toBe(false);
+  });
+
+  it('loads the Settings AMR wallet fallback balance without a manual card refresh button', async () => {
     let walletCalls = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();

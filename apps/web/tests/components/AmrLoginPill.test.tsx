@@ -237,7 +237,7 @@ describe('AmrLoginPill', () => {
     expect(screen.queryByText('LOCAL')).toBeNull();
   });
 
-  it('uses the test-profile AMR console URL for signed-in users', () => {
+  it('uses the test-profile AMR management URL for signed-in users', () => {
     renderAccountControl({
       status: 'signed-in',
       email: 'leaf@example.com',
@@ -248,12 +248,12 @@ describe('AmrLoginPill', () => {
 
     expect(screen.getByText('leaf@example.com')).toBeTruthy();
     expect(screen.getByText('TEST')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Console' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
       'https://vela.powerformer.net/wallet?source=open_design',
     );
   });
 
-  it('uses the local-profile AMR console URL for signed-in users', () => {
+  it('uses the local-profile AMR management URL for signed-in users', () => {
     renderAccountControl({
       status: 'signed-in',
       email: 'leaf@example.com',
@@ -263,12 +263,12 @@ describe('AmrLoginPill', () => {
     });
 
     expect(screen.getByText('LOCAL')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Console' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
       'http://localhost:5173/wallet?source=open_design',
     );
   });
 
-  it('uses the production AMR console URL by default', () => {
+  it('uses the production AMR management URL by default', () => {
     renderAccountControl({
       status: 'signed-in',
       email: 'leaf@example.com',
@@ -278,12 +278,12 @@ describe('AmrLoginPill', () => {
     });
 
     expect(screen.queryByText('PROD')).toBeNull();
-    expect(screen.getByRole('link', { name: 'Console' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
       'https://open-design.ai/amr/wallet?source=open_design',
     );
   });
 
-  it('adds Open Design attribution to the signed-in console link on click', () => {
+  it('adds Open Design attribution to the signed-in management link on click', () => {
     const fetchMock = vi.fn(async () => new Response('{}', { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -305,7 +305,7 @@ describe('AmrLoginPill', () => {
       </I18nProvider>,
     );
 
-    const link = screen.getByRole('link', { name: 'Console' }) as HTMLAnchorElement;
+    const link = screen.getByRole('link', { name: 'Manage' }) as HTMLAnchorElement;
     fireEvent.click(link);
 
     const url = new URL(link.href);

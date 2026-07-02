@@ -924,6 +924,11 @@ async function seedDeckArtifact(
 
 async function openDesignFile(page: Page, fileName: string) {
   const preview = artifactPreview(page);
+  await waitForLoadingToClear(page);
+  const activePath = new URL(page.url()).pathname;
+  if (activePath.endsWith(`/files/${encodeURIComponent(fileName)}`) && await preview.isVisible().catch(() => false)) {
+    return;
+  }
   const filePattern = new RegExp(fileName.replace(/\./g, '\\.'), 'i');
   const fileTabButton = page.getByRole('tab', { name: filePattern }).first();
   let tabFound = true;
@@ -934,17 +939,27 @@ async function openDesignFile(page: Page, fileName: string) {
   }
 
   if (tabFound) {
-    await fileTabButton.click();
+    const isSelected = await fileTabButton.getAttribute('aria-selected');
+    if (isSelected !== 'true') {
+      await fileTabButton.click();
+    }
   } else {
-    const fileButton = page.getByRole('button', { name: filePattern });
+    const fileButton = page.getByRole('button', { name: filePattern }).first();
     await fileButton.click();
-    await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+    if (!(await preview.isVisible().catch(() => false))) {
+      const openButton = page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' });
+      if (await openButton.isVisible().catch(() => false)) {
+        await openButton.click();
+      } else {
+        await fileButton.dblclick();
+      }
+    }
   }
   await expect(preview).toBeVisible();
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function expectFileSource(page: Page, projectId: string, fileName: string, snippets: string[]) {

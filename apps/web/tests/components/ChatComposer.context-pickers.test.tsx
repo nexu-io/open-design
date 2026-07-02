@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { createRef, type ComponentProps } from 'react';
+import { createRef, useState, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const trackChatPanelClickMock = vi.hoisted(() => vi.fn());
@@ -17,7 +17,7 @@ vi.mock('../../src/analytics/events', async (importOriginal) => {
 import { ChatComposer, type ChatComposerHandle } from '../../src/components/ChatComposer';
 import { I18nProvider } from '../../src/i18n';
 import type { Locale } from '../../src/i18n/types';
-import type { AppliedPluginSnapshot } from '@open-design/contracts';
+import type { AppliedPluginSnapshot, ProjectMetadata } from '@open-design/contracts';
 import { composerText, pressEnter, typeAndSettle } from '../helpers/lexical-composer';
 
 const COMMUNITY_PLUGIN = {
@@ -128,6 +128,20 @@ let fetchMock: ReturnType<typeof vi.fn>;
 let plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
 let skills = [SKILL];
 let servers = [MCP_SERVER];
+let openFolderPaths: string[];
+let deferNextProjectPatch = false;
+let rejectNextProjectPatch = false;
+let resolveDeferredProjectPatch: (() => void) | null = null;
+let referenceProjects: Array<{
+  id: string;
+  name: string;
+  skillId: null;
+  designSystemId: null;
+  createdAt: number;
+  updatedAt: number;
+  metadata: { kind: 'prototype' };
+}>;
+let referenceProjectDetails: Record<string, { project: (typeof referenceProjects)[number]; resolvedDir: string | null }>;
 
 function composerElement(
   overrides: Partial<ComponentProps<typeof ChatComposer>> = {},
@@ -172,6 +186,12 @@ function stagedPluginChip(): Element | null {
     ?.querySelector('.staged-chip.staged-context--plugin') ?? null;
 }
 
+function projectPatchBodies(): Array<{ metadata?: { linkedDirs?: string[] } }> {
+  return fetchMock.mock.calls
+    .filter(([url, init]) => url === '/api/projects/project-1' && init?.method === 'PATCH')
+    .map(([, init]) => JSON.parse(String(init?.body ?? '{}')));
+}
+
 // The contenteditable serializes newlines as `<br>`, which jsdom's
 // `.textContent` drops — so use the Lexical-aware `composerText()` helper for
 // every editor-text assertion (it walks the tree and emits real `\n`s).
@@ -181,6 +201,12 @@ beforeEach(() => {
   plugins = [COMMUNITY_PLUGIN, USER_PLUGIN];
   skills = [SKILL];
   servers = [MCP_SERVER];
+  openFolderPaths = ['/Users/me/reference-dir'];
+  deferNextProjectPatch = false;
+  rejectNextProjectPatch = false;
+  resolveDeferredProjectPatch = null;
+  referenceProjects = [];
+  referenceProjectDetails = {};
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === '/api/mcp/servers') {
       return new Response(JSON.stringify({ servers, templates: [] }), {
@@ -206,6 +232,21 @@ beforeEach(() => {
         headers: { 'content-type': 'application/json' },
       });
     }
+    if (url === '/api/projects') {
+      return new Response(JSON.stringify({ projects: referenceProjects }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url === '/api/dialog/open-folder' && init?.method === 'POST') {
+      return new Response(
+        JSON.stringify({ path: openFolderPaths.shift() ?? '/Users/me/reference-dir' }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+    }
     if (url.startsWith('/api/skills/')) {
       const id = decodeURIComponent(url.split('/').pop() ?? '');
       const skill = skills.find((candidate) => candidate.id === id) ?? makeSkill({ id, name: id });
@@ -215,8 +256,44 @@ beforeEach(() => {
       });
     }
     if (url === '/api/projects/project-1' && init?.method === 'PATCH') {
-      return new Response(JSON.stringify({ project: { id: 'project-1', skillId: SKILL.id } }), {
+      const body = JSON.parse(String(init.body ?? '{}')) as { metadata?: unknown };
+      if (rejectNextProjectPatch) {
+        rejectNextProjectPatch = false;
+        return new Response(JSON.stringify({
+          error: { message: 'directory does not exist or is not accessible' },
+        }), {
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (deferNextProjectPatch) {
+        deferNextProjectPatch = false;
+        await new Promise<void>((resolve) => {
+          resolveDeferredProjectPatch = resolve;
+        });
+        resolveDeferredProjectPatch = null;
+      }
+      return new Response(JSON.stringify({
+        project: {
+          id: 'project-1',
+          name: 'Project',
+          skillId: SKILL.id,
+          designSystemId: null,
+          createdAt: 1,
+          updatedAt: 1,
+          metadata: body.metadata ?? { kind: 'prototype' },
+        },
+      }), {
         status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    const projectDetailMatch = /^\/api\/projects\/([^/?]+)(?:\?.*)?$/.exec(url);
+    if (projectDetailMatch && init?.method !== 'PATCH') {
+      const projectId = decodeURIComponent(projectDetailMatch[1]!);
+      const detail = referenceProjectDetails[projectId] ?? null;
+      return new Response(JSON.stringify(detail ?? {}), {
+        status: detail ? 200 : 404,
         headers: { 'content-type': 'application/json' },
       });
     }
@@ -412,6 +489,515 @@ describe('ChatComposer context pickers', () => {
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     expect(onSend.mock.calls[0]?.[3]?.context?.workspaceItems).toEqual([browserContext]);
+  });
+
+  it('does not preserve active file paths as linked dirs when changing the working dir', async () => {
+    openFolderPaths = ['/Users/me/new-work-dir'];
+    renderComposer({
+      activeWorkspaceContext: {
+        id: 'file:index.html',
+        kind: 'file',
+        label: 'index.html',
+        path: 'index.html',
+        absolutePath: '/tmp/open-design/project-1/index.html',
+        tabId: 'index.html',
+      },
+      projectMetadata: { kind: 'prototype', linkedDirs: ['/Users/me/work-dir'] },
+    });
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(await screen.findByTestId('working-dir-pick'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(1);
+    });
+    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual(['/Users/me/new-work-dir']);
+  });
+
+  it('removes the linked dir added for a local-code context when its chip is cleared', async () => {
+    const onProjectMetadataChange = vi.fn();
+    renderComposer({
+      projectMetadata: { kind: 'prototype' },
+      onProjectMetadataChange,
+    });
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByText('Link local code'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('staged-contexts').textContent).toContain('reference-dir');
+    });
+    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual(['/Users/me/reference-dir']);
+
+    fireEvent.click(screen.getByLabelText('Remove reference-dir'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(2);
+    });
+    expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual([]);
+    await waitFor(() => {
+      expect(screen.queryByText('reference-dir')).toBeNull();
+    });
+    expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ linkedDirs: [] }),
+    );
+  });
+
+  it('stages multiple referenced projects and links all resolved dirs together', async () => {
+    const referenceA = {
+      id: 'reference-a',
+      name: 'Reference A',
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: { kind: 'prototype' as const },
+    };
+    const referenceB = {
+      ...referenceA,
+      id: 'reference-b',
+      name: 'Reference B',
+    };
+    referenceProjects = [referenceA, referenceB];
+    referenceProjectDetails = {
+      'reference-a': {
+        project: referenceA,
+        resolvedDir: '/tmp/open-design/reference-a',
+      },
+      'reference-b': {
+        project: referenceB,
+        resolvedDir: '/tmp/open-design/reference-b',
+      },
+    };
+    const onProjectMetadataChange = vi.fn();
+    renderComposer({
+      projectMetadata: { kind: 'prototype', linkedDirs: ['/Users/me/work-dir'] },
+      onProjectMetadataChange,
+    });
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByTestId('composer-plus-reference-project'));
+    await screen.findByText('Reference A');
+    fireEvent.click(screen.getByText('Reference B'));
+    fireEvent.click(screen.getByRole('button', { name: 'Reference project' }));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(1);
+    });
+    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual([
+      '/Users/me/work-dir',
+      '/tmp/open-design/reference-a',
+      '/tmp/open-design/reference-b',
+    ]);
+    await waitFor(() => {
+      const stagedText = screen.getByTestId('staged-contexts').textContent ?? '';
+      expect(stagedText).toContain('ProjectReference A');
+      expect(stagedText).toContain('ProjectReference B');
+    });
+    expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        linkedDirs: [
+          '/Users/me/work-dir',
+          '/tmp/open-design/reference-a',
+          '/tmp/open-design/reference-b',
+        ],
+      }),
+    );
+  });
+
+  it('does not stage referenced project context when linking its directory is rejected', async () => {
+    const referenceA = {
+      id: 'reference-a',
+      name: 'Reference A',
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: { kind: 'prototype' as const },
+    };
+    referenceProjects = [referenceA];
+    referenceProjectDetails = {
+      'reference-a': {
+        project: referenceA,
+        resolvedDir: '/tmp/open-design/missing-reference-a',
+      },
+    };
+    rejectNextProjectPatch = true;
+    const onSend = vi.fn();
+    renderComposer({ onSend });
+    await flushMounts();
+    await typeAndSettle('Review this');
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByTestId('composer-plus-reference-project'));
+    await screen.findByText('Reference A');
+    fireEvent.click(screen.getByRole('button', { name: 'Reference project' }));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(1);
+    });
+    expect(screen.queryByTestId('staged-contexts')).toBeNull();
+    expect(composerText()).toBe('Review this');
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend.mock.calls[0]?.[3]?.context?.workspaceItems).toBeUndefined();
+  });
+
+  it('keeps sent linked-dir workspace context visible and removable after reset', async () => {
+    const onProjectMetadataChange = vi.fn();
+    const onSend = vi.fn();
+
+    function ControlledComposer() {
+      const [metadata, setMetadata] = useState<ProjectMetadata>({ kind: 'prototype' });
+      return composerElement({
+        projectMetadata: metadata,
+        onProjectMetadataChange: (next) => {
+          onProjectMetadataChange(next);
+          setMetadata(next);
+        },
+        onSend,
+      });
+    }
+
+    render(<ControlledComposer />);
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByText('Link local code'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(1);
+    });
+    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual(['/Users/me/reference-dir']);
+    await waitFor(() => {
+      expect(screen.getByTestId('staged-contexts').textContent).toContain('reference-dir');
+    });
+
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend.mock.calls[0]?.[3]?.context?.workspaceItems).toEqual([
+      expect.objectContaining({
+        id: 'local-code:/Users/me/reference-dir',
+        absolutePath: '/Users/me/reference-dir',
+      }),
+    ]);
+    await waitFor(() => {
+      expect(composerText().trim()).toBe('');
+      expect(screen.getByTestId('staged-contexts').textContent).toContain('reference-dir');
+    });
+    expect(screen.getByTestId('working-dir-trigger').textContent).not.toContain('reference-dir');
+
+    fireEvent.click(screen.getByLabelText('Remove reference-dir'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(2);
+    });
+    expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual([]);
+    expect(screen.queryByTestId('staged-contexts')?.textContent ?? '').not.toContain('reference-dir');
+    expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ linkedDirs: [] }),
+    );
+  });
+
+  it('does not remove a pre-existing linked dir when a matching workspace chip is cleared', async () => {
+    const onProjectMetadataChange = vi.fn();
+    renderComposer({
+      projectMetadata: { kind: 'prototype', linkedDirs: ['/Users/me/reference-dir'] },
+      onProjectMetadataChange,
+    });
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByText('Link local code'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('staged-contexts').textContent).toContain('reference-dir');
+    });
+    expect(projectPatchBodies()).toEqual([]);
+
+    fireEvent.click(screen.getByLabelText('Remove reference-dir'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('staged-contexts')?.textContent ?? '').not.toContain('reference-dir');
+    });
+    expect(projectPatchBodies()).toEqual([]);
+    expect(onProjectMetadataChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps draft text typed while linked-dir removal is pending', async () => {
+    renderComposer({ projectMetadata: { kind: 'prototype' } });
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByText('Link local code'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(1);
+    });
+
+    deferNextProjectPatch = true;
+    fireEvent.click(screen.getByLabelText('Remove reference-dir'));
+
+    await waitFor(() => {
+      expect(resolveDeferredProjectPatch).toBeTruthy();
+    });
+    await typeAndSettle('Keep the typed text after clicking remove');
+    await act(async () => {
+      resolveDeferredProjectPatch?.();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(2);
+    });
+    expect(composerText()).toBe('Keep the typed text after clicking remove');
+  });
+
+  it('preserves staged local-code linked dirs when changing or clearing the working dir', async () => {
+    openFolderPaths = ['/Users/me/reference-dir', '/Users/me/other-work-dir'];
+    const onProjectMetadataChange = vi.fn();
+    renderComposer({
+      projectMetadata: { kind: 'prototype', linkedDirs: ['/Users/me/work-dir'] },
+      onProjectMetadataChange,
+    });
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByText('Link local code'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(1);
+    });
+    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual([
+      '/Users/me/work-dir',
+      '/Users/me/reference-dir',
+    ]);
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(await screen.findByTestId('working-dir-pick'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(2);
+    });
+    expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual([
+      '/Users/me/other-work-dir',
+      '/Users/me/reference-dir',
+    ]);
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(await screen.findByTestId('working-dir-clear'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(3);
+    });
+    expect(projectPatchBodies()[2]?.metadata?.linkedDirs).toEqual(['/Users/me/reference-dir']);
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('reference-dir');
+  });
+
+  it('treats Home-carried workspace dirs as context-only after project creation', async () => {
+    openFolderPaths = ['/Users/me/other-work-dir'];
+    const onProjectMetadataChange = vi.fn();
+
+    function ControlledComposer() {
+      const [metadata, setMetadata] = useState<ProjectMetadata>({
+        kind: 'prototype',
+        linkedDirs: ['/Users/me/reference-dir'],
+      });
+      return composerElement({
+        initialWorkspaceContexts: [{
+          id: 'local-code:/Users/me/reference-dir',
+          kind: 'local-code',
+          label: 'reference-dir',
+          title: 'reference-dir',
+          absolutePath: '/Users/me/reference-dir',
+        }],
+        projectMetadata: metadata,
+        onProjectMetadataChange: (next) => {
+          onProjectMetadataChange(next);
+          setMetadata(next);
+        },
+      });
+    }
+
+    render(<ControlledComposer />);
+    await flushMounts();
+
+    expect(screen.getByTestId('working-dir-trigger').textContent).not.toContain('reference-dir');
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    expect(screen.queryByTestId('working-dir-clear')).toBeNull();
+    fireEvent.click(await screen.findByTestId('working-dir-pick'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(1);
+    });
+    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual([
+      '/Users/me/other-work-dir',
+      '/Users/me/reference-dir',
+    ]);
+    await waitFor(() => {
+      expect(screen.getByTestId('working-dir-trigger').textContent).toContain('other-work-dir');
+    });
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(await screen.findByTestId('working-dir-clear'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(2);
+    });
+    expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual(['/Users/me/reference-dir']);
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('reference-dir');
+
+    fireEvent.click(screen.getByLabelText('Remove reference-dir'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(3);
+    });
+    expect(projectPatchBodies()[2]?.metadata?.linkedDirs).toEqual([]);
+    expect(screen.queryByTestId('staged-contexts')?.textContent ?? '').not.toContain('reference-dir');
+    expect(screen.getByTestId('working-dir-trigger').textContent).not.toContain('reference-dir');
+  });
+
+  it('keeps a promoted context dir as the working dir when its chip is removed', async () => {
+    openFolderPaths = ['/Users/me/shared', '/Users/me/shared'];
+    const onProjectMetadataChange = vi.fn();
+
+    function ControlledComposer() {
+      const [metadata, setMetadata] = useState<ProjectMetadata>({ kind: 'prototype' });
+      return composerElement({
+        projectMetadata: metadata,
+        onProjectMetadataChange: (next) => {
+          onProjectMetadataChange(next);
+          setMetadata(next);
+        },
+      });
+    }
+
+    render(<ControlledComposer />);
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByText('Link local code'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(1);
+    });
+    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual(['/Users/me/shared']);
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(await screen.findByTestId('working-dir-pick'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(2);
+    });
+    expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual(['/Users/me/shared']);
+    await waitFor(() => {
+      expect(screen.getByTestId('working-dir-trigger').textContent).toContain('shared');
+    });
+
+    fireEvent.click(screen.getByLabelText('Remove shared'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('staged-contexts')?.textContent ?? '').not.toContain('shared');
+    });
+    expect(projectPatchBodies()).toHaveLength(2);
+    expect(screen.getByTestId('working-dir-trigger').textContent).toContain('shared');
+    expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ linkedDirs: ['/Users/me/shared'] }),
+    );
+  });
+
+  it('preserves a promoted context dir when clearing the working dir while its chip remains', async () => {
+    openFolderPaths = ['/Users/me/shared', '/Users/me/shared'];
+    const onProjectMetadataChange = vi.fn();
+
+    function ControlledComposer() {
+      const [metadata, setMetadata] = useState<ProjectMetadata>({ kind: 'prototype' });
+      return composerElement({
+        projectMetadata: metadata,
+        onProjectMetadataChange: (next) => {
+          onProjectMetadataChange(next);
+          setMetadata(next);
+        },
+      });
+    }
+
+    render(<ControlledComposer />);
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByText('Link local code'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(1);
+    });
+    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual(['/Users/me/shared']);
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(await screen.findByTestId('working-dir-pick'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(2);
+    });
+    expect(projectPatchBodies()[1]?.metadata?.linkedDirs).toEqual(['/Users/me/shared']);
+    await waitFor(() => {
+      expect(screen.getByTestId('working-dir-trigger').textContent).toContain('shared');
+    });
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(await screen.findByTestId('working-dir-clear'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(3);
+    });
+    expect(projectPatchBodies()[2]?.metadata?.linkedDirs).toEqual(['/Users/me/shared']);
+    expect(screen.getByTestId('staged-contexts').textContent).toContain('shared');
+    expect(screen.getByTestId('working-dir-trigger').textContent).not.toContain('shared');
+    expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ linkedDirs: ['/Users/me/shared'] }),
+    );
+  });
+
+  it('keeps a shared linked dir while another workspace item uses the same path', async () => {
+    openFolderPaths = ['/Users/me/shared'];
+    const onProjectMetadataChange = vi.fn();
+    renderComposer({
+      activeWorkspaceContext: {
+        id: 'project:project-a',
+        kind: 'project',
+        label: 'Project A',
+        title: 'Project A',
+        path: 'project-a',
+        absolutePath: '/Users/me/shared',
+      },
+      projectMetadata: { kind: 'prototype' },
+      onProjectMetadataChange,
+    });
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByText('Link local code'));
+
+    await waitFor(() => {
+      expect(projectPatchBodies()).toHaveLength(1);
+    });
+    expect(projectPatchBodies()[0]?.metadata?.linkedDirs).toEqual(['/Users/me/shared']);
+    expect(screen.getByLabelText('Remove Project A')).toBeTruthy();
+
+    fireEvent.click(screen.getAllByLabelText('Remove shared')[0]!);
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Remove shared')).toBeNull();
+    });
+    expect(projectPatchBodies()).toHaveLength(1);
+    expect(onProjectMetadataChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ linkedDirs: ['/Users/me/shared'] }),
+    );
   });
 
   it('selects an MCP server from @ search and keeps the inline token visible', async () => {

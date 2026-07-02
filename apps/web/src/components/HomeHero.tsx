@@ -23,17 +23,24 @@ import type {
   RefObject,
 } from 'react';
 import type {
+  ChatSessionMode,
   ConnectorDetail,
   DesignSystemSummary,
   InputFieldSpec,
   InstalledPluginRecord,
   McpServerConfig,
+  WorkspaceContextItem,
 } from '@open-design/contracts';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
-import { trackHomeChatComposerClick } from '../analytics/events';
+import {
+  trackContextLinkResult,
+  trackFigmaHelpModalSurfaceView,
+  trackHomeChatComposerClick,
+  trackProjectReferenceModalSurfaceView,
+} from '../analytics/events';
 import {
   chipsForGroup,
   orderedCreateChips,
@@ -74,13 +81,21 @@ import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
-import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { ComposerPlusMenu, PLUS_SUBMENU_RESOURCE_KIND } from './ComposerPlusMenu';
+import { ContextChipHoverCard } from './ContextChipHoverCard';
+import { workspaceContextDetailLine, workspaceContextKindLabel } from './workspace-context';
+import { FigmaHelpModal } from './FigmaHelpModal';
 import { TemplatePicker } from './home-hero/TemplatePicker';
 import { LibraryPicker } from './LibraryPicker';
+import { SessionModeToggle } from './SessionModeToggle';
 import { assetTitle } from './LibraryAssetMeta';
 import { libraryAssetRawUrl } from '../providers/registry';
 import type { LibraryAsset } from '@open-design/contracts';
 import { WorkingDirPicker } from './WorkingDirPicker';
+import {
+  ProjectReferenceModal,
+  type ProjectReferenceSelection,
+} from './ProjectReferenceModal';
 import {
   LexicalComposerInput,
   type LexicalComposerInputHandle,
@@ -130,6 +145,8 @@ interface Props {
   // showing: the host seeds the prompt with `scenario.text`, binds the
   // scenario's template, and creates the project -- one-click "just start".
   onSubmitScenario?: (scenario: PlaceholderScenario) => void;
+  sessionMode?: ChatSessionMode;
+  onSessionModeChange?: (mode: ChatSessionMode) => void;
   activePluginTitle: string | null;
   // True when the active plugin chip shows a user-picked plugin (Community card
   // or example-prompt preset) rather than a task-type chip's default plugin —
@@ -153,9 +170,12 @@ interface Props {
   contextOnlyPlugins?: InstalledPluginRecord[];
   contextOnlyMcpServers?: McpServerConfig[];
   contextOnlyConnectors?: ConnectorDetail[];
+  contextWorkspaceItems?: WorkspaceContextItem[];
   onRemovePluginContext?: (pluginId: string) => void;
   onRemoveMcpContext?: (serverId: string) => void;
   onRemoveConnectorContext?: (connectorId: string) => void;
+  onAddWorkspaceContext?: (item: WorkspaceContextItem) => void;
+  onRemoveWorkspaceContext?: (id: string) => void;
   onAddPlugin?: () => void;
   onAddConnector?: () => void;
   onAddMcp?: () => void;
@@ -205,7 +225,8 @@ interface Props {
   showActivePluginChip?: boolean;
   workingDir?: string | null;
   recentDirs?: string[];
-  onPickWorkingDir?: () => void;
+  onPickWorkingDir?: () => Promise<string | null> | string | null | void;
+  onPickLocalCodeDir?: () => Promise<string | null> | string | null | void;
   onSelectRecentWorkingDir?: (dir: string) => void;
   onClearWorkingDir?: () => void;
   onExamplePromptStatusChange?: (info: ExamplePromptInfo | null) => void;
@@ -257,6 +278,7 @@ const EMPTY_STAGED_FILES: File[] = [];
 const EMPTY_SKILLS: SkillSummary[] = [];
 const EMPTY_MCP_OPTIONS: McpServerConfig[] = [];
 const EMPTY_CONNECTOR_OPTIONS: ConnectorDetail[] = [];
+const EMPTY_WORKSPACE_ITEMS: WorkspaceContextItem[] = [];
 
 export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   {
@@ -265,6 +287,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPromptChange,
     onSubmit,
     onSubmitScenario = () => undefined,
+    sessionMode = 'design',
+    onSessionModeChange,
     firstRunGuide,
     activePluginTitle,
     activePluginIsExplicit = false,
@@ -280,9 +304,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     contextOnlyPlugins = EMPTY_PLUGIN_CONTEXTS,
     contextOnlyMcpServers = EMPTY_MCP_OPTIONS,
     contextOnlyConnectors = EMPTY_CONNECTOR_OPTIONS,
+    contextWorkspaceItems = EMPTY_WORKSPACE_ITEMS,
     onRemovePluginContext = () => undefined,
     onRemoveMcpContext = () => undefined,
     onRemoveConnectorContext = () => undefined,
+    onAddWorkspaceContext = () => undefined,
+    onRemoveWorkspaceContext = () => undefined,
     onAddPlugin = () => undefined,
     onAddConnector = () => undefined,
     onAddMcp = () => undefined,
@@ -324,6 +351,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     workingDir = null,
     recentDirs = [],
     onPickWorkingDir,
+    onPickLocalCodeDir,
     onSelectRecentWorkingDir,
     onClearWorkingDir,
     onExamplePromptStatusChange,
@@ -339,7 +367,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const [hoveredPlugin, setHoveredPlugin] = useState<InstalledPluginRecord | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
+  const [projectReferenceOpen, setProjectReferenceOpen] = useState(false);
+  const [figmaHelpOpen, setFigmaHelpOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const homeHeroRef = useRef<HTMLElement | null>(null);
   // Two-flash attention pulse on the send button; armed via the
   // imperative `pulseSend()` handle, cleared when the animation ends.
   const [sendAttention, setSendAttention] = useState(false);
@@ -582,6 +613,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         mcpOptions,
         pluginOptions,
         connectorOptions,
+        contextWorkspaceItems,
         selectedPluginContexts,
         stagedFiles,
         skillOptions,
@@ -593,6 +625,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       mcpOptions,
       pluginOptions,
       connectorOptions,
+      contextWorkspaceItems,
       selectedPluginContexts,
       stagedFiles,
       skillOptions,
@@ -896,6 +929,92 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPickConnector(connector, next);
   }
 
+  function insertInlineMentionSeparator() {
+    const current = editorRef.current?.getText() ?? prompt;
+    if (current.trim() && !/\s$/.test(current)) {
+      editorRef.current?.insertText(' ');
+    }
+  }
+
+  function appendWorkspacePrompt(item: WorkspaceContextItem) {
+    onAddWorkspaceContext(item);
+    insertInlineMentionSeparator();
+    editorRef.current?.insertMention({
+      token: inlineMentionToken(item.label),
+      entity: { id: item.id, kind: 'workspace', label: item.label },
+    });
+    onPromptChange(editorRef.current?.getText() ?? prompt);
+    dismissMentionPicker();
+    requestAnimationFrame(() => editorRef.current?.focus());
+  }
+
+  function handleReferenceProjects(selections: ProjectReferenceSelection[]) {
+    for (const selection of selections) {
+      const path = selection.resolvedDir.trim();
+      const label = selection.project.name || selection.project.id;
+      appendWorkspacePrompt(
+        {
+          id: `project:${selection.project.id}`,
+          kind: 'project',
+          label,
+          title: label,
+          path: selection.project.id,
+          ...(path ? { absolutePath: path } : {}),
+        }
+      );
+    }
+    setProjectReferenceOpen(false);
+    trackContextLinkResult(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      context_kind: 'project',
+      result: 'success',
+      count: selections.length,
+    });
+  }
+
+  async function handleLinkLocalCodeContext() {
+    const selected = await onPickLocalCodeDir?.();
+    if (!selected) {
+      trackContextLinkResult(analytics.track, {
+        page_name: 'home',
+        area: 'chat_composer',
+        context_kind: 'local_code',
+        result: 'cancelled',
+      });
+      return;
+    }
+    const label = selected.split(/[/\\]/).filter(Boolean).pop() || selected;
+    appendWorkspacePrompt(
+      {
+        id: `local-code:${selected}`,
+        kind: 'local-code',
+        label,
+        title: label,
+        path: selected,
+        absolutePath: selected,
+      }
+    );
+    trackContextLinkResult(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      context_kind: 'local_code',
+      result: 'success',
+      count: 1,
+    });
+  }
+
+  function openDesignSystemPicker() {
+    const trigger = homeHeroRef.current?.querySelector<HTMLButtonElement>(
+      '[data-testid="home-hero-design-system-trigger"]',
+    );
+    if (!trigger || trigger.disabled) return;
+    window.requestAnimationFrame(() => {
+      if (trigger.getAttribute('aria-expanded') !== 'true') trigger.click();
+      trigger.focus({ preventScroll: true });
+    });
+  }
+
   // Lexical reports the active @-trigger derived from the caret. HomeHero
   // has no slash surface, so only the mention branch is wired.
   function handleTrigger({
@@ -1076,12 +1195,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     Boolean(activeSkillTitle) ||
     contextOnlyPlugins.length > 0 ||
     contextOnlyMcpServers.length > 0 ||
-    contextOnlyConnectors.length > 0;
+    contextOnlyConnectors.length > 0 ||
+    contextWorkspaceItems.length > 0;
 
   let optionRenderIndex = 0;
 
   return (
-    <section className="home-hero" data-testid="home-hero">
+    <section ref={homeHeroRef} className="home-hero" data-testid="home-hero">
       <div className="home-hero__brand" aria-hidden>
         <span className="home-hero__brand-mark">
           <img src="/app-icon.svg" alt="" draggable={false} />
@@ -1266,10 +1386,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               </span>
             ) : null}
             {contextOnlyPlugins.map((plugin) => (
-              <span
+              <ContextChipHoverCard
                 key={`ctx-plugin-${plugin.id}`}
                 className="home-hero__active-chip home-hero__active-chip--context"
                 data-testid={`home-hero-context-plugin-${plugin.id}`}
+                typeLabel="Plugin"
+                detail={plugin.id}
               >
                 <span className="home-hero__active-icon" aria-hidden>
                   <Icon name="sliders" size={12} />
@@ -1278,7 +1400,16 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <button
                   type="button"
                   className="home-hero__active-clear od-tooltip"
-                  onClick={() => onRemovePluginContext(plugin.id)}
+                  onClick={() => {
+                    trackHomeChatComposerClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'context_remove',
+                      resource_kind: 'plugin',
+                      resource_id: plugin.id,
+                    });
+                    onRemovePluginContext(plugin.id);
+                  }}
                   aria-label={t('chat.removeAria', { name: plugin.title })}
                   title={t('common.close')}
                   data-tooltip={t('common.close')}
@@ -1286,15 +1417,17 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 >
                   <Icon name="close" size={9} />
                 </button>
-              </span>
+              </ContextChipHoverCard>
             ))}
             {contextOnlyMcpServers.map((server) => {
               const label = server.label || server.id;
               return (
-                <span
+                <ContextChipHoverCard
                   key={`ctx-mcp-${server.id}`}
                   className="home-hero__active-chip home-hero__active-chip--context"
                   data-testid={`home-hero-context-mcp-${server.id}`}
+                  typeLabel="MCP server"
+                  detail={server.url || server.id}
                 >
                   <span className="home-hero__active-icon" aria-hidden>
                     <Icon name="sliders" size={12} />
@@ -1303,7 +1436,16 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   <button
                     type="button"
                     className="home-hero__active-clear od-tooltip"
-                    onClick={() => onRemoveMcpContext(server.id)}
+                    onClick={() => {
+                      trackHomeChatComposerClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'chat_composer',
+                        element: 'context_remove',
+                        resource_kind: 'mcp',
+                        resource_id: server.id,
+                      });
+                      onRemoveMcpContext(server.id);
+                    }}
                     aria-label={t('chat.removeAria', { name: label })}
                     title={t('common.close')}
                     data-tooltip={t('common.close')}
@@ -1311,14 +1453,16 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   >
                     <Icon name="close" size={9} />
                   </button>
-                </span>
+                </ContextChipHoverCard>
               );
             })}
             {contextOnlyConnectors.map((connector) => (
-              <span
+              <ContextChipHoverCard
                 key={`ctx-connector-${connector.id}`}
                 className="home-hero__active-chip home-hero__active-chip--context"
                 data-testid={`home-hero-context-connector-${connector.id}`}
+                typeLabel="Connector"
+                detail={connector.provider || connector.id}
               >
                 <span className="home-hero__active-icon" aria-hidden>
                   <Icon name="link" size={12} />
@@ -1327,7 +1471,16 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <button
                   type="button"
                   className="home-hero__active-clear od-tooltip"
-                  onClick={() => onRemoveConnectorContext(connector.id)}
+                  onClick={() => {
+                    trackHomeChatComposerClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'context_remove',
+                      resource_kind: 'connector',
+                      resource_id: connector.id,
+                    });
+                    onRemoveConnectorContext(connector.id);
+                  }}
                   aria-label={t('chat.removeAria', { name: connector.name })}
                   title={t('common.close')}
                   data-tooltip={t('common.close')}
@@ -1335,7 +1488,43 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 >
                   <Icon name="close" size={9} />
                 </button>
-              </span>
+              </ContextChipHoverCard>
+            ))}
+            {contextWorkspaceItems.map((item) => (
+              <ContextChipHoverCard
+                key={`ctx-workspace-${item.id}`}
+                className="home-hero__active-chip home-hero__active-chip--context"
+                data-testid={`home-hero-context-workspace-${item.id}`}
+                typeLabel={workspaceContextKindLabel(item.kind)}
+                detail={workspaceContextDetailLine(item)}
+              >
+                <span className="home-hero__active-icon" aria-hidden>
+                  <Icon name={item.kind === 'local-code' ? 'terminal' : 'folder'} size={12} />
+                </span>
+                <span className="home-hero__active-label">{item.label}</span>
+                <button
+                  type="button"
+                  className="home-hero__active-clear od-tooltip"
+                  onClick={() => {
+                    trackHomeChatComposerClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'context_remove',
+                      resource_kind: 'workspace',
+                      resource_id: item.id,
+                    });
+                    const nextPrompt = stripHomeMentionToken(prompt, item.label);
+                    if (nextPrompt !== prompt) onPromptChange(nextPrompt);
+                    onRemoveWorkspaceContext(item.id);
+                  }}
+                  aria-label={t('chat.removeAria', { name: item.label })}
+                  title={t('common.close')}
+                  data-tooltip={t('common.close')}
+                  data-testid={`home-hero-context-clear-${item.id}`}
+                >
+                  <Icon name="close" size={9} />
+                </button>
+              </ContextChipHoverCard>
             ))}
           </div>
         ) : null}
@@ -1515,6 +1704,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           <div className="home-hero__foot-left">
             <ComposerPlusMenu
               triggerTestId="home-hero-plus-trigger"
+              placementPreference="down"
               onOpen={() =>
                 trackHomeChatComposerClick(analytics.track, {
                   page_name: 'home',
@@ -1522,6 +1712,23 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   element: 'plus_menu_open',
                 })
               }
+              onSubmenuOpen={(submenu) => {
+                if (submenu === 'toolbox') return;
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_submenu_open',
+                  resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
+                });
+              }}
+              onSearchUsed={(submenu) => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_search',
+                  resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
+                });
+              }}
               connectors={connectorOptions}
               onPickConnector={(connector) => {
                 trackHomeChatComposerClick(analytics.track, {
@@ -1601,6 +1808,30 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 });
                 fileInputRef.current?.click();
               }}
+              onReferenceProject={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_pick',
+                  resource_kind: 'workspace',
+                  resource_id: 'reference-project',
+                });
+                trackProjectReferenceModalSurfaceView(analytics.track, {
+                  page_name: 'home',
+                  area: 'project_reference_modal',
+                });
+                setProjectReferenceOpen(true);
+              }}
+              onLinkLocalCode={onPickLocalCodeDir ? () => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_pick',
+                  resource_kind: 'workspace',
+                  resource_id: 'local-code',
+                });
+                void handleLinkLocalCodeContext();
+              } : undefined}
               onSelectFromLibrary={() => {
                 trackHomeChatComposerClick(analytics.track, {
                   page_name: 'home',
@@ -1617,12 +1848,52 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 });
                 onImportFigma();
               } : undefined}
+              onShowFigmaHelp={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'figma_help',
+                });
+                trackFigmaHelpModalSurfaceView(analytics.track, {
+                  page_name: 'home',
+                  area: 'figma_help_modal',
+                });
+                setFigmaHelpOpen(true);
+              }}
+              onOpenDesignSystems={onDesignSystemChange ? () => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'design_system_open',
+                });
+                openDesignSystemPicker();
+              } : undefined}
             />
             {libraryPickerOpen ? (
               <LibraryPicker
                 onClose={() => setLibraryPickerOpen(false)}
                 onConfirm={(assets) => importLibraryAssets(assets)}
               />
+            ) : null}
+            {projectReferenceOpen ? (
+              <ProjectReferenceModal
+                onClose={() => {
+                  // Only the dismiss paths (X / backdrop / Escape / Cancel)
+                  // land here — a confirmed pick closes via
+                  // handleReferenceProjects, which reports 'success'.
+                  trackContextLinkResult(analytics.track, {
+                    page_name: 'home',
+                    area: 'chat_composer',
+                    context_kind: 'project',
+                    result: 'cancelled',
+                  });
+                  setProjectReferenceOpen(false);
+                }}
+                onSelect={handleReferenceProjects}
+              />
+            ) : null}
+            {figmaHelpOpen ? (
+              <FigmaHelpModal onClose={() => setFigmaHelpOpen(false)} />
             ) : null}
             <TemplatePicker
               templates={templateChips}
@@ -1662,6 +1933,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             ) : null}
           </div>
           <div className="home-hero__foot-right">
+            <div className="home-hero__mode-switcher">
+              <SessionModeToggle
+                mode={sessionMode}
+                onChange={onSessionModeChange}
+              />
+            </div>
             {executionSwitcher ? (
               <div className="home-hero__execution-switcher">
                 {executionSwitcher}
@@ -1679,7 +1956,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               aria-label={submitting ? t('chat.comments.sending') : t('homeHero.run')}
               aria-busy={submitting}
             >
-              <Icon name="send" size={13} />
+              <Icon name="send" size={16} />
               <span>{submitting ? t('chat.comments.sending') : t('chat.send')}</span>
             </button>
           </div>
@@ -1709,7 +1986,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   area: 'chat_composer',
                   element: 'working_dir',
                 });
-                onPickWorkingDir();
+                void onPickWorkingDir();
               }}
               onSelectRecent={(dir) => {
                 trackHomeChatComposerClick(analytics.track, {
@@ -2118,6 +2395,7 @@ function buildHomeMentionEntities({
   activeSkillId,
   activeSkillTitle,
   connectorOptions,
+  contextWorkspaceItems,
   mcpOptions,
   pluginOptions,
   selectedPluginContexts,
@@ -2128,6 +2406,7 @@ function buildHomeMentionEntities({
   activeSkillId: string | null;
   activeSkillTitle: string | null;
   connectorOptions: ConnectorDetail[];
+  contextWorkspaceItems: WorkspaceContextItem[];
   mcpOptions: McpServerConfig[];
   pluginOptions: InstalledPluginRecord[];
   selectedPluginContexts: InstalledPluginRecord[];
@@ -2135,6 +2414,15 @@ function buildHomeMentionEntities({
   skillOptions: SkillSummary[];
 }): InlineMentionEntity[] {
   const entities: InlineMentionEntity[] = [];
+  for (const item of contextWorkspaceItems) {
+    entities.push({
+      id: item.id,
+      kind: 'workspace',
+      label: item.label,
+      token: inlineMentionToken(item.label),
+      title: `Workspace: ${item.label}`,
+    });
+  }
   const fileSeen = new Set<string>();
   for (const file of stagedFiles) {
     if (fileSeen.has(file.name)) continue;

@@ -900,6 +900,115 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
       retryable: true,
       user_action: 'retry',
     });
+
+    expect(
+      classify(
+        'AGENT_CONNECTION_DROPPED',
+        'Claude Code lost its connection to the Anthropic API before the response finished.',
+        [
+          { event: 'agent', data: { type: 'text_delta', delta: 'working' } },
+          errorEvent(
+            'AGENT_CONNECTION_DROPPED',
+            'Claude Code lost its connection to the Anthropic API before the response finished.',
+            true,
+          ),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'stream_disconnected',
+      failure_stage: 'child_close',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(classify('AGENT_EXECUTION_FAILED', 'Unexpected server error. Check server logs for details.')).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_5xx',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(classify('AGENT_EXECUTION_FAILED', 'NotFoundError: OpenAIException - {"detail":"Not Found"}')).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      retryable: false,
+      user_action: 'none',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'No payment method. Add a payment method here: https://opencode.ai/workspace/wrk_123/billing',
+      ),
+    ).toMatchObject({
+      failure_category: 'rate_limit',
+      failure_detail: 'workspace_credits_exhausted',
+      retryable: false,
+      user_action: 'recharge',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'request (34421 tokens) exceeds the available context size (32768 tokens), try increasing it',
+      ),
+    ).toMatchObject({
+      failure_category: 'prompt_too_large',
+      failure_detail: 'prompt_too_large',
+      failure_stage: 'prompt_send',
+      retryable: false,
+      user_action: 'reduce_context',
+    });
+
+    expect(classify('AGENT_EXECUTION_FAILED', 'Codex CLI was not found. Please update or reinstall OpenAI Codex.')).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'cli_not_installed',
+      failure_stage: 'spawn',
+      retryable: false,
+      user_action: 'install_cli',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'Error: Missing optional dependency @openai/codex-win32-x64. Reinstall Codex: npm install -g @openai/codex@latest',
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'cli_not_installed',
+      retryable: false,
+      user_action: 'install_cli',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'No auth type is selected. Please configure an auth type before running in non-interactive mode.',
+      ),
+    ).toMatchObject({
+      failure_category: 'auth',
+      failure_detail: 'auth_required',
+      retryable: false,
+      user_action: 'login',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        [
+          '============================================================',
+          'Bun v1.3.10 (30e609e0) Windows x64 (baseline)',
+          'panic(main thread): Illegal instruction',
+          'oh no: Bun has crashed.',
+        ].join('\n'),
+      ),
+    ).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'process_crashed',
+      retryable: false,
+      user_action: 'none',
+    });
   });
 });
 

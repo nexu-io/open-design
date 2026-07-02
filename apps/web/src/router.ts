@@ -172,18 +172,50 @@ export function buildPath(route: Route): string {
 // warning. The `history` API call itself stays synchronous so the URL
 // bar updates immediately; only the `useRoute()` subscriber updates
 // are deferred past the current render.
+// Each history entry carries a monotonic depth (`odIndex`) so `goBack()` can
+// tell whether there is an in-app entry behind the current one. We store it in
+// `history.state` — nothing else reads host history state — so it survives
+// reloads and the browser's own back/forward. The very first entry (a fresh
+// load or deep link) has no state, which reads as index 0.
+interface HistoryState {
+  odIndex: number;
+}
+
+function readHistoryIndex(): number {
+  const state = window.history.state as Partial<HistoryState> | null;
+  return typeof state?.odIndex === 'number' ? state.odIndex : 0;
+}
+
 export function navigate(route: Route, opts: { replace?: boolean } = {}): void {
   const target = buildPath(route);
   const current = window.location.pathname;
   if (target === current) return;
+  const index = readHistoryIndex();
+  // `replace` keeps the current depth (it swaps the entry in place); a push
+  // adds one level so the entry we are leaving becomes the "previous layer".
+  const nextState: HistoryState = { odIndex: opts.replace ? index : index + 1 };
   if (opts.replace) {
-    window.history.replaceState(null, '', target);
+    window.history.replaceState(nextState, '', target);
   } else {
-    window.history.pushState(null, '', target);
+    window.history.pushState(nextState, '', target);
   }
   queueMicrotask(() => {
     window.dispatchEvent(new PopStateEvent('popstate'));
   });
+}
+
+// Step back to the route the user actually came from. We pop the browser
+// history stack (which `navigate()` builds via pushState) so "back" lands on
+// the real previous layer — Projects, Tasks, a design system, wherever — not a
+// hardcoded destination. When the current entry is the first in-app entry
+// (`odIndex` 0: deep link or fresh load), there is nothing in-app to pop, so we
+// navigate to `fallback` instead of letting `history.back()` escape the app.
+export function goBack(fallback: Route): void {
+  if (readHistoryIndex() > 0) {
+    window.history.back();
+  } else {
+    navigate(fallback, { replace: true });
+  }
 }
 
 let cachedPathname: string | null = null;
