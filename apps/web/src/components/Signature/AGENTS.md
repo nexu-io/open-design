@@ -21,13 +21,13 @@ without code churn.
 ## Import boundary
 
 The signature **engine** lives in `@open-design/contracts/design-signature`.
-Import it from there — never reach into `apps/daemon/src/**`.
+Import it from there, never reach into `apps/daemon/src/**`.
 
 ```ts
 // Correct
 import { computeSignature, diffSignatures } from '@open-design/contracts/design-signature';
 
-// Forbidden — violates web/daemon boundary rule in AGENTS.md
+// Forbidden, violates web/daemon boundary rule in AGENTS.md
 import { ... } from '../../../../../../daemon/src/design-signature';
 ```
 
@@ -38,7 +38,7 @@ This boundary is enforced by the repo-wide rule in `AGENTS.md`:
 
 - The strip is **disabled by default**. Users enable it in **Settings → Design Signature**.
 - All computation is **in-browser**: `useDesignSignatureDiff` calls the pure engine from
-  `@open-design/contracts` directly — there is no daemon HTTP round-trip and no project
+  `@open-design/contracts` directly, there is no daemon HTTP round-trip and no project
   metadata `PATCH`.
 - The strip renders **above** the artifact preview in `FileWorkspace.tsx` and is
   conditionally mounted only when enabled.
@@ -52,7 +52,7 @@ history** across sessions or across browser tabs.
 
 Persistent cross-session history is tracked in **issue #1241**. Until that ships,
 do not store baseline signatures in `localStorage`, project metadata, or any
-daemon-owned store — that would be a scope expansion beyond the current design.
+daemon-owned store, that would be a scope expansion beyond the current design.
 
 ## Invariants
 
@@ -79,7 +79,7 @@ daemon-owned store — that would be a scope expansion beyond the current design
    before pushing to confirm the hook and component suites are green.
 4. For CSS changes in `DesignSignatureStrip.module.css`, verify the accordion
    animation uses the canonical `.accordion-collapsible` + `.accordion-collapsible-inner`
-   class pair — do not introduce a bespoke height-animation approach.
+   class pair, do not introduce a bespoke height-animation approach.
 
 ## Related
 

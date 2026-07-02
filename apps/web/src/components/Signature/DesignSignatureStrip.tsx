@@ -10,7 +10,7 @@ import { StripExpanded } from './StripExpanded';
  * Opt-in, collapsed-by-default strip on the preview surface. Leads with the
  * plain-language "what changed since last version" diff (issue #4359 / Eli's
  * Discord direction); the per-strand signature is demoted to an expandable
- * "Why" detail. Computes in-browser via the contracts engine — no round-trip.
+ * "Why" detail. Computes in-browser via the contracts engine, no round-trip.
  */
 export function DesignSignatureStrip({
   artifactHtml,

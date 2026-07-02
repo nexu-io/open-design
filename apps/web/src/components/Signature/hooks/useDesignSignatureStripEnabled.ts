@@ -11,7 +11,7 @@ interface ConfigShape {
 /**
  * Settings-toggle flag for the Design Signature strip. Unlike Critique
  * Theater, this is a pure client view-preference: the strip computes
- * entirely in-browser (no backend gating), so there is no project PATCH —
+ * entirely in-browser (no backend gating), so there is no project PATCH ,
  * only the localStorage blob + a same-tab CustomEvent for live updates and
  * the cross-tab `storage` event for other windows. Defaults to false (opt-in).
  */

@@ -1,11 +1,11 @@
-// Design Signature — a compact, deterministic fingerprint of a design,
+// Design Signature, a compact, deterministic fingerprint of a design,
 // computed from the tokens it actually uses (palette, type rhythm, spacing
 // cadence, structural density) rather than from a screenshot.
 //
 // The point: an artifact's *look* is opaque, but its design DNA is not. Two
 // artifacts that render similarly can have very different signatures (a tight
 // type scale vs. a chaotic one; a 3-color palette vs. 11). The signature makes
-// that structure legible and comparable — same design across versions shows
+// that structure legible and comparable, same design across versions shows
 // exactly which strand changed.
 //
 // Pure and dependency-free: it consumes the DesignExtractReport produced by
@@ -140,12 +140,12 @@ function scorePalette(colors: string[]): SignatureStrand {
       n === 0
         ? 'No colors detected.'
         : `${n} distinct color${n === 1 ? '' : 's'}` +
-          (n > 6 ? ' — broad palette, likely unintentional.' : '.'),
+          (n > 6 ? ', broad palette, likely unintentional.' : '.'),
   };
 }
 
 // Type rhythm: a design wants a small, deliberate set of font families
-// (typically 1–2). More than that fragments the voice.
+// (typically 1-2). More than that fragments the voice.
 function scoreRhythm(fontFamilies: number): SignatureStrand {
   let score: number;
   if (fontFamilies === 0) score = 0;
@@ -159,7 +159,7 @@ function scoreRhythm(fontFamilies: number): SignatureStrand {
       fontFamilies === 0
         ? 'No font families detected.'
         : `${fontFamilies} font famil${fontFamilies === 1 ? 'y' : 'ies'}` +
-          (fontFamilies > 2 ? ' — type voice is fragmented.' : '.'),
+          (fontFamilies > 2 ? ', type voice is fragmented.' : '.'),
   };
 }
 
@@ -176,7 +176,7 @@ function scoreCadence(spacing: string[]): SignatureStrand {
   const nonPx = spacing.length - pxValues.length;
 
   if (pxValues.length === 0) {
-    // All rem/em/other — assume a systematic scale.
+    // All rem/em/other, assume a systematic scale.
     return {
       key: 'cadence',
       label: 'Cadence',
@@ -223,7 +223,7 @@ function scoreDensity(counts: {
 }
 
 // ---------------------------------------------------------------------------
-// Normalization helpers — deterministic, dependency-free.
+// Normalization helpers, deterministic, dependency-free.
 // ---------------------------------------------------------------------------
 
 /** Lowercase + expand shorthand hex so `#FFF` and `#ffffff` dedupe together. */
@@ -236,7 +236,7 @@ export function normalizeColor(value: string): string | null {
     else if (h.length === 4) h = h.split('').map((c) => c + c).join('');
     return '#' + h;
   }
-  // rgb()/hsl() — collapse internal whitespace so equivalent strings dedupe.
+  // rgb()/hsl(), collapse internal whitespace so equivalent strings dedupe.
   if (/^(rgb|hsl)a?\(/.test(v)) return v.replace(/\s+/g, '');
   return null;
 }
@@ -325,7 +325,7 @@ function dominantBaseUnit(pxValues: number[]): number {
 
 // A short, stable hash of the structural inputs. Equal designs (same tokens)
 // produce the same fingerprint; a single token change flips it. Deterministic
-// FNV-1a over the sorted, normalized token set — no crypto dependency needed.
+// FNV-1a over the sorted, normalized token set, no crypto dependency needed.
 function fingerprintOf(t: {
   colors: string[];
   spacing: string[];
@@ -353,7 +353,7 @@ function fingerprintOf(t: {
 }
 
 // ---------------------------------------------------------------------------
-// Diff — what changed between two signatures (the previous version vs. now).
+// Diff, what changed between two signatures (the previous version vs. now).
 // Pure and deterministic: it compares the token sets and strand scores and
 // translates them into plain-language change lines a designer can read at a
 // glance ("Heading scale increased", "Button radius increased").

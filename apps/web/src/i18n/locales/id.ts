@@ -3058,7 +3058,7 @@ export const id: Dict = {
   'designSignature.collapsedLabel': 'Signature',
   'designSignature.changesSince': 'Changes since last version',
   'designSignature.changeCount': '{n} changes since last version',
-  'designSignature.noPrevious': 'First version — no previous to compare.',
+  'designSignature.noPrevious': 'First version, no previous to compare.',
   'designSignature.noChanges': 'No changes since last version.',
   'designSignature.whyDetail': 'Why (signature detail)',
   'designSignature.expand': 'Expand design changes',
