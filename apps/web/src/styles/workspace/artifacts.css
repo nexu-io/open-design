@@ -705,6 +705,8 @@
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field-label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
 .settings-divider { height: 1px; background: var(--border-soft); margin: 8px 0; border: none; }
+.settings-subsection { display: flex; flex-direction: column; gap: 8px; }
+.settings-subsection-title { margin: 0; font-size: 12px; font-weight: 600; color: var(--text); letter-spacing: 0.02em; }
 .memory-model-inline__select {
   width: 100%;
   min-width: 0;

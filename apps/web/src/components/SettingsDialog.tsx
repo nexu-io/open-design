@@ -3528,8 +3528,8 @@ export function SettingsDialog({
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
     appearance: { title: t('settings.appearance'), subtitle: t('settings.appearanceHint') },
     critiqueTheater: {
-      title: t('critiqueTheater.settingsNav'),
-      subtitle: t('critiqueTheater.settingsNavHint'),
+      title: t('advancedDesign.settingsNav'),
+      subtitle: t('advancedDesign.settingsNavHint'),
     },
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
     privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
@@ -4009,10 +4009,10 @@ export function SettingsDialog({
               className={`settings-nav-item${activeSection === 'critiqueTheater' ? ' active' : ''}`}
               onClick={() => setActiveSection('critiqueTheater')}
             >
-              <Icon name="comment" size={18} />
+              <Icon name="sliders" size={18} />
               <span>
-                <strong>{t('critiqueTheater.settingsNav')}</strong>
-                <small>{t('critiqueTheater.settingsNavHint')}</small>
+                <strong>{t('advancedDesign.settingsNav')}</strong>
+                <small>{t('advancedDesign.settingsNavHint')}</small>
               </span>
             </button>
             <button
@@ -8146,66 +8146,72 @@ function CritiqueTheaterSection() {
     <section className="settings-section">
       <div className="section-head">
         <div>
-          <h3>{t('critiqueTheater.settingsNav')}</h3>
-          <p className="hint">{t('critiqueTheater.settingsNavHint')}</p>
+          <h3>{t('advancedDesign.settingsNav')}</h3>
+          <p className="hint">{t('advancedDesign.settingsNavHint')}</p>
         </div>
       </div>
-      <label className="field">
-        <span className="field-label">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => {
-              const next = e.target.checked;
-              trackSettingsDesignReviewClick(analytics.track, {
-                page_name: 'settings',
-                area: 'design_review',
-                element: 'enable_toggle',
-                status_before: enabled ? 'on' : 'off',
-                status_after: next ? 'on' : 'off',
-                has_active_project: activeProjectId !== null,
-              });
-              if (activeProjectId !== null) {
-                void setCritiqueTheaterEnabled(next, { projectId: activeProjectId });
-              } else {
-                void setCritiqueTheaterEnabled(next);
-              }
-            }}
-          />
-          {' '}
-          {t('critiqueTheater.settingsEnabledLabel')}
-        </span>
-        <small className="hint">
-          {t('critiqueTheater.settingsEnabledDescription')}
-        </small>
-        {activeProjectId !== null ? (
+      <div className="settings-subsection">
+        <h4 className="settings-subsection-title">{t('advancedDesign.designJuryTitle')}</h4>
+        <label className="field">
+          <span className="field-label">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => {
+                const next = e.target.checked;
+                trackSettingsDesignReviewClick(analytics.track, {
+                  page_name: 'settings',
+                  area: 'design_review',
+                  element: 'enable_toggle',
+                  status_before: enabled ? 'on' : 'off',
+                  status_after: next ? 'on' : 'off',
+                  has_active_project: activeProjectId !== null,
+                });
+                if (activeProjectId !== null) {
+                  void setCritiqueTheaterEnabled(next, { projectId: activeProjectId });
+                } else {
+                  void setCritiqueTheaterEnabled(next);
+                }
+              }}
+            />
+            {' '}
+            {t('critiqueTheater.settingsEnabledLabel')}
+          </span>
           <small className="hint">
-            {t('critiqueTheater.settingsEnabledProjectHint')}
+            {t('critiqueTheater.settingsEnabledDescription')}
           </small>
-        ) : (
-          <small className="hint">
-            {t('critiqueTheater.settingsEnabledNoProjectHint')}
-          </small>
-        )}
-      </label>
+          {activeProjectId !== null ? (
+            <small className="hint">
+              {t('critiqueTheater.settingsEnabledProjectHint')}
+            </small>
+          ) : (
+            <small className="hint">
+              {t('critiqueTheater.settingsEnabledNoProjectHint')}
+            </small>
+          )}
+        </label>
+      </div>
       <div className="settings-divider" aria-hidden="true" />
-      <label className="field">
-        <span className="field-label">
-          <input
-            type="checkbox"
-            checked={waitTeamEnabled}
-            onChange={(e) => {
-              const next = e.target.checked;
-              setWaitTeamEnabled(next);
-            }}
-          />
-          {' '}
-          {t('waiteam.settingsEnabledLabel')}
-        </span>
-        <small className="hint">
-          {t('waiteam.settingsEnabledDescription')}
-        </small>
-      </label>
+      <div className="settings-subsection">
+        <h4 className="settings-subsection-title">{t('advancedDesign.multiAgentTitle')}</h4>
+        <label className="field">
+          <span className="field-label">
+            <input
+              type="checkbox"
+              checked={waitTeamEnabled}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setWaitTeamEnabled(next);
+              }}
+            />
+            {' '}
+            {t('waiteam.settingsEnabledLabel')}
+          </span>
+          <small className="hint">
+            {t('waiteam.settingsEnabledDescription')}
+          </small>
+        </label>
+      </div>
     </section>
   );
 }
