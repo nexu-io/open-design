@@ -370,6 +370,22 @@ export interface ChatSendMeta {
   entryFrom?: ChatAnalyticsEntryFrom;
   /** One-shot run mode override for seeded follow-ups before parent state catches up. */
   sessionMode?: ChatSessionMode;
+  /** Multi-agent team selected via @team mention. When present, the run
+   *  should route through the multi-agent team module instead of the
+   *  default single-agent path. */
+  team?: {
+    id: string;
+    mode: string;
+    name: string;
+    assignments: Array<{
+      agentId: string;
+      agentType: string;
+      agentName: string;
+      role: string;
+      score: number;
+      reason: string;
+    }>;
+  };
 }
 
 /**
@@ -1134,6 +1150,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setStagedSkills([]);
       setStagedMcpServers([]);
       setStagedConnectors([]);
+      setStagedTeam(null);
       setStagedWorkspaceContexts(linkedWorkspaceContexts);
       setWorkspaceLinkedDirAdds(nextWorkspaceLinkedDirAdds);
       if (
@@ -1224,6 +1241,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         ...(meta ?? {}),
         ...(pendingEntryFrom && !meta?.entryFrom ? { entryFrom: pendingEntryFrom } : {}),
         ...(pendingSessionMode && !meta?.sessionMode ? { sessionMode: pendingSessionMode } : {}),
+        ...(stagedTeam && !meta?.team ? { team: stagedTeam } : {}),
       };
       const effectiveMeta =
         Object.keys(effectiveMetaShape).length > 0 ? effectiveMetaShape : undefined;
@@ -2114,6 +2132,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setStagedMcpServers((prev) => prev.filter((m) => set.has(`mcp:${m.id}`)));
       setStagedConnectors((prev) =>
         prev.filter((c) => set.has(`connector:${c.id}`)),
+      );
+      setStagedTeam((prev) =>
+        prev && !set.has(`team:${prev.id}`) ? null : prev,
       );
       setStagedWorkspaceContexts((prev) =>
         prev.filter((item) => set.has(`workspace:${item.id}`) || Boolean(workspaceLinkedDirAdds[item.id])),

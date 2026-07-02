@@ -3993,6 +3993,14 @@ export interface Dict {
   'critiqueTheater.settingsEnabledProjectHint': string;
   'critiqueTheater.settingsEnabledNoProjectHint': string;
 
+  // Advanced Design (Design Jury + Multi-Agent Team)
+  'advancedDesign.settingsNav': string;
+  'advancedDesign.settingsNavHint': string;
+  'advancedDesign.designJuryTitle': string;
+  'advancedDesign.multiAgentTitle': string;
+  'waiteam.settingsEnabledLabel': string;
+  'waiteam.settingsEnabledDescription': string;
+
   // Diagnostics export
   'diagnostics.exportTitle': string;
   'diagnostics.exportButton': string;
