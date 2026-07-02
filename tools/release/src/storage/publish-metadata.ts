@@ -87,6 +87,35 @@ const targetDefs: TargetDef[] = [
   { enableEnv: "ENABLE_LINUX_X64", label: "Linux x64", legacyKey: "linux", resultEnv: "LINUX_X64_RESULT", target: "linux_x64" },
 ];
 
+// Optional per-release "what's new" highlights forwarded verbatim into
+// metadata.json so the packaged app can show a post-update card. Content is
+// keyed by the stable base version at tools/release/whats-new/<base>.json
+// (override the path with RELEASE_WHATS_NEW_PATH). A missing file is the
+// normal quiet case; a present-but-malformed file fails the publish loudly so
+// broken highlights never ship silently.
+function readWhatsNewBlock(baseVersion: string): Record<string, unknown> | null {
+  const path = optional("RELEASE_WHATS_NEW_PATH", join(process.cwd(), "tools", "release", "whats-new", `${baseVersion}.json`));
+  if (!existsSync(path)) return null;
+
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  if (typeof parsed !== "object" || parsed == null || Array.isArray(parsed)) {
+    throw new Error(`whats-new file must be a JSON object: ${path}`);
+  }
+  const block = parsed as Record<string, unknown>;
+  for (const field of ["title", "body"] as const) {
+    if (typeof block[field] !== "string" || (block[field] as string).trim().length === 0) {
+      throw new Error(`whats-new file requires a non-empty string "${field}": ${path}`);
+    }
+  }
+  for (const field of ["imageUrl", "linkUrl"] as const) {
+    if (block[field] != null && !String(block[field]).startsWith("https://")) {
+      throw new Error(`whats-new "${field}" must be an HTTPS URL: ${path}`);
+    }
+  }
+  console.log(`including whats-new highlights from ${path}`);
+  return block;
+}
+
 function releaseMetadataFields(): Record<string, unknown> {
   const fields = releaseMetadataVersionFields(releaseChannel, releaseVersion);
   const baseVersion = typeof fields.baseVersion === "string" ? fields.baseVersion : "";
@@ -294,8 +323,15 @@ if (assetVersionSuffix === "auto") {
 const versionPrefix = optional("RELEASE_VERSION_PREFIX", `${releaseChannel}/versions/${releaseVersion}${assetVersionSuffix}`);
 
 const latestMetadataUpdated = releaseState === "complete";
+const releaseFields = releaseMetadataFields();
+const whatsNew = readWhatsNewBlock(
+  typeof releaseFields.baseVersion === "string" && releaseFields.baseVersion.length > 0
+    ? releaseFields.baseVersion
+    : releaseVersion,
+);
 const metadata = {
-  ...releaseMetadataFields(),
+  ...releaseFields,
+  ...(whatsNew != null ? { whatsNew } : {}),
   channel: releaseChannel,
   expectedPlatforms: expectedTargets,
   expectedTargets,

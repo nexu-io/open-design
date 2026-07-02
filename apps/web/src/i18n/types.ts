@@ -948,6 +948,14 @@ export interface Dict {
   'updater.readyVersion': string;
   'updater.upToDate': string;
 
+  // Post-update "what's new" card on the home surface. Release-configured
+  // copy comes from the release feed; these keys cover the card chrome and
+  // the generic fallback when a version ships without highlights.
+  'whatsNew.updatedTitle': string;
+  'whatsNew.genericBody': string;
+  'whatsNew.cta': string;
+  'whatsNew.dismissAria': string;
+
   // Newsletter email field on the onboarding About-you step.
   'newsletter.label': string;
   'newsletter.placeholder': string;

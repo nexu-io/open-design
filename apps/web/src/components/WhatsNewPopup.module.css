@@ -1,0 +1,87 @@
+/* Post-update "what's new" card. Anchored to the bottom-right of the home
+   surface (mirrors the reference toast placement) and layered under modal
+   dialogs so it never blocks a deliberate user flow. */
+.card {
+  position: fixed;
+  right: 24px;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  z-index: 1400;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(400px, calc(100vw - 48px));
+  padding: 14px 16px;
+  border: 1px solid var(--border, #d0d7de);
+  border-radius: var(--radius-md, 10px);
+  background: var(--bg-panel, var(--bg, #fff));
+  color: var(--text, #1f2328);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.headerIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-muted, var(--text));
+}
+
+.title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.close {
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+
+.content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.body {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted, var(--text));
+  overflow-wrap: anywhere;
+}
+
+.image {
+  flex: 0 0 auto;
+  width: 132px;
+  max-height: 132px;
+  object-fit: cover;
+  border-radius: var(--radius, 8px);
+  border: 1px solid var(--border, #d0d7de);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+@media (max-width: 640px) {
+  .card {
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+
+  .image {
+    width: 96px;
+  }
+}

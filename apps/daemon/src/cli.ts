@@ -335,6 +335,7 @@ const SUBCOMMAND_MAP = {
   export: runExport,
   status: runStatus,
   version: runVersion,
+  'whats-new': runWhatsNew,
   doctor: runDoctor,
   config: runConfig,
   library: runLibrary,
@@ -8059,6 +8060,40 @@ async function runVersion(args) {
     ? data.version
     : (data?.version?.version ?? JSON.stringify(data));
   console.log(version);
+}
+
+// `od whats-new` — CLI mirror of the home-surface post-update highlights
+// card. Prints the release-configured "what's new" copy for the running
+// version (or a generic pointer at the release notes when none is
+// configured), from the same /api/whats-new endpoint the web UI reads.
+async function runWhatsNew(args) {
+  const flags = parseFlags(args, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
+  if (flags.help || flags.h) {
+    console.log(`Usage:
+  od whats-new [--json]   Print the release highlights for the running version.`);
+    process.exit(0);
+  }
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/whats-new`);
+  } catch (err) {
+    return exitWithStructuredError({
+      code:    'daemon-not-running',
+      message: `Cannot reach daemon at ${base}: ${err?.message ?? err}`,
+    });
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  console.log(`Open Design ${data?.version ?? 'unknown'} (${data?.channel ?? 'unknown'} channel)`);
+  if (data?.content != null) {
+    console.log(`\n${data.content.title}\n${data.content.body}`);
+    console.log(`\nDetails: ${data.content.linkUrl ?? data.releaseUrl}`);
+  } else {
+    console.log(`\nNo release highlights configured for this version.`);
+    console.log(`Release notes: ${data?.releaseUrl ?? ''}`);
+  }
 }
 
 // ---------------------------------------------------------------------------

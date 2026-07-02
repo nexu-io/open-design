@@ -3783,6 +3783,11 @@ export const zhTW: Dict = {
     "Open Design {version} 已就緒。Open Design 會關閉並開啟安裝器。",
   "updater.upToDate": "您已經是最新版本啦",
 
+  "whatsNew.updatedTitle": "Open Design {version} 更新亮點",
+  "whatsNew.genericBody": "Open Design 已更新，帶來多項改進與修復。查看發行說明了解詳情。",
+  "whatsNew.cta": "看看有什麼新功能",
+  "whatsNew.dismissAria": "關閉更新亮點",
+
   'designBrowser.copyScreenshot': '複製截圖',
   'designBrowser.hardReload': '強制重新整理',
   'designBrowser.copyUrl': '複製 URL',
