@@ -329,7 +329,7 @@ export const ja: Dict = {
   'settings.agentInstall.stepAuth': 'Open Design に戻る前に、ベンダー CLI で認証（サインインまたは API 資格情報の追加）を行います。',
   'settings.agentInstall.stepRescan': 'このセクションで「再スキャン」をクリックします。',
   'settings.agentInstall.stepSelect': 'インストール済みとして表示されたらエージェントカードを選択します。',
-  'settings.noAgentsDetected': 'エージェントが検出されませんでした。Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent、Qwen、または GitHub Copilot CLI のいずれかをインストールして、再スキャンをクリックしてください。',
+  'settings.noAgentsDetected': 'エージェントが検出されませんでした。Claude Code、Codex、OpenCode、Cursor Agent、Qwen、または GitHub Copilot CLI のいずれかをインストールして、再スキャンをクリックしてください。',
   'settings.agentInstalledGroup': 'あなたの CLI（{count}）',
   'settings.agentInstallGroup': 'インストール可能（{count}）',
   'settings.agentAuthRequired': '認証が必要です',

@@ -167,6 +167,7 @@ describe('AMR runtime def', () => {
   it('normalizes Vela public model ids to link-canonical ACP model ids', () => {
     expect(normalizeVelaModelId('public_model_deepseek_v3_2')).toBe('deepseek-v3.2');
     expect(normalizeVelaModelId('public_model_kimi_k2_6')).toBe('kimi-k2.6');
+    expect(normalizeVelaModelId('public_model_kimi_k2_7_code')).toBe('kimi-k2.7-code');
     expect(normalizeVelaModelId('public_model_gemini_2_5_flash')).toBe('gemini-2.5-flash');
     expect(normalizeVelaModelId('public_model_gemini_3_1_flash_lite_preview')).toBe(
       'gemini-3.1-flash-lite-preview',

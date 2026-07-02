@@ -74,4 +74,51 @@ describe('buildAgentGuideMarkdown', () => {
     expect(md).toContain('- Daemon: `http://example.test:5555`');
     expect(md).toContain('- MCP install info: `http://example.test:5555/api/mcp/install-info`');
   });
+
+  it('uses daemon install-info for the MCP config instead of assuming od is on PATH', () => {
+    const md = buildAgentGuideMarkdown({
+      daemonUrl: 'http://127.0.0.1:7456',
+      mcpInstallInfo: {
+        command: 'C:\\Program Files\\Open Design\\Open Design.exe',
+        args: [
+          'C:\\Program Files\\Open Design\\resources\\app\\apps\\daemon\\dist\\cli.js',
+          'mcp',
+        ],
+        env: {
+          ELECTRON_RUN_AS_NODE: '1',
+          OD_DATA_DIR: 'C:\\Users\\Ada\\AppData\\Roaming\\Open Design',
+        },
+      },
+    });
+
+    expect(md).toContain('"command": "C:\\\\Program Files\\\\Open Design\\\\Open Design.exe"');
+    expect(md).toContain(
+      '"C:\\\\Program Files\\\\Open Design\\\\resources\\\\app\\\\apps\\\\daemon\\\\dist\\\\cli.js"',
+    );
+    expect(md).toContain('"ELECTRON_RUN_AS_NODE": "1"');
+    expect(md).toContain('"OD_DATA_DIR": "C:\\\\Users\\\\Ada\\\\AppData\\\\Roaming\\\\Open Design"');
+    expect(md).not.toContain('"command": "od"');
+  });
+
+  it('does not rewrite CLI snippets with POSIX env prefixes for Windows packaged installs', () => {
+    const md = buildAgentGuideMarkdown({
+      daemonUrl: 'http://127.0.0.1:7456',
+      mcpInstallInfo: {
+        command: 'C:\\Program Files\\Open Design\\Open Design.exe',
+        args: [
+          'C:\\Program Files\\Open Design\\resources\\app\\apps\\daemon\\dist\\cli.js',
+          'mcp',
+        ],
+        env: {
+          ELECTRON_RUN_AS_NODE: '1',
+          OD_DATA_DIR: 'C:\\Users\\Ada\\AppData\\Roaming\\Open Design',
+        },
+      },
+    });
+
+    expect(md).toContain('"command": "C:\\\\Program Files\\\\Open Design\\\\Open Design.exe"');
+    expect(md).toContain('"ELECTRON_RUN_AS_NODE": "1"');
+    expect(md).toContain('od skills list --json');
+    expect(md).not.toMatch(/^\s*ELECTRON_RUN_AS_NODE=1\s+OD_DATA_DIR=/m);
+  });
 });

@@ -175,4 +175,15 @@ describe('readPromptTemplate', () => {
     );
     expect(await readPromptTemplate(root, 'image', 'bad')).toBeNull();
   });
+
+  it('returns null for a path-traversal id instead of reading outside the surface dir', async () => {
+    // `id` arrives straight from the request path (`/api/prompt-templates/:surface/:id`,
+    // where a percent-encoded `..%2f` decodes back to `../`). Plant a valid template one
+    // level above the surface dir and confirm a traversal id can't resolve to it.
+    await writeFile(
+      path.join(root, 'secret.json'),
+      JSON.stringify(makeTemplate({ id: '../secret' })),
+    );
+    expect(await readPromptTemplate(root, 'image', '../secret')).toBeNull();
+  });
 });

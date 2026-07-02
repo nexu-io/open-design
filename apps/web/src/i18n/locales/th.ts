@@ -329,7 +329,7 @@ export const th: Dict = {
   'settings.agentInstall.stepAuth': 'ยืนยันตัวตนกับ CLI ของผู้ให้บริการ (ลงชื่อเข้าใช้หรือเพิ่มข้อมูลรับรอง API) ก่อนกลับไปที่ Open Design',
   'settings.agentInstall.stepRescan': 'คลิกสแกนใหม่ในส่วนนี้',
   'settings.agentInstall.stepSelect': 'เลือกการ์ดเอเจนต์เมื่อแสดงว่าได้ติดตั้งแล้ว',
-  'settings.noAgentsDetected': 'ยังไม่พบเอเจนต์ โปรดติดตั้งอย่างใดอย่างหนึ่ง: Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen หรือ GitHub Copilot CLI แล้วคลิกสแกนใหม่',
+  'settings.noAgentsDetected': 'ยังไม่พบเอเจนต์ โปรดติดตั้งอย่างใดอย่างหนึ่ง: Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen หรือ GitHub Copilot CLI แล้วคลิกสแกนใหม่',
   'settings.agentInstalledGroup': 'CLI ของคุณ ({count})',
   'settings.agentInstallGroup': 'พร้อมให้ติดตั้ง ({count})',
   'settings.agentAuthRequired': 'ต้องยืนยันตัวตน',
