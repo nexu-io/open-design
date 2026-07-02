@@ -45,8 +45,8 @@ DNA JSON 分三层，对应"可量化 / 可感知 / 特殊渲染"：
 
 ```bash
 node "$WEB_CLONE_SKILL_DIR/scripts/dna-scaffold.mjs" \
-  --recon ./website-clones/<站名>-clone/RECON/original-recon.json \
-  --out   ./website-clones/<站名>-clone/RECON/design-dna.json
+  --recon "$WEB_CLONE_PROJECT/RECON/original-recon.json" \
+  --out   "$WEB_CLONE_PROJECT/RECON/design-dna.json"
 ```
 
 脚本会输出完整 DNA 骨架，并把侦察到的字体、CSS 色变量、框架/特效信号**best-effort 预填**，

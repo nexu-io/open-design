@@ -1,6 +1,6 @@
 # 产物规范与模板
 
-每个复刻子项目（`./website-clones/<站名>-clone/`）的标准产物。
+每个复刻子项目（`$WEB_CLONE_PROJECT/`）的标准产物。
 
 ## NOTES.md（必须）
 
@@ -27,7 +27,7 @@
 
 ## 跑起来
 \`\`\`bash
-cd ./website-clones/<站名>-clone
+cd "$WEB_CLONE_PROJECT"
 # 单文件静态站: python3 -m http.server 8123
 # 框架站: nvm use <ver> && npm install && npm run dev
 \`\`\`

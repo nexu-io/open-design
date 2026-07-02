@@ -18,7 +18,7 @@
 ```bash
 node "$WEB_CLONE_SKILL_DIR/scripts/mirror-site.mjs" \
   --url https://<站>/ \
-  --out ./website-clones/<站名>-clone
+  --out "$WEB_CLONE_PROJECT"
 ```
 产物：
 - `<out>/site/…`：镜像的**同源**资产（保留路径；目录 URL 存 `index.html`）
@@ -59,7 +59,7 @@ node "$WEB_CLONE_SKILL_DIR/scripts/mirror-site.mjs" \
 
 ## 服务 + 验证
 ```bash
-cd ./website-clones/<站名>-clone/site
+cd "$WEB_CLONE_PROJECT/site"
 python3 -m http.server 8124      # 必须从 site/ 作 web 根，根相对路径(/_astro /models …)才解析
 ```
 然后按 SKILL.md Step 5：浏览器 0 console error + `visual-diff.mjs` 像素对照原站。重 WebGL 站记得**滚动到各段截图**对照（静态全页截图抓不到滚动触发的 GL 帧）。
