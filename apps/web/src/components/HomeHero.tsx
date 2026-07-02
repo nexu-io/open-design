@@ -35,7 +35,12 @@ import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
-import { trackHomeChatComposerClick } from '../analytics/events';
+import {
+  trackContextLinkResult,
+  trackFigmaHelpModalSurfaceView,
+  trackHomeChatComposerClick,
+  trackProjectReferenceModalSurfaceView,
+} from '../analytics/events';
 import {
   chipsForGroup,
   orderedCreateChips,
@@ -959,11 +964,26 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       );
     }
     setProjectReferenceOpen(false);
+    trackContextLinkResult(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      context_kind: 'project',
+      result: 'success',
+      count: selections.length,
+    });
   }
 
   async function handleLinkLocalCodeContext() {
     const selected = await onPickLocalCodeDir?.();
-    if (!selected) return;
+    if (!selected) {
+      trackContextLinkResult(analytics.track, {
+        page_name: 'home',
+        area: 'chat_composer',
+        context_kind: 'local_code',
+        result: 'cancelled',
+      });
+      return;
+    }
     const label = selected.split(/[/\\]/).filter(Boolean).pop() || selected;
     appendWorkspacePrompt(
       {
@@ -975,6 +995,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         absolutePath: selected,
       }
     );
+    trackContextLinkResult(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      context_kind: 'local_code',
+      result: 'success',
+      count: 1,
+    });
   }
 
   function openDesignSystemPicker() {
@@ -1373,7 +1400,16 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <button
                   type="button"
                   className="home-hero__active-clear od-tooltip"
-                  onClick={() => onRemovePluginContext(plugin.id)}
+                  onClick={() => {
+                    trackHomeChatComposerClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'context_remove',
+                      resource_kind: 'plugin',
+                      resource_id: plugin.id,
+                    });
+                    onRemovePluginContext(plugin.id);
+                  }}
                   aria-label={t('chat.removeAria', { name: plugin.title })}
                   title={t('common.close')}
                   data-tooltip={t('common.close')}
@@ -1400,7 +1436,16 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   <button
                     type="button"
                     className="home-hero__active-clear od-tooltip"
-                    onClick={() => onRemoveMcpContext(server.id)}
+                    onClick={() => {
+                      trackHomeChatComposerClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'chat_composer',
+                        element: 'context_remove',
+                        resource_kind: 'mcp',
+                        resource_id: server.id,
+                      });
+                      onRemoveMcpContext(server.id);
+                    }}
                     aria-label={t('chat.removeAria', { name: label })}
                     title={t('common.close')}
                     data-tooltip={t('common.close')}
@@ -1426,7 +1471,16 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <button
                   type="button"
                   className="home-hero__active-clear od-tooltip"
-                  onClick={() => onRemoveConnectorContext(connector.id)}
+                  onClick={() => {
+                    trackHomeChatComposerClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'context_remove',
+                      resource_kind: 'connector',
+                      resource_id: connector.id,
+                    });
+                    onRemoveConnectorContext(connector.id);
+                  }}
                   aria-label={t('chat.removeAria', { name: connector.name })}
                   title={t('common.close')}
                   data-tooltip={t('common.close')}
@@ -1452,6 +1506,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   type="button"
                   className="home-hero__active-clear od-tooltip"
                   onClick={() => {
+                    trackHomeChatComposerClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'context_remove',
+                      resource_kind: 'workspace',
+                      resource_id: item.id,
+                    });
                     const nextPrompt = stripHomeMentionToken(prompt, item.label);
                     if (nextPrompt !== prompt) onPromptChange(nextPrompt);
                     onRemoveWorkspaceContext(item.id);
@@ -1735,6 +1796,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   page_name: 'home',
                   area: 'chat_composer',
                   element: 'plus_pick',
+                  resource_kind: 'workspace',
+                  resource_id: 'reference-project',
+                });
+                trackProjectReferenceModalSurfaceView(analytics.track, {
+                  page_name: 'home',
+                  area: 'project_reference_modal',
                 });
                 setProjectReferenceOpen(true);
               }}
@@ -1742,7 +1809,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 trackHomeChatComposerClick(analytics.track, {
                   page_name: 'home',
                   area: 'chat_composer',
-                  element: 'working_dir',
+                  element: 'plus_pick',
+                  resource_kind: 'workspace',
+                  resource_id: 'local-code',
                 });
                 void handleLinkLocalCodeContext();
               } : undefined}
@@ -1762,8 +1831,26 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 });
                 onImportFigma();
               } : undefined}
-              onShowFigmaHelp={() => setFigmaHelpOpen(true)}
-              onOpenDesignSystems={onDesignSystemChange ? openDesignSystemPicker : undefined}
+              onShowFigmaHelp={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'figma_help',
+                });
+                trackFigmaHelpModalSurfaceView(analytics.track, {
+                  page_name: 'home',
+                  area: 'figma_help_modal',
+                });
+                setFigmaHelpOpen(true);
+              }}
+              onOpenDesignSystems={onDesignSystemChange ? () => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'design_system_open',
+                });
+                openDesignSystemPicker();
+              } : undefined}
             />
             {libraryPickerOpen ? (
               <LibraryPicker
@@ -1773,7 +1860,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             ) : null}
             {projectReferenceOpen ? (
               <ProjectReferenceModal
-                onClose={() => setProjectReferenceOpen(false)}
+                onClose={() => {
+                  // Only the dismiss paths (X / backdrop / Escape / Cancel)
+                  // land here — a confirmed pick closes via
+                  // handleReferenceProjects, which reports 'success'.
+                  trackContextLinkResult(analytics.track, {
+                    page_name: 'home',
+                    area: 'chat_composer',
+                    context_kind: 'project',
+                    result: 'cancelled',
+                  });
+                  setProjectReferenceOpen(false);
+                }}
                 onSelect={handleReferenceProjects}
               />
             ) : null}
