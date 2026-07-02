@@ -1189,12 +1189,31 @@ function formatDesignFilesEntryLine(entry: DesignFilesHintEntry | null | undefin
   return `- \`${entryPath}\` (${[kind, size].filter(Boolean).join(', ')})`;
 }
 
+/**
+ * The workspace hint must advertise the same directory spelling the agent's
+ * own `process.cwd()` reports — the symlink-resolved (realpath) form — not
+ * the unresolved spawn path. On macOS, /var is a symlink to /private/var, so
+ * a daemon-spawned cwd under /var/... is observed by the child as
+ * /private/var/...; advertising the spawn spelling makes the model see two
+ * spellings of one directory and waste reasoning on path comparisons. Falls
+ * back to the given cwd when resolution fails (e.g. dir not yet created).
+ */
+function resolveAgentObservedCwd(cwd: string): string {
+  try {
+    return fs.realpathSync.native(cwd);
+  } catch {
+    return cwd;
+  }
+}
+
 export function formatDesignFilesWorkspaceHint(
-  cwd: string | null | undefined,
+  rawCwd: string | null | undefined,
   files: DesignFilesHintEntry[] = [],
   folders: DesignFilesHintEntry[] = [],
 ) {
-  if (typeof cwd !== 'string' || cwd.trim().length === 0) return '';
+  if (typeof rawCwd !== 'string' || rawCwd.trim().length === 0) return '';
+  // 힌트에는 에이전트의 process.cwd()가 보고하는 realpath 철자를 노출 — resolveAgentObservedCwd docblock 참조
+  const cwd = resolveAgentObservedCwd(rawCwd);
   const safeFolders = Array.isArray(folders) ? folders : [];
   const safeFiles = Array.isArray(files) ? files : [];
   const folderLines = safeFolders
