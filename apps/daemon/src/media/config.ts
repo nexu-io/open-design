@@ -108,6 +108,9 @@ const ENV_KEYS: Record<string, string[]> = {
   aihubmix: ['OD_AIHUBMIX_API_KEY', 'AIHUBMIX_API_KEY'],
   tavily: ['OD_TAVILY_API_KEY', 'TAVILY_API_KEY'],
   leonardo: ['OD_LEONARDO_API_KEY', 'LEONARDO_API_KEY'],
+  // Pollinations works anonymously with no key; a publishable pk_ key
+  // (POLLINATIONS_API_KEY) only raises rate limits.
+  pollinations: ['OD_POLLINATIONS_API_KEY', 'POLLINATIONS_API_KEY'],
 };
 
 // Resolve an `OD_*_DIR` env override using the same semantics as

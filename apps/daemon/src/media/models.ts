@@ -19,6 +19,7 @@ export type MediaProvider = {
   settingsVisible?: boolean;
   supportsCustomModel?: boolean;
   customModelPlaceholder?: string;
+  optionalApiKey?: boolean;
 };
 
 export type MediaModel = {
@@ -37,6 +38,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'grok', label: 'xAI Grok Imagine', hint: 'grok-imagine — image + video with native audio', integrated: true, defaultBaseUrl: 'https://api.x.ai/v1' },
   { id: 'hyperframes', label: 'HyperFrames', hint: 'Local HTML -> MP4 renderer', integrated: true, credentialsRequired: false, settingsVisible: false },
   { id: 'nanobanana', label: 'Nano Banana', hint: 'Google official by default; custom gateway configurable', integrated: true, defaultBaseUrl: 'https://generativelanguage.googleapis.com', supportsCustomModel: true },
+  { id: 'pollinations', label: 'Pollinations', hint: 'Free, no key (Flux); optional pk_ key raises limits', integrated: true, credentialsRequired: false, optionalApiKey: true, settingsVisible: true, defaultBaseUrl: 'https://image.pollinations.ai', docsUrl: 'https://pollinations.ai' },
   { id: 'imagerouter', label: 'ImageRouter', hint: 'OpenAI-compatible image + video routing', integrated: true, defaultBaseUrl: 'https://api.imagerouter.io/v1/openai', docsUrl: 'https://docs.imagerouter.io/api-reference/image-generation/', supportsCustomModel: true, customModelPlaceholder: 'openai/gpt-image-2 or xAI/grok-imagine-video' },
   { id: 'openrouter', label: 'OpenRouter', hint: 'Unified gateway for image + video models', integrated: true, credentialsRequired: true, settingsVisible: true, defaultBaseUrl: 'https://openrouter.ai/api/v1', docsUrl: 'https://openrouter.ai/settings/keys' },
   { id: 'custom-image', label: 'Custom Image API', hint: 'OpenAI-compatible images/generations + images/edits (local or cloud)', integrated: true, docsUrl: 'https://platform.openai.com/docs/api-reference/images', supportsCustomModel: true, customModelPlaceholder: 'my-image-model' },
@@ -91,6 +93,7 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'gpt-image-1-mini', label: 'gpt-image-1-mini', hint: 'OpenAI · low-cost variant', provider: 'openai', caps: ['t2i', 'i2i'] },
   { id: 'dall-e-3', label: 'dall-e-3', hint: 'OpenAI · classic', provider: 'openai', caps: ['t2i'] },
   { id: 'dall-e-2', label: 'dall-e-2', hint: 'OpenAI · legacy', provider: 'openai', caps: ['t2i'] },
+  { id: 'pollinations-flux', label: 'Pollinations Flux', hint: 'Free · no API key · Flux', provider: 'pollinations', caps: ['t2i'] },
   { id: 'codex-gpt-image-2', label: 'gpt-image-2 (Codex)', hint: 'Codex Subscription · local CLI imagegen', provider: 'codex', caps: ['t2i', 'i2i'] },
 
   { id: 'doubao-seedream-3-0-t2i-250415', label: 'seedream-3.0', hint: 'ByteDance · Doubao image', provider: 'volcengine', caps: ['t2i'] },

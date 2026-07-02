@@ -629,6 +629,11 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'pollinations' && surface === 'image') {
+      const result = await renderPollinationsImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (def.provider === 'imagerouter' && surface === 'image') {
       const result = await renderImageRouterImage(ctx, credentials);
       bytes = result.bytes;
@@ -827,6 +832,76 @@ function defaultAspectFor(surface: MediaSurface): string | undefined {
   if (surface === 'image') return '1:1';
   if (surface === 'video') return '16:9';
   return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Provider: Pollinations (free, no API key)
+//
+// Pollinations serves an image from a plain GET URL:
+//   https://image.pollinations.ai/prompt/<encoded prompt>?width=&height=&model=&nologo=true
+// The anonymous tier needs no key. When a publishable key is configured it is
+// sent as a Bearer token to raise rate limits. This is the one no-key image
+// provider in the catalog, so it gives every user a free image path.
+// ---------------------------------------------------------------------------
+const POLLINATIONS_SIZES: Record<string, { width: number; height: number }> = {
+  '1:1': { width: 1024, height: 1024 },
+  '4:5': { width: 1024, height: 1280 },
+  '3:4': { width: 1024, height: 1365 },
+  '9:16': { width: 1024, height: 1820 },
+  '16:9': { width: 1280, height: 720 },
+  '1.91:1': { width: 1280, height: 670 },
+};
+
+async function renderPollinationsImage(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+): Promise<RenderResult> {
+  const size =
+    (ctx.aspect ? POLLINATIONS_SIZES[ctx.aspect] : undefined) || { width: 1024, height: 1024 };
+  // Map the catalog id (e.g. `pollinations-flux`) to the Pollinations model name.
+  const wire = ctx.wireModel || ctx.model || 'pollinations-flux';
+  const model = wire.replace(/^pollinations-/, '') || 'flux';
+  const prompt = ctx.prompt || 'A clean, high-quality image.';
+  const base = (credentials.baseUrl || 'https://image.pollinations.ai').replace(/\/+$/, '');
+  const params = new URLSearchParams({
+    width: String(size.width),
+    height: String(size.height),
+    model,
+    nologo: 'true',
+    referrer: 'open-design',
+  });
+  const url = `${base}/prompt/${encodeURIComponent(prompt)}?${params.toString()}`;
+  const headers: Record<string, string> = {};
+  if (credentials.apiKey) headers.Authorization = `Bearer ${credentials.apiKey}`;
+  // Pollinations occasionally answers 200 with an empty body for an otherwise
+  // valid request (we have seen this on the landscape aspects). Returning those
+  // bytes would persist a zero-byte file while reporting success, so retry once
+  // and reject the response if it still comes back empty.
+  let bytes = Buffer.alloc(0);
+  let contentType = '';
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < 2 && bytes.length === 0; attempt++) {
+    const res = await fetch(url, withMediaRequestInit(ctx, { headers }));
+    lastStatus = res.status;
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => '')).slice(0, 200);
+      throw new Error(`pollinations ${res.status}: ${detail}`);
+    }
+    bytes = Buffer.from(await res.arrayBuffer());
+    contentType = res.headers.get('content-type') || '';
+  }
+  if (bytes.length === 0) {
+    throw new Error(
+      `pollinations ${lastStatus}: empty image response for ${size.width}x${size.height}`,
+    );
+  }
+  const suggestedExt = contentType.includes('png') ? '.png' : '.jpg';
+  const kb = Math.round(bytes.length / 1024);
+  return {
+    bytes,
+    providerNote: `pollinations/${model} · ${size.width}x${size.height} · ${kb} KB`,
+    suggestedExt,
+  };
 }
 
 // ---------------------------------------------------------------------------

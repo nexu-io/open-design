@@ -34,6 +34,7 @@ export type MediaProviderId =
   | 'grok'
   | 'hyperframes'
   | 'nanobanana'
+  | 'pollinations'
   | 'imagerouter'
   | 'openrouter'
   | 'custom-image'
@@ -75,6 +76,8 @@ export interface MediaProvider {
   supportsCustomModel?: boolean;
   /** Placeholder text for custom model override fields in Settings. */
   customModelPlaceholder?: string;
+  /** Show a key field in Settings even though a key is not required (free tier works without one). */
+  optionalApiKey?: boolean;
 }
 
 /**
@@ -133,6 +136,17 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     defaultBaseUrl: 'https://generativelanguage.googleapis.com',
     docsUrl: 'https://ai.google.dev/gemini-api/docs/api-key',
     supportsCustomModel: true,
+  },
+  {
+    id: 'pollinations',
+    label: 'Pollinations',
+    hint: 'Free, no key (Flux); optional pk_ key raises limits',
+    integrated: true,
+    credentialsRequired: false,
+    optionalApiKey: true,
+    settingsVisible: true,
+    defaultBaseUrl: 'https://image.pollinations.ai',
+    docsUrl: 'https://pollinations.ai',
   },
   {
     id: 'imagerouter',
@@ -368,6 +382,13 @@ export const IMAGE_MODELS: MediaModel[] = [
     label: 'dall-e-2',
     hint: 'OpenAI · legacy',
     provider: 'openai',
+    caps: ['t2i'],
+  },
+  {
+    id: 'pollinations-flux',
+    label: 'Pollinations Flux',
+    hint: 'Free · no API key · Flux',
+    provider: 'pollinations',
     caps: ['t2i'],
   },
   {

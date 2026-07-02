@@ -7159,6 +7159,10 @@ function MediaProvidersSection({
           const disabled = false;
           const supportsCustomModel = provider.supportsCustomModel === true;
           const requiresCredentials = provider.credentialsRequired !== false;
+          // Some providers work with no key (free tier) but accept an optional
+          // key for higher limits. Show the key field for those too, without
+          // marking them as requiring credentials (so they stay picker-ready).
+          const showApiKeyFields = requiresCredentials || provider.optionalApiKey === true;
           const clearable = isStoredMediaProviderEntryPresent(entry);
           const apiKeyVisible = visibleApiKeys.has(provider.id);
           return (
@@ -7200,7 +7204,7 @@ function MediaProvidersSection({
                 */}
               </div>
               {provider.id === 'grok' ? <XaiOAuthControl /> : null}
-              {requiresCredentials ? (
+              {showApiKeyFields ? (
                 <div className="media-provider-body">
                   <div className="media-provider-secret-field">
                     <input
