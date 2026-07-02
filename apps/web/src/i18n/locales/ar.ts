@@ -2318,6 +2318,7 @@ export const ar: Dict = {
   'tool.grep': 'Grep',
   'tool.fetch': 'جلب',
   'tool.search': 'بحث',
+  'tool.task': 'وكيل فرعي',
   'tool.lines': '{n} أسطر',
   'tool.changeSingular': 'تغيير',
   'tool.changePlural': 'تغييرات',

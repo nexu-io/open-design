@@ -2891,6 +2891,7 @@ export interface Dict {
   'tool.grep': string;
   'tool.fetch': string;
   'tool.search': string;
+  'tool.task': string;
   'tool.lines': string;
   'tool.changeSingular': string;
   'tool.changePlural': string;

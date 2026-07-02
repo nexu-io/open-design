@@ -2318,6 +2318,7 @@ export const hu: Dict = {
   'tool.grep': 'Grep',
   'tool.fetch': 'Lekérés',
   'tool.search': 'Keresés',
+  'tool.task': 'Alügynök',
   'tool.lines': '{n} sor',
   'tool.changeSingular': 'változás',
   'tool.changePlural': 'változás',

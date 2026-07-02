@@ -2318,6 +2318,7 @@ export const th: Dict = {
   'tool.grep': 'หาการค้น Grep ลงไป',
   'tool.fetch': 'ดึงรับส่ง Fetch',
   'tool.search': 'สืบเสาะ',
+  'tool.task': 'ซับเอเจนต์',
   'tool.lines': '{n} เป็นจำนวนบรรัด',
   'tool.changeSingular': 'ปรับจุดหนึ่งแล้ว',
   'tool.changePlural': 'เปลี่ยนแก้ไขมาเยอะเลย',

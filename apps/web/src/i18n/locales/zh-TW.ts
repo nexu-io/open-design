@@ -2318,6 +2318,7 @@ export const zhTW: Dict = {
   'tool.grep': 'Grep',
   'tool.fetch': '擷取',
   'tool.search': '搜尋',
+  'tool.task': '子代理',
   'tool.lines': '{n} 行',
   'tool.changeSingular': '處變更',
   'tool.changePlural': '處變更',

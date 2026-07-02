@@ -2318,6 +2318,7 @@ export const ko: Dict = {
   'tool.grep': '검색 (Grep)',
   'tool.fetch': '가져오기 (Fetch)',
   'tool.search': '검색 (Search)',
+  'tool.task': '서브에이전트',
   'tool.lines': '{n} 줄',
   'tool.changeSingular': '변경',
   'tool.changePlural': '변경',

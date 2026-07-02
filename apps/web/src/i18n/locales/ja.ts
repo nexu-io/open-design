@@ -2318,6 +2318,7 @@ export const ja: Dict = {
   'tool.grep': 'Grep',
   'tool.fetch': 'フェッチ',
   'tool.search': '検索',
+  'tool.task': 'サブエージェント',
   'tool.lines': '{n} 行',
   'tool.changeSingular': '変更',
   'tool.changePlural': '変更',

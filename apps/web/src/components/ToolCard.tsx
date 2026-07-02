@@ -71,6 +71,7 @@ export function ToolCard({
   if (name === 'Grep') return <GrepCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'WebFetch' || name === 'web_fetch') return <WebFetchCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (name === 'WebSearch' || name === 'web_search') return <WebSearchCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
+  if (name === 'Task') return <TaskCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   if (isAskUserQuestionName(name))
     return <LegacyAskUserQuestionCard input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
   return <GenericCard name={name} input={use.input} result={result} runStreaming={isStreaming} runSucceeded={isSucceeded} />;
@@ -518,6 +519,30 @@ function WebSearchCard({ input, result, runStreaming, runSucceeded }: { input: u
         <span className="op-title">{t('tool.search')}</span>
         <span className="op-meta">{obj.query ?? ''}</span>
       </div>
+    </div>
+  );
+}
+
+// Subagent (`Task` tool) runs are represented as one labeled card instead of
+// the raw `{"description","prompt","subagent_type"}` JSON GenericCard would
+// otherwise dump into the head — the sidechain's own tool calls are hidden
+// from the main transcript (see `buildBlocks` in AssistantMessage.tsx), so
+// this card is the only visible trace of the subagent's work.
+function TaskCard({ input, result, runStreaming, runSucceeded }: { input: unknown; result?: Props['result']; runStreaming: boolean; runSucceeded: boolean }) {
+  const t = useT();
+  const obj = (input ?? {}) as { description?: string; subagent_type?: string };
+  const label = obj.description?.trim() || obj.subagent_type || '';
+  return (
+    <div className="op-card op-task">
+      <div className="op-card-head">
+        <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
+        <span className="op-title">{t('tool.task')}</span>
+        <span className="op-meta">{label}</span>
+      </div>
+      {result && !result.isError && result.content.trim() ? (
+        <pre className="op-output">{truncate(result.content, 1200)}</pre>
+      ) : null}
+      <FileErrorDetail result={result} />
     </div>
   );
 }

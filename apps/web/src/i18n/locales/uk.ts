@@ -2318,6 +2318,7 @@ export const uk: Dict = {
   'tool.grep': 'Grep',
   'tool.fetch': 'Отримати',
   'tool.search': 'Пошук',
+  'tool.task': 'Субагент',
   'tool.lines': '{n} рядків',
   'tool.changeSingular': 'змінення',
   'tool.changePlural': 'змінення',

@@ -2318,6 +2318,7 @@ export const tr: Dict = {
   'tool.grep': 'Grep',
   'tool.fetch': 'Getir',
   'tool.search': 'Ara',
+  'tool.task': 'Alt ajan',
   'tool.lines': '{n} satır',
   'tool.changeSingular': 'değişiklik',
   'tool.changePlural': 'değişiklikler',

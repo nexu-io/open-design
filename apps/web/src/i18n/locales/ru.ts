@@ -2318,6 +2318,7 @@ export const ru: Dict = {
   'tool.grep': 'Grep',
   'tool.fetch': 'Fetch',
   'tool.search': 'Поиск',
+  'tool.task': 'Субагент',
   'tool.lines': '{n} строк',
   'tool.changeSingular': 'изменение',
   'tool.changePlural': 'изменения',

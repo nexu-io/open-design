@@ -2318,6 +2318,7 @@ export const fa: Dict = {
   'tool.grep': 'Grep',
   'tool.fetch': 'دریافت',
   'tool.search': 'جستجو',
+  'tool.task': 'عامل فرعی',
   'tool.lines': '{n} خط',
   'tool.changeSingular': 'تغییر',
   'tool.changePlural': 'تغییرات',

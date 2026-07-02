@@ -2318,6 +2318,7 @@ export const ptBR: Dict = {
   'tool.grep': 'Grep',
   'tool.fetch': 'Buscar',
   'tool.search': 'Pesquisar',
+  'tool.task': 'Subagente',
   'tool.lines': '{n} linhas',
   'tool.changeSingular': 'alteração',
   'tool.changePlural': 'alterações',

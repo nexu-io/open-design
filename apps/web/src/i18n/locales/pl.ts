@@ -2318,6 +2318,7 @@ export const pl: Dict = {
   'tool.grep': 'Grep',
   'tool.fetch': 'Pobierz (Fetch)',
   'tool.search': 'Szukaj',
+  'tool.task': 'Subagent',
   'tool.lines': '{n} linii',
   'tool.changeSingular': 'zmiana',
   'tool.changePlural': 'zmiany',

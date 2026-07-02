@@ -2318,6 +2318,7 @@ export const zhCN: Dict = {
   'tool.grep': 'Grep',
   'tool.fetch': '抓取',
   'tool.search': '搜索',
+  'tool.task': '子代理',
   'tool.lines': '{n} 行',
   'tool.changeSingular': '处变更',
   'tool.changePlural': '处变更',

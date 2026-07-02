@@ -2318,6 +2318,7 @@ export const id: Dict = {
   'tool.grep': 'Grep',
   'tool.fetch': 'Fetch',
   'tool.search': 'Cari',
+  'tool.task': 'Subagen',
   'tool.lines': '{n} baris',
   'tool.changeSingular': 'perubahan',
   'tool.changePlural': 'perubahan',
