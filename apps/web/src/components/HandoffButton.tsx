@@ -88,7 +88,6 @@ const FALLBACK_CLI_TARGETS: CliTarget[] = [
   { id: 'codex', name: 'Codex CLI', bin: 'codex', available: false },
   { id: 'opencode', name: 'OpenCode', bin: 'opencode-cli', available: false },
   { id: 'cursor-agent', name: 'Cursor Agent', bin: 'cursor-agent', available: false },
-  { id: 'gemini', name: 'Gemini CLI', bin: 'gemini', available: false },
   { id: 'qwen', name: 'Qwen Code', bin: 'qwen', available: false },
   { id: 'qoder', name: 'Qoder CLI', bin: 'qodercli', available: false },
   { id: 'copilot', name: 'GitHub Copilot CLI', bin: 'copilot', available: false },

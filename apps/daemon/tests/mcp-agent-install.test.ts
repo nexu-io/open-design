@@ -28,7 +28,7 @@ describe('agent slug guard', () => {
   it('accepts every documented slug and rejects others', () => {
     for (const s of AGENT_SLUGS) expect(isAgentSlug(s)).toBe(true);
     expect(isAgentSlug('not-an-agent')).toBe(false);
-    expect(AGENT_SLUGS).toHaveLength(14);
+    expect(AGENT_SLUGS).toHaveLength(13);
   });
 });
 
@@ -56,14 +56,6 @@ describe('CLI-driven agents', () => {
     expect(plan.addArgv.slice(-SPEC.args.length - 2)).toEqual(['--', SPEC.command, ...SPEC.args]);
   });
 
-  it('gemini omits the -- separator (positional command)', () => {
-    const plan = planAgentInstall('gemini', SPEC_NO_ENV, ctx());
-    if (plan.kind !== 'cli') throw new Error('expected cli');
-    expect(plan.addArgv).toEqual([
-      'mcp', 'add', '-s', 'user', '-t', 'stdio',
-      'open-design', SPEC.command, ...SPEC.args,
-    ]);
-  });
 });
 
 describe('JSON-config agents', () => {

@@ -329,7 +329,7 @@ export const tr: Dict = {
   'settings.agentInstall.stepAuth': 'Open Design\'a dönmeden önce sağlayıcı CLI\'sinde kimlik doğrulaması yap (oturum aç veya API kimlik bilgileri ekle).',
   'settings.agentInstall.stepRescan': 'Bu bölümde Yeniden tara\'ya tıkla.',
   'settings.agentInstall.stepSelect': 'Ajan yüklü olarak göründüğünde kartını seç.',
-  'settings.noAgentsDetected': 'Hiçbir ajan tespit edilemedi. Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, veya GitHub Copilot CLI’lardan birini kurun ve yeniden tarayın.',
+  'settings.noAgentsDetected': 'Hiçbir ajan tespit edilemedi. Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen, veya GitHub Copilot CLI’lardan birini kurun ve yeniden tarayın.',
   'settings.agentInstalledGroup': 'CLI\'larınız ({count})',
   'settings.agentInstallGroup': 'Kurulabilir ({count})',
   'settings.agentAuthRequired': 'Kimlik doğrulama gerekli',

@@ -329,7 +329,7 @@ export const pl: Dict = {
   'settings.agentInstall.stepAuth': 'Uwierzytelnij się w CLI dostawcy (zaloguj się lub dodaj dane API), zanim wrócisz do Open Design.',
   'settings.agentInstall.stepRescan': 'Kliknij Ponów skanowanie w tej sekcji.',
   'settings.agentInstall.stepSelect': 'Wybierz kartę agenta, gdy pojawi się jako zainstalowany.',
-  'settings.noAgentsDetected': 'Nie wykryto jeszcze żadnych agentów. Zainstaluj Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen lub GitHub Copilot CLI, a następnie kliknij Ponów skanowanie.',
+  'settings.noAgentsDetected': 'Nie wykryto jeszcze żadnych agentów. Zainstaluj Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen lub GitHub Copilot CLI, a następnie kliknij Ponów skanowanie.',
   'settings.agentInstalledGroup': 'Twoje CLI ({count})',
   'settings.agentInstallGroup': 'Dostępne do instalacji ({count})',
   'settings.agentAuthRequired': 'Wymagane uwierzytelnienie',

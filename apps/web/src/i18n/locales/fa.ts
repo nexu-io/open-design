@@ -329,7 +329,7 @@ export const fa: Dict = {
   'settings.agentInstall.stepAuth': 'قبل از بازگشت به Open Design، در CLI ارائه‌دهنده احراز هویت کنید (ورود یا افزودن اطلاعات API).',
   'settings.agentInstall.stepRescan': 'در این بخش روی اسکن مجدد کلیک کنید.',
   'settings.agentInstall.stepSelect': 'وقتی عامل به‌صورت نصب‌شده نمایش داده شد، کارت آن را انتخاب کنید.',
-  'settings.noAgentsDetected': 'هنوز هیچ عاملی شناسایی نشده. یکی از Claude Code، Codex، Gemini CLI، OpenCode، Cursor Agent، Qwen یا GitHub Copilot CLI را نصب کنید، سپس روی اسکن مجدد کلیک کنید.',
+  'settings.noAgentsDetected': 'هنوز هیچ عاملی شناسایی نشده. یکی از Claude Code، Codex، OpenCode، Cursor Agent، Qwen یا GitHub Copilot CLI را نصب کنید، سپس روی اسکن مجدد کلیک کنید.',
   'settings.agentInstalledGroup': 'CLIهای شما ({count})',
   'settings.agentInstallGroup': 'آماده نصب ({count})',
   'settings.agentAuthRequired': 'احراز هویت لازم است',

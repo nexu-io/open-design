@@ -51,7 +51,6 @@ const AGENT_BIN_ENV_KEYS: Record<FakeAgentId, string> = {
 
 export const FAKE_AGENT_RUNTIME_IDS: FakeAgentId[] = [
   'claude',
-  'gemini',
   'opencode',
   'cursor-agent',
   'qwen',

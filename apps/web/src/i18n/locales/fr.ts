@@ -329,7 +329,7 @@ export const fr: Dict = {
   'settings.agentInstall.stepAuth': 'Authentifiez-vous avec la CLI du fournisseur (connexion ou ajout des identifiants API) avant de revenir dans Open Design.',
   'settings.agentInstall.stepRescan': 'Cliquez sur Réanalyser dans cette section.',
   'settings.agentInstall.stepSelect': 'Sélectionnez la carte de l\'agent une fois qu\'elle apparaît comme installée.',
-  'settings.noAgentsDetected': 'Aucun agent détecté pour l’instant. Installez Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, GitHub Copilot CLI, Qoder CLI, Hermes, Kimi CLI, Pi, Kiro CLI, Kilo, Mistral Vibe CLI ou DeepSeek TUI, puis cliquez sur Réanalyser.',
+  'settings.noAgentsDetected': 'Aucun agent détecté pour l’instant. Installez Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen, GitHub Copilot CLI, Qoder CLI, Hermes, Kimi CLI, Pi, Kiro CLI, Kilo, Mistral Vibe CLI ou DeepSeek TUI, puis cliquez sur Réanalyser.',
   'settings.agentInstalledGroup': 'Vos CLI ({count})',
   'settings.agentInstallGroup': 'Disponibles à installer ({count})',
   'settings.agentAuthRequired': 'Authentification requise',

@@ -329,7 +329,7 @@ export const hu: Dict = {
   'settings.agentInstall.stepAuth': 'Hitelesíts a szolgáltató CLI-jében (bejelentkezés vagy API hitelesítő adatok megadása), mielőtt visszatérsz az Open Designhoz.',
   'settings.agentInstall.stepRescan': 'Kattints az Újraellenőrzés gombra ebben a szakaszban.',
   'settings.agentInstall.stepSelect': 'Válaszd ki az ügynök kártyáját, amint telepítettként jelenik meg.',
-  'settings.noAgentsDetected': 'Még nincs észlelt ügynök. Telepítsd a Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen vagy GitHub Copilot CLI valamelyikét, majd kattints az Újraellenőrzésre.',
+  'settings.noAgentsDetected': 'Még nincs észlelt ügynök. Telepítsd a Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen vagy GitHub Copilot CLI valamelyikét, majd kattints az Újraellenőrzésre.',
   'settings.agentInstalledGroup': 'Saját CLI-k ({count})',
   'settings.agentInstallGroup': 'Telepíthető ({count})',
   'settings.agentAuthRequired': 'Hitelesítés szükséges',

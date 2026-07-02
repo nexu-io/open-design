@@ -611,7 +611,7 @@ Options:
   --no-open        Do not open the browser after start.
 
 What the daemon does:
-  * scans PATH for installed code-agent CLIs (claude, codex, devin, gemini, opencode, cursor-agent, ...)
+  * scans PATH for installed code-agent CLIs (claude, codex, devin, opencode, cursor-agent, ...)
   * serves the chat UI at http://<host>:<port>
   * proxies messages (text + images) to the selected agent via child-process spawn
   * exposes /api/projects/:id/media/generate — the unified image/video/audio
@@ -5981,7 +5981,7 @@ async function runRun(args) {
     console.log(`Usage:
   od run start --project <projectId> [--conversation <id>] [--message "<text>"]
                [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
-               [--agent claude|codex|gemini] [--model <id>] [--follow] [--json]
+               [--agent claude|codex|opencode] [--model <id>] [--follow] [--json]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
                [--agent claude] [--model <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.

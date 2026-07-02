@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import { relative, resolve } from 'node:path';
 import {
-  assert, chmodSync, claude, codex, deepseek, gemini, join, minimalAgentDef, mkdirSync, mkdtempSync, resolveAgentExecutable, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
+  assert, chmodSync, claude, codex, deepseek, join, minimalAgentDef, mkdirSync, mkdtempSync, resolveAgentExecutable, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { codexAppBundleCandidates } from '../../src/runtimes/executables.js';
 
@@ -663,7 +663,7 @@ fsTest(
           process.env.PATH = '/usr/bin:/bin';
 
           const resolved = resolveAgentExecutable(
-            minimalAgentDef({ id: 'gemini', bin: 'codex' }),
+            minimalAgentDef({ id: 'other-agent', bin: 'codex' }),
           );
           assert.equal(resolved, null);
         }),

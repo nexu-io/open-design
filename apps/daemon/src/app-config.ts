@@ -162,6 +162,7 @@ export function appConfigDir(projectRoot: string, env: NodeJS.ProcessEnv = proce
 }
 
 const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set(['model', 'reasoning']);
+const RETIRED_AGENT_IDS: ReadonlySet<string> = new Set(['gemini']);
 
 const TELEMETRY_KEYS: ReadonlySet<string> = new Set([
   'metrics',
@@ -199,7 +200,6 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['deepseek', new Set(['DEEPSEEK_BIN'])],
   ['devin', new Set(['DEVIN_BIN'])],
   ['mimo', new Set(['MIMO_BIN'])],
-  ['gemini', new Set(['GEMINI_BIN'])],
   ['hermes', new Set(['HERMES_BIN'])],
   ['kimi', new Set(['KIMI_BIN'])],
   ['kiro', new Set(['KIRO_BIN'])],
@@ -439,6 +439,38 @@ function normalizeAgentCliEnvPrefs(prefs: AppConfigPrefs): AppConfigPrefs {
   return next;
 }
 
+function normalizeRetiredAgentPrefs(prefs: AppConfigPrefs): AppConfigPrefs {
+  let changed = false;
+  let next = prefs;
+
+  if (typeof next.agentId === 'string' && RETIRED_AGENT_IDS.has(next.agentId)) {
+    next = { ...next };
+    delete next.agentId;
+    changed = true;
+  }
+
+  if (next.agentModels) {
+    let nextAgentModels = next.agentModels;
+    for (const agentId of RETIRED_AGENT_IDS) {
+      if (!Object.prototype.hasOwnProperty.call(nextAgentModels, agentId)) continue;
+      if (nextAgentModels === next.agentModels) nextAgentModels = { ...next.agentModels };
+      delete nextAgentModels[agentId];
+      changed = true;
+    }
+    const normalizedAgentModels = Object.keys(nextAgentModels).length > 0 ? nextAgentModels : undefined;
+    if (normalizedAgentModels !== next.agentModels) {
+      next = next === prefs ? { ...next } : next;
+      if (normalizedAgentModels) {
+        next.agentModels = normalizedAgentModels;
+      } else {
+        delete next.agentModels;
+      }
+    }
+  }
+
+  return changed ? next : prefs;
+}
+
 function inferAgentCliEnvIntentForExplicitEnvWrite(prefs: AppConfigPrefs): AppConfigPrefs {
   if (!prefs.agentCliEnv) return prefs;
   let nextAgentCliEnvIntent = prefs.agentCliEnvIntent;
@@ -597,7 +629,7 @@ function filterAllowedKeys(obj: Record<string, unknown>): AppConfigPrefs {
       applyConfigValue(result, key as keyof AppConfigPrefs, obj[key]);
     }
   }
-  return normalizeAgentCliEnvPrefs(result as AppConfigPrefs);
+  return normalizeRetiredAgentPrefs(normalizeAgentCliEnvPrefs(result as AppConfigPrefs));
 }
 
 // Fill in telemetry defaults when the saved config has no `telemetry`
@@ -743,10 +775,11 @@ async function doWrite(
     ? inferAgentCliEnvIntentForExplicitEnvWrite(next as AppConfigPrefs)
     : next as AppConfigPrefs;
   const normalizedNext = normalizeAgentCliEnvPrefs(nextWithInferredIntent);
+  const normalizedNextWithoutRetiredAgents = normalizeRetiredAgentPrefs(normalizedNext);
   const file = configFile(dataDir);
   await mkdir(path.dirname(file), { recursive: true });
   const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
-  await writeFile(tmp, JSON.stringify(normalizedNext, null, 2), 'utf8');
+  await writeFile(tmp, JSON.stringify(normalizedNextWithoutRetiredAgents, null, 2), 'utf8');
   await rename(tmp, file);
   // Mirror the identity bits to the channel-root installation file so they
   // survive a namespace-scoped data-dir wipe. Only fires when the caller
@@ -754,7 +787,7 @@ async function doWrite(
   // unrelated app-config update). A write failure here doesn't roll back
   // the app-config write — the next read merges them transparently.
   if (Object.prototype.hasOwnProperty.call(partial, 'installationId')) {
-    const id = normalizedNext.installationId;
+    const id = normalizedNextWithoutRetiredAgents.installationId;
     // Caller explicitly touched installationId — mirror the outcome
     // (including the clear case) to installation.json so a future read
     // doesn't keep serving the old value out of the channel-root file.
@@ -769,5 +802,5 @@ async function doWrite(
       // app-config write already succeeded.
     }
   }
-  return normalizedNext;
+  return normalizedNextWithoutRetiredAgents;
 }
