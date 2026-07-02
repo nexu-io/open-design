@@ -1389,21 +1389,24 @@ process.stdin.on("end", () => {
     expect(script).toContain(".github/workflows/landing-page-staging.yml");
   });
 
-  it("[P2] supports stable dry-run metadata and prepublish boundaries", async () => {
+  it("[P2] supports stable metadata, prepublish, and publish dispatch modes", async () => {
     const [workflow, script] = await Promise.all([
       readFile(releaseStableWorkflowPath, "utf8"),
       readFile(releaseStableScriptPath, "utf8"),
     ]);
 
     expect(workflow).toContain("dry_run:");
-    expect(workflow).toContain("Dry-run boundary to validate. metadata stops after promotion metadata; prepublish runs build/smoke/report/plan without publishing.");
+    expect(workflow).toContain(
+      "Release mode. metadata stops after promotion metadata; prepublish runs build/smoke/report/plan without publishing; publish performs the stable release.",
+    );
     expect(workflow).toContain("group: open-design-release-stable-${{ inputs.dry_run }}");
     expect(workflow).toContain("type: choice");
     expect(workflow).toContain("- metadata");
     expect(workflow).toContain("- prepublish");
+    expect(workflow).toContain("- publish");
     expect(workflow).toContain("default: metadata");
     expect(workflow).not.toContain("inputs.channel");
-    expect(workflow).toContain("OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run }}");
+    expect(workflow).toContain("OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run == 'publish' && 'false' || inputs.dry_run }}");
     expect(workflow).toContain("dry_run: ${{ steps.stable.outputs.dry_run }}");
     expect(workflow).toContain("dry_run_mode: ${{ steps.stable.outputs.dry_run_mode }}");
     expect(workflow).toContain("if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}");

@@ -8,12 +8,13 @@ on:
         required: true
         type: string
       dry_run:
-        description: "Dry-run boundary to validate. metadata stops after promotion metadata; prepublish runs build/smoke/report/plan without publishing."
+        description: "Release mode. metadata stops after promotion metadata; prepublish runs build/smoke/report/plan without publishing; publish performs the stable release."
         required: false
         type: choice
         options:
           - metadata
           - prepublish
+          - publish
         default: metadata
       ref:
         description: "Stable release branch to build, for example release/v0.5.1. Empty builds the dispatch ref, which must also be release/vX.Y.Z."
@@ -46,7 +47,7 @@ on:
         required: true
         type: string
       dry_run:
-        description: "Dry-run boundary to validate: metadata or prepublish."
+        description: "Release mode: metadata, prepublish, or publish. The legacy false value is also accepted for callers."
         required: false
         type: string
         default: "metadata"
@@ -154,7 +155,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GITHUB_REPOSITORY: ${{ github.repository }}
       OPEN_DESIGN_PRERELEASE_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/prerelease/latest/metadata.json
-      OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run }}
+      OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run == 'publish' && 'false' || inputs.dry_run }}
       OPEN_DESIGN_RELEASE_CHANNEL: stable
       OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
       OPEN_DESIGN_STABLE_PRERELEASE_VERSION: ${{ inputs.prerelease_version }}
