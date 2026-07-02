@@ -23,8 +23,11 @@ import { useAnalytics } from '../analytics/provider';
 import {
   trackChatPanelClick,
   trackComposerBarClick,
+  trackContextLinkResult,
   trackDesignToolboxClick,
+  trackFigmaHelpModalSurfaceView,
   trackFileUploadResult,
+  trackProjectReferenceModalSurfaceView,
 } from '../analytics/events';
 import type {
   ComposerBarClickProps,
@@ -53,7 +56,7 @@ import type {
 } from '@open-design/contracts';
 import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../comments';
 import { Icon, type IconName } from "./Icon";
-import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { ComposerPlusMenu, PLUS_SUBMENU_RESOURCE_KIND } from './ComposerPlusMenu';
 import { LibraryPicker } from './LibraryPicker';
 import { FigmaImportModal } from './FigmaImportModal';
 import { FigmaHelpModal } from './FigmaHelpModal';
@@ -1326,11 +1329,29 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         } satisfies WorkspaceContextItem;
       });
       const trackedByDir = await addLinkedDirs(items.map((item) => workspaceContextLinkedDir(item) ?? ''));
-      if (trackedByDir === false) return;
+      if (trackedByDir === false) {
+        trackContextLinkResult(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          context_kind: 'project',
+          result: 'failed',
+          count: items.length,
+          ...(projectId ? { project_id: projectId } : {}),
+        });
+        return;
+      }
       for (const item of items) {
         appendWorkspacePrompt(item);
       }
       setProjectReferenceOpen(false);
+      trackContextLinkResult(analytics.track, {
+        page_name: 'chat_panel',
+        area: 'chat_composer',
+        context_kind: 'project',
+        result: 'success',
+        count: items.length,
+        ...(projectId ? { project_id: projectId } : {}),
+      });
       const trackedAdds: Record<string, TrackedWorkspaceLinkedDir> = {};
       for (const item of items) {
         const path = workspaceContextLinkedDir(item);
@@ -1344,9 +1365,27 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     async function handleLinkLocalCodeContext() {
       const selected = await openFolderDialog();
-      if (!selected) return;
+      if (!selected) {
+        trackContextLinkResult(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          context_kind: 'local_code',
+          result: 'cancelled',
+          ...(projectId ? { project_id: projectId } : {}),
+        });
+        return;
+      }
       const trackedLinkedDir = await addLinkedDir(selected);
-      if (trackedLinkedDir === false) return;
+      if (trackedLinkedDir === false) {
+        trackContextLinkResult(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          context_kind: 'local_code',
+          result: 'failed',
+          ...(projectId ? { project_id: projectId } : {}),
+        });
+        return;
+      }
       const label = selected.split(/[/\\]/).filter(Boolean).pop() || selected;
       const item: WorkspaceContextItem = {
         id: `local-code:${selected}`,
@@ -1359,6 +1398,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (trackedLinkedDir) {
         setWorkspaceLinkedDirAdds((current) => ({ ...current, [item.id]: trackedLinkedDir }));
       }
+      trackContextLinkResult(analytics.track, {
+        page_name: 'chat_panel',
+        area: 'chat_composer',
+        context_kind: 'local_code',
+        result: 'success',
+        count: 1,
+        ...(projectId ? { project_id: projectId } : {}),
+      });
     }
 
     async function insertSkillMention(skill: SkillSummary) {
@@ -2732,6 +2779,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 trackComposerBar({ element: 'plus_menu_open' });
                 setComposerEngaged(true);
               }}
+              onSubmenuOpen={(submenu) => {
+                // The toolbox flyout tracks its own open (design_toolbox_open).
+                if (submenu === 'toolbox') return;
+                trackComposerBar({
+                  element: 'plus_submenu_open',
+                  resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
+                });
+              }}
+              onSearchUsed={(submenu) => {
+                trackComposerBar({
+                  element: 'plus_search',
+                  resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
+                });
+              }}
               connectors={connectors}
               onPickConnector={(connector) => {
                 trackComposerBar({
@@ -2790,6 +2851,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               }}
               onReferenceProject={() => {
                 trackComposerBar({ element: 'plus_pick', resource_kind: 'workspace', resource_id: 'reference-project' });
+                trackProjectReferenceModalSurfaceView(analytics.track, {
+                  page_name: 'chat_panel',
+                  area: 'project_reference_modal',
+                  ...(projectId ? { project_id: projectId } : {}),
+                });
                 setProjectReferenceOpen(true);
               }}
               onLinkLocalCode={() => {
@@ -2813,8 +2879,23 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 });
                 setFigmaModalOpen(true);
               } : undefined}
-              onShowFigmaHelp={() => setFigmaHelpOpen(true)}
-              onOpenDesignSystems={projectId && designSystemPicker ? openDesignSystemPicker : undefined}
+              onShowFigmaHelp={() => {
+                trackChatPanelClick(analytics.track, {
+                  page_name: 'chat_panel',
+                  area: 'chat_panel',
+                  element: 'figma_help',
+                });
+                trackFigmaHelpModalSurfaceView(analytics.track, {
+                  page_name: 'chat_panel',
+                  area: 'figma_help_modal',
+                  ...(projectId ? { project_id: projectId } : {}),
+                });
+                setFigmaHelpOpen(true);
+              }}
+              onOpenDesignSystems={projectId && designSystemPicker ? () => {
+                trackComposerBar({ element: 'design_system_open' });
+                openDesignSystemPicker();
+              } : undefined}
               toolboxLabel={t('chat.designToolbox.title')}
               renderToolbox={(close) => (
                 <DesignToolboxPanel
@@ -3039,7 +3120,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         {projectReferenceOpen ? (
           <ProjectReferenceModal
             currentProjectId={projectId}
-            onClose={() => setProjectReferenceOpen(false)}
+            onClose={() => {
+              // Only the dismiss paths (X / backdrop / Escape / Cancel) land
+              // here — a confirmed pick closes via handleReferenceProjects,
+              // which reports 'success' / 'failed'.
+              trackContextLinkResult(analytics.track, {
+                page_name: 'chat_panel',
+                area: 'chat_composer',
+                context_kind: 'project',
+                result: 'cancelled',
+                ...(projectId ? { project_id: projectId } : {}),
+              });
+              setProjectReferenceOpen(false);
+            }}
             onSelect={(items) => void handleReferenceProjects(items)}
           />
         ) : null}
