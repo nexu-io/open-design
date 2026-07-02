@@ -3,6 +3,7 @@ import {
   createServer as createHttpServer,
   request as createHttpRequest,
   type IncomingMessage,
+  type OutgoingHttpHeaders,
   type Server as HttpServer,
   type ServerResponse,
 } from "node:http";
@@ -41,6 +42,8 @@ const WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
 const WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
 const STANDALONE_PARENT_PID_ENV = "OD_STANDALONE_PARENT_PID";
 const STANDALONE_STARTUP_TIMEOUT_ENV = "OD_STANDALONE_STARTUP_TIMEOUT_MS";
+const DEV_CLIENT_CACHE_CONTROL = "no-store, no-cache, must-revalidate, proxy-revalidate";
+const DEV_CLIENT_CLEAR_SITE_DATA = '"cache"';
 const SHUTDOWN_TIMEOUT_MS = 3000;
 const STANDALONE_READINESS_POLL_MS = 150;
 const STANDALONE_TCP_READINESS_GRACE_MS = STANDALONE_READINESS_POLL_MS;
@@ -63,6 +66,20 @@ type StandaloneBackend = {
   origin: string;
   stop(): Promise<void>;
 };
+
+type DaemonProxyHandlerOptions = {
+  preventStaticAssetBrowserCache?: boolean;
+};
+
+type WriteHeadOverride = (
+  statusCode: number,
+  statusMessageOrHeaders?: string | OutgoingHttpHeaders,
+  headers?: OutgoingHttpHeaders,
+) => ServerResponse;
+
+type WriteHeadOverrideArgs =
+  | [statusCode: number, headers: OutgoingHttpHeaders]
+  | [statusCode: number, statusMessage: string, headers: OutgoingHttpHeaders];
 
 function createNextApp(options: { dev: boolean; dir: string } & NextBundlerOptions): NextApp {
   const createNextServer = require("next") as (nextOptions: { dev: boolean; dir: string } & NextBundlerOptions) => NextApp;
@@ -251,6 +268,69 @@ function resolveHttpProxyTarget(
   }
 
   return new URL(`${parsedRequestUrl.pathname}${parsedRequestUrl.search}`, origin);
+}
+
+export function isNextStaticAssetRequest(requestUrl: string | undefined): boolean {
+  if (requestUrl == null) return false;
+  try {
+    const parsedRequestUrl = new URL(requestUrl, `http://${HOST}`);
+    return parsedRequestUrl.pathname === "/_next/static" || parsedRequestUrl.pathname.startsWith("/_next/static/");
+  } catch {
+    return false;
+  }
+}
+
+export function isLikelyDocumentNavigationRequest(request: IncomingMessage): boolean {
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  if (isNextStaticAssetRequest(request.url)) return false;
+  const accept = firstHeaderValue(request.headers.accept);
+  return accept?.includes("text/html") === true;
+}
+
+function devNoStoreHeaders(options: { clearSiteData?: boolean } = {}): OutgoingHttpHeaders {
+  return {
+    "Cache-Control": DEV_CLIENT_CACHE_CONTROL,
+    Pragma: "no-cache",
+    Expires: "0",
+    ...(options.clearSiteData === true ? { "Clear-Site-Data": DEV_CLIENT_CLEAR_SITE_DATA } : {}),
+  };
+}
+
+function mergeDevNoStoreHeaders(
+  headers: OutgoingHttpHeaders | undefined,
+  options: { clearSiteData?: boolean } = {},
+): OutgoingHttpHeaders {
+  return { ...(headers ?? {}), ...devNoStoreHeaders(options) };
+}
+
+function withDevNoStoreWriteHeadArgs(
+  statusCode: number,
+  statusMessageOrHeaders?: string | OutgoingHttpHeaders,
+  headers?: OutgoingHttpHeaders,
+  options: { clearSiteData?: boolean } = {},
+): WriteHeadOverrideArgs {
+  if (typeof statusMessageOrHeaders === "string") {
+    return [statusCode, statusMessageOrHeaders, mergeDevNoStoreHeaders(headers as OutgoingHttpHeaders | undefined, options)];
+  }
+  return [statusCode, mergeDevNoStoreHeaders(statusMessageOrHeaders as OutgoingHttpHeaders | undefined, options)];
+}
+
+function installDevNoStoreHeaderOverride(
+  response: ServerResponse,
+  options: { clearSiteData?: boolean } = {},
+): void {
+  for (const [key, value] of Object.entries(devNoStoreHeaders(options))) {
+    if (value == null) continue;
+    response.setHeader(key, value);
+  }
+  const originalWriteHead = response.writeHead.bind(response) as WriteHeadOverride;
+  response.writeHead = ((statusCode: number, statusMessageOrHeaders?: string | OutgoingHttpHeaders, headers?: OutgoingHttpHeaders) => {
+    const patchedArgs = withDevNoStoreWriteHeadArgs(statusCode, statusMessageOrHeaders, headers, options);
+    if (patchedArgs.length === 3) {
+      return originalWriteHead(patchedArgs[0], patchedArgs[1], patchedArgs[2]);
+    }
+    return originalWriteHead(patchedArgs[0], patchedArgs[1]);
+  }) as ServerResponse["writeHead"];
 }
 
 export function normalizeDaemonProxyOriginHeader(options: {
@@ -876,9 +956,10 @@ async function createWebSidecarHandle(
   };
 }
 
-function createDaemonProxyHandler(
+export function createDaemonProxyHandler(
   daemonOrigin: string | null,
   fallback: (request: IncomingMessage, response: ServerResponse) => Promise<void>,
+  options: DaemonProxyHandlerOptions = {},
 ): (request: IncomingMessage, response: ServerResponse) => void {
   return (request, response) => {
     const daemonProxyTarget = daemonOrigin == null ? null : resolveDaemonProxyTarget(daemonOrigin, request.url);
@@ -891,6 +972,14 @@ function createDaemonProxyHandler(
         response.end(error instanceof Error ? error.message : String(error));
       });
       return;
+    }
+
+    if (options.preventStaticAssetBrowserCache === true) {
+      if (isNextStaticAssetRequest(request.url)) {
+        installDevNoStoreHeaderOverride(response);
+      } else if (isLikelyDocumentNavigationRequest(request)) {
+        installDevNoStoreHeaderOverride(response, { clearSiteData: true });
+      }
     }
 
     void fallback(request, response).catch((error: unknown) => {
@@ -910,7 +999,9 @@ async function startRegularNextSidecar(
 
   const daemonOrigin = resolveDaemonOrigin();
   const handleRequest = app.getRequestHandler();
-  const httpServer = createHttpServer(createDaemonProxyHandler(daemonOrigin, handleRequest));
+  const httpServer = createHttpServer(createDaemonProxyHandler(daemonOrigin, handleRequest, {
+    preventStaticAssetBrowserCache: dev,
+  }));
 
   return await createWebSidecarHandle(runtime, httpServer, async () => {
     await app.close?.();
