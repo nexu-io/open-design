@@ -1,5 +1,11 @@
 # Decisions Log
 
+## 2026-07-02 — naver-blog subagent-stages 구현 완료 + PR #6
+- claude CLI 2.1.198 dispatch tool `Task`→`Agent` 개명 확인 → TaskCard 양쪽 매칭: 라이브 도그푸딩 실측, 구버전 호환 (출처: HANDOFF subagent-stages SHIPPED)
+- tool_use 중복 발화(pre-existing, one-shot dedup)를 이 브랜치서 fix: TaskCard 렌더를 직접 막아 in-scope — emitToolUse 내부 emittedToolUseIds 중앙 idempotent 가드 (출처: 육안 라운드 2)
+- 육안 검증 = 자동 게이트와 별개 필수 단계: 유닛+API 전부 green에서 육안이 실버그 2건(SSE 매퍼 태그 탈락, tool_use 중복) 추가 발견 — persisted-event 주입 테스트는 라이브 인제스천 경로 미커버 (출처: 육안 3라운드)
+- dev 환경: Node 24 PATH 강제 필수 (쉘 v25 → better-sqlite3 mismatch 가짜실패 455) + vitest 필터는 exec vitest run (출처: Task 3 게이트)
+
 ## 2026-07-02 — naver-blog 리서치·검수 서브에이전트 분리 (설계+플랜 완료, 구현 0/6)
 - A안(스킬 지시문 레벨, child Claude Code Task tool 활용) 채택. C안(daemon 파이프라인 스테이지 실행기, `pipeline.stages` 승격)는 규모 초과로 별도 스펙 분리 — 근거: `docs/superpowers/specs/2026-07-02-naver-blog-subagent-stages-design.md`
 - daemon 사이드체인 가드(`claude-stream.ts`의 `parent_tool_use_id` 미처리 → 서브에이전트 `stop_reason: end_turn`이 메인 turn 종료로 오인돼 stdin 조기 close)를 스킬 개정의 필수 선행으로 결정 — 검증 없이 배포하면 서브에이전트 dispatch가 run을 죽일 위험
