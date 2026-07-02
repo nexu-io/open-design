@@ -1949,6 +1949,8 @@ export interface Dict {
   'newproj.importClaudeZipTitle': string;
   'newproj.importingClaudeZip': string;
   'newproj.privacyFooter': string;
+  'newproj.openFolder': string;
+  'newproj.openingFolder': string;
   'newproj.designSystem': string;
   'newproj.dsNoneFreeform': string;
   'newproj.dsNoneSubtitleEmpty': string;
