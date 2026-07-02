@@ -1,0 +1,47 @@
+/*
+ * Component-owned styles for the Design Signature Strip.
+ * Disclosure animation (expand/collapse) is NOT defined here, it is inherited
+ * from the shared `.accordion-collapsible` + `.accordion-collapsible-inner`
+ * class pair loaded globally via `apps/web/src/index.css` (defined in
+ * `apps/web/src/styles/viewer/composio.css`). Do not add a bespoke transition
+ * here; use the canonical shared classes instead.
+ */
+.strip {
+  border: 1px solid var(--border, rgba(0,0,0,0.1));
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  background: var(--surface, transparent);
+}
+.collapsedRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+.fingerprint { font-family: ui-monospace, monospace; opacity: 0.7; }
+.changeList { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; }
+.changeItem { display: flex; gap: 6px; }
+.dir { width: 1em; text-align: center; }
+.whyGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin-top: 6px; }
+.strand { display: flex; align-items: center; gap: 8px; }
+.strandLabel { min-width: 64px; }
+.barTrack {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border, rgba(0, 0, 0, 0.12));
+  overflow: hidden;
+}
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent, currentColor);
+}
+.whyBtn { margin-top: 6px; }

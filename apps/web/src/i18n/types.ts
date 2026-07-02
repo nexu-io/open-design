@@ -3992,6 +3992,19 @@ export interface Dict {
   'critiqueTheater.settingsEnabledDescription': string;
   'critiqueTheater.settingsEnabledProjectHint': string;
   'critiqueTheater.settingsEnabledNoProjectHint': string;
+  'designSignature.collapsedLabel': string;
+  'designSignature.changesSince': string;
+  'designSignature.changeCount': string;
+  'designSignature.noPrevious': string;
+  'designSignature.noChanges': string;
+  'designSignature.whyDetail': string;
+  'designSignature.expand': string;
+  'designSignature.collapse': string;
+  'designSignature.ariaLabel': string;
+  'designSignature.settingsNav': string;
+  'designSignature.settingsNavHint': string;
+  'designSignature.settingsEnabledLabel': string;
+  'designSignature.settingsEnabledDescription': string;
 
   // Diagnostics export
   'diagnostics.exportTitle': string;
