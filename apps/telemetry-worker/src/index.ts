@@ -1,8 +1,15 @@
+import * as Sentry from '@sentry/cloudflare';
+import type { CloudflareOptions, ErrorEvent, Event } from '@sentry/cloudflare';
+
 const DEFAULT_LANGFUSE_BASE_URL = 'https://us.cloud.langfuse.com';
 const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_BATCH_EVENTS = 100;
 const RELAY_MARKER_HEADER = 'X-Open-Design-Telemetry';
 const RELAY_MARKER_VALUE = 'langfuse-ingestion-v1';
+const DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.1;
+const FILTERED_VALUE = '[Filtered]';
+const SENSITIVE_KEY_PATTERN =
+  /authorization|cookie|password|secret|token|api[-_]?key|session|langfuse/i;
 const ALLOWED_EVENT_TYPES = new Set([
   'trace-create',
   'span-create',
@@ -19,6 +26,10 @@ export interface Env {
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
   LANGFUSE_BASE_URL?: string;
+  SENTRY_DSN?: string;
+  SENTRY_ENVIRONMENT?: string;
+  SENTRY_RELEASE?: string;
+  SENTRY_TRACES_SAMPLE_RATE?: string;
   TELEMETRY_CLIENT_RATE_LIMITER?: RateLimitBinding;
   TELEMETRY_IP_RATE_LIMITER?: RateLimitBinding;
 }
@@ -35,6 +46,86 @@ function jsonResponse(status: number, body: Record<string, unknown>): Response {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function shouldScrubKey(key: string): boolean {
+  return SENSITIVE_KEY_PATTERN.test(key);
+}
+
+function scrubValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => scrubValue(item));
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  const scrubbed: Record<string, unknown> = {};
+  for (const [key, nestedValue] of Object.entries(value)) {
+    scrubbed[key] = shouldScrubKey(key) ? FILTERED_VALUE : scrubValue(nestedValue);
+  }
+  return scrubbed;
+}
+
+function parseSampleRate(value: string | undefined): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1
+    ? parsed
+    : DEFAULT_SENTRY_TRACES_SAMPLE_RATE;
+}
+
+export function scrubSentryEvent(event: Event): Event {
+  const scrubbed: Event = { ...event };
+
+  if (event.request) {
+    scrubbed.request = { ...event.request };
+    delete scrubbed.request.data;
+    if (event.request.headers && isRecord(event.request.headers)) {
+      scrubbed.request.headers = scrubValue(event.request.headers) as Record<string, string>;
+    }
+  }
+
+  if (event.extra) {
+    scrubbed.extra = scrubValue(event.extra) as NonNullable<Event['extra']>;
+  }
+
+  if (event.user) {
+    const userId = typeof event.user.id === 'string' ? event.user.id : undefined;
+    if (userId) {
+      scrubbed.user = { id: userId };
+    } else {
+      delete scrubbed.user;
+    }
+  }
+
+  return scrubbed;
+}
+
+export function buildSentryOptions(env: Env): CloudflareOptions {
+  const dsn = env.SENTRY_DSN?.trim();
+  const release = env.SENTRY_RELEASE?.trim();
+  const environment = env.SENTRY_ENVIRONMENT?.trim() || 'production';
+  const options: CloudflareOptions = {
+    enabled: Boolean(dsn),
+    environment,
+    sendDefaultPii: false,
+    tracesSampleRate: parseSampleRate(env.SENTRY_TRACES_SAMPLE_RATE),
+    integrations: (integrations) => [
+      ...integrations.filter((integration) => integration.name !== 'HttpServer'),
+      Sentry.httpServerIntegration({ maxRequestBodySize: 'none' }),
+    ],
+    beforeSend: (event) => scrubSentryEvent(event) as ErrorEvent,
+  };
+
+  if (dsn) {
+    options.dsn = dsn;
+  }
+  if (release) {
+    options.release = release;
+  }
+
+  return options;
 }
 
 function bodySizeBytes(value: string): number {
@@ -196,6 +287,6 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   });
 }
 
-export default {
+export default Sentry.withSentry<Env>((env) => buildSentryOptions(env), {
   fetch: handleRequest,
-};
+});

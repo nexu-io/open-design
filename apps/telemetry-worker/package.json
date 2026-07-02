@@ -15,5 +15,8 @@
   },
   "engines": {
     "node": "~24"
+  },
+  "dependencies": {
+    "@sentry/cloudflare": "^10.63.0"
   }
 }

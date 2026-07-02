@@ -2,6 +2,7 @@ name = "open-design-telemetry-relay"
 account_id = "64ad4569ffd912432d6b86d5656484c4"
 main = "src/index.ts"
 compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
 workers_dev = false
 routes = [
   { pattern = "telemetry.open-design.ai", custom_domain = true }
@@ -9,6 +10,8 @@ routes = [
 
 [vars]
 LANGFUSE_BASE_URL = "https://us.cloud.langfuse.com"
+SENTRY_ENVIRONMENT = "production"
+SENTRY_TRACES_SAMPLE_RATE = "0.1"
 
 [[ratelimits]]
 name = "TELEMETRY_CLIENT_RATE_LIMITER"

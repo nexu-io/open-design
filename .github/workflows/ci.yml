@@ -140,6 +140,7 @@ jobs:
       - name: App workspace tests
         run: |
           pnpm --filter @open-design/daemon test
+          pnpm --filter @open-design/telemetry-worker test
           pnpm --filter @open-design/web test
           pnpm --filter @open-design/tools-dev test
           pnpm --filter @open-design/tools-pack test
@@ -165,6 +166,40 @@ jobs:
       # races outweigh the lost parallelism; revisit if the package count grows.
       - name: Build workspaces
         run: pnpm -r --workspace-concurrency=1 --if-present run build
+
+  automerge-gate:
+    name: automerge-gate
+    runs-on: ubuntu-latest
+    needs: [validate, packaged_changes, packaged_smoke_mac, packaged_smoke_win]
+    if: ${{ always() }}
+
+    steps:
+      - name: Require workspace and packaged validation to pass
+        env:
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+          PACKAGED_CHANGES_RESULT: ${{ needs.packaged_changes.result }}
+          PACKAGED_REQUIRED: ${{ needs.packaged_changes.outputs.required }}
+          MAC_SMOKE_RESULT: ${{ needs.packaged_smoke_mac.result }}
+          WIN_SMOKE_RESULT: ${{ needs.packaged_smoke_win.result }}
+        run: |
+          if [ "$VALIDATE_RESULT" != "success" ]; then
+            echo "validate result: $VALIDATE_RESULT"
+            exit 1
+          fi
+          if [ "$PACKAGED_CHANGES_RESULT" != "success" ]; then
+            echo "packaged_changes result: $PACKAGED_CHANGES_RESULT"
+            exit 1
+          fi
+          if [ "$PACKAGED_REQUIRED" = "true" ]; then
+            if [ "$MAC_SMOKE_RESULT" != "success" ]; then
+              echo "packaged_smoke_mac result: $MAC_SMOKE_RESULT"
+              exit 1
+            fi
+            if [ "$WIN_SMOKE_RESULT" != "success" ]; then
+              echo "packaged_smoke_win result: $WIN_SMOKE_RESULT"
+              exit 1
+            fi
+          fi
 
   packaged_smoke_mac:
     name: Packaged mac smoke
