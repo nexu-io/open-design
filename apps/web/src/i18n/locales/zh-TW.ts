@@ -3300,6 +3300,7 @@ export const zhTW: Dict = {
   "critiqueTheater.settingsEnabledProjectHint":
     "已為此專案儲存。此專案的新執行將在伺服器端經過設計評審團。",
   "critiqueTheater.settingsEnabledNoProjectHint":
+    "請開啟專案以將設定持久化至伺服器端。目前僅修改瀏覽器內偏好。",
   "designSignature.collapsedLabel": "Signature",
   "designSignature.changesSince": "Changes since last version",
   "designSignature.changeCount": "{n} changes since last version",
@@ -3313,7 +3314,6 @@ export const zhTW: Dict = {
   "designSignature.settingsNavHint": "See what changed each time a design regenerates",
   "designSignature.settingsEnabledLabel": "Show the \"what changed\" strip on the preview",
   "designSignature.settingsEnabledDescription": "When enabled, a collapsed strip above the artifact preview summarizes what changed since the previous version (color, type, spacing, radius), so you can catch unintended drift across regenerations.",
-    "請開啟專案以將設定持久化至伺服器端。目前僅修改瀏覽器內偏好。",
   "pet.title": "寵物",
   "pet.subtitle":
     "「顯示寵物」控制它是否出現在工作區；下方可以選擇內建、自訂或社群寵物。",

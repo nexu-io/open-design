@@ -3291,6 +3291,7 @@ export const zhCN: Dict = {
   "critiqueTheater.settingsEnabledProjectHint":
     "已为该项目保存。该项目的新运行将在服务端经过设计评审团。",
   "critiqueTheater.settingsEnabledNoProjectHint":
+    "打开项目后此设置才会服务端持久化；目前仅修改浏览器本地偏好。",
   "designSignature.collapsedLabel": "Signature",
   "designSignature.changesSince": "Changes since last version",
   "designSignature.changeCount": "{n} changes since last version",
@@ -3304,7 +3305,6 @@ export const zhCN: Dict = {
   "designSignature.settingsNavHint": "See what changed each time a design regenerates",
   "designSignature.settingsEnabledLabel": "Show the \"what changed\" strip on the preview",
   "designSignature.settingsEnabledDescription": "When enabled, a collapsed strip above the artifact preview summarizes what changed since the previous version (color, type, spacing, radius), so you can catch unintended drift across regenerations.",
-    "打开项目后此设置才会服务端持久化；目前仅修改浏览器本地偏好。",
   "pet.title": "宠物",
   "pet.subtitle":
     "「显示宠物」控制它是否出现在工作区；下方可以选择内置、自定义或社区宠物。",
