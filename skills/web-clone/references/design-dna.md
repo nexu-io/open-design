@@ -44,7 +44,7 @@ DNA JSON 分三层，对应"可量化 / 可感知 / 特殊渲染"：
 ## 脚手架
 
 ```bash
-node scripts/dna-scaffold.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/dna-scaffold.mjs" \
   --recon ./website-clones/<站名>-clone/RECON/original-recon.json \
   --out   ./website-clones/<站名>-clone/RECON/design-dna.json
 ```

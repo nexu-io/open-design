@@ -33,9 +33,13 @@ od:
 
 # Web Clone · 网站复刻方法论
 
-把"复刻一个网站"做成可重复的流程。配套工程区默认是当前工作区的 `./website-clones/`（每个复刻是一个子目录）。如需自定义位置，设置 `WEB_CLONE_ROOT=/absolute/path`。
+把"复刻一个网站"做成可重复的流程。配套工程区默认是目标工作区的 `./website-clones/`（每个复刻是一个子目录）。如需自定义位置，设置 `WEB_CLONE_ROOT=/absolute/path`。
 
-运行内置脚本时，在 skill 根目录下使用相对路径，例如 `node scripts/recon-site.mjs ...`。不要使用作者本机路径或假设某个固定用户目录存在。
+运行内置脚本时，从用户的目标 workspace / project 根目录执行命令，并让 `WEB_CLONE_SKILL_DIR` 指向本 skill 目录。不要 `cd` 到 skill 目录里运行脚本，否则 `./website-clones/` 会写进 skill 包内部。
+
+```bash
+export WEB_CLONE_SKILL_DIR="/absolute/path/to/skills/web-clone"
+```
 
 ## 头号铁律：真源码至上，绝不信 AI 推测的代码
 
@@ -50,7 +54,7 @@ od:
 ### Step 0 · 先建标准工程骨架
 
 ```bash
-node scripts/init-clone.mjs <站名> --url <原站URL>
+node "$WEB_CLONE_SKILL_DIR/scripts/init-clone.mjs" <站名> --url <原站URL>
 ```
 
 该脚本会创建 `./website-clones/<站名>-clone/`、`NOTES.md`、`RECON/screenshots/`，避免每次手工漏掉产物。
@@ -74,34 +78,34 @@ SSL_CERT_FILE=/etc/ssl/cert.pem gh api "search/repositories?q=<关键词>" \
 优先用内置脚本跑标准侦察：
 
 ```bash
-node scripts/recon-site.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/recon-site.mjs" \
   --url <原站URL> \
   --out ./website-clones/<站名>-clone/RECON \
   --label original
 
-node scripts/asset-harvest.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/asset-harvest.mjs" \
   --recon ./website-clones/<站名>-clone/RECON/original-recon.json \
   --out ./website-clones/<站名>-clone/assets/original \
   --manifest ./website-clones/<站名>-clone/RECON/asset-manifest.json
 
-node scripts/network-capture.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/network-capture.mjs" \
   --url <原站URL> \
   --out ./website-clones/<站名>-clone/RECON/network \
   --label original
 
-node scripts/route-crawl.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/route-crawl.mjs" \
   --url <原站URL> \
   --out ./website-clones/<站名>-clone/RECON/routes \
   --label original \
   --max-pages 25 \
   --max-depth 2
 
-node scripts/interaction-probe.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/interaction-probe.mjs" \
   --url <原站URL> \
   --out ./website-clones/<站名>-clone/RECON/interactions \
   --label original
 
-node scripts/sourcemap-hunt.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/sourcemap-hunt.mjs" \
   --recon ./website-clones/<站名>-clone/RECON/original-recon.json \
   --out ./website-clones/<站名>-clone/RECON/sourcemaps
 ```
@@ -115,7 +119,7 @@ node scripts/sourcemap-hunt.mjs \
 **若模式是「视觉复刻」或「内容爆改」** → 顺手产出结构化设计身份 `design-dna.json`，把"那个站的感觉"变成可版本化、可对照的 token 规范，让 Step 6 替换时"DNA 留着、内容换掉"有据可依：
 
 ```bash
-node scripts/dna-scaffold.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/dna-scaffold.mjs" \
   --recon ./website-clones/<站名>-clone/RECON/original-recon.json \
   --out   ./website-clones/<站名>-clone/RECON/design-dna.json \
   --name  "<站名>"
@@ -142,7 +146,7 @@ L4-L6 复杂站按 `references/complex-playbooks.md` 走，不要只用普通官
 ### Step 4 · 在克隆中枢里搭工程
 
 ```bash
-mkdir ./website-clones/<站名>-clone && cd $_
+cd ./website-clones/<站名>-clone
 # git 源码：clone 进来；单文件：放进来。原始源码留一份只读基准 index-original.html
 # 检查 Node 版本（package.json engines），nvm use 对应版本，钉 .nvmrc
 ```
@@ -158,30 +162,30 @@ mkdir ./website-clones/<站名>-clone && cd $_
 复刻完成后再跑一次克隆站侦察，并生成自动对比报告：
 
 ```bash
-node scripts/recon-site.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/recon-site.mjs" \
   --url http://127.0.0.1:<端口>/ \
   --out ./website-clones/<站名>-clone/RECON \
   --label clone
 
-node scripts/route-crawl.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/route-crawl.mjs" \
   --url http://127.0.0.1:<端口>/ \
   --out ./website-clones/<站名>-clone/RECON/routes-clone \
   --label clone \
   --max-pages 25 \
   --max-depth 2
 
-node scripts/interaction-probe.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/interaction-probe.mjs" \
   --url http://127.0.0.1:<端口>/ \
   --out ./website-clones/<站名>-clone/RECON/interactions-clone \
   --label clone
 
-node scripts/visual-diff.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/visual-diff.mjs" \
   --original ./website-clones/<站名>-clone/RECON/screenshots/original-1440.png \
   --clone ./website-clones/<站名>-clone/RECON/screenshots/clone-1440.png \
   --out ./website-clones/<站名>-clone/RECON/visual-diff-1440.json \
   --diff ./website-clones/<站名>-clone/RECON/screenshots/visual-diff-1440.png
 
-node scripts/compare-recon.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/compare-recon.mjs" \
   --original ./website-clones/<站名>-clone/RECON/original-recon.json \
   --clone ./website-clones/<站名>-clone/RECON/clone-recon.json \
   --visual-diff ./website-clones/<站名>-clone/RECON/visual-diff-1440.json \
@@ -191,7 +195,7 @@ node scripts/compare-recon.mjs \
   --clone-interactions ./website-clones/<站名>-clone/RECON/interactions-clone/clone-interactions.json \
   --out ./website-clones/<站名>-clone/CLONE_REPORT.md
 
-node scripts/audit-clone.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/audit-clone.mjs" \
   --project ./website-clones/<站名>-clone \
   --brand "<原站品牌名>" \
   --out ./website-clones/<站名>-clone/CLONE_AUDIT.md

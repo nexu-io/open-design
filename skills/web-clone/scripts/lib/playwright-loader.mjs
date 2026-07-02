@@ -1,19 +1,30 @@
 import { createRequire } from "node:module";
+import path from "node:path";
 
-const require = createRequire(import.meta.url);
+const skillRequire = createRequire(import.meta.url);
+
+function requireFromWorkspace(specifier) {
+  const workspaceRequire = createRequire(path.join(process.cwd(), "package.json"));
+  return workspaceRequire(specifier);
+}
 
 export function loadPlaywright() {
   const candidates = [
-    "playwright",
+    () => process.env.WEB_CLONE_PLAYWRIGHT_PATH
+      ? skillRequire(process.env.WEB_CLONE_PLAYWRIGHT_PATH)
+      : null,
+    () => requireFromWorkspace("playwright"),
+    () => skillRequire("playwright"),
   ];
   for (const candidate of candidates) {
     try {
-      return require(candidate);
+      const loaded = candidate();
+      if (loaded) return loaded;
     } catch {
       // Try next candidate.
     }
   }
-  throw new Error("Playwright not found. Run `npm install -D playwright` in the clone project, or install the Browser skill dependencies.");
+  throw new Error("Playwright not found. Run `npm install -D playwright` in the workspace where you execute the web-clone scripts, or set WEB_CLONE_PLAYWRIGHT_PATH to an installed Playwright package.");
 }
 
 export async function launchChromium(chromium) {

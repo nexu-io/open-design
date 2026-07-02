@@ -16,7 +16,7 @@
 
 ## 一键脚本
 ```bash
-node scripts/mirror-site.mjs \
+node "$WEB_CLONE_SKILL_DIR/scripts/mirror-site.mjs" \
   --url https://<站>/ \
   --out ./website-clones/<站名>-clone
 ```
