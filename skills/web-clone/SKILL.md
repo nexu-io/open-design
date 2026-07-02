@@ -175,6 +175,12 @@ node scripts/interaction-probe.mjs \
   --out ./website-clones/<站名>-clone/RECON/interactions-clone \
   --label clone
 
+node scripts/visual-diff.mjs \
+  --original ./website-clones/<站名>-clone/RECON/screenshots/original-1440.png \
+  --clone ./website-clones/<站名>-clone/RECON/screenshots/clone-1440.png \
+  --out ./website-clones/<站名>-clone/RECON/visual-diff-1440.json \
+  --diff ./website-clones/<站名>-clone/RECON/screenshots/visual-diff-1440.png
+
 node scripts/compare-recon.mjs \
   --original ./website-clones/<站名>-clone/RECON/original-recon.json \
   --clone ./website-clones/<站名>-clone/RECON/clone-recon.json \
@@ -184,12 +190,6 @@ node scripts/compare-recon.mjs \
   --original-interactions ./website-clones/<站名>-clone/RECON/interactions/original-interactions.json \
   --clone-interactions ./website-clones/<站名>-clone/RECON/interactions-clone/clone-interactions.json \
   --out ./website-clones/<站名>-clone/CLONE_REPORT.md
-
-node scripts/visual-diff.mjs \
-  --original ./website-clones/<站名>-clone/RECON/screenshots/original-1440.png \
-  --clone ./website-clones/<站名>-clone/RECON/screenshots/clone-1440.png \
-  --out ./website-clones/<站名>-clone/RECON/visual-diff-1440.json \
-  --diff ./website-clones/<站名>-clone/RECON/screenshots/visual-diff-1440.png
 
 node scripts/audit-clone.mjs \
   --project ./website-clones/<站名>-clone \
