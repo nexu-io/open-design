@@ -48,14 +48,14 @@ jobs:
       - name: Render previews + publish clips to R2 (main only)
         uses: ./.github/actions/bake-previews
         with:
-          upload: ${{ github.ref == 'refs/heads/main' }}
+          upload: ${{ github.ref == 'refs/heads/main' && github.repository == 'nexu-io/open-design' }}
           r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_AK }}
           r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_SK }}
           r2-bucket: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_BUCKET }}
           r2-endpoint: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_URL }}
 
       - name: Mint release-bot token for the rolling manifest PR
-        if: ${{ github.ref == 'refs/heads/main' }}
+        if: ${{ github.ref == 'refs/heads/main' && github.repository == 'nexu-io/open-design' }}
         id: app
         # A GITHUB_TOKEN-authored push/PR does NOT trigger workflows, so a manifest
         # PR opened with it never runs `Validate workspace` — main's required check
@@ -71,7 +71,7 @@ jobs:
           private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
 
       - name: Open or update the rolling manifest PR for review
-        if: ${{ github.ref == 'refs/heads/main' }} # branch debug runs skip publishing
+        if: ${{ github.ref == 'refs/heads/main' && github.repository == 'nexu-io/open-design' }} # branch debug runs skip publishing
         # The clips are already on R2; the manifest is version-pinned (it ships
         # with the build), so it must land on main through a reviewed PR rather
         # than a direct push to protected main.
