@@ -75,7 +75,7 @@
 
 .demo-bar__group {
   display: grid;
-  grid-template-columns: 66px minmax(0, 1fr);
+  grid-template-columns: 72px minmax(0, 1fr);
   align-items: start;
   gap: 8px;
   min-width: 0;
@@ -95,7 +95,8 @@
   color: rgba(255, 255, 255, 0.48);
   letter-spacing: 0.02em;
   flex-shrink: 0;
-  white-space: nowrap;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .demo-bar__divider {
