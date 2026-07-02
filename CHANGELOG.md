@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- 🧬 **Design Signature and Diff.** New `od signature <file>` command gives every artifact a legible identity: it scores the **palette**, type **rhythm**, spacing **cadence**, and structural **density** from the tokens the design actually uses, with a composite vitality score and a stable fingerprint. With `od signature <file> --against <previous>` it also prints a plain-language list of what changed since the last version (for example "Color changed", "Corner radius increased", "Typography changed") plus the vitality delta. Pure, deterministic, dependency-free; reads a file or stdin and supports `--json`. This lands the engine and CLI; an always-on Signature readout in the workspace is proposed as a follow-up.
+
 ## [0.9.0] - 2026-05-29
 
 🎉 **310 PRs · 88 contributors · 7 days** — Meet the **install-and-create release**. No more API-key scavenger hunts. No more asking teammates to install three different CLIs before their first prompt. **Open Design AMR** is now built into the app: sign in once, pick a model, and start building. Around that zero-config first run, 0.9.0 brings a bigger agent bench, faster model picking, a more discoverable plugin marketplace, richer review workflows, smoother Studio tools, and easier installs across Windows, macOS, and Linux. 🚀
