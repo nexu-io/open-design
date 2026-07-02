@@ -76,6 +76,10 @@ function assetPreviewStyle(asset: NonNullable<DesignKit['assets']>[number]): CSS
   } as CSSProperties;
 }
 
+function assetPreviewKey(asset: NonNullable<DesignKit['assets']>[number]): string {
+  return `${asset.kind}:${asset.url}`;
+}
+
 // ── Logo with fallback chain ────────────────────────────────────────
 // Brand stage (`/api/brands/:id/logo`) when a brandId is known, else an explicit
 // logoSrc, then Google's favicon for the domain, then a monogram letter.
@@ -353,6 +357,8 @@ function DesignKitViewInner({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [logoLightbox, setLogoLightbox] = useState<{ src: string; caption: string } | null>(null);
   const [assetPreview, setAssetPreview] = useState<{ url: string; label: string } | null>(null);
+  const [loadedAssetPreviews, setLoadedAssetPreviews] = useState<ReadonlySet<string>>(() => new Set());
+  const [assetPreviewRevealArmed, setAssetPreviewRevealArmed] = useState(false);
   const [designMdOpen, setDesignMdOpen] = useState(false);
   const [designMdDraft, setDesignMdDraft] = useState('');
   const [designMdTarget, setDesignMdTarget] = useState<DesignMdEditTarget>({ kind: 'all' });
@@ -540,6 +546,24 @@ function DesignKitViewInner({
       setLightboxIndex(lightboxItems.length - 1);
     }
   }, [lightboxIndex, lightboxItems.length]);
+
+  useEffect(() => {
+    const assetKeys = (kit.assets ?? []).map(assetPreviewKey);
+    setLoadedAssetPreviews(new Set());
+    setAssetPreviewRevealArmed(false);
+    if (assetKeys.length === 0) return undefined;
+    const armTimer = window.setTimeout(() => {
+      setAssetPreviewRevealArmed(true);
+    }, 3500);
+    const revealTimer = window.setTimeout(() => {
+      setLoadedAssetPreviews(new Set(assetKeys));
+      setAssetPreviewRevealArmed(true);
+    }, 9000);
+    return () => {
+      window.clearTimeout(armTimer);
+      window.clearTimeout(revealTimer);
+    };
+  }, [kit.assets]);
 
   useEffect(() => {
     if (
@@ -1629,35 +1653,50 @@ function DesignKitViewInner({
             <section className={styles.section} aria-label={t('brandDetail.brandAssets')}>
               <h3 className={styles.sectionTitle}>{t('brandDetail.brandAssets')}</h3>
               <div className={styles.assets}>
-                {kit.assets.map((a) => (
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    key={a.kind}
-                    className={styles.asset}
-                    onClick={() => setAssetPreview({ url: a.url, label: a.label })}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        setAssetPreview({ url: a.url, label: a.label });
-                      }
-                    }}
-                  >
-                    <div className={styles.assetFrame} style={assetPreviewStyle(a)}>
-                      <iframe
-                        src={a.url}
-                        loading="lazy"
-                        tabIndex={-1}
-                        aria-hidden="true"
-                        sandbox={DESIGN_KIT_PREVIEW_SANDBOX}
-                        title={a.label}
-                      />
+                {kit.assets.map((a) => {
+                  const previewKey = assetPreviewKey(a);
+                  const previewLoaded = assetPreviewRevealArmed && loadedAssetPreviews.has(previewKey);
+                  return (
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      key={a.kind}
+                      className={styles.asset}
+                      onClick={() => setAssetPreview({ url: a.url, label: a.label })}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setAssetPreview({ url: a.url, label: a.label });
+                        }
+                      }}
+                    >
+                      <div
+                        className={`${styles.assetFrame} ${previewLoaded ? styles.assetFrameLoaded : ''}`}
+                        style={assetPreviewStyle(a)}
+                      >
+                        <iframe
+                          src={a.url}
+                          loading="eager"
+                          tabIndex={-1}
+                          aria-hidden="true"
+                          sandbox={DESIGN_KIT_PREVIEW_SANDBOX}
+                          title={a.label}
+                          onLoad={() => {
+                            setLoadedAssetPreviews((prev) => {
+                              if (prev.has(previewKey)) return prev;
+                              const next = new Set(prev);
+                              next.add(previewKey);
+                              return next;
+                            });
+                          }}
+                        />
+                      </div>
+                      <div className={styles.assetMeta}>
+                        <span className={styles.assetName}>{a.label}</span>
+                      </div>
                     </div>
-                    <div className={styles.assetMeta}>
-                      <span className={styles.assetName}>{a.label}</span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           ) : null}
