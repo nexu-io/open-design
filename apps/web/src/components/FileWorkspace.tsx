@@ -348,6 +348,7 @@ const BROWSER_TAB_PREFIX = '__browser__:';
 // We keep an LRU of the most-recently-activated browser tabs live and unmount
 // the rest; switching back to an evicted tab remounts (reloads) it.
 const BROWSER_KEEPALIVE_CAP = 3;
+const QUICK_SWITCHER_DOCUMENT_CLASS = 'od-quick-switcher-open';
 const SKETCH_AUTOSAVE_DELAY_MS = 800;
 
 // Stable empty folder list so the render-phase project-switch reset is
@@ -1628,6 +1629,13 @@ export function FileWorkspace({
     };
     window.addEventListener('keydown', onKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [quickSwitcherOpen]);
+
+  useEffect(() => {
+    document.body.classList.toggle(QUICK_SWITCHER_DOCUMENT_CLASS, quickSwitcherOpen);
+    return () => {
+      document.body.classList.remove(QUICK_SWITCHER_DOCUMENT_CLASS);
+    };
   }, [quickSwitcherOpen]);
 
   async function handleDelete(name: string) {

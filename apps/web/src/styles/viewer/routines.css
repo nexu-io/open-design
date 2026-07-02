@@ -1664,12 +1664,86 @@
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
 }
+/* QuickSwitcher owns the modal input while open. The fixed composer normally
+   restores pointer-events on its child .composer, so suspend that child too. */
+body.od-quick-switcher-open .chat-composer-fixed-layer {
+  pointer-events: none;
+  opacity: 0.58;
+}
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer {
+  pointer-events: none;
+}
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell:focus-within,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer.drag-active .composer-shell {
+  border-color: transparent;
+  box-shadow: none;
+}
 /* Keep the typing area a clean white field with a soft border so it reads as
    the one input surface inside the tinted card — the resting border replaces
    the removed toolbar divider as the only separator in the footer. */
 .chat-composer-fixed-layer .composer-input-wrap {
   background: var(--bg-panel);
   border-color: var(--border-soft);
+}
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap:focus-within {
+  background: var(--bg-fill-tertiary);
+  border-color: transparent;
+  box-shadow: none;
+}
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-editor [contenteditable='true'],
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-editor .composer-editable,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer textarea,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer input {
+  color: var(--text-muted);
+  caret-color: transparent;
+}
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-placeholder {
+  color: color-mix(in srgb, var(--text-muted) 72%, transparent);
+}
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-design-system-row,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-row {
+  border-color: transparent;
+}
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger.picked,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context--plugin,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context--workspace,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-order,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-preview-trigger,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-preview-trigger:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-open,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment button,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment button:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-active-file,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__chip {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-name,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-kind,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name strong,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name span {
+  color: var(--text-muted);
+}
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context .staged-icon,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context .staged-remove,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-icon,
+body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-remove,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__icon,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-chip-strip__remove {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
 }
 .app .composer textarea {
   min-height: 56px;
@@ -1772,6 +1846,26 @@
   border-color: var(--border);
   color: var(--text-faint);
   cursor: default;
+}
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .icon-btn,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .icon-btn:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-import,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-research,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger:hover,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger.is-open,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-agent-trigger,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-btn,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled,
+body.od-quick-switcher-open .chat-composer-fixed-layer .working-dir-pill-trigger {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled {
+  color: var(--text-faint);
 }
 /* The pill renders under `.app` (legacy header host) and under
    `.chat-composer-fixed-layer` (its current home in the composer toolbar).

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -189,9 +191,12 @@ vi.mock('../../src/components/DesignFilesPanel', async () => {
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
 const mockedWriteProjectTextFile = vi.mocked(writeProjectTextFile);
+const chatCss = readFileSync(join(process.cwd(), 'src/styles/chat.css'), 'utf8');
+const routinesCss = readFileSync(join(process.cwd(), 'src/styles/viewer/routines.css'), 'utf8');
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
+let composerCssStyle: HTMLStyleElement | null = null;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -215,6 +220,10 @@ afterEach(() => {
     act(() => root?.unmount());
     root = null;
   }
+  document.body.classList.remove('od-quick-switcher-open');
+  document.querySelectorAll('.chat-composer-fixed-layer').forEach((node) => node.remove());
+  composerCssStyle?.remove();
+  composerCssStyle = null;
   host?.remove();
   host = null;
   vi.clearAllMocks();
@@ -246,6 +255,65 @@ function workspaceFile(name: string): ProjectFile {
     kind: name.endsWith('.html') ? 'html' : 'text',
     mime: name.endsWith('.html') ? 'text/html' : 'text/plain',
   };
+}
+
+function cssDeclarations(css: string, selector: string): string {
+  const blocks: string[] = [];
+  const rulePattern = /([^{}]+)\{([^}]*)\}/g;
+  const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  let match: RegExpExecArray | null;
+  while ((match = rulePattern.exec(cssWithoutComments)) !== null) {
+    const selectors = (match[1] ?? '').split(',').map((item) => item.trim());
+    if (selectors.includes(selector)) blocks.push(match[2] ?? '');
+  }
+  if (blocks.length === 0) throw new Error(`Missing CSS block for ${selector}`);
+  return blocks.join('\n');
+}
+
+function installComposerIsolationCss() {
+  const rules = [
+    ['.chat-composer-fixed-layer', chatCss],
+    ['.chat-composer-fixed-layer .composer', chatCss],
+    ['.composer-input-wrap', chatCss],
+    ['.composer-input-wrap:focus-within', chatCss],
+    ['.composer-input-editor .composer-editable', chatCss],
+    ['.composer-input-placeholder', chatCss],
+    ['.chat-composer-fixed-layer .composer-shell', routinesCss],
+    ['.chat-composer-fixed-layer .composer.drag-active .composer-shell', routinesCss],
+    ['.chat-composer-fixed-layer .composer-input-wrap', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer.drag-active .composer-shell', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-wrap:focus-within', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-editor .composer-editable', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-input-placeholder', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-row', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context-picker--design-system .project-ds-picker-trigger', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-order', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment button', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-name', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name strong', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-comment .staged-name span', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-context .staged-icon', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-icon', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .staged-chip .staged-remove', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-active-file', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .icon-btn', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .session-mode-toggle__trigger', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-agent-trigger', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-row .avatar-btn', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send', routinesCss],
+    ['body.od-quick-switcher-open .chat-composer-fixed-layer .composer-send:disabled', routinesCss],
+  ] as const;
+  composerCssStyle = document.createElement('style');
+  composerCssStyle.textContent = rules
+    .map(([selector, css]) => `${selector} {${cssDeclarations(css, selector)}}`)
+    .join('\n');
+  document.head.appendChild(composerCssStyle);
 }
 
 function renderWorkspace(element: React.ReactElement) {
@@ -337,6 +405,195 @@ function renderDesignFilesPanel(overrides: Partial<React.ComponentProps<typeof D
   };
   return render(<DesignFilesPanel {...props} />);
 }
+
+describe('FileWorkspace quick switcher visual isolation', () => {
+  it('moves focus into quick search and marks the document while the overlay is open', async () => {
+    installComposerIsolationCss();
+
+    const composerLayer = document.createElement('div');
+    composerLayer.className = 'chat-composer-fixed-layer';
+    composerLayer.innerHTML = `
+      <div class="composer drag-active">
+        <div class="composer-shell">
+          <div class="staged-row staged-context-row">
+            <div class="staged-context-picker staged-context-picker--design-system">
+              <button class="project-ds-picker-trigger picked" type="button">Choose design system</button>
+            </div>
+            <div class="staged-chip staged-context staged-context--workspace">
+              <span class="staged-icon">F</span>
+              <span class="staged-name">
+                <span class="staged-context-kind">Current</span>manual-edit.html
+              </span>
+              <button class="staged-remove" type="button">x</button>
+            </div>
+            <div class="staged-chip staged-file">
+              <span class="staged-order">1</span>
+              <span class="staged-icon">F</span>
+              <span class="staged-name">hero.png</span>
+              <button class="staged-remove" type="button">x</button>
+            </div>
+            <div class="staged-chip staged-comment">
+              <span class="staged-name"><strong>Hero</strong><span>Needs tweak</span></span>
+              <button class="staged-remove" type="button">x</button>
+            </div>
+          </div>
+          <div class="composer-active-file">
+            <span class="composer-active-file__label">Current</span>
+            <span class="composer-active-file__name">manual-edit.html</span>
+          </div>
+          <div class="composer-input-wrap">
+            <div class="composer-input-editor">
+              <div class="composer-editable" contenteditable="true" tabindex="0">Mock focused composer control</div>
+              <div class="composer-input-placeholder">Describe what you want to generate...</div>
+            </div>
+          </div>
+          <div class="composer-row">
+            <button class="icon-btn" type="button">+</button>
+            <button class="avatar-agent-trigger" type="button">
+              <span class="avatar-btn">A</span>
+            </button>
+            <button class="session-mode-toggle__trigger" type="button">Design</button>
+            <button class="composer-send" type="button" disabled>Send</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(composerLayer);
+
+    const composer = composerLayer.querySelector<HTMLElement>('.composer');
+    const composerShell = composerLayer.querySelector<HTMLElement>('.composer-shell');
+    const composerInputWrap = composerLayer.querySelector<HTMLElement>('.composer-input-wrap');
+    const composerControl = composerLayer.querySelector<HTMLElement>('.composer-editable');
+    const composerPlaceholder = composerLayer.querySelector<HTMLElement>('.composer-input-placeholder');
+    const designSystemTrigger = composerLayer.querySelector<HTMLElement>('.project-ds-picker-trigger');
+    const stagedContext = composerLayer.querySelector<HTMLElement>('.staged-context');
+    const stagedContextKind = composerLayer.querySelector<HTMLElement>('.staged-context-kind');
+    const stagedIcon = composerLayer.querySelector<HTMLElement>('.staged-context .staged-icon');
+    const stagedRemove = composerLayer.querySelector<HTMLElement>('.staged-context .staged-remove');
+    const stagedFile = composerLayer.querySelector<HTMLElement>('.staged-file');
+    const stagedOrder = composerLayer.querySelector<HTMLElement>('.staged-file .staged-order');
+    const stagedFileIcon = composerLayer.querySelector<HTMLElement>('.staged-file > .staged-icon');
+    const stagedFileRemove = composerLayer.querySelector<HTMLElement>('.staged-file > .staged-remove');
+    const stagedFileName = composerLayer.querySelector<HTMLElement>('.staged-file .staged-name');
+    const stagedComment = composerLayer.querySelector<HTMLElement>('.staged-comment');
+    const stagedCommentButton = composerLayer.querySelector<HTMLElement>('.staged-comment button');
+    const stagedCommentStrong = composerLayer.querySelector<HTMLElement>('.staged-comment .staged-name strong');
+    const stagedCommentSpan = composerLayer.querySelector<HTMLElement>('.staged-comment .staged-name span');
+    const activeFileChip = composerLayer.querySelector<HTMLElement>('.composer-active-file');
+    const toolbarIcon = composerLayer.querySelector<HTMLElement>('.icon-btn');
+    const toolbarAvatar = composerLayer.querySelector<HTMLElement>('.avatar-agent-trigger');
+    const toolbarAvatarButton = composerLayer.querySelector<HTMLElement>('.avatar-btn');
+    const toolbarMode = composerLayer.querySelector<HTMLElement>('.session-mode-toggle__trigger');
+    const toolbarSend = composerLayer.querySelector<HTMLElement>('.composer-send');
+    if (!composer) throw new Error('Missing mock composer');
+    if (!composerShell) throw new Error('Missing mock composer shell');
+    if (!composerInputWrap) throw new Error('Missing mock composer input wrapper');
+    if (!composerControl) throw new Error('Missing mock composer control');
+    if (!composerPlaceholder) throw new Error('Missing mock composer placeholder');
+    if (!designSystemTrigger) throw new Error('Missing mock design-system trigger');
+    if (!stagedContext) throw new Error('Missing mock staged context');
+    if (!stagedContextKind) throw new Error('Missing mock staged context kind');
+    if (!stagedIcon) throw new Error('Missing mock staged context icon');
+    if (!stagedRemove) throw new Error('Missing mock staged context remove');
+    if (!stagedFile) throw new Error('Missing mock staged file');
+    if (!stagedOrder) throw new Error('Missing mock staged order');
+    if (!stagedFileIcon) throw new Error('Missing mock staged file icon');
+    if (!stagedFileRemove) throw new Error('Missing mock staged file remove');
+    if (!stagedFileName) throw new Error('Missing mock staged file name');
+    if (!stagedComment) throw new Error('Missing mock staged comment');
+    if (!stagedCommentButton) throw new Error('Missing mock staged comment button');
+    if (!stagedCommentStrong) throw new Error('Missing mock staged comment strong text');
+    if (!stagedCommentSpan) throw new Error('Missing mock staged comment span text');
+    if (!activeFileChip) throw new Error('Missing mock active file chip');
+    if (!toolbarIcon) throw new Error('Missing mock toolbar icon');
+    if (!toolbarAvatar) throw new Error('Missing mock toolbar avatar');
+    if (!toolbarAvatarButton) throw new Error('Missing mock toolbar avatar button');
+    if (!toolbarMode) throw new Error('Missing mock toolbar mode');
+    if (!toolbarSend) throw new Error('Missing mock toolbar send');
+
+    expect(getComputedStyle(composerLayer).pointerEvents).toBe('none');
+    expect(getComputedStyle(composer).pointerEvents).toBe('auto');
+    expect(getComputedStyle(composerControl).pointerEvents).toBe('auto');
+
+    composerControl.focus();
+    expect(document.activeElement).toBe(composerControl);
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: 'p', ctrlKey: true });
+
+    await waitFor(() => {
+      expect(document.body.classList.contains('od-quick-switcher-open')).toBe(true);
+    });
+    const quickSearchInput = screen.getByRole('textbox');
+    await waitFor(() => {
+      expect(document.activeElement).toBe(quickSearchInput);
+    });
+    await waitFor(() => {
+      expect(getComputedStyle(composer).pointerEvents).toBe('none');
+    });
+    expect(getComputedStyle(composerLayer).pointerEvents).toBe('none');
+    expect(getComputedStyle(composerLayer).opacity).toBe('0.58');
+    expect(getComputedStyle(composerControl).pointerEvents).toBe('none');
+    expect(getComputedStyle(composerShell).boxShadow).toBe('none');
+    expect(getComputedStyle(composerShell).borderColor).toBe('rgba(0, 0, 0, 0)');
+    expect(getComputedStyle(composerInputWrap).background).toBe('var(--bg-fill-tertiary)');
+    expect(getComputedStyle(composerInputWrap).borderColor).toBe('rgba(0, 0, 0, 0)');
+    expect(getComputedStyle(composerInputWrap).boxShadow).toBe('none');
+    expect(getComputedStyle(composerControl).color).toBe('var(--text-muted)');
+    expect(getComputedStyle(composerControl).caretColor).toBe('rgba(0, 0, 0, 0)');
+    expect(getComputedStyle(composerPlaceholder).color).toBe('color-mix(in srgb, var(--text-muted) 72%, transparent)');
+    for (const toolbarControl of [
+      designSystemTrigger,
+      stagedContext,
+      stagedIcon,
+      stagedRemove,
+      stagedFile,
+      stagedOrder,
+      stagedFileIcon,
+      stagedFileRemove,
+      stagedComment,
+      stagedCommentButton,
+      activeFileChip,
+      toolbarIcon,
+      toolbarAvatar,
+      toolbarAvatarButton,
+      toolbarMode,
+      toolbarSend,
+    ]) {
+      expect(getComputedStyle(toolbarControl).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+      expect(getComputedStyle(toolbarControl).borderColor).toBe('rgba(0, 0, 0, 0)');
+      expect(getComputedStyle(toolbarControl).boxShadow).toBe('none');
+    }
+    expect(getComputedStyle(stagedContextKind).color).toBe('var(--text-muted)');
+    expect(getComputedStyle(stagedFileName).color).toBe('var(--text-muted)');
+    expect(getComputedStyle(stagedCommentStrong).color).toBe('var(--text-muted)');
+    expect(getComputedStyle(stagedCommentSpan).color).toBe('var(--text-muted)');
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(document.body.classList.contains('od-quick-switcher-open')).toBe(false);
+    });
+    await waitFor(() => {
+      expect(getComputedStyle(composer).pointerEvents).toBe('auto');
+    });
+    expect(getComputedStyle(composerControl).pointerEvents).toBe('auto');
+    expect(getComputedStyle(composerLayer).opacity).not.toBe('0.58');
+    expect(getComputedStyle(composerInputWrap).background).toBe('var(--bg-panel)');
+  });
+});
 
 function unreadableDropDataTransfer(fallbackFiles: File[] = []) {
   return {
