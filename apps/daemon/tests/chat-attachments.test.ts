@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -63,5 +65,33 @@ describe('formatDesignFilesWorkspaceHint', () => {
     expect(hint).toContain('Folders:\n- `slides` (folder)');
     expect(hint).toContain('Files:\n- `slides/pitch.html` (html, 2 KB)');
     expect(hint).toContain('- `image.png` (image, 192 KB)');
+  });
+
+  it('advertises the symlink-resolved cwd the agent observes via process.cwd(), not the spawn-time spelling', () => {
+    // PR #10 adjacent issue: the agent's process.cwd() reports the physical
+    // (realpath) directory, so the prompt must advertise that same spelling
+    // instead of the unresolved spawn path — otherwise the model sees two
+    // spellings of one directory (e.g. /var/... vs /private/var/... on macOS).
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'od-cwd-hint-'));
+    try {
+      const realDir = path.join(base, 'workspace-real');
+      fs.mkdirSync(realDir);
+      const symlinkCwd = path.join(base, 'workspace-link');
+      fs.symlinkSync(realDir, symlinkCwd, 'dir');
+      const resolvedCwd = fs.realpathSync.native(symlinkCwd);
+
+      const hint = formatDesignFilesWorkspaceHint(symlinkCwd, [], []);
+
+      expect(hint).toContain(`\`${resolvedCwd}\``);
+      expect(hint).not.toContain(symlinkCwd);
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to the given cwd when the directory cannot be realpath-resolved', () => {
+    const missingCwd = path.join(os.tmpdir(), 'od-cwd-hint-missing', 'does-not-exist');
+    const hint = formatDesignFilesWorkspaceHint(missingCwd, [], []);
+    expect(hint).toContain(`\`${missingCwd}\``);
   });
 });
