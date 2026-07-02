@@ -648,6 +648,38 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.status).toBe(401);
   });
 
+  it('maps NVIDIA DEGRADED errors to actionable upstream detail', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream((url) => {
+        expect(url).toBe('https://integrate.api.nvidia.com/v1/chat/completions');
+        return jsonResponse(
+          { error: { message: 'DEGRADED function id=abc123' } },
+          { status: 400 },
+        );
+      }),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://integrate.api.nvidia.com/v1',
+        apiKey: 'nvapi-test',
+        model: 'minimaxai/minimax-m3',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('upstream_unavailable');
+    expect(body.status).toBe(400);
+    expect(body.detail).toContain('selected NVIDIA model instance');
+    expect(body.detail).toContain('Try a different model');
+    expect(body.detail).not.toContain('function id');
+  });
+
   it('does not add a duplicate version segment for versioned OpenAI-compatible subpaths', async () => {
     const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
       const url = String(input);
