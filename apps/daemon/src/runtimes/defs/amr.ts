@@ -146,7 +146,7 @@ export function parseVelaModelJson(
     const rawId = item && typeof item === 'object'
       ? (item as { id?: unknown }).id
       : null;
-    const id = typeof rawId === 'string' ? rawId.trim() : '';
+    const id = typeof rawId === 'string' ? (normalizeVelaModelId(rawId) ?? '') : '';
     if (!id || seen.has(id) || !isVelaChatModelId(id)) continue;
     seen.add(id);
     models.push({ id, label: id });
