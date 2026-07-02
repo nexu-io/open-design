@@ -121,6 +121,43 @@ describe('resolveMarketplaceEntryVersion', () => {
     expect(resolveMarketplaceEntryVersion(e, '^0.0.3')?.version).toBe('0.0.3');
   });
 
+  it('excludes prerelease candidates from a non-prerelease caret range', () => {
+    // npm excludes prereleases from `^0.2.0` / `^0.0.3` unless the range itself
+    // carries a prerelease, so a `-beta` entry must not satisfy them.
+    const e = entry({
+      version: '0.2.1-beta.1',
+      versions: [
+        { version: '0.2.0', source: 's020' },
+        { version: '0.2.1-beta.1', source: 's021b' },
+      ],
+    });
+    // Highest satisfying is the stable 0.2.0, not the newer 0.2.1-beta.1.
+    expect(resolveMarketplaceEntryVersion(e, '^0.2.0')?.version).toBe('0.2.0');
+
+    const patch = entry({
+      version: '0.0.3-beta.1',
+      versions: [{ version: '0.0.3-beta.1', source: 's003b' }],
+    });
+    // Only a prerelease exists and the range is stable, so nothing matches.
+    expect(resolveMarketplaceEntryVersion(patch, '^0.0.3')).toBeNull();
+  });
+
+  it('matches same-tuple prereleases when the caret range is itself a prerelease', () => {
+    // `^0.2.1-beta.1` => `>=0.2.1-beta.1 <0.3.0`: same-tuple prereleases and the
+    // 0.2.1 release match (release outranks its prereleases), but 0.2.5-beta.1
+    // (a different tuple) does not.
+    const e = entry({
+      version: '0.2.1',
+      versions: [
+        { version: '0.2.1-beta.1', source: 'sb1' },
+        { version: '0.2.1-beta.2', source: 'sb2' },
+        { version: '0.2.1', source: 's021' },
+        { version: '0.2.5-beta.1', source: 's025b' },
+      ],
+    });
+    expect(resolveMarketplaceEntryVersion(e, '^0.2.1-beta.1')?.version).toBe('0.2.1');
+  });
+
   it('respects tilde ranges (locks minor)', () => {
     const e = entry({
       version: '1.2.5',
