@@ -97,4 +97,4 @@ You should see the Open Design interface.
 - `Authorization: Bearer <OD_API_TOKEN> required` on macOS: Docker Desktop bridge networking makes the daemon see requests as non-loopback. See [Docker Desktop on macOS](../../deploy/README.md#docker-desktop-on-macos) for the host networking workaround.
 - `409 Conflict` or hanging during AMR login (Firewall/Airgap): The server cannot reach `amr-api.open-design.ai`. 
   - **Option 1 (Proxy)**: Add `HTTPS_PROXY=http://your-proxy:port` to your `.env` file to route agent traffic.
-  - **Option 2 (Offline Auth)**: Run `vela login` on a personal machine with internet, copy `runtimeKey` from `~/.config/open-design/vela.json`, and set `VELA_RUNTIME_KEY=your-key` in your `.env`.
+  - **Option 2 (Offline Auth)**: Run `vela login` on a personal machine with internet, copy `runtimeKey` and `linkUrl` from `~/.amr/config.json`, then set both `VELA_RUNTIME_KEY=your-key` and `VELA_LINK_URL=your-url` in your `deploy/.env`.
