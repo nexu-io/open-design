@@ -66,7 +66,25 @@ test('[P2] captures the settings local CLI surface', async ({ page }) => {
 
   const dialog = await prepareVisualSettingsDialog(page);
   await dialog.getByRole('tab', { name: /Local CLI/i }).click();
-  await expect(dialog.getByTestId('settings-agent-select-codex')).toBeVisible();
+  const codexCard = dialog.getByTestId('settings-agent-card-codex');
+  const codexSelect = dialog.getByTestId('settings-agent-select-codex');
+  await expect(codexCard).toHaveClass(/active/);
+  await expect(codexSelect).toBeVisible();
+  await expect(codexSelect.locator('.agent-card-title')).toContainText('Codex CLI');
+  await expect(codexCard.locator('.agent-card-test-btn')).toBeVisible();
+  await expect(codexCard.locator('.agent-card-config')).toBeVisible();
+  await expect(codexCard.locator('.agent-card-model-summary')).toHaveCount(0);
+
+  const claudeCard = dialog.getByTestId('settings-agent-card-claude');
+  await expect(claudeCard).not.toHaveClass(/active/);
+  await expect(claudeCard.locator('.agent-card-model-summary')).toContainText(/Default|CLI config/i);
+
+  const unavailableCard = dialog.locator('.agent-card-unavailable').first();
+  if (await unavailableCard.isVisible().catch(() => false)) {
+    await expect(unavailableCard.locator('.agent-card-actions--inline')).toBeVisible();
+    await expect(unavailableCard.locator('.agent-card-link--icon')).toBeVisible();
+    await expect(unavailableCard.locator('.agent-card-link--ghost')).toBeVisible();
+  }
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-settings-local-cli');

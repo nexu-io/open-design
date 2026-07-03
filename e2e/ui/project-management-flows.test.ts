@@ -609,7 +609,7 @@ test('[P0] @critical project detail composer agent menu lets the user switch Loc
   await expect(modelSelect).toContainText(/Sonnet/i);
 });
 
-test('[P0] project detail composer agent and model switches carry into the next daemon run request', async ({ page }) => {
+test('[P0] project detail composer agent, model, and Plan mode switches carry into the next daemon run request', async ({ page }) => {
   test.setTimeout(60_000);
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await page.route('**/api/runs', async (route) => {
@@ -639,9 +639,13 @@ test('[P0] project detail composer agent and model switches carry into the next 
   await modelSelect.click();
   await page.getByRole('option', { name: /^Sonnet \(alias\)$/i }).click();
   await expect(modelSelect).toContainText(/Sonnet/i);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.avatar-popover[role="dialog"]')).toHaveCount(0);
+
+  await selectComposerSessionMode(page, 'Plan mode');
 
   const input = page.getByTestId('chat-composer-input');
-  await input.fill('Use the selected local agent for this run.');
+  await input.fill('Plan the selected local agent run.');
   await Promise.all([
     page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
     page.getByTestId('chat-send').click(),
@@ -650,6 +654,103 @@ test('[P0] project detail composer agent and model switches carry into the next 
   expect(runRequestBodies.length).toBeGreaterThan(0);
   expect(runRequestBodies[0]?.agentId).toBe('claude');
   expect(runRequestBodies[0]?.model).toBe('sonnet');
+  expect(runRequestBodies[0]?.sessionMode).toBe('plan');
+});
+
+test('[P1] project detail composer can alternate Design, Ask, and Plan modes across turns', async ({ page }) => {
+  test.setTimeout(60_000);
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await page.route('**/api/runs', async (route) => {
+    const raw = route.request().postData();
+    if (raw) runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: `mode-run-${runRequestBodies.length}` }),
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
+    });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Composer session mode alternation');
+  await expectWorkspaceReady(page);
+
+  async function sendTurn(prompt: string) {
+    const input = page.getByTestId('chat-composer-input');
+    await expect(input).toBeVisible();
+    await input.fill(prompt);
+    await Promise.all([
+      page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+      page.getByTestId('chat-send').click(),
+    ]);
+    await expect(page.getByTestId('chat-send')).toBeEnabled({ timeout: 15_000 });
+  }
+
+  await selectComposerSessionMode(page, 'Design mode');
+  await sendTurn('Design the first iteration.');
+
+  await selectComposerSessionMode(page, 'Ask mode');
+  await sendTurn('Ask a clarifying question about the direction.');
+
+  await selectComposerSessionMode(page, 'Plan mode');
+  await sendTurn('Plan the implementation steps.');
+
+  await selectComposerSessionMode(page, 'Design mode');
+  await sendTurn('Design the final iteration.');
+
+  expect(runRequestBodies.map((body) => body.sessionMode)).toEqual(['design', 'chat', 'plan', 'design']);
+});
+
+test('[P1] project detail composer keeps the selected mode across consecutive turns', async ({ page }) => {
+  test.setTimeout(60_000);
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await page.route('**/api/runs', async (route) => {
+    const raw = route.request().postData();
+    if (raw) runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: `same-mode-run-${runRequestBodies.length}` }),
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
+    });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'Composer same session mode reuse');
+  await expectWorkspaceReady(page);
+
+  async function sendTurn(prompt: string) {
+    const input = page.getByTestId('chat-composer-input');
+    await expect(input).toBeVisible();
+    await input.fill(prompt);
+    await Promise.all([
+      page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
+      page.getByTestId('chat-send').click(),
+    ]);
+    await expect(page.getByTestId('chat-send')).toBeEnabled({ timeout: 15_000 });
+  }
+
+  await selectComposerSessionMode(page, 'Plan mode');
+  await sendTurn('Plan the first pass.');
+  await sendTurn('Plan the second pass without changing mode.');
+
+  expect(runRequestBodies.map((body) => body.sessionMode)).toEqual(['plan', 'plan']);
+  await expect(page.getByTestId('chat-composer').getByTestId('session-mode-trigger')).toHaveAttribute(
+    'aria-label',
+    'Plan mode',
+  );
 });
 
 test('[P0] @critical project detail composer BYOK model switch persists from the agent menu', async ({ page }) => {
@@ -1997,7 +2098,7 @@ type ConversationHistoryFixture = {
   id: string;
   projectId: string;
   title: string | null;
-  sessionMode: 'design' | 'ask';
+  sessionMode: 'design' | 'ask' | 'plan';
   messageCount: number;
   createdAt: number;
   updatedAt: number;
@@ -2186,6 +2287,20 @@ async function openComposerAgentMenu(page: Page): Promise<{
   }
   await expect(claudeButton).toBeVisible({ timeout: 20_000 });
   return { menu, claudeButton };
+}
+
+async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
+  const trigger = page.getByTestId('chat-composer').getByTestId('session-mode-trigger');
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+
+  const menu = page.locator('.session-mode-toggle__menu[role="menu"]');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitemradio', { name: 'Ask mode' })).toBeVisible();
+  await expect(menu.getByRole('menuitemradio', { name: 'Plan mode' })).toBeVisible();
+  await expect(menu.getByRole('menuitemradio', { name: 'Design mode' })).toBeVisible();
+  await menu.getByRole('menuitemradio', { name: modeTitle }).click();
+  await expect(trigger).toHaveAttribute('aria-label', modeTitle);
 }
 
 async function routeComposerPlusFixtures(page: Page) {

@@ -114,6 +114,22 @@ async function createProject(page: Page, entry: UiScenario) {
   await page.getByTestId('create-project').click();
 }
 
+async function createProjectViaApi(page: Page, name: string): Promise<string> {
+  const projectId = `markdown-plan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const response = await page.request.post('/api/projects', {
+    data: {
+      id: projectId,
+      name,
+      skillId: null,
+      designSystemId: null,
+      pendingPrompt: null,
+      metadata: { kind: 'prototype' },
+    },
+  });
+  expect(response.ok(), `create project: ${await response.text()}`).toBeTruthy();
+  return projectId;
+}
+
 async function createProjectNameOnly(page: Page, entry: UiScenario) {
   await openNewProjectModal(page);
   if (entry.create.tab) {
@@ -236,6 +252,12 @@ async function expectProjectFileToContain(
     .toContain(expected);
 }
 
+async function readProjectFileText(page: Page, projectId: string, fileName: string): Promise<string> {
+  const response = await page.request.get(`/api/projects/${projectId}/files/${fileName}`);
+  expect(response.ok()).toBeTruthy();
+  return response.text();
+}
+
 async function expectScenarioFiles(
   page: Page,
   entry: UiScenario,
@@ -283,6 +305,19 @@ async function expectProjectFilesToIncludeSuffixes(
     .toBe(true);
 }
 
+async function waitForSingleSketchFile(page: Page, projectId: string): Promise<string> {
+  let sketchName = '';
+  await expect
+    .poll(async () => {
+      const sketches = (await listProjectFilesFromApi(page, projectId))
+        .filter((file) => file.kind === 'sketch' && file.name.endsWith('.sketch.json'));
+      sketchName = sketches[0]?.name ?? '';
+      return sketches.length;
+    }, { timeout: 15_000 })
+    .toBe(1);
+  return sketchName;
+}
+
 async function clickDesignFilePreviewOpen(page: Page) {
   const preview = page.getByTestId('design-file-preview');
   await expect(preview).toBeVisible();
@@ -314,6 +349,10 @@ async function openDesignFile(page: Page, fileName: string) {
 
 async function waitForLoadingToClear(page: Page) {
   await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function runUploadedImageRendersInPreviewFlow(page: Page, entry: UiScenario) {
@@ -466,6 +505,124 @@ test('[P1] design files page keeps the current single-file actions and context h
   await expect(menu.getByRole('button', { name: /delete/i })).toBeVisible();
 
   await expect(page.getByText(/images, docs, references, or folders/i)).toBeVisible();
+});
+
+test('[P1] design files new sketch creates a persisted sketch tab and restores it after reload', async ({ page }) => {
+  test.setTimeout(90_000);
+  await routeMockAgents(page);
+
+  const projectId = await createProjectViaApi(page, 'Design files sketch restore');
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+
+  await page.getByTestId('design-files-tab').click();
+  await page.getByTestId('design-files-empty-new-sketch').click();
+
+  const sketchName = await waitForSingleSketchFile(page, projectId);
+  const sketchTab = page.getByTestId('file-workspace').getByRole('tab', {
+    name: new RegExp(escapeRegExp(sketchName), 'i'),
+  });
+  await expect(sketchTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('sketch-excalidraw-editor')).toBeVisible();
+  await expect(page.getByTestId('sketch-save-state')).toContainText(/saved|saving/i);
+  await expectProjectFileToContain(page, projectId, sketchName, '"type": "excalidraw"');
+  await expectProjectFileToContain(page, projectId, sketchName, `"name": "${sketchName}"`);
+
+  await page.reload();
+  await expectWorkspaceReady(page);
+  await expect(page.getByTestId('file-workspace').getByRole('tab', {
+    name: new RegExp(escapeRegExp(sketchName), 'i'),
+  })).toBeVisible();
+  await expect(page.getByTestId('sketch-excalidraw-editor')).toBeVisible();
+});
+
+test('[P1] design files sketch toolbar creates a sketch and exposes editor menu actions', async ({ page }) => {
+  test.setTimeout(90_000);
+  await routeMockAgents(page);
+
+  const projectId = await createProjectViaApi(page, 'Design files sketch toolbar');
+  await seedProjectFile(page, projectId, 'alpha.html', '<!doctype html><title>alpha</title><h1>alpha</h1>');
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await page.getByTestId('design-files-tab').click();
+
+  await expect(page.getByTestId('design-file-row-alpha.html')).toBeVisible();
+  await page.getByRole('button', { name: /new sketch/i }).click();
+
+  const sketchName = await waitForSingleSketchFile(page, projectId);
+  await expect(page.getByTestId('file-workspace').getByRole('tab', {
+    name: new RegExp(escapeRegExp(sketchName), 'i'),
+  })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('sketch-excalidraw-editor')).toBeVisible();
+  await expect(page.getByTestId('sketch-save-state')).toContainText(/saved|saving/i);
+
+  await page.getByTestId('sketch-excalidraw-editor').getByTestId('main-menu-trigger').click();
+  await expect(page.getByTestId('sketch-menu-save')).toBeVisible();
+  await expect(page.getByTestId('sketch-menu-export-image')).toBeVisible();
+  await expect(page.getByTestId('sketch-menu-export-image')).toBeDisabled();
+  await expect(page.getByTestId('sketch-menu-clear')).toBeVisible();
+  await expect(page.getByTestId('sketch-menu-clear')).toBeDisabled();
+});
+
+test('[P1] markdown plan documents support code, split, preview, and autosaved edits', async ({ page }) => {
+  await routeMockAgents(page);
+
+  const projectId = await createProjectViaApi(page, 'Markdown plan editor modes');
+  await seedProjectFile(
+    page,
+    projectId,
+    'plan.md',
+    [
+      '# Seeded Plan',
+      '',
+      '## Scope',
+      '- Confirm markdown editing modes.',
+      '',
+    ].join('\n'),
+  );
+
+  await page.goto(`/projects/${projectId}/files/plan.md`, { waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await expect(page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i })).toBeVisible();
+
+  const markdownModes = page.getByRole('tablist', { name: /markdown view mode/i });
+  const codeTab = markdownModes.getByRole('tab', { name: /^Code$/ });
+  const splitTab = markdownModes.getByRole('tab', { name: /^Split$/ });
+  const previewTab = markdownModes.getByRole('tab', { name: /^Preview$/ });
+  const editor = page.getByRole('textbox', { name: /markdown editor/i });
+  const preview = page.getByLabel(/markdown preview/i);
+
+  await expect(splitTab).toHaveAttribute('aria-selected', 'true');
+  await expect(editor).toHaveValue(/Seeded Plan/);
+  await expect(preview).toContainText('Scope');
+
+  await codeTab.click();
+  await expect(codeTab).toHaveAttribute('aria-selected', 'true');
+  await expect(editor).toBeVisible();
+  await expect(preview).toHaveCount(0);
+  await editor.fill(`${await editor.inputValue()}\n## Code Edit\n- Edited from code mode.\n`);
+  await expectProjectFileToContain(page, projectId, 'plan.md', 'Edited from code mode.');
+
+  await splitTab.click();
+  await expect(splitTab).toHaveAttribute('aria-selected', 'true');
+  await expect(editor).toBeVisible();
+  await expect(preview).toBeVisible();
+  await expect(preview).toContainText('Code Edit');
+  await editor.fill(`${await readProjectFileText(page, projectId, 'plan.md')}\n## Split Edit\n- Edited from split mode.\n`);
+  await expectProjectFileToContain(page, projectId, 'plan.md', 'Edited from split mode.');
+  await expect(preview).toContainText('Split Edit');
+
+  await previewTab.click();
+  await expect(previewTab).toHaveAttribute('aria-selected', 'true');
+  await expect(editor).toHaveCount(0);
+  await expect(preview).toBeVisible();
+  await expect(preview).toContainText('Edited from code mode.');
+  await expect(preview).toContainText('Edited from split mode.');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Edited from code mode/);
+  await expect(page.getByLabel(/markdown preview/i)).toContainText('Edited from split mode.');
 });
 
 test('[P1] design files batch delete removes selected files and keeps cancel retryable', async ({ page }) => {
