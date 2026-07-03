@@ -25,14 +25,22 @@ var DaemonAddr = "http://127.0.0.1:17900"
 
 // Pool Agent 池管理器
 type Pool struct {
-	mu           sync.RWMutex
-	agents       map[string]*ManagedAgent
-	bus          *bus.CommunicationBus
-	workDir      string
-	daemonClient *daemon.Client
-	builder      *profiler.TeamBuilder // 智能组队构建器
-	config       *config.TeamConfig    // 团队配置
+	mu             sync.RWMutex
+	agents         map[string]*ManagedAgent
+	bus            *bus.CommunicationBus
+	workDir        string
+	daemonClient   *daemon.Client
+	builder        *profiler.TeamBuilder // 智能组队构建器
+	config         *config.TeamConfig    // 团队配置
+	eventSink      EventSink             // 事件转发回调（可选）
+	projectId      string                // 运行项目上下文
+	conversationId string                // 运行会话上下文
 }
+
+// EventSink 由外部（如 odteam CLI）设置的回调，用于流式转发
+// daemon SSE 事件。每个 agent 执行任务时收到的事件都会通过此回调
+// 转发，使调用方能够实时输出中间结果。
+type EventSink func(agentID, eventType string, data []byte)
 
 // ManagedAgent 受管理的 Agent 实例
 type ManagedAgent struct {
@@ -44,6 +52,10 @@ type ManagedAgent struct {
 	cancel  context.CancelFunc
 	client  *daemon.Client
 	workDir string
+	onEvent EventSink
+	// 运行上下文，传递给 daemon /api/chat
+	projectId      string
+	conversationId string
 }
 
 // TaskAssignment 任务分配
@@ -181,6 +193,13 @@ func (p *Pool) registerAgent(spec config.AgentSpec, dc *daemon.Client) {
 	subCh := p.bus.Subscribe(spec.ID, 50)
 	p.agents[spec.ID] = ma
 
+	// 传递运行上下文和事件回调
+	ma.projectId = p.projectId
+	ma.conversationId = p.conversationId
+	if p.eventSink != nil {
+		ma.onEvent = p.eventSink
+	}
+
 	go ma.run(subCh)
 }
 
@@ -254,6 +273,11 @@ func (ma *ManagedAgent) executeTask(task *TaskAssignment) *TaskResult {
 	//   error  → 错误
 	var artifacts []*protocol.Artifact
 	for evt := range eventCh {
+		// 流式转发：将每个 daemon SSE 事件通过回调传递给外部消费者
+		// （如 odteam CLI），使其能实时输出到 stdout 供 daemon 转发。
+		if ma.onEvent != nil {
+			ma.onEvent(ma.Spec.ID, evt.Type, evt.Data)
+		}
 		switch evt.Type {
 		case "agent":
 			// agent 事件：payload 可能是 live_artifact 并带着产物元数据
@@ -337,11 +361,13 @@ func (ma *ManagedAgent) buildChatRequest(task *TaskAssignment) daemon.ChatReques
 	}
 
 	return daemon.ChatRequest{
-		Message: message,
-		AgentId: ma.Spec.Type,                  // daemon 需要运行时 slug (claude-code/codex)，非团队标签 (designer/writer)
-		Skills:  ma.Spec.Skills,                // YAML 中配置的技能 ID
-		Designs: firstOrEmpty(ma.Spec.Designs), // daemon 契约要求单个 string，发送第一个选中的设计系统
-		Stream:  true,
+		Message:        message,
+		AgentId:        ma.Spec.Type,                  // daemon 需要运行时 slug (claude-code/codex)，非团队标签 (designer/writer)
+		Skills:         ma.Spec.Skills,                // YAML 中配置的技能 ID
+		Designs:        firstOrEmpty(ma.Spec.Designs), // daemon 契约要求单个 string，发送第一个选中的设计系统
+		Stream:         true,
+		ProjectId:      ma.projectId,
+		ConversationId: ma.conversationId,
 	}
 }
 
@@ -584,6 +610,31 @@ func (p *Pool) ListRuntimes() []protocol.AgentRuntime {
 // SetDaemonAddr 动态设置 daemon 地址（CLI 启动时调用）
 func SetDaemonAddr(addr string) {
 	DaemonAddr = addr
+}
+
+// SetEventSink 设置事件转发回调。已在 pool 中的 agent 和后续
+// 注册的 agent 都会收到此回调。odteam CLI 用它把 daemon SSE 事件
+// 流式输出到 stdout，供 daemon 转发给前端。
+func (p *Pool) SetEventSink(fn EventSink) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.eventSink = fn
+	for _, ma := range p.agents {
+		ma.onEvent = fn
+	}
+}
+
+// SetRunContext 设置运行项目/会话上下文，传递给后续 agent 的
+// daemon /api/chat 请求。odteam CLI 从 stdin JSON 中读取这些值。
+func (p *Pool) SetRunContext(projectId, conversationId string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.projectId = projectId
+	p.conversationId = conversationId
+	for _, ma := range p.agents {
+		ma.projectId = projectId
+		ma.conversationId = conversationId
+	}
 }
 
 // Shutdown 关闭所有 Agent

@@ -659,6 +659,25 @@ const PLUGIN_PREVIEWS_DIR = resolveDaemonPluginPreviewsDir({
 });
 const OD_BIN = resolveDaemonCliPath();
 const OD_NODE_BIN = process.execPath;
+// Resolve the odteam CLI binary path. Used when ChatRequest.team is
+// present — daemon spawns odteam to orchestrate the multi-agent run
+// instead of the single-agent spawn path. Resolution order:
+//   1. OD_TEAM_BIN env var (explicit override)
+//   2. Built binary in the monorepo (packages/multi-agent-team/cmd/odteam/odteam)
+function resolveOdTeamBin() {
+  const candidates = [];
+  if (process.env.OD_TEAM_BIN) candidates.push(process.env.OD_TEAM_BIN);
+  candidates.push(path.join(PROJECT_ROOT, 'packages', 'multi-agent-team', 'cmd', 'odteam', 'odteam'));
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(c) && fs.statSync(c).isFile()) {
+        fs.accessSync(c, fs.constants.X_OK);
+        return c;
+      }
+    } catch { /* not executable or doesn't exist */ }
+  }
+  return null;
+}
 const SKILLS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'skills',
@@ -5454,11 +5473,11 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
-    // Multi-agent team: when a team selection is present, record it on the
-    // run so downstream consumers (run history, analytics) can distinguish
-    // team-orchestrated runs from single-agent runs. The actual multi-agent
-    // orchestration is handled by the multi-agent team module which calls
-    // back to /api/chat for individual agent execution.
+    // Multi-agent team: when a team selection is present, record it on
+    // the run so downstream consumers (run history, analytics) can distinguish
+    // team-orchestrated runs from single-agent runs. The actual routing to
+    // the odteam CLI happens later in this function (after `send` is defined)
+    // so the team event stream can be forwarded as SSE events.
     if (team && typeof team === 'object' && team.id) {
       run.teamMode = team.mode;
       run.teamName = team.name;
@@ -6201,6 +6220,130 @@ export async function startServer({
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
     };
+    // ── Multi-agent team orchestration fork ──────────────────────
+    // When ChatRequest.team is present, route the run through the
+    // multi-agent team module (odteam CLI) instead of the default
+    // single-agent spawn path. daemon spawns odteam, passes the team
+    // selection + prompt + context via stdin as JSON, and forwards
+    // the JSON-lines event stream from stdout as SSE events.
+    if (team && typeof team === 'object' && team.id) {
+      const odteamBin = resolveOdTeamBin();
+      if (!odteamBin) {
+        send('error', createSseErrorPayload(
+          'AGENT_UNAVAILABLE',
+          'odteam CLI is not installed. Build it with: cd packages/multi-agent-team && go build -o cmd/odteam/odteam ./cmd/odteam/',
+          { retryable: false },
+        ));
+        return design.runs.finish(run, 'failed', 1, null);
+      }
+      const teamPrompt = (typeof message === 'string' && message) || currentPrompt || '';
+      if (!teamPrompt.trim() && safeCommentAttachments.length === 0) {
+        return design.runs.fail(run, 'BAD_REQUEST', 'message required');
+      }
+      const teamReq = {
+        prompt: teamPrompt,
+        daemonAddr: daemonUrl,
+        workDir: path.join(os.tmpdir(), `odteam-${run.id}`),
+        projectId: typeof projectId === 'string' ? projectId : '',
+        conversationId: typeof conversationId === 'string' ? conversationId : '',
+        team: {
+          id: team.id,
+          mode: team.mode,
+          name: team.name,
+          assignments: Array.isArray(team.assignments)
+            ? team.assignments.map((a) => ({
+                agentId: a.agentId,
+                agentType: a.agentType,
+                agentName: a.agentName,
+                role: a.role,
+              }))
+            : [],
+        },
+      };
+      run.status = 'running';
+      run.updatedAt = Date.now();
+      send('start', {
+        runId: run.id,
+        agentId: typeof agentId === 'string' ? agentId : 'team',
+        bin: 'odteam',
+        streamFormat: 'plain',
+        projectId: typeof projectId === 'string' ? projectId : null,
+        cwd,
+        model: null,
+        reasoning: null,
+        toolTokenExpiresAt: null,
+      });
+      const teamChild = spawn(odteamBin, [], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env },
+        cwd,
+      });
+      run.child = teamChild;
+      let teamStdoutBuf = '';
+      let teamStderrTail = '';
+      teamChild.stdin.write(JSON.stringify(teamReq));
+      teamChild.stdin.end();
+      teamChild.stdout.on('data', (chunk) => {
+        teamStdoutBuf += chunk.toString();
+        const lines = teamStdoutBuf.split('\n');
+        teamStdoutBuf = lines.pop() ?? '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const evt = JSON.parse(trimmed);
+            if (evt.event === 'agent' && evt.data) {
+              send('agent', evt.data);
+            } else if (evt.event === 'error' && evt.data) {
+              send('error', createSseErrorPayload(
+                'AGENT_EXECUTION_FAILED',
+                evt.data.message || 'team orchestration error',
+              ));
+            } else if (evt.event === 'team_start' || evt.event === 'task_result' || evt.event === 'team_end') {
+              send('agent', {
+                type: 'diagnostic',
+                name: evt.event,
+                source: 'odteam',
+                ...(typeof evt.data === 'object' && evt.data ? evt.data : { data: evt.data }),
+              });
+            }
+          } catch { /* ignore non-JSON lines */ }
+        }
+      });
+      teamChild.stderr.on('data', (chunk) => {
+        const text = chunk.toString();
+        teamStderrTail = `${teamStderrTail}${text}`.slice(-2000);
+        send('stderr', { chunk: text });
+      });
+      teamChild.on('error', (err) => {
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          `odteam spawn failed: ${err.message}`,
+        ));
+        design.runs.finish(run, 'failed', 1, null);
+      });
+      teamChild.on('close', (code, signal) => {
+        // Flush any remaining buffered stdout
+        if (teamStdoutBuf.trim()) {
+          try {
+            const evt = JSON.parse(teamStdoutBuf.trim());
+            if (evt.event === 'agent' && evt.data) {
+              send('agent', evt.data);
+            }
+          } catch { /* ignore */ }
+        }
+        const teamStatus = code === 0 ? 'succeeded' : 'failed';
+        design.runs.emit(run, 'diagnostic', {
+          type: 'runtime_close',
+          rpc_close_reason: 'team_orchestration_exit',
+          status: teamStatus,
+          ...(typeof code === 'number' ? { exit_code: code } : {}),
+          ...(signal ? { signal } : {}),
+        });
+        design.runs.finish(run, teamStatus, code, signal);
+      });
+      return;
+    }
     const retryAnalyticsBase = (decision, failure, errorCode) => {
       const runProjectKind = resolveRunProjectKindForAnalytics({
         hintProjectKind: null,
