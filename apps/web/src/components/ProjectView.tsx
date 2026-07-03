@@ -3932,7 +3932,9 @@ export function ProjectView({
                   endedAt: prev.endedAt ?? Date.now(),
                 }),
                 true,
-                { telemetryFinalized: true },
+                latestReattachRunStatus === 'canceled'
+                  ? { telemetryFinalized: true }
+                  : undefined,
               );
               if (latestReattachRunStatus === 'canceled') return;
               void (async () => {
@@ -4005,6 +4007,7 @@ export function ProjectView({
               const resumable = (err as Error & { resumable?: boolean }).resumable === true;
               let skipFinalPersistNow = false;
               let retryFullReplayAfterCleanup = false;
+              const genericDisconnect = isGenericDaemonDisconnect(err);
               // A superseded reattached run must not paint a global failure
               // banner or re-finalize its message over the replacement run.
               const runMayFinalize =
@@ -4025,7 +4028,7 @@ export function ProjectView({
                   }),
                   true,
                 );
-                if (artifactFromRecoverableSourceText(replayedContent)) {
+                if (!genericDisconnect && artifactFromRecoverableSourceText(replayedContent)) {
                   void (async () => {
                     if (recoveredArtifactMessagesRef.current.has(message.id)) return;
                     const latestRunStatus = await fetchChatRunStatus(runId).catch(() => null);
@@ -4101,7 +4104,7 @@ export function ProjectView({
               // null the same as an active retryable state and keep the row
               // eligible for future refresh/reattach. Only authoritative
               // terminal statuses seal completedReattachRunsRef.
-              if (isGenericDaemonDisconnect(err)) {
+              if (genericDisconnect) {
                 const attempts = (genericDisconnectRetriesRef.current.get(runId) ?? 0) + 1;
                 if (attempts >= MAX_TRANSIENT_RETRIES) {
                   const backoffUntil = Date.now() + 3000;
