@@ -59,7 +59,7 @@ These conventions are **machine-enforced** by `scripts/check-barrel-imports.ts` 
 - **A file directly under the domain root** (the root `index.ts`, or a straggler like `server-services.ts`) may reach a subdir **only through that subdir's barrel**, never a private file. Domain-root files carry no declared edges of their own.
 - **The domain root barrel uses explicit named re-exports**, never `export *` — the public surface must be enumerable and free of silent name collisions.
 - **External daemon code imports from `'./design-systems/index.js'`** (or the subpath equivalent) — never from a subdirectory path directly.
-- **Tests are exempt.** Files under `apps/daemon/tests/` may white-box import subdir internals; the guard only scans `src/`.
+- **Tests are exempt, by design.** The guard scans only `src/` (runtime code); files under `apps/daemon/tests/` may white-box import subdir internals — most of those internals (e.g. `core/swift-colors`, `user/migration`, `tokens/token-contract`) are deliberately *not* on the public barrel, so unit-testing them requires reaching in. **Convention, not enforced:** a test covering a symbol the root barrel *does* export (a public-surface function like `renderDesignSystemPreview` or `parseFrontmatter`) should still import it from `'../src/design-systems/index.js'`, so the public API is exercised the way real consumers use it and future internal reshuffles stay free.
 
 The guard scans static imports, re-exports (`export * from`, `export { } from`), `import type`, dynamic `import()`, and `import x = require()`. Its `check-barrel-imports.test.ts` suite exercises each rule plus the config-cycle validator.
 

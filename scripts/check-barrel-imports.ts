@@ -334,6 +334,15 @@ export async function checkCapabilityBarrelImports(): Promise<boolean> {
   }
 
   const violations: BarrelImportViolation[] = [];
+  // Scope is intentionally runtime code only (`apps/daemon/src`). Test code under
+  // `apps/daemon/tests` is NOT scanned: unit tests legitimately white-box import
+  // subdir internals that are deliberately absent from the public barrel (e.g.
+  // `core/swift-colors`, `user/migration`, `tokens/token-contract`). Widening the
+  // scan to tests would force those internal-only helpers onto the public surface,
+  // defeating the encapsulation this check exists to protect. The
+  // barrel-only guarantee therefore covers external RUNTIME importers; the
+  // "prefer the barrel for public-surface symbols" test convention is documented,
+  // not enforced (see design-systems/README.md → Import conventions).
   const scanRoot = path.join(repoRoot, 'apps', 'daemon', 'src');
 
   for (const repositoryPath of await collectSourceFiles(scanRoot)) {
