@@ -1,4 +1,4 @@
-<h1 align="center">Open Design: The Vibe Design Workspace — the open-source Claude Design alternative</h1>
+<h1 align="center">Open Design: The Vibe Design Workspace &amp; the open-source Claude Design alternative</h1>
 
 <p align="center">Your coding agent becomes the design engine.</p>
 
