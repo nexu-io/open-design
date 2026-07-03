@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolveOnPath } from "../runtimes/executables.js";
+import { assertPublicBrandUrl } from "./safe-fetch.js";
 
 /**
  * Optional system-Chrome fallback for the prefetch pipeline.
@@ -102,6 +103,13 @@ function runChrome(args: string[], timeoutMs: number): Promise<{ stdout: string;
 
 /** JS-rendered DOM of the page, or null when Chrome is unavailable/fails. */
 export async function chromeDumpDom(url: string): Promise<string | null> {
+  // Navigating Chrome to an attacker-derived URL is an outbound request too, so
+  // apply the same SSRF guard as the JS fetchers before launching the browser.
+  try {
+    await assertPublicBrandUrl(url);
+  } catch {
+    return null;
+  }
   const { stdout } = await runChrome([...COMMON_FLAGS, "--dump-dom", url], 20_000);
   const html = stdout.trim();
   // A real render produces a full document; tiny output means an error page.
@@ -110,6 +118,11 @@ export async function chromeDumpDom(url: string): Promise<string | null> {
 
 /** Full-page-ish screenshot written to outPath. Returns success. */
 export async function chromeScreenshot(url: string, outPath: string): Promise<boolean> {
+  try {
+    await assertPublicBrandUrl(url);
+  } catch {
+    return false;
+  }
   const { code } = await runChrome(
     [...COMMON_FLAGS, `--screenshot=${outPath}`, "--window-size=1280,2000", url],
     20_000,
