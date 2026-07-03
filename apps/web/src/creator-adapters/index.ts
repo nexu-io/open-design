@@ -810,10 +810,6 @@ function compareFocusCandidates(left: FocusCandidate, right: FocusCandidate): nu
   return right.moment - left.moment;
 }
 
-function resolveProjectIdFromTaskId(taskId: string): string | undefined {
-  return taskId.startsWith("project:") ? taskId.slice("project:".length) : undefined;
-}
-
 function toIsoString(value: number | string): string {
   return typeof value === "string" ? value : new Date(value).toISOString();
 }

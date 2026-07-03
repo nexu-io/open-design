@@ -850,7 +850,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
                       void triggerCreatorFocusAction();
                     }}
                   >
-                    {creatorDashboard.focus?.recommendedAction ?? 'Open project'}
+                    {creatorDashboard.focus.recommendedAction}
                   </Button>
                 </div>
               ) : null}
