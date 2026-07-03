@@ -308,6 +308,17 @@ describe('TasksView page shell', () => {
 
     fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
     expect(await screen.findByText('Run queued')).toBeTruthy();
+    const heroCard = screen
+      .getByText('Focus now')
+      .closest('.creator-dashboard__hero-card') as HTMLElement | null;
+    if (!heroCard) {
+      throw new Error('expected creator focus hero card');
+    }
+    expect(within(heroCard).getByText('Run queued')).toBeTruthy();
+    expect(within(heroCard).getByRole('button', { name: 'Monitor run' })).toBeTruthy();
+    expect(within(heroCard).getByText('素材')).toBeTruthy();
+    expect(within(heroCard).getByText('就绪')).toBeTruthy();
+    expect(within(heroCard).getByText('video')).toBeTruthy();
     fireEvent.click(await screen.findByRole('button', { name: 'Monitor run' }));
 
     expect(navigateSpy).toHaveBeenCalledWith({
