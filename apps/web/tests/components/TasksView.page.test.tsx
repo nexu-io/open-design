@@ -257,6 +257,50 @@ describe('TasksView page shell', () => {
     });
   });
 
+  it('routes queued-run focus action into the queued conversation', async () => {
+    const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
+    const creatorProjects: Project[] = [
+      {
+        id: 'project-queued-1',
+        name: '排队中的剪辑项目',
+        skillId: null,
+        designSystemId: null,
+        createdAt: Date.now() - 30_000,
+        updatedAt: Date.now() - 10_000,
+        metadata: { kind: 'video' },
+        status: { value: 'queued' },
+      },
+    ];
+    mockTasksViewFetch({
+      creatorProjects,
+      creatorRuns: [
+        {
+          id: 'run-queued-1',
+          projectId: 'project-queued-1',
+          conversationId: 'conv-queued-1',
+          assistantMessageId: 'msg-queued-1',
+          agentId: 'codex',
+          status: 'queued',
+          createdAt: Date.now() - 20_000,
+          updatedAt: Date.now() - 2_000,
+        },
+      ],
+    });
+
+    render(<TasksView projects={creatorProjects} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    expect(await screen.findByText('Run queued')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Monitor run' }));
+
+    expect(navigateSpy).toHaveBeenCalledWith({
+      kind: 'project',
+      projectId: 'project-queued-1',
+      conversationId: 'conv-queued-1',
+      fileName: null,
+    });
+  });
+
   it('routes retry-run focus action into the failed conversation', async () => {
     const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
     const creatorProjects: Project[] = [
