@@ -1470,6 +1470,7 @@ function meaningfulDomFallbackTarget(el) {
     return id === 'path-0' && el && el.parentElement === document.body && el.id === 'root';
   }
   function targetFrom(el, allowDomFallback, clickedEl, clickPoint){
+    if (!el) return null;
     var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
     if (allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
     var selector = annotatedSelectorFor(el);

@@ -327,6 +327,7 @@ export function buildManualEditBridge(enabled: boolean): string {
     return hasHiddenAncestorDisplayState(el);
   }
   function targetFrom(el, includeOuterHtml){
+    if (!el) return null;
     var rect = el.getBoundingClientRect();
     var kind = inferKind(el);
     var id = stableId(el);

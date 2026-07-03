@@ -359,6 +359,7 @@ export function browserElementPickerScript(filePath: string): string {
     return String(value).replace(/\\\\/g, '\\\\\\\\').replace(/"/g, '\\\\"');
   }
   function visibleRect(el) {
+    if (!el) return null;
     const rect = el.getBoundingClientRect();
     if (!rect || rect.width <= 0 || rect.height <= 0) return null;
     return rect;
@@ -418,6 +419,7 @@ export function browserElementPickerScript(filePath: string): string {
     };
   }
   function snapshotFor(el, ev) {
+    if (!el) return null;
     const rect = el.getBoundingClientRect();
     const identity = selectorFor(el);
     const tag = el.tagName ? el.tagName.toLowerCase() : 'element';

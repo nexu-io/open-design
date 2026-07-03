@@ -664,17 +664,27 @@ const OD_NODE_BIN = process.execPath;
 // instead of the single-agent spawn path. Resolution order:
 //   1. OD_TEAM_BIN env var (explicit override)
 //   2. Built binary in the monorepo (packages/multi-agent-team/cmd/odteam/odteam)
-function resolveOdTeamBin() {
-  const candidates = [];
-  if (process.env.OD_TEAM_BIN) candidates.push(process.env.OD_TEAM_BIN);
-  candidates.push(path.join(PROJECT_ROOT, 'packages', 'multi-agent-team', 'cmd', 'odteam', 'odteam'));
-  for (const c of candidates) {
-    try {
-      if (fs.existsSync(c) && fs.statSync(c).isFile()) {
-        fs.accessSync(c, fs.constants.X_OK);
-        return c;
-      }
-    } catch { /* not executable or doesn't exist */ }
+type OdTeamSpawn = { command: string; args: string[]; cwd?: string };
+
+function resolveOdTeamBin(): OdTeamSpawn | null {
+  // 1. OD_TEAM_BIN env var (custom binary path)
+  if (process.env.OD_TEAM_BIN) {
+    return { command: process.env.OD_TEAM_BIN, args: [] };
+  }
+  // 2. Pre-built binary (e.g. go build -o cmd/odteam/odteam ./cmd/odteam)
+  const binPath = path.join(PROJECT_ROOT, 'packages', 'multi-agent-team', 'cmd', 'odteam', 'odteam');
+  try {
+    if (fs.existsSync(binPath) && fs.statSync(binPath).isFile()) {
+      fs.accessSync(binPath, fs.constants.X_OK);
+      return { command: binPath, args: [] };
+    }
+  } catch { /* not executable or doesn't exist */ }
+  // 3. Dev fallback: go run ./cmd/odteam when source exists but binary
+  //    hasn't been built yet (go build ./... does not produce an executable)
+  const modDir = path.join(PROJECT_ROOT, 'packages', 'multi-agent-team');
+  const mainFile = path.join(modDir, 'cmd', 'odteam', 'main.go');
+  if (fs.existsSync(mainFile)) {
+    return { command: 'go', args: ['run', './cmd/odteam'], cwd: modDir };
   }
   return null;
 }
@@ -6227,8 +6237,8 @@ export async function startServer({
     // selection + prompt + context via stdin as JSON, and forwards
     // the JSON-lines event stream from stdout as SSE events.
     if (team && typeof team === 'object' && team.id) {
-      const odteamBin = resolveOdTeamBin();
-      if (!odteamBin) {
+      const odteamSpawn = resolveOdTeamBin();
+      if (!odteamSpawn) {
         send('error', createSseErrorPayload(
           'AGENT_UNAVAILABLE',
           'odteam CLI is not installed. Build it with: cd packages/multi-agent-team && go build -o cmd/odteam/odteam ./cmd/odteam/',
@@ -6273,10 +6283,10 @@ export async function startServer({
         reasoning: null,
         toolTokenExpiresAt: null,
       });
-      const teamChild = spawn(odteamBin, [], {
+      const teamChild = spawn(odteamSpawn.command, odteamSpawn.args, {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env },
-        cwd,
+        cwd: odteamSpawn.cwd ?? cwd,
       });
       run.child = teamChild;
       let teamStdoutBuf = '';

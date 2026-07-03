@@ -225,7 +225,8 @@ export function PreviewDrawOverlay({
   }
 
   function pointFromEvent(e: PointerEvent): Point {
-    const cvs = canvasRef.current!;
+    const cvs = canvasRef.current;
+    if (!cvs) return { x: 0, y: 0 };
     const rect = cvs.getBoundingClientRect();
     const x = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
     const y = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0;
