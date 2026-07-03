@@ -108,7 +108,7 @@ Common install paths:
 |-----|-------------|
 | Claude Code | `~/.local/bin/claude` (symlink) + `~/.local/share/claude` (binaries) |
 | opencode | `~/.opencode/bin/opencode` |
-| Codex | `~/.local/bin/codex` or `/usr/local/bin/codex` |
+| Codex | `~/.local/bin/codex` |
 
 The daemon auto-detects any CLI that is visible in `PATH` at startup — no extra
 configuration needed. For a CLI installed in a non-standard path, add a volume
