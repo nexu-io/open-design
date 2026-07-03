@@ -2398,6 +2398,32 @@
   transform: none;
 }
 
+/* The baked deck preview (od.bakedPreview) is captured at the 1.31 tile aspect,
+   so the deck's fixed 16:9 stage self-letterboxes with a dark --stage-bg band
+   baked into the poster/clip. The iframe rule above only fixes the LIVE surface;
+   these preset tiles render the BAKED media (preferBaked), so mirror the same
+   treatment for it: render the clip in a native 16:9 box centered in the
+   standard cell and center-crop it, so object-fit:cover strips exactly the baked
+   letterbox and the slide reads edge-to-edge with no dark band. (Non-deck tiles
+   keep the top-anchored 1.31 clip below so web-page hero headlines stay in
+   frame.) */
+.home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__preview--media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__media {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+.home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__media-img,
+.home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__media-video {
+  object-position: center;
+}
+
 /* Baked clips are framed 1.31:1 for the Community grid; the wider preset tiles
    would otherwise object-fit:cover-crop the hero out of the middle. Anchor to
    the top so the hero headline stays in frame. Scoped to the preset cards. */
