@@ -1008,14 +1008,59 @@ function parseCodexThreadId(stdout: string): string {
   throw new Error('codex imagegen did not emit a thread.started thread_id');
 }
 
-async function readCodexGeneratedImage(generatedRoot: string, threadId: string): Promise<Buffer> {
+function summarizeCodexImagegenStdout(stdout: string): string {
+  const messages: string[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const obj = JSON.parse(trimmed) as { item?: { text?: unknown }; text?: unknown };
+      const text = typeof obj.item?.text === 'string'
+        ? obj.item.text
+        : typeof obj.text === 'string'
+          ? obj.text
+          : '';
+      if (text.trim()) messages.push(text.trim());
+    } catch {
+      messages.push(trimmed);
+    }
+  }
+  return truncate(messages.join('\n'), 500);
+}
+
+function codexImagegenMissingOutputError(threadDir: string, stdout: string): Error {
+  const summary = summarizeCodexImagegenStdout(stdout);
+  const suffix = summary ? ` Codex stdout summary: ${summary}` : '';
+  if (/\bpreview[- ]only\b|without saving|without writing|does not write|no file|bez przenoszenia/i.test(summary)) {
+    return new Error(
+      `Codex imagegen completed in preview-only mode and did not write an image file under ${threadDir}. Use an API-backed image provider or a Codex CLI build that writes generated_images output.${suffix}`,
+    );
+  }
+  return new Error(
+    `Codex imagegen completed but did not write an ig_* image under ${threadDir}. Use an API-backed image provider or a Codex CLI build that writes generated_images output.${suffix}`,
+  );
+}
+
+async function readCodexGeneratedImage(
+  generatedRoot: string,
+  threadId: string,
+  stdout: string,
+): Promise<Buffer> {
   const threadDir = path.join(generatedRoot, threadId);
-  const entries = await readdir(threadDir);
+  let entries: string[];
+  try {
+    entries = await readdir(threadDir);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      throw codexImagegenMissingOutputError(threadDir, stdout);
+    }
+    throw err;
+  }
   const match = entries
     .filter((name) => /^ig_.*\.(?:png|jpe?g|webp)$/i.test(name))
     .sort()[0];
   if (!match) {
-    throw new Error(`codex imagegen produced no ig_* image in ${threadDir}`);
+    throw codexImagegenMissingOutputError(threadDir, stdout);
   }
   const imagePath = path.join(threadDir, match);
   const bytes = await readFile(imagePath);
@@ -1068,7 +1113,7 @@ async function renderCodexImage(ctx: MediaContext): Promise<RenderResult> {
   await mkdir(generatedRoot, { recursive: true });
   const { stdout } = await runCodexImagegen(ctx, generatedRoot, env);
   const threadId = parseCodexThreadId(stdout);
-  const bytes = await readCodexGeneratedImage(generatedRoot, threadId);
+  const bytes = await readCodexGeneratedImage(generatedRoot, threadId, stdout);
   const imageModel = codexImageModelLabel(ctx.model);
   return {
     bytes,
