@@ -450,6 +450,7 @@ export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
  */
 export interface OpenCodeConfigBuildOptions {
   allowedDirectories?: string[];
+  extraConfig?: Record<string, unknown>;
 }
 
 export function buildOpenCodeMcpConfigContent(
@@ -491,12 +492,22 @@ export function buildOpenCodeMcpConfigContent(
   const externalDirectory = buildOpenCodeExternalDirectoryAllowlist(
     options.allowedDirectories,
   );
-  if (Object.keys(mcp).length === 0 && !externalDirectory) return null;
+  const extraConfig = options.extraConfig ?? {};
+  if (
+    Object.keys(mcp).length === 0 &&
+    !externalDirectory &&
+    Object.keys(extraConfig).length === 0
+  ) return null;
 
-  const config: Record<string, unknown> = {};
+  const config: Record<string, unknown> = { ...extraConfig };
   if (Object.keys(mcp).length > 0) config.mcp = mcp;
   if (externalDirectory) {
+    const priorPermission =
+      config.permission && typeof config.permission === 'object' && !Array.isArray(config.permission)
+        ? config.permission as Record<string, unknown>
+        : {};
     config.permission = {
+      ...priorPermission,
       external_directory: externalDirectory,
     };
   }

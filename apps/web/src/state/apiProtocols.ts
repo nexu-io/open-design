@@ -216,10 +216,10 @@ export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
 // blank. Kept here so the BYOK form can render it as a placeholder
 // hint and keep the two surfaces (form vs. daemon) in sync.
 export const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ApiProtocol, string> = {
-  anthropic: 'https://api.anthropic.com',
-  openai: 'https://api.openai.com',
+  anthropic: 'https://api.anthropic.com/v1',
+  openai: 'https://api.openai.com/v1',
   azure: '',
-  google: 'https://generativelanguage.googleapis.com',
+  google: 'https://generativelanguage.googleapis.com/v1beta',
   ollama: 'https://ollama.com',
   senseaudio: 'https://api.senseaudio.cn',
   aihubmix: 'https://aihubmix.com/v1',

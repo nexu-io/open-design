@@ -13,7 +13,7 @@ import {
   it,
 } from 'vitest';
 
-import { readAppConfig, writeAppConfig } from '../src/app-config.js';
+import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { isLocalSameOrigin } from '../src/origin-validation.js';
 
 // Default telemetry preference applied when an existing config has no
@@ -348,6 +348,12 @@ describe('app-config', () => {
             OPENCODE_TEST_HOME: '  ~/.open-design-amr-opencode  ',
             HOME: 'should-not-persist',
           },
+          opencode: {
+            OPENCODE_BIN: '  ~/bin/opencode  ',
+          },
+          'byok-opencode': {
+            OPENCODE_BIN: '  ~/bin/byok-opencode  ',
+          },
           'trae-cli': {
             TRAE_CLI_BIN: '  ~/bin/traecli-public  ',
           },
@@ -368,7 +374,11 @@ describe('app-config', () => {
           OPEN_DESIGN_AMR_PROFILE: 'local',
           OPENCODE_TEST_HOME: '~/.open-design-amr-opencode',
         },
+        opencode: { OPENCODE_BIN: '~/bin/opencode' },
         'trae-cli': { TRAE_CLI_BIN: '~/bin/traecli-public' },
+      });
+      expect(agentCliEnvForAgent(cfg.agentCliEnv, 'byok-opencode')).toEqual({
+        OPENCODE_BIN: '~/bin/opencode',
       });
     });
 

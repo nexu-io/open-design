@@ -39,6 +39,7 @@ import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
 import {
   executionProfileFromStreamFormat,
+  type ByokMediaDefaults,
   type ChatSessionMode,
   type ExecutionProfile,
   type MediaExecutionPolicy,
@@ -314,6 +315,31 @@ printf '%s\\n' "\$last"
 
 For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
 
+function renderByokMediaDefaultsHint(defaults?: ByokMediaDefaults): string {
+  const lines: string[] = [];
+  const imageModel = defaults?.imageModel?.trim();
+  const videoModel = defaults?.videoModel?.trim();
+  const speechModel = defaults?.speechModel?.trim();
+  const speechVoice = defaults?.speechVoice?.trim();
+  if (imageModel) lines.push(`- Image model: \`${imageModel}\``);
+  if (videoModel) lines.push(`- Video model: \`${videoModel}\``);
+  if (speechModel) lines.push(`- Speech model: \`${speechModel}\``);
+  if (speechVoice) lines.push(`- Speech voice: \`${speechVoice}\``);
+  if (lines.length === 0) return '';
+  return `
+
+### Run-scoped BYOK media defaults
+
+The user selected these BYOK media defaults in the chat UI for this run. Use
+them when dispatching media unless the current user message explicitly asks for
+a different model or voice.
+${lines.join('\n')}`;
+}
+
+function renderMediaDispatchHint(defaults?: ByokMediaDefaults): string {
+  return `${MEDIA_DISPATCH_HINT}${renderByokMediaDefaultsHint(defaults)}`;
+}
+
 const FILESYSTEM_HANDOFF_OVERRIDE = `
 
 ---
@@ -535,6 +561,8 @@ export interface ComposeInput {
   // Run-scoped media policy. Defaults to enabled when omitted so existing
   // local OD behavior keeps the same media prompt contract.
   mediaExecution?: MediaExecutionPolicy | undefined;
+  // Run-scoped BYOK media defaults selected in the chat UI.
+  byokMediaDefaults?: ByokMediaDefaults | undefined;
   // Explicit handoff profile. Filesystem runs write project files through
   // native tools; text_artifact runs (BYOK/plain) deliver source through
   // assistant-text <artifact> blocks.
@@ -576,6 +604,7 @@ export function composeSystemPrompt({
   userInstructions,
   projectInstructions,
   mediaExecution,
+  byokMediaDefaults,
   executionProfile,
 }: ComposeInput): string {
   // Injection resistance goes FIRST — before everything else — so no later
@@ -874,12 +903,12 @@ export function composeSystemPrompt({
     // hint. The override above tells the agent to nudge the user toward Design
     // mode for anything that actually generates media.
   } else if (isMediaSurface) {
-    parts.push(renderMediaGenerationContract(mediaExecution));
+    parts.push(renderMediaGenerationContract(mediaExecution, byokMediaDefaults));
   } else {
     // Non-media projects (prototype, deck, etc.): inject a lightweight hint
     // so the agent uses `od media generate` if the user asks for an image/video
     // mid-session, rather than hunting for provider API keys in the environment.
-    parts.push(MEDIA_DISPATCH_HINT);
+    parts.push(renderMediaDispatchHint(byokMediaDefaults));
   }
 
   if (!isAskMode && includeCodexImagegenOverride && shouldAllowCodexImagegenOverride(metadata, mediaExecution)) {

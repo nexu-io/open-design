@@ -362,7 +362,7 @@ export function agentCliEnvForAgent(
   agentId: string,
 ): Record<string, string> {
   if (!prefs || typeof agentId !== 'string') return {};
-  const env = prefs[agentId];
+  const env = prefs[agentId === 'byok-opencode' ? 'opencode' : agentId];
   if (!env || typeof env !== 'object' || Array.isArray(env)) return {};
   return { ...env };
 }

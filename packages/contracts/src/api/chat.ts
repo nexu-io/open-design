@@ -18,6 +18,30 @@ import type { TrackingRuntimeType } from '../analytics/public-params.js';
 export type ChatRole = 'user' | 'assistant';
 export type ChatSessionMode = 'design' | 'chat' | 'plan';
 export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
+export type ByokChatProtocol =
+  | 'anthropic'
+  | 'openai'
+  | 'azure'
+  | 'google'
+  | 'ollama'
+  | 'senseaudio'
+  | 'aihubmix';
+
+export interface ByokChatProviderConfig {
+  protocol: ByokChatProtocol;
+  apiKey: string;
+  baseUrl?: string;
+  apiVersion?: string;
+  /** Explicit run-scoped provider policy for presets that do not require bearer credentials. */
+  requiresApiKey?: boolean;
+}
+
+export interface ByokMediaDefaults {
+  imageModel?: string;
+  videoModel?: string;
+  speechModel?: string;
+  speechVoice?: string;
+}
 
 export interface ChatRequest {
   agentId: string;
@@ -42,6 +66,17 @@ export interface ChatRequest {
   commentAttachments?: ChatCommentAttachment[];
   model?: string | null;
   reasoning?: string | null;
+  /**
+   * Run-scoped BYOK provider credentials for the daemon-backed OpenCode
+   * adapter. The daemon must not persist this object; it is translated into
+   * child env + OPENCODE_CONFIG_CONTENT for the current run only.
+   */
+  byokProvider?: ByokChatProviderConfig;
+  /**
+   * Run-scoped BYOK media defaults selected in the chat UI. The daemon uses
+   * these to guide OpenCode-backed `od media generate` calls for this run only.
+   */
+  byokMediaDefaults?: ByokMediaDefaults;
   /** UI locale selected by the client, used by prompt composition for user-visible generated UI. */
   locale?: string;
   research?: ResearchOptions;

@@ -24,6 +24,7 @@ import type {
   DaemonAgentPayload,
   AmrModelsResponse,
   AmrWalletSnapshot,
+  ByokChatProviderConfig,
   MediaExecutionPolicy,
   ResearchOptions,
   RunContextSelection,
@@ -57,6 +58,17 @@ import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observabil
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
 const HIGH_INPUT_TOKEN_WARNING_THRESHOLD = 200_000;
+const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
+const API_MODE_AGENT_IDS = new Set([
+  'anthropic-api',
+  'openai-api',
+  'azure-openai-api',
+  'google-gemini-api',
+  'ollama-cloud-api',
+  'senseaudio-api',
+  'aihubmix-api',
+  'bedrock-api',
+]);
 
 export function latestUserPromptFromHistory(history: ChatMessage[]): string {
   for (let i = history.length - 1; i >= 0; i -= 1) {
@@ -137,11 +149,21 @@ function scopeHistoryToAgent(history: ChatMessage[], targetAgentId?: string): Ch
   if (!targetAgentId) return history;
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const message = history[i];
-    if (message?.role === 'assistant' && message.agentId && message.agentId !== targetAgentId) {
+    if (
+      message?.role === 'assistant' &&
+      message.agentId &&
+      !isSameTranscriptAgentFamily(message.agentId, targetAgentId)
+    ) {
       return history.slice(i + 1);
     }
   }
   return history;
+}
+
+function isSameTranscriptAgentFamily(agentId: string, targetAgentId: string): boolean {
+  if (agentId === targetAgentId) return true;
+  if (targetAgentId !== BYOK_OPENCODE_AGENT_ID) return false;
+  return API_MODE_AGENT_IDS.has(agentId);
 }
 
 // Strip OD-specific markup that the agent emitted on a prior turn but
@@ -282,6 +304,8 @@ export interface DaemonStreamOptions {
   // options and falls back to the CLI default when missing.
   model?: string | null;
   reasoning?: string | null;
+  byokProvider?: ByokChatProviderConfig;
+  byokMediaDefaults?: ChatRequest['byokMediaDefaults'];
   research?: ResearchOptions;
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
@@ -576,6 +600,8 @@ export async function streamViaDaemon({
   commentAttachments,
   model,
   reasoning,
+  byokProvider,
+  byokMediaDefaults,
   research,
   context,
   appliedPluginSnapshotId,
@@ -612,6 +638,8 @@ export async function streamViaDaemon({
     commentAttachments: commentAttachments ?? [],
     model: model ?? null,
     reasoning: reasoning ?? null,
+    ...(byokProvider ? { byokProvider } : {}),
+    ...(byokMediaDefaults ? { byokMediaDefaults } : {}),
     locale,
     ...(appliedPluginSnapshotId ? { appliedPluginSnapshotId } : {}),
     ...(context ? { context } : {}),

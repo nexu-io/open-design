@@ -125,7 +125,7 @@ export function spawnEnvForAgent(
   if (agentId === 'codex') {
     return reapplySandboxRuntimeEnv(env, sandboxRuntime);
   }
-  if (agentId === 'opencode') {
+  if (agentId === 'opencode' || agentId === 'byok-opencode') {
     stripKeysCaseInsensitive(env, [
       'OPENCODE',
       'OPENCODE_PID',

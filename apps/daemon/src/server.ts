@@ -154,6 +154,7 @@ import {
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
+import { buildOpenCodeByokProviderConfig } from './runtimes/byok-opencode.js';
 import {
   readVelaLoginStatus,
   resolveAmrProfile,
@@ -4776,6 +4777,7 @@ export async function startServer({
     connectedExternalMcp,
     appliedPluginSnapshotId,
     mediaExecution,
+    byokMediaDefaults,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -5285,6 +5287,7 @@ export async function startServer({
       locale: typeof locale === 'string' ? locale : undefined,
       sessionMode: normalizeConversationSessionMode(sessionMode),
       mediaExecution,
+      byokMediaDefaults,
       streamFormat,
       executionProfile: executionProfileFromStreamFormat(streamFormat),
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
@@ -5421,6 +5424,8 @@ export async function startServer({
       research,
       context,
       titleGeneration,
+      byokProvider,
+      byokMediaDefaults,
     } = chatBody;
     lifecycle.mark('prompt_build_start');
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
@@ -5459,6 +5464,19 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    const byokOpenCodeProvider = def.id === 'byok-opencode'
+      ? buildOpenCodeByokProviderConfig(
+          byokProvider,
+          typeof model === 'string' ? model : null,
+        )
+      : null;
+    if (def.id === 'byok-opencode' && !byokOpenCodeProvider) {
+      return design.runs.fail(
+        run,
+        'BYOK_PROVIDER_REQUIRED',
+        'BYOK OpenCode requires a provider, API key, and model for this run.',
+      );
+    }
     // Validate the checked-in `inactivityTimeoutMs` hint immediately
     // after the runtime def is selected and before any side-effectful
     // setup (auto-memory extract, `.mcp.json` write/unlink,
@@ -5742,6 +5760,7 @@ export async function startServer({
         sessionMode: runSessionMode,
         connectedExternalMcp,
         mediaExecution: run?.mediaExecution,
+        byokMediaDefaults,
         // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
@@ -6597,6 +6616,9 @@ export async function startServer({
           oauthTokensForSpawn,
           {
             allowedDirectories: [effectiveCwd, ...extraAllowedDirs],
+            ...(byokOpenCodeProvider
+              ? { extraConfig: byokOpenCodeProvider.config }
+              : {}),
           },
         );
       } catch (err) {
@@ -7292,6 +7314,7 @@ export async function startServer({
         ...agentSpawnEnv,
         ...(mmdRouteLaunchEnv || {}),
         ...odMediaEnv,
+        ...(byokOpenCodeProvider ? byokOpenCodeProvider.env : {}),
         ...openDesignAmrTraceEnv({
           agentId: def.id,
           runId: run.id,

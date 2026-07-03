@@ -57,6 +57,7 @@ import {
   amrPlansUrlForProfile,
   amrProfileBadgeLabel,
 } from '../runtime/amr-guidance';
+import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import {
@@ -127,6 +128,7 @@ import {
 import { MEDIA_PROVIDERS } from '../media/models';
 import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelOptions } from '../media/aihubmix-image-models';
 import { isVisualStabilityMode } from '../utils/visualStability';
+import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
@@ -663,26 +665,6 @@ function providerConnectionTestKey(
     config.model.trim(),
     protocol === 'azure' ? config.apiVersion?.trim() ?? '' : '',
   ].join('\n');
-}
-
-function isLocalOllamaBaseUrl(baseUrl: string): boolean {
-  try {
-    const parsed = new URL(baseUrl);
-    const hostname = parsed.hostname.toLowerCase();
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-  } catch {
-    return false;
-  }
-}
-
-function byokProviderRequiresApiKey(
-  protocol: ApiProtocol,
-  provider: KnownProvider | undefined,
-  baseUrl: string,
-): boolean {
-  if (provider?.requiresApiKey === false) return false;
-  if (protocol === 'ollama' && isLocalOllamaBaseUrl(baseUrl)) return false;
-  return true;
 }
 
 type ByokFirstPartyBaseUrlHint = {
@@ -1880,7 +1862,7 @@ export function SettingsDialog({
   }, []);
 
   const installedCount = useMemo(
-    () => agents.filter((a) => a.available).length,
+    () => agents.filter((a) => a.available && isVisibleLocalCliAgent(a)).length,
     [agents],
   );
 
@@ -3551,10 +3533,11 @@ export function SettingsDialog({
     about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
   };
   const activeHeader = sectionHeader[activeSection];
+  const visibleAgents = agents.filter(isVisibleLocalCliAgent);
   const installedAgents = orderAgentsWithOpenDesignFirst(
-    agents.filter((a) => a.available),
+    visibleAgents.filter((a) => a.available),
   );
-  const unavailableAgents = agents.filter((a) => !a.available);
+  const unavailableAgents = visibleAgents.filter((a) => !a.available);
   const initialAgentScanRunning = agentsLoading && agents.length === 0;
   const agentModelOptionLabel = (
     model: ProviderModelOption | undefined,
