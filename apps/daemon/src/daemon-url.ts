@@ -1,12 +1,15 @@
 import { spawn } from "node:child_process";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  APP_KEYS,
+  OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
   type DaemonStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import { requestJsonIpc } from "@open-design/sidecar";
+import { requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
 
 export const DEFAULT_DAEMON_URL = "http://127.0.0.1:7456";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -26,8 +29,9 @@ export interface ResolveDaemonUrlOptions {
  * Spawn order: explicit `--daemon-url` flag, `OD_DAEMON_URL` env, then
  * a STATUS roundtrip to the concrete sidecar IPC endpoint supplied by
  * the lifecycle owner in `OD_SIDECAR_IPC_PATH`, then the default
- * `tools-dev status --json` runtime. Falls back to the legacy default
- * for direct `od` launches that do not run as a sidecar.
+ * `tools-dev status --json` runtime, then packaged sidecar sockets.
+ * Falls back to the legacy default for direct `od` launches that do not
+ * have a discoverable sidecar runtime.
  */
 export async function resolveDaemonUrl(
   options: ResolveDaemonUrlOptions = {},
@@ -41,6 +45,8 @@ export async function resolveDaemonUrl(
   if (discovered != null) return discovered;
   const toolsDevUrl = await discoverDaemonUrlFromToolsDev(env, options.timeoutMs ?? 800);
   if (toolsDevUrl != null) return toolsDevUrl;
+  const packagedUrl = await discoverDaemonUrlFromPackagedIpc(env, options.timeoutMs ?? 800);
+  if (packagedUrl != null) return packagedUrl;
   return DEFAULT_DAEMON_URL;
 }
 
@@ -50,16 +56,7 @@ async function discoverDaemonUrlFromIpc(
 ): Promise<string | null> {
   const socketPath = env[SIDECAR_ENV.IPC_PATH];
   if (socketPath == null || socketPath.length === 0) return null;
-  try {
-    const status = await requestJsonIpc<DaemonStatusSnapshot>(
-      socketPath,
-      { type: SIDECAR_MESSAGES.STATUS },
-      { timeoutMs },
-    );
-    return status?.url ?? null;
-  } catch {
-    return null;
-  }
+  return await readDaemonUrlFromIpc(socketPath, timeoutMs);
 }
 
 async function discoverDaemonUrlFromToolsDev(
@@ -100,6 +97,64 @@ async function discoverDaemonUrlFromToolsDev(
       done(code === 0 ? extractDaemonUrlFromToolsDevStatus(stdout) : null);
     });
   });
+}
+
+async function discoverDaemonUrlFromPackagedIpc(
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+): Promise<string | null> {
+  const stablePath = resolveAppIpcPath({
+    app: APP_KEYS.DAEMON,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    env,
+    namespace: "release-stable",
+  });
+  const stableUrl = await readDaemonUrlFromIpc(stablePath, timeoutMs);
+  if (stableUrl != null) return stableUrl;
+  if (process.platform === "win32") return null;
+
+  const ipcBase = path.resolve(
+    env[SIDECAR_ENV.IPC_BASE] ?? OPEN_DESIGN_SIDECAR_CONTRACT.defaults.ipcBase,
+  );
+  let entries;
+  try {
+    entries = await readdir(ipcBase, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  const socketPaths = entries
+    .filter((entry) => entry.isDirectory() && entry.name !== "release-stable")
+    .map((entry) =>
+      resolveAppIpcPath({
+        app: APP_KEYS.DAEMON,
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        env,
+        namespace: entry.name,
+      }),
+    )
+    .sort();
+  for (const socketPath of socketPaths) {
+    const url = await readDaemonUrlFromIpc(socketPath, timeoutMs);
+    if (url != null) return url;
+  }
+  return null;
+}
+
+async function readDaemonUrlFromIpc(
+  socketPath: string,
+  timeoutMs: number,
+): Promise<string | null> {
+  try {
+    const status = await requestJsonIpc<DaemonStatusSnapshot>(
+      socketPath,
+      { type: SIDECAR_MESSAGES.STATUS },
+      { timeoutMs },
+    );
+    return status?.url ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function extractDaemonUrlFromToolsDevStatus(stdout: string): string | null {

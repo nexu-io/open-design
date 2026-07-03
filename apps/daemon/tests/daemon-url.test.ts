@@ -2,8 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createJsonIpcServer, type JsonIpcServerHandle } from "@open-design/sidecar";
-import { SIDECAR_ENV, SIDECAR_MESSAGES } from "@open-design/sidecar-proto";
+import { createJsonIpcServer, resolveAppIpcPath, type JsonIpcServerHandle } from "@open-design/sidecar";
+import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT, SIDECAR_ENV, SIDECAR_MESSAGES } from "@open-design/sidecar-proto";
 import { resolveDaemonUrl, DEFAULT_DAEMON_URL } from "../src/daemon-url.js";
 
 // Verifies the resolution chain: --daemon-url > OD_DAEMON_URL > sidecar
@@ -49,14 +49,20 @@ describe("resolveDaemonUrl", () => {
   });
 
   it("returns the legacy default when no flag/env/socket is available", async () => {
-    const url = await resolveDaemonUrl({
-      env: {
-        PATH: emptyBinDir,
-        [SIDECAR_ENV.IPC_PATH]: path.join(ipcBaseDir, "missing.sock"),
-      },
-      timeoutMs: 200,
-    });
-    expect(url).toBe(DEFAULT_DAEMON_URL);
+    const emptyIpcBaseDir = fs.mkdtempSync(path.join(os.tmpdir(), "od-mcp-resolve-empty-"));
+    try {
+      const url = await resolveDaemonUrl({
+        env: {
+          PATH: emptyBinDir,
+          [SIDECAR_ENV.IPC_PATH]: path.join(emptyIpcBaseDir, "missing.sock"),
+          [SIDECAR_ENV.IPC_BASE]: emptyIpcBaseDir,
+        },
+        timeoutMs: 200,
+      });
+      expect(url).toBe(DEFAULT_DAEMON_URL);
+    } finally {
+      fs.rmSync(emptyIpcBaseDir, { recursive: true, force: true });
+    }
   });
 
   it("discovers the default tools-dev daemon URL when no sidecar IPC path is available", async () => {
@@ -116,6 +122,88 @@ describe("resolveDaemonUrl", () => {
         timeoutMs: 1000,
       });
       expect(url).toBe("http://127.0.0.1:54321");
+    } finally {
+      await ipc?.close();
+    }
+  });
+
+  it("discovers the packaged stable daemon URL when no sidecar IPC path is available", async () => {
+    const socketPath = resolveAppIpcPath({
+      app: APP_KEYS.DAEMON,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      env: { [SIDECAR_ENV.IPC_BASE]: ipcBaseDir },
+      namespace: "release-stable",
+    });
+    let ipc: JsonIpcServerHandle | null = null;
+    try {
+      ipc = await createJsonIpcServer({
+        socketPath,
+        handler: (message) => {
+          if (
+            message != null &&
+            typeof message === "object" &&
+            (message as { type?: unknown }).type === SIDECAR_MESSAGES.STATUS
+          ) {
+            return {
+              pid: 4242,
+              state: "running",
+              updatedAt: new Date().toISOString(),
+              url: "http://127.0.0.1:65432",
+            };
+          }
+          throw new Error("unexpected message");
+        },
+      });
+
+      const url = await resolveDaemonUrl({
+        env: {
+          PATH: emptyBinDir,
+          [SIDECAR_ENV.IPC_BASE]: ipcBaseDir,
+        },
+        timeoutMs: 1000,
+      });
+      expect(url).toBe("http://127.0.0.1:65432");
+    } finally {
+      await ipc?.close();
+    }
+  });
+
+  it("discovers a packaged daemon URL by scanning IPC namespace directories", async () => {
+    const socketPath = resolveAppIpcPath({
+      app: APP_KEYS.DAEMON,
+      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+      env: { [SIDECAR_ENV.IPC_BASE]: ipcBaseDir },
+      namespace: "p",
+    });
+    let ipc: JsonIpcServerHandle | null = null;
+    try {
+      ipc = await createJsonIpcServer({
+        socketPath,
+        handler: (message) => {
+          if (
+            message != null &&
+            typeof message === "object" &&
+            (message as { type?: unknown }).type === SIDECAR_MESSAGES.STATUS
+          ) {
+            return {
+              pid: 4343,
+              state: "running",
+              updatedAt: new Date().toISOString(),
+              url: "http://127.0.0.1:65433",
+            };
+          }
+          throw new Error("unexpected message");
+        },
+      });
+
+      const url = await resolveDaemonUrl({
+        env: {
+          PATH: emptyBinDir,
+          [SIDECAR_ENV.IPC_BASE]: ipcBaseDir,
+        },
+        timeoutMs: 1000,
+      });
+      expect(url).toBe("http://127.0.0.1:65433");
     } finally {
       await ipc?.close();
     }
