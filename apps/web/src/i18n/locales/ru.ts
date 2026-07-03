@@ -150,7 +150,7 @@ export const ru: Dict = {
   'plugins.availableDetails.versionDeprecatedSuffix': ' (устарело)',
   'plugins.availableDetails.versionYankedSuffix': ' (снято с публикации)',
   'plugins.availableDetails.ref': 'Ревизия',
-  'plugins.availableDetails.integrity': 'Целостность',
+  'plugins.availableDetails.integrity': 'Integrity',
   'plugins.availableDetails.permissions': 'Разрешения',
   'plugins.availableDetails.capabilitySummary': 'Сводка возможностей',
   'plugins.actions.copyInstallCommand': 'Скопировать команду установки',
