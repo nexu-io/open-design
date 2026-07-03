@@ -2,7 +2,7 @@
 /** @module cli/plugin/dev
  * Plugin authoring: scaffold (starter template), validate (pre-install lint), pack (.tgz build), export (snapshot publishing).
  * Collaborators: github.ts (git operations in export), ./plugins/* (validation/packing logic).
- * Invariant: all author-facing CLI validates against live daemon registry (skills/design-systems/atoms) before install.
+ * Invariant: daemon registry validation is optional — `--no-daemon` or an unreachable daemon falls back to offline-only validation with warnings instead of blocking.
  */
 import { libraryDaemonUrl, parseFlags } from '../core/index.js';
 import { execFileBuffered } from './github.js';
@@ -17,7 +17,6 @@ import { basename } from 'node:path';
 /**
  * Interactive starter. Writes <out|cwd>/<id>/{SKILL.md,open-design.json,README.md}.
  * With --with-claude-plugin, also scaffolds Claude Plugin wrapper (Phase 4 / spec §14.1).
- * @param rest Raw argv after 'scaffold'
  */
 export async function runPluginScaffold(rest) {
   const flags = parseFlags(rest, {
@@ -84,7 +83,6 @@ Writes <out|cwd>/<id>/{SKILL.md,open-design.json,README.md}.`);
  * Pre-install lint on author's working folder. Validates manifest shape, atom ids, until expressions.
  * Fetches daemon registry (skills/design-systems/atoms) unless --no-daemon; falls back offline with warnings.
  * Exit 4 on errors, 0 on pass. Useful for author devloop before install (spec §11.5, plan §3.W1).
- * @param rest Raw argv after 'validate'
  */
 export async function runPluginValidate(rest) {
   const flags = parseFlags(rest, {

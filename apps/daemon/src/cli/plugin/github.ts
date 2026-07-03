@@ -7,10 +7,6 @@
 /**
  * Runs command with args, captures stdout/stderr, returns { ok, code, stdout, stderr, error }.
  * Default 30s timeout, 1MB buffer. Used for git/gh/other commands.
- * @param command Command name (e.g., 'git', 'gh')
- * @param args Command arguments
- * @param opts { timeout?, maxBuffer?, cwd?, env? }
- * @returns { ok: boolean, code?, stdout, stderr, error? }
  */
 export async function execFileBuffered(command, args, opts = {}) {
   const { execFile } = await import('node:child_process');

@@ -28,9 +28,6 @@ function parseProjectFileVersionSourceFlag(raw) {
 /**
  * Main dispatcher for `od files` subcommands (list, read, write, upload, delete, diff, versions, version-read, version-create, version-restore).
  * Versions support optional --prompt/--prompt-file for captioning and --source provenance.
- * @async
- * @param {Array<string>} args - Subcommand and arguments.
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 export async function runFiles(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {

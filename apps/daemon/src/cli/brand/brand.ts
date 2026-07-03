@@ -24,8 +24,8 @@ const BRAND_BOOLEAN_FLAGS = new Set([
 
 // Derive a short domain for list output from a brand's source URL.
 /**
- * Extracts hostname from a brand's source URL for compact list output.
  * @internal
+ * Extracts hostname from a brand's source URL for compact list output.
  */
 function brandDomainForCli(sourceUrl) {
   if (typeof sourceUrl !== 'string' || sourceUrl.trim().length === 0) return '-';
@@ -38,8 +38,8 @@ function brandDomainForCli(sourceUrl) {
 }
 
 /**
- * Formats a brand summary as tab-separated id/name/domain/status for CLI output.
  * @internal
+ * Formats a brand summary as a tab-separated id/name/domain/status line for CLI output.
  */
 function formatBrandRow(summary) {
   const meta = summary?.meta ?? {};

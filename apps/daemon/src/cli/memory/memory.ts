@@ -98,8 +98,6 @@ Common options:
 
 /**
  * @internal Extracts positional arguments from argv, skipping flag values.
- * @param {Array<any>} values - Raw argument list.
- * @returns {Array<string>} Positionals.
  */
 function memoryPositionals(values) {
   const out = [];
@@ -119,8 +117,6 @@ function memoryPositionals(values) {
 
 /**
  * @internal Formats memory tree node as tab-separated row (id, parentId, path, kind, type, scope, name).
- * @param {object} node - Tree node.
- * @returns {string} Tab-separated row.
  */
 function formatMemoryTreeRow(node) {
   return [
@@ -136,7 +132,6 @@ function formatMemoryTreeRow(node) {
 
 /**
  * @internal Prints memory entry in human-readable form (name, id, type, description, body markdown).
- * @param {object} entry - Memory entry.
  */
 function printMemoryEntry(entry) {
   console.log(`# ${entry.name}`);
@@ -149,9 +144,6 @@ function printMemoryEntry(entry) {
 
 /**
  * @internal GETs /api/memory/tree; returns derived tree structure with folders and entry nodes.
- * @async
- * @param {string} base - Daemon base URL.
- * @returns {Promise<object>} Tree data.
  */
 async function fetchMemoryTree(base) {
   let resp;
@@ -167,11 +159,6 @@ async function fetchMemoryTree(base) {
 
 /**
  * @internal PATCHes /api/memory/tree/{id} with partial update (name, description, type, body).
- * @async
- * @param {string} base - Daemon base URL.
- * @param {string} id - Node ID.
- * @param {object} body - Partial update object.
- * @returns {Promise<object>} Updated entry.
  */
 async function patchMemoryTreeNode(base, id, body) {
   let resp;
@@ -195,10 +182,6 @@ async function patchMemoryTreeNode(base, id, body) {
 /**
  * @internal GETs /api/memory/{id}; returns null on 404 (entry not found yet).
  * Used by profile/rule handlers for read-before-write merging.
- * @async
- * @param {string} base - Daemon base URL.
- * @param {string} id - Entry ID.
- * @returns {Promise<object|null>} Entry or null.
  */
 async function fetchMemoryEntry(base, id) {
   let resp;
@@ -219,9 +202,6 @@ async function fetchMemoryEntry(base, id) {
 // undefined when neither is supplied so the caller can fall back to flags.
 /**
  * @internal Reads --prompt-file (path or - for stdin); returns undefined if flag is missing.
- * @async
- * @param {object} flags - Parsed flags.
- * @returns {Promise<string|undefined>} File content or undefined.
  */
 async function readMemoryPromptFile(flags) {
   if (typeof flags['prompt-file'] !== 'string' || flags['prompt-file'].length === 0) {
@@ -246,8 +226,6 @@ async function readMemoryPromptFile(flags) {
 // in `od plugin apply`. Returns an ordered list of {label, value} pairs.
 /**
  * @internal Manually scans argv for repeated --field "Label=Value" pairs (parseFlags collapses duplicates).
- * @param {Array<any>} rest - Raw argument list.
- * @returns {Array<{label: string, value: string}>} Collected field pairs.
  */
 function collectMemoryFieldFlags(rest) {
   const out = [];
@@ -276,8 +254,7 @@ function collectMemoryFieldFlags(rest) {
 /**
  * @internal Parses profile markdown body into label→value map.
  * Preserves preamble (free prose, headings); tolerates legacy **Label:** bold format.
- * @param {string} body - Profile markdown.
- * @returns {object} {labels: string[], byLabel: Map, preamble: string[]}.
+ * Returns `{labels, byLabel, preamble}` for use by renderProfileBody.
  */
 function parseProfileBody(body) {
   const labels = [];
@@ -299,8 +276,6 @@ function parseProfileBody(body) {
 
 /**
  * @internal Renders parsed profile back to markdown list format (preserving preamble).
- * @param {object} parsed - Parsed profile object.
- * @returns {string} Markdown body.
  */
 function renderProfileBody(parsed) {
   const lines = [];
@@ -315,7 +290,6 @@ function renderProfileBody(parsed) {
 
 /**
  * @internal Prints profile entry or 'no profile yet' if null.
- * @param {object|null} entry - Profile entry.
  */
 function printMemoryProfile(entry) {
   if (!entry) {
@@ -331,8 +305,6 @@ function printMemoryProfile(entry) {
 // route patch lands, so we coalesce missing booleans to a printable dash.
 /**
  * @internal Formats boolean config value as 'on' / 'off' / '-' (for missing/unimplemented).
- * @param {any} value - Config value.
- * @returns {string} Formatted string.
  */
 function formatMemoryConfigSwitch(value) {
   if (value === true) return 'on';
@@ -343,9 +315,6 @@ function formatMemoryConfigSwitch(value) {
 /**
  * Main dispatcher for `od memory` subcommands (tree, profile, rule, verify, config).
  * Tree is default; tree view/edit/move are nested verbs under tree.
- * @async
- * @param {Array<string>} args - Subcommand and arguments.
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 export async function runMemory(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {

@@ -58,9 +58,9 @@ export async function runMedia(args) {
 }
 
 /**
+ * @internal
  * Initiates a media generation task (image/video/audio).
  * Validates surface, model, and project context; posts to daemon and polls until completion or timeout.
- * @internal
  */
 async function runMediaGenerate(rawArgs) {
   let flags;
@@ -147,9 +147,9 @@ async function runMediaGenerate(rawArgs) {
 }
 
 /**
- * Polls an in-flight media task until completion or budget exhaustion.
- * Surfaces progress updates to stderr, stdout result envelope to stdout.
  * @internal
+ * Polls an in-flight media task until completion or budget exhaustion.
+ * Surfaces progress updates to stderr and the result envelope to stdout.
  */
 async function runMediaWait(rawArgs) {
   const taskId = rawArgs.find((a) => a && !a.startsWith('--'));
@@ -177,9 +177,9 @@ async function runMediaWait(rawArgs) {
 }
 
 /**
- * Polls /api/media/tasks/:id/wait with per-call timeout and total budget.
- * Streams progress lines and handles done/failed/interrupted terminal states.
  * @internal
+ * Polls `/api/media/tasks/:id/wait` with per-call timeout and a total budget.
+ * Streams progress lines to stderr and handles `done`/`failed`/`interrupted` terminal states.
  */
 async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}) {
   const totalBudgetMs = typeof options.totalBudgetMs === 'number' ? options.totalBudgetMs : 25_000;

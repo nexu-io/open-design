@@ -13,7 +13,10 @@ const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
 /** Whitelist of boolean flags for `od diagnostics export`. */
 const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 
-/** Alias of `od daemon status`. */
+/**
+ * Alias of `od daemon status`: fetches and prints the daemon runtime snapshot.
+ * Delegates to `runDaemon(['status', ...args])`.
+ */
 export async function runStatus(args) {
   // Alias of `od daemon status`.
   return runDaemon(['status', ...args]);

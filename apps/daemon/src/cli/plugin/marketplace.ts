@@ -2,7 +2,7 @@
 /** @module cli/plugin/marketplace
  * `od marketplace` subcommand router: catalog discovery, plugin lookup, metadata doctor.
  * Collaborators: manage.ts (flag parsing), github.ts (auth/login flows).
- * Invariant: marketplace list is the source of truth; all plugin resolution routes through resolveMarketplacePluginFromList().
+ * Invariant: the daemon-cached catalog manifest is the source of truth for resolution; all plugin resolution routes through resolveMarketplacePluginFromList(), which operates on that cached list.
  */
 import { parseFlags, structuredHttpFailure } from '../core/index.js';
 import { execFileBuffered, inferGithubHost, spawnPassthrough } from './github.js';

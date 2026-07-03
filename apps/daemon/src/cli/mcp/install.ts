@@ -32,8 +32,8 @@ const MCP_INSTALL_BOOLEAN_FLAGS = new Set([
 ]);
 
 /**
- * Formats and emits install result (JSON or human-readable) to stdout/stderr.
  * @internal
+ * Formats and emits install result (JSON or human-readable) to stdout/stderr.
  */
 function emitInstallResult(useJson, result) {
   if (useJson) {

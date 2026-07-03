@@ -101,11 +101,10 @@ Shows the GitHub account gh will use for Open Design registry publishing.`);
 // in one step. We never POST anywhere — the upstream review flow is
 // always under the author's control.
 /**
- * Generates catalog submission URL + pre-filled PR body. With --open, auto-launches system browser.
- * Reads plugin metadata from daemon (or flags.repo), then delegates to buildPublishLink().
- * Targets: open-design|anthropics-skills|awesome-agent-skills|clawhub|skills-sh|marketplace-json.
- * Phase 4 / spec §14.1.
- * @param rest Raw argv after 'publish'
+ * Generates a catalog submission URL and pre-filled PR body for a plugin.
+ * With `--open`, auto-launches the system browser to the submission form.
+ * Reads plugin metadata from the daemon (or `--repo`), delegates URL building to `buildPublishLink()`.
+ * Supported targets: `open-design`, `anthropics-skills`, `awesome-agent-skills`, `clawhub`, `skills-sh`, `marketplace-json` (spec §14.1).
  */
 export async function runPluginPublish(rest) {
   const flags = parseFlags(rest, {
@@ -226,10 +225,10 @@ publish from a frozen run snapshot rather than the live installed copy.`);
 }
 
 /**
- * Creates or updates public GitHub repo for plugin. Resolves owner from --owner, manifest.repo,
- * gh auth, or GitHub API. Never publishes to placeholder owners (spec §3.T2).
- * Normalizes manifest.plugin.repo if needed; syncs local folder to remote; tags release.
- * @param rest Raw argv after 'publish-repo'
+ * Creates or updates the public GitHub repository for a plugin.
+ * Resolves the target owner from `--owner`, `manifest.repo`, `gh auth`, or the GitHub API (in that order).
+ * Never publishes to placeholder owners (spec §3.T2).
+ * Normalizes `manifest.plugin.repo` when needed; syncs the local folder to remote; tags the release.
  */
 export async function runPluginPublishRepo(rest) {
   const flags = parseFlags(rest, {
@@ -394,9 +393,9 @@ GitHub API as a last resort. It never publishes to placeholder owners.`);
 }
 
 /**
- * Forks nexu-io/open-design, clones, copies plugin into plugins/community/<name>/,
- * pushes branch, opens PR form. Resolves owner same as publish-repo.
- * @param rest Raw argv after 'open-design-pr'
+ * Forks `nexu-io/open-design`, clones it sparsely, copies the plugin folder into
+ * `plugins/community/<name>/`, pushes a branch, and opens the GitHub PR form with `--web`.
+ * Owner resolution follows the same priority order as `runPluginPublishRepo`.
  */
 export async function runPluginOpenDesignPr(rest) {
   const flags = parseFlags(rest, {
@@ -519,9 +518,9 @@ fork of nexu-io/open-design, pushes a branch, and opens the PR form with --web.`
 }
 
 /**
- * Upserts plugin entry into a marketplace-json catalog file (local or fetched).
- * Handles missing catalog gracefully (creates new).
  * @internal
+ * Upserts a plugin entry into a local marketplace-JSON catalog file.
+ * Creates the catalog if it does not exist yet.
  */
 async function publishToMarketplaceJson({ catalogPath, meta }) {
   const [{ dirname, resolve }, { mkdir, readFile, writeFile }, { PublishError, upsertMarketplaceJsonEntry }] = await Promise.all([
@@ -563,8 +562,9 @@ async function publishToMarketplaceJson({ catalogPath, meta }) {
 }
 
 /**
- * Renders success/error result as human text or --json. Shows owner source (--owner|plugin.repo|gh auth|API).
  * @internal
+ * Renders a publish-repo or open-design-pr result as human text or `--json`.
+ * On success, reports the repo URL and how the owner was resolved; on failure, surfaces the failing step.
  */
 function emitPluginWorkflowResult(flags, payload) {
   if (flags.json) {
@@ -594,16 +594,16 @@ function emitPluginWorkflowResult(flags, payload) {
 }
 
 /**
- * Safely parse JSON or return null.
  * @internal
+ * Parses a JSON string, returning `null` on any parse error.
  */
 function safeJson(raw) {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
 /**
- * Extracts first https?:// URL from text (used to parse gh PR create --web output).
  * @internal
+ * Extracts the first `https?://` URL from text; used to parse the URL from `gh pr create --web` output.
  */
 function extractFirstUrl(text) {
   const match = /https?:\/\/\S+/i.exec(String(text ?? ''));
@@ -611,9 +611,8 @@ function extractFirstUrl(text) {
 }
 
 /**
- * Yanking never deletes metadata or bytes. Opens issue form on nexu-io/open-design with
- * versioning/yanking metadata. Author clicks Create to submit (spec §14.2).
- * @param rest Raw argv after 'yank'
+ * Opens the `nexu-io/open-design` issue form pre-filled with a yank request for a specific plugin version.
+ * Yanking never deletes metadata or bytes — it marks the version unresolvable for new installs while preserving lockfile replay (spec §14.2).
  */
 export async function runPluginYank(rest) {
   const flags = parseFlags(rest, {

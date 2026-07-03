@@ -7,12 +7,9 @@ import { exitWithStructuredError, parseFlags, readPromptFromFlags, streamRunEven
 import { PROJECT_BOOLEAN_FLAGS, PROJECT_STRING_FLAGS, basenameForCli, collectCliPositionals, postImportFolderToDaemon, postJsonToDaemon, projectDaemonUrl, resolveFolderPathForCli } from './project.js';
 
 /**
- * @internal Reads run message from --message flag, or --prompt(--prompt-file) fallback, or caller-provided fallback.
- * Used when starting runs; message is optional if a skill is specified.
- * @async
- * @param {object} flags - Parsed flag object.
- * @param {string} [fallback=null] - Fallback message if flags provide none.
- * @returns {Promise<string|null>} Message or fallback.
+ * @internal
+ * Reads a run message from `--message`, `--prompt`/`--prompt-file`, or the `fallback` argument.
+ * Returns `null` when none is provided; a message is optional when a skill id is specified instead.
  */
 async function readRunMessageFromFlags(flags, fallback = null) {
   if (typeof flags.message === 'string' && flags.message.length > 0) {
@@ -25,10 +22,7 @@ async function readRunMessageFromFlags(flags, fallback = null) {
 
 /**
  * Main dispatcher for `od run` subcommands (start, redesign, watch, cancel, list, info, result-package).
- * Redesign auto-imports a folder if no --project given; start requires --project.
- * @async
- * @param {Array<string>} args - Subcommand and arguments.
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
+ * `redesign` auto-imports a folder when no `--project` is given; `start` requires `--project`.
  */
 export async function runRun(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {

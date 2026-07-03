@@ -26,9 +26,6 @@ export const LIBRARY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
  * are provided via `--key=value` or `--key value` (for string flags).
  * Boolean flags take no value; positionals pass through silently (callers
  * that handle positional args re-scan argv themselves).
- * @param {Array<string>} argv - Raw argv slice (typically args[1..])
- * @param {object} opts - { string: Set<string>, boolean: Set<string> }
- * @returns {object} Parsed flags object: { key1: value1, key2: true, ... }
  */
 export function parseFlags(argv, opts = {}) {
   const stringFlags = opts.string instanceof Set ? opts.string : new Set();
@@ -85,9 +82,6 @@ export function parseFlags(argv, opts = {}) {
  * Extracts positional (non-flag) arguments from argv. Skips over string-flag
  * values (e.g., if --query is in stringFlags, the value after --query is not
  * a positional). Returns a list of positionals in order.
- * @param {Array<string>} argv - Raw argv slice
- * @param {Set<string>} stringFlags - Set of flag names that consume the next value
- * @returns {Array<string>} Positional arguments
  */
 export function positionalArgs(argv, stringFlags = new Set()) {
   const out = [];
@@ -110,8 +104,6 @@ export function positionalArgs(argv, stringFlags = new Set()) {
  * boolean, numeric strings → number, otherwise returns the raw string.
  * Used by the config and plugin domains to convert `--flag=value` strings
  * into application-native types.
- * @param {string} raw - Raw string value from flag
- * @returns {boolean|number|string} Coerced value
  */
 export function coerceCliValue(raw) {
   if (raw === 'true') return true;

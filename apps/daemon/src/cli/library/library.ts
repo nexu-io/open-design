@@ -25,9 +25,6 @@ const LIBRARY_ASSET_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 /**
  * Dispatcher for `od atoms` subcommands (list, show, info).
  * Atoms are first-party agent task blueprints (implemented + planned stages).
- * @async
- * @param {Array<string>} args - Subcommand and arguments.
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 export async function runAtoms(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -144,9 +141,6 @@ Options:
 /**
  * Main dispatcher for `od library` subcommands (list, search, get, rm, import, apply, edit-as-page, figma, sync, pair).
  * Import accepts file paths or URLs; apply copies asset into project design files; sync pulls design systems and generated artifacts into Library.
- * @async
- * @param {Array<string>} args - Subcommand and arguments.
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 export async function runLibrary(args) {
   const sub = args.find((a) => !a.startsWith('-')) || '';
@@ -369,10 +363,7 @@ export async function runLibrary(args) {
 /**
  * @internal Common handler for `od <name> list|show` where name is skills|craft|design-systems.
  * Queries /api/<name> or /api/design-systems depending on entity type.
- * @async
  * @param {string} name - Entity name (skills, craft, or design-systems).
- * @param {Array<string>} args - Subcommand and arguments.
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 async function runLibraryList(name, args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -419,26 +410,17 @@ async function runLibraryList(name, args) {
 
 /**
  * Dispatcher for `od skills list|show` — lists and displays agent skills.
- * @async
- * @param {Array<string>} args - Subcommand and arguments.
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 export async function runSkills(args)        { return runLibraryList('skills', args); }
 
 /**
  * Dispatcher for `od craft list|show` — lists and displays craft rule collections.
- * @async
- * @param {Array<string>} args - Subcommand and arguments.
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 export async function runCraft(args)         { return runLibraryList('craft', args); }
 
 /**
  * Dispatcher for `od design-systems` subcommands (list, show, rename, download, import-local, import-github, import-shadcn, rebuild-token-contract).
  * Delegates to specialized handlers; defaults to list if no recognized subcommand.
- * @async
- * @param {Array<string>} args - Subcommand and arguments.
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 export async function runDesignSystems(args) {
   if (args[0] === 'rename') return runDesignSystemRename(args.slice(1));
@@ -461,11 +443,8 @@ export async function runDesignSystems(args) {
 // "Download brand" button produces — and writes it to disk. Only user design
 // systems are downloadable; presets return 404.
 /**
- * Downloads an editable design system as a self-contained .zip (all files + generated SKILLS.md guide).
+ * @internal Downloads an editable design system as a self-contained .zip (all files + generated SKILLS.md guide).
  * Presets return 404; only user systems are downloadable.
- * @async
- * @param {Array<string>} args - Subcommand and arguments (id, optional --out path).
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 async function runDesignSystemDownload(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -529,11 +508,8 @@ generated SKILLS.md usage guide).
 // the Settings UI. The CLI resolves relative paths before sending the request
 // because the daemon intentionally accepts only absolute host paths.
 /**
- * Imports a local project directory as an editable design system via POST /api/design-systems/import/local.
+ * @internal Imports a local project directory as an editable design system via POST /api/design-systems/import/local.
  * Resolves relative paths to absolute before sending (daemon only accepts absolute paths).
- * @async
- * @param {Array<string>} args - Subcommand and arguments (path, optional flags).
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 async function runDesignSystemImportLocal(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -567,11 +543,8 @@ Imports a local project directory as an editable Open Design design system.
 // od design-systems import-github <url> [--branch <branch>] [--name <name>]
 //   [--import-mode <mode>] [--craft <slug,slug>] [--json] [--daemon-url <url>]
 /**
- * Imports a public GitHub repository URL as an editable design system.
+ * @internal Imports a public GitHub repository URL as an editable design system.
  * Supports branch/tag/ref override via --branch flag.
- * @async
- * @param {Array<string>} args - Subcommand and arguments (URL, optional flags).
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 async function runDesignSystemImportGithub(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -655,11 +628,8 @@ async function postDesignSystemImport(flags, endpoint, body) {
 // design-system detail view. Without --force the daemon only queues a job when
 // source/token-contract.report.json recommends it.
 /**
- * Queues a review-gated TOKEN_SCHEMA rebuild for an editable design system.
+ * @internal Queues a review-gated TOKEN_SCHEMA rebuild for an editable design system.
  * Without --force, rebuild only queues if daemon's quality report recommends it.
- * @async
- * @param {Array<string>} args - Subcommand and arguments (id, optional --force).
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 async function runDesignSystemTokenContractRebuild(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -707,11 +677,8 @@ Starts a review-gated TOKEN_SCHEMA token contract rebuild for an editable import
 // shorthand "<owner>/<repo>/<item>" (e.g. shadcn/ui/theme-zinc) or a direct
 // https URL to a registry-item JSON document.
 /**
- * Imports a shadcn registry item as an editable design system.
+ * @internal Imports a shadcn registry item as an editable design system.
  * Reference is shadcn shorthand (owner/repo/item) or direct URL to registry-item JSON.
- * @async
- * @param {Array<string>} args - Subcommand and arguments (reference, optional flags).
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 async function runDesignSystemImportShadcn(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -744,12 +711,9 @@ Imports a shadcn registry item as an Open Design design system.
 // returns 404, surfaced here as a structured failure. Arg parsing lives in
 // rename-args.ts so it can be unit-tested.
 /**
- * @internal Helper for `od design-systems rename <id> --title <new-title>`.
+ * @internal Handler for `od design-systems rename <id> --title <new-title>`.
  * Renames a user-created design system; built-in systems return 404.
  * Delegates arg parsing to parseDesignSystemRenameArgs for unit testing.
- * @async
- * @param {Array<string>} args - Subcommand arguments (id, flags).
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 async function runDesignSystemRename(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {

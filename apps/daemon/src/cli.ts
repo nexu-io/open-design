@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 // @ts-nocheck
-/**
- * @module cli-entry
- *
- * Thin composition root for the `od` CLI. All subcommand behavior lives in
- * `./cli/<concern>/` capability-barrel modules; this file only owns argv
- * intake, the subcommand routing table, root help, and the legacy `tools *`
- * delegations. Keep it wiring-only: new subcommand logic belongs in a
- * `./cli/` concern module, exported through `./cli/index.js`.
+/** @module cli
+ * Thin composition root for the `od` CLI. Owns argv intake, the subcommand
+ * routing table (`SUBCOMMAND_MAP`), root help, and legacy `tools *` delegations.
+ * All subcommand logic lives in `./cli/<concern>/` capability-barrel modules;
+ * this file is wiring-only — new subcommand logic belongs in a `./cli/` module
+ * exported through `./cli/index.js`.
  */
 import { runDaemonCliStartup } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
@@ -62,11 +60,18 @@ const argv = process.argv.slice(2);
 // working unchanged. Subcommand routing is keyword-based; flags are
 // parsed inside each handler.
 
+/** @internal Thin bridge for `od artifacts` that normalizes exitCode into process.exit. */
 async function runArtifacts(args) {
   const { exitCode } = await runArtifactsCli(args);
   process.exit(exitCode);
 }
 
+/**
+ * Single routing table mapping every `od <subcommand>` keyword to its handler.
+ * Dispatch is keyword-based (first non-flag positional); flags are parsed inside
+ * each handler. Extending the CLI means adding an entry here and exporting the
+ * handler from `./cli/index.js`.
+ */
 const SUBCOMMAND_MAP = {
   artifacts: runArtifacts,
   media: runMedia,
@@ -156,6 +161,7 @@ if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
   await runDaemonCliStartup(argv, { printHelp: printRootHelp });
 }
 
+/** @internal Prints the top-level `od --help` usage text covering all subcommands. */
 function printRootHelp() {
   console.log(`Usage:
   od [--port <n>] [--host <addr>] [--no-open]

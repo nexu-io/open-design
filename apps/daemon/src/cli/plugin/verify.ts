@@ -15,6 +15,7 @@ import { PLUGIN_BOOLEAN_FLAGS, PLUGIN_STRING_FLAGS, pluginDaemonUrl } from './ma
 /**
  * Subcommands: list [--project id], show <id>, diff <a> <b>, prune [--before ms].
  * Snapshot GC escape hatch (Plan §3.A5, spec Phase 5). list returns JSON; others allow --json flag.
+ * Note: show/diff exit 72 (RECOVERABLE_EXIT_CODES['snapshot-stale']) on 404 — the reuse of the stale code for not-found is a known quirk.
  */
 export async function runPluginSnapshots(args) {
   const sub = args[0];
@@ -151,7 +152,6 @@ export async function runPluginSnapshots(args) {
  * CI meta-command. Reads optional .od-verify.json from plugin folder (or --config).
  * Runs enabled subset of doctor/simulate/canon; aggregates into pass/fail.
  * Exit 4 on failure (useful for CI gates). Phase 5 / spec §16 / plan §3.FF1.
- * @param rest Raw argv after 'verify'
  */
 export async function runPluginVerify(rest) {
   const flags = parseFlags(rest, {
@@ -327,7 +327,6 @@ Exit codes:
  * Dry-run pipeline without LLM. Walks stages, tests 'until' expressions against supplied signals.
  * Signals: critique.score, iterations, user.confirmed, preview.ok, build.passing, tests.passing (closed vocabulary).
  * Exit 4 on cap-hit or unparsable stage (plan §3.EE1).
- * @param rest Raw argv after 'simulate'
  */
 export async function runPluginSimulate(rest) {
   const flags = parseFlags(rest, {
@@ -436,7 +435,6 @@ Closed signal vocabulary:
  * Prints canonical system prompt block (## Active plugin / ## Plugin inputs / ## Plugin atoms)
  * that snapshot splices into prompt. With --check <file>, compares byte-equality (spec §3.CC1, §3.DD2).
  * Useful for locking fixtures and understanding agent read view.
- * @param rest Raw argv after 'canon'
  */
 export async function runPluginCanon(rest) {
   const flags = parseFlags(rest, {

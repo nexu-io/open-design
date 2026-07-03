@@ -2,6 +2,8 @@
 /** @module cli/mcp/mcp
  * Implements `od mcp` (stdio MCP server) and `od mcp install` dispatcher.
  * Proxies daemon tool calls into external coding agents; resolves launch specs from daemon config.
+ * The stdio server implementation (`runMcpStdio`) is loaded via dynamic self-import (`import('./mcp.js')`)
+ * inside `runMcp` to avoid paying its startup cost on every `od` invocation.
  */
 import { AGENT_SLUGS } from '../../mcp-agent-install.js';
 import { cliDaemonBaseUrl, cliDaemonUrl, parseFlags } from '../core/index.js';

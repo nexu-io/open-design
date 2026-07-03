@@ -35,9 +35,6 @@ export const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 
 /**
  * Resolves the daemon base URL from flags or environment; wrapper around cliDaemonUrl.
- * @async
- * @param {object} flags - Parsed flag object (may include --daemon-url).
- * @returns {Promise<string>} Normalized daemon base URL.
  */
 export async function projectDaemonUrl(flags) {
   return cliDaemonUrl(flags);

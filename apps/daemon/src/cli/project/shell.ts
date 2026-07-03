@@ -1,8 +1,8 @@
 // @ts-nocheck
 /** @module cli/project/shell
  * Implements interactive shell bridging for projects (PTY attach over HTTP SSE + POST stdin).
- * Mirrors web Terminal tab behavior: --follow enables attachment, --json-only creates and exits.
- * Collaborators: parseFlags, structuredHttpFailure from core.
+ * Mirrors web Terminal tab behavior: --follow enables attachment, --json creates and exits without attaching.
+ * Collaborators: PROJECT_*_FLAGS, projectDaemonUrl from project.ts; parseFlags, structuredHttpFailure from core.
  */
 import { parseFlags, structuredHttpFailure } from '../core/index.js';
 import { PROJECT_BOOLEAN_FLAGS, PROJECT_STRING_FLAGS, projectDaemonUrl } from './project.js';
@@ -14,11 +14,8 @@ import { PROJECT_BOOLEAN_FLAGS, PROJECT_STRING_FLAGS, projectDaemonUrl } from '.
 // stdin is a TTY we flip it into raw mode so the remote shell sees per-key
 // bytes (ctrl-c, arrows, tab) instead of line-buffered input.
 /**
- * Creates an interactive PTY in the project's working directory and optionally attaches.
- * Sends terminal dimensions if available; returns JSON if --json flag set.
- * @async
- * @param {Array<string>} args - Subcommand and arguments (only called from dispatcher with remaining args).
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
+ * @internal Creates an interactive PTY in the project's working directory and optionally attaches.
+ * Sends terminal dimensions if available; exits after printing JSON when --json flag is set.
  */
 async function runShell(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {

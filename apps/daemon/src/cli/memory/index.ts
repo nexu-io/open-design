@@ -1,5 +1,5 @@
 // @ts-nocheck
 /** @module cli/memory
- * Re-exports the memory CLI handler for the dispatcher.
+ * Barrel layer for memory CLI commands.
  */
 export * from './memory.js';

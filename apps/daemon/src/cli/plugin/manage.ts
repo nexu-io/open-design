@@ -72,12 +72,9 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
 ]);
 
 /**
- * Main entry point: routes `od plugin <subcommand> [args]` to 30+ handlers.
- * Subcommands: list, search, stats, sources, info, manifest, install, upgrade,
- * uninstall, apply, duplicate, canon, diff, doctor, replay, trust, snapshots,
- * simulate, verify, events, run, scaffold, validate, pack, candidates,
- * login, whoami, export, publish, publish-repo, open-design-pr, yank.
- * @param args Raw argv slice after 'plugin'
+ * Main entry point for `od plugin`: routes 30+ subcommands to their handlers.
+ * Flag whitelist (PLUGIN_*_FLAGS) is enforced before dispatch so misspelled flags
+ * fail at parse time rather than silently reaching the daemon.
  */
 export async function runPlugin(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -215,8 +212,6 @@ async function runPluginRun(rest) {
 /**
  * Resolves daemon URL from --daemon-url flag, OD_DAEMON_URL env, OD_SIDECAR_IPC_PATH discovery,
  * or default http://127.0.0.1:7456. Wrapper around cliDaemonUrl() for plugin-specific context.
- * @param flags Parsed command flags
- * @returns HTTP base URL (without trailing /)
  */
 export async function pluginDaemonUrl(flags) {
   return cliDaemonUrl(flags);
@@ -226,7 +221,7 @@ export async function pluginDaemonUrl(flags) {
 // `od plugin search` below). Recognising these as string flags
 // keeps the parseFlags() argv consumer happy.
 /**
- * List installed plugins with AND-combined filters (--task-kind, --mode, --tag, --trust, --bundled).
+ * @internal List installed plugins with AND-combined filters (--task-kind, --mode, --tag, --trust, --bundled).
  * Delegates to searchInstalledPlugins() for ranking/matching. Output: compact or --json.
  */
 async function runPluginList(rest) {
@@ -259,7 +254,7 @@ Lists installed plugins. Filters AND together: --task-kind=code-migration
 
 // Plan §3.Y1 — `od plugin search <query>`.
 /**
- * Free-text search: case-insensitive substring match on id/title/description/tags.
+ * @internal Free-text search: case-insensitive substring match on id/title/description/tags.
  * Combines with same filters as list (spec §3.Y1).
  */
 async function runPluginSearch(rest) {
@@ -295,7 +290,7 @@ flags as 'od plugin list'.`);
 // daemon-side route owns the SQLite reads; the CLI is a thin
 // formatter.
 /**
- * Aggregate inventory report: plugin counts by sourceKind/trust/taskKind, bundled vs third-party,
+ * @internal Aggregate inventory report: plugin counts by sourceKind/trust/taskKind, bundled vs third-party,
  * snapshot totals/status breakdown, oldest/newest applied timestamps (spec §3.DD1).
  */
 async function runPluginStats(rest) {

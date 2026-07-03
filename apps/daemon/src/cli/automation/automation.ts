@@ -41,8 +41,6 @@ const AUTOMATION_WEEKDAY_TOKENS = {
  * @internal Parses --schedule flag into typed schedule object (hourly, daily, weekdays, or weekly).
  * Forms: hourly:<minute> | daily:HH:MM[:TZ] | weekdays:HH:MM[:TZ] | weekly:DAY:HH:MM[:TZ]
  * Exits 2 on parse error.
- * @param {string} raw - Raw schedule string.
- * @returns {object} {kind, minute?|time, timezone?, weekday?}.
  */
 function parseScheduleFlag(raw) {
   if (!raw || typeof raw !== 'string') {
@@ -99,8 +97,6 @@ function parseScheduleFlag(raw) {
  * @internal Parses --target flag into {mode, projectId?}.
  * Forms: 'new-project' | 'reuse=<id>' | 'reuse:<id>' | implicit reuse if --project given.
  * Exits 2 on parse error.
- * @param {object} flags - Parsed flags.
- * @returns {object} {mode, projectId?}.
  */
 function parseAutomationTarget(flags) {
   const raw = flags.target;
@@ -136,8 +132,6 @@ function parseAutomationTarget(flags) {
 
 /**
  * @internal Formats schedule object for display (hourly:00, daily:09:00:UTC, etc.).
- * @param {object} schedule - Schedule object.
- * @returns {string} Human-readable schedule.
  */
 function describeAutomationScheduleForCli(schedule) {
   if (!schedule) return '-';
@@ -153,8 +147,6 @@ function describeAutomationScheduleForCli(schedule) {
 
 /**
  * @internal Formats target object for display ('reuse=<id>' or 'new-project').
- * @param {object} target - Target object.
- * @returns {string} Human-readable target.
  */
 function describeAutomationTargetForCli(target) {
   if (!target) return '-';
@@ -164,8 +156,6 @@ function describeAutomationTargetForCli(target) {
 
 /**
  * @internal Splits comma-separated IDs, trims, filters empty, dedupes.
- * @param {string} value - Raw comma-separated IDs or empty.
- * @returns {Array<string>} Unique trimmed IDs.
  */
 function splitAutomationIds(value) {
   if (typeof value !== 'string' || value.trim().length === 0) return [];
@@ -183,8 +173,6 @@ function splitAutomationIds(value) {
 /**
  * @internal Builds context object from --skill, --plugin, --mcp, --connector flags (comma-separated).
  * Returns null if no IDs provided.
- * @param {object} flags - Parsed flags.
- * @returns {object|null} {skillIds?, pluginIds?, mcpServerIds?, connectorIds?}.
  */
 function automationContextFromFlags(flags) {
   const skillIds = splitAutomationIds(flags.skill);
@@ -202,8 +190,6 @@ function automationContextFromFlags(flags) {
 
 /**
  * @internal Formats automation routine as tab-separated row (id, name, schedule, target, status, nextRun).
- * @param {object} r - Routine object.
- * @returns {string} Tab-separated row.
  */
 function formatAutomationRow(r) {
   const next = r.nextRunAt
@@ -278,9 +264,6 @@ Common options:
 /**
  * Main dispatcher for `od automation` subcommands (template, source/ingest, proposal, list, get, runs, create, update, run, delete, pause, resume, crystallize-run).
  * Source/proposal are self-evolution surfaces; template/source/proposal are read-only discovery.
- * @async
- * @param {Array<string>} args - Subcommand and arguments.
- * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
  */
 export async function runAutomation(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
