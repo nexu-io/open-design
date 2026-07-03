@@ -44,6 +44,23 @@ describe('resolveRoutedPluginId — 우선순위 ②③④ + 게이트', () => {
     })).toBe('od-default');
   });
 
+  it('③ configured router가 non-router 플러그인이면 무시하고 od-default (misconfig guard)', () => {
+    // od config set defaultRouterPluginId는 무검증 generic setter — 버티컬을 잘못 지정해도
+    // 모든 모호/무매칭 프롬프트가 그 버티컬로 새면 안 된다 (스펙 §9: invalid config 무시).
+    expect(resolveRoutedPluginId({
+      ...FREEFORM, prompt: '랜딩페이지 하나',
+      installed: INSTALLED, defaultRouterPluginId: 'example-naver-blog',
+    })).toBe('od-default');
+  });
+
+  it('③ 라우터 미설정 + od-default 미설치 → ④ kind 폴백 (triple-fallback 완주)', () => {
+    const withoutDefault = INSTALLED.filter((record) => record.id !== 'od-default');
+    expect(resolveRoutedPluginId({
+      ...FREEFORM, prompt: '랜딩페이지 하나',
+      installed: withoutDefault, defaultRouterPluginId: null,
+    })).toBe('od-new-generation');
+  });
+
   it('게이트: kind가 other가 아니면 트리거 무시하고 ④ kind 폴백', () => {
     expect(resolveRoutedPluginId({
       sessionMode: 'design', metadata: { kind: 'deck' },

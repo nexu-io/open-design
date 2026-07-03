@@ -71,8 +71,17 @@ export function resolveRoutedPluginId(args: {
     // 모호/무매칭 → 설정 라우터 → od-default → (아래) kind 폴백
     const configured = args.defaultRouterPluginId;
     if (typeof configured === 'string' && configured.length > 0) {
-      if (isInstalled(args.installed, configured)) return configured;
-      console.warn(`[plugins] defaultRouterPluginId ${configured} is not installed; falling back to od-default`);
+      const configuredRecord = args.installed.find((record) => record.id === configured);
+      if (!configuredRecord) {
+        console.warn(`[plugins] defaultRouterPluginId ${configured} is not installed; falling back to od-default`);
+      } else if (routingOf(configuredRecord).router !== true) {
+        // od config set은 무검증 generic setter — 버티컬을 잘못 지정하면 모든 모호/무매칭
+        // 프롬프트가 그 버티컬로 새므로 non-router는 무시 (스펙 §9: invalid config 무시,
+        // 재매칭 fallbackRoute의 router 가드와 대칭).
+        console.warn(`[plugins] defaultRouterPluginId ${configured} is not a router plugin; falling back to od-default`);
+      } else {
+        return configured;
+      }
     }
     if (isInstalled(args.installed, 'od-default')) return 'od-default';
   }
