@@ -671,10 +671,11 @@ function resolveOdTeamBin(): OdTeamSpawn | null {
   if (process.env.OD_TEAM_BIN) {
     return { command: process.env.OD_TEAM_BIN, args: [] };
   }
-  // 2. Packaged install: DAEMON_RESOURCE_ROOT/bin/odteam
+  // 2. Packaged install: DAEMON_RESOURCE_ROOT/bin/odteam(.exe)
   //    (bundled by tools-pack via copyBundledOdTeamBinary)
   if (DAEMON_RESOURCE_ROOT) {
-    const packagedPath = path.join(DAEMON_RESOURCE_ROOT, 'bin', 'odteam');
+    const odteamName = process.platform === 'win32' ? 'odteam.exe' : 'odteam';
+    const packagedPath = path.join(DAEMON_RESOURCE_ROOT, 'bin', odteamName);
     try {
       if (fs.existsSync(packagedPath) && fs.statSync(packagedPath).isFile()) {
         fs.accessSync(packagedPath, fs.constants.X_OK);
