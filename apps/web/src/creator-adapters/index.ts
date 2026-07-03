@@ -574,6 +574,11 @@ function buildFocusCandidates(
   const candidates: FocusCandidate[] = [];
   const taskByProjectId = new Map(tasks.map((task) => [task.projectId, task]));
   const activityByProjectId = new Map<string, ActivityItemViewModel>();
+  for (const activity of activities) {
+    if (!activityByProjectId.has(activity.projectId)) {
+      activityByProjectId.set(activity.projectId, activity);
+    }
+  }
 
   for (const task of tasks) {
     const relatedActivity = activityByProjectId.get(task.projectId);

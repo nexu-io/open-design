@@ -150,6 +150,103 @@ describe("buildCreatorDashboardData", () => {
     expect(firstWorkflow.id).toBe("wf-1");
     expect(firstWorkflow.defaultStageLabel).toBe("选题");
   });
+
+  it("uses latest completion activity as a focus fallback when no run metadata exists", () => {
+    const tasks: Task[] = [
+      {
+        id: "t-review",
+        projectId: "p-review",
+        title: "待复核项目",
+        stage: "review",
+        status: "todo",
+        priority: "low",
+        createdAt: "2025-01-01T00:00:00Z",
+        updatedAt: "2025-01-02T00:00:00Z",
+      },
+    ];
+    const activities: ActivityEvent[] = [
+      {
+        id: "a-review",
+        projectId: "p-review",
+        category: "review",
+        title: "运行完成",
+        createdAt: "2025-01-03T00:00:00Z",
+      },
+    ];
+
+    const result = buildCreatorDashboardData({ tasks, activities });
+
+    expect(result.focus?.projectId).toBe("p-review");
+    expect(result.focus?.reason).toBe("Fresh result to review");
+    expect(result.focus?.recommendedAction).toBe("Review output");
+  });
+
+  it("uses latest start activity as a focus fallback when no run metadata exists", () => {
+    const tasks: Task[] = [
+      {
+        id: "t-running",
+        projectId: "p-running",
+        title: "推进中项目",
+        stage: "editing",
+        status: "todo",
+        priority: "low",
+        createdAt: "2025-01-01T00:00:00Z",
+        updatedAt: "2025-01-02T00:00:00Z",
+      },
+    ];
+    const activities: ActivityEvent[] = [
+      {
+        id: "a-running",
+        projectId: "p-running",
+        category: "editing",
+        title: "运行开始",
+        createdAt: "2025-01-03T00:00:00Z",
+      },
+    ];
+
+    const result = buildCreatorDashboardData({ tasks, activities });
+
+    expect(result.focus?.projectId).toBe("p-running");
+    expect(result.focus?.reason).toBe("Run in progress");
+    expect(result.focus?.recommendedAction).toBe("Monitor run");
+  });
+
+  it("prefers the newest activity when multiple fallback activities exist for one project", () => {
+    const tasks: Task[] = [
+      {
+        id: "t-multi",
+        projectId: "p-multi",
+        title: "多事件项目",
+        stage: "editing",
+        status: "todo",
+        priority: "low",
+        createdAt: "2025-01-01T00:00:00Z",
+        updatedAt: "2025-01-02T00:00:00Z",
+      },
+    ];
+    const activities: ActivityEvent[] = [
+      {
+        id: "a-older",
+        projectId: "p-multi",
+        category: "editing",
+        title: "运行开始",
+        createdAt: "2025-01-03T00:00:00Z",
+      },
+      {
+        id: "a-newer",
+        projectId: "p-multi",
+        category: "review",
+        title: "运行完成",
+        createdAt: "2025-01-04T00:00:00Z",
+      },
+    ];
+
+    const result = buildCreatorDashboardData({ tasks, activities });
+
+    expect(result.activities.map((item) => item.title)).toEqual(["运行完成", "运行开始"]);
+    expect(result.focus?.reason).toBe("Fresh result to review");
+    expect(result.focus?.recommendedAction).toBe("Review output");
+  });
 });
 
 // ---------------------------------------------------------------------------
