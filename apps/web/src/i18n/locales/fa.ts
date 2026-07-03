@@ -1405,6 +1405,8 @@ export const fa: Dict = {
   'newproj.importClaudeZip': 'وارد کردن ZIP طراحی Claude',
   'newproj.importClaudeZipTitle': 'وارد کردن یک فایل .zip صادر شده از Claude Design',
   'newproj.importingClaudeZip': 'در حال وارد کردن…',
+  'newproj.openFolder': 'پوشه را باز کن',
+  'newproj.openingFolder': 'در حال باز کردن...',
   'newproj.privacyFooter': 'به طور پیش‌فرض فقط شما می‌توانید پروژه خود را ببینید.',
   'newproj.designSystem': 'سیستم طراحی',
   'newproj.dsNoneFreeform': 'هیچ — آزاد',

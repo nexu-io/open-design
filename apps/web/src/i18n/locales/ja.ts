@@ -1405,6 +1405,8 @@ export const ja: Dict = {
   'newproj.importClaudeZip': 'Claude Design ZIP をインポート',
   'newproj.importClaudeZipTitle': 'Claude Design の .zip エクスポートをインポート',
   'newproj.importingClaudeZip': 'インポート中…',
+  'newproj.openFolder': 'フォルダを開く',
+  'newproj.openingFolder': '開いています...',
   'newproj.privacyFooter': 'デフォルトではあなただけがプロジェクトを見ることができます。',
   'newproj.designSystem': 'デザインシステム',
   'newproj.dsNoneFreeform': 'なし — フリーフォーム',

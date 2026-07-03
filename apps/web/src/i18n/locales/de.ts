@@ -1405,6 +1405,8 @@ export const de: Dict = {
   'newproj.importClaudeZip': 'Claude Design ZIP importieren',
   'newproj.importClaudeZipTitle': 'Einen Claude Design .zip-Export importieren',
   'newproj.importingClaudeZip': 'Import läuft…',
+  'newproj.openFolder': 'Ordner öffnen',
+  'newproj.openingFolder': 'Wird geöffnet...',
   'newproj.privacyFooter': 'Standardmäßig können nur Sie Ihr Projekt sehen.',
   'newproj.designSystem': 'Designsystem',
   'newproj.dsNoneFreeform': 'Keines — frei',
