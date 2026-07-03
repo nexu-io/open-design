@@ -7936,7 +7936,22 @@ function IntegrationsSection() {
             }}
             data-lang={snippetLang}
           >
-            <code>
+            <code
+              style={{
+                // Neutralize the global inline-`code` chip style (background,
+                // padding, rounded corners, color, size) so it doesn't paint a
+                // light rounded rectangle behind every wrapped segment of the
+                // dark snippet block — which read as permanent selection
+                // highlights on the wrapped `claude mcp add-json` one-liner.
+                // Issue #4509.
+                background: 'transparent',
+                padding: 0,
+                borderRadius: 0,
+                color: 'inherit',
+                fontFamily: 'inherit',
+                fontSize: 'inherit',
+              }}
+            >
               {snippet ||
                 (infoError
                   ? t('settings.mcpResolvingFailed')
