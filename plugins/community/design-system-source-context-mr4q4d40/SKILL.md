@@ -1,3 +1,9 @@
+---
+name: design-system-source-context-mr4q4d40
+description: Sidecar source context for design-system package generation, review, and package audit.
+user-invocable: false
+---
+
 # Design System Source Context
 
 This file is generated during setup and should be treated as source evidence for the design-system project. Use it before writing or revising DESIGN.md, previews, tokens, UI kit examples, or assets.
