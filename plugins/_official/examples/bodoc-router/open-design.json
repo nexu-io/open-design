@@ -1,0 +1,41 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-bodoc-router",
+  "title": "Bodoc task router",
+  "title_i18n": {
+    "en": "Bodoc task router",
+    "ko": "보닥 작업 라우터"
+  },
+  "version": "0.1.0",
+  "description": "Hidden fallback router for the bodoc marketing team. When a free-form prompt matches no vertical trigger, it asks which bodoc deliverable to build, then the daemon hands the conversation off to the chosen vertical plugin.",
+  "description_i18n": {
+    "en": "Hidden fallback router for the bodoc marketing team. When a free-form prompt matches no vertical trigger, it asks which bodoc deliverable to build, then the daemon hands the conversation off to the chosen vertical plugin.",
+    "ko": "보닥 마케팅 팀용 숨김 폴백 라우터. 자유입력이 어떤 버티컬 트리거에도 매칭되지 않으면 어떤 산출물을 만들지 묻고, 선택된 버티컬 플러그인으로 데몬이 대화를 전환한다."
+  },
+  "license": "MIT",
+  "author": { "name": "Open Design", "url": "https://github.com/nexu-io" },
+  "tags": ["scenario", "first-party", "router", "hidden", "marketing"],
+  "compat": { "agentSkills": [{ "path": "./SKILL.md" }] },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "marketing",
+    "mode": "scenario",
+    "hidden": true,
+    "routing": { "router": true, "fallbackRoute": "od-default" },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "designSystem": { "ref": "bodoc" }
+    },
+    "pipeline": { "stages": [{ "id": "route", "atoms": ["discovery-question-form"] }] },
+    "capabilities": ["prompt:inject"],
+    "useCase": {
+      "query": {
+        "en": "Ask which bodoc marketing deliverable to build, then continue in the matching vertical workflow.",
+        "ko": "어떤 보닥 마케팅 산출물을 만들지 확인한 뒤 해당 버티컬 워크플로로 이어간다."
+      },
+      "exampleOutputs": []
+    }
+  }
+}
