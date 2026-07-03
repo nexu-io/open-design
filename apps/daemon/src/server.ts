@@ -160,7 +160,7 @@ import {
 } from './integrations/vela.js';
 import {
   amrAccountFailureDetails,
-  classifyAmrAccountFailure,
+  classifyAmrAccountFailureSignal,
 } from './integrations/vela-errors.js';
 import { amrModelLoadingCache } from './runtimes/amr-model-cache.js';
 import {
@@ -8177,15 +8177,14 @@ export async function startServer({
           noteAgentActivity();
           if (event === 'error') flushVisibleAgentStderr();
           if (def.id === 'amr' && event === 'error') {
-            const failure = classifyAmrAccountFailure(
-              [
-                typeof data?.message === 'string' ? data.message : '',
-                typeof data?.error?.message === 'string' ? data.error.message : '',
-                typeof data?.error?.code === 'string' ? data.error.code : '',
-                agentStdoutTail,
-                agentStderrTail,
-              ].join('\n'),
-            );
+            const failure = classifyAmrAccountFailureSignal({
+              details: data?.error?.details,
+              message: data?.message,
+              errorMessage: data?.error?.message,
+              errorCode: data?.error?.code,
+              stdoutTail: agentStdoutTail,
+              stderrTail: agentStderrTail,
+            });
             if (failure) {
               sendAmrAccountFailure(failure);
               return;
@@ -8388,9 +8387,10 @@ export async function startServer({
         !run.cancelRequested
       ) {
         if (def.id === 'amr') {
-          const amrFailure = classifyAmrAccountFailure(
-            `${agentStderrTail}\n${agentStdoutTail}`,
-          );
+          const amrFailure = classifyAmrAccountFailureSignal({
+            stdoutTail: agentStdoutTail,
+            stderrTail: agentStderrTail,
+          });
           if (amrFailure) {
             sendAmrAccountFailure(amrFailure);
             return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
