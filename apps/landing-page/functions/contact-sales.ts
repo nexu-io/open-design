@@ -104,13 +104,42 @@ const TEAM_SIZE_LABELS: Record<string, string> = {
   "51-200": "51–200 人",
   "200+": "200 人以上",
 };
+// /enterprise submits expected seats as one of these range codes; the pricing
+// modal still sends free numeric text, so the card falls back to the raw value.
+const ALLOWED_SEATS = new Set([
+  "1-5",
+  "5-10",
+  "10-20",
+  "20-50",
+  "50-100",
+  "100-200",
+  "200-500",
+  "500+",
+]);
+const SEAT_LABELS: Record<string, string> = {
+  "1-5": "1–5 个",
+  "5-10": "5–10 个",
+  "10-20": "10–20 个",
+  "20-50": "20–50 个",
+  "50-100": "50–100 个",
+  "100-200": "100–200 个",
+  "200-500": "200–500 个",
+  "500+": "500 个以上",
+};
 const ALLOWED_USE_CASES = new Set([
   "product_design",
   "design_system",
   "prototype",
   "marketing",
+  "brand",
+  "social_media",
+  "poster_print",
   "deck",
+  "video_motion",
+  "illustration",
   "dashboards",
+  "education",
+  "game_assets",
   "other",
 ]);
 const USE_CASE_LABELS: Record<string, string> = {
@@ -118,8 +147,15 @@ const USE_CASE_LABELS: Record<string, string> = {
   design_system: "设计系统",
   prototype: "原型 / 应用 UI",
   marketing: "营销与落地页",
+  brand: "品牌视觉 / VI",
+  social_media: "社媒内容 / 电商素材",
+  poster_print: "海报 / 印刷物料",
   deck: "演示文稿 / Deck",
+  video_motion: "视频 / 动效",
+  illustration: "插画 / 图像生成",
   dashboards: "仪表盘 / 内部工具",
+  education: "教学 / 课件",
+  game_assets: "游戏素材",
   other: "其他",
 };
 
@@ -212,7 +248,7 @@ function buildFeishuCard(lead: ContactLead): Record<string, unknown> {
           fieldRow("公司", lead.company),
           fieldRow("团队规模", TEAM_SIZE_LABELS[lead.teamSize] ?? lead.teamSize),
           fieldRow("国家 / 地区", lead.location),
-          fieldRow("预计席位数", lead.seats),
+          fieldRow("预计席位数", SEAT_LABELS[lead.seats] ?? lead.seats),
           fieldRow("预算", BUDGET_LABELS[lead.budget] ?? lead.budget),
           fieldRow("使用场景", lead.useCases.map((v) => USE_CASE_LABELS[v] ?? v).join("、")),
           fieldRow("职位", lead.role),
@@ -324,11 +360,6 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return json({ ok: false, error: "invalid_email" }, 400, origin);
   }
 
-  const name = readString(payload.name, MAX_SHORT);
-  if (!name) {
-    return json({ ok: false, error: "missing_fields" }, 400, origin);
-  }
-
   // Reject unrecognized sources up front. This is a public write endpoint, so a
   // typoed/unknown source must return 400 rather than silently falling through
   // to the relaxed path and persisting arbitrary leads.
@@ -340,19 +371,27 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return json({ ok: false, error: "invalid_source" }, 400, origin);
   }
 
+  // The /enterprise form no longer asks for a name (email is the contact
+  // handle); every other source still requires one.
+  const name = readString(payload.name, MAX_SHORT);
+  if (!name && source !== "enterprise") {
+    return json({ ok: false, error: "missing_fields" }, 400, origin);
+  }
+
   const company = readString(payload.company, MAX_SHORT);
   const teamSize = readString(payload.teamSize, MAX_SHORT);
   const budget = readString(payload.budget, MAX_SHORT);
+  const seats = readString(payload.seats, MAX_SHORT);
   const useCases = readUseCases(payload.useCases);
 
   // `pricing_team` (the lightweight /pricing modal) is the only relaxed caller —
   // name + email only, with team size/budget as free display strings. Every
-  // other allowlisted source keeps the full contact-form contract: company + a
-  // known team-size/budget enum + at least one use case.
+  // other allowlisted source keeps the full contact-form contract: known
+  // team-size/seat-range/budget enums + a use case (company is optional).
   if (
     source !== "pricing_team" &&
-    (!company ||
-      !ALLOWED_TEAM_SIZES.has(teamSize) ||
+    (!ALLOWED_TEAM_SIZES.has(teamSize) ||
+      !ALLOWED_SEATS.has(seats) ||
       !ALLOWED_BUDGETS.has(budget) ||
       useCases.length === 0)
   ) {
@@ -369,7 +408,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     useCases,
     role: readString(payload.role, MAX_SHORT),
     location: readString(payload.location, MAX_SHORT),
-    seats: readString(payload.seats, MAX_SHORT),
+    seats,
     message: readString(payload.message, MAX_MESSAGE),
     source,
     locale: readString(payload.locale, 16) || "en",

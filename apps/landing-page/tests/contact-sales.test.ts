@@ -27,13 +27,14 @@ async function call(
 }
 
 const ENTERPRISE_OK = {
-  name: "Ada",
   email: "ada@acme.com",
   source: "enterprise",
   company: "Acme",
   teamSize: "11-50",
+  seats: "20-50",
   budget: "usd_50_200",
   useCases: ["design_system"],
+  location: "中国 (CN)",
 };
 
 describe("contact-sales validation", () => {
@@ -43,10 +44,12 @@ describe("contact-sales validation", () => {
     assert.equal((await call({ name: "Ada", source: "pricing_team" })).body.error, "invalid_email");
   });
 
-  it("rejects a missing name on every source", async () => {
+  it("rejects a missing name on every source except enterprise", async () => {
     const { status, body } = await call({ email: "ada@acme.com", source: "pricing_team" });
     assert.equal(status, 400);
     assert.equal(body.error, "missing_fields");
+    // The /enterprise form no longer collects a name.
+    assert.equal((await call(ENTERPRISE_OK)).status, 200);
   });
 
   it("rejects an unrecognized or missing source (no silent relaxed write)", async () => {
@@ -62,17 +65,22 @@ describe("contact-sales validation", () => {
     assert.equal((await call({ name: "Ada", email: "ada@acme.com", source: "client" })).body.error, "missing_fields");
   });
 
-  it("keeps the enterprise contract: company + known team-size/budget + a use case are required", async () => {
-    assert.equal((await call({ ...ENTERPRISE_OK, company: "" })).body.error, "missing_fields");
+  it("keeps the enterprise contract: known team-size/seat-range/budget enums + a use case are required", async () => {
     assert.equal((await call({ ...ENTERPRISE_OK, teamSize: "nonsense" })).body.error, "missing_fields");
+    assert.equal((await call({ ...ENTERPRISE_OK, seats: "" })).body.error, "missing_fields");
+    assert.equal((await call({ ...ENTERPRISE_OK, seats: "nonsense" })).body.error, "missing_fields");
     assert.equal((await call({ ...ENTERPRISE_OK, budget: "nonsense" })).body.error, "missing_fields");
     assert.equal((await call({ ...ENTERPRISE_OK, useCases: [] })).body.error, "missing_fields");
+    // Company became optional when the form slimmed down.
+    assert.equal((await call({ ...ENTERPRISE_OK, company: "" })).status, 200);
   });
 
   it("accepts a complete enterprise submission", async () => {
     const { status, body } = await call(ENTERPRISE_OK);
     assert.equal(status, 200);
     assert.equal(body.ok, true);
+    // The expanded use-case vocabulary is accepted.
+    assert.equal((await call({ ...ENTERPRISE_OK, useCases: ["video_motion"] })).status, 200);
   });
 
   it("accepts a pricing_team lead with only name + email (canonical team-size/budget enums)", async () => {
