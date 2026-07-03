@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import fsp from 'node:fs/promises';
+import path from 'node:path';
 import type { RouteDeps } from '../server-context.js';
 import type {
   DesignSystemFileDetail,
@@ -28,6 +29,8 @@ type DesignSystemWorkspaceProject = {
 type AvailableDesignSystemSummary = DesignSystemSummary & {
   source?: 'built-in' | 'installed' | 'user';
 };
+
+const PACKAGED_SHOWCASE_PATH = 'system/kit.html';
 
 export interface RegisterDesignSystemRoutesDeps extends RouteDeps<'db' | 'paths' | 'projectFiles' | 'projectStore'> {
   designSystems: {
@@ -235,6 +238,18 @@ export function registerDesignSystemRoutes(app: Express, ctx: RegisterDesignSyst
 
   app.get('/api/design-systems/:id/showcase', async (req, res) => {
     try {
+      const packaged = await readAvailableDesignSystemStaticFile(req.params.id, PACKAGED_SHOWCASE_PATH);
+      if (packaged?.contentType.startsWith('text/html')) {
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Last-Modified', packaged.updatedAt);
+        return res.type('text/html').send(
+          rewriteDesignSystemShowcaseAssetUrls(
+            packaged.bytes.toString('utf8'),
+            req.params.id,
+            path.posix.dirname(PACKAGED_SHOWCASE_PATH),
+          ),
+        );
+      }
       const body = await readAvailableDesignSystem(req.params.id);
       if (body === null) return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemShowcase(req.params.id, body);
@@ -405,4 +420,54 @@ export function registerDesignSystemRoutes(app: Express, ctx: RegisterDesignSyst
       res.status(500).json({ error: String(err) });
     }
   });
+}
+
+export function rewriteDesignSystemShowcaseAssetUrls(
+  html: string,
+  designSystemId: string,
+  baseDir: string,
+): string {
+  if (!html) return html;
+  return html
+    .replace(/\b(src|href)=(["'])([^"']+)\2/gi, (match, attr: string, quote: string, raw: string) => {
+      const rewritten = rewriteDesignSystemShowcaseAssetUrl(raw, designSystemId, baseDir);
+      return rewritten === raw ? match : `${attr}=${quote}${rewritten}${quote}`;
+    })
+    .replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/gi, (match, quote: string, raw: string) => {
+      const rewritten = rewriteDesignSystemShowcaseAssetUrl(raw, designSystemId, baseDir);
+      return rewritten === raw ? match : `url(${quote}${rewritten}${quote})`;
+    });
+}
+
+function rewriteDesignSystemShowcaseAssetUrl(
+  rawUrl: string,
+  designSystemId: string,
+  baseDir: string,
+): string {
+  const value = rawUrl.trim();
+  if (
+    value.length === 0
+    || value.startsWith('#')
+    || value.startsWith('/')
+    || /^[a-z][a-z0-9+.-]*:/i.test(value)
+  ) {
+    return rawUrl;
+  }
+
+  const match = /^([^?#]+)([?#].*)?$/.exec(value);
+  if (!match) return rawUrl;
+  const [, rawPath, suffix = ''] = match;
+  if (!rawPath) return rawUrl;
+  const relativePath = path.posix.normalize(path.posix.join(baseDir, rawPath));
+  if (
+    relativePath === '.'
+    || relativePath.startsWith('../')
+    || path.posix.isAbsolute(relativePath)
+  ) {
+    return rawUrl;
+  }
+
+  const staticUrl = `/api/design-systems/${encodeURIComponent(designSystemId)}/static?path=${encodeURIComponent(relativePath)}`;
+  if (suffix.startsWith('?')) return `${staticUrl}&${suffix.slice(1)}`;
+  return `${staticUrl}${suffix}`;
 }
