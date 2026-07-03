@@ -68,6 +68,7 @@ export function ManualEditPanel({
 }) {
   const t = useT();
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const selectedTargetRef = useRef<ManualEditTarget | null>(selectedTarget);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const targetForInspector = selectedTarget;
