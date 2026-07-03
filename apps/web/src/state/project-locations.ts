@@ -1,5 +1,6 @@
 import type {
   ProjectLocation,
+  ProjectLocationFolderBrowserResponse,
   ProjectLocationsResponse,
   ScanProjectLocationsResponse,
   UpdateProjectLocationsRequest,
@@ -28,6 +29,21 @@ export async function updateProjectLocations(
     if (!resp.ok) return null;
     const json = (await resp.json()) as ProjectLocationsResponse;
     return Array.isArray(json.locations) ? json.locations : [];
+  } catch {
+    return null;
+  }
+}
+
+export async function browseProjectLocationFolders(folderPath?: string | null): Promise<ProjectLocationFolderBrowserResponse | null> {
+  try {
+    const query = new URLSearchParams();
+    const selected = typeof folderPath === 'string' ? folderPath.trim() : '';
+    if (selected) query.set('path', selected);
+    const suffix = query.toString();
+    const resp = await fetch(`/api/project-locations/browse${suffix ? `?${suffix}` : ''}`);
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as ProjectLocationFolderBrowserResponse;
+    return Array.isArray(json.entries) && typeof json.path === 'string' ? json : null;
   } catch {
     return null;
   }

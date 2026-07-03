@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
-import type { ProjectLocation } from '@open-design/contracts';
+import type { Dispatch, FormEvent, SetStateAction } from 'react';
+import type { ProjectLocation, ProjectLocationFolderBrowserResponse } from '@open-design/contracts';
 import type { AppConfig } from '../types';
 import {
+  browseProjectLocationFolders,
   fetchProjectLocations,
   openProjectLocationFolderDialog,
   scanProjectLocations,
@@ -44,13 +45,26 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
   const [drafts, setDrafts] = useState<DraftLocation[]>(cfg.projectLocations ?? []);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [addingLocation, setAddingLocation] = useState(false);
+  const [manualPath, setManualPath] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [folderBrowserOpen, setFolderBrowserOpen] = useState(false);
+  const [folderBrowserLoading, setFolderBrowserLoading] = useState(false);
+  const [folderBrowserError, setFolderBrowserError] = useState<string | null>(null);
+  const [folderBrowser, setFolderBrowser] = useState<ProjectLocationFolderBrowserResponse | null>(null);
   const draftsRef = useRef<DraftLocation[]>(drafts);
+  const manualPathInputRef = useRef<HTMLInputElement | null>(null);
+  const noFolderSelectedStatus = t('settings.projectLocationsNoFolderSelected');
+  const visibleStatus = status === noFolderSelectedStatus ? null : status;
 
   useEffect(() => {
     draftsRef.current = drafts;
   }, [drafts]);
+
+  useEffect(() => {
+    if (addingLocation) manualPathInputRef.current?.focus();
+  }, [addingLocation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,24 +152,104 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     return result;
   }
 
-  async function handleAddFolder() {
-    setError(null);
+  function setNoFolderSelectedStatus() {
     setStatus(null);
-    const selected = await openProjectLocationFolderDialog();
+  }
+
+  async function addLocationPath(locationPath: string): Promise<boolean> {
+    const selected = locationPath.trim();
     if (!selected) {
-      setStatus(t('settings.projectLocationsNoFolderSelected'));
-      return;
+      setNoFolderSelectedStatus();
+      manualPathInputRef.current?.focus();
+      return false;
     }
     if (draftsRef.current.some((draft) => draft.path === selected)) {
       setStatus(t('settings.projectLocationsDuplicate'));
-      return;
+      return false;
     }
     const previous = draftsRef.current;
     const next = [...previous, { path: selected }];
     setDrafts(next);
     const saved = await save(next);
-    if (!saved) setDrafts(previous);
-    else await runScan();
+    if (!saved) {
+      setDrafts(previous);
+      return false;
+    }
+    setManualPath('');
+    setAddingLocation(false);
+    setFolderBrowserOpen(false);
+    await runScan();
+    return true;
+  }
+
+  async function loadFolderBrowser(folderPath?: string | null): Promise<boolean> {
+    setFolderBrowserLoading(true);
+    setFolderBrowserError(null);
+    try {
+      const next = await browseProjectLocationFolders(folderPath);
+      if (!next) {
+        setFolderBrowserError(t('settings.projectLocationsBrowserLoadError'));
+        return false;
+      }
+      setFolderBrowser(next);
+      return true;
+    } finally {
+      setFolderBrowserLoading(false);
+    }
+  }
+
+  async function openFolderBrowser(): Promise<boolean> {
+    setFolderBrowserOpen(true);
+    return loadFolderBrowser(manualPath);
+  }
+
+  async function handleFolderBrowserUse() {
+    const selected = folderBrowser?.path;
+    if (!selected) return;
+    setManualPath(selected);
+    setFolderBrowserOpen(false);
+    setAddingLocation(true);
+    manualPathInputRef.current?.focus();
+  }
+
+  async function handleAddFolder() {
+    setAddingLocation(true);
+    setError(null);
+    setStatus(null);
+    setFolderBrowserOpen(false);
+  }
+
+  async function handleBrowseForLocation() {
+    setError(null);
+    setStatus(null);
+    setAddingLocation(true);
+    const selected = await openProjectLocationFolderDialog().catch(() => null);
+    if (!selected) {
+      const opened = await openFolderBrowser();
+      if (!opened) {
+        manualPathInputRef.current?.focus();
+        manualPathInputRef.current?.select();
+      }
+      return;
+    }
+    setManualPath(selected.trim());
+    setFolderBrowserOpen(false);
+    manualPathInputRef.current?.focus();
+  }
+
+  async function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setStatus(null);
+    await addLocationPath(manualPath);
+  }
+
+  function handleCancelAddLocation() {
+    setAddingLocation(false);
+    setManualPath('');
+    setStatus(null);
+    setFolderBrowserOpen(false);
+    setFolderBrowserError(null);
   }
 
   async function removeDraft(index: number) {
@@ -222,17 +316,109 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
         ))}
       </div>
 
-      <button
-        type="button"
-        className="icon-btn project-location-add"
-        onClick={handleAddFolder}
-        disabled={loading || saving}
-      >
-        <Icon name="plus" size={12} />
-        {t('settings.projectLocationsAddFolder')}
-      </button>
+      {addingLocation ? (
+        <form className="project-location-manual" onSubmit={handleManualSubmit}>
+          <label className="project-location-manual-label sr-only" htmlFor="project-location-manual-path">
+            {t('settings.designSystemsProjectPath')}
+          </label>
+          <div className="project-location-manual-row">
+            <button
+              type="button"
+              className="icon-btn project-location-browse"
+              onClick={handleBrowseForLocation}
+              disabled={loading || saving || folderBrowserLoading}
+              aria-label={t('settings.projectLocationsBrowseFolders')}
+              title={t('settings.projectLocationsBrowseFolders')}
+            >
+              <Icon name="folder" size={14} />
+            </button>
+            <input
+              ref={manualPathInputRef}
+              id="project-location-manual-path"
+              className="project-location-manual-input"
+              type="text"
+              value={manualPath}
+              onChange={(event) => setManualPath(event.currentTarget.value)}
+              placeholder={t('settings.projectLocationsManualPlaceholder')}
+              disabled={loading || saving}
+            />
+            <button type="submit" className="icon-btn project-location-manual-submit" disabled={loading || saving || !manualPath.trim()}>
+              <Icon name="check" size={12} />
+              {t('common.save')}
+            </button>
+            <button type="button" className="icon-btn project-location-manual-cancel" onClick={handleCancelAddLocation} disabled={saving}>
+              <Icon name="close" size={12} />
+              {t('common.cancel')}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button
+          type="button"
+          className="icon-btn project-location-add"
+          onClick={handleAddFolder}
+          disabled={loading || saving}
+        >
+          <Icon name="plus" size={12} />
+          {t('settings.projectLocationsAddFolder')}
+        </button>
+      )}
 
-      {status ? <p className="settings-rescan-status">{status}</p> : null}
+      {folderBrowserOpen ? (
+        <div className="project-location-browser" role="dialog" aria-label={t('settings.projectLocationsBrowserDialogLabel')}>
+          <div className="project-location-browser-head">
+            <div>
+              <strong>{t('settings.projectLocationsBrowserTitle')}</strong>
+              <code>{folderBrowser?.path ?? t('settings.projectLocationsBrowserLoading')}</code>
+            </div>
+            <button type="button" className="icon-btn" onClick={() => setFolderBrowserOpen(false)}>
+              {t('common.cancel')}
+            </button>
+          </div>
+          <div className="project-location-browser-actions">
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => loadFolderBrowser(folderBrowser?.parentPath)}
+              disabled={folderBrowserLoading || !folderBrowser?.parentPath}
+            >
+              <Icon name="arrow-up" size={12} />
+              {t('settings.projectLocationsBrowserParentFolder')}
+            </button>
+            <button
+              type="button"
+              className="icon-btn primary"
+              onClick={handleFolderBrowserUse}
+              disabled={folderBrowserLoading || !folderBrowser?.path}
+            >
+              <Icon name="check" size={12} />
+              {t('settings.projectLocationsBrowserUseFolder')}
+            </button>
+          </div>
+          {folderBrowserError ? <p className="settings-rescan-status error">{folderBrowserError}</p> : null}
+          <div className="project-location-browser-list">
+            {folderBrowser?.entries.map((entry) => (
+              <button
+                type="button"
+                className="project-location-browser-entry"
+                key={entry.path}
+                aria-label={entry.name}
+                onClick={() => loadFolderBrowser(entry.path)}
+                disabled={folderBrowserLoading}
+              >
+                <Icon name="folder" size={14} />
+                <span>{entry.name}</span>
+                <code>{entry.path}</code>
+              </button>
+            ))}
+            {!folderBrowserLoading && folderBrowser && folderBrowser.entries.length === 0 ? (
+              <p className="project-location-browser-empty">{t('settings.projectLocationsBrowserEmpty')}</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {visibleStatus ? <p className="settings-rescan-status">{visibleStatus}</p> : null}
       {error ? <p className="settings-rescan-status error">{error}</p> : null}
     </section>
   );

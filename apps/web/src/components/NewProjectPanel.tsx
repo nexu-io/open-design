@@ -10,7 +10,7 @@ import {
   trackNewProjectModalSurfaceView,
   trackNewProjectModalTabClick,
 } from '../analytics/events';
-import type { ConnectorDetail } from '@open-design/contracts';
+import type { ConnectorDetail, ProjectLocationPrefs } from '@open-design/contracts';
 import type {
   TrackingDesignSystemApplyTargetKind,
   TrackingDesignSystemOrigin,
@@ -117,6 +117,7 @@ export type MediaSurface = 'image' | 'video' | 'audio';
 
 export interface CreateInput {
   name: string;
+  projectLocationId?: string;
   skillId: string | null;
   designSystemId: string | null;
   metadata: ProjectMetadata;
@@ -134,6 +135,8 @@ interface Props {
   templates: ProjectTemplate[];
   onDeleteTemplate?: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
+  projectLocations?: ProjectLocationPrefs[];
+  defaultProjectLocationId?: string | null;
   onCreate: (input: CreateInput & { requestId?: string }) => void;
   onImportClaudeDesign?: (
     file: File,
@@ -263,6 +266,8 @@ export function NewProjectPanel({
   templates,
   onDeleteTemplate,
   promptTemplates,
+  projectLocations = [],
+  defaultProjectLocationId = 'default',
   onCreate,
   onImportClaudeDesign,
   onImportFolder,
@@ -277,6 +282,7 @@ export function NewProjectPanel({
   const t = useT();
   const analytics = useAnalytics();
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const projectLocationSelectId = useId();
   const [importing, setImporting] = useState(false);
   const [importZipError, setImportZipError] = useState<
     { message: string; details?: string } | null
@@ -326,6 +332,37 @@ export function NewProjectPanel({
   );
   const [dsSelectionTouched, setDsSelectionTouched] = useState(false);
   const [dsMulti, setDsMulti] = useState(false);
+  const projectLocationOptions = useMemo(
+    () => [
+      {
+        id: 'default',
+        name: t('newproj.locationDefault'),
+        path: null,
+      },
+      ...projectLocations.map((location) => ({
+        id: location.id,
+        name: location.name.trim() || displayFolderName(location.path) || t('newproj.locationExternalBase'),
+        path: location.path,
+      })),
+    ],
+    [projectLocations, t],
+  );
+  const preferredProjectLocationId = defaultProjectLocationId ?? 'default';
+  const [projectLocationId, setProjectLocationId] = useState(() => preferredProjectLocationId);
+  const [projectLocationTouched, setProjectLocationTouched] = useState(false);
+  const selectedProjectLocation =
+    projectLocationOptions.find((location) => location.id === projectLocationId)
+    ?? projectLocationOptions[0]!;
+  const showProjectLocationPicker = projectLocationOptions.length > 1;
+
+  useEffect(() => {
+    setProjectLocationId((current) => {
+      const currentExists = projectLocationOptions.some((location) => location.id === current);
+      if (projectLocationTouched && currentExists) return current;
+      const preferredExists = projectLocationOptions.some((location) => location.id === preferredProjectLocationId);
+      return preferredExists ? preferredProjectLocationId : 'default';
+    });
+  }, [preferredProjectLocationId, projectLocationOptions, projectLocationTouched]);
 
   // Per-tab metadata. Tracked independently so switching tabs preserves
   // each tab's pick rather than resetting to defaults.
@@ -714,6 +751,7 @@ export function NewProjectPanel({
     );
     onCreate({
       name: trimmedName || autoName(tab, mediaSurface, t),
+      ...(showProjectLocationPicker ? { projectLocationId } : {}),
       skillId: skillIdForTab,
       designSystemId: primaryDs,
       metadata: {
@@ -849,6 +887,32 @@ export function NewProjectPanel({
             onChange={(e) => setName(e.target.value)}
           />
         </div>
+
+        {showProjectLocationPicker ? (
+          <div className="newproj-project-location-row">
+            <label className="newproj-label" htmlFor={projectLocationSelectId}>
+              {t('newproj.locationLabel')}
+            </label>
+            <select
+              id={projectLocationSelectId}
+              className="newproj-project-location-select"
+              value={projectLocationId}
+              onChange={(event) => {
+                setProjectLocationTouched(true);
+                setProjectLocationId(event.currentTarget.value);
+              }}
+            >
+              {projectLocationOptions.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.path ? `${location.name} - ${location.path}` : location.name}
+                </option>
+              ))}
+            </select>
+            <small title={selectedProjectLocation.path ?? selectedProjectLocation.name}>
+              {selectedProjectLocation.path ?? selectedProjectLocation.name}
+            </small>
+          </div>
+        ) : null}
 
         <div className="newproj-working-dir-row">
           <button

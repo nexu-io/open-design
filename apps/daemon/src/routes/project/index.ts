@@ -11,6 +11,7 @@ import {
   type ProjectFileVersionPromptSource,
   type ProjectFileVersionSource,
   type ProjectFileVersionWarning,
+  type ProjectLocationFolderBrowserResponse,
 } from '@open-design/contracts';
 import { readMeta as readBrandMeta } from '../../brands/store.js';
 import { createProjectArtifactFile } from '../../artifacts/create.js';
@@ -42,6 +43,7 @@ import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
 import { listSkills } from '../../skills.js';
 import { isSafeId } from '../../projects.js';
+import { browseProjectLocationFolders } from '../../project-location-browser.js';
 import {
   BUILT_IN_PROJECT_LOCATION_ID,
   allProjectLocations,
@@ -1257,6 +1259,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       : BUILT_IN_PROJECT_LOCATION_ID;
   }
 
+  async function projectLocationBrowseRoot(): Promise<string | undefined> {
+    const externalLocation = (await configuredProjectLocations()).find((location) => !location.builtIn);
+    return externalLocation ? path.dirname(externalLocation.path) : undefined;
+  }
+
   function unregisterProjectsForRemovedLocations(
     previousLocations: Array<{ id: string; path: string; builtIn?: boolean }>,
     nextLocations: Array<{ id?: string; path: string }>,
@@ -1280,6 +1287,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       res.json(body);
     } catch (err: any) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
+  app.get('/api/project-locations/browse', async (req, res) => {
+    try {
+      const requestedPath = typeof req.query?.path === 'string' ? req.query.path : null;
+      const rootPath = await projectLocationBrowseRoot();
+      const body: ProjectLocationFolderBrowserResponse =
+        await browseProjectLocationFolders(requestedPath, rootPath ? { rootPath } : undefined);
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message ?? err));
     }
   });
 

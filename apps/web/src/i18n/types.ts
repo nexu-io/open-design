@@ -597,6 +597,15 @@ export interface Dict {
   'settings.projectLocationsDefaultBadge': string;
   'settings.projectLocationsMakeDefault': string;
   'settings.projectLocationsDefaultSaved': string;
+  'settings.projectLocationsManualPlaceholder': string;
+  'settings.projectLocationsBrowseFolders': string;
+  'settings.projectLocationsBrowserDialogLabel': string;
+  'settings.projectLocationsBrowserTitle': string;
+  'settings.projectLocationsBrowserLoading': string;
+  'settings.projectLocationsBrowserParentFolder': string;
+  'settings.projectLocationsBrowserUseFolder': string;
+  'settings.projectLocationsBrowserLoadError': string;
+  'settings.projectLocationsBrowserEmpty': string;
   'settings.librarySkills': string;
   'settings.libraryDesignSystems': string;
   'settings.librarySearch': string;
