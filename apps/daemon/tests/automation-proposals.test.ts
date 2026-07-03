@@ -11,7 +11,7 @@ import {
   rejectAutomationProposal,
 } from '../src/automation/index.js';
 import { listDesignSystems } from '../src/design-systems/index.js';
-import { readMemoryEntry } from '../src/memory.js';
+import { readMemoryEntry } from '../src/memory/index.js';
 import { listSkills } from '../src/skills.js';
 
 let dataDir = '';

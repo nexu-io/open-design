@@ -20,7 +20,7 @@ import {
   deleteMemoryEntry,
   readMemoryEntry,
   upsertMemoryEntry,
-} from '../../memory.js';
+} from '../../memory/index.js';
 import { upsertUserAutomationTemplate } from '../templates/index.js';
 
 const STORE_DIR = 'automation-proposals';

@@ -1,20 +1,34 @@
+/** @module connectors/connectors
+ * Connector-sourced memory extraction and suggestion: reads design-relevant content
+ * from connected apps (Notion, Figma, Linear, GitHub, Slack, Google Drive, etc.),
+ * composes a compacted context block, and delegates to `llm/extractWithLLM` or
+ * `llm/suggestWithLLM` with a design-focused system prompt and a content-quality filter.
+ *
+ * Two public entry points: {@link extractMemoryFromConnectors} (write new facts to the
+ * store automatically) and {@link suggestMemoryFromConnectors} (return proposals for
+ * user review). The connector reading pipeline is shared: it scores and sorts available
+ * tools, executes up to `MAX_CONNECTORS_PER_RUN` connectors with query variants,
+ * enriches Notion search responses with page-body reads, and caps total context at
+ * `MAX_TOTAL_CONTEXT_CHARS`. Depends on `llm/` for the extraction/suggestion path;
+ * no other sibling subdirectory imports this file directly.
+ */
 import type {
   ConnectorMemoryExtractionResult,
   MemorySuggestion,
   MemoryEntrySummary,
 } from '@open-design/contracts';
 
-import type { BoundedJsonObject, BoundedJsonValue } from './live-artifacts/schema.js';
-import { extractWithLLM, suggestWithLLM } from './memory-llm.js';
-import { type ConnectorDetail, type ConnectorToolDetail } from './connectors/catalog.js';
+import type { BoundedJsonObject, BoundedJsonValue } from '../../live-artifacts/schema.js';
+import { extractWithLLM, suggestWithLLM } from '../llm/index.js';
+import { type ConnectorDetail, type ConnectorToolDetail } from '../../connectors/catalog.js';
 import {
   ConnectorServiceError,
   connectorService,
   type ConnectorExecuteResponse,
   type ConnectorService,
-} from './connectors/service.js';
-import { listConnectorTools } from './tools/connectors.js';
-import type { ToolTokenGrant } from './tool-tokens.js';
+} from '../../connectors/service.js';
+import { listConnectorTools } from '../../tools/connectors.js';
+import type { ToolTokenGrant } from '../../tool-tokens.js';
 
 const DEFAULT_CONNECTOR_MEMORY_QUERY =
   '设计思路 设计偏好 UI UX 视觉风格 品牌 logo 设计系统 OpenDesign';
@@ -159,6 +173,14 @@ const CONNECTOR_DESIGN_MEMORY_PATTERNS = [
   /设计系统/,
 ];
 
+/**
+ * Options shared by {@link extractMemoryFromConnectors} and
+ * {@link suggestMemoryFromConnectors}. `projectsRoot` is the daemon projects directory
+ * used by the connector service. `connectorIds` optionally restricts which connectors
+ * are queried; when omitted all available connectors are tried (up to
+ * `MAX_CONNECTORS_PER_RUN`). `query` overrides the default Chinese/English design-
+ * memory search hint. `localCliRunner` is a test seam for the LLM provider.
+ */
 export interface ExtractMemoryFromConnectorsOptions {
   projectsRoot: string;
   projectRoot?: string;
@@ -179,6 +201,12 @@ export interface ExtractMemoryFromConnectorsOptions {
   }) => Promise<string>;
 }
 
+/**
+ * Returned by {@link extractMemoryFromConnectors}. `changed` is the list of memory
+ * entry summaries written to the store. `connectors` provides per-connector status
+ * (succeeded / failed / skipped) with tool names and summaries. `contextBytes` is the
+ * byte length of the context block passed to the LLM.
+ */
 export interface ExtractMemoryFromConnectorsResult {
   changed: MemoryEntrySummary[];
   attemptedLLM: boolean;
@@ -186,6 +214,11 @@ export interface ExtractMemoryFromConnectorsResult {
   contextBytes: number;
 }
 
+/**
+ * Returned by {@link suggestMemoryFromConnectors}. `suggestions` are the proposed
+ * memory drafts enriched with source connector metadata (for display in the suggestions
+ * panel) but NOT written to the store. The user must explicitly accept them.
+ */
 export interface SuggestMemoryFromConnectorsResult {
   suggestions: MemorySuggestion[];
   attemptedLLM: boolean;
@@ -1265,6 +1298,16 @@ function isDesignMemoryDraft(draft: Omit<MemorySuggestion, 'id' | 'source'>): bo
   return CONNECTOR_DESIGN_MEMORY_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+/**
+ * Reads design-relevant content from connected apps and returns proposed memory
+ * suggestions WITHOUT writing them to the store. The proposals are enriched with
+ * connector source metadata so the suggestions panel can show which app each fact came
+ * from. Returns an empty list when no connector yields readable design-relevant content
+ * or when the connector context is empty.
+ * @param dataDir - The resolved daemon data root (used for LLM provider selection).
+ * @param options - Connector query options; see {@link ExtractMemoryFromConnectorsOptions}.
+ * @returns A {@link SuggestMemoryFromConnectorsResult} with suggestions and per-connector status.
+ */
 export async function suggestMemoryFromConnectors(
   dataDir: string,
   options: ExtractMemoryFromConnectorsOptions,
@@ -1314,6 +1357,17 @@ export async function suggestMemoryFromConnectors(
   };
 }
 
+/**
+ * Reads design-relevant content from connected apps, calls the LLM extractor with a
+ * design-focused system prompt, and writes approved facts directly to the memory store
+ * (auto-keep). Emits a batched `'extract'` change event via `extractWithLLM` so the
+ * "Memory updated" toast fires once for the whole connector run. Returns an empty
+ * `changed` list when no connector yields readable design-relevant content.
+ * @param dataDir - The resolved daemon data root.
+ * @param options - Connector query options; see {@link ExtractMemoryFromConnectorsOptions}.
+ * @returns An {@link ExtractMemoryFromConnectorsResult} with written entries and
+ *   per-connector status.
+ */
 export async function extractMemoryFromConnectors(
   dataDir: string,
   options: ExtractMemoryFromConnectorsOptions,

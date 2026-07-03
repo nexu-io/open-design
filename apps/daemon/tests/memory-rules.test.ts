@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   distillRulesFromAnnotations,
   parseRuleBody,
-} from '../src/memory-rules.js';
+} from '../src/memory/index.js';
 
 describe('parseRuleBody', () => {
   it('parses assertion / check / rationale lines', () => {

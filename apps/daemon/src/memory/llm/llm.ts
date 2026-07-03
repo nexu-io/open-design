@@ -1,56 +1,35 @@
 // @ts-nocheck
-// LLM-driven memory extractor.
-//
-// The heuristic regex pack in `memory.ts` only catches explicit markers
-// ("remember:", "记住", "我喜欢"…). For everything else — implicit
-// preferences, role, ongoing-work context — we ask a small fast model
-// to look at the just-finished turn and the existing memory and return
-// a JSON list of facts to add.
-//
-// This module is fire-and-forget: the chat run finishes and triggers
-// extraction in the background. Output lands in the same MD store so
-// the next turn's prompt picks it up automatically.
-//
-// Provider selection (in order):
-//   0. memory `.config.json` extraction override → user-supplied
-//      provider/model/baseUrl/apiKey/apiVersion from the Memory model
-//      picker. The override may pick any of four providers — anthropic,
-//      openai, azure (openai-compatible at a per-resource URL), or
-//      google gemini. This is the only path that lets a Local-CLI user
-//      (no env-var key in the daemon's environment) point memory
-//      extraction at, say, their personal Anthropic key with a
-//      specific Haiku build instead of falling all the way through to
-//      gpt-4o-mini. When the override carries the provider but no
-//      apiKey we fall back to the corresponding env var (or the media-
-//      config OpenAI key for openai/azure overrides) so a "I want to
-//      switch to OpenAI but reuse my existing key" change costs zero
-//      typing.
-//   1. current Local CLI, when the caller passed `chatAgentId` and the
-//      agent supports headless one-shot output (Claude Code today).
-//   2. matching provider env var for the current chat protocol.
-//   3. BYOK chat-config snapshot for API-mode chats.
-//   4. ANTHROPIC_API_KEY env → Claude Haiku 4.5 (legacy fallback)
-//   5. OPENAI_API_KEY env    → gpt-4o-mini
-//   6. media-config OpenAI BYOK → gpt-4o-mini
-//      (the key the user already typed into Settings → Media providers;
-//       reuses an existing credential so Local-CLI users don't have to
-//       paste it twice just to get LLM-side memory extraction)
-//   7. nothing               → record a 'skipped: no-provider' attempt
-//      so the UI can surface "configure a key to enable LLM memory"
-//      instead of staying silent
-//
-// Every attempt — whether it actually called the model or short-circuited
-// — produces a record in `memory-extractions.ts` so the settings panel
-// can show running / skipped / success / failed states in real time.
+/** @module llm/llm
+ * Small-model LLM memory extractor: picks a provider, calls the model with the
+ * current turn context and existing memory snapshot, parses the JSON response, and
+ * writes or suggests new facts. Three public entry points: {@link suggestWithLLM}
+ * (propose only, no write), {@link extractWithLLM} (propose + write), and
+ * {@link distillAnnotationsToMemory} (extract durable preferences from inline design
+ * annotations). All three are fire-and-forget relative to the chat turn — extraction
+ * runs in the background after the turn ends.
+ *
+ * Provider selection order (highest to lowest priority):
+ *   0. Memory config extraction override (user-set in the Memory model picker)
+ *   1. Current Local CLI (claude/codex/opencode) in headless one-shot mode
+ *   2. Chat-protocol-constrained env var (keeps extraction on the same vendor)
+ *   3. BYOK chat-config snapshot for API-mode chats
+ *   4. ANTHROPIC_API_KEY env → claude-haiku-4-5
+ *   5. OPENAI_API_KEY env → gpt-4o-mini
+ *   6. Media-config OpenAI BYOK → gpt-4o-mini
+ *   7. Nothing → record `'skipped: no-provider'`
+ *
+ * Depends on `core/` for the change bus, `store/` for config/entry reads and writes,
+ * and `extractions/` for extraction-history telemetry.
+ */
 
 import { MEMORY_TYPES } from '@open-design/contracts';
+import { memoryEvents } from '../core/index.js';
 import {
   composeMemoryBody,
   listMemoryEntries,
   readMemoryConfig,
   upsertMemoryEntry,
-  memoryEvents,
-} from './memory.js';
+} from '../store/index.js';
 import {
   startExtraction,
   recordSkip,
@@ -59,9 +38,9 @@ import {
   markProposed,
   markSuccess,
   markFailed,
-} from './memory-extractions.js';
-import { resolveProviderConfig } from './media/config.js';
-import { AIHUBMIX_APP_CODE } from './integrations/aihubmix.js';
+} from '../extractions/index.js';
+import { resolveProviderConfig } from '../../media/config.js';
+import { AIHUBMIX_APP_CODE } from '../../integrations/aihubmix.js';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { createCommandInvocation } from '@open-design/platform';
@@ -70,9 +49,9 @@ import {
   getAgentDef,
   resolveAgentLaunch,
   spawnEnvForAgent,
-} from './agents.js';
-import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
-import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
+} from '../../agents.js';
+import { agentCliEnvForAgent, readAppConfig } from '../../app-config.js';
+import { createJsonEventStreamHandler } from '../../runtimes/json-event-stream.js';
 
 const SYSTEM_PROMPT = `You are a memory extractor for a personal AI design assistant.
 
@@ -1180,6 +1159,17 @@ async function collectProposedEntries(dataDir, input, options) {
   return { status: 'ok', attemptId, proposed, existingEntries };
 }
 
+/**
+ * Runs the LLM extraction pipeline and returns proposed memory drafts WITHOUT writing
+ * them to the store. Consumers (e.g. the connector memory path, the rule distiller)
+ * use this when they want to inspect and filter candidates before committing. Records
+ * a `phase: 'success'` attempt with `writtenCount: 0` so the settings history shows
+ * the call even when nothing is ultimately written.
+ * @param dataDir - The resolved daemon data root.
+ * @param input - Turn context: `{ userMessage, assistantMessage? }`.
+ * @param options - Provider hints, candidate filter, test seams; see `collectProposedEntries`.
+ * @returns Array of memory draft objects (type/name/description/body), may be empty.
+ */
 export async function suggestWithLLM(dataDir, input, options) {
   const result = await collectProposedEntries(dataDir, input, options);
   if (result.status !== 'ok') return [];
@@ -1230,6 +1220,19 @@ function renderAnnotationPayload(annotations, userMessage) {
   return parts.join('\n');
 }
 
+/**
+ * Auto-distills inline design annotations (comments, highlights, drawn marks) from a
+ * review turn into durable `feedback` and `rule` memory. This is the automatic half of
+ * the "interaction → memory" loop: each review turn is mined in the background and
+ * written directly to the store (auto-keep) without requiring a separate Keep click.
+ * Only annotations carrying a non-empty user comment are mined — a bare highlight has
+ * no durable signal to distill. Delegates to {@link extractWithLLM} with the
+ * annotation-specific system prompt and a type filter allowing only `feedback`/`rule`.
+ * @param dataDir - The resolved daemon data root.
+ * @param input - `{ annotations, userMessage?, assistantMessage? }`.
+ * @param options - Provider hints forwarded to `extractWithLLM`.
+ * @returns The memory entry summaries that were written to the store.
+ */
 // Auto-distill preview annotations (comments / highlights / drawn marks) into
 // durable `feedback` and `rule` memory. This is the automatic half of the
 // "interaction → memory" loop: instead of waiting for the agent to propose a
@@ -1265,6 +1268,17 @@ export async function distillAnnotationsToMemory(dataDir, input, options) {
   );
 }
 
+/**
+ * Runs the full LLM extraction pipeline: picks a provider, calls the model, parses the
+ * JSON response, deduplicates against existing entries, and writes each new fact to the
+ * store. Emits a batched `'extract'` change event (driving the "Memory updated" toast)
+ * once all writes complete. Returns the list of entry summaries written.
+ * @param dataDir - The resolved daemon data root.
+ * @param input - Turn context: `{ userMessage, assistantMessage? }`.
+ * @param options - Provider hints, `source` tag, `kind` tag, candidate filter, system
+ *   prompt override, and test seams (`localCliRunner`).
+ * @returns Array of written entry summaries (may be empty when no new facts were found).
+ */
 export async function extractWithLLM(dataDir, input, options) {
   const changeSource = options?.source ?? 'llm';
   const result = await collectProposedEntries(dataDir, input, options);

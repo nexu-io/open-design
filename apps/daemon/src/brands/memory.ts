@@ -21,7 +21,7 @@
 
 import type { Brand } from '@open-design/contracts';
 
-import { readMemoryConfig, upsertMemoryEntry } from '../memory.js';
+import { readMemoryConfig, upsertMemoryEntry } from '../memory/index.js';
 
 /** A memory entry derived from a brand, ready to hand to `upsertMemoryEntry`. */
 export interface BrandMemoryEntryInput {

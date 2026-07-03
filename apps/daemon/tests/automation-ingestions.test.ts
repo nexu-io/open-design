@@ -10,7 +10,7 @@ import {
   listAutomationProposals,
   listAutomationSourcePackets,
 } from '../src/automation/index.js';
-import { buildMemoryTree, readMemoryEntry } from '../src/memory.js';
+import { buildMemoryTree, readMemoryEntry } from '../src/memory/index.js';
 
 let dataDir = '';
 

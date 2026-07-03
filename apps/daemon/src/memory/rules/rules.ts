@@ -1,29 +1,24 @@
-// Annotation → rule-proposal distillation (THREAD 1).
-//
-// Turns a batch of in-canvas/in-deck annotations (comments, highlights,
-// inspect-selection marks, visual marks) into candidate `rule` memories. The
-// output is display-only `RuleProposalDraft`s surfaced through the existing
-// Keep gate — distillation never writes a rule on its own.
-//
-// Two passes, layered:
-//   - heuristic — always available, no provider. Each annotation note becomes
-//     one draft (assertion = the note, check derived from the note + target).
-//   - llm       — best-effort. Reuses `suggestWithLLM` (memory-llm.ts) with a
-//     rule-focused system prompt so the small model can generalise several
-//     related annotations into a single reusable, checkable rule. Falls back
-//     silently to the heuristic result when no provider is configured.
-//
-// Both passes feed the same merge+dedupe so the surfaced list never contains a
-// near-duplicate of an annotation the heuristic already captured.
+/** @module rules/rules
+ * Annotation-to-rule-proposal distillation: turns a batch of in-canvas / in-deck
+ * annotations (comments, highlights, inspect-selection marks) into candidate `rule`
+ * memory drafts surfaced through the Keep gate. Distillation NEVER writes a rule on its
+ * own — that is the user's explicit decision.
+ *
+ * Two layered passes: a heuristic pass (always available, no provider — each annotation
+ * note becomes one draft) and a best-effort LLM pass via `llm/suggestWithLLM` (groups
+ * related annotations into a single generalised, checkable rule). Both passes feed the
+ * same merge+dedupe so the output never surfaces near-duplicates. Depends on `llm/`
+ * for the suggest path; no other sibling imports this file directly.
+ */
 
 import type {
   AnnotationDistillInput,
   RuleProposalDraft,
 } from '@open-design/contracts';
-// suggestWithLLM lives in the @ts-nocheck memory-llm module; its inferred type
+// suggestWithLLM lives in the @ts-nocheck llm/ module; its inferred type
 // is loose, which is fine — we only consume the {type,name,description,body}
 // MemoryDraft shape it documents.
-import { suggestWithLLM } from './memory-llm.js';
+import { suggestWithLLM } from '../llm/index.js';
 
 const MAX_ANNOTATIONS = 24;
 const MAX_PROPOSALS = 8;
@@ -38,6 +33,13 @@ interface DistillOptions {
   suggest?: typeof suggestWithLLM;
 }
 
+/**
+ * The result returned by {@link distillRulesFromAnnotations}. `proposals` is the
+ * merged, deduplicated list of rule drafts. `attemptedLLM` indicates whether the LLM
+ * pass was reached (false when no provider is configured or the pass threw).
+ * `source` is `'heuristic'` when only the regex pass produced output, `'llm'` when
+ * only the model did, or `'mixed'` when both contributed surviving proposals.
+ */
 export interface DistillResult {
   proposals: RuleProposalDraft[];
   attemptedLLM: boolean;
@@ -66,6 +68,15 @@ Output STRICT JSON in this exact shape — nothing else, no prose, no markdown f
 
 If nothing worth a rule, return: {"entries": []}`;
 
+/**
+ * Parses a `rule` memory entry body back into structured proposal fields. The body is
+ * expected to follow the `Assertion: … / Check: … / Verified by: …` format written by
+ * `OdCard.keep` and `od memory rule add`. Tolerant: a body that is plain prose falls
+ * back to treating the first line as the assertion.
+ * @param body - The raw markdown body of a rule memory entry.
+ * @returns `{ assertion, check, rationale }` — `check` defaults to `assertion` when
+ *   no `Check:` line is present.
+ */
 // Parse a rule memory body (`Assertion:` / `Check:` / `Verified by:` /
 // `Rationale:` lines, as written by OdCard.keep and `od memory rule add`) back
 // into the structured proposal fields. Tolerant: a body that is just prose
@@ -98,11 +109,23 @@ export function parseRuleBody(body: string): {
   return { assertion, check: check || assertion, rationale };
 }
 
+/**
+ * @internal
+ * Collapses whitespace in `value` and truncates to `max` characters with a trailing
+ * `…`. Used to sanitise annotation text before building proposal fields.
+ */
 function clean(value: string | undefined, max: number): string {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim();
   return text.length > max ? `${text.slice(0, max - 1).trim()}…` : text;
 }
 
+/**
+ * @internal
+ * Builds a single heuristic `RuleProposalDraft` from one annotation. The note becomes
+ * the assertion; a verifiable check is derived from the note; the target element and
+ * current text are recorded as the rationale. Returns `null` when the note is too short
+ * (< 3 characters) to form a meaningful rule.
+ */
 // Build one heuristic proposal from a single annotation. The note is the
 // assertion; the check restates it as a verifiable instruction; the target
 // context is recorded as the rationale so the user can see what it came from.
@@ -131,6 +154,12 @@ function heuristicProposal(
   };
 }
 
+/**
+ * @internal
+ * Serialises the annotation batch into the user message sent to the LLM pass. Each
+ * annotation is numbered with its note, target, file path, current text, kind, and
+ * HTML hint so the model has enough context to judge whether the critique generalises.
+ */
 // Compose a single user payload describing every annotation for the LLM pass.
 function renderAnnotationsPayload(
   annotations: AnnotationDistillInput[],
@@ -151,10 +180,22 @@ function renderAnnotationsPayload(
   return parts.join('\n');
 }
 
+/**
+ * @internal
+ * Derives the deduplication key for a proposal: the normalised lowercase assertion.
+ * Two proposals that express the same constraint in different whitespace or
+ * capitalisation will share a key and only one will survive the merge.
+ */
 function dedupeKey(draft: RuleProposalDraft): string {
   return draft.assertion.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * @internal
+ * Merges LLM proposals and heuristic proposals into a single deduplicated list (LLM
+ * first so LLM proposals win on assertion collision, keeping the better-generalised
+ * phrasing). Caps the result at `MAX_PROPOSALS`.
+ */
 // Merge heuristic + LLM proposals, dropping near-duplicate assertions. LLM
 // proposals win on collision because they tend to be the better-generalised
 // phrasing of the same intent.
@@ -174,6 +215,20 @@ function mergeProposals(
   return out;
 }
 
+/**
+ * Distils a batch of design annotations into candidate `rule` memory proposals.
+ * Runs a heuristic pass first (always), then a best-effort LLM pass via
+ * `suggestWithLLM` with a rule-focused system prompt and a `type === 'rule'` filter.
+ * The two passes are merged and deduplicated, with LLM proposals winning on collision
+ * because they tend to be better generalised. Returns up to `MAX_PROPOSALS` proposals.
+ * @param dataDir - The resolved daemon data root (used only for the LLM pass provider
+ *   selection via `readMemoryConfig`).
+ * @param input - `{ annotations }` — only annotations with a non-empty `note` of ≥ 3
+ *   characters are processed; up to `MAX_ANNOTATIONS` annotations are read.
+ * @param options - Provider hints and an optional `suggest` test seam.
+ * @returns A {@link DistillResult} with the merged proposal list, LLM-attempted flag,
+ *   and source tag.
+ */
 export async function distillRulesFromAnnotations(
   dataDir: string,
   input: { annotations: AnnotationDistillInput[] },

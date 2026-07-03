@@ -7,11 +7,11 @@ import {
   memoryDir,
   readMemoryEntry,
   readMemoryIndex,
-} from '../../src/memory.js';
+} from '../../src/memory/index.js';
 import {
   __resetExtractionsForTests,
   recordHeuristic,
-} from '../../src/memory-extractions.js';
+} from '../../src/memory/index.js';
 import { startServer } from '../../src/server.js';
 
 interface StartedServer {

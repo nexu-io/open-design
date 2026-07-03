@@ -9,7 +9,7 @@ import {
   readMemoryEntry,
   updateMemoryTreeNode,
   upsertMemoryEntry,
-} from '../src/memory.js';
+} from '../src/memory/index.js';
 
 let dataDir = '';
 

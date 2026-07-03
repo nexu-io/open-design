@@ -275,7 +275,7 @@ import {
   extractFromMessage,
   listActiveRuleEntries,
   readMemoryConfig,
-} from './memory.js';
+} from './memory/index.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
@@ -7454,7 +7454,7 @@ export async function startServer({
         chatAgentId: typeof agentId === 'string' ? agentId : null,
         chatModel: typeof safeModel === 'string' ? safeModel : null,
       };
-      void import('./memory-llm.js')
+      void import('./memory/index.js')
         .then(({ extractWithLLM, distillAnnotationsToMemory }) => {
           const generalPass = extractWithLLM(
             RUNTIME_DATA_DIR,

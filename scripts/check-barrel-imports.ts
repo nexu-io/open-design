@@ -107,6 +107,25 @@ export const CAPABILITY_BARREL_DOMAINS: CapabilityBarrelDomain[] = [
       ['ingestion', 'templates'],
     ],
   },
+  {
+    name: 'memory',
+    root: 'apps/daemon/src/memory',
+    subdirs: ['core', 'store', 'extractions', 'verify', 'llm', 'rules', 'connectors'],
+    foundation: 'core',
+    // The store persists facts and records extraction attempts (store -> extractions);
+    // the small-model extractor reads/writes the store and logs attempts
+    // (llm -> store, llm -> extractions); rule distillation and connector-sourced
+    // memory both sit on top of the extractor (rules -> llm, connectors -> llm). The
+    // former store <-> extractions cycle was broken by lifting the change bus
+    // (memoryEvents) into core/. verify/ is an independent leaf sharing only core/.
+    allowedEdges: [
+      ['store', 'extractions'],
+      ['llm', 'store'],
+      ['llm', 'extractions'],
+      ['rules', 'llm'],
+      ['connectors', 'llm'],
+    ],
+  },
 ];
 
 export type BarrelImportViolation = {

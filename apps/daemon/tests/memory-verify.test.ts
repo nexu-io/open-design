@@ -7,7 +7,7 @@ import {
   removeVerification,
   clearVerifications,
   __resetVerificationsForTests,
-} from '../src/memory-verify.js';
+} from '../src/memory/index.js';
 
 function scorecard(rows: Array<{ rule: string; status: string; note?: string }>, status = 'pass'): string {
   const payload = JSON.stringify({ status, rows });

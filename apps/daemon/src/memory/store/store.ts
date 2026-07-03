@@ -1,69 +1,38 @@
 // @ts-nocheck
-// Filesystem-backed markdown memory store.
-//
-// Layout (under <dataDir>/memory/):
-//   MEMORY.md            ← short index; one bullet per fact file
-//   <type>_<slug>.md     ← per-fact body + frontmatter
-//   .config.json         ← switches: { "enabled": true, "chatExtractionEnabled": true }
-//
-// Frontmatter format (matches Claude Code's auto-memory pattern):
-//   ---
-//   name: User role
-//   description: User is a senior FE engineer working on Open Design.
-//   type: user
-//   ---
-//
-//   {markdown body}
-//
-// The store is intentionally dependency-free. We piggyback on the
-// existing daemon `frontmatter.ts` parser. Concurrency: writes are
-// last-writer-wins on a per-file basis; the daemon only ever has one
-// chat run at a time touching memory so we don't need locking yet.
+/** @module store/store
+ * Filesystem-backed markdown memory store: config switches, the `MEMORY.md` index,
+ * per-fact CRUD, typed tree projection, prompt-body composition, active-rule listing,
+ * and the heuristic chat extractor.
+ *
+ * On-disk layout under `<dataDir>/memory/`: `MEMORY.md` (user-editable index; one
+ * bullet per linked fact file), `<type>_<slug>.md` (per-fact YAML frontmatter +
+ * markdown body), and `.config.json` (enabled / per-hook / extraction-override
+ * switches). Writes are last-writer-wins per file — the daemon runs at most one chat
+ * turn at a time so no locking is needed yet.
+ *
+ * Depends on `core/` for the shared change bus and `extractions/` to record heuristic
+ * attempt telemetry. No sibling subdirectory imports this file directly; consumers
+ * use the `store/` barrel.
+ */
 
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
-import { EventEmitter } from 'node:events';
 import { MEMORY_TYPES, PROFILE_MEMORY_ID, parseFormAnswers } from '@open-design/contracts';
-import { parseFrontmatter } from './design-systems/index.js';
+import { parseFrontmatter } from '../../design-systems/index.js';
+import { memoryEvents, type MemoryChangeEvent } from '../core/index.js';
 // Imported lazily through the memory-extractions module by the call
-// sites below so a future test-only build of memory.ts that stubs the
-// store can still tree-shake the ring buffer. We use a static import
-// here because memory.ts is the chat hot path — a dynamic import per
+// sites below so a future test-only build of the store that stubs it
+// can still tree-shake the ring buffer. We use a static import
+// here because the store is the chat hot path — a dynamic import per
 // turn would add a microtask hop for no real benefit.
-import { recordHeuristic, recordSkip } from './memory-extractions.js';
+import { recordHeuristic, recordSkip } from '../extractions/index.js';
 
-// Tiny in-process bus. The HTTP layer (`/api/memory/events`) subscribes
-// to this and forwards events to any open SSE client; the storage
-// helpers below emit on every write so the web UI auto-refreshes
-// whenever memory changes — whether the change came from the chat
-// hook, the LLM extractor, the settings panel, or `curl`.
-export const memoryEvents = new EventEmitter();
-memoryEvents.setMaxListeners(64);
-
-export type MemoryChangeKind =
-  | 'upsert'
-  | 'delete'
-  | 'index'
-  | 'config'
-  | 'extract';
-
-export interface MemoryChangeEvent {
-  kind: MemoryChangeKind;
-  // Optional details — populated for upsert / delete; absent for index /
-  // config so the frontend just re-fetches the list.
-  id?: string;
-  name?: string;
-  description?: string;
-  type?: string;
-  // For 'extract' events, the size of the batch that was added in one
-  // pass. Lets the toast say "Memory updated (3 new)" instead of three
-  // separate toasts.
-  count?: number;
-  source?: 'heuristic' | 'llm' | 'manual' | 'connector' | 'brand';
-  enabled?: boolean;
-  at: number;
-}
-
+/**
+ * @internal
+ * Stamps the current timestamp onto a memory change event and emits it on the shared
+ * change bus. Centralised so every write path produces a consistent `at` field without
+ * callers having to add it manually.
+ */
 function emitChange(event: Omit<MemoryChangeEvent, 'at'>): void {
   memoryEvents.emit('change', { ...event, at: Date.now() });
 }
@@ -86,18 +55,41 @@ back if you change your mind.
 
 `;
 
+/**
+ * Returns the absolute path to the memory subdirectory under the given daemon data
+ * root. All other helpers in this module derive their paths through this function so
+ * the on-disk layout stays centralised in one place.
+ * @param dataDir - The resolved daemon data root (`RUNTIME_DATA_DIR`).
+ */
 export function memoryDir(dataDir) {
   return path.join(dataDir, 'memory');
 }
 
+/**
+ * @internal
+ * Creates the memory directory (and any parents) if it does not already exist.
+ */
 async function ensureDir(dir) {
   await fsp.mkdir(dir, { recursive: true });
 }
 
+/**
+ * @internal
+ * Returns true when `t` is one of the canonical `MEMORY_TYPES` bucket strings.
+ */
 function isValidType(t) {
   return typeof t === 'string' && VALID_TYPES.has(t);
 }
 
+/**
+ * Derives a stable, filesystem-safe memory id from a type bucket and a display name.
+ * The id has the form `<type>_<slug>` where slug is at most 48 cleaned lowercase
+ * alphanumeric characters. For purely non-ASCII names (CJK, emoji) an FNV-1a 32-bit
+ * hash is used so two distinct memories never share an id through the slug fallback.
+ * @param type - One of the `MEMORY_TYPES` values; falls back to `'user'` when invalid.
+ * @param name - The human-readable display name of the memory entry.
+ * @returns A lowercase alphanumeric-plus-underscore id always prefixed by `<type>_`.
+ */
 // Slug rules: lowercase, alphanumeric + underscore. Strip everything
 // else. Always prefixed by `<type>_` so a file's category is visible
 // in `ls` without parsing frontmatter. When the source name is purely
@@ -125,6 +117,11 @@ export function deriveMemoryId(type, name) {
   return `${safeType}_n${h.toString(36)}`;
 }
 
+/**
+ * @internal
+ * Returns the absolute path for a memory entry file. Validates that `id` matches the
+ * allowed character set and length so a network-supplied id cannot escape the memory dir.
+ */
 function entryPath(dataDir, id) {
   // Defence in depth: the id arrives from the network. Reject anything
   // that could escape the memory dir or break the .md convention.
@@ -134,10 +131,18 @@ function entryPath(dataDir, id) {
   return path.join(memoryDir(dataDir), `${id}.md`);
 }
 
+/**
+ * @internal
+ * Returns the absolute path to the `MEMORY.md` index file.
+ */
 function indexPath(dataDir) {
   return path.join(memoryDir(dataDir), INDEX_FILE);
 }
 
+/**
+ * @internal
+ * Returns the absolute path to the `.config.json` feature-toggle file.
+ */
 function configPath(dataDir) {
   return path.join(memoryDir(dataDir), CONFIG_FILE);
 }
@@ -154,6 +159,12 @@ const VALID_EXTRACTION_PROVIDERS = new Set([
   'ollama',
 ]);
 
+/**
+ * @internal
+ * Validates and normalises an extraction-override object, keeping only the allowed
+ * provider fields and dropping any unknown keys so `.config.json` cannot accumulate
+ * arbitrary user-supplied keys that silently break the extractor on restart.
+ */
 function normalizeExtractionPatch(input) {
   if (!input || typeof input !== 'object') return null;
   const provider = input.provider;
@@ -174,6 +185,15 @@ function normalizeExtractionPatch(input) {
   return out;
 }
 
+/**
+ * Reads the memory feature-toggle config from `.config.json`. Returns a fully
+ * default-on config when the file is missing or unparseable — the feature is designed
+ * to be on by default so the first few chats are not silently context-free.
+ * @param dataDir - The resolved daemon data root.
+ * @returns Config with `enabled`, `chatExtractionEnabled`, `profileEnabled`,
+ *   `rewriteEnabled`, `verifyEnabled` (all default `true`) and `extraction` (default
+ *   `null`).
+ */
 export async function readMemoryConfig(dataDir) {
   try {
     const raw = await fsp.readFile(configPath(dataDir), 'utf8');
@@ -204,6 +224,19 @@ export async function readMemoryConfig(dataDir) {
   }
 }
 
+/**
+ * Writes a partial config patch over the current `.config.json`, carrying all fields
+ * forward when omitted. `extraction: null` clears the provider override (reverting to
+ * auto-pick); an absent `extraction` key leaves the existing override untouched. The
+ * three per-hook booleans (`profileEnabled`, `rewriteEnabled`, `verifyEnabled`) are
+ * default-on and only flip when the patch supplies an explicit boolean. Emits a
+ * `'config'` change event when any toggle actually changes value.
+ * @param dataDir - The resolved daemon data root.
+ * @param patch - Partial config object. Supported keys: `enabled`,
+ *   `chatExtractionEnabled`, `profileEnabled`, `rewriteEnabled`, `verifyEnabled`,
+ *   `extraction`.
+ * @returns The fully-merged config that was persisted to disk.
+ */
 // Patch shape:
 //   { enabled?: boolean, chatExtractionEnabled?: boolean,
 //     profileEnabled?: boolean, rewriteEnabled?: boolean,
@@ -268,6 +301,14 @@ export async function writeMemoryConfig(dataDir, patch) {
   return next;
 }
 
+/**
+ * Returns a safe-for-the-DOM version of the extraction override config. The raw API
+ * key is replaced by its last 4 characters (`apiKeyTail`) and a boolean
+ * `apiKeyConfigured` flag, so the settings UI can render "configured / ••••abcd"
+ * affordances without ever sending the real key to the browser.
+ * @param extraction - The raw extraction override from the stored config, or `null`.
+ * @returns The masked shape, or `null` when no override is configured.
+ */
 // Public — returns the masked shape consumed by GET /api/memory.
 // Keeps the secret out of the DOM but lets the UI render "configured" /
 // "•••• abcd" affordances without round-tripping through writeConfig.
@@ -285,6 +326,12 @@ export function maskMemoryExtractionConfig(extraction) {
   };
 }
 
+/**
+ * Reads the `MEMORY.md` index file as a raw string. Returns the default placeholder
+ * content when the file does not yet exist, so callers always receive a parseable
+ * result without having to handle missing-file errors themselves.
+ * @param dataDir - The resolved daemon data root.
+ */
 export async function readMemoryIndex(dataDir) {
   try {
     return await fsp.readFile(indexPath(dataDir), 'utf8');
@@ -293,12 +340,27 @@ export async function readMemoryIndex(dataDir) {
   }
 }
 
+/**
+ * Overwrites `MEMORY.md` with `body` and emits an `'index'` change event unless
+ * `options.silent` is true. The silent path is used by `upsertMemoryEntry` and
+ * `deleteMemoryEntry` during index maintenance so a single user action does not fire
+ * two back-to-back change events and trigger two UI re-fetches.
+ * @param dataDir - The resolved daemon data root.
+ * @param body - The complete new index content to write.
+ * @param options - Pass `{ silent: true }` to suppress the change event.
+ */
 export async function writeMemoryIndex(dataDir, body, options) {
   await ensureDir(memoryDir(dataDir));
   await fsp.writeFile(indexPath(dataDir), String(body ?? ''));
   if (!options?.silent) emitChange({ kind: 'index' });
 }
 
+/**
+ * @internal
+ * Parses a raw memory entry file into a `{ summary, body }` pair. The summary
+ * contains the frontmatter fields; the body is the trimmed markdown below the
+ * frontmatter delimiter.
+ */
 function summarize(id, raw, mtime) {
   const { data, body } = parseFrontmatter(raw);
   const type = isValidType(data?.type) ? data.type : 'user';
@@ -314,6 +376,13 @@ function summarize(id, raw, mtime) {
   };
 }
 
+/**
+ * Lists all valid memory entries in the memory directory as lightweight summaries
+ * (id, name, description, type, updatedAt). Returns an empty array when the directory
+ * does not exist. Unreadable or malformed files are silently skipped so one corrupted
+ * entry never prevents the rest of the list from loading. Results are newest-first.
+ * @param dataDir - The resolved daemon data root.
+ */
 export async function listMemoryEntries(dataDir) {
   const dir = memoryDir(dataDir);
   let names = [];
@@ -350,18 +419,38 @@ export async function listMemoryEntries(dataDir) {
 // profile-first … rule-last, matching the prompt-section order below.
 const MEMORY_TREE_TYPES = [...MEMORY_TYPES];
 
+/**
+ * @internal
+ * Returns the synthetic folder node id for a memory type (e.g. `'folder:user'`).
+ */
 function memoryTreeFolderId(type) {
   return `folder:${type}`;
 }
 
+/**
+ * @internal
+ * Maps a memory type to its tree scope: `'project'` for the `project` bucket,
+ * `'global'` for all others.
+ */
 function memoryTreeScopeForType(type) {
   return type === 'project' ? 'project' : 'global';
 }
 
+/**
+ * @internal
+ * Converts a millisecond timestamp to an ISO 8601 string, treating non-finite values
+ * as the epoch so tree nodes always have a valid timestamp field.
+ */
 function toIsoTime(ms) {
   return new Date(Number.isFinite(ms) ? ms : 0).toISOString();
 }
 
+/**
+ * @internal
+ * Extracts all `<label>: <id>` references from a memory entry body (e.g.
+ * `Source packet: abc123`). Used to populate `sourcePacketIds` / `proposalIds`
+ * on tree nodes so the UI can cross-link entries to automation artifacts.
+ */
 function extractAutomationRefs(body, label) {
   const refs = new Set();
   const re = new RegExp(`^${label}:\\s*([A-Za-z0-9_-]+)\\s*$`, 'gim');
@@ -372,6 +461,14 @@ function extractAutomationRefs(body, label) {
   return Array.from(refs);
 }
 
+/**
+ * Builds the tree-panel data structure consumed by `GET /api/memory/tree`: one synthetic
+ * folder node per memory type in canonical display order (profile → user → feedback →
+ * project → reference → rule), each containing its child entry nodes. Entry nodes carry
+ * `sourcePacketIds` and `proposalIds` extracted from the entry body so the UI can
+ * cross-link entries to automation artifacts.
+ * @param dataDir - The resolved daemon data root.
+ */
 export async function buildMemoryTree(dataDir) {
   const entries = await listMemoryEntries(dataDir);
   const byType = new Map();
@@ -428,6 +525,13 @@ export async function buildMemoryTree(dataDir) {
   return nodes;
 }
 
+/**
+ * Reads a single memory entry by id and returns its frontmatter summary fields plus the
+ * trimmed markdown body. Returns `null` when the entry does not exist, `id` is invalid,
+ * or the file cannot be read.
+ * @param dataDir - The resolved daemon data root.
+ * @param id - A lowercase alphanumeric-plus-underscore entry id (e.g. `user_role`).
+ */
 export async function readMemoryEntry(dataDir, id) {
   let raw;
   let stat;
@@ -444,6 +548,12 @@ export async function readMemoryEntry(dataDir, id) {
   return { ...summary, body };
 }
 
+/**
+ * @internal
+ * Serialises a memory entry's fields into the on-disk YAML-frontmatter + markdown
+ * format. Sanitises each field (strips newlines, validates type) so the resulting
+ * file is always parseable by `parseFrontmatter`.
+ */
 function renderEntryFile(name, description, type, body) {
   const safeName = String(name || 'Untitled').replace(/\r?\n/g, ' ').trim();
   const safeDesc = String(description || '').replace(/\r?\n/g, ' ').trim();
@@ -452,6 +562,15 @@ function renderEntryFile(name, description, type, body) {
   return `---\nname: ${safeName}\ndescription: ${safeDesc}\ntype: ${safeType}\n---\n\n${trimmedBody}\n`;
 }
 
+/**
+ * Applies a partial patch to an existing memory entry, forwarding all unchanged fields
+ * from the current entry. Rejects synthetic folder node ids (prefixed `folder:`)
+ * because folders are derived projections and cannot be edited directly.
+ * @param dataDir - The resolved daemon data root.
+ * @param id - The entry id to patch; must not start with `'folder:'`.
+ * @param patch - Partial entry fields; omitted keys retain their current values.
+ * @returns The updated entry (same shape as {@link readMemoryEntry}).
+ */
 export async function updateMemoryTreeNode(dataDir, id, patch) {
   if (typeof id !== 'string' || id.startsWith('folder:')) {
     throw new Error('memory tree folders are derived and cannot be edited');
@@ -474,6 +593,17 @@ export async function updateMemoryTreeNode(dataDir, id, patch) {
   });
 }
 
+/**
+ * Creates or replaces a memory entry on disk and adds/updates its bullet in `MEMORY.md`.
+ * The id may be supplied explicitly (round-trip editing) or derived from `(type, name)`.
+ * Emits an `'upsert'` change event unless `options.silent` is true; `options.source`
+ * labels the change origin for telemetry (e.g. `'heuristic'`, `'llm'`, `'manual'`).
+ * @param dataDir - The resolved daemon data root.
+ * @param input - Entry fields: `{ id?, name, description, type, body }`. `name` and a
+ *   valid `type` are required.
+ * @param options - `{ silent?, source? }` — suppress the change event and/or tag it.
+ * @returns The written entry as a full summary + body object.
+ */
 export async function upsertMemoryEntry(dataDir, input, options) {
   const { name, description, type, body } = input || {};
   if (!name || !isValidType(type)) {
@@ -503,6 +633,13 @@ export async function upsertMemoryEntry(dataDir, input, options) {
   return entry;
 }
 
+/**
+ * Deletes the per-fact `.md` file for `id` and removes its bullet from `MEMORY.md`.
+ * A missing file is silently tolerated (idempotent). Always emits a `'delete'` change
+ * event so the web UI can drop the row immediately without re-fetching the full list.
+ * @param dataDir - The resolved daemon data root.
+ * @param id - The entry id to delete.
+ */
 export async function deleteMemoryEntry(dataDir, id) {
   try {
     await fsp.unlink(entryPath(dataDir, id));
@@ -517,6 +654,13 @@ export async function deleteMemoryEntry(dataDir, id) {
 
 const INDEX_LINK_RE = /^\s*-\s+\[([^\]]+)\]\(([^)]+)\)(\s+—\s+(.*))?$/;
 
+/**
+ * @internal
+ * Parses the set of active entry ids from the `MEMORY.md` link-bullet list. Every
+ * bullet pointing at `<id>.md` is an entry the user wants injected into future system
+ * prompts; removing a bullet disables that entry while leaving its file on disk.
+ * Free-form prose, headings, blank lines, and `MEMORY.md` self-references are ignored.
+ */
 // Pull the linked entry ids out of MEMORY.md. The index is the user's
 // editable list — every bullet that points at `<id>.md` is a fact the
 // user wants injected into future system prompts. Removing a bullet
@@ -538,6 +682,12 @@ function parseIndexLinkIds(indexBody: string): Set<string> {
   return ids;
 }
 
+/**
+ * @internal
+ * Ensures `MEMORY.md` contains a bullet for `id`. If the bullet already exists it is
+ * updated in-place (name / description may have changed); if absent it is appended.
+ * Writes silently so the caller's own upsert event is the only change notification.
+ */
 async function ensureIndexHasEntry(dataDir, id, name, description) {
   const current = await readMemoryIndex(dataDir);
   const lines = current.split(/\r?\n/);
@@ -564,6 +714,11 @@ async function ensureIndexHasEntry(dataDir, id, name, description) {
   await writeMemoryIndex(dataDir, lines.join('\n'), { silent: true });
 }
 
+/**
+ * @internal
+ * Removes the bullet for `id` from `MEMORY.md`. Writes silently so the caller's
+ * `'delete'` event is the only change notification.
+ */
 async function removeIndexLine(dataDir, id) {
   const current = await readMemoryIndex(dataDir);
   const link = `${id}.md`;
@@ -576,6 +731,18 @@ async function removeIndexLine(dataDir, id) {
 
 // ----- System-prompt body -------------------------------------------------
 
+/**
+ * Builds the markdown block injected into every chat system prompt. The active set is
+ * derived from `MEMORY.md` link bullets rather than every `.md` file on disk — removing
+ * a bullet disables that fact in future prompts while keeping the file on disk. Returns
+ * `''` when memory is disabled or no entries are active so the prompt composer can drop
+ * the block with a single truthiness check.
+ *
+ * Canonical section order: Profile (gated on `profileEnabled`) → User → Feedback →
+ * Project → Reference → Verified rules. The `profile` type renders as a structured
+ * key/value block; `rule` renders as a rubric the self-verify pass reads back.
+ * @param dataDir - The resolved daemon data root.
+ */
 // Build the markdown block that the prompt composer folds into every
 // run. Returns `''` when memory is disabled, missing, or empty so the
 // composer can drop the block without an extra `if`.
@@ -667,11 +834,24 @@ export async function composeMemoryBody(dataDir) {
   return parts.join('\n').trim();
 }
 
+/**
+ * @internal
+ * Convenience wrapper: reads a single entry by id and returns just its markdown body,
+ * or `''` when the entry is missing.
+ */
 async function readEntryBodyById(dataDir, id) {
   const entry = await readMemoryEntry(dataDir, id);
   return entry?.body ?? '';
 }
 
+/**
+ * Returns the `rule` memory entries that are active — i.e. linked in `MEMORY.md` —
+ * each with its full markdown body. The `verify/` enforcer reads these as the rubric
+ * an artifact turn must satisfy. Honors the same active-set gate as
+ * {@link composeMemoryBody} so a rule the user removes from the index stops being
+ * enforced without deleting its file. Returns `[]` when memory is globally disabled.
+ * @param dataDir - The resolved daemon data root.
+ */
 // Return the `rule` memory entries that are ACTIVE — i.e. linked in MEMORY.md
 // — with their bodies. The POST self-verify enforcement (memory-verify.ts)
 // reads these as the rubric an artifact turn must be checked against. We honor
@@ -696,6 +876,10 @@ export async function listActiveRuleEntries(dataDir) {
   return out;
 }
 
+/**
+ * @internal
+ * Uppercases the first character of a string; used for type-bucket section headings.
+ */
 function capitalize(s) {
   return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
 }
@@ -869,12 +1053,24 @@ const REMEMBER_PATTERNS: ExtractionPattern[] = [
   },
 ];
 
+/**
+ * @internal
+ * Substitutes every `$1` occurrence in `template` with `captured`. Used by the
+ * heuristic extraction patterns to build description and body text from a regex match.
+ */
 function applyTemplate(template, captured) {
   return String(template || '').replace(/\$1/g, String(captured));
 }
 
 // ----- Onboarding → structured profile ------------------------------------
 
+/**
+ * @internal
+ * Returns true when a `<question-form>` id should seed / update the singleton
+ * `user_profile` entry. Discovery briefs, task-type forms, and explicitly
+ * profile-tagged forms qualify; an empty id also qualifies because the onboarding
+ * flow does not always stamp a form id.
+ */
 // Form ids that should seed / update the singleton `user_profile`. Discovery
 // briefs, task-type forms, and any explicitly profile-tagged form all feed the
 // "who I am / how I work" facts the intent gateway expands a short query
@@ -890,6 +1086,11 @@ function isProfileFormId(id) {
   );
 }
 
+/**
+ * @internal
+ * Regex that matches a single profile field line (`- Label: value`). Used by
+ * {@link parseProfileBody} to extract label→value pairs for merge-on-write.
+ */
 // Parse an existing profile body (line-per-field `- Label: value`) into an
 // ordered label→value map so later answers ADD or overwrite individual fields
 // instead of wiping unrelated ones. Lines that don't match the `- Label: …`
@@ -916,6 +1117,13 @@ const CANONICAL_PROFILE_LABELS = [
   'Current goals',
 ];
 
+/**
+ * @internal
+ * Maps an incoming label (potentially hand-typed, differently cased) to its canonical
+ * form from `CANONICAL_PROFILE_LABELS`, or returns the trimmed input unchanged when no
+ * match is found. Prevents duplicate profile fields when the same field is submitted
+ * with slightly different capitalisation across turns.
+ */
 function canonicalProfileLabel(label) {
   const trimmed = String(label || '').trim();
   if (!trimmed) return '';
@@ -926,6 +1134,12 @@ function canonicalProfileLabel(label) {
   return match ?? trimmed;
 }
 
+/**
+ * @internal
+ * Parses a profile entry body into an ordered canonical-label → value map. Lines that
+ * do not match the `- Label: value` shape are silently dropped because the profile is
+ * a structured fact block, not free prose.
+ */
 function parseProfileBody(body) {
   const map = new Map();
   for (const line of String(body || '').split(/\r?\n/)) {
@@ -939,6 +1153,11 @@ function parseProfileBody(body) {
   return map;
 }
 
+/**
+ * @internal
+ * Serialises a canonical-label → value map back into the `- Label: value` line format
+ * expected by the profile entry body.
+ */
 function renderProfileBody(map) {
   const lines = [];
   for (const [label, value] of map) {
@@ -947,6 +1166,13 @@ function renderProfileBody(map) {
   return lines.join('\n');
 }
 
+/**
+ * @internal
+ * Merges freshly-answered question-form pairs into the existing `user_profile` entry,
+ * by label, and upserts the singleton. Runs before prompt composition so the profile
+ * is available to the same turn. Returns the written summary, or `null` when there are
+ * no pairs to write.
+ */
 // Merge freshly-answered form pairs into the existing profile, by label, and
 // upsert the singleton `user_profile` entry. Runs synchronously pre-turn so
 // the profile is visible to the SAME turn's prompt composition. Returns the
@@ -991,6 +1217,15 @@ async function captureProfileFromForm(dataDir, parsed) {
   };
 }
 
+/**
+ * Heuristic-only memory extraction: scans `userMessage` for explicit save markers
+ * (`remember:`, `I prefer`, `我是`, etc.) and onboarding question-form answers, then
+ * upserts matched facts into the store. Always records an extraction-history attempt
+ * via `recordHeuristic` so the settings panel shows a row for every turn, even when
+ * nothing matched. Returns the list of entries written (may be empty).
+ * @param dataDir - The resolved daemon data root.
+ * @param userMessage - The raw user message text for the current turn.
+ */
 export async function extractFromMessage(dataDir, userMessage) {
   // Mirror the LLM extractor's skip surface so the settings panel shows
   // both extractors for the same turn — even when there's nothing to
@@ -1098,6 +1333,11 @@ export async function extractFromMessage(dataDir, userMessage) {
   return changed;
 }
 
+/**
+ * @internal
+ * Truncates `s` to at most `max` characters, appending `…` when it is cut, so
+ * captured phrases stored as description or body fields stay within a reasonable size.
+ */
 function truncate(s, max) {
   if (s.length <= max) return s;
   return `${s.slice(0, max - 1).trim()}…`;

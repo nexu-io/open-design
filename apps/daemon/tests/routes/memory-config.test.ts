@@ -17,7 +17,7 @@ import {
   memoryDir,
   readMemoryConfig,
   writeMemoryConfig,
-} from '../../src/memory.js';
+} from '../../src/memory/index.js';
 import { startServer } from '../../src/server.js';
 
 interface StartedServer {
