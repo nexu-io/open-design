@@ -252,3 +252,30 @@
 - 갭 fix = 서버사이드 resolve(배지 메커니즘 대칭): create 핸들러가 resolveStampDesignSystemId(db,pluginId)=pickDesignSystemId(manifest)로 ref resolve → 컬럼 세팅. web-only(metadata→컬럼) 미채택 — CLI dual-track 깨짐. 컬럼이 단일 진실원. 명시 body.designSystemId 우선 (출처: 사용자 승인 "서버사이드 resolve")
 - bodoc 특화 검증 = 라이브 produce E2E(코드추적만으로 끝내지 않음): claude agent produce 1회 → brief.md가 design-systems/bodoc/DESIGN.md §11 명시 인용, "안녕하세요 보닥입니다!" 페르소나·서비스4종·금지어준수·craft준수 확인 (출처: 라이브 produce runId dc8887a6)
 - 캐리 Minor 전부 accept-as-followup(최종 opus 리뷰 판정), T8 stale 주석만 무료 fix. fix 3 Minor 비차단 (출처: 최종 whole-branch 리뷰)
+
+## 2026-07-02 — 품질 팔로우업 4 PR (#7~#10) + 게이트 acceptance
+- opencode external_directory fix = 이중표기 allowlist(`allowedDirectorySpellings()`), effectiveCwd 정규화 미채택: cwd 정규화는 전 에이전트 spawn cwd·프롬프트 문자열 변경 리스크, allowlist가 staged-skill/extra dir까지 커버. pre-existing chat-route 실패는 테스트 아닌 프로덕션 버그(자식 process.cwd()=OS 해석 물리경로 vs 미해석 키) (출처: HANDOFF 클로즈아웃, PR #10)
+- naver-blog 컨펌 게이트 바이패스 근본원인 = 폼 미발화: 화살표 체인 문구("제시→컨펌→Write")는 턴 종료 강제 없음 — 게이트에는 "즉시 턴 종료 + 답변 전 Write 금지" 명시 필수. fix는 스킬 국소, 재발 시 system.ts 승격 (출처: 라이브 run 타임라인 조사 + PR #9)
+- 게이트 acceptance = 라이브 도그푸딩 2턴: turn2가 리서치→기획안→컨펌 폼에서 턴 종료, 산출 research.md 1개뿐 — PASS. question-form auto-continue 타이머(2분) 주의: 검증만 목적이면 확인 즉시 페이지 이탈 (출처: browse 도그푸딩 9b0b5edc)
+- 병렬 서브에이전트 정책: 메인 트리에서 에이전트 작업 중이면 추가 에이전트는 worktree 격리 dispatch + fresh worktree pnpm install 명시 (출처: PR #9/#10 병렬 진행)
+
+## 2026-07-03 — naver-blog 팔로우업 종결 (PR #11·#12) + P2 차기 준비
+- 기획안 히스토리 = `plan-v*.md` 버전 파일(v1, 반려 시 v2… 기존 보존), 컨펌 전 Write 유일 예외 — PR #9 하드스톱(즉시 턴 종료·brief/html 금지)은 원문 유지, 예외만 명시. 근거: 사용자 지시 — 컨펌 무관 기획 이력 보존, 반려 시 구·신 2건 공존 (출처: HANDOFF PR #11)
+- cwdHint fix = `formatDesignFilesWorkspaceHint` 진입점 realpath 해석(`resolveAgentObservedCwd()`, 실패 시 미해석 폴백): 힌트는 agent `process.cwd()` 관측 표기와 일치해야 함. linkedDirsHint 동일 이슈는 Adjacent 이월 (출처: HANDOFF PR #12)
+- 다음 P2 버티컬 = SNS 카드뉴스 권장: naver-blog 경량 패턴 최대 재사용 + 기존 카드 템플릿 자산(card-twitter·card-xiaohongshu·social-carousel 등). 경량형 → 공통 추상화 계속 보류(3번째 추적형 대기) (출처: HANDOFF P2 차기 준비)
+- destructive git 전 머지 검증 절차: 일괄 원격 삭제가 분류기 차단 → `git merge-base --is-ancestor <sha> origin/main` 전수 검증 증거 출력 후 삭제 (출처: HANDOFF 원격 브랜치 정리)
+
+## 2026-07-03 — 트리거 라우팅 스펙+플랜 (자유입력 → 버티컬 직행)
+- 발단 = 자유입력 "네이버 블로그 게시물 작성하자"가 od-default 범용 인터뷰로: HomeView.tsx:1529가 DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID(od-default) 하드코딩 스탬핑 — 버티컬 플러그인은 명시 선택 없이 도달 불가 (출처: 사용자 스크린샷 + 코드 추적)
+- 라우팅 = 매니페스트 od.routing.triggers + 데몬 단일 지점 (접근법 A): 명시 > 단일 트리거 매치 > app-config defaultRouterPluginId(설치 전역) > kind 폴백. 게이트 = design && kind other/미지정 && !live-artifact — deck·미디어 명시 생성 하이재킹 방지. LLM 분류는 v2 (출처: 브레인스토밍 사용자 승인)
+- 핸드오프 = 재매칭 단일 메커니즘: 라우터(router:true) pin 시 run-start가 currentPrompt(트랜스크립트 아님 — 과거 키워드 재인식 방지) 재매칭 → pluginId 주입 → 기존 resolve가 re-pin (linkSnapshotTo* 무조건 UPDATE, 충돌 없음 코드검증). 폼 옵션 value 슬러그("naver-blog")가 "라벨 [value: 슬러그]" 렌더로 트리거 매칭 → i18n 취약성 해소 (출처: plan-reviewer H1~H3 + fact-gathering)
+- fallbackRoute는 FORM_ANSWERS_MARKER('[form answers — ') 있을 때만: 없으면 최초 run이 원 모호 프롬프트 재매칭 none→od-default로 새어 라우터 폼 미표시. 마커 상수는 contracts로 승격, web formatFormAnswers가 공유 (출처: 플랜 셀프리뷰)
+- 자유입력 게이트에 프롬프트 존재 조건 배제: 첨부-only 빈 프롬프트 제출은 매칭 none→라우터 폴백으로 흘러 od-default task-type 폼 현행 UX 보존 (출처: 플랜 셀프리뷰 — HomeView.context-picker.test.tsx:167 케이스)
+- 스펙 독립리뷰(plan-reviewer) 검증: 재pin 전제 성립, discovery.ts od-default 예외 무해, CLI od config set 제네릭이라 무료, passthrough라 contracts 선행은 타이핑 요구(부팅 안전 아님). 매 자가편집 후 독립검증 관례 유지 (출처: APPROVE-WITH-CHANGES 리뷰)
+
+## 2026-07-03 — 트리거 라우팅 구현 완료 (11태스크 SDD) + 머지
+- 구현 = subagent-driven-development 11태스크, 리뷰 게이트가 자가리뷰 통과분 4건 포착: 플랜 F1(카탈로그 전제 오류—naver-blog는 bundled walker 등록)·F2(id=manifest name, folder 파생 아님), Task6 router-flag 가드 누락(플랜 갭, fallbackRoute와 비대칭), Task7 external-location kind 주입 미러 regression, Task10 config.ts allowlist 양방향 추가(없으면 silent no-op — 브리프 "autosave 전체 PUT" 전제 오류) (출처: 태스크 리뷰 사이클)
+- POST /api/runs 테스트는 agentId 필드 (meta={...requestBody}, server.ts:11325) — `agent:`는 무시돼 firstAvailable 실스폰 위험 (출처: plan-reviewer A2 caveat)
+- 검증 = daemon 4605/0 fail, web 실패 8건 중 7건 main-baseline worktree 재실행으로 pre-existing 확증, 1건(prefill od-default 단언)만 브랜치 도입 → 테스트 갱신. "0 new fail" 판정은 반드시 baseline 대조로 (출처: Task 11 스윕)
+- 기본 라우터는 설치별 1회 설정 필수: 미설정 시 무관 발화가 od-default 폴백 (설계 정상) — 팀 배포 시 `od config set defaultRouterPluginId example-bodoc-router` 온보딩 단계에 포함 (출처: 라이브 acceptance 사용자 스크린샷 리포트)
+- 팔로우업 이월: MCP create(skipDiscoveryBrief) 라우팅 스펙 결정, 라우터 handoff 후 designSystemId 컬럼 create-time 스탬프 유지(이종 DS 라우터면 오주입), effectiveCreateKind 헬퍼 추출(kind 주입 규칙 2곳 중복), run-start pin-없음 경로, dangling 라우터 스냅샷 GC (출처: 최종 whole-branch 리뷰)
