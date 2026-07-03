@@ -5,4 +5,4 @@ FROM ghcr.io/nexu-io/od:latest
 
 USER root
 RUN apk add --no-cache libc6-compat
-USER node
+USER open-design

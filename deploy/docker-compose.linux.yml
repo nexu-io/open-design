@@ -42,16 +42,18 @@ services:
     volumes:
       - ${HOME}/.local/bin:/mnt/host-local-bin:ro
       - ${HOME}/.opencode/bin:/mnt/host-opencode:ro
-      # Claude Code versioned binaries (the ~/.local/bin/claude symlink points here).
+      # Claude Code versioned binaries — mounted at the same absolute path as the host
+      # so the ~/.local/bin/claude symlink resolves correctly inside the container.
       - ${HOME}/.local/share/claude:${HOME}/.local/share/claude:ro
       # Claude Code credentials — read-only; never written inside the container.
-      - ${HOME}/.claude:/home/node/.claude:ro
+      - ${HOME}/.claude:/home/open-design/.claude:ro
       # Full glibc for CLIs that exceed what libc6-compat (gcompat) covers.
+      # amd64 only — on arm64 replace with /lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu:ro
       - /lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:ro
       - /lib64:/lib64:ro
     tmpfs:
-      # uid/gid must match the container's node user (1000:1000).
-      - /home/node:uid=1000,gid=1000
+      # uid/gid must match the base image's open-design user (1001:1001).
+      - /home/open-design:uid=1001,gid=1001
     healthcheck:
       # Use wget (available in Alpine) instead of node — faster and does not
       # compete with the daemon for CPU during startup.
@@ -59,4 +61,4 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 30s  # increased from 20s — glibc host mounts add startup latency

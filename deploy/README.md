@@ -126,8 +126,17 @@ docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d --no-buil
 ```
 
 If a CLI fails with `symbol not found` or relocation errors despite `libc6-compat`,
-the compose file already mounts `/lib/x86_64-linux-gnu` and `/lib64` from the host
-read-only, which provides full glibc for the most demanding binaries.
+the compose file mounts `/lib/x86_64-linux-gnu` and `/lib64` from the host read-only,
+which provides full glibc for the most demanding binaries. These paths are **amd64-only**;
+on arm64 replace them with `/lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu:ro`.
+
+**Upgrading from a previous install:** if you previously ran the container as a different
+user (e.g. `node`, uid 1000), the data volume may need an ownership fix before the daemon
+can write to it:
+
+```bash
+docker run --rm -v open-design_open_design_data:/data alpine chown -R 1001:1001 /data
+```
 
 Pass provider API keys via `.env`:
 
