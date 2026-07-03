@@ -2185,7 +2185,7 @@
   gap: 10px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  padding: 1px 2px 8px;
+  padding: 1px 2px 14px;
   scrollbar-width: thin;
 }
 
