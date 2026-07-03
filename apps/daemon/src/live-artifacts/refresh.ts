@@ -3,7 +3,7 @@ import { lstat, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-import { listFiles, projectDir, readProjectFile, validateProjectPath } from '../projects.js';
+import { listFiles, readProjectFile, resolveProjectDir, validateProjectPath } from '../projects.js';
 import type { BoundedJsonObject, BoundedJsonValue, LiveArtifact, LiveArtifactRefreshSourceMetadata, LiveArtifactSource } from './schema.js';
 import { validateBoundedJsonObject } from './schema.js';
 
@@ -50,6 +50,7 @@ export type LocalDaemonRefreshToolName =
 export interface ExecuteLocalDaemonRefreshSourceOptions {
   projectsRoot: string;
   projectId: string;
+  projectMetadata?: { baseDir?: string } | null;
   source: LiveArtifactSource;
   signal?: AbortSignal;
 }
@@ -545,7 +546,9 @@ async function executeProjectFilesSearch(options: ExecuteLocalDaemonRefreshSourc
   const input = options.source.input as ProjectFilesSearchInput;
   const query = optionalString(input.query, 'input.query')?.trim();
   const maxResults = optionalPositiveInteger(input.maxResults, 'input.maxResults', 25, 100);
-  const allFiles = await listFiles(options.projectsRoot, options.projectId) as Array<{ name: string; path: string; type: string; size: number; mtime: number; kind?: string; mime?: string }>;
+  const allFiles = await listFiles(options.projectsRoot, options.projectId, {
+    metadata: options.projectMetadata ?? undefined,
+  }) as Array<{ name: string; path: string; type: string; size: number; mtime: number; kind?: string; mime?: string }>;
   const matches: BoundedJsonObject[] = [];
   const normalizedQuery = query?.toLowerCase();
 
@@ -558,7 +561,7 @@ async function executeProjectFilesSearch(options: ExecuteLocalDaemonRefreshSourc
 
     if (!matched && normalizedQuery !== undefined && isTextLikeFile(file) && file.size <= 128 * 1024) {
       try {
-        const entry = await readProjectFile(options.projectsRoot, options.projectId, file.path);
+        const entry = await readProjectFile(options.projectsRoot, options.projectId, file.path, options.projectMetadata ?? undefined);
         const text = entry.buffer.toString('utf8');
         matched = text.toLowerCase().includes(normalizedQuery);
         if (matched) preview = compactTextPreview(text, query);
@@ -586,7 +589,7 @@ async function executeProjectFilesSearch(options: ExecuteLocalDaemonRefreshSourc
 async function executeProjectFilesReadJson(options: ExecuteLocalDaemonRefreshSourceOptions): Promise<BoundedJsonObject> {
   const filePath = selectJsonPath(options.source.input as ProjectFilesReadJsonInput);
   if (!filePath.endsWith('.json')) throw new Error('project_files.read_json only supports .json files');
-  const dir = projectDir(options.projectsRoot, options.projectId);
+  const dir = resolveProjectDir(options.projectsRoot, options.projectId, options.projectMetadata ?? undefined);
   const target = path.resolve(dir, filePath);
   const [dirReal, targetLinkStat] = await Promise.all([realpath(dir), lstat(target)]);
   if (targetLinkStat.isSymbolicLink()) throw new Error('project_files.read_json does not follow symlinks');
@@ -625,7 +628,7 @@ async function runGit(projectPath: string, args: string[], signal: AbortSignal |
 async function executeGitSummary(options: ExecuteLocalDaemonRefreshSourceOptions): Promise<BoundedJsonObject> {
   const input = options.source.input as GitSummaryInput;
   const maxCommits = optionalPositiveInteger(input.maxCommits, 'input.maxCommits', 10, 50);
-  const dir = projectDir(options.projectsRoot, options.projectId);
+  const dir = resolveProjectDir(options.projectsRoot, options.projectId, options.projectMetadata ?? undefined);
   const insideWorkTree = (await runGit(dir, ['rev-parse', '--is-inside-work-tree'], options.signal)).trim() === 'true';
   if (!insideWorkTree) return asBoundedRefreshOutput({ toolName: 'git.summary', isRepository: false, branch: '', status: [], recentCommits: [], diffStat: [] });
 

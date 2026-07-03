@@ -47,6 +47,11 @@ import {
   updateProject,
 } from '../db.js';
 import { listFiles, readProjectFile, resolveProjectDir, writeProjectFile } from '../projects.js';
+import {
+  createLocationProjectDir,
+  defaultExternalProjectLocationForRuntime,
+  writeProjectManifest,
+} from '../project-locations.js';
 import { brandFromDesignMd, sourceUrlForDesignMd } from './design-md-input.js';
 import { brandGuideMd, brandToDesignMd } from './design-md.js';
 import { reflowBrandToMemory } from './memory.js';
@@ -305,6 +310,19 @@ export async function startBrandExtraction(
     locale,
     extractionAttemptId,
   };
+  let externalProjectDir: string | null = null;
+  let externalProjectLocationId: string | null = null;
+  if (opts.dataDir) {
+    const location = await defaultExternalProjectLocationForRuntime({
+      dataDir: opts.dataDir,
+      projectsDir: opts.projectsRoot,
+    });
+    if (location) {
+      externalProjectDir = await createLocationProjectDir(location, projectId);
+      externalProjectLocationId = location.id;
+    }
+  }
+
   const metadata: ProjectMetadata = {
     kind: 'brand',
     importedFrom: 'brand-extraction',
@@ -313,6 +331,12 @@ export async function startBrandExtraction(
     skipDiscoveryBrief: true,
     brandId: id,
     brandSourceUrl: url,
+    ...(externalProjectDir && externalProjectLocationId
+      ? {
+          baseDir: externalProjectDir,
+          projectLocationId: externalProjectLocationId,
+        }
+      : {}),
   };
   const name = `${host} Design System`;
   const runProgrammatic = Boolean(opts.userDesignSystemsRoot);
@@ -369,6 +393,17 @@ export async function startBrandExtraction(
       createdAt: now,
       updatedAt: now,
     });
+    if (externalProjectDir) {
+      await writeProjectManifest(externalProjectDir, {
+        schemaVersion: 1,
+        id: projectId,
+        name,
+        createdAt: now,
+        updatedAt: now,
+        skillId: null,
+        designSystemId: draftDesignSystemId,
+      });
+    }
     if (draftDesignSystemId && opts.userDesignSystemsRoot) {
       try {
         await linkUserDesignSystemProject(opts.userDesignSystemsRoot, draftDesignSystemId, projectId);
@@ -1301,8 +1336,10 @@ export async function finalizeBrand(
   const meta = readMeta(brandsRoot, id);
   if (!meta) throw new Error(`brand not found: ${id}`);
   const projectId = opts.projectId ?? meta.projectId ?? brandProjectId(id);
+  const project = getProject(opts.db, projectId);
+  const projectMetadata = project?.metadata as ProjectMetadata | undefined;
 
-  const brandJsonRaw = await readProjectTextOrNull(projectsRoot, projectId, 'brand.json');
+  const brandJsonRaw = await readProjectTextOrNull(projectsRoot, projectId, 'brand.json', projectMetadata);
   if (brandJsonRaw === null) {
     throw new Error(
       'brand.json not found in the extraction project — the agent has not written the design system yet.',
@@ -1325,12 +1362,12 @@ export async function finalizeBrand(
 
   // Pull the agent's downloaded assets into the brand workspace so the
   // deterministic builder and the design system see them.
-  copyProjectDirToBrand(projectsRoot, projectId, brandsRoot, id, 'logos');
-  copyProjectDirToBrand(projectsRoot, projectId, brandsRoot, id, 'fonts');
-  copyProjectDirToBrand(projectsRoot, projectId, brandsRoot, id, 'imagery');
+  copyProjectDirToBrand(projectsRoot, projectId, projectMetadata, brandsRoot, id, 'logos');
+  copyProjectDirToBrand(projectsRoot, projectId, projectMetadata, brandsRoot, id, 'fonts');
+  copyProjectDirToBrand(projectsRoot, projectId, projectMetadata, brandsRoot, id, 'imagery');
 
   const guideMd =
-    (await readProjectTextOrNull(projectsRoot, projectId, 'BRAND.md')) ?? brandGuideMd(brand);
+    (await readProjectTextOrNull(projectsRoot, projectId, 'BRAND.md', projectMetadata)) ?? brandGuideMd(brand);
 
   return finalizeBrandCore({ ...opts, id, projectId, meta, brand, guideMd });
 }
@@ -1460,13 +1497,16 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
     brandSourceUrl: meta.sourceUrl,
     brandDesignSystemId: designSystemId,
   };
+  const existing = getProject(db, projectId);
+  const projectMetadata: ProjectMetadata = { ...(existing?.metadata ?? {}), ...finalizeMetadata };
+  const projectName = `${brand.name || meta.sourceUrl} Design System`;
   await syncBrandFilesToProject({
     brandsRoot,
     projectsRoot,
     brandId: id,
     projectId,
     brand,
-    metadata: finalizeMetadata,
+    metadata: projectMetadata,
   });
   throwIfProgrammaticExtractionNotCurrent(opts);
 
@@ -1479,7 +1519,7 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
     projectId,
     brand: brand as unknown as Record<string, unknown>,
     status: 'ready',
-    metadata: finalizeMetadata,
+    metadata: projectMetadata,
     locale: opts.locale ?? meta.locale,
   });
   throwIfProgrammaticExtractionNotCurrent(opts);
@@ -1487,17 +1527,30 @@ async function finalizeBrandCore(opts: FinalizeBrandCoreOptions): Promise<BrandF
   await linkUserDesignSystemProject(userDesignSystemsRoot, designSystemId, projectId);
   throwIfProgrammaticExtractionNotCurrent(opts);
 
-  const existing = getProject(db, projectId);
   if (existing) {
     updateProject(db, projectId, {
-      name: `${brand.name || meta.sourceUrl} Design System`,
+      name: projectName,
       skillId: existing.skillId ?? null,
       designSystemId,
       pendingPrompt: existing.pendingPrompt ?? null,
-      metadata: { ...(existing.metadata ?? {}), ...finalizeMetadata },
+      metadata: projectMetadata,
       customInstructions: existing.customInstructions ?? null,
       updatedAt: Date.now(),
     });
+    const projectBaseDir = typeof projectMetadata.baseDir === 'string'
+      ? path.normalize(projectMetadata.baseDir)
+      : null;
+    if (projectBaseDir && path.isAbsolute(projectBaseDir)) {
+      await writeProjectManifest(projectBaseDir, {
+        schemaVersion: 1,
+        id: projectId,
+        name: projectName,
+        createdAt: existing.createdAt ?? Date.now(),
+        updatedAt: Date.now(),
+        skillId: existing.skillId ?? null,
+        designSystemId,
+      });
+    }
   }
   throwIfProgrammaticExtractionNotCurrent(opts);
 
@@ -1778,6 +1831,8 @@ export interface RenderBrandPreviewOptions {
   brandsRoot: string;
   skillsRoot: string;
   projectsRoot: string;
+  /** Optional db handle lets the preview honor external Project Location metadata. */
+  db?: Parameters<typeof insertProject>[0];
   /** Overrides the brand's recorded backing project. */
   projectId?: string;
   /** Explicit preview lifecycle for caller-known states such as user stop. */
@@ -1816,8 +1871,9 @@ export async function renderBrandPreviewIntoProject(
       : meta.status === 'extracting' || meta.status === 'needs_input'
       ? 'extracting'
       : 'draft');
+  const projectMetadata = opts.db ? (getProject(opts.db, projectId)?.metadata as ProjectMetadata | undefined) : undefined;
 
-  const raw = await readProjectTextOrNull(projectsRoot, projectId, 'brand.json');
+  const raw = await readProjectTextOrNull(projectsRoot, projectId, 'brand.json', projectMetadata);
   let brand: Record<string, unknown> = { sourceUrl: meta.sourceUrl, colors: [], typography: {} };
   let rendered = false;
   if (raw !== null) {
@@ -1844,6 +1900,7 @@ export async function renderBrandPreviewIntoProject(
       kind: 'brand',
       brandId: id,
       brandSourceUrl: meta.sourceUrl,
+      ...(projectMetadata ?? {}),
     });
     const logoSlot = brandLogoSlot(brand.logo);
     if (!logoSlot.primary) {
@@ -1860,7 +1917,12 @@ export async function renderBrandPreviewIntoProject(
     projectId,
     brand,
     status,
-    metadata: { kind: 'brand', brandId: id, brandSourceUrl: meta.sourceUrl },
+    metadata: {
+      ...(projectMetadata ?? {}),
+      kind: 'brand',
+      brandId: id,
+      brandSourceUrl: meta.sourceUrl,
+    },
     locale: opts.locale ?? meta.locale,
   });
   return { id, projectId, file: BRAND_KIT_FILE, rendered };
@@ -2022,9 +2084,10 @@ async function readProjectTextOrNull(
   projectsRoot: string,
   projectId: string,
   name: string,
+  metadata?: ProjectMetadata,
 ): Promise<string | null> {
   try {
-    const file = await readProjectFile(projectsRoot, projectId, name);
+    const file = await readProjectFile(projectsRoot, projectId, name, metadata);
     const buf = file?.buffer;
     if (buf === null || buf === undefined) return null;
     return Buffer.isBuffer(buf) ? buf.toString('utf8') : String(buf);
@@ -2037,13 +2100,14 @@ async function readProjectTextOrNull(
 function copyProjectDirToBrand(
   projectsRoot: string,
   projectId: string,
+  metadata: ProjectMetadata | undefined,
   brandsRoot: string,
   brandId: string,
   dirName: string,
 ): void {
   let projectDir: string;
   try {
-    projectDir = resolveProjectDir(projectsRoot, projectId);
+    projectDir = resolveProjectDir(projectsRoot, projectId, metadata);
   } catch {
     return;
   }

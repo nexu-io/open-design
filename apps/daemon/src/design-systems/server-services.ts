@@ -1,6 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
+import {
+  createLocationProjectDir,
+  defaultExternalProjectLocationForRuntime,
+  writeProjectManifest,
+} from '../project-locations.js';
 
 type JsonRecord = Record<string, unknown>;
 type SkillEntry = { id: string } & JsonRecord;
@@ -65,6 +70,8 @@ export function createDesignSystemServerServices({
     ALL_SKILL_LIKE_ROOTS: string[];
   };
   paths: {
+    RUNTIME_DATA_DIR: string;
+    RUNTIME_DATA_DIR_CANONICAL?: string;
     PROJECTS_DIR: string;
     DESIGN_SYSTEMS_DIR: string;
     USER_DESIGN_SYSTEMS_DIR: string;
@@ -245,13 +252,33 @@ export function createDesignSystemServerServices({
     if (!projectId) return null;
 
     const now = Date.now();
-    const metadata = {
+    let externalProjectDir: string | null = null;
+    let externalProjectLocationId: string | null = null;
+    const existing = projects.getProject(dbHandle, projectId);
+    if (!existing) {
+      const locationOptions = {
+        dataDir: paths.RUNTIME_DATA_DIR,
+        projectsDir: paths.PROJECTS_DIR,
+        ...(paths.RUNTIME_DATA_DIR_CANONICAL ? { dataDirCanonical: paths.RUNTIME_DATA_DIR_CANONICAL } : {}),
+      };
+      const location = await defaultExternalProjectLocationForRuntime(locationOptions);
+      if (location) {
+        externalProjectDir = await createLocationProjectDir(location, projectId);
+        externalProjectLocationId = location.id;
+      }
+    }
+    const metadata: JsonRecord = {
       kind: 'other',
       importedFrom: 'design-system',
       entryFile: 'DESIGN.md',
       sourceFileName: id,
+      ...(externalProjectDir && externalProjectLocationId
+        ? {
+            baseDir: externalProjectDir,
+            projectLocationId: externalProjectLocationId,
+          }
+        : {}),
     };
-    const existing = projects.getProject(dbHandle, projectId);
     const projectName = summary.title ?? id;
     const project = existing
       ? projects.updateProject(dbHandle, projectId, {
@@ -271,6 +298,17 @@ export function createDesignSystemServerServices({
           updatedAt: now,
         });
     if (!project) return null;
+    if (externalProjectDir) {
+      await writeProjectManifest(externalProjectDir, {
+        schemaVersion: 1,
+        id: projectId,
+        name: projectName,
+        createdAt: now,
+        updatedAt: now,
+        skillId: null,
+        designSystemId: id,
+      });
+    }
 
     const files = await designSystems.listUserDesignSystemFiles(paths.USER_DESIGN_SYSTEMS_DIR, id);
     if (!files) return null;

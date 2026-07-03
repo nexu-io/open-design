@@ -9,7 +9,15 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
   const { PROJECTS_DIR } = ctx.paths;
   const { authorizeToolRequest, requestProjectOverride, requestRunOverride } = ctx.auth;
   const { createLiveArtifact, listLiveArtifacts, updateLiveArtifact, refreshLiveArtifact, emitLiveArtifactEvent, emitLiveArtifactRefreshEvent, readLiveArtifactCode, setLiveArtifactCodeHeaders, ensureLiveArtifactPreview, setLiveArtifactPreviewHeaders, getLiveArtifact, listLiveArtifactRefreshLogEntries, deleteLiveArtifact } = ctx.liveArtifacts;
-  const { updateProject } = ctx.projectStore;
+  const { getProject, updateProject } = ctx.projectStore;
+  const liveArtifactStorageScope = (projectId: string) => {
+    const projectMetadata = getProject(db, projectId)?.metadata;
+    return {
+      projectsRoot: PROJECTS_DIR,
+      projectId,
+      ...(projectMetadata === undefined ? {} : { projectMetadata }),
+    };
+  };
   app.get('/api/live-artifacts', async (req, res) => {
     try {
       const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
@@ -17,10 +25,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
         return sendApiError(res, 400, 'BAD_REQUEST', 'projectId query parameter is required');
       }
 
-      const artifacts = await listLiveArtifacts({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
-      });
+      const artifacts = await listLiveArtifacts(liveArtifactStorageScope(projectId));
       res.json({ artifacts });
     } catch (err: any) {
       sendLiveArtifactRouteError(res, err);
@@ -41,8 +46,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       const variant = typeof req.query.variant === 'string' ? req.query.variant : 'rendered';
       if (variant === 'template' || variant === 'rendered-source') {
         const html = await readLiveArtifactCode({
-          projectsRoot: PROJECTS_DIR,
-          projectId,
+          ...liveArtifactStorageScope(projectId),
           artifactId: req.params.artifactId,
           variant: variant === 'template' ? 'template' : 'rendered',
         });
@@ -54,8 +58,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       }
 
       const record = await ensureLiveArtifactPreview({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
+        ...liveArtifactStorageScope(projectId),
         artifactId: req.params.artifactId,
       });
       setLiveArtifactPreviewHeaders(res);
@@ -73,8 +76,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       }
 
       const record = await getLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
+        ...liveArtifactStorageScope(projectId),
         artifactId: req.params.artifactId,
       });
       res.json({ artifact: record.artifact });
@@ -91,8 +93,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       }
 
       const refreshes = await listLiveArtifactRefreshLogEntries({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
+        ...liveArtifactStorageScope(projectId),
         artifactId: req.params.artifactId,
       });
       res.json({ refreshes });
@@ -118,8 +119,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       }
 
       const record = await createLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId: toolGrant.projectId,
+        ...liveArtifactStorageScope(toolGrant.projectId),
         input: input ?? {},
         templateHtml,
         provenanceJson,
@@ -143,10 +143,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
         });
       }
 
-      const artifacts = await listLiveArtifacts({
-        projectsRoot: PROJECTS_DIR,
-        projectId: toolGrant.projectId,
-      });
+      const artifacts = await listLiveArtifacts(liveArtifactStorageScope(toolGrant.projectId));
       res.json({ artifacts });
     } catch (err: any) {
       sendLiveArtifactRouteError(res, err);
@@ -168,8 +165,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       }
 
       const record = await updateLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId: toolGrant.projectId,
+        ...liveArtifactStorageScope(toolGrant.projectId),
         artifactId,
         input: input ?? {},
         templateHtml,
@@ -199,8 +195,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       let result;
       try {
         result = await refreshLiveArtifact({
-          projectsRoot: PROJECTS_DIR,
-          projectId: toolGrant.projectId,
+          ...liveArtifactStorageScope(toolGrant.projectId),
           artifactId,
           onStarted: ({ refreshId }: any) => {
             emitLiveArtifactRefreshEvent(toolGrant, { phase: 'started', artifactId, refreshId });
@@ -235,8 +230,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       }
 
       const record = await updateLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
+        ...liveArtifactStorageScope(projectId),
         artifactId: req.params.artifactId,
         input: req.body ?? {},
       });
@@ -255,13 +249,11 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       }
 
       const existing = await getLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
+        ...liveArtifactStorageScope(projectId),
         artifactId: req.params.artifactId,
       });
       await deleteLiveArtifact({
-        projectsRoot: PROJECTS_DIR,
-        projectId,
+        ...liveArtifactStorageScope(projectId),
         artifactId: req.params.artifactId,
       });
       updateProject(db, projectId, {});
@@ -286,8 +278,7 @@ export function registerLiveArtifactRoutes(app: Express, ctx: RegisterLiveArtifa
       let result;
       try {
         result = await refreshLiveArtifact({
-          projectsRoot: PROJECTS_DIR,
-          projectId,
+          ...liveArtifactStorageScope(projectId),
           artifactId: req.params.artifactId,
           onStarted: ({ refreshId }: any) => {
             emitLiveArtifactRefreshEvent({ projectId }, { phase: 'started', artifactId: req.params.artifactId, refreshId });

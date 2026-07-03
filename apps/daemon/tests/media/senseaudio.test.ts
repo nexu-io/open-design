@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -128,6 +128,38 @@ describe('senseaudio media generation', () => {
 
     const bytes = await readFile(path.join(projectsRoot, 'project-1', 'senseaudio-speech.mp3'));
     expect(bytes.equals(mp3Bytes)).toBe(true);
+  });
+
+  it('writes media artifacts into metadata.baseDir for external projects', async () => {
+    await writeConfig({
+      providers: {
+        senseaudio: {
+          apiKey: 'sense-test-key',
+          baseUrl: TEST_SENSEAUDIO_BASE_URL,
+        },
+      },
+    });
+    const externalDir = path.join(root, 'external-project');
+    await mkdir(externalDir, { recursive: true });
+    const mp3Bytes = Buffer.from([0x49, 0x44, 0x33, 0x04]);
+    vi.stubGlobal('fetch', vi.fn(async () => buildOkResponse(mp3Bytes)));
+
+    const result = await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      metadata: { baseDir: externalDir },
+      surface: 'audio',
+      model: 'senseaudio-tts',
+      audioKind: 'speech',
+      prompt: 'External project voice line.',
+      output: 'external-speech.mp3',
+    } as any);
+
+    expect(result.name).toBe('external-speech.mp3');
+    const bytes = await readFile(path.join(externalDir, 'external-speech.mp3'));
+    expect(bytes.equals(mp3Bytes)).toBe(true);
+    await expect(stat(path.join(projectsRoot, 'project-1'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('passes custom voice id through to the request body', async () => {

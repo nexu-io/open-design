@@ -144,6 +144,24 @@ describe('live artifact store layout', () => {
     );
   });
 
+  it('stores live artifacts in metadata.baseDir when a project uses an external location', async () => {
+    const projectsRoot = await makeProjectsRoot();
+    const externalDir = path.join(path.dirname(projectsRoot), 'external-project');
+    await mkdir(externalDir, { recursive: true });
+
+    const record = await createLiveArtifact({
+      projectsRoot,
+      projectId: 'project-1',
+      input: validCreateInput(),
+      projectMetadata: { baseDir: externalDir },
+    } as any);
+
+    expect(record.paths.projectDir).toBe(externalDir);
+    expect(record.paths.rootDir).toBe(path.join(externalDir, '.live-artifacts'));
+    await expect(readFile(record.paths.artifactJsonPath, 'utf8')).resolves.toContain('"projectId": "project-1"');
+    await expect(stat(path.join(projectsRoot, 'project-1'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('rejects artifact ids that could escape the storage root', async () => {
     const projectsRoot = await makeProjectsRoot();
     await ensureLiveArtifactStoreLayout(projectsRoot, 'project-1', 'artifact-1');
@@ -190,6 +208,32 @@ describe('live artifact store layout', () => {
     const files = await listFiles(projectsRoot, 'project-1');
     expect(files.map((file) => file.path)).toEqual(['public.txt']);
     await expect(readdir(paths.rootDir)).resolves.toEqual(['artifact-1']);
+  });
+
+  it('executes project file refresh tools against metadata.baseDir', async () => {
+    const projectsRoot = await makeProjectsRoot();
+    const externalDir = path.join(path.dirname(projectsRoot), 'refresh-project');
+    await mkdir(externalDir, { recursive: true });
+    await writeFile(path.join(externalDir, 'metrics.json'), '{"visits":42}\n', 'utf8');
+
+    const output = await executeLocalDaemonRefreshSource({
+      projectsRoot,
+      projectId: 'project-1',
+      projectMetadata: { baseDir: externalDir },
+      source: {
+        type: 'daemon_tool',
+        toolName: 'project_files.read_json',
+        input: { path: 'metrics.json' },
+        refreshPermission: 'manual_refresh_granted_for_read_only',
+      },
+    } as any);
+
+    expect(output).toMatchObject({
+      toolName: 'project_files.read_json',
+      path: 'metrics.json',
+      json: { visits: 42 },
+    });
+    await expect(stat(path.join(projectsRoot, 'project-1'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('creates a live artifact by assigning daemon-owned fields and persisting artifact files', async () => {
@@ -569,6 +613,52 @@ describe('live artifact store layout', () => {
     });
     expect(nextLock.metadata.refreshId).toBe('refresh-000002');
     await releaseLiveArtifactRefreshLock(nextLock);
+  });
+
+  it('recovers timed-out refresh locks for projects stored in metadata.baseDir', async () => {
+    const projectsRoot = await makeProjectsRoot();
+    const externalDir = await mkdtemp(path.join(tmpdir(), 'od-live-artifacts-external-'));
+    tempRoots.push(externalDir);
+    const projectMetadata = { baseDir: externalDir };
+    const created = await createLiveArtifact({
+      projectsRoot,
+      projectId: 'project-1',
+      projectMetadata,
+      input: validCreateInput(),
+      templateHtml: '<h1>{{data.title}}</h1>',
+    });
+    await writeFile(created.paths.artifactJsonPath, `${JSON.stringify({
+      ...created.artifact,
+      refreshStatus: 'running',
+      updatedAt: '2026-04-30T10:00:00.000Z',
+    }, null, 2)}\n`, 'utf8');
+    const lock = await acquireLiveArtifactRefreshLock({
+      projectsRoot,
+      projectId: 'project-1',
+      projectMetadata,
+      artifactId: created.artifact.id,
+      now: new Date('2026-04-30T10:00:00.000Z'),
+    });
+
+    await expect(stat(path.join(projectsRoot, 'project-1'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(recoverStaleLiveArtifactRefreshes({
+      projectsRoot,
+      projectMetadataById: new Map([['project-1', projectMetadata]]),
+      staleAfterMs: 120_000,
+      now: new Date('2026-04-30T10:03:00.000Z'),
+    })).resolves.toEqual([
+      { projectId: 'project-1', artifactId: created.artifact.id, refreshId: lock.metadata.refreshId, status: 'recovered' },
+    ]);
+
+    await expect(stat(lock.lockPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(getLiveArtifact({
+      projectsRoot,
+      projectId: 'project-1',
+      artifactId: created.artifact.id,
+      projectMetadata,
+    })).resolves.toMatchObject({
+      artifact: { refreshStatus: 'failed', updatedAt: '2026-04-30T10:03:00.000Z' },
+    });
   });
 
   it('leaves non-timed-out refresh locks in place during startup recovery', async () => {

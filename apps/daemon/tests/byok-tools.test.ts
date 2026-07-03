@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -120,6 +120,37 @@ describe('executeGenerateImage', () => {
     const filename = result.url!.split('/').pop()!;
     const onDisk = await readFile(path.join(projectsRoot, PROJECT_ID, filename));
     expect(onDisk.equals(pngBytes)).toBe(true);
+  });
+
+  it('persists generated images in metadata.baseDir for external projects', async () => {
+    const externalDir = path.join(root, 'external-project');
+    await mkdir(externalDir, { recursive: true });
+    const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.endsWith('/v1/image/sync')) {
+        return new Response(
+          JSON.stringify({ url: 'https://cdn.example.test/external.png' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === 'https://cdn.example.test/external.png') {
+        return new Response(pngBytes, { status: 200, headers: { 'content-type': 'image/png' } });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await executeGenerateImage(
+      { prompt: 'external project image' },
+      { ...baseCtx(), metadata: { baseDir: externalDir } } as any,
+    );
+
+    expect(result.ok).toBe(true);
+    const filename = result.url!.split('/').pop()!;
+    const onDisk = await readFile(path.join(externalDir, filename));
+    expect(onDisk.equals(pngBytes)).toBe(true);
+    await expect(stat(path.join(projectsRoot, PROJECT_ID))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('honours args.model when the LLM picks a SenseAudio image model', async () => {

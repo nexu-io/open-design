@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import fs, { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync, readdirSync } from 'node:fs';
+import fs, {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +39,7 @@ import { patchMeta } from '../src/brands/store.js';
 import { ensureLogoFallback } from '../src/brands/logo-fallback.js';
 import { brandFromMaterial } from '../src/brands/provisional.js';
 import { listDesignSystems } from '../src/design-systems/index.js';
+import { writeAppConfig } from '../src/app-config.js';
 import { buildBrandSystem, deriveTokens, seedFromMaterial } from '../src/brands/engine/index.js';
 import {
   adoptExistingImagery,
@@ -200,6 +210,7 @@ describe('agent-driven brand extraction engine', () => {
   let brandsRoot: string;
   let projectsRoot: string;
   let userDesignSystemsRoot: string;
+  let extraTempDirs: string[];
 
   it('keeps the generated default theme light even when the source canvas is dark', () => {
     const darkCanvasBrand: Brand = {
@@ -246,6 +257,7 @@ describe('agent-driven brand extraction engine', () => {
     brandsRoot = path.join(tempDir, 'brands');
     projectsRoot = path.join(tempDir, 'projects');
     userDesignSystemsRoot = path.join(tempDir, 'user-design-systems');
+    extraTempDirs = [];
     mkdirSync(brandsRoot, { recursive: true });
     mkdirSync(projectsRoot, { recursive: true });
     mkdirSync(userDesignSystemsRoot, { recursive: true });
@@ -254,6 +266,7 @@ describe('agent-driven brand extraction engine', () => {
   afterEach(() => {
     closeDatabase();
     rmSync(tempDir, { recursive: true, force: true });
+    for (const dir of extraTempDirs) rmSync(dir, { recursive: true, force: true });
   });
 
   it('keeps the system Chrome fallback disabled unless explicitly opted in', () => {
@@ -382,6 +395,83 @@ describe('agent-driven brand extraction engine', () => {
     };
     expect(tabs.active).toBe('brand.html');
     expect(tabs.browserTabs?.[0]?.url).toBe('https://acme.com/');
+  });
+
+  it('creates brand extraction projects under the configured default project location', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const externalProjectsRoot = mkdtempSync(path.join(os.tmpdir(), 'od-external-brand-projects-'));
+    extraTempDirs.push(externalProjectsRoot);
+    await writeAppConfig(tempDir, {
+      projectLocations: [{ id: 'external-brand-projects', name: 'External brand projects', path: externalProjectsRoot }],
+      defaultProjectLocationId: 'external-brand-projects',
+    });
+
+    const result = await startOfflineBrandExtraction({
+      url: 'fireship.io',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      dataDir: tempDir,
+    });
+
+    const project = getProject(db, result.projectId);
+    const expectedProjectDir = realpathSync(path.join(externalProjectsRoot, result.projectId));
+    expect(project?.metadata?.projectLocationId).toBe('external-brand-projects');
+    expect(project?.metadata?.baseDir).toBe(expectedProjectDir);
+    expect(existsSync(path.join(expectedProjectDir, 'brand.html'))).toBe(true);
+    expect(existsSync(path.join(projectsRoot, result.projectId, 'brand.html'))).toBe(false);
+
+    const manifest = JSON.parse(readFileSync(path.join(expectedProjectDir, '.open-design', 'project.json'), 'utf8')) as {
+      id?: string;
+      name?: string;
+      designSystemId?: string | null;
+    };
+    expect(manifest.id).toBe(result.projectId);
+    expect(manifest.name).toBe('fireship.io Design System');
+    expect(manifest.designSystemId).toBeNull();
+  });
+
+  it('keeps programmatic brand extraction output under the configured default project location', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const externalProjectsRoot = mkdtempSync(path.join(os.tmpdir(), 'od-external-brand-projects-'));
+    extraTempDirs.push(externalProjectsRoot);
+    await writeAppConfig(tempDir, {
+      projectLocations: [{ id: 'external-brand-projects', name: 'External brand projects', path: externalProjectsRoot }],
+      defaultProjectLocationId: 'external-brand-projects',
+    });
+    let backgroundExtraction: Promise<unknown> | null = null;
+
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async (url) => programmaticPrefetchResult(url),
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+      dataDir: tempDir,
+    });
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
+
+    const project = getProject(db, result.projectId);
+    const expectedProjectDir = realpathSync(path.join(externalProjectsRoot, result.projectId));
+    expect(project?.metadata?.projectLocationId).toBe('external-brand-projects');
+    expect(project?.metadata?.baseDir).toBe(expectedProjectDir);
+    expect(project?.designSystemId?.startsWith('user:')).toBe(true);
+    expect(existsSync(path.join(expectedProjectDir, 'brand.html'))).toBe(true);
+    expect(existsSync(path.join(expectedProjectDir, 'system', 'index.html'))).toBe(true);
+    expect(existsSync(path.join(projectsRoot, result.projectId, 'system', 'index.html'))).toBe(false);
+    const manifest = JSON.parse(readFileSync(path.join(expectedProjectDir, '.open-design', 'project.json'), 'utf8')) as {
+      designSystemId?: string | null;
+    };
+    expect(manifest.designSystemId).toBe(project?.designSystemId);
   });
 
   it('localizes the seeded brand.html copy from the creation locale', async () => {

@@ -1,6 +1,6 @@
 import type http from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -72,6 +72,14 @@ describe('project design system route gates', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+    });
+  }
+
+  async function putAppConfig(config: Record<string, unknown>) {
+    return fetch(`${baseUrl}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
     });
   }
 
@@ -157,6 +165,44 @@ describe('project design system route gates', () => {
 
     expect(reopenedBody.project.id).toBe(projectId);
     expect(reopenedBody.project.pendingPrompt).toBe(prompt);
+  });
+
+  it('creates design-system workspace projects under the configured default project location', async () => {
+    const extDir = mkdtempSync(path.join(tmpdir(), 'od-ds-default-location-'));
+    tempDirs.push(extDir);
+    const locationId = 'design-system-default-location';
+    const configResp = await putAppConfig({
+      projectLocations: [{ id: locationId, name: 'Design system workspaces', path: extDir }],
+      defaultProjectLocationId: locationId,
+    });
+    expect(configResp.status).toBe(200);
+
+    try {
+      const draft = await createUserDesignSystem('draft');
+      const workspaceResp = await fetch(
+        `${baseUrl}/api/design-systems/${encodeURIComponent(draft.id)}/workspace`,
+        { method: 'POST' },
+      );
+      expect(workspaceResp.status).toBe(201);
+      const workspaceBody = (await workspaceResp.json()) as {
+        project: {
+          id: string;
+          metadata?: {
+            baseDir?: string;
+            importedFrom?: string;
+            projectLocationId?: string;
+          };
+        };
+      };
+      projectsToClean.push(workspaceBody.project.id);
+
+      const expectedProjectDir = await realpath(path.join(extDir, workspaceBody.project.id));
+      expect(workspaceBody.project.metadata?.importedFrom).toBe('design-system');
+      expect(workspaceBody.project.metadata?.projectLocationId).toBe(locationId);
+      expect(workspaceBody.project.metadata?.baseDir).toBe(expectedProjectDir);
+    } finally {
+      await putAppConfig({ projectLocations: [], defaultProjectLocationId: null });
+    }
   });
 
   it('audits generated design-system package files from the project workspace', async () => {

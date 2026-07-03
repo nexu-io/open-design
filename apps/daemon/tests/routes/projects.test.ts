@@ -973,6 +973,40 @@ describe('project locations routes', () => {
     expect(detail.resolvedDir).toBe(expectedProjectDir);
   });
 
+  it('DELETE /api/projects/:id removes project folders created under an external project location', async () => {
+    const extDir = makeTempDir();
+    await putProjectLocations([{ id: 'delete-ext', name: 'Delete External', path: extDir }]);
+
+    const projectId = `ext-delete-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Delete External Project',
+        skillId: null,
+        designSystemId: null,
+        projectLocationId: 'delete-ext',
+      }),
+    });
+    expect(createResp.status).toBe(200);
+    const createBody = (await createResp.json()) as {
+      project: { metadata?: { baseDir?: string; projectLocationId?: string } };
+    };
+    const baseDir = createBody.project.metadata?.baseDir;
+    expect(baseDir).toBe(await realpath(path.join(extDir, projectId)));
+    await writeFile(path.join(baseDir!, 'index.html'), '<!doctype html>');
+
+    const deleteResp = await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}`, {
+      method: 'DELETE',
+    });
+    expect(deleteResp.status).toBe(200);
+    await expect(stat(baseDir!)).rejects.toMatchObject({ code: 'ENOENT' });
+
+    const detailResp = await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}`);
+    expect(detailResp.status).toBe(404);
+  });
+
   it('POST /api/projects uses the configured default project location when no location is supplied', async () => {
     const extDir = makeTempDir();
     const locationId = 'default-create-location';

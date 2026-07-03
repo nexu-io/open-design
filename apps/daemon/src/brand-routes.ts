@@ -382,6 +382,7 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         brandsRoot,
         skillsRoot,
         projectsRoot,
+        db,
       };
       if (projectId) renderOptions.projectId = projectId;
       if (locale) renderOptions.locale = locale;
