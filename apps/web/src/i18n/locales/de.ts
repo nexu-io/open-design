@@ -586,6 +586,7 @@ export const de: Dict = {
   'settings.mcpInstructionAntigravity': 'In Antigravity: Agent-Panel-Menü "..." → MCP Servers → Manage MCP Servers → View raw config. Führe dieses JSON zusammen.',
   'settings.mcpInstructionZed': 'Öffne die Zed-Einstellungen ({shortcut}) und füge dies in das Objekt der obersten Ebene ein. Zed verwendet "context_servers", nicht "mcpServers".',
   'settings.mcpInstructionWindsurf': 'Öffne {path} (oder verwende das MCPs-Symbol in Cascade → Configure) und führe zusammen:',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
   'settings.mcpCopyAria': 'MCP-Konfigurations-Snippet kopieren',
   'settings.mcpResolvingFailed': '# Auflösen der Pfade fehlgeschlagen, siehe den Fehler oben',
   'settings.mcpLoadingPaths': '# Installationspfade werden vom lokalen Daemon geladen…',

@@ -586,6 +586,7 @@ export const ko: Dict = {
   'settings.mcpInstructionAntigravity': 'Antigravity에서: Agent 패널 "..." 메뉴 → MCP Servers → Manage MCP Servers → View raw config. 이 JSON을 병합하세요.',
   'settings.mcpInstructionZed': 'Zed 설정({shortcut})을 열고 이것을 최상위 객체에 병합하세요. Zed는 "mcpServers"가 아닌 "context_servers"를 사용합니다.',
   'settings.mcpInstructionWindsurf': '{path}을(를) 열거나(또는 Cascade의 MCPs 아이콘 → Configure 사용) 다음을 병합하세요:',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
   'settings.mcpCopyAria': 'MCP 설정 스니펫 복사',
   'settings.mcpResolvingFailed': '# 경로 확인에 실패했습니다. 위의 오류를 참고하세요',
   'settings.mcpLoadingPaths': '# 로컬 데몬에서 설치 경로를 불러오는 중…',

@@ -586,6 +586,7 @@ export const en: Dict = {
   'settings.mcpInstructionAntigravity': 'In Antigravity: Agent panel "..." menu → MCP Servers → Manage MCP Servers → View raw config. Merge this JSON.',
   'settings.mcpInstructionZed': 'Open Zed Settings ({shortcut}) and merge this into the top-level object. Zed uses "context_servers", not "mcpServers".',
   'settings.mcpInstructionWindsurf': 'Open {path} (or use the MCPs icon in Cascade → Configure) and merge:',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
   'settings.mcpCopyAria': 'Copy MCP configuration snippet',
   'settings.mcpResolvingFailed': '# resolving paths failed, see the error above',
   'settings.mcpLoadingPaths': '# loading install paths from the local daemon…',

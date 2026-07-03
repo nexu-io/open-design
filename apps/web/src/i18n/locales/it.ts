@@ -586,6 +586,7 @@ export const it: Dict = {
   'settings.mcpInstructionAntigravity': 'In Antigravity: pannello Agent, menu "..." → MCP Servers → Manage MCP Servers → View raw config. Unisci questo JSON.',
   'settings.mcpInstructionZed': 'Apri le impostazioni di Zed ({shortcut}) e unisci questo nell\'oggetto di livello superiore. Zed usa "context_servers", non "mcpServers".',
   'settings.mcpInstructionWindsurf': 'Apri {path} (oppure usa l\'icona MCP in Cascade → Configure) e unisci:',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
   'settings.mcpCopyAria': 'Copia lo snippet di configurazione MCP',
   'settings.mcpResolvingFailed': '# risoluzione dei percorsi non riuscita, vedi l\'errore sopra',
   'settings.mcpLoadingPaths': '# caricamento dei percorsi di installazione dal daemon locale…',

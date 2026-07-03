@@ -586,6 +586,7 @@ export const pl: Dict = {
   'settings.mcpInstructionAntigravity': 'W Antigravity: panel Agent, menu „...” → MCP Servers → Manage MCP Servers → View raw config. Scal ten JSON.',
   'settings.mcpInstructionZed': 'Otwórz Zed Settings ({shortcut}) i scal to z obiektem najwyższego poziomu. Zed używa „context_servers”, a nie „mcpServers”.',
   'settings.mcpInstructionWindsurf': 'Otwórz {path} (lub użyj ikony MCP w Cascade → Configure) i scal:',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
   'settings.mcpCopyAria': 'Skopiuj fragment konfiguracji MCP',
   'settings.mcpResolvingFailed': '# rozpoznawanie ścieżek nie powiodło się, zobacz błąd powyżej',
   'settings.mcpLoadingPaths': '# wczytywanie ścieżek instalacji z lokalnego daemona…',

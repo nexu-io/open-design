@@ -586,6 +586,7 @@ export const hu: Dict = {
   'settings.mcpInstructionAntigravity': 'Az Antigravityben: Agent panel "..." menü → MCP Servers → Manage MCP Servers → View raw config. Egyesítsd ezt a JSON-t.',
   'settings.mcpInstructionZed': 'Nyisd meg a Zed beállításait ({shortcut}), és egyesítsd ezt a legfelső szintű objektummal. A Zed a „context_servers” kulcsot használja, nem a „mcpServers” kulcsot.',
   'settings.mcpInstructionWindsurf': 'Nyisd meg ezt: {path} (vagy használd az MCPs ikont a Cascade-ben → Configure), majd egyesítsd:',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
   'settings.mcpCopyAria': 'MCP konfigurációs részlet másolása',
   'settings.mcpResolvingFailed': '# az útvonalak feloldása sikertelen, lásd a fenti hibát',
   'settings.mcpLoadingPaths': '# telepítési útvonalak betöltése a helyi daemonból…',

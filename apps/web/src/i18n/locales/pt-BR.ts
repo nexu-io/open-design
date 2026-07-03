@@ -586,6 +586,7 @@ export const ptBR: Dict = {
   'settings.mcpInstructionAntigravity': 'No Antigravity: menu "..." do painel do Agent → MCP Servers → Manage MCP Servers → View raw config. Mescle este JSON.',
   'settings.mcpInstructionZed': 'Abra as Zed Settings ({shortcut}) e mescle isto no objeto de nível superior. O Zed usa "context_servers", não "mcpServers".',
   'settings.mcpInstructionWindsurf': 'Abra {path} (ou use o ícone de MCPs no Cascade → Configure) e mescle:',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
   'settings.mcpCopyAria': 'Copiar trecho de configuração do MCP',
   'settings.mcpResolvingFailed': '# a resolução de caminhos falhou, veja o erro acima',
   'settings.mcpLoadingPaths': '# carregando caminhos de instalação do daemon local…',

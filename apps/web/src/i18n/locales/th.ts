@@ -586,6 +586,7 @@ export const th: Dict = {
   'settings.mcpInstructionAntigravity': 'ใน Antigravity: เมนู "..." ของแผง Agent → MCP Servers → Manage MCP Servers → View raw config แล้วรวม JSON นี้',
   'settings.mcpInstructionZed': 'เปิด Zed Settings ({shortcut}) แล้วผสานสิ่งนี้เข้ากับอ็อบเจกต์ระดับบนสุด Zed ใช้ "context_servers" ไม่ใช่ "mcpServers"',
   'settings.mcpInstructionWindsurf': 'เปิด {path} (หรือใช้ไอคอน MCPs ใน Cascade → Configure) แล้วรวม:',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
   'settings.mcpCopyAria': 'คัดลอกสคริปต์การตั้งค่า MCP',
   'settings.mcpResolvingFailed': '# resolving paths failed, see the error above',
   'settings.mcpLoadingPaths': '# loading install paths from the local daemon…',

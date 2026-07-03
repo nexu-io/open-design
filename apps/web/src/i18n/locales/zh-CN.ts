@@ -597,8 +597,10 @@ export const zhCN: Dict = {
     '在 Antigravity 中：Agent 面板 "..." 菜单 → MCP Servers → Manage MCP Servers → View raw config。合并此 JSON。',
   "settings.mcpInstructionZed":
     '打开 Zed Settings（{shortcut}），然后将此配置合并到顶层对象中。Zed 使用 "context_servers"，而非 "mcpServers"。',
-  "settings.mcpInstructionWindsurf":
-    "打开 {path}（或在 Cascade 中使用 MCPs 图标 → Configure）并合并：",
+  'settings.mcpInstructionWindsurf':
+    '打开 {path}（或在 Cascade 中使用 MCPs 图标 → Configure）并合并：',
+  'settings.mcpInstructionKiro':
+    '打开 {path}，将此 JSON 合并到文件中。项目专用服务器请使用工作区级配置 (.kiro/settings/mcp.json)。',
   "settings.mcpCopyAria": "复制 MCP 配置片段",
   "settings.mcpResolvingFailed": "# 解析路径失败，请查看上方错误",
   "settings.mcpLoadingPaths": "# 正在从本地守护进程加载安装路径…",

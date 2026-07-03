@@ -586,6 +586,7 @@ export const ja: Dict = {
   'settings.mcpInstructionAntigravity': 'Antigravity の場合：Agent パネルの「...」メニュー → MCP Servers → Manage MCP Servers → View raw config。この JSON をマージしてください。',
   'settings.mcpInstructionZed': 'Zedの設定（{shortcut}）を開き、これをトップレベルのオブジェクトにマージしてください。Zedは「mcpServers」ではなく「context_servers」を使用します。',
   'settings.mcpInstructionWindsurf': '{path} を開く（または Cascade の MCPs アイコン → Configure を使用）してマージしてください：',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
   'settings.mcpCopyAria': 'MCP設定スニペットをコピー',
   'settings.mcpResolvingFailed': '# パスの解決に失敗しました。上記のエラーを参照してください',
   'settings.mcpLoadingPaths': '# ローカルデーモンからインストールパスを読み込み中…',

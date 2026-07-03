@@ -586,6 +586,7 @@ export const id: Dict = {
   'settings.mcpInstructionAntigravity': 'Di Antigravity: panel Agent menu "..." → MCP Servers → Manage MCP Servers → View raw config. Gabungkan JSON ini.',
   'settings.mcpInstructionZed': 'Buka Zed Settings ({shortcut}) dan gabungkan ini ke dalam objek tingkat atas. Zed menggunakan "context_servers", bukan "mcpServers".',
   'settings.mcpInstructionWindsurf': 'Buka {path} (atau gunakan ikon MCPs di Cascade → Configure) lalu gabungkan:',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
   'settings.mcpCopyAria': 'Salin cuplikan konfigurasi MCP',
   'settings.mcpResolvingFailed': '# penentuan jalur gagal, lihat error di atas',
   'settings.mcpLoadingPaths': '# memuat jalur instalasi dari daemon lokal…',

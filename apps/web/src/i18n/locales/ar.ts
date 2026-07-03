@@ -586,6 +586,7 @@ export const ar: Dict = {
   'settings.mcpInstructionAntigravity': 'في Antigravity: قائمة "..." في لوحة الوكيل ← MCP Servers ← Manage MCP Servers ← View raw config. ادمج هذا الـ JSON.',
   'settings.mcpInstructionZed': 'افتح إعدادات Zed ({shortcut}) وادمج هذا في الكائن ذي المستوى الأعلى. يستخدم Zed "context_servers" وليس "mcpServers".',
   'settings.mcpInstructionWindsurf': 'افتح {path} (أو استخدم أيقونة MCPs في Cascade ← Configure) وادمج:',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
   'settings.mcpCopyAria': 'نسخ مقتطف إعداد MCP',
   'settings.mcpResolvingFailed': '# فشل تحديد المسارات، راجع الخطأ أعلاه',
   'settings.mcpLoadingPaths': '# جارٍ تحميل مسارات التثبيت من الخدمة المحلية…',

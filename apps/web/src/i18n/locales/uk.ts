@@ -586,6 +586,7 @@ export const uk: Dict = {
   'settings.mcpInstructionAntigravity': 'В Antigravity: меню «...» панелі Agent → MCP Servers → Manage MCP Servers → View raw config. Об’єднайте цей JSON.',
   'settings.mcpInstructionZed': 'Відкрийте налаштування Zed ({shortcut}) і об’єднайте це з об’єктом верхнього рівня. Zed використовує «context_servers», а не «mcpServers».',
   'settings.mcpInstructionWindsurf': 'Відкрийте {path} (або скористайтеся піктограмою MCP у Cascade → Configure) і об’єднайте:',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
   'settings.mcpCopyAria': 'Копіювати фрагмент конфігурації MCP',
   'settings.mcpResolvingFailed': '# не вдалося визначити шляхи, див. помилку вище',
   'settings.mcpLoadingPaths': '# завантаження шляхів встановлення з локального демона…',

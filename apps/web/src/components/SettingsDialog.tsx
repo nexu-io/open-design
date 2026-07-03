@@ -7407,7 +7407,8 @@ type McpClientId =
   | 'vscode'
   | 'zed'
   | 'windsurf'
-  | 'antigravity';
+  | 'antigravity'
+  | 'kiro';
 
 interface McpInstallInfo {
   command: string;
@@ -7704,6 +7705,17 @@ function IntegrationsSection() {
       buildInstruction: (info) =>
         t('settings.mcpInstructionWindsurf', {
           path: homeConfigPath(info.platform, '~/.codeium/windsurf/mcp_config.json', '%USERPROFILE%\\.codeium\\windsurf\\mcp_config.json'),
+        }),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
+    },
+    {
+      id: 'kiro',
+      label: 'Kiro CLI',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionKiro', {
+          path: homeConfigPath(info.platform, '~/.kiro/settings/mcp.json', '%USERPROFILE%\\.kiro\\settings\\mcp.json'),
         }),
       buildSnippet: buildSharedMcpJson,
       buildSnippetLang: () => 'json',

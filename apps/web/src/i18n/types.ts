@@ -884,6 +884,7 @@ export interface Dict {
   'settings.mcpInstructionAntigravity': string;
   'settings.mcpInstructionZed': string;
   'settings.mcpInstructionWindsurf': string;
+  'settings.mcpInstructionKiro': string;
   'settings.mcpCopyAria': string;
   'settings.mcpResolvingFailed': string;
   'settings.mcpLoadingPaths': string;

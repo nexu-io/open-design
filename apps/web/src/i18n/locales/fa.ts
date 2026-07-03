@@ -586,6 +586,7 @@ export const fa: Dict = {
   'settings.mcpInstructionAntigravity': 'در Antigravity: منوی «...» پنل Agent ← MCP Servers ← Manage MCP Servers ← View raw config. این JSON را ادغام کنید.',
   'settings.mcpInstructionZed': 'تنظیمات Zed ({shortcut}) را باز کنید و این را در شیء سطح‌بالا ادغام کنید. Zed از «context_servers» استفاده می‌کند، نه «mcpServers».',
   'settings.mcpInstructionWindsurf': '{path} را باز کنید (یا از آیکون MCPها در Cascade ← Configure استفاده کنید) و ادغام کنید:',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
   'settings.mcpCopyAria': 'کپی قطعه پیکربندی MCP',
   'settings.mcpResolvingFailed': '# حل مسیرها ناموفق بود، خطای بالا را ببینید',
   'settings.mcpLoadingPaths': '# در حال بارگذاری مسیرهای نصب از daemon محلی…',

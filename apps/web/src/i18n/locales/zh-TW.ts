@@ -600,6 +600,7 @@ export const zhTW: Dict = {
   "settings.mcpInstructionZed":
     "開啟 Zed Settings（{shortcut}），然後將此內容合併至最上層物件。Zed 使用「context_servers」，而非「mcpServers」。",
   "settings.mcpInstructionWindsurf":
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. Use mcpServers at workspace level (.kiro/settings/mcp.json) for project-specific servers.',
     "開啟 {path}（或使用 Cascade 中的 MCPs 圖示 → Configure）並合併：",
   "settings.mcpCopyAria": "複製 MCP 設定片段",
   "settings.mcpResolvingFailed": "# 解析路徑失敗，請見上方錯誤",
