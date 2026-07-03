@@ -301,6 +301,50 @@ describe('TasksView page shell', () => {
     });
   });
 
+  it('routes review-output focus action into the completed conversation', async () => {
+    const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
+    const creatorProjects: Project[] = [
+      {
+        id: 'project-review-1',
+        name: '待复核的成片项目',
+        skillId: null,
+        designSystemId: null,
+        createdAt: Date.now() - 30_000,
+        updatedAt: Date.now() - 10_000,
+        metadata: { kind: 'video' },
+        status: { value: 'succeeded' },
+      },
+    ];
+    mockTasksViewFetch({
+      creatorProjects,
+      creatorRuns: [
+        {
+          id: 'run-review-1',
+          projectId: 'project-review-1',
+          conversationId: 'conv-review-1',
+          assistantMessageId: 'msg-review-1',
+          agentId: 'codex',
+          status: 'succeeded',
+          createdAt: Date.now() - 20_000,
+          updatedAt: Date.now() - 2_000,
+        },
+      ],
+    });
+
+    render(<TasksView projects={creatorProjects} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    expect(await screen.findByText('Fresh result to review')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Review output' }));
+
+    expect(navigateSpy).toHaveBeenCalledWith({
+      kind: 'project',
+      projectId: 'project-review-1',
+      conversationId: 'conv-review-1',
+      fileName: null,
+    });
+  });
+
   it('routes retry-run focus action into the failed conversation', async () => {
     const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
     const creatorProjects: Project[] = [
