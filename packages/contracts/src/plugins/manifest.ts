@@ -210,6 +210,15 @@ export const PluginManifestSchema = z.object({
       optional: z.array(PluginConnectorRefSchema).optional(),
     }).passthrough().optional(),
     inputs: z.array(InputFieldSchema).optional(),
+    // 자연어 트리거 라우팅 (스펙 2026-07-03-prompt-trigger-routing §5):
+    // triggers = 자유입력 프롬프트 부분 문자열 매칭 어휘 — 초범용 단일 토큰 금지, 2단어 이상 또는 브랜드명 수준 특정성.
+    // router   = 라우터 플러그인 플래그 — pin된 상태에서도 새 user 메시지 재매칭을 허용.
+    // fallbackRoute = 라우터 폼 답변이 무매칭/모호할 때 전환할 비라우터 플러그인 id (비라우터 검증은 런타임 가드).
+    routing: z.object({
+      triggers:      z.array(z.string()).optional(),
+      router:        z.boolean().optional(),
+      fallbackRoute: z.string().optional(),
+    }).passthrough().optional(),
     capabilities: z.array(z.string()).optional(),
   }).passthrough().optional(),
 }).passthrough();

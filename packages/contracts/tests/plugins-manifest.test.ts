@@ -109,3 +109,33 @@ describe('plugin manifest localized text', () => {
     expect(resolveLocalizedText({ 'zh-CN': '中文' }, 'fr')).toBe('中文');
   });
 });
+
+describe('plugin manifest od.routing', () => {
+  it('parses triggers / router / fallbackRoute and keeps them typed', () => {
+    const manifest = PluginManifestSchema.parse({
+      name: 'sample-routed',
+      version: '1.0.0',
+      od: {
+        routing: {
+          triggers: ['네이버 블로그', 'naver blog'],
+          router: false,
+        },
+      },
+    });
+    expect(manifest.od?.routing?.triggers).toEqual(['네이버 블로그', 'naver blog']);
+    expect(manifest.od?.routing?.router).toBe(false);
+  });
+
+  it('accepts a router manifest with fallbackRoute and manifests without routing', () => {
+    const router = PluginManifestSchema.parse({
+      name: 'sample-router',
+      version: '1.0.0',
+      od: { routing: { router: true, fallbackRoute: 'od-default' } },
+    });
+    expect(router.od?.routing?.router).toBe(true);
+    expect(router.od?.routing?.fallbackRoute).toBe('od-default');
+
+    const plain = PluginManifestSchema.parse({ name: 'plain', version: '1.0.0', od: {} });
+    expect(plain.od?.routing).toBeUndefined();
+  });
+});
