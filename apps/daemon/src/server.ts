@@ -390,14 +390,21 @@ import {
 } from './media/models.js';
 import { readMaskedConfig, writeConfig } from './media/config.js';
 import {
-  deleteMediaTask,
-  getMediaTask,
-  insertMediaTask,
   listMediaTasksByProject,
   listRecentMediaTasks,
   reconcileMediaTasksOnBoot,
-  updateMediaTask,
 } from './media/tasks.js';
+import {
+  appendTaskProgress,
+  createMediaTask,
+  getLiveMediaTask,
+  hydrateMediaTask,
+  mediaTaskSnapshot,
+  mediaTasks,
+  notifyTaskWaiters,
+  persistMediaTask,
+  TASK_TTL_AFTER_DONE_MS,
+} from './media/task-registry.js';
 import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
@@ -3180,123 +3187,6 @@ function sendMulterError(res, err) {
   }
 
   return sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
-}
-
-const mediaTasks = new Map();
-const TASK_TTL_AFTER_DONE_MS = 10 * 60 * 1000;
-const MEDIA_TERMINAL_STATUSES = new Set(['done', 'failed', 'interrupted']);
-
-function hydrateMediaTask(row) {
-  const task = {
-    id: row.id,
-    projectId: row.projectId,
-    status: row.status,
-    surface: row.surface,
-    model: row.model,
-    progress: Array.isArray(row.progress) ? row.progress.slice() : [],
-    file: row.file ?? null,
-    error: row.error ?? null,
-    startedAt: row.startedAt,
-    endedAt: row.endedAt,
-    waiters: new Set(),
-  };
-  mediaTasks.set(task.id, task);
-  return task;
-}
-
-function getLiveMediaTask(db, taskId) {
-  const cached = mediaTasks.get(taskId);
-  if (cached) return cached;
-  const row = getMediaTask(db, taskId);
-  return row ? hydrateMediaTask(row) : null;
-}
-
-function createMediaTask(db, taskId, projectId, info = {}) {
-  const task = {
-    id: taskId,
-    projectId,
-    status: 'queued',
-    surface: info.surface,
-    model: info.model,
-    progress: [],
-    file: null,
-    error: null,
-    startedAt: Date.now(),
-    endedAt: null,
-    waiters: new Set(),
-  };
-  mediaTasks.set(taskId, task);
-  insertMediaTask(db, {
-    id: taskId,
-    projectId,
-    status: task.status,
-    surface: task.surface,
-    model: task.model,
-    progress: task.progress,
-    file: task.file,
-    error: task.error,
-    startedAt: task.startedAt,
-    endedAt: task.endedAt,
-  });
-  return task;
-}
-
-function persistMediaTask(db, task) {
-  updateMediaTask(db, task.id, {
-    status: task.status,
-    surface: task.surface,
-    model: task.model,
-    progress: task.progress,
-    file: task.file,
-    error: task.error,
-    startedAt: task.startedAt,
-    endedAt: task.endedAt,
-  });
-}
-
-function appendTaskProgress(db, task, line) {
-  task.progress.push(line);
-  persistMediaTask(db, task);
-  notifyTaskWaiters(db, task);
-}
-
-function notifyTaskWaiters(db, task) {
-  const wakers = Array.from(task.waiters);
-  for (const w of wakers) {
-    try {
-      w();
-    } catch {
-      // Never let one bad waiter block the rest.
-    }
-  }
-  if (
-    MEDIA_TERMINAL_STATUSES.has(task.status) &&
-    !task._gcScheduled
-  ) {
-    task._gcScheduled = true;
-    setTimeout(() => {
-      if (task.waiters.size === 0) {
-        mediaTasks.delete(task.id);
-        deleteMediaTask(db, task.id);
-      }
-    }, TASK_TTL_AFTER_DONE_MS).unref?.();
-  }
-}
-
-function mediaTaskSnapshot(task, since = 0) {
-  const snapshot = {
-    taskId: task.id,
-    status: task.status,
-    startedAt: task.startedAt,
-    endedAt: task.endedAt,
-    progress: task.progress.slice(since),
-    nextSince: task.progress.length,
-  };
-  if (task.status === 'done') snapshot.file = task.file;
-  if (task.status === 'failed' || task.status === 'interrupted') {
-    snapshot.error = task.error;
-  }
-  return snapshot;
 }
 
 export function createSseResponse(
