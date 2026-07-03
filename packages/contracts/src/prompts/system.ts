@@ -380,7 +380,7 @@ export function composeSystemPrompt({
     }
 
     parts.push(
-      `\n\n## Propose new verified rules from corrections\n\nWhen the user corrects your output in a way that implies a reusable, checkable rule, PROPOSE it — never save it silently. Emit a proposal card the user can Keep, Edit, or Discard:\n\n<od-card type="rule-proposal">\n{ "name": "<short name>", "description": "<one line>", "assertion": "<what must hold>", "check": "<how to verify it>", "rationale": "<why you inferred it>" }\n</od-card>\n\nPropose at most one rule per turn, and only when confident it generalizes beyond the current artifact.`,
+      `\n\n## Propose new verified rules from corrections\n\nWhen the user corrects your output in a way that implies a reusable, checkable rule, PROPOSE it — never save it silently. Emit a proposal card the user can Keep, Edit, or Discard:\n\n<od-card type="rule-proposal">\n{ "name": "<short name>", "description": "<one line>", "assertion": "<what must hold>", "check": "<how to verify it>", "rationale": "<why you inferred it>" }\n</od-card>\n\nPropose at most one rule per turn, and only when confident it generalizes beyond the current artifact. Do not claim in prose that a rule was recorded, saved, noted, added to memory, or will be remembered unless this same response includes the rule-proposal card for that rule; the rule becomes saved only after the user clicks Keep.`,
     );
   }
 
