@@ -2,9 +2,9 @@
 
 <p align="center">Your coding agent becomes the design engine.</p>
 
-> 🔥 **Open Design 0.13.0 — _Stay in Flow_ is here.** Long design sessions used to break on every interruption — a run lost its place, a model picker made you guess, an export needed one more detour. 0.13.0 keeps the session alive: resume Codex / OpenCode / Pi / OpenDesign Cloud runs across turns, pick the right model faster, and hand off screenshot-backed PPTX / PDF without leaving the app. [Download 0.13.0](https://github.com/nexu-io/open-design/releases) · [Release notes](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
+> 🔥 **Open Design 0.13.0 — _Stay in Flow_ is here.** Long design sessions used to break on every interruption — a run lost its place, a model picker made you guess, an export needed one more detour. 0.13.0 keeps the session alive: resume Codex / OpenCode / Pi / Open Design Cloud runs across turns, pick the right model faster, and hand off screenshot-backed PPTX / PDF without leaving the app. [Download 0.13.0](https://github.com/nexu-io/open-design/releases) · [Release notes](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — the official model service.** One recharge to use GPT, Claude, Gemini, and DeepSeek inside Open Design: 20+ flagship models, zero config, billed by real token usage. [Try AMR](https://open-design.ai/amr/?utm_source=github&utm_medium=referral&utm_content=readme_try_amr)
+> ⚡ **Open Design Cloud — the official model service.** One recharge to use GPT, Claude, Gemini, and DeepSeek inside Open Design: 20+ flagship models, zero config, billed by real token usage. [Try Open Design Cloud](https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_try_cloud)
 >
 > 🏅 **The Open Design Fellow program is now open.** If you also believe design should be open — become an Open Design Fellow, shape the product alongside the core team, and help more people take part in defining the future of design. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and [Discord](https://discord.gg/mHAjSMV6gz).
 
@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_website">Website</a> ·
   <a href="https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download">Download</a> ·
-  <a href="https://open-design.ai/amr/?utm_source=github&utm_medium=referral&utm_content=readme_model_router">Model Router</a> ·
+  <a href="https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_cloud">Open Design Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">Follow @OpenDesignHQ</a>
 </p>
@@ -592,7 +592,7 @@ Full architecture → [`docs/architecture.md`](docs/architecture.md). Skill prot
 - [x] Sidecar protocol + Electron desktop + IPC automation
 - [x] Artifact lint API + 5-dim self-critique pre-emit gate
 - [x] **0.8.0** — plugin marketplace infrastructure (261 official plugins, manifest spec, per-agent install scripts)
-- [x] **0.9.0** — Open Design AMR (official Model Router built into the app: zero config, one-click sign-in)
+- [x] **0.9.0** — Open Design Cloud (official model service built into the app: zero config, one-click sign-in)
 - [x] Packaged Electron builds — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (optional lane)
 - [ ] Comment-mode surgical edits — partially shipped; reliable targeted patching in progress
 - [ ] AI-emitted tweaks panel UX — not yet implemented
