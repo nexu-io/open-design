@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type { ToolPackConfig } from "../config.js";
+import { createPackagedRuntimeConfig } from "../packaged-config.js";
 import { pathExists } from "./fs.js";
 import type { WinBuiltAppManifest, WinPaths } from "./types.js";
 
@@ -16,13 +17,7 @@ export async function readPackagedVersion(config: ToolPackConfig): Promise<strin
 }
 
 function createPackagedConfig(config: ToolPackConfig, packagedVersion: string): Record<string, unknown> {
-  return {
-    appVersion: packagedVersion,
-    namespace: config.namespace,
-    ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
-    webOutputMode: config.webOutputMode,
-    ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
-  };
+  return createPackagedRuntimeConfig(config, packagedVersion);
 }
 
 export async function writePackagedConfigFile(

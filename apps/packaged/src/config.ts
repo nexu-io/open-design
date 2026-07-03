@@ -21,9 +21,13 @@ export type RawPackagedConfig = {
   namespaceBaseRoot?: string;
   nodeCommandRelative?: string;
   resourceRoot?: string;
+  sentryDsn?: string;
+  sentryEnvironment?: string;
+  sentryTracesSampleRate?: string;
   // Baked by tools/pack from OPEN_DESIGN_TELEMETRY_RELAY_URL and forwarded to
   // the daemon at runtime; Langfuse credentials never ship in packaged config.
   telemetryRelayUrl?: string;
+  webSentryDsn?: string;
   webSidecarEntryRelative?: string;
   webStandaloneRoot?: string;
   webOutputMode?: string;
@@ -37,7 +41,11 @@ export type PackagedConfig = {
   namespaceBaseRoot: string;
   nodeCommand: string | null;
   resourceRoot: string;
+  sentryDsn: string | null;
+  sentryEnvironment: string | null;
+  sentryTracesSampleRate: string | null;
   telemetryRelayUrl: string | null;
+  webSentryDsn: string | null;
   webSidecarEntry: string | null;
   webStandaloneRoot: string | null;
   webOutputMode: PackagedWebOutputMode;
@@ -156,7 +164,14 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     namespaceBaseRoot,
     nodeCommand,
     resourceRoot,
+    sentryDsn: cleanOptionalString(process.env.OPEN_DESIGN_DAEMON_SENTRY_DSN) ?? cleanOptionalString(raw.sentryDsn),
+    sentryEnvironment:
+      cleanOptionalString(process.env.OPEN_DESIGN_DAEMON_SENTRY_ENVIRONMENT) ?? cleanOptionalString(raw.sentryEnvironment),
+    sentryTracesSampleRate:
+      cleanOptionalString(process.env.OPEN_DESIGN_DAEMON_SENTRY_TRACES_SAMPLE_RATE) ??
+      cleanOptionalString(raw.sentryTracesSampleRate),
     telemetryRelayUrl: cleanOptionalString(raw.telemetryRelayUrl),
+    webSentryDsn: cleanOptionalString(process.env.SENTRY_DSN) ?? cleanOptionalString(raw.webSentryDsn),
     webSidecarEntry,
     webStandaloneRoot,
     webOutputMode,

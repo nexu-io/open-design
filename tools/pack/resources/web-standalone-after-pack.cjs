@@ -243,7 +243,7 @@ async function installStandaloneResource(config, resourcesRoot, platformName) {
   await copyOptional(path.join(sourceWebRoot, "package.json"), path.join(destinationWebRoot, "package.json"));
   const copiedNestedNodeModules = await copyOptional(path.join(sourceWebRoot, "node_modules"), path.join(destinationWebRoot, "node_modules"), copyOptions);
   const linkedHoistEntries = await linkPnpmPublicHoist(destinationRoot);
-  await copyRequired(path.join(sourceWebRoot, ".next"), path.join(destinationWebRoot, ".next"));
+  await copyRequired(path.join(sourceWebRoot, ".next"), path.join(destinationWebRoot, ".next"), copyOptions);
   const copiedStatic = await copyOptional(config.webStaticSourceRoot, path.join(destinationWebRoot, ".next", "static"));
   const copiedPublic = await copyOptional(config.webPublicSourceRoot, path.join(destinationWebRoot, "public"));
   const rewrittenSymlinks = platformName === "win32"

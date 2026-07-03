@@ -48,7 +48,12 @@ async function writeRootWebPackage(resourcesRoot: string): Promise<void> {
 
 async function writeStandaloneFixture(
   workspaceRoot: string,
-  options: { includeHoistedNext: boolean; includeWebNext: boolean; useAbsolutePnpmSymlinks?: boolean },
+  options: {
+    includeHoistedNext: boolean;
+    includeNextDotNodeModulesSymlinks?: boolean;
+    includeWebNext: boolean;
+    useAbsolutePnpmSymlinks?: boolean;
+  },
 ): Promise<string> {
   const standaloneRoot = join(workspaceRoot, "apps", "web", ".next", "standalone");
   const sourceWebRoot = join(standaloneRoot, "apps", "web");
@@ -75,6 +80,15 @@ async function writeStandaloneFixture(
     }
   }
 
+  if (options.includeNextDotNodeModulesSymlinks) {
+    const importInTheMiddleRoot = await writePnpmLinkedPackage(standaloneRoot, "import-in-the-middle");
+    const requireInTheMiddleRoot = await writePnpmLinkedPackage(standaloneRoot, "require-in-the-middle");
+    const nextNodeModulesRoot = join(sourceWebRoot, ".next", "node_modules");
+    await mkdir(nextNodeModulesRoot, { recursive: true });
+    await symlink(importInTheMiddleRoot, join(nextNodeModulesRoot, "import-in-the-middle-3b8720d58ab45988"));
+    await symlink(requireInTheMiddleRoot, join(nextNodeModulesRoot, "require-in-the-middle-a99415fa67232f7f"));
+  }
+
   await mkdir(join(sourceWebRoot, ".next", "static"), { recursive: true });
   await writeFile(join(sourceWebRoot, "server.js"), "module.exports = {};\n", "utf8");
   await writeFile(join(sourceWebRoot, ".next", "BUILD_ID"), "fixture\n", "utf8");
@@ -87,6 +101,7 @@ async function writeStandaloneFixture(
 
 async function runFixture(options: {
   includeHoistedNext?: boolean;
+  includeNextDotNodeModulesSymlinks?: boolean;
   includeWebNext: boolean;
   omitMacAdhocBundleSign?: boolean;
   platformName?: "darwin" | "win32";
@@ -95,12 +110,14 @@ async function runFixture(options: {
   appOutDir: string;
   auditReportPath: string;
   destinationRoot: string;
+  destinationWebRoot: string;
   root: string;
 }> {
   const root = await mkdtemp(join(tmpdir(), "open-design-web-standalone-hook-"));
   const workspaceRoot = join(root, "workspace");
   const standaloneSourceRoot = await writeStandaloneFixture(workspaceRoot, {
     includeHoistedNext: options.includeHoistedNext ?? true,
+    includeNextDotNodeModulesSymlinks: options.includeNextDotNodeModulesSymlinks,
     includeWebNext: options.includeWebNext,
     useAbsolutePnpmSymlinks: options.useAbsolutePnpmSymlinks,
   });
@@ -159,6 +176,7 @@ async function runFixture(options: {
     appOutDir,
     auditReportPath,
     destinationRoot: join(resourcesRoot, "open-design-web-standalone"),
+    destinationWebRoot: join(resourcesRoot, "open-design-web-standalone", "apps", "web"),
     root,
   };
 }
@@ -216,6 +234,32 @@ describe("web standalone afterPack hook", () => {
 
       expect(report.platformName).toBe("win32");
       expect(report.macAdhocBundleSign).toEqual([]);
+    } finally {
+      await rm(fixture.root, { force: true, recursive: true });
+    }
+  });
+
+  it("dereferences win32 copied .next node_modules symlinks from Sentry instrumentation deps", async () => {
+    const fixture = await runFixture({
+      includeNextDotNodeModulesSymlinks: true,
+      includeWebNext: true,
+      platformName: "win32",
+    });
+
+    try {
+      const report = JSON.parse(await readFile(fixture.auditReportPath, "utf8")) as {
+        copiedAudit: { externalSymlinks: string[] };
+      };
+      const copiedImportLink = join(
+        fixture.destinationWebRoot,
+        ".next",
+        "node_modules",
+        "import-in-the-middle-3b8720d58ab45988",
+      );
+
+      expect(report.copiedAudit.externalSymlinks).toEqual([]);
+      await expect(readlink(copiedImportLink)).rejects.toThrow();
+      expect(await pathExists(join(copiedImportLink, "package.json"))).toBe(true);
     } finally {
       await rm(fixture.root, { force: true, recursive: true });
     }

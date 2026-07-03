@@ -60,8 +60,18 @@ function resolveHeadlessConfig(): PackagedConfig {
     namespaceBaseRoot,
     nodeCommand: null,
     resourceRoot,
+    sentryDsn:
+      process.env.OPEN_DESIGN_DAEMON_SENTRY_DSN?.trim() ||
+      null,
+    sentryEnvironment:
+      process.env.OPEN_DESIGN_DAEMON_SENTRY_ENVIRONMENT?.trim() ||
+      null,
+    sentryTracesSampleRate:
+      process.env.OPEN_DESIGN_DAEMON_SENTRY_TRACES_SAMPLE_RATE?.trim() ||
+      null,
     telemetryRelayUrl: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim() || null,
     webSidecarEntry: null,
+    webSentryDsn: process.env.SENTRY_DSN?.trim() || null,
     webStandaloneRoot: null,
     webOutputMode: "server",
   };
@@ -108,6 +118,9 @@ async function main(): Promise<void> {
     daemonCliEntry: config.daemonCliEntry,
     daemonSidecarEntry: config.daemonSidecarEntry,
     nodeCommand: config.nodeCommand,
+    sentryDsn: config.sentryDsn,
+    sentryEnvironment: config.sentryEnvironment,
+    sentryTracesSampleRate: config.sentryTracesSampleRate,
     telemetryRelayUrl: config.telemetryRelayUrl,
     // PR #974 round-5 (lefarcen P2): headless packaged mode runs daemon
     // + web only, no Electron, no privileged shell.openPath surface.
@@ -118,6 +131,7 @@ async function main(): Promise<void> {
     // passes `true` because it does start desktop main.
     requireDesktopAuth: false,
     webSidecarEntry: config.webSidecarEntry,
+    webSentryDsn: config.webSentryDsn,
     webStandaloneRoot: config.webStandaloneRoot,
     webOutputMode: config.webOutputMode,
   });

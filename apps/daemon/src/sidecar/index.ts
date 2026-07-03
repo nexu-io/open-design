@@ -1,7 +1,10 @@
+import "../sentry-init.js";
+
 import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from "@open-design/sidecar-proto";
 import { bootstrapSidecarRuntime } from "@open-design/sidecar";
 import { readProcessStamp } from "@open-design/platform";
 
+import { captureStartupException } from "../sentry.js";
 import { startDaemonSidecar } from "./server.js";
 
 async function main(): Promise<void> {
@@ -18,7 +21,8 @@ async function main(): Promise<void> {
   await server.waitUntilStopped();
 }
 
-void main().catch((error: unknown) => {
+void main().catch(async (error: unknown) => {
+  await captureStartupException(error);
   console.error(error instanceof Error ? error.stack || error.message : String(error));
   process.exit(1);
 });

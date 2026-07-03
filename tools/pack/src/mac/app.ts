@@ -2,6 +2,7 @@ import { chmod, cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 
 import type { ToolPackConfig } from "../config.js";
+import { createPackagedRuntimeConfig } from "../packaged-config.js";
 import {
   MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
   MAC_PREBUNDLE_ESBUILD_TARGET,
@@ -227,17 +228,12 @@ export async function writeAssembledApp(
   await writeFile(
     paths.packagedConfigPath,
     `${JSON.stringify(
-      {
-        appVersion: packagedVersion,
+      createPackagedRuntimeConfig(config, packagedVersion, {
         ...(usePrebundledStandaloneWeb ? { daemonCliEntryRelative: MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH } : {}),
         ...(usePrebundledStandaloneWeb ? { daemonSidecarEntryRelative: MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH } : {}),
-        namespace: config.namespace,
         nodeCommandRelative: "open-design/bin/node",
-        ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
         ...(usePrebundledStandaloneWeb ? { webSidecarEntryRelative: MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH } : {}),
-        webOutputMode: config.webOutputMode,
-        ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
-      },
+      }),
       null,
       2,
     )}\n`,

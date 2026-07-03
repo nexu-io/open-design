@@ -25,7 +25,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  OPEN_DESIGN_DAEMON_SENTRY_ENVIRONMENT: production
+  OPEN_DESIGN_DAEMON_SENTRY_TRACES_SAMPLE_RATE: "0.1"
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  SENTRY_ENVIRONMENT: production
+  SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+  SENTRY_PROJECT: ${{ vars.OPEN_DESIGN_WEB_SENTRY_PROJECT }}
 
 jobs:
   metadata:
@@ -194,6 +199,10 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.OPEN_DESIGN_WEB_SENTRY_DSN }}
+          OPEN_DESIGN_DAEMON_SENTRY_DSN: ${{ secrets.OPEN_DESIGN_DAEMON_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_DSN: ${{ secrets.OPEN_DESIGN_WEB_SENTRY_DSN }}
         run: |
           set -euo pipefail
           tools_pack_dir="$RUNNER_TEMP/tools-pack"
@@ -379,6 +388,10 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.OPEN_DESIGN_WEB_SENTRY_DSN }}
+          OPEN_DESIGN_DAEMON_SENTRY_DSN: ${{ secrets.OPEN_DESIGN_DAEMON_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_DSN: ${{ secrets.OPEN_DESIGN_WEB_SENTRY_DSN }}
         run: |
           set -euo pipefail
           pnpm exec tools-pack mac build \
@@ -466,6 +479,11 @@ jobs:
 
       - name: Build release windows artifacts
         id: win_tools_pack_build
+        env:
+          NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.OPEN_DESIGN_WEB_SENTRY_DSN }}
+          OPEN_DESIGN_DAEMON_SENTRY_DSN: ${{ secrets.OPEN_DESIGN_DAEMON_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_DSN: ${{ secrets.OPEN_DESIGN_WEB_SENTRY_DSN }}
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -624,6 +642,11 @@ jobs:
       # distros than ubuntu-latest's glibc 2.39. Docker is preinstalled on the
       # GitHub-hosted ubuntu-latest runner, so no extra setup is required.
       - name: Build release linux artifacts
+        env:
+          NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.OPEN_DESIGN_WEB_SENTRY_DSN }}
+          OPEN_DESIGN_DAEMON_SENTRY_DSN: ${{ secrets.OPEN_DESIGN_DAEMON_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_DSN: ${{ secrets.OPEN_DESIGN_WEB_SENTRY_DSN }}
         run: |
           set -euo pipefail
           pnpm exec tools-pack linux build \

@@ -72,8 +72,18 @@ export type ToolPackConfig = {
   roots: ToolPackRoots;
   silent: boolean;
   signed: boolean;
+  sentryAuthToken?: string;
+  sentryDsn?: string;
+  sentryEnvironment?: string;
+  sentryOrg?: string;
+  sentryProject?: string;
+  sentryRelease?: string;
+  sentryTracesSampleRate?: string;
   telemetryRelayUrl?: string;
   to: ToolPackBuildOutput;
+  webSentryDsn?: string;
+  webSentryPublicDsn?: string;
+  webSentryTracesSampleRate?: string;
   webOutputMode: ToolPackWebOutputMode;
   workspaceRoot: string;
 };
@@ -125,6 +135,72 @@ function resolveToolPackTelemetryRelayUrl(value: string | undefined): string | u
   return normalized.replace(/\/+$/, "");
 }
 
+function resolveToolPackDaemonSentryDsn(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`OPEN_DESIGN_DAEMON_SENTRY_DSN must be an absolute https URL: ${value}`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error(`OPEN_DESIGN_DAEMON_SENTRY_DSN must use https: ${value}`);
+  }
+  return normalized;
+}
+
+function resolveToolPackDaemonSentryEnvironment(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  return normalized.length === 0 ? undefined : normalized;
+}
+
+function resolveToolPackDaemonSentryTracesSampleRate(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    throw new Error("OPEN_DESIGN_DAEMON_SENTRY_TRACES_SAMPLE_RATE must be between 0 and 1");
+  }
+  return normalized;
+}
+
+function resolveToolPackSentryDsn(value: string | undefined, envName: string): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`${envName} must be an absolute https URL: ${value}`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error(`${envName} must use https: ${value}`);
+  }
+  return normalized;
+}
+
+function resolveOptionalEnvValue(value: string | undefined): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  return normalized.length === 0 ? undefined : normalized;
+}
+
+function resolveToolPackSentrySampleRate(value: string | undefined, envName: string): string | undefined {
+  if (value == null) return undefined;
+  const normalized = value.trim();
+  if (normalized.length === 0) return undefined;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    throw new Error(`${envName} must be between 0 and 1`);
+  }
+  return normalized;
+}
+
 function resolveElectronVersion(workspaceRoot: string): string {
   const require = createRequire(join(workspaceRoot, "apps/desktop/package.json"));
   const desktopPackage = require(join(workspaceRoot, "apps/desktop/package.json")) as {
@@ -152,6 +228,20 @@ export function resolveToolPackConfig(
   platform: ToolPackPlatform,
   options: ToolPackCliOptions = {},
 ): ToolPackConfig {
+  const sentryDsn = resolveToolPackDaemonSentryDsn(process.env.OPEN_DESIGN_DAEMON_SENTRY_DSN);
+  const webSentryDsn = resolveToolPackSentryDsn(process.env.SENTRY_DSN, "SENTRY_DSN");
+  const webSentryPublicDsn = resolveToolPackSentryDsn(process.env.NEXT_PUBLIC_SENTRY_DSN, "NEXT_PUBLIC_SENTRY_DSN");
+  const sentryEnvironment =
+    resolveOptionalEnvValue(process.env.SENTRY_ENVIRONMENT) ??
+    resolveToolPackDaemonSentryEnvironment(process.env.OPEN_DESIGN_DAEMON_SENTRY_ENVIRONMENT);
+  const sentryTracesSampleRate =
+    resolveToolPackSentrySampleRate(process.env.SENTRY_TRACES_SAMPLE_RATE, "SENTRY_TRACES_SAMPLE_RATE") ??
+    resolveToolPackDaemonSentryTracesSampleRate(process.env.OPEN_DESIGN_DAEMON_SENTRY_TRACES_SAMPLE_RATE);
+  const webSentryTracesSampleRate =
+    resolveToolPackSentrySampleRate(
+      process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE,
+      "NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE",
+    ) ?? sentryTracesSampleRate;
   const namespace = resolveNamespace({
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
     env: process.env,
@@ -194,6 +284,35 @@ export function resolveToolPackConfig(
     removeSidecars: options.removeSidecars === true,
     silent: options.silent !== false,
     signed: options.signed === true,
+    ...(sentryDsn == null
+      ? {}
+      : {
+          sentryDsn,
+          sentryEnvironment: sentryEnvironment ?? "production",
+          sentryTracesSampleRate: sentryTracesSampleRate ?? "0.1",
+        }),
+    ...(webSentryDsn == null && webSentryPublicDsn == null
+      ? {}
+      : {
+          ...(resolveOptionalEnvValue(process.env.SENTRY_AUTH_TOKEN) == null
+            ? {}
+            : { sentryAuthToken: resolveOptionalEnvValue(process.env.SENTRY_AUTH_TOKEN) }),
+          ...(webSentryDsn == null ? {} : { webSentryDsn }),
+          ...(webSentryPublicDsn == null
+            ? {}
+            : { webSentryPublicDsn }),
+          ...(sentryEnvironment == null ? { sentryEnvironment: "production" } : { sentryEnvironment }),
+          ...(resolveOptionalEnvValue(process.env.SENTRY_ORG) == null
+            ? {}
+            : { sentryOrg: resolveOptionalEnvValue(process.env.SENTRY_ORG) }),
+          ...(resolveOptionalEnvValue(process.env.SENTRY_PROJECT) == null
+            ? {}
+            : { sentryProject: resolveOptionalEnvValue(process.env.SENTRY_PROJECT) }),
+          ...(resolveOptionalEnvValue(process.env.SENTRY_RELEASE) == null
+            ? {}
+            : { sentryRelease: resolveOptionalEnvValue(process.env.SENTRY_RELEASE) }),
+          ...(webSentryTracesSampleRate == null ? {} : { webSentryTracesSampleRate }),
+        }),
     telemetryRelayUrl: resolveToolPackTelemetryRelayUrl(process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL),
     to: resolveToolPackBuildOutput(platform, options.to),
     webOutputMode: resolveToolPackWebOutputMode(platform, process.env.OD_WEB_OUTPUT_MODE),

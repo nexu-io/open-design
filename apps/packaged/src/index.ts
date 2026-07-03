@@ -84,6 +84,9 @@ async function main(): Promise<void> {
     daemonCliEntry: config.daemonCliEntry,
     daemonSidecarEntry: config.daemonSidecarEntry,
     nodeCommand: config.nodeCommand,
+    sentryDsn: config.sentryDsn,
+    sentryEnvironment: config.sentryEnvironment,
+    sentryTracesSampleRate: config.sentryTracesSampleRate,
     telemetryRelayUrl: config.telemetryRelayUrl,
     // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
     // main alongside the daemon, so the import-folder gate must be
@@ -91,6 +94,7 @@ async function main(): Promise<void> {
     // the daemon+web-only counterpart that passes `false`.
     requireDesktopAuth: true,
     webSidecarEntry: config.webSidecarEntry,
+    webSentryDsn: config.webSentryDsn,
     webStandaloneRoot: config.webStandaloneRoot,
     webOutputMode: config.webOutputMode,
   });

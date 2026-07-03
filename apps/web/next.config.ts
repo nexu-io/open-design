@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { withSentryConfig, type SentryBuildOptions } from '@sentry/nextjs';
 import { dirname, isAbsolute, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -86,4 +87,34 @@ const nextConfig: NextConfig = {
       : {}),
 };
 
-export default nextConfig;
+const sentryOrg = process.env.SENTRY_ORG?.trim();
+const sentryProject = process.env.SENTRY_PROJECT?.trim();
+
+const sentryBuildOptions: SentryBuildOptions = {
+  ...(sentryOrg ? { org: sentryOrg } : {}),
+  ...(sentryProject ? { project: sentryProject } : {}),
+  silent: !process.env.SENTRY_AUTH_TOKEN,
+  telemetry: false,
+  widenClientFileUpload: true,
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+    deleteSourcemapsAfterUpload: true,
+  },
+};
+
+if (process.env.SENTRY_AUTH_TOKEN) {
+  sentryBuildOptions.authToken = process.env.SENTRY_AUTH_TOKEN;
+}
+
+if (process.env.SENTRY_RELEASE) {
+  sentryBuildOptions.release = {
+    name: process.env.SENTRY_RELEASE,
+  };
+}
+
+export default withSentryConfig(nextConfig, sentryBuildOptions);

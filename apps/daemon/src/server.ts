@@ -157,6 +157,7 @@ import {
   validateTarget as validateRoutineTarget,
 } from './routines.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
+import { installExpressAsyncErrorForwarding } from './express-async.js';
 import {
   buildProjectArchive,
   buildBatchArchive,
@@ -249,6 +250,7 @@ import { registerChatRoutes } from './chat-routes.js';
 import { registerStaticResourceRoutes } from './static-resource-routes.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routine-routes.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
+import { setupSentryExpressErrorHandler } from './sentry.js';
 import { configureConnectorCredentialStore, ConnectorServiceError, FileConnectorCredentialStore } from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
@@ -2083,6 +2085,7 @@ export async function startServer({
   let daemonShuttingDown = false;
   const extraAllowedOrigins = configuredAllowedOrigins();
   const app = express();
+  installExpressAsyncErrorForwarding(app);
   app.use(express.json({ limit: '4mb' }));
 
   // Multi-directory scanning shared by every skill / template surface. The
@@ -4660,6 +4663,8 @@ export async function startServer({
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
 
   });
+
+  setupSentryExpressErrorHandler(app);
 
   // Wait for `listen` to bind so callers always see the resolved URL —
   // critical when port=0 (ephemeral port) and when the embedding sidecar

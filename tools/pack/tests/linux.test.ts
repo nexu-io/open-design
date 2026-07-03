@@ -8,8 +8,10 @@ import { describe, expect, it } from "vitest";
 import type { ToolPackConfig } from "../src/config.js";
 import {
   buildDockerArgs,
+  buildDockerEnv,
   matchesAppImageProcess,
   renderDesktopTemplate,
+  renderHeadlessLauncherScript,
   sanitizeNamespace,
 } from "../src/linux.js";
 
@@ -97,10 +99,47 @@ describe("buildDockerArgs", () => {
     expect(args).toContain("OPEN_DESIGN_TELEMETRY_RELAY_URL=https://telemetry.open-design.ai/api/langfuse");
   });
 
+  it("passes web Sentry build env into containerized builds without exposing values in docker argv", () => {
+    const config = {
+      ...makeConfig(),
+      sentryAuthToken: "upload-token",
+      sentryDsn: "https://public@example.ingest.sentry.io/daemon",
+      sentryEnvironment: "production",
+      sentryOrg: "zhenheai",
+      sentryProject: "open-design-web",
+      webSentryDsn: "https://public@example.ingest.sentry.io/web",
+      webSentryPublicDsn: "https://public@example.ingest.sentry.io/web",
+    };
+    const args = buildDockerArgs(config, { uid: 1000, gid: 1000 });
+    const dockerEnv = buildDockerEnv(config, {});
+
+    expect(args).toContain("OPEN_DESIGN_DAEMON_SENTRY_DSN");
+    expect(args).toContain("SENTRY_DSN");
+    expect(args).toContain("NEXT_PUBLIC_SENTRY_DSN");
+    expect(args).toContain("SENTRY_AUTH_TOKEN");
+    expect(args).toContain("SENTRY_ORG");
+    expect(args).toContain("SENTRY_PROJECT");
+    expect(args).toContain("SENTRY_ENVIRONMENT");
+    expect(args).not.toContain("OPEN_DESIGN_DAEMON_SENTRY_DSN=https://public@example.ingest.sentry.io/daemon");
+    expect(args).not.toContain("SENTRY_DSN=https://public@example.ingest.sentry.io/web");
+    expect(args).not.toContain("NEXT_PUBLIC_SENTRY_DSN=https://public@example.ingest.sentry.io/web");
+    expect(args).not.toContain("SENTRY_AUTH_TOKEN=upload-token");
+
+    expect(dockerEnv).toMatchObject({
+      NEXT_PUBLIC_SENTRY_DSN: "https://public@example.ingest.sentry.io/web",
+      OPEN_DESIGN_DAEMON_SENTRY_DSN: "https://public@example.ingest.sentry.io/daemon",
+      SENTRY_AUTH_TOKEN: "upload-token",
+      SENTRY_DSN: "https://public@example.ingest.sentry.io/web",
+      SENTRY_ENVIRONMENT: "production",
+      SENTRY_ORG: "zhenheai",
+      SENTRY_PROJECT: "open-design-web",
+    });
+  });
+
   it("re-invokes pnpm tools-pack linux build inside the container without --containerized", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const last = args[args.length - 1];
-    expect(last).toMatch(/npx --yes pnpm@\d+\.\d+\.\d+ install --frozen-lockfile/);
+    expect(last).toMatch(/env -u SENTRY_AUTH_TOKEN npx --yes pnpm@\d+\.\d+\.\d+ install --frozen-lockfile/);
     expect(last).toMatch(/npx --yes pnpm@\d+\.\d+\.\d+ tools-pack linux build --to all --namespace default/);
     expect(last).not.toMatch(/--containerized/);
   });
@@ -163,6 +202,34 @@ describe("buildDockerArgs", () => {
     );
     const last = args[args.length - 1];
     expect(last).toContain("--app-version '0.5.0-beta.1'\\''quoted'");
+  });
+});
+
+describe("renderHeadlessLauncherScript", () => {
+  it("keeps Sentry DSNs out of installed headless launchers", () => {
+    const sentryValues = {
+      sentryDsn: "https://public@example.ingest.sentry.io/daemon",
+      sentryEnvironment: "production",
+      sentryTracesSampleRate: "0.1",
+      webSentryDsn: "https://public@example.ingest.sentry.io/web",
+    };
+    const script = renderHeadlessLauncherScript({
+      dataDir: "/work/.tmp/tools-pack/runtime/linux",
+      entryPath: "/work/.tmp/tools-pack/out/linux/namespaces/default/app/node_modules/@open-design/packaged/dist/headless.mjs",
+      namespace: "default",
+      nodePath: "/work/.tmp/tools-pack/out/linux/namespaces/default/app/open-design/bin/node",
+      resourceRoot: "/work/.tmp/tools-pack/out/linux/namespaces/default/open-design",
+      ...sentryValues,
+    });
+
+    expect(script).not.toContain("OD_PACKAGED_CONFIG_PATH");
+    expect(script).toContain('OD_DATA_DIR="/work/.tmp/tools-pack/runtime/linux"');
+    expect(script).toContain('OD_RESOURCE_ROOT="/work/.tmp/tools-pack/out/linux/namespaces/default/open-design"');
+    expect(script).not.toContain("OPEN_DESIGN_DAEMON_SENTRY_DSN");
+    expect(script).not.toContain("OPEN_DESIGN_DAEMON_SENTRY_ENVIRONMENT");
+    expect(script).not.toContain("OPEN_DESIGN_DAEMON_SENTRY_TRACES_SAMPLE_RATE");
+    expect(script).not.toContain("SENTRY_DSN");
+    expect(script).not.toContain("https://public@example.ingest.sentry.io");
   });
 });
 

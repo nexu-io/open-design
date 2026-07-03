@@ -37,6 +37,7 @@
     "@open-design/platform": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
+    "@sentry/node": "^10.63.0",
     "better-sqlite3": "^12.9.0",
     "blake3-wasm": "2.1.5",
     "chokidar": "^5.0.0",

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-nocheck
+import './sentry-init.js';
 import { startServer } from './server.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';

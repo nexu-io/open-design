@@ -21,8 +21,10 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import headlessSource from '../src/headless.ts?raw';
 import {
   buildPackagedDaemonSpawnEnv,
+  buildPackagedWebSpawnEnv,
   resolveDaemonStatusTimeoutMs,
   resolvePackagedChildBaseEnv,
   resolvePackagedPathEnv,
@@ -61,6 +63,57 @@ describe('resolveDaemonStatusTimeoutMs', () => {
       if (original == null) delete process.env.OD_LEGACY_DATA_DIR;
       else process.env.OD_LEGACY_DATA_DIR = original;
     }
+  });
+});
+
+describe('buildPackagedWebSpawnEnv', () => {
+  it('forwards packaged web Sentry env separately from daemon Sentry env', () => {
+    const env = buildPackagedWebSpawnEnv(
+      { url: 'http://127.0.0.1:7456' },
+      {
+        webOutputMode: 'standalone',
+        webStandaloneRoot: '/tmp/od-web-standalone',
+        webSentryDsn: 'https://public@example.ingest.sentry.io/2',
+        webSentryEnvironment: 'production',
+        webSentryTracesSampleRate: '0.2',
+      },
+    );
+
+    expect(env.SENTRY_DSN).toBe('https://public@example.ingest.sentry.io/2');
+    expect(env.SENTRY_ENVIRONMENT).toBe('production');
+    expect(env.SENTRY_TRACES_SAMPLE_RATE).toBe('0.2');
+    expect(env.OPEN_DESIGN_DAEMON_SENTRY_DSN).toBeUndefined();
+    expect(env.OD_WEB_OUTPUT_MODE).toBe('standalone');
+    expect(env.OD_WEB_STANDALONE_ROOT).toBe('/tmp/od-web-standalone');
+  });
+
+  it('omits web Sentry env when no web DSN is configured', () => {
+    const env = buildPackagedWebSpawnEnv(
+      { url: 'http://127.0.0.1:7456' },
+      {
+        webOutputMode: 'server',
+        webStandaloneRoot: null,
+        webSentryDsn: null,
+        webSentryEnvironment: 'production',
+        webSentryTracesSampleRate: '0.2',
+      },
+    );
+
+    expect(env.SENTRY_DSN).toBeUndefined();
+    expect(env.SENTRY_ENVIRONMENT).toBeUndefined();
+    expect(env.SENTRY_TRACES_SAMPLE_RATE).toBeUndefined();
+  });
+});
+
+describe('headless packaged config scope', () => {
+  it('keeps headless packaged mode on explicit env instead of arbitrary config files', () => {
+    expect(headlessSource).toContain('process.env.OPEN_DESIGN_DAEMON_SENTRY_DSN');
+    expect(headlessSource).toContain('process.env.SENTRY_DSN');
+    expect(headlessSource).not.toContain('OD_PACKAGED_CONFIG_PATH');
+    expect(headlessSource).not.toContain('OD_WEB_OUTPUT_MODE');
+    expect(headlessSource).not.toContain('readFileSync');
+    expect(headlessSource).not.toContain('HeadlessRawPackagedConfig');
+    expect(headlessSource).not.toContain('raw.');
   });
 });
 
@@ -220,6 +273,34 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     expect(env.OPEN_DESIGN_TELEMETRY_RELAY_URL).toBe(
       'https://telemetry.open-design.ai/api/langfuse',
     );
+  });
+
+  it('forwards packaged daemon Sentry env only when a daemon DSN is configured', () => {
+    const withSentry = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+      sentryDsn: 'https://public@example.ingest.sentry.io/1',
+      sentryEnvironment: 'production',
+      sentryTracesSampleRate: '0.25',
+    });
+    expect(withSentry.SENTRY_DSN).toBe('https://public@example.ingest.sentry.io/1');
+    expect(withSentry.SENTRY_ENVIRONMENT).toBe('production');
+    expect(withSentry.SENTRY_TRACES_SAMPLE_RATE).toBe('0.25');
+
+    const withoutSentry = buildPackagedDaemonSpawnEnv(fakePaths(), {
+      appVersion: null,
+      daemonCliEntry: null,
+      legacyDataDir: null,
+      requireDesktopAuth: true,
+      sentryDsn: null,
+      sentryEnvironment: 'production',
+      sentryTracesSampleRate: '0.25',
+    });
+    expect(withoutSentry.SENTRY_DSN).toBeUndefined();
+    expect(withoutSentry.SENTRY_ENVIRONMENT).toBeUndefined();
+    expect(withoutSentry.SENTRY_TRACES_SAMPLE_RATE).toBeUndefined();
   });
 });
 

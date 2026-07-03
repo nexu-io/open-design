@@ -218,7 +218,18 @@ export type PackagedDaemonSpawnEnvOptions = {
    */
   requireDesktopAuth: boolean;
   legacyDataDir?: string | null;
+  sentryDsn?: string | null;
+  sentryEnvironment?: string | null;
+  sentryTracesSampleRate?: string | null;
   telemetryRelayUrl?: string | null;
+};
+
+type PackagedWebSpawnEnvOptions = {
+  webOutputMode: PackagedWebOutputMode;
+  webStandaloneRoot: string | null;
+  webSentryDsn?: string | null;
+  webSentryEnvironment?: string | null;
+  webSentryTracesSampleRate?: string | null;
 };
 
 /**
@@ -260,6 +271,45 @@ export function buildPackagedDaemonSpawnEnv(
     ...(options.legacyDataDir == null || options.legacyDataDir.length === 0
       ? {}
       : { OD_LEGACY_DATA_DIR: options.legacyDataDir }),
+    ...(options.sentryDsn == null || options.sentryDsn.length === 0
+      ? {}
+      : {
+          SENTRY_DSN: options.sentryDsn,
+          ...(options.sentryEnvironment == null || options.sentryEnvironment.length === 0
+            ? {}
+            : { SENTRY_ENVIRONMENT: options.sentryEnvironment }),
+          ...(options.sentryTracesSampleRate == null || options.sentryTracesSampleRate.length === 0
+            ? {}
+            : { SENTRY_TRACES_SAMPLE_RATE: options.sentryTracesSampleRate }),
+        }),
+  };
+}
+
+export function buildPackagedWebSpawnEnv(
+  daemonStatus: Pick<DaemonStatusSnapshot, "url">,
+  options: PackagedWebSpawnEnvOptions,
+): NodeJS.ProcessEnv {
+  if (daemonStatus.url == null) {
+    throw new Error("daemon did not report a URL");
+  }
+
+  return {
+    [SIDECAR_ENV.DAEMON_PORT]: extractPort(daemonStatus.url),
+    [SIDECAR_ENV.WEB_PORT]: "0",
+    ...(options.webStandaloneRoot == null ? {} : { OD_WEB_STANDALONE_ROOT: options.webStandaloneRoot }),
+    OD_WEB_OUTPUT_MODE: options.webOutputMode,
+    PORT: "0",
+    ...(options.webSentryDsn == null || options.webSentryDsn.length === 0
+      ? {}
+      : {
+          SENTRY_DSN: options.webSentryDsn,
+          ...(options.webSentryEnvironment == null || options.webSentryEnvironment.length === 0
+            ? {}
+            : { SENTRY_ENVIRONMENT: options.webSentryEnvironment }),
+          ...(options.webSentryTracesSampleRate == null || options.webSentryTracesSampleRate.length === 0
+            ? {}
+            : { SENTRY_TRACES_SAMPLE_RATE: options.webSentryTracesSampleRate }),
+        }),
   };
 }
 
@@ -338,6 +388,9 @@ export async function startPackagedSidecars(
     daemonCliEntry: string | null;
     daemonSidecarEntry: string | null;
     nodeCommand: string | null;
+    sentryDsn: string | null;
+    sentryEnvironment: string | null;
+    sentryTracesSampleRate: string | null;
     telemetryRelayUrl: string | null;
     /**
      * PR #974 round-5 (lefarcen P2): caller asserts whether a desktop
@@ -350,6 +403,7 @@ export async function startPackagedSidecars(
      */
     requireDesktopAuth: boolean;
     webSidecarEntry: string | null;
+    webSentryDsn: string | null;
     webStandaloneRoot: string | null;
     webOutputMode: PackagedWebOutputMode;
   },
@@ -374,6 +428,9 @@ export async function startPackagedSidecars(
         daemonCliEntry: options.daemonCliEntry,
         legacyDataDir: process.env.OD_LEGACY_DATA_DIR ?? null,
         requireDesktopAuth: options.requireDesktopAuth,
+        sentryDsn: options.sentryDsn,
+        sentryEnvironment: options.sentryEnvironment,
+        sentryTracesSampleRate: options.sentryTracesSampleRate,
         telemetryRelayUrl: options.telemetryRelayUrl,
       }),
       nodeCommand: options.nodeCommand,
@@ -397,13 +454,13 @@ export async function startPackagedSidecars(
     const web = await spawnSidecarChild({
       app: APP_KEYS.WEB,
       entryPath: options.webSidecarEntry ?? resolveSidecarEntry("@open-design/web", "sidecar"),
-      env: {
-        [SIDECAR_ENV.DAEMON_PORT]: extractPort(daemonStatus.url),
-        [SIDECAR_ENV.WEB_PORT]: "0",
-        ...(options.webStandaloneRoot == null ? {} : { OD_WEB_STANDALONE_ROOT: options.webStandaloneRoot }),
-        OD_WEB_OUTPUT_MODE: options.webOutputMode,
-        PORT: "0",
-      },
+      env: buildPackagedWebSpawnEnv(daemonStatus, {
+        webOutputMode: options.webOutputMode,
+        webStandaloneRoot: options.webStandaloneRoot,
+        webSentryDsn: options.webSentryDsn,
+        webSentryEnvironment: options.sentryEnvironment,
+        webSentryTracesSampleRate: options.sentryTracesSampleRate,
+      }),
       nodeCommand: options.nodeCommand,
       paths,
       runtime,

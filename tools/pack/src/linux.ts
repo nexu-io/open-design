@@ -25,6 +25,7 @@ import {
 } from "@open-design/platform";
 
 import type { ToolPackConfig } from "./config.js";
+import { createPackagedRuntimeConfig } from "./packaged-config.js";
 import { copyBundledResourceTrees, linuxResources } from "./resources.js";
 
 const execFileAsync = promisify(execFile);
@@ -77,6 +78,40 @@ function toDockerMountPath(value: string): string {
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function pushDockerEnvName(args: string[], name: string, value: string | undefined): void {
+  if (value != null) {
+    args.push("-e", name);
+  }
+}
+
+export function buildDockerEnv(
+  config: ToolPackConfig,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...baseEnv };
+  const set = (name: string, value: string | undefined) => {
+    if (value != null) {
+      env[name] = value;
+    }
+  };
+
+  set("OPEN_DESIGN_DAEMON_SENTRY_DSN", config.sentryDsn);
+  set("OPEN_DESIGN_DAEMON_SENTRY_ENVIRONMENT", config.sentryEnvironment);
+  set("SENTRY_ENVIRONMENT", config.sentryEnvironment);
+  set("NEXT_PUBLIC_SENTRY_ENVIRONMENT", config.sentryEnvironment);
+  set("OPEN_DESIGN_DAEMON_SENTRY_TRACES_SAMPLE_RATE", config.sentryTracesSampleRate);
+  set("SENTRY_DSN", config.webSentryDsn);
+  set("NEXT_PUBLIC_SENTRY_DSN", config.webSentryPublicDsn);
+  set("SENTRY_AUTH_TOKEN", config.sentryAuthToken);
+  set("SENTRY_ORG", config.sentryOrg);
+  set("SENTRY_PROJECT", config.sentryProject);
+  set("SENTRY_RELEASE", config.sentryRelease);
+  set("NEXT_PUBLIC_SENTRY_RELEASE", config.sentryRelease);
+  set("NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE", config.webSentryTracesSampleRate);
+
+  return env;
 }
 
 export function buildDockerArgs(
@@ -132,7 +167,7 @@ export function buildDockerArgs(
   if (config.appVersion != null) {
     innerArgs.push(`--app-version ${shellQuote(config.appVersion)}`);
   }
-  const innerCommand = `${pnpmCmd} install --frozen-lockfile && ` + innerArgs.join(" ");
+  const innerCommand = `env -u SENTRY_AUTH_TOKEN ${pnpmCmd} install --frozen-lockfile && ` + innerArgs.join(" ");
 
   const dockerArgs = [
     "run",
@@ -159,6 +194,19 @@ export function buildDockerArgs(
   if (config.telemetryRelayUrl != null) {
     dockerArgs.push("-e", `OPEN_DESIGN_TELEMETRY_RELAY_URL=${config.telemetryRelayUrl}`);
   }
+  pushDockerEnvName(dockerArgs, "OPEN_DESIGN_DAEMON_SENTRY_DSN", config.sentryDsn);
+  pushDockerEnvName(dockerArgs, "OPEN_DESIGN_DAEMON_SENTRY_ENVIRONMENT", config.sentryEnvironment);
+  pushDockerEnvName(dockerArgs, "SENTRY_ENVIRONMENT", config.sentryEnvironment);
+  pushDockerEnvName(dockerArgs, "NEXT_PUBLIC_SENTRY_ENVIRONMENT", config.sentryEnvironment);
+  pushDockerEnvName(dockerArgs, "OPEN_DESIGN_DAEMON_SENTRY_TRACES_SAMPLE_RATE", config.sentryTracesSampleRate);
+  pushDockerEnvName(dockerArgs, "SENTRY_DSN", config.webSentryDsn);
+  pushDockerEnvName(dockerArgs, "NEXT_PUBLIC_SENTRY_DSN", config.webSentryPublicDsn);
+  pushDockerEnvName(dockerArgs, "SENTRY_AUTH_TOKEN", config.sentryAuthToken);
+  pushDockerEnvName(dockerArgs, "SENTRY_ORG", config.sentryOrg);
+  pushDockerEnvName(dockerArgs, "SENTRY_PROJECT", config.sentryProject);
+  pushDockerEnvName(dockerArgs, "SENTRY_RELEASE", config.sentryRelease);
+  pushDockerEnvName(dockerArgs, "NEXT_PUBLIC_SENTRY_RELEASE", config.sentryRelease);
+  pushDockerEnvName(dockerArgs, "NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE", config.webSentryTracesSampleRate);
   dockerArgs.push(
     "-w",
     "/project",
@@ -387,13 +435,9 @@ async function writeAssembledApp(
   await writeFile(
     paths.packagedConfigPath,
     `${JSON.stringify(
-      {
-        appVersion: version,
-        namespace: config.namespace,
+      createPackagedRuntimeConfig(config, version, {
         nodeCommandRelative: "open-design/bin/node",
-        ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
-        ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
-      },
+      }),
       null,
       2,
     )}\n`,
@@ -546,7 +590,7 @@ async function runBuildInContainer(config: ToolPackConfig): Promise<void> {
   const args = buildDockerArgs(config, { uid, gid });
 
   return new Promise((resolve, reject) => {
-    const child = spawn("docker", args, { stdio: "inherit", env: process.env });
+    const child = spawn("docker", args, { stdio: "inherit", env: buildDockerEnv(config) });
     // In Node's child-process `exit` event, code === null means the child was
     // terminated by a signal (SIGTERM, SIGKILL, etc.). A signal-terminated
     // build is NOT a successful build — the AppImage may be missing or partial,
@@ -1155,6 +1199,34 @@ async function waitForWebIdentity(config: ToolPackConfig, childPid: number, time
   return null;
 }
 
+export type HeadlessLauncherScriptValues = {
+  dataDir: string;
+  entryPath: string;
+  namespace: string;
+  nodePath: string;
+  resourceRoot: string;
+};
+
+export function renderHeadlessLauncherScript(values: HeadlessLauncherScriptValues): string {
+  const env = [
+    `OD_NAMESPACE=${JSON.stringify(values.namespace)}`,
+    `OD_DATA_DIR=${JSON.stringify(values.dataDir)}`,
+    `OD_RESOURCE_ROOT=${JSON.stringify(values.resourceRoot)}`,
+  ];
+
+  return [
+    "#!/bin/sh",
+    `# Open Design headless launcher — namespace: ${values.namespace}`,
+    [
+      ...env,
+      "exec",
+      JSON.stringify(values.nodePath),
+      JSON.stringify(values.entryPath),
+      '"$@"',
+    ].join(" "),
+  ].join("\n") + "\n";
+}
+
 export async function installPackedLinuxHeadless(config: ToolPackConfig): Promise<LinuxHeadlessInstallResult> {
   const paths = resolveLinuxPaths(config);
   const entryPath = resolveHeadlessEntryPath(paths);
@@ -1180,11 +1252,13 @@ export async function installPackedLinuxHeadless(config: ToolPackConfig): Promis
   // so the headless process writes its runtime data under the same paths that
   // tools-pack stop/logs expect.
   const dataDir = dirname(config.roots.runtime.namespaceBaseRoot);
-  const script = [
-    "#!/bin/sh",
-    `# Open Design headless launcher — namespace: ${config.namespace}`,
-    `OD_NAMESPACE=${JSON.stringify(config.namespace)} OD_DATA_DIR=${JSON.stringify(dataDir)} OD_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
-  ].join("\n") + "\n";
+  const script = renderHeadlessLauncherScript({
+    dataDir,
+    entryPath,
+    namespace: config.namespace,
+    nodePath,
+    resourceRoot: paths.resourceRoot,
+  });
 
   await writeFile(launcherPath, script, { encoding: "utf8", mode: 0o755 });
 

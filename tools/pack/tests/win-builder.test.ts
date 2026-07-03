@@ -4,7 +4,9 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import type { ToolPackConfig } from "../src/config.js";
 import { materializeCachedUnpackedForInstaller } from "../src/win/builder.js";
+import { writePackagedConfigFile } from "../src/win/manifest.js";
 import type { WinPaths } from "../src/win/types.js";
 
 function createPaths(root: string): WinPaths {
@@ -44,6 +46,72 @@ function createPaths(root: string): WinPaths {
     unpackedRoot: join(namespaceRoot, "builder", "win-unpacked"),
   };
 }
+
+function createConfig(root: string): ToolPackConfig {
+  return {
+    containerized: false,
+    electronBuilderCliPath: "/x/electron-builder/cli.js",
+    electronDistPath: "/x/electron/dist",
+    electronVersion: "41.3.0",
+    macCompression: "normal",
+    namespace: "second",
+    platform: "win",
+    portable: false,
+    removeData: false,
+    removeLogs: false,
+    removeProductUserData: false,
+    removeSidecars: false,
+    roots: {
+      output: {
+        appBuilderRoot: join(root, "namespaces", "second", "builder"),
+        namespaceRoot: join(root, "namespaces", "second"),
+        platformRoot: join(root, "namespaces"),
+        root,
+      },
+      runtime: {
+        namespaceBaseRoot: join(root, "runtime", "namespaces"),
+        namespaceRoot: join(root, "runtime", "namespaces", "second"),
+      },
+      cacheRoot: join(root, "cache"),
+      toolPackRoot: root,
+    },
+    sentryDsn: "https://public@example.ingest.sentry.io/daemon",
+    sentryEnvironment: "production",
+    sentryTracesSampleRate: "0.1",
+    signed: false,
+    silent: true,
+    to: "nsis",
+    webOutputMode: "standalone",
+    webSentryDsn: "https://public@example.ingest.sentry.io/web",
+    workspaceRoot: root,
+  };
+}
+
+describe("writePackagedConfigFile", () => {
+  it("persists public Sentry DSNs in Windows packaged config without the upload token", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-config-"));
+    const paths = createPaths(root);
+
+    try {
+      await writePackagedConfigFile(paths.packagedConfigPath, createConfig(root), "1.2.3");
+      const config = JSON.parse(await readFile(paths.packagedConfigPath, "utf8")) as Record<string, unknown>;
+
+      expect(config).toMatchObject({
+        appVersion: "1.2.3",
+        namespace: "second",
+        sentryDsn: "https://public@example.ingest.sentry.io/daemon",
+        sentryEnvironment: "production",
+        sentryTracesSampleRate: "0.1",
+        webOutputMode: "standalone",
+        webSentryDsn: "https://public@example.ingest.sentry.io/web",
+      });
+      expect(config).not.toHaveProperty("sentryAuthToken");
+      expect(config).not.toHaveProperty("SENTRY_AUTH_TOKEN");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
 
 describe("materializeCachedUnpackedForInstaller", () => {
   it("overwrites cached packaged config and app package version", async () => {
