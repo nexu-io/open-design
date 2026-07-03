@@ -1013,7 +1013,19 @@ async function consumeDaemonRun({
       let sawStreamProgress = false;
 
       while (true) {
-        const { value, done } = await reader.read();
+        let readResult: ReadableStreamReadResult<Uint8Array>;
+        try {
+          readResult = await reader.read();
+        } catch (err) {
+          // Only catch reader.read() failures — a broken SSE connection
+          // (tab backgrounded, proxy idle timeout, network drop). Parsing
+          // and handler invocations stay OUTSIDE this catch so local
+          // processing bugs surface through the existing outer error path.
+          if ((err as Error).name === 'AbortError') throw err;
+          try { reader.cancel(); } catch {}
+          break;
+        }
+        const { value, done } = readResult;
         if (done) break;
         buf += decoder.decode(value, { stream: true });
         let idx: number;
