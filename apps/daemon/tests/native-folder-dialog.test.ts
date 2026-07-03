@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildWindowsFolderDialogCommand,
+  parseLinuxFolderDialogResult,
   parseFolderDialogStdout,
 } from '../src/native-folder-dialog.js';
+
+function dialogError(message: string, code: string | number): Error & { code: string | number } {
+  const err = new Error(message) as Error & { code: string | number };
+  err.code = code;
+  return err;
+}
 
 describe('native folder dialog helpers', () => {
   it('builds the Windows folder picker command with STA mode', () => {
@@ -42,5 +49,31 @@ describe('native folder dialog helpers', () => {
 
   it('returns null when the native dialog command fails', () => {
     expect(parseFolderDialogStdout(new Error('cancelled'), 'C:\\Users\\Ada\\Project\r\n')).toBeNull();
+  });
+
+  it('parses a selected Linux folder path from stdout', () => {
+    expect(parseLinuxFolderDialogResult(null, '/home/ada/project\n', '')).toBe('/home/ada/project');
+  });
+
+  it('keeps Linux cancel quiet even when zenity emits GTK warnings on stderr', () => {
+    const err = dialogError('Command failed: zenity', 1);
+
+    expect(parseLinuxFolderDialogResult(err, '', '(zenity:123): Gtk-WARNING **: Theme parsing error\n')).toBeNull();
+  });
+
+  it('throws for Linux folder picker display failures', () => {
+    const err = dialogError('Command failed: zenity', 1);
+
+    expect(() => parseLinuxFolderDialogResult(err, '', 'Gtk-WARNING **: cannot open display: :99')).toThrow(
+      'Could not open folder picker: Gtk-WARNING **: cannot open display: :99',
+    );
+  });
+
+  it('throws a stable message when zenity is missing', () => {
+    const err = dialogError('spawn zenity ENOENT', 'ENOENT');
+
+    expect(() => parseLinuxFolderDialogResult(err, '', '')).toThrow(
+      'Could not open folder picker: zenity is not installed',
+    );
   });
 });

@@ -19,6 +19,7 @@ import {
   fetchProjectFileText,
   fetchSkillExample,
   isDeployProviderId,
+  openFolderDialog,
   updateDeployConfig,
   uploadProjectFiles,
   writeProjectTextFileDetailed,
@@ -150,6 +151,38 @@ describe('writeProjectTextFileDetailed', () => {
       code: 'ARTIFACT_REGRESSION',
       message: 'new artifact is smaller than the prior version',
     });
+  });
+});
+
+describe('openFolderDialog', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the legacy fail-soft behavior unless throwOnError is requested', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(
+        JSON.stringify({ error: 'Could not open folder picker: zenity is not installed' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } },
+      )),
+    );
+
+    await expect(openFolderDialog()).resolves.toBeNull();
+  });
+
+  it('throws daemon picker messages when throwOnError is requested', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(
+        JSON.stringify({ error: 'Could not open folder picker: zenity is not installed' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } },
+      )),
+    );
+
+    await expect(openFolderDialog({ throwOnError: true }))
+      .rejects.toThrow('Could not open folder picker: zenity is not installed');
   });
 });
 

@@ -197,7 +197,11 @@ import {
 } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
-import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
+import {
+  buildWindowsFolderDialogCommand,
+  parseFolderDialogStdout,
+  parseLinuxFolderDialogResult,
+} from './native-folder-dialog.js';
 import {
   AssetCacheError,
   assetCacheRewriteUrl,
@@ -2906,7 +2910,7 @@ function requestRunOverride(runId, tokenRunId) {
 }
 
 function openNativeFolderDialog() {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const platform = process.platform;
     if (platform === 'darwin') {
       // `choose folder` is handled specially by the system: it presents a fully
@@ -2930,10 +2934,12 @@ function openNativeFolderDialog() {
         'zenity',
         ['--file-selection', '--directory', '--title=Select a code folder to link'],
         { timeout: 120_000 },
-        (err, stdout) => {
-          if (err) return resolve(null);
-          const p = stdout.trim();
-          resolve(p || null);
+        (err, stdout, stderr) => {
+          try {
+            resolve(parseLinuxFolderDialogResult(err, stdout, stderr));
+          } catch (folderDialogError) {
+            reject(folderDialogError);
+          }
         },
       );
     } else if (platform === 'win32') {
