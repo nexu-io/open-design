@@ -27,6 +27,7 @@ interface Props {
   onOpen: (id: string) => void;
   onViewAll: () => void;
   onDelete?: (id: string) => Promise<boolean | void> | boolean | void;
+  onDuplicate?: (id: string) => Promise<void> | void;
   onRename?: (id: string, name: string) => void;
   limit?: number;
 }
@@ -35,6 +36,10 @@ const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
 
 const DECK_PREVIEW_WIDTH = 1280;
 const DECK_PREVIEW_HEIGHT = 720;
+const DEFAULT_RECENT_PROJECT_LIMIT = 6;
+const WIDE_RECENT_PROJECT_LIMIT = 7;
+// 7 * 180px cards + 6 * 12px gaps, matching recent-projects.css.
+const WIDE_RECENT_PROJECT_MIN_ROW_WIDTH = 1332;
 const deckCoverCache = new Map<string, string>();
 const deckCoverInflight = new Map<string, Promise<string>>();
 
@@ -44,15 +49,51 @@ export function RecentProjectsStrip({
   onOpen,
   onViewAll,
   onDelete,
+  onDuplicate,
   onRename,
-  limit = 6,
+  limit,
 }: Props) {
   const t = useT();
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const [responsiveLimit, setResponsiveLimit] = useState(DEFAULT_RECENT_PROJECT_LIMIT);
+  const resolvedLimit = limit ?? responsiveLimit;
+  const hasRecentProjects = projects.length > 0;
+
+  useEffect(() => {
+    if (limit !== undefined) return;
+
+    const update = () => {
+      const rowWidth = rowRef.current?.getBoundingClientRect().width;
+      if (rowWidth === undefined) {
+        setResponsiveLimit(DEFAULT_RECENT_PROJECT_LIMIT);
+        return;
+      }
+      setResponsiveLimit(
+        rowWidth >= WIDE_RECENT_PROJECT_MIN_ROW_WIDTH
+          ? WIDE_RECENT_PROJECT_LIMIT
+          : DEFAULT_RECENT_PROJECT_LIMIT,
+      );
+    };
+
+    update();
+    const node = rowRef.current;
+    if (node && typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(update);
+      observer.observe(node);
+      return () => observer.disconnect();
+    }
+
+    if (typeof window === 'undefined') return;
+
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [hasRecentProjects, limit]);
+
   const recent = useMemo(
     () => [...projects]
       .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, limit),
-    [projects, limit],
+      .slice(0, resolvedLimit),
+    [projects, resolvedLimit],
   );
   const [coverByProject, setCoverByProject] = useState<
     Record<string, { kind: 'html' | 'image' | 'video' | 'logo'; name: string } | null>
@@ -64,7 +105,7 @@ export function RecentProjectsStrip({
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
   const renameTitleId = useId();
   const confirmTitleId = useId();
-  const actionsAvailable = Boolean(onDelete || onRename);
+  const actionsAvailable = Boolean(onDelete || onDuplicate || onRename);
 
   useEffect(() => {
     if (!menuOpenId) return;
@@ -179,6 +220,14 @@ export function RecentProjectsStrip({
     setConfirmTarget(project);
   }
 
+  function requestDuplicate(project: Project) {
+    if (!onDuplicate) return;
+    setMenuOpenId(null);
+    void Promise.resolve(onDuplicate(project.id)).catch((err) => {
+      console.warn('[RecentProjectsStrip] duplicate project failed:', err);
+    });
+  }
+
   async function commitDelete() {
     if (!confirmTarget || !onDelete) return;
     const target = confirmTarget;
@@ -201,6 +250,7 @@ export function RecentProjectsStrip({
         </button>
       </header>
       <div
+        ref={rowRef}
         className={`recent-projects__row${menuOpenId ? ' recent-projects__row--menu-open' : ''}`}
         role="list"
       >
@@ -305,6 +355,12 @@ export function RecentProjectsStrip({
                         <button type="button" role="menuitem" onClick={() => startRename(project)}>
                           <Icon name="pencil" size={12} />
                           <span>{t('designs.menuRename')}</span>
+                        </button>
+                      ) : null}
+                      {onDuplicate ? (
+                        <button type="button" role="menuitem" onClick={() => requestDuplicate(project)}>
+                          <Icon name="copy" size={12} />
+                          <span>{t('designs.menuDuplicate')}</span>
                         </button>
                       ) : null}
                       {onDelete ? (

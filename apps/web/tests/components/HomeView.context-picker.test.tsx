@@ -500,6 +500,185 @@ describe('HomeView context picker', () => {
     }));
   });
 
+  it('blocks submit when referenced project context folder is missing', async () => {
+    const referenceProject = {
+      id: 'reference-a',
+      name: 'Reference A',
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: { kind: 'prototype' },
+    };
+    const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/mcp/servers') {
+        return new Response(JSON.stringify({ servers: [], templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/projects') {
+        return new Response(JSON.stringify({ projects: [referenceProject] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && (url === '/api/projects/reference-a' || url.startsWith('/api/projects/reference-a?'))) {
+        return new Response(JSON.stringify({
+          project: referenceProject,
+          resolvedDir: '/tmp/open-design/missing-reference-a',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/dir-exists' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ exists: false }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    fireEvent.click(screen.getByTestId('home-hero-plus-trigger'));
+    fireEvent.click(await screen.findByTestId('composer-plus-reference-project'));
+    await screen.findByText('Reference A');
+    fireEvent.click(screen.getByRole('button', { name: 'Reference project' }));
+
+    await waitFor(() => {
+      expect(homeHeroPromptText().trim()).toBe('@Reference A');
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('selected reference folder');
+    });
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(homeHeroPromptText().trim()).toBe('@Reference A');
+    expect(screen.getByTestId('home-hero-context-workspace-project:reference-a').textContent).toContain(
+      'Reference A',
+    );
+  });
+
+  it('keeps referenced project context visible after its inline mention is deleted', async () => {
+    const referenceProject = {
+      id: 'reference-a',
+      name: 'Reference A',
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: { kind: 'prototype' },
+    };
+    const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/mcp/servers') {
+        return new Response(JSON.stringify({ servers: [], templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/projects') {
+        return new Response(JSON.stringify({ projects: [referenceProject] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && (url === '/api/projects/reference-a' || url.startsWith('/api/projects/reference-a?'))) {
+        return new Response(JSON.stringify({
+          project: referenceProject,
+          resolvedDir: '/tmp/open-design/reference-a',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/dir-exists' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ exists: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await screen.findByTestId('home-hero-input');
+    fireEvent.click(screen.getByTestId('home-hero-plus-trigger'));
+    fireEvent.click(await screen.findByTestId('composer-plus-reference-project'));
+    await screen.findByText('Reference A');
+    fireEvent.click(screen.getByRole('button', { name: 'Reference project' }));
+
+    await waitFor(() => {
+      expect(homeHeroPromptText().trim()).toBe('@Reference A');
+    });
+    setHomeHeroPrompt('Describe this');
+    await settle();
+
+    expect(screen.getByTestId('home-hero-context-workspace-project:reference-a').textContent).toContain(
+      'Reference A',
+    );
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'Describe this',
+      initialRunContext: {
+        workspaceItems: [
+          expect.objectContaining({
+            id: 'project:reference-a',
+            kind: 'project',
+            label: 'Reference A',
+            absolutePath: '/tmp/open-design/reference-a',
+          }),
+        ],
+      },
+      linkedDirs: ['/tmp/open-design/reference-a'],
+    }));
+  });
+
   it('keeps a connector context when the prompt has punctuation right after the pill', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {

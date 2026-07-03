@@ -15,6 +15,11 @@ import type {
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
   ReplaceProjectWorkingDirResponse,
+  ProjectFileVersion,
+  ProjectFileVersionSource,
+  ProjectFileVersionResponse,
+  ProjectFileVersionsResponse,
+  RestoreProjectFileVersionResponse,
   SocialShareRequest,
   SocialShareResponse,
 } from '@open-design/contracts';
@@ -1595,11 +1600,11 @@ export async function deleteLiveArtifact(projectId: string, artifactId: string):
 
 async function readApiErrorBody(resp: Response): Promise<{ message: string; code?: string }> {
   try {
-    const json = (await resp.json()) as { error?: { code?: string; message?: string }; message?: string };
-    const message = json.error?.message ?? json.message;
+    const json = (await resp.json()) as { error?: { code?: string; message?: string } | string; message?: string };
+    const message = typeof json.error === 'string' ? json.error : json.error?.message ?? json.message;
     return {
       message: typeof message === 'string' && message.length > 0 ? message : `Request failed (${resp.status}).`,
-      ...(typeof json.error?.code === 'string' ? { code: json.error.code } : {}),
+      ...(typeof json.error === 'object' && typeof json.error?.code === 'string' ? { code: json.error.code } : {}),
     };
   } catch {
     return { message: `Request failed (${resp.status}).` };
@@ -1699,6 +1704,65 @@ export async function fetchProjectFileText(
   }
 }
 
+function projectFileVersionsUrl(projectId: string, name: string): string {
+  const safePath = name
+    .split('/')
+    .map((seg) => encodeURIComponent(seg))
+    .join('/');
+  return `/api/projects/${encodeURIComponent(projectId)}/files/${safePath}/versions`;
+}
+
+export async function fetchProjectFileVersions(
+  projectId: string,
+  name: string,
+): Promise<ProjectFileVersionsResponse | null> {
+  try {
+    const resp = await fetch(projectFileVersionsUrl(projectId, name), { cache: 'no-store' });
+    if (!resp.ok) return null;
+    return (await resp.json()) as ProjectFileVersionsResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchProjectFileVersion(
+  projectId: string,
+  name: string,
+  versionId: string,
+): Promise<ProjectFileVersionResponse | null> {
+  try {
+    const resp = await fetch(
+      `${projectFileVersionsUrl(projectId, name)}/${encodeURIComponent(versionId)}`,
+      { cache: 'no-store' },
+    );
+    if (!resp.ok) return null;
+    return (await resp.json()) as ProjectFileVersionResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function restoreProjectFileVersion(
+  projectId: string,
+  name: string,
+  version: Pick<ProjectFileVersion, 'id'>,
+): Promise<RestoreProjectFileVersionResponse | null> {
+  try {
+    const resp = await fetch(
+      `${projectFileVersionsUrl(projectId, name)}/${encodeURIComponent(version.id)}/restore`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+    );
+    if (!resp.ok) return null;
+    return (await resp.json()) as RestoreProjectFileVersionResponse;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchPreviewComments(
   projectId: string,
   conversationId: string,
@@ -1780,7 +1844,12 @@ export async function writeProjectTextFile(
   projectId: string,
   name: string,
   content: string,
-  options?: { artifactManifest?: ArtifactManifest },
+  options?: {
+    artifactManifest?: ArtifactManifest;
+    versionSource?: ProjectFileVersionSource;
+    versionLabel?: string;
+    versionPrompt?: string | null;
+  },
 ): Promise<ProjectFile | null> {
   const result = await writeProjectTextFileDetailed(projectId, name, content, options);
   return result.ok ? result.file : null;
@@ -1794,13 +1863,25 @@ export async function writeProjectTextFileDetailed(
   projectId: string,
   name: string,
   content: string,
-  options?: { artifactManifest?: ArtifactManifest },
+  options?: {
+    artifactManifest?: ArtifactManifest;
+    versionSource?: ProjectFileVersionSource;
+    versionLabel?: string;
+    versionPrompt?: string | null;
+  },
 ): Promise<WriteProjectTextFileResult> {
   try {
     const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, content, artifactManifest: options?.artifactManifest }),
+      body: JSON.stringify({
+        name,
+        content,
+        artifactManifest: options?.artifactManifest,
+        versionSource: options?.versionSource,
+        versionLabel: options?.versionLabel,
+        versionPrompt: options?.versionPrompt,
+      }),
     });
     if (!resp.ok) {
       const body = await readApiErrorBody(resp);
@@ -2044,13 +2125,22 @@ export async function renameProjectFile(
   return (await resp.json()) as RenameProjectFileResponse;
 }
 
-export async function openFolderDialog(): Promise<string | null> {
+export async function openFolderDialog(options: { throwOnError?: boolean } = {}): Promise<string | null> {
   try {
     const resp = await fetch('/api/dialog/open-folder', { method: 'POST' });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      if (options.throwOnError) {
+        const errorBody = await readApiErrorBody(resp);
+        throw new Error(errorBody.message);
+      }
+      return null;
+    }
     const data = await resp.json();
     return typeof data.path === 'string' && data.path.length > 0 ? data.path : null;
-  } catch {
+  } catch (err) {
+    if (options.throwOnError) {
+      throw err instanceof Error ? err : new Error('Could not open folder picker');
+    }
     return null;
   }
 }

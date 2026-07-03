@@ -10,6 +10,8 @@ import type {
   ApplyResult,
   ChatSessionMode,
   CreateConversationRequest,
+  CreateDesignSystemProjectFromProjectResponse,
+  DuplicateProjectResponse,
   CreatePluginShareProjectResponse,
   CreateTerminalRequest,
   ImportFolderRequest,
@@ -55,6 +57,27 @@ export async function getProject(id: string): Promise<Project | null> {
     if (!resp.ok) return null;
     const json = (await resp.json()) as { project: Project };
     return json.project;
+  } catch {
+    return null;
+  }
+}
+
+export async function getProjectDetail(
+  id: string,
+  opts?: { ensureDir?: boolean },
+): Promise<{ project: Project; resolvedDir: string | null } | null> {
+  try {
+    // `ensureDir` asks the daemon to materialize a managed project's folder
+    // before resolving it, so referencing a brand-new (empty) project yields a
+    // real on-disk directory instead of a path that fails existence checks.
+    const query = opts?.ensureDir ? '?ensureDir=1' : '';
+    const resp = await fetch(`/api/projects/${encodeURIComponent(id)}${query}`);
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { project: Project; resolvedDir?: unknown };
+    return {
+      project: json.project,
+      resolvedDir: typeof json.resolvedDir === 'string' ? json.resolvedDir : null,
+    };
   } catch {
     return null;
   }
@@ -113,6 +136,78 @@ export async function createProject(input: {
     };
   } catch (err) {
     throw err instanceof Error ? err : new Error('Could not create project');
+  }
+}
+
+export async function createDesignSystemProjectFromProject(
+  projectId: string,
+  input: { name?: string; pendingPrompt?: string } = {},
+): Promise<CreateDesignSystemProjectFromProjectResponse> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/design-system-copy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) {
+      let message = 'Could not create design system';
+      try {
+        const body = await resp.json() as { error?: unknown };
+        if (
+          body.error &&
+          typeof body.error === 'object' &&
+          'message' in body.error &&
+          typeof body.error.message === 'string' &&
+          body.error.message.trim()
+        ) {
+          message = body.error.message;
+        } else if (typeof body.error === 'string' && body.error.trim()) {
+          message = body.error;
+        }
+      } catch {
+        // Keep the generic fallback when the error body is absent or invalid.
+      }
+      throw new Error(message);
+    }
+    return (await resp.json()) as CreateDesignSystemProjectFromProjectResponse;
+  } catch (err) {
+    throw err instanceof Error ? err : new Error('Could not create design system');
+  }
+}
+
+export async function duplicateProject(
+  projectId: string,
+  input: { name?: string } = {},
+): Promise<DuplicateProjectResponse> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/duplicate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) {
+      let message = 'Could not duplicate project';
+      try {
+        const body = await resp.json() as { error?: unknown };
+        if (
+          body.error &&
+          typeof body.error === 'object' &&
+          'message' in body.error &&
+          typeof body.error.message === 'string' &&
+          body.error.message.trim()
+        ) {
+          message = body.error.message;
+        } else if (typeof body.error === 'string' && body.error.trim()) {
+          message = body.error;
+        }
+      } catch {
+        // Keep the generic fallback when the error body is absent or invalid.
+      }
+      throw new Error(message);
+    }
+    return (await resp.json()) as DuplicateProjectResponse;
+  } catch (err) {
+    throw err instanceof Error ? err : new Error('Could not duplicate project');
   }
 }
 

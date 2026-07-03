@@ -1162,6 +1162,175 @@ describe('MemorySection', () => {
     }
   });
 
+  it('refreshes pending connector authorization when the window regains focus', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    let connected = false;
+    const authWindow = {
+      document: {
+        title: '',
+        body: { innerHTML: '' },
+      },
+      location: { replace: vi.fn() },
+      close: vi.fn(),
+    };
+    vi.spyOn(window, 'open').mockReturnValue(authWindow as unknown as Window);
+    const onConnectorsChanged = vi.fn();
+    const suggestionBodies: unknown[] = [];
+    window.addEventListener(CONNECTORS_CHANGED_EVENT, onConnectorsChanged);
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions') {
+        return new Response(JSON.stringify({ extractions: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/connectors/discovery?hydrateTools=false') {
+        return new Response(JSON.stringify({
+          connectors: [
+            {
+              id: 'github',
+              name: 'GitHub',
+              provider: 'composio',
+              category: 'Developer',
+              status: 'available',
+              tools: [],
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/connectors/status') {
+        return new Response(JSON.stringify({
+          statuses: {
+            github: connected
+              ? { status: 'connected', accountLabel: 'External browser GitHub' }
+              : { status: 'available' },
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/connectors/auth-configs/prepare' && init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          results: {
+            github: { status: 'ready', authConfigId: 'ac_github' },
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/connectors/github/connect' && init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          connector: {
+            id: 'github',
+            name: 'GitHub',
+            provider: 'composio',
+            category: 'Developer',
+            status: 'available',
+            tools: [],
+          },
+          auth: {
+            kind: 'redirect_required',
+            redirectUrl: 'https://example.com/github-oauth',
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/connectors/suggest' && init?.method === 'POST') {
+        suggestionBodies.push(JSON.parse(String(init.body)));
+        return new Response(JSON.stringify({
+          suggestions: [
+            {
+              id: 'project_external_github_1',
+              name: 'External GitHub context',
+              description: 'Connector-derived context after focus refresh.',
+              type: 'project',
+              body: 'Remember that this project depends on GitHub context imported after browser authorization.',
+              source: {
+                kind: 'connector',
+                connectorId: 'github',
+                connectorName: 'GitHub',
+                accountLabel: 'External browser GitHub',
+                toolName: 'github.github_search',
+                toolTitle: 'Search GitHub',
+              },
+            },
+          ],
+          attemptedLLM: true,
+          contextBytes: 72,
+          connectors: [
+            {
+              connectorId: 'github',
+              connectorName: 'GitHub',
+              accountLabel: 'External browser GitHub',
+              status: 'succeeded',
+              toolName: 'github.github_search',
+              toolTitle: 'Search GitHub',
+              summary: 'Found repo context after OAuth.',
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    try {
+      renderMemorySection({
+        chatAgentId: 'codex',
+        chatModel: 'default',
+      });
+      await openAddMemories();
+      fireEvent.click(await screen.findByRole('tab', { name: 'Import from apps' }));
+      const githubRow = await waitFor(() => {
+        const row = document.querySelector('[data-memory-connector-id="github"]');
+        expect(row).toBeTruthy();
+        return row as HTMLElement;
+      });
+
+      fireEvent.click(within(githubRow).getByRole('button', { name: 'Connect GitHub' }));
+
+      await waitFor(() => {
+        expect(authWindow.location.replace).toHaveBeenCalledWith('https://example.com/github-oauth');
+      });
+      expect(within(githubRow).getByText('Finish authorization in your browser, then return here')).toBeTruthy();
+      expect(within(githubRow).queryByText('Select')).toBeNull();
+      expect(onConnectorsChanged).not.toHaveBeenCalled();
+
+      connected = true;
+      window.dispatchEvent(new Event('focus'));
+
+      await waitFor(() => expect(onConnectorsChanged).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(within(githubRow).getByText('External browser GitHub')).toBeTruthy());
+      expect(within(githubRow).queryByText('Finish authorization in your browser, then return here')).toBeNull();
+      expect(within(githubRow).getByText('Select')).toBeTruthy();
+
+      fireEvent.click(screen.getByLabelText('Use GitHub for memory extraction'));
+      const scanButton = await screen.findByRole('button', { name: /Scan selected apps/i });
+      await waitFor(() => {
+        expect((scanButton as HTMLButtonElement).disabled).toBe(false);
+      });
+      fireEvent.click(scanButton);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Found 1 suggested memory from 1 app/)).toBeTruthy();
+      });
+      expect(screen.getByText('72 B read')).toBeTruthy();
+      expect(screen.getByText(/Search GitHub · Found repo context after OAuth/)).toBeTruthy();
+      expect(suggestionBodies).toEqual([{
+        connectorIds: ['github'],
+        chatAgentId: 'codex',
+        chatModel: 'default',
+      }]);
+    } finally {
+      window.removeEventListener(CONNECTORS_CHANGED_EVENT, onConnectorsChanged);
+    }
+  });
+
   it('shows reconnect guidance for memory connectors with stale authorization', async () => {
     globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
     const lastError = 'GitHub authorization expired. Reconnect GitHub.';

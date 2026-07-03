@@ -50,6 +50,7 @@ export function normalizeVelaModelId(rawId: string): string | null {
   if (/^deepseek_v3_2$/i.test(withoutPrefix)) return 'deepseek-v3.2';
   if (/^deepseek-v3-2$/i.test(withoutPrefix)) return 'deepseek-v3.2';
   if (/^kimi_k2_6$/i.test(withoutPrefix)) return 'kimi-k2.6';
+  if (/^kimi_k2_7_code$/i.test(withoutPrefix)) return 'kimi-k2.7-code';
   if (/^glm_5_1$/i.test(withoutPrefix)) return 'glm-5.1';
   if (/^glm_5$/i.test(withoutPrefix)) return 'glm-5';
   const versioned = normalizeKnownVelaVersionId(withoutPrefix);
@@ -145,7 +146,7 @@ export function parseVelaModelJson(
     const rawId = item && typeof item === 'object'
       ? (item as { id?: unknown }).id
       : null;
-    const id = typeof rawId === 'string' ? rawId.trim() : '';
+    const id = typeof rawId === 'string' ? (normalizeVelaModelId(rawId) ?? '') : '';
     if (!id || seen.has(id) || !isVelaChatModelId(id)) continue;
     seen.add(id);
     models.push({ id, label: id });

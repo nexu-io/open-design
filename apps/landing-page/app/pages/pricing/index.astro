@@ -22,6 +22,10 @@ import {
   fillTemplate,
   PREMIUM_MODELS,
   STANDARD_MODELS,
+  DELIVERABLE_RANGES,
+  CREDIT_BONUS_PCT,
+  TEAM_SIZE_VALUES,
+  BUDGET_VALUES,
   type PlanTierId,
 } from '../../_lib/pricing-content';
 import {
@@ -57,6 +61,7 @@ const faqs = getFaqs(locale);
 const faqTitle = getFaqTitle(locale);
 const storyMoreHref = href('/stories/ikigai-one/');
 const enterprise = getEnterprise(locale);
+const LF = enterprise.leadForm;
 
 const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
 const title = 'Pricing — Open Design';
@@ -66,6 +71,14 @@ const description =
 const tiers: PlanTierConfig[] = PRICING_SNAPSHOT.tiers;
 const usd = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 const renderCatalogLabel = (label: string) => fillTemplate(label, catalogLabelVars);
+
+// Displayed monthly credit = base grant × the limited-time bonus (Pro +20%,
+// Max +50%). The base grant stays the plans.json contract number; the bonus is
+// a promo surfaced as a badge next to the amount.
+function effectiveCreditUsd(t: PlanTierConfig): number {
+  const bonusPct = CREDIT_BONUS_PCT[t.tier as PlanTierId];
+  return bonusPct ? Math.round(t.monthly.grantUsd * (1 + bonusPct / 100)) : t.monthly.grantUsd;
+}
 
 // Build-time display values per tier (the inline script recomputes these from
 // the public plans.json using the same formulas + the same label templates).
@@ -79,6 +92,7 @@ function view(t: PlanTierConfig) {
       strike: usd(t.monthly.priceUsd),
       tag: fillTemplate(L.firstMonthTag, { pct: String(introPct) }),
       subline: fillTemplate(L.monthlyRenewal, { amountUsd: usd(t.monthly.priceUsd) }),
+      saveCta: fillTemplate(L.yearlySaveCta, { savingsUsd: usd(yearlySave) }),
     },
     yearly: {
       amount: usd(yearlyEquiv),
@@ -89,7 +103,8 @@ function view(t: PlanTierConfig) {
         savingsUsd: usd(yearlySave),
       }),
     },
-    credits: `${usd(t.monthly.grantUsd)}${L.perMonth}`,
+    credits: fillTemplate(L.creditBenefit, { amount: usd(effectiveCreditUsd(t)) }),
+    bonusPct: CREDIT_BONUS_PCT[t.tier as PlanTierId],
   };
 }
 
@@ -126,14 +141,14 @@ const jsonLd = [
     <span aria-current="page">Pricing</span>
   </nav>
 
-  <article class="info-page pr-page" data-pricing-root data-interval="monthly">
+  <article class="info-page pr-page" data-pricing-root data-interval="yearly">
     <header class="pr-hero">
       <h1 class="pr-hero-heading">{L.heroTitle}</h1>
       <div class="pr-toggle" role="tablist" aria-label="Billing interval">
-        <button type="button" class="pr-toggle-btn is-active" role="tab" data-interval-btn="monthly" aria-selected="true">
+        <button type="button" class="pr-toggle-btn" role="tab" data-interval-btn="monthly" aria-selected="false">
           {L.monthly}
         </button>
-        <button type="button" class="pr-toggle-btn" role="tab" data-interval-btn="yearly" aria-selected="false">
+        <button type="button" class="pr-toggle-btn is-active" role="tab" data-interval-btn="yearly" aria-selected="true">
           {L.yearly}
           <span class="pr-toggle-save">{L.yearlySave}</span>
         </button>
@@ -166,7 +181,13 @@ const jsonLd = [
                   <span class="pr-per">{L.perMonth}</span>
                   <span class="pr-tag" data-od-tag>{v.monthly.tag}</span>
                 </div>
-                <p class="pr-subline" data-od-subline>{v.monthly.subline}</p>
+                <p class="pr-subline">
+                  <span data-od-subline>{v.monthly.subline}</span>
+                  <button type="button" class="pr-yearly-nudge" data-goto-yearly>
+                    <span data-od-yearly-cta>{v.monthly.saveCta}</span>
+                    <span class="pr-yearly-nudge-arrow" aria-hidden="true">→</span>
+                  </button>
+                </p>
               </div>
               <div class="pr-when" data-when="yearly">
                 <div class="pr-price-row">
@@ -179,36 +200,50 @@ const jsonLd = [
               </div>
             </div>
 
-            <div class="pr-metrics">
-              <div class="pr-metric">
-                <span class="pr-metric-label">{L.modelCredits}</span>
-                <span class="pr-metric-val" data-od-credit>{v.credits}</span>
-              </div>
-              <div class="pr-metric">
-                <span class="pr-metric-label">{L.deliverablesLabel}</span>
-                <span class="pr-metric-val">{plan.deliverablesValue}</span>
-              </div>
-            </div>
-
             <p class="pr-anchor">{plan.costAnchor}</p>
 
             <a
               class={t.recommended ? 'btn btn-primary pr-cta' : 'btn btn-ghost pr-cta'}
-              href={cloudSubscribeUrl(t.tier, 'monthly')}
+              href={cloudSubscribeUrl(t.tier, 'yearly')}
               data-pricing-cta
               data-tier={t.tier}
             >
               {plan.ctaLabel}
             </a>
 
+            {/* Fully-expanded benefits — credit + deliverable lead the list,
+                then every included benefit; no "includes all <tier>" heading. */}
             <ul class="pr-feats">
-              {plan.features.map((f) =>
-                f.heading ? (
-                  <li class="pr-feat-head">{renderCatalogLabel(f.label)}</li>
-                ) : (
-                  <li class="pr-feat">{renderCatalogLabel(f.label)}</li>
-                ),
-              )}
+              <li class="pr-feat pr-feat-lead">
+                <span data-od-credit>{v.credits}</span>
+                {v.bonusPct != null && (
+                  <span class="pr-bonus">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <rect x="3" y="8" width="18" height="4" rx="1" />
+                      <path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
+                      <path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5" />
+                    </svg>
+                    {fillTemplate(L.creditBonus, { pct: String(v.bonusPct) })}
+                  </span>
+                )}
+              </li>
+              <li class="pr-feat pr-feat-lead pr-feat-task">
+                <span>{fillTemplate(L.deliverableBenefit, { range: DELIVERABLE_RANGES[t.tier as PlanTierId] })}</span>
+                <button type="button" class="pr-info-btn" aria-label={L.taskTooltip.note} aria-describedby={`pr-task-tip-${t.tier}`}>
+                  <svg class="pr-info-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4M12 8h.01" />
+                  </svg>
+                </button>
+                <span class="pr-task-tip" id={`pr-task-tip-${t.tier}`} role="tooltip">
+                  <span>{L.taskTooltip.line1}</span>
+                  <span>{L.taskTooltip.line2}</span>
+                  <span class="pr-task-tip-note">{L.taskTooltip.note}</span>
+                </span>
+              </li>
+              {plan.features.map((f) => (
+                <li class="pr-feat">{renderCatalogLabel(f)}</li>
+              ))}
             </ul>
 
             <div class="pr-models">
@@ -248,9 +283,9 @@ const jsonLd = [
         </div>
       </div>
       <div class="pr-team-actions">
-        <a class="btn btn-primary pr-team-cta" href={`mailto:${ENTERPRISE_EMAIL}`}>
+        <button type="button" class="btn btn-primary pr-team-cta" data-open-lead-modal>
           {enterprise.leadCta}
-        </a>
+        </button>
         <a class="pr-team-email" href={`mailto:${ENTERPRISE_EMAIL}`}>
           <span aria-hidden="true">✉</span> {ENTERPRISE_EMAIL}
         </a>
@@ -316,10 +351,104 @@ const jsonLd = [
     </div>
   </section>
 
-  <script is:inline define:vars={{ plansUrl: PLANS_JSON_URL, labels: L, subscribeBase: CLOUD_CONSOLE_URL }}>
+  {/* Team-plan lead-capture modal — opened by the "Request team access" CTA in
+      the team banner. POSTs to the /contact-sales Pages Function. */}
+  <div class="pr-modal" data-lead-modal hidden aria-hidden="true">
+    <div class="pr-modal-backdrop" data-lead-close></div>
+    <div class="pr-modal-card" role="dialog" aria-modal="true" aria-labelledby="pr-lead-title">
+      <button type="button" class="pr-modal-x" data-lead-close aria-label={LF.close}>
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </button>
+
+      <form class="pr-lead-form" data-lead-form novalidate>
+        <h2 class="pr-modal-title" id="pr-lead-title">{LF.title}</h2>
+        <p class="pr-modal-sub">{LF.subtitle}</p>
+
+        <div class="pr-lead-grid">
+          <div class="pr-lead-field">
+            <label class="pr-lead-label" for="pr-lead-name">{LF.fields.name} <span class="pr-req">*</span></label>
+            <input class="pr-lead-input" id="pr-lead-name" name="name" type="text" required autocomplete="name" placeholder={LF.placeholders.name} />
+          </div>
+          <div class="pr-lead-field">
+            <label class="pr-lead-label" for="pr-lead-email">{LF.fields.email} <span class="pr-req">*</span></label>
+            <input class="pr-lead-input" id="pr-lead-email" name="email" type="email" required autocomplete="email" placeholder={LF.placeholders.email} />
+          </div>
+          <div class="pr-lead-field">
+            <label class="pr-lead-label" for="pr-lead-company">{LF.fields.company} <span class="pr-opt">{LF.optional}</span></label>
+            <input class="pr-lead-input" id="pr-lead-company" name="company" type="text" autocomplete="organization" placeholder={LF.placeholders.company} />
+          </div>
+          <div class="pr-lead-field">
+            <label class="pr-lead-label" for="pr-lead-teamsize">{LF.fields.teamSize} <span class="pr-opt">{LF.optional}</span></label>
+            <select class="pr-lead-input pr-lead-select" id="pr-lead-teamsize" name="teamSize">
+              <option value="">{LF.selectPlaceholder}</option>
+              {LF.teamSizeOptions.map((label, i) => <option value={TEAM_SIZE_VALUES[i]}>{label}</option>)}
+            </select>
+          </div>
+          <div class="pr-lead-field">
+            <label class="pr-lead-label" for="pr-lead-role">{LF.fields.role} <span class="pr-opt">{LF.optional}</span></label>
+            <input class="pr-lead-input" id="pr-lead-role" name="role" type="text" placeholder={LF.placeholders.role} />
+          </div>
+          <div class="pr-lead-field">
+            <label class="pr-lead-label" for="pr-lead-location">{LF.fields.country} <span class="pr-opt">{LF.optional}</span></label>
+            <input class="pr-lead-input" id="pr-lead-location" name="location" type="text" placeholder={LF.placeholders.country} />
+          </div>
+          <div class="pr-lead-field">
+            <label class="pr-lead-label" for="pr-lead-seats">{LF.fields.seats} <span class="pr-opt">{LF.optional}</span></label>
+            <input class="pr-lead-input" id="pr-lead-seats" name="seats" type="text" inputmode="numeric" placeholder={LF.placeholders.seats} />
+          </div>
+          <div class="pr-lead-field">
+            <label class="pr-lead-label" for="pr-lead-budget">{LF.fields.budget} <span class="pr-opt">{LF.optional}</span></label>
+            <select class="pr-lead-input pr-lead-select" id="pr-lead-budget" name="budget">
+              <option value="">{LF.selectPlaceholder}</option>
+              {LF.budgetOptions.map((label, i) => <option value={BUDGET_VALUES[i]}>{label}</option>)}
+            </select>
+          </div>
+          <div class="pr-lead-field pr-lead-field-full">
+            <label class="pr-lead-label" for="pr-lead-message">{LF.fields.useCase} <span class="pr-opt">{LF.optional}</span></label>
+            <textarea class="pr-lead-input pr-lead-textarea" id="pr-lead-message" name="message" rows="3" placeholder={LF.placeholders.useCase}></textarea>
+          </div>
+        </div>
+
+        <p class="pr-lead-error" data-lead-error role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary pr-lead-submit" data-lead-submit>{LF.submit}</button>
+        <p class="pr-lead-privacy">{LF.privacy}</p>
+      </form>
+
+      <div class="pr-lead-success" data-lead-success hidden>
+        <span class="pr-lead-success-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        </span>
+        <h3 class="pr-lead-success-title">{LF.successTitle}</h3>
+        <p class="pr-lead-success-desc">{LF.successDesc}</p>
+        <button type="button" class="btn btn-ghost pr-lead-success-close" data-lead-close>{LF.close}</button>
+      </div>
+    </div>
+  </div>
+
+  <script is:inline define:vars={{ plansUrl: PLANS_JSON_URL, labels: L, subscribeBase: CLOUD_CONSOLE_URL, creditBonusPct: CREDIT_BONUS_PCT, leadForm: LF }}>
     (() => {
       const root = document.querySelector('[data-pricing-root]');
       if (!root) return;
+
+      // Shared analytics helper — same PostHog sink as the rest of the site
+      // (window.__odTrack, guarded). Stamps page_name + locale on every event.
+      const track = (name, extra) => {
+        try {
+          if (typeof window.__odTrack === 'function') {
+            window.__odTrack(
+              name,
+              Object.assign(
+                { page_name: 'pricing', locale: (document.documentElement.getAttribute('lang') || 'en').toLowerCase() },
+                extra || {},
+              ),
+            );
+          }
+        } catch (e) {}
+      };
 
       // Keep each plan's CTA deep-link pointing at the cloud console with the
       // currently selected billing interval. The console is auth-gated and
@@ -334,17 +463,26 @@ const jsonLd = [
       };
 
       // ── Billing interval toggle ──────────────────────────────────────────
+      // One entry point so the toggle button and the "save $X yearly" nudge
+      // share state updates AND emit one analytics event with the right source.
+      const activateInterval = (interval, via) => {
+        root.setAttribute('data-interval', interval);
+        for (const b of root.querySelectorAll('[data-interval-btn]')) {
+          const on = b.getAttribute('data-interval-btn') === interval;
+          b.classList.toggle('is-active', on);
+          b.setAttribute('aria-selected', on ? 'true' : 'false');
+        }
+        syncCtas(interval);
+        track('pricing_interval_toggle', { interval: interval, via: via || 'toggle' });
+      };
+
       for (const btn of root.querySelectorAll('[data-interval-btn]')) {
-        btn.addEventListener('click', () => {
-          const interval = btn.getAttribute('data-interval-btn');
-          root.setAttribute('data-interval', interval);
-          for (const b of root.querySelectorAll('[data-interval-btn]')) {
-            const on = b === btn;
-            b.classList.toggle('is-active', on);
-            b.setAttribute('aria-selected', on ? 'true' : 'false');
-          }
-          syncCtas(interval);
-        });
+        btn.addEventListener('click', () => activateInterval(btn.getAttribute('data-interval-btn'), 'toggle'));
+      }
+
+      // Monthly-tab "save $X yearly" nudge → switch to the yearly tab.
+      for (const nudge of root.querySelectorAll('[data-goto-yearly]')) {
+        nudge.addEventListener('click', () => activateInterval('yearly', 'nudge'));
       }
 
       // ── Pricing contract reconciliation ──────────────────────────────────
@@ -375,13 +513,16 @@ const jsonLd = [
             set(card, '[data-when="monthly"] [data-od-strike]', usd(t.monthly.priceUsd));
             set(card, '[data-when="monthly"] [data-od-tag]', fill(labels.firstMonthTag, { pct: String(introPct) }));
             set(card, '[data-when="monthly"] [data-od-subline]', fill(labels.monthlyRenewal, { amountUsd: usd(t.monthly.priceUsd) }));
+            set(card, '[data-when="monthly"] [data-od-yearly-cta]', fill(labels.yearlySaveCta, { savingsUsd: usd(yearlySave) }));
 
             set(card, '[data-when="yearly"] [data-od-amount]', usd(yearlyEquiv));
             set(card, '[data-when="yearly"] [data-od-strike]', usd(t.monthly.priceUsd));
             set(card, '[data-when="yearly"] [data-od-tag]', fill(labels.yearlyDiscountTag, { pct: String(t.yearly.discountPct) }));
             set(card, '[data-when="yearly"] [data-od-subline]', fill(labels.yearlySubline, { totalUsd: usd(t.yearly.priceUsd), savingsUsd: usd(yearlySave) }));
 
-            set(card, '[data-od-credit]', usd(t.monthly.grantUsd) + labels.perMonth);
+            const bonusPct = creditBonusPct[t.tier];
+            const effectiveGrant = bonusPct ? Math.round(t.monthly.grantUsd * (1 + bonusPct / 100)) : t.monthly.grantUsd;
+            set(card, '[data-od-credit]', fill(labels.creditBenefit, { amount: usd(effectiveGrant) }));
           }
         })
         .catch(() => {});
@@ -400,6 +541,115 @@ const jsonLd = [
           else if (window.posthog && window.posthog.capture) window.posthog.capture('pricing_subscribe_click', props);
         } catch (e) {}
       });
+
+      // ── Team-plan lead-capture modal ─────────────────────────────────────
+      // The banner + modal live OUTSIDE [data-pricing-root], so query document.
+      const modal = document.querySelector('[data-lead-modal]');
+      if (modal) {
+        const form = modal.querySelector('[data-lead-form]');
+        const errorEl = modal.querySelector('[data-lead-error]');
+        const successEl = modal.querySelector('[data-lead-success]');
+        const submitBtn = modal.querySelector('[data-lead-submit]');
+        let lastFocus = null;
+
+        const openModal = () => {
+          lastFocus = document.activeElement;
+          // Restore a clean form on every open so a prior success/error panel
+          // doesn't strand the modal (a second lead can be submitted freely).
+          if (form) { form.reset(); form.hidden = false; }
+          if (successEl) successEl.hidden = true;
+          if (errorEl) errorEl.hidden = true;
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = leadForm.submit; }
+          modal.hidden = false;
+          modal.setAttribute('aria-hidden', 'false');
+          document.body.style.overflow = 'hidden';
+          const first = modal.querySelector('input[name="name"]');
+          if (first) setTimeout(() => first.focus(), 40);
+        };
+        const closeModal = () => {
+          modal.hidden = true;
+          modal.setAttribute('aria-hidden', 'true');
+          document.body.style.overflow = '';
+          if (lastFocus && lastFocus.focus) lastFocus.focus();
+        };
+
+        for (const btn of document.querySelectorAll('[data-open-lead-modal]')) {
+          btn.addEventListener('click', () => {
+            track('team_lead_open', { area: 'team_banner' });
+            openModal();
+          });
+        }
+        for (const el of modal.querySelectorAll('[data-lead-close]')) {
+          el.addEventListener('click', closeModal);
+        }
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && !modal.hidden) closeModal();
+        });
+
+        const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const showError = (msg) => {
+          if (!errorEl) return;
+          errorEl.textContent = msg;
+          errorEl.hidden = false;
+        };
+
+        if (form) {
+          form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = new FormData(form);
+            const val = (k) => (data.get(k) || '').toString().trim();
+            const name = val('name');
+            const email = val('email');
+            if (!name || !email) return showError(leadForm.errorRequired);
+            if (!EMAIL_RE.test(email)) return showError(leadForm.errorEmail);
+            if (errorEl) errorEl.hidden = true;
+            if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = leadForm.submitting; }
+
+            const payload = {
+              name, email,
+              company: val('company'),
+              teamSize: (data.get('teamSize') || '').toString(),
+              role: val('role'),
+              location: val('location'),
+              seats: val('seats'),
+              budget: (data.get('budget') || '').toString(),
+              message: val('message'),
+              source: 'pricing_team',
+              locale: document.documentElement.lang || 'en',
+              pageUrl: location.href,
+            };
+
+            try {
+              const res = await fetch('/contact-sales', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+              const body = await res.json().catch(() => ({}));
+              if (!res.ok || !body.ok) throw new Error('failed');
+              form.hidden = true;
+              if (successEl) successEl.hidden = false;
+              // Success conversion — segmentation props only, no PII (name/email
+              // stay out of the analytics payload).
+              track('team_lead_submit', {
+                team_size: payload.teamSize || '(none)',
+                budget: payload.budget || '(none)',
+                has_company: !!payload.company,
+                has_role: !!payload.role,
+                has_seats: !!payload.seats,
+                has_message: !!payload.message,
+              });
+            } catch (err) {
+              // Client-side validation already passed, so a failure here is
+              // transient/network — show the submit-failure hint, not a
+              // "fill required fields" message, and let the user retry.
+              showError(leadForm.errorSubmit);
+              track('team_lead_error', {});
+              if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = leadForm.submit; }
+            }
+          });
+        }
+      }
     })();
   </script>
 </Layout>
@@ -528,20 +778,25 @@ const jsonLd = [
     white-space: nowrap;
   }
   .pr-subline { margin: 8px 0 0; font-size: 0.8rem; color: var(--ink-soft, #777); }
-
-  /* ---- Metrics ---- */
-  .pr-metrics {
-    margin: 18px 0 0;
-    padding: 16px 0;
-    border-top: 1px solid var(--line, rgba(0, 0, 0, 0.08));
-    border-bottom: 1px solid var(--line, rgba(0, 0, 0, 0.08));
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
+  .pr-yearly-nudge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    color: inherit;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.2s cubic-bezier(0.23, 1, 0.32, 1);
   }
-  .pr-metric { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-  .pr-metric-label { font-size: 0.84rem; color: var(--ink-soft, #666); }
-  .pr-metric-val { font-size: 0.86rem; font-weight: 650; color: var(--ink); white-space: nowrap; }
+  .pr-yearly-nudge [data-od-yearly-cta] { text-decoration: underline; text-underline-offset: 2px; }
+  .pr-yearly-nudge:hover { color: var(--ink, #1a1a1a); }
+  .pr-yearly-nudge:focus-visible { outline: 2px solid var(--brand, #2bd200); outline-offset: 2px; border-radius: 4px; }
+  .pr-yearly-nudge-arrow { transition: transform 0.2s cubic-bezier(0.23, 1, 0.32, 1); }
+  .pr-yearly-nudge:hover .pr-yearly-nudge-arrow { transform: translateX(2px); }
 
   /* ---- Cost anchor ---- */
   .pr-anchor {
@@ -554,9 +809,16 @@ const jsonLd = [
   /* ---- CTA ---- */
   .pr-cta { margin-top: 18px; width: 100%; justify-content: center; text-align: center; }
 
-  /* ---- Features ---- */
-  .pr-feats { list-style: none; margin: 24px 0 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
-  .pr-feat-head { font-size: 0.9rem; font-weight: 650; color: var(--ink); }
+  /* ---- Features (fully expanded; credit + deliverable lead the list) ---- */
+  .pr-feats {
+    list-style: none;
+    margin: 22px 0 0;
+    padding: 18px 0 0;
+    border-top: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
   .pr-feat {
     position: relative;
     padding-left: 22px;
@@ -571,6 +833,66 @@ const jsonLd = [
     top: 0;
     font-weight: 700;
     color: var(--olive, #218c00);
+  }
+  /* Lead rows (credit + deliverable) carry an inline badge / info icon. */
+  .pr-feat-lead { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .pr-bonus {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0.1rem 0.42rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    color: #0d3300;
+    background: color-mix(in srgb, var(--brand, #2bd200) 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--brand, #2bd200) 45%, transparent);
+  }
+  .pr-info-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink-soft, #aaa);
+    cursor: help;
+    line-height: 0;
+  }
+  .pr-info-btn:focus-visible { outline: 2px solid var(--brand, #2bd200); outline-offset: 2px; border-radius: 999px; }
+  .pr-info-icon { flex-shrink: 0; }
+  /* Hover/focus tooltip explaining how a "design deliverable" is counted. */
+  .pr-feat-task { position: relative; }
+  .pr-task-tip {
+    position: absolute;
+    left: 22px;
+    top: 100%;
+    margin-top: 6px;
+    z-index: 20;
+    width: 210px;
+    padding: 10px 11px;
+    border-radius: 10px;
+    background: #262626;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 0.72rem;
+    line-height: 1.55;
+    text-align: left;
+    box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-2px);
+    transition: opacity 0.2s cubic-bezier(0.23, 1, 0.32, 1), transform 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+    pointer-events: none;
+  }
+  .pr-task-tip span { display: block; }
+  .pr-task-tip-note { margin-top: 5px; color: rgba(255, 255, 255, 0.55); }
+  .pr-feat-task:hover .pr-task-tip,
+  .pr-feat-task:focus-within .pr-task-tip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
   }
 
   /* ---- Model lists ---- */
@@ -826,6 +1148,123 @@ const jsonLd = [
     font-size: 0.88rem;
     line-height: 1.65;
     color: var(--ink-soft, #555);
+  }
+
+  /* ---- Team-plan lead-capture modal ---- */
+  .pr-modal[hidden] { display: none; }
+  .pr-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .pr-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
+    animation: pr-modal-fade 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .pr-modal-card {
+    position: relative;
+    width: min(560px, 100%);
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    background: var(--bg, #fff);
+    border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
+    border-radius: 20px;
+    padding: 30px 30px 26px;
+    box-shadow: 0 32px 90px -24px rgba(0, 0, 0, 0.45);
+    animation: pr-modal-pop 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  @keyframes pr-modal-fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes pr-modal-pop {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .pr-modal-x {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    display: inline-flex;
+    padding: 6px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-soft, #888);
+    cursor: pointer;
+    transition: background 0.2s cubic-bezier(0.23, 1, 0.32, 1), color 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .pr-modal-x:hover { background: var(--line, rgba(0, 0, 0, 0.06)); color: var(--ink); }
+  .pr-modal-title { margin: 0; font-size: 1.4rem; font-weight: 700; color: var(--ink); }
+  .pr-modal-sub { margin: 8px 0 0; font-size: 0.88rem; line-height: 1.55; color: var(--ink-soft, #666); }
+
+  .pr-lead-grid {
+    margin-top: 22px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px 18px;
+  }
+  .pr-lead-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+  .pr-lead-field-full { grid-column: 1 / -1; }
+  .pr-lead-label { font-size: 0.84rem; font-weight: 600; color: var(--ink); }
+  .pr-req { color: #e5484d; font-weight: 700; }
+  .pr-opt { font-size: 0.78rem; font-weight: 400; color: var(--ink-soft, #999); }
+  .pr-lead-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 11px 13px;
+    font: inherit;
+    font-size: 0.9rem;
+    color: var(--ink, #1a1a1a);
+    background: var(--surface, rgba(0, 0, 0, 0.015));
+    border: 1px solid var(--border, rgba(0, 0, 0, 0.14));
+    border-radius: 10px;
+    transition: border-color 0.2s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .pr-lead-input::placeholder { color: var(--ink-soft, #aaa); }
+  .pr-lead-input:focus {
+    outline: none;
+    border-color: var(--brand, #2bd200);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand, #2bd200) 18%, transparent);
+  }
+  .pr-lead-select { appearance: none; cursor: pointer; background-image: none; }
+  .pr-lead-textarea { resize: vertical; min-height: 84px; line-height: 1.5; }
+  .pr-lead-error {
+    margin: 16px 0 0;
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: #e5484d;
+  }
+  .pr-lead-submit { margin-top: 20px; width: 100%; justify-content: center; }
+  .pr-lead-privacy {
+    margin: 14px 0 0;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--ink-soft, #999);
+  }
+
+  .pr-lead-success { text-align: center; padding: 26px 8px 12px; }
+  .pr-lead-success-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 54px;
+    height: 54px;
+    border-radius: 999px;
+    color: var(--olive, #218c00);
+    background: color-mix(in srgb, var(--brand, #2bd200) 16%, transparent);
+  }
+  .pr-lead-success-title { margin: 16px 0 0; font-size: 1.2rem; font-weight: 700; color: var(--ink); }
+  .pr-lead-success-desc { margin: 8px 0 0; font-size: 0.9rem; line-height: 1.55; color: var(--ink-soft, #666); }
+  .pr-lead-success-close { margin-top: 22px; }
+
+  @media (max-width: 560px) {
+    .pr-lead-grid { grid-template-columns: 1fr; }
+    .pr-modal-card { padding: 26px 20px 22px; }
   }
 </style>
 

@@ -166,14 +166,32 @@ export function deriveSeedPalette(
   const byLight = [...ranked].sort((a, b) => b.l - a.l);
   const byDark = [...ranked].sort((a, b) => a.l - b.l);
 
-  // Background: lightest frequent color (favor count among the near-white set).
+  // Page cast: count-weighted mean luminance over the measured colors decides
+  // whether the canvas itself is light or dark, so the `background` role tracks
+  // the brand's real theme instead of letting a single dark swatch paint a
+  // light page's background black (or vice-versa). Biased light (0.45 split,
+  // mirroring seed.ts) because a wrong dark canvas reads far more jarring than a
+  // wrong light one.
+  const totalCount = ranked.reduce((sum, c) => sum + c.count, 0);
+  const meanLuma =
+    totalCount > 0 ? ranked.reduce((sum, c) => sum + c.l * c.count, 0) / totalCount : 1;
+  const darkCast = meanLuma < 0.45;
+
+  // Background: on a light page, the most frequent near-white (else the lightest
+  // measured color); on a dark page, the most frequent near-black (else the
+  // darkest measured color). Either way the role matches the page's cast.
   const lightSet = ranked.filter((c) => c.l >= 0.9);
-  const background =
-    [...lightSet].sort((a, b) => b.count - a.count)[0] ?? byLight[0] ?? null;
-  // Foreground: darkest frequent color.
+  const darkBgSet = ranked.filter((c) => c.l <= 0.12);
+  const background = darkCast
+    ? [...darkBgSet].sort((a, b) => b.count - a.count)[0] ?? byDark[0] ?? null
+    : [...lightSet].sort((a, b) => b.count - a.count)[0] ?? byLight[0] ?? null;
+  // Foreground: the high-contrast counterpart to the background — darkest
+  // frequent color on a light page, lightest frequent color on a dark page.
   const darkSet = ranked.filter((c) => c.l <= 0.25);
-  const foreground =
-    [...darkSet].sort((a, b) => b.count - a.count)[0] ?? byDark[0] ?? null;
+  const lightFgSet = ranked.filter((c) => c.l >= 0.85);
+  const foreground = darkCast
+    ? [...lightFgSet].sort((a, b) => b.count - a.count)[0] ?? byLight[0] ?? null
+    : [...darkSet].sort((a, b) => b.count - a.count)[0] ?? byDark[0] ?? null;
 
   // Accent: prefer the declared theme-color when chromatic, else the most
   // frequent chromatic literal.
@@ -186,14 +204,19 @@ export function deriveSeedPalette(
     chromatic.find((c) => c.hex !== accentHex)?.hex ??
     null;
 
-  const bgRgb = background?.rgb ?? { r: 255, g: 255, b: 255 };
-  const fgRgb = foreground?.rgb ?? { r: 26, g: 26, b: 24 };
+  // Cast-aware defaults so an unmeasured background/foreground still lands on the
+  // correct theme (a dark page keeps a dark bg / light fg rather than snapping to
+  // white-on-near-black).
+  const bgRgb = background?.rgb ?? (darkCast ? { r: 17, g: 17, b: 17 } : { r: 255, g: 255, b: 255 });
+  const fgRgb = foreground?.rgb ?? (darkCast ? { r: 244, g: 244, b: 244 } : { r: 26, g: 26, b: 24 });
+  // Surface lifts the background toward the foreground (lighter on a light page,
+  // a touch lighter than near-black on a dark page) so cards separate either way.
+  const surfaceRgb = mix(bgRgb, fgRgb, 0.06);
 
   const out: BrandColor[] = [];
-  out.push(color('background', background ? background.hex : '#ffffff', 'Background', 'page background'));
-  // Surface: a hair lighter than the background (toward white) so cards lift.
-  out.push(color('surface', toHex(mix(bgRgb, { r: 255, g: 255, b: 255 }, 0.6)), 'Surface', 'cards, panels'));
-  out.push(color('foreground', foreground ? foreground.hex : '#1a1a18', 'Foreground', 'primary text'));
+  out.push(color('background', toHex(bgRgb), 'Background', 'page background'));
+  out.push(color('surface', toHex(surfaceRgb), 'Surface', 'cards, panels'));
+  out.push(color('foreground', toHex(fgRgb), 'Foreground', 'primary text'));
   // Muted: midpoint between fg and bg — a measured-derived secondary text tone.
   out.push(color('muted', toHex(mix(fgRgb, bgRgb, 0.45)), 'Muted', 'secondary text'));
   // Border: close to the background, nudged toward the foreground for a hairline.

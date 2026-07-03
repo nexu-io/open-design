@@ -1,0 +1,26 @@
+{
+  "candidateId": "242e9a72-9a69-4de5-91a4-67563dcf7db1",
+  "projectId": "brand-anthropic-a38199",
+  "runId": "30dd0eed-69ac-4975-9ca8-c659cfffeda2",
+  "conversationId": "05128f01-0c8c-43bb-9672-78ed2973b1fd",
+  "provenance": {
+    "summary": "Detected from context/source-context.md, SKILL.md after a successful run.",
+    "detectedAt": 1782803588534
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 8892,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 5815,
+      "copied": true
+    }
+  ]
+}

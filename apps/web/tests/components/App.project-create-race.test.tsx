@@ -92,6 +92,20 @@ vi.mock('../../src/components/EntryView', () => ({
       <button
         type="button"
         onClick={() =>
+          onCreateProject({
+            name: 'Context dir project',
+            skillId: null,
+            designSystemId: null,
+            metadata: { kind: 'prototype', linkedDirs: ['/Users/me/existing'] },
+            linkedDirs: ['/Users/me/reference', ' /Users/me/reference ', '/Users/me/local-code'],
+          })
+        }
+      >
+        Create project with context dirs
+      </button>
+      <button
+        type="button"
+        onClick={() =>
           void onImportFolderResponse?.({
             conversationId: 'conv-import',
             entryFile: null,
@@ -133,11 +147,13 @@ vi.mock('../../src/components/EntryView', () => ({
 vi.mock('../../src/components/ProjectView', () => ({
   ProjectView: ({
     onBack,
+    onCreateProjectFromDesignSystem,
     onProjectsRefresh,
     project,
     routeConversationId,
   }: {
     onBack: () => void;
+    onCreateProjectFromDesignSystem?: (designSystemId: string, title: string) => Promise<void> | void;
     onProjectsRefresh: () => Promise<void>;
     project: Project;
     routeConversationId?: string | null;
@@ -150,6 +166,12 @@ vi.mock('../../src/components/ProjectView', () => ({
       </button>
       <button type="button" onClick={() => void onProjectsRefresh()}>
         Refresh projects
+      </button>
+      <button
+        type="button"
+        onClick={() => void onCreateProjectFromDesignSystem?.('slack', 'Slack')}
+      >
+        Create design from design system
       </button>
     </main>
   ),
@@ -565,6 +587,45 @@ describe('App project creation routing', () => {
     expect(window.location.pathname).toBe('/projects/project-new');
   });
 
+  it('routes "create with this design system" through the default design router, not a prototype', async () => {
+    mockedListProjects.mockResolvedValue([existingProject]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Existing project' }));
+    await screen.findByTestId('project-view');
+    fireEvent.click(screen.getByRole('button', { name: 'Create design from design system' }));
+
+    await waitFor(() => {
+      expect(mockedCreateProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Untitled',
+          skillId: null,
+          designSystemId: 'slack',
+          // No prototype assumption: the click binds the hidden default
+          // router so the agent asks (via the task-type question-form) what
+          // to build, then auto-sends a preset prompt that names the system.
+          pluginId: 'od-default',
+          conversationMode: 'design',
+          pendingPrompt: expect.stringContaining('Slack'),
+          pluginInputs: expect.objectContaining({
+            prompt: expect.stringContaining('Slack'),
+          }),
+          metadata: expect.objectContaining({
+            kind: 'other',
+          }),
+        }),
+      );
+    });
+
+    // The web-prototype scenario and prototype kind must NOT leak in.
+    const call = mockedCreateProject.mock.calls.at(-1)?.[0] as
+      | { pluginId?: string; metadata?: { kind?: string } }
+      | undefined;
+    expect(call?.pluginId).not.toBe('example-web-prototype');
+    expect(call?.metadata?.kind).not.toBe('prototype');
+  });
+
   it('keeps a newly created project open when a post-create refresh resolves stale', async () => {
     const bootstrapProjects = deferred<Project[]>();
     const staleRefreshProjects = deferred<Project[]>();
@@ -872,6 +933,31 @@ describe('App project creation routing', () => {
     expect(replaceOrder).toBeLessThan(uploadOrder);
   });
 
+  it('persists Home context linked dirs into the project create metadata', async () => {
+    mockedListProjects.mockResolvedValue([]);
+
+    render(<App />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Create project with context dirs' }),
+    );
+
+    await waitFor(() => {
+      expect(mockedCreateProject).toHaveBeenCalled();
+    });
+    expect(mockedCreateProject.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          linkedDirs: [
+            '/Users/me/existing',
+            '/Users/me/reference',
+            '/Users/me/local-code',
+          ],
+        }),
+      }),
+    );
+  });
+
   it('short-circuits the upload + auto-send when the working-dir handoff fails', async () => {
     // Regression for the swallowed-failure case: the desktop working-dir token
     // has a ~60s TTL, so a slow user (or any rejected POST) makes
@@ -957,7 +1043,6 @@ describe('App project creation routing', () => {
       target: { value: 'https://acme.com' },
     });
     fireEvent.click(screen.getByRole('button', { name: /continue to generation/i }));
-    fireEvent.click(screen.getByRole('button', { name: /extract design system/i }));
 
     await waitFor(() => {
       expect(screen.getByTestId('project-route-conversation').textContent).toBe('conv-brand-acme');

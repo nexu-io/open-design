@@ -200,7 +200,7 @@ const FAQ_EN: FaqItem[] =
     { q: "What is BYOK? Do all plans support it?", a: "BYOK means Bring Your Own Key: add your own Anthropic, OpenAI, Google, or other provider API key and call provider models directly. BYOK does not consume Open Design balance and is available on every plan, including Free." },
     { q: "How are credits and charges handled after a plan change?", a: "This release supports upgrades only: moving to a higher tier or switching monthly to yearly. Upgrades take effect immediately, grant the new benefits, and only charge the prorated difference (your current plan's unused time is credited — you don't pay the full new-plan price). Self-service downgrades (lower tier, or yearly to monthly) are not available and that entry is disabled; to downgrade, please contact support." },
     { q: "Can I cancel a subscription anytime?", a: "Yes. Canceling stops renewal but does not end current benefits immediately. The paid period remains usable until it ends, then the account returns to Free. Yearly cancellations keep benefits through the current yearly period and do not trigger a refund.", cancelCta: "Cancel subscription" },
-    { q: "How do refunds work?", a: "Canceling a subscription does not refund it or reclaim current benefits for a prorated refund. Your paid period remains usable until it ends. If you see a duplicate charge or payment issue, contact support through the help center so we can review the bill." },
+    { q: "How do refunds work?", a: "If you'd like a refund, or run into a billing problem such as a duplicate charge or an unexpected charge, email support@open-design.ai directly and we'll help review and sort it out. Canceling a subscription only stops billing for the next cycle — it does not automatically issue a refund." },
   ];
 
 const FAQ_ZH: FaqItem[] =
@@ -214,7 +214,7 @@ const FAQ_ZH: FaqItem[] =
     { q: "BYOK 是什么？所有套餐都支持吗？", a: "BYOK（Bring Your Own Key）是指填入你自己的 Anthropic、OpenAI、Google 等厂商 API Key，直接调用原厂模型，不消耗 Open Design 余额、也不受套餐模型列表限制。所有套餐（包括 Free）均支持 BYOK。" },
     { q: "升级或降级套餐后，额度和扣费怎么处理？", a: "本期仅支持「升级」：提升套餐档位、或由月付转年付，升级立即生效并下发新套餐权益、仅需补差价（按当前套餐未用时长抵扣后的差额计费，无需支付新套餐全价）。降级（降低档位或由年付转月付）暂不支持自助操作，相关入口会置灰；如需降级，请联系人工客服处理。" },
     { q: "可以随时取消订阅吗？", a: "可以。取消订阅表示取消续订，不会立即终止当前权益。当前已付费周期内仍可正常使用，到期后不再续费、不再扣款，账户自动回到 Free。年付取消后权益保留到当前年度周期结束，不支持退款或立即回收权益。", cancelCta: "取消订阅" },
-    { q: "怎么申请退款？", a: "订阅取消不支持退款，也不支持通过立即回收当前权益来折算退款。取消后当前已付费周期继续可用，到期后停止续费；如果遇到重复扣款或支付异常，请通过帮助中心联系客服核查账单。" },
+    { q: "怎么申请退款？", a: "如果你有退款诉求，或遇到重复扣款、异常扣费等账单问题，请直接联系 support@open-design.ai，我们会协助核查处理。取消订阅本身只会停止下个账期扣费，不会自动发起退款。" },
   ];
 
 const FAQ_ZH_TW: FaqItem[] =
@@ -228,7 +228,7 @@ const FAQ_ZH_TW: FaqItem[] =
     { q: "BYOK 是什麼？所有套餐都支援嗎？", a: "BYOK 指 Bring Your Own Key：填入自己的 Anthropic、OpenAI、Google 等廠商 API Key，直接調用原廠模型。BYOK 不消耗 Open Design 餘額，所有套餐（含 Free）都支援。" },
     { q: "變更套餐後，額度和扣費如何處理？", a: "本期僅支援升級：提升套餐檔位，或從月付改為年付。升級會立即生效、發放新權益，且僅需補差價（按當前套餐未用時長抵扣後的差額計費，無需支付新套餐全價）。降級（降低檔位或由年付改月付）暫不支援自助操作，相關入口會置灰；如需降級，請聯絡人工客服處理。" },
     { q: "可以隨時取消訂閱嗎？", a: "可以。取消訂閱代表停止續費，不會立即終止當前權益。已付費週期仍可使用，到期後帳戶回到 Free。年付取消後權益保留到當前年付週期結束，不會自動退款。", cancelCta: "取消訂閱" },
-    { q: "退款如何處理？", a: "取消訂閱不會自動退款，也不會透過立即回收當前權益折算退款。已付費週期可繼續使用；若遇到重複扣款或支付異常，請透過幫助中心聯絡客服核查帳單。" },
+    { q: "退款如何處理？", a: "如果你有退款需求，或遇到重複扣款、異常扣費等帳單問題，請直接聯絡 support@open-design.ai，我們會協助核查處理。取消訂閱本身只會停止下個帳期扣費，不會自動發起退款。" },
   ];
 
 const FAQ_PT_BR: FaqItem[] =
@@ -242,7 +242,7 @@ const FAQ_PT_BR: FaqItem[] =
     { q: "O que é BYOK? Todos os planos suportam?", a: "BYOK significa Bring Your Own Key: use sua chave Anthropic, OpenAI, Google ou de outro provedor para chamar modelos diretamente. BYOK não consome saldo Open Design e está disponível em todos os planos." },
     { q: "Como créditos e cobranças funcionam após mudar de plano?", a: "Esta versão aceita apenas upgrades: subir de nível ou trocar mensal por anual. Upgrades entram em vigor imediatamente, liberam os novos benefícios e cobram apenas a diferença proporcional (o tempo não usado do plano atual é creditado — você não paga o preço cheio do novo plano). O downgrade (nível inferior ou anual para mensal) não está disponível como autoatendimento e fica desativado; para fazer downgrade, fale com o suporte." },
     { q: "Posso cancelar a assinatura a qualquer momento?", a: "Sim. Cancelar interrompe a renovação, mas não encerra os benefícios atuais imediatamente. O período pago continua utilizável até terminar; depois a conta volta ao Free. Cancelamentos anuais mantêm benefícios até o fim do período anual.", cancelCta: "Cancelar assinatura" },
-    { q: "Como funcionam reembolsos?", a: "Cancelar uma assinatura não gera reembolso automático nem recolhe benefícios atuais para reembolso proporcional. O período pago continua utilizável. Para cobrança duplicada ou erro de pagamento, fale com o suporte pela central de ajuda." },
+    { q: "Como funcionam reembolsos?", a: "Se você quiser um reembolso ou tiver algum problema de cobrança, como cobrança duplicada ou cobrança indevida, fale diretamente com support@open-design.ai e vamos ajudar a verificar e resolver. Cancelar a assinatura apenas interrompe a cobrança do próximo ciclo — não gera reembolso automático." },
   ];
 
 const FAQ_ES: FaqItem[] =
@@ -256,7 +256,7 @@ const FAQ_ES: FaqItem[] =
     { q: "¿Qué es BYOK? ¿Todos los planes lo admiten?", a: "BYOK significa Bring Your Own Key: usa tu propia clave de Anthropic, OpenAI, Google u otro proveedor para llamar modelos directamente. BYOK no consume saldo Open Design y está disponible en todos los planes." },
     { q: "¿Cómo se gestionan créditos y cargos al cambiar de plan?", a: "Esta versión solo admite upgrades: subir de nivel o pasar de mensual a anual. Los upgrades se aplican inmediatamente, conceden los nuevos beneficios y cobran solo la diferencia prorrateada (se acredita el tiempo no usado de tu plan actual — no pagas el precio completo del nuevo plan). El downgrade (nivel inferior o anual a mensual) no está disponible como autoservicio y queda desactivado; para bajar de plan, contacta con soporte." },
     { q: "¿Puedo cancelar la suscripción cuando quiera?", a: "Sí. Cancelar detiene la renovación, pero no corta los beneficios actuales de inmediato. El período pagado sigue disponible hasta terminar; después la cuenta vuelve a Free. Las cancelaciones anuales mantienen beneficios hasta el final del período anual.", cancelCta: "Cancelar suscripción" },
-    { q: "¿Cómo funcionan los reembolsos?", a: "Cancelar una suscripción no genera reembolso automático ni retira beneficios actuales para un reembolso prorrateado. El período pagado sigue disponible. Si ves un cargo duplicado o error de pago, contacta soporte desde el centro de ayuda." },
+    { q: "¿Cómo funcionan los reembolsos?", a: "Si quieres un reembolso o tienes algún problema de facturación, como un cargo duplicado o un cargo indebido, escribe directamente a support@open-design.ai y te ayudaremos a revisarlo y resolverlo. Cancelar la suscripción solo detiene el cobro del próximo ciclo; no genera un reembolso automático." },
   ];
 
 const FAQ_RU: FaqItem[] =
@@ -270,7 +270,7 @@ const FAQ_RU: FaqItem[] =
     { q: "Что такое BYOK? Все планы это поддерживают?", a: "BYOK означает Bring Your Own Key: добавьте собственный ключ Anthropic, OpenAI, Google или другого провайдера и вызывайте модели напрямую. BYOK не расходует баланс Open Design и доступен во всех планах." },
     { q: "Как обрабатываются кредиты и платежи после смены плана?", a: "В этой версии доступны только повышения: переход на более высокий уровень или с месячной оплаты на годовую. Повышения применяются сразу, выдают новые преимущества и списывают только пропорциональную разницу (неиспользованное время текущего плана засчитывается — полная цена нового плана не взимается). Понижение (более низкий уровень или с годовой оплаты на месячную) недоступно в самообслуживании, и эта кнопка отключена; чтобы понизить план, обратитесь в поддержку." },
     { q: "Можно ли отменить подписку в любое время?", a: "Да. Отмена останавливает продление, но не прекращает текущие преимущества сразу. Оплаченный период остается доступным до конца, затем аккаунт возвращается на Free. При годовой отмене преимущества сохраняются до конца текущего годового периода.", cancelCta: "Отменить подписку" },
-    { q: "Как работают возвраты?", a: "Отмена подписки не создает автоматический возврат и не изымает текущие преимущества для пропорционального возврата. Оплаченный период остается доступным. При двойном списании или ошибке оплаты обратитесь в поддержку через центр помощи." },
+    { q: "Как работают возвраты?", a: "Если вы хотите вернуть средства или столкнулись с проблемой оплаты — двойным списанием или ошибочным списанием, — напишите напрямую на support@open-design.ai, и мы поможем всё проверить и решить. Отмена подписки лишь останавливает списание за следующий период и не создаёт возврат автоматически." },
   ];
 
 const FAQ_FR: FaqItem[] =
@@ -284,7 +284,7 @@ const FAQ_FR: FaqItem[] =
     { q: "Qu'est-ce que BYOK ? Tous les plans le prennent-ils en charge ?", a: "BYOK signifie Bring Your Own Key : ajoutez votre propre clé Anthropic, OpenAI, Google ou autre fournisseur pour appeler les modèles directement. BYOK ne consomme pas le solde Open Design et est disponible sur tous les plans." },
     { q: "Comment les crédits et frais sont-ils gérés après un changement de plan ?", a: "Cette version prend seulement en charge les upgrades : niveau supérieur ou passage de mensuel à annuel. Ils prennent effet immédiatement, accordent les nouveaux avantages et facturent seulement la différence au prorata (le temps non utilisé de votre plan actuel est crédité — vous ne payez pas le prix complet du nouveau plan). Le downgrade (niveau inférieur ou annuel vers mensuel) n'est pas disponible en libre-service et ce bouton est désactivé ; pour rétrograder, contactez le support." },
     { q: "Puis-je annuler l'abonnement à tout moment ?", a: "Oui. L'annulation arrête le renouvellement, sans couper immédiatement les avantages actuels. La période payée reste utilisable jusqu'à sa fin, puis le compte revient à Free. Les annulations annuelles conservent les avantages jusqu'à la fin de la période annuelle.", cancelCta: "Annuler l'abonnement" },
-    { q: "Comment fonctionnent les remboursements ?", a: "Annuler un abonnement ne crée pas de remboursement automatique et ne retire pas les avantages actuels pour un prorata. La période payée reste utilisable. En cas de double débit ou d'erreur de paiement, contactez le support via le centre d'aide." },
+    { q: "Comment fonctionnent les remboursements ?", a: "Si vous souhaitez un remboursement ou rencontrez un problème de facturation, comme un double débit ou un débit anormal, écrivez directement à support@open-design.ai et nous vous aiderons à vérifier et à régler cela. Annuler l'abonnement arrête seulement le prélèvement du prochain cycle ; cela ne déclenche pas de remboursement automatique." },
   ];
 
 const FAQ_KO: FaqItem[] =
@@ -298,7 +298,7 @@ const FAQ_KO: FaqItem[] =
     { q: "BYOK란 무엇인가요? 모든 플랜에서 지원하나요?", a: "BYOK는 Bring Your Own Key의 약자로, Anthropic, OpenAI, Google 등 제공자의 API 키를 직접 추가해 모델을 호출하는 방식입니다. BYOK는 Open Design 잔액을 사용하지 않으며 모든 플랜에서 지원됩니다." },
     { q: "플랜 변경 후 크레딧과 요금은 어떻게 처리되나요?", a: "이번 릴리스에서는 업그레이드만 지원합니다. 더 높은 티어로 이동하거나 월간에서 연간 결제로 전환할 수 있습니다. 업그레이드는 즉시 적용되고 새 혜택을 지급하며 차액만 청구합니다(현재 플랜의 미사용 기간이 차감되어 새 플랜 전액을 내지 않습니다). 다운그레이드(낮은 티어 또는 연간에서 월간 전환)는 셀프서비스로 지원되지 않으며 해당 버튼은 비활성화됩니다. 다운그레이드가 필요하면 고객지원에 문의하세요." },
     { q: "구독을 언제든 취소할 수 있나요?", a: "네. 취소하면 갱신이 중단되지만 현재 혜택이 즉시 종료되지는 않습니다. 결제된 기간은 끝날 때까지 사용할 수 있고 이후 계정은 Free로 돌아갑니다. 연간 구독 취소 시 혜택은 현재 연간 기간 종료까지 유지됩니다.", cancelCta: "구독 취소" },
-    { q: "환불은 어떻게 처리되나요?", a: "구독 취소는 자동 환불을 만들지 않으며 현재 혜택을 회수해 일할 환불하지 않습니다. 결제된 기간은 계속 사용할 수 있습니다. 중복 청구나 결제 오류가 있으면 도움말 센터에서 지원팀에 문의하세요." },
+    { q: "환불은 어떻게 처리되나요?", a: "환불을 원하거나 중복 청구, 비정상 청구 같은 결제 문제가 있으면 support@open-design.ai로 직접 문의해 주세요. 저희가 확인하고 처리해 드립니다. 구독 취소는 다음 결제 주기의 청구만 중단하며, 자동으로 환불을 진행하지는 않습니다." },
   ];
 
 const FAQ_DE: FaqItem[] =
@@ -312,7 +312,7 @@ const FAQ_DE: FaqItem[] =
     { q: "Was ist BYOK? Unterstützen alle Pläne das?", a: "BYOK bedeutet Bring Your Own Key: Du fügst deinen eigenen API-Schlüssel von Anthropic, OpenAI, Google oder anderen Anbietern hinzu und rufst Modelle direkt auf. BYOK verbraucht kein Open Design Guthaben und ist in allen Plänen verfügbar." },
     { q: "Wie werden Credits und Gebühren nach einem Planwechsel behandelt?", a: "Diese Version unterstützt nur Upgrades: Wechsel auf eine höhere Stufe oder von monatlich zu jährlich. Upgrades gelten sofort, gewähren die neuen Vorteile und berechnen nur die anteilige Differenz (die ungenutzte Zeit deines aktuellen Plans wird angerechnet – du zahlst nicht den vollen Preis des neuen Plans). Ein Downgrade (niedrigere Stufe oder jährlich zu monatlich) ist nicht im Self-Service verfügbar und diese Schaltfläche ist deaktiviert; für ein Downgrade wende dich an den Support." },
     { q: "Kann ich jederzeit kündigen?", a: "Ja. Kündigen stoppt die Verlängerung, beendet aktuelle Vorteile aber nicht sofort. Der bezahlte Zeitraum bleibt bis zum Ende nutzbar, danach kehrt das Konto zu Free zurück. Bei Jahresplänen bleiben Vorteile bis zum Ende der aktuellen Jahresperiode erhalten.", cancelCta: "Abo kündigen" },
-    { q: "Wie funktionieren Rückerstattungen?", a: "Eine Kündigung erstellt keine automatische Rückerstattung und zieht aktuelle Vorteile nicht für eine anteilige Rückerstattung ein. Der bezahlte Zeitraum bleibt nutzbar. Bei doppelter Abbuchung oder Zahlungsfehler kontaktiere den Support über das Help Center." },
+    { q: "Wie funktionieren Rückerstattungen?", a: "Wenn du eine Rückerstattung möchtest oder ein Abrechnungsproblem hast, etwa eine doppelte oder fehlerhafte Abbuchung, schreib direkt an support@open-design.ai – wir helfen dir, das zu prüfen und zu klären. Eine Kündigung stoppt nur die Abbuchung für den nächsten Abrechnungszeitraum und löst keine automatische Rückerstattung aus." },
   ];
 
 const FAQ_JA: FaqItem[] =
@@ -326,7 +326,7 @@ const FAQ_JA: FaqItem[] =
     { q: "BYOK とは何ですか？すべてのプランで使えますか？", a: "BYOK は Bring Your Own Key の略で、自分の Anthropic、OpenAI、Google などの API キーを追加してモデルを直接呼び出す方式です。BYOK は Open Design 残高を消費せず、すべてのプランで利用できます。" },
     { q: "プラン変更後、クレジットと請求はどう処理されますか？", a: "このリリースではアップグレードのみ対応します。上位ティアへの移行、または月額から年額への変更です。アップグレードは即時反映され、新しい特典を付与し、差額のみを請求します（現在のプランの未使用期間が差し引かれ、新プランの満額は請求されません）。ダウングレード（下位ティア、または年額から月額）はセルフサービスでは利用できず、その操作は無効化されています。ダウングレードが必要な場合はサポートへお問い合わせください。" },
     { q: "サブスクリプションはいつでもキャンセルできますか？", a: "はい。キャンセルすると更新は停止しますが、現在の特典はすぐには終了しません。支払い済み期間は終了まで利用でき、その後アカウントは Free に戻ります。年額キャンセルの場合、特典は現在の年額期間終了まで維持されます。", cancelCta: "サブスクをキャンセル" },
-    { q: "返金はどのように扱われますか？", a: "サブスクリプションのキャンセルで自動返金は発生せず、現在の特典を回収して日割り返金することもありません。支払い済み期間は引き続き利用できます。重複請求や支払いエラーがある場合は、ヘルプセンターからサポートへ連絡してください。" },
+    { q: "返金はどのように扱われますか？", a: "返金をご希望の場合や、重複請求・不正請求などの請求に関する問題が発生した場合は、support@open-design.ai まで直接ご連絡ください。確認のうえ対応いたします。サブスクリプションのキャンセルは次の請求期間の課金を停止するだけで、自動的に返金は行われません。" },
   ];
 
 const STORY_BY_LOCALE: Partial<Record<LandingLocaleCode, StoryCopy>> = {
@@ -384,12 +384,55 @@ export function getFaqTitle(locale: LandingLocaleCode): string {
 }
 
 
+export interface LeadFormCopy {
+  title: string;
+  subtitle: string;
+  fields: {
+    name: string;
+    email: string;
+    company: string;
+    teamSize: string;
+    role: string;
+    country: string;
+    seats: string;
+    budget: string;
+    useCase: string;
+  };
+  placeholders: {
+    name: string;
+    email: string;
+    company: string;
+    role: string;
+    country: string;
+    seats: string;
+    useCase: string;
+  };
+  /** 4 team-size options (display strings). */
+  teamSizeOptions: string[];
+  /** 5 budget-range options (display strings). */
+  budgetOptions: string[];
+  optional: string;
+  selectPlaceholder: string;
+  submit: string;
+  submitting: string;
+  privacy: string;
+  successTitle: string;
+  successDesc: string;
+  errorRequired: string;
+  errorEmail: string;
+  /** Shown when the network POST fails (distinct from validation errors). */
+  errorSubmit: string;
+  close: string;
+}
+
 export interface EnterpriseCopy {
   title: string;
   badge: string;
   description: string;
   leadCta: string;
   features: string[];
+  /** Team-plan lead-capture modal (mirrors the vela subscription modal). */
+  leadForm: LeadFormCopy;
 }
 
 /** Team/enterprise lead-capture email. */
@@ -411,6 +454,49 @@ const ENTERPRISE_ZH: EnterpriseCopy = {
     "统一账单 & 用量仪表盘",
     "SSO / SAML & 优先支持",
   ],
+  leadForm: {
+    title: "申请团队版",
+    subtitle: "🎁 留下信息，即可锁定专属团队版优惠，上线后第一时间联系你。",
+    fields: {
+      name: "姓名",
+      email: "工作邮箱",
+      company: "公司名称",
+      teamSize: "团队规模",
+      role: "角色 / 职位",
+      country: "国家 / 地区",
+      seats: "预计席位数",
+      budget: "预算区间",
+      useCase: "使用场景 / 需求",
+    },
+    placeholders: {
+      name: "你的姓名",
+      email: "name@company.com",
+      company: "公司 / 团队名称",
+      role: "如设计负责人、产品经理",
+      country: "如 中国大陆",
+      seats: "如 20",
+      useCase: "想用团队版解决什么问题？",
+    },
+    teamSizeOptions: ["1–10 人", "11–50 人", "51–200 人", "200 人以上"],
+    budgetOptions: [
+      "$1,000/月 以下",
+      "$1,000–5,000/月",
+      "$5,000–20,000/月",
+      "$20,000/月 以上",
+      "暂未确定",
+    ],
+    optional: "（选填）",
+    selectPlaceholder: "请选择",
+    submit: "提交申请",
+    submitting: "提交中…",
+    privacy: "仅用于团队版相关联系，我们不会对外分享你的信息。",
+    successTitle: "已收到你的申请",
+    successDesc: "团队版上线后，我们会尽快与你联系。",
+    errorRequired: "请填写所有必填项",
+    errorEmail: "请输入有效的工作邮箱",
+    errorSubmit: "提交失败，请稍后重试，或邮件联系 support@open-design.ai",
+    close: "关闭",
+  },
 };
 
 const ENTERPRISE_EN: EnterpriseCopy = {
@@ -429,6 +515,49 @@ const ENTERPRISE_EN: EnterpriseCopy = {
     "Unified billing & usage dashboard",
     "SSO / SAML & priority support",
   ],
+  leadForm: {
+    title: "Request team access",
+    subtitle: "🎁 Leave your details to unlock an exclusive Team offer — we'll reach out the moment it's live.",
+    fields: {
+      name: "Name",
+      email: "Work email",
+      company: "Company",
+      teamSize: "Team size",
+      role: "Role / title",
+      country: "Country / region",
+      seats: "Expected seats",
+      budget: "Budget range",
+      useCase: "Use case / needs",
+    },
+    placeholders: {
+      name: "Your name",
+      email: "name@company.com",
+      company: "Company or team name",
+      role: "e.g. Head of Design, PM",
+      country: "e.g. United States",
+      seats: "e.g. 20",
+      useCase: "What do you want Team to help with?",
+    },
+    teamSizeOptions: ["1–10 people", "11–50 people", "51–200 people", "200+ people"],
+    budgetOptions: [
+      "Under $1,000/mo",
+      "$1,000–5,000/mo",
+      "$5,000–20,000/mo",
+      "Over $20,000/mo",
+      "Not decided yet",
+    ],
+    optional: "(optional)",
+    selectPlaceholder: "Please select",
+    submit: "Submit request",
+    submitting: "Submitting…",
+    privacy: "Used only to contact you about Team. We never share your info.",
+    successTitle: "Request received",
+    successDesc: "We'll get in touch as soon as Team launches.",
+    errorRequired: "Please fill in all required fields",
+    errorEmail: "Please enter a valid work email",
+    errorSubmit: "Couldn't submit — please try again or email support@open-design.ai",
+    close: "Close",
+  },
 };
 
 const ENTERPRISE_ZH_TW: EnterpriseCopy = {
@@ -447,6 +576,49 @@ const ENTERPRISE_ZH_TW: EnterpriseCopy = {
     "統一帳單 & 用量儀表板",
     "SSO / SAML & 優先支援",
   ],
+  leadForm: {
+    title: "申請團隊版",
+    subtitle: "🎁 留下資訊，即可鎖定專屬團隊版優惠，上線後第一時間聯絡你。",
+    fields: {
+      name: "姓名",
+      email: "工作信箱",
+      company: "公司名稱",
+      teamSize: "團隊規模",
+      role: "角色 / 職位",
+      country: "國家 / 地區",
+      seats: "預計席位數",
+      budget: "預算區間",
+      useCase: "使用場景 / 需求",
+    },
+    placeholders: {
+      name: "你的姓名",
+      email: "name@company.com",
+      company: "公司 / 團隊名稱",
+      role: "如設計負責人、產品經理",
+      country: "如 台灣",
+      seats: "如 20",
+      useCase: "想用團隊版解決什麼問題？",
+    },
+    teamSizeOptions: ["1–10 人", "11–50 人", "51–200 人", "200 人以上"],
+    budgetOptions: [
+      "$1,000/月 以下",
+      "$1,000–5,000/月",
+      "$5,000–20,000/月",
+      "$20,000/月 以上",
+      "尚未確定",
+    ],
+    optional: "（選填）",
+    selectPlaceholder: "請選擇",
+    submit: "提交申請",
+    submitting: "提交中…",
+    privacy: "僅用於團隊版相關聯絡，我們不會對外分享你的資訊。",
+    successTitle: "已收到你的申請",
+    successDesc: "團隊版上線後，我們會盡快與你聯絡。",
+    errorRequired: "請填寫所有必填項",
+    errorEmail: "請輸入有效的工作信箱",
+    errorSubmit: "提交失敗，請稍後重試，或來信 support@open-design.ai",
+    close: "關閉",
+  },
 };
 
 const ENTERPRISE_PT_BR: EnterpriseCopy = {
@@ -465,6 +637,49 @@ const ENTERPRISE_PT_BR: EnterpriseCopy = {
     "Faturamento e painel de uso unificados",
     "SSO / SAML e suporte prioritário",
   ],
+  leadForm: {
+    title: "Solicitar acesso ao Equipe",
+    subtitle: "🎁 Deixe seus dados e garanta uma oferta exclusiva do Equipe — falamos assim que lançar.",
+    fields: {
+      name: "Nome",
+      email: "Email corporativo",
+      company: "Empresa",
+      teamSize: "Tamanho da equipe",
+      role: "Função / cargo",
+      country: "País / região",
+      seats: "Assentos previstos",
+      budget: "Faixa de orçamento",
+      useCase: "Caso de uso / necessidades",
+    },
+    placeholders: {
+      name: "Seu nome",
+      email: "nome@empresa.com",
+      company: "Nome da empresa ou equipe",
+      role: "ex.: Head de Design, PM",
+      country: "ex.: Brasil",
+      seats: "ex.: 20",
+      useCase: "Com o que você quer que o Equipe ajude?",
+    },
+    teamSizeOptions: ["1–10 pessoas", "11–50 pessoas", "51–200 pessoas", "200+ pessoas"],
+    budgetOptions: [
+      "Até $1.000/mês",
+      "$1.000–5.000/mês",
+      "$5.000–20.000/mês",
+      "Acima de $20.000/mês",
+      "Ainda não definido",
+    ],
+    optional: "(opcional)",
+    selectPlaceholder: "Selecione",
+    submit: "Enviar solicitação",
+    submitting: "Enviando…",
+    privacy: "Usado apenas para contato sobre o Equipe. Nunca compartilhamos seus dados.",
+    successTitle: "Solicitação recebida",
+    successDesc: "Entraremos em contato assim que o Equipe for lançado.",
+    errorRequired: "Preencha todos os campos obrigatórios",
+    errorEmail: "Informe um email corporativo válido",
+    errorSubmit: "Não foi possível enviar. Tente novamente ou escreva para support@open-design.ai",
+    close: "Fechar",
+  },
 };
 
 const ENTERPRISE_ES: EnterpriseCopy = {
@@ -483,6 +698,49 @@ const ENTERPRISE_ES: EnterpriseCopy = {
     "Facturación y panel de uso unificados",
     "SSO / SAML y soporte prioritario",
   ],
+  leadForm: {
+    title: "Solicitar acceso a Equipo",
+    subtitle: "🎁 Déjanos tus datos y consigue una oferta exclusiva de Equipo; te contactamos en cuanto esté disponible.",
+    fields: {
+      name: "Nombre",
+      email: "Email de trabajo",
+      company: "Empresa",
+      teamSize: "Tamaño del equipo",
+      role: "Rol / cargo",
+      country: "País / región",
+      seats: "Asientos previstos",
+      budget: "Rango de presupuesto",
+      useCase: "Caso de uso / necesidades",
+    },
+    placeholders: {
+      name: "Tu nombre",
+      email: "nombre@empresa.com",
+      company: "Nombre de empresa o equipo",
+      role: "p. ej. Head of Design, PM",
+      country: "p. ej. España",
+      seats: "p. ej. 20",
+      useCase: "¿En qué quieres que te ayude Equipo?",
+    },
+    teamSizeOptions: ["1–10 personas", "11–50 personas", "51–200 personas", "200+ personas"],
+    budgetOptions: [
+      "Menos de $1.000/mes",
+      "$1.000–5.000/mes",
+      "$5.000–20.000/mes",
+      "Más de $20.000/mes",
+      "Aún sin decidir",
+    ],
+    optional: "(opcional)",
+    selectPlaceholder: "Selecciona",
+    submit: "Enviar solicitud",
+    submitting: "Enviando…",
+    privacy: "Se usa solo para contactarte sobre Equipo. Nunca compartimos tus datos.",
+    successTitle: "Solicitud recibida",
+    successDesc: "Te contactaremos en cuanto se lance Equipo.",
+    errorRequired: "Completa todos los campos obligatorios",
+    errorEmail: "Introduce un email de trabajo válido",
+    errorSubmit: "No se pudo enviar. Inténtalo de nuevo o escribe a support@open-design.ai",
+    close: "Cerrar",
+  },
 };
 
 const ENTERPRISE_RU: EnterpriseCopy = {
@@ -501,6 +759,49 @@ const ENTERPRISE_RU: EnterpriseCopy = {
     "Единый биллинг и панель использования",
     "SSO / SAML и приоритетная поддержка",
   ],
+  leadForm: {
+    title: "Запросить доступ к Команде",
+    subtitle: "🎁 Оставьте данные и получите эксклюзивное предложение на Команду — свяжемся, как только она выйдет.",
+    fields: {
+      name: "Имя",
+      email: "Рабочая почта",
+      company: "Компания",
+      teamSize: "Размер команды",
+      role: "Роль / должность",
+      country: "Страна / регион",
+      seats: "Ожидаемое число мест",
+      budget: "Бюджет",
+      useCase: "Сценарий / задачи",
+    },
+    placeholders: {
+      name: "Ваше имя",
+      email: "name@company.com",
+      company: "Название компании или команды",
+      role: "напр. Head of Design, PM",
+      country: "напр. Россия",
+      seats: "напр. 20",
+      useCase: "С чем должна помочь Команда?",
+    },
+    teamSizeOptions: ["1–10 человек", "11–50 человек", "51–200 человек", "200+ человек"],
+    budgetOptions: [
+      "До $1 000/мес",
+      "$1 000–5 000/мес",
+      "$5 000–20 000/мес",
+      "Более $20 000/мес",
+      "Пока не определён",
+    ],
+    optional: "(необязательно)",
+    selectPlaceholder: "Выберите",
+    submit: "Отправить заявку",
+    submitting: "Отправка…",
+    privacy: "Используется только для связи по Команде. Мы не передаём ваши данные.",
+    successTitle: "Заявка получена",
+    successDesc: "Свяжемся с вами, как только Команда выйдет.",
+    errorRequired: "Заполните все обязательные поля",
+    errorEmail: "Введите корректную рабочую почту",
+    errorSubmit: "Не удалось отправить. Повторите попытку или напишите на support@open-design.ai",
+    close: "Закрыть",
+  },
 };
 
 const ENTERPRISE_FR: EnterpriseCopy = {
@@ -519,6 +820,49 @@ const ENTERPRISE_FR: EnterpriseCopy = {
     "Facturation et tableau de bord d’usage unifiés",
     "SSO / SAML et support prioritaire",
   ],
+  leadForm: {
+    title: "Demander l’accès à Équipe",
+    subtitle: "🎁 Laissez vos coordonnées pour une offre exclusive Équipe — on vous contacte dès le lancement.",
+    fields: {
+      name: "Nom",
+      email: "Email professionnel",
+      company: "Entreprise",
+      teamSize: "Taille de l’équipe",
+      role: "Rôle / fonction",
+      country: "Pays / région",
+      seats: "Sièges prévus",
+      budget: "Budget",
+      useCase: "Cas d’usage / besoins",
+    },
+    placeholders: {
+      name: "Votre nom",
+      email: "nom@entreprise.com",
+      company: "Nom de l’entreprise ou équipe",
+      role: "ex. Head of Design, PM",
+      country: "ex. France",
+      seats: "ex. 20",
+      useCase: "En quoi Équipe peut-il vous aider ?",
+    },
+    teamSizeOptions: ["1–10 personnes", "11–50 personnes", "51–200 personnes", "200+ personnes"],
+    budgetOptions: [
+      "Moins de $1 000/mois",
+      "$1 000–5 000/mois",
+      "$5 000–20 000/mois",
+      "Plus de $20 000/mois",
+      "Pas encore défini",
+    ],
+    optional: "(facultatif)",
+    selectPlaceholder: "Sélectionner",
+    submit: "Envoyer la demande",
+    submitting: "Envoi…",
+    privacy: "Utilisé uniquement pour vous contacter au sujet d’Équipe. Jamais partagé.",
+    successTitle: "Demande reçue",
+    successDesc: "Nous vous contacterons dès le lancement d’Équipe.",
+    errorRequired: "Veuillez remplir tous les champs obligatoires",
+    errorEmail: "Saisissez un email professionnel valide",
+    errorSubmit: "Échec de l'envoi — réessayez ou écrivez à support@open-design.ai",
+    close: "Fermer",
+  },
 };
 
 const ENTERPRISE_KO: EnterpriseCopy = {
@@ -537,6 +881,49 @@ const ENTERPRISE_KO: EnterpriseCopy = {
     "통합 청구 및 사용량 대시보드",
     "SSO / SAML 및 우선 지원",
   ],
+  leadForm: {
+    title: "팀 액세스 요청",
+    subtitle: "🎁 정보를 남기면 팀 전용 혜택을 드려요 — 출시되는 즉시 연락드릴게요.",
+    fields: {
+      name: "이름",
+      email: "업무용 이메일",
+      company: "회사",
+      teamSize: "팀 규모",
+      role: "역할 / 직책",
+      country: "국가 / 지역",
+      seats: "예상 좌석 수",
+      budget: "예산 범위",
+      useCase: "사용 시나리오 / 요구 사항",
+    },
+    placeholders: {
+      name: "이름",
+      email: "name@company.com",
+      company: "회사 또는 팀 이름",
+      role: "예: 디자인 총괄, PM",
+      country: "예: 대한민국",
+      seats: "예: 20",
+      useCase: "팀 버전으로 무엇을 해결하고 싶나요?",
+    },
+    teamSizeOptions: ["1–10명", "11–50명", "51–200명", "200명 이상"],
+    budgetOptions: [
+      "$1,000/월 미만",
+      "$1,000–5,000/월",
+      "$5,000–20,000/월",
+      "$20,000/월 초과",
+      "아직 미정",
+    ],
+    optional: "(선택)",
+    selectPlaceholder: "선택하세요",
+    submit: "요청 보내기",
+    submitting: "제출 중…",
+    privacy: "팀 버전 관련 연락에만 사용하며 정보를 외부에 공유하지 않습니다.",
+    successTitle: "요청을 받았습니다",
+    successDesc: "팀 버전 출시되는 대로 연락드리겠습니다.",
+    errorRequired: "모든 필수 항목을 입력하세요",
+    errorEmail: "유효한 업무용 이메일을 입력하세요",
+    errorSubmit: "제출에 실패했습니다. 다시 시도하거나 support@open-design.ai로 문의해 주세요.",
+    close: "닫기",
+  },
 };
 
 const ENTERPRISE_DE: EnterpriseCopy = {
@@ -555,6 +942,49 @@ const ENTERPRISE_DE: EnterpriseCopy = {
     "Einheitliche Abrechnung und Nutzungs-Dashboard",
     "SSO / SAML und priorisierter Support",
   ],
+  leadForm: {
+    title: "Team-Zugang anfragen",
+    subtitle: "🎁 Hinterlasse deine Daten und sichere dir ein exklusives Team-Angebot — wir melden uns zum Start.",
+    fields: {
+      name: "Name",
+      email: "Geschäftliche E-Mail",
+      company: "Unternehmen",
+      teamSize: "Teamgröße",
+      role: "Rolle / Position",
+      country: "Land / Region",
+      seats: "Erwartete Plätze",
+      budget: "Budgetrahmen",
+      useCase: "Anwendungsfall / Bedarf",
+    },
+    placeholders: {
+      name: "Dein Name",
+      email: "name@firma.com",
+      company: "Firmen- oder Teamname",
+      role: "z. B. Head of Design, PM",
+      country: "z. B. Deutschland",
+      seats: "z. B. 20",
+      useCase: "Wobei soll Team dir helfen?",
+    },
+    teamSizeOptions: ["1–10 Personen", "11–50 Personen", "51–200 Personen", "200+ Personen"],
+    budgetOptions: [
+      "Unter $1.000/Monat",
+      "$1.000–5.000/Monat",
+      "$5.000–20.000/Monat",
+      "Über $20.000/Monat",
+      "Noch nicht entschieden",
+    ],
+    optional: "(optional)",
+    selectPlaceholder: "Bitte auswählen",
+    submit: "Anfrage senden",
+    submitting: "Wird gesendet…",
+    privacy: "Nur zur Kontaktaufnahme wegen Team. Wir geben deine Daten nie weiter.",
+    successTitle: "Anfrage erhalten",
+    successDesc: "Wir melden uns, sobald Team startet.",
+    errorRequired: "Bitte fülle alle Pflichtfelder aus",
+    errorEmail: "Bitte gib eine gültige geschäftliche E-Mail ein",
+    errorSubmit: "Senden fehlgeschlagen — bitte erneut versuchen oder an support@open-design.ai schreiben",
+    close: "Schließen",
+  },
 };
 
 const ENTERPRISE_JA: EnterpriseCopy = {
@@ -573,6 +1003,49 @@ const ENTERPRISE_JA: EnterpriseCopy = {
     "統合請求と利用状況ダッシュボード",
     "SSO / SAML と優先サポート",
   ],
+  leadForm: {
+    title: "チーム版をリクエスト",
+    subtitle: "🎁 情報をご記入いただくと、チーム版限定特典をご用意。提供開始後すぐにご連絡します。",
+    fields: {
+      name: "氏名",
+      email: "業務用メール",
+      company: "会社",
+      teamSize: "チーム規模",
+      role: "役割 / 役職",
+      country: "国 / 地域",
+      seats: "想定シート数",
+      budget: "予算帯",
+      useCase: "利用シーン / ニーズ",
+    },
+    placeholders: {
+      name: "お名前",
+      email: "name@company.com",
+      company: "会社名またはチーム名",
+      role: "例：デザイン責任者、PM",
+      country: "例：日本",
+      seats: "例：20",
+      useCase: "チーム版で何を解決したいですか？",
+    },
+    teamSizeOptions: ["1〜10 名", "11〜50 名", "51〜200 名", "200 名以上"],
+    budgetOptions: [
+      "$1,000/月 未満",
+      "$1,000〜5,000/月",
+      "$5,000〜20,000/月",
+      "$20,000/月 超",
+      "未定",
+    ],
+    optional: "（任意）",
+    selectPlaceholder: "選択してください",
+    submit: "リクエストを送信",
+    submitting: "送信中…",
+    privacy: "チーム版に関するご連絡のみに使用し、情報を外部に共有しません。",
+    successTitle: "リクエストを受け付けました",
+    successDesc: "チーム版の提供開始後、すぐにご連絡します。",
+    errorRequired: "必須項目をすべて入力してください",
+    errorEmail: "有効な業務用メールを入力してください",
+    errorSubmit: "送信に失敗しました。もう一度お試しいただくか、support@open-design.ai までご連絡ください。",
+    close: "閉じる",
+  },
 };
 
 const ENTERPRISE_BY_LOCALE: Partial<Record<LandingLocaleCode, EnterpriseCopy>> = {

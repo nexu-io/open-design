@@ -154,13 +154,14 @@ import {
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
+import { buildOpenCodeByokProviderConfig } from './runtimes/byok-opencode.js';
 import {
   readVelaLoginStatus,
   resolveAmrProfile,
 } from './integrations/vela.js';
 import {
   amrAccountFailureDetails,
-  classifyAmrAccountFailure,
+  classifyAmrAccountFailureSignal,
 } from './integrations/vela-errors.js';
 import { amrModelLoadingCache } from './runtimes/amr-model-cache.js';
 import {
@@ -197,7 +198,11 @@ import {
 } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
-import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
+import {
+  buildWindowsFolderDialogCommand,
+  parseFolderDialogStdout,
+  parseLinuxFolderDialogResult,
+} from './native-folder-dialog.js';
 import {
   AssetCacheError,
   assetCacheRewriteUrl,
@@ -333,8 +338,13 @@ import {
 } from './runtimes/run-artifacts.js';
 import {
   createRunArtifactBaselines,
+  diffRunArtifacts,
   snapshotProjectArtifacts,
 } from './run-artifact-fs.js';
+import {
+  AiHtmlVersionSnapshotError,
+  snapshotAiHtmlVersionsForRun,
+} from './run-html-version-snapshots.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import { buildPromptStackTelemetry } from './prompt-telemetry.js';
 import { readAnalyticsContext } from './analytics.js';
@@ -1168,6 +1178,8 @@ const WORKSPACE_CONTEXT_KINDS = new Set([
   'design-system',
   'file',
   'folder',
+  'project',
+  'local-code',
   'browser',
   'terminal',
   'side-chat',
@@ -1339,6 +1351,16 @@ function renderWorkspaceContextToolHints(items) {
       '- File and Design Files tabs: use project-relative paths exactly as shown. Read before editing, and keep generated screenshots/briefs/assets in Design Files when the user asks to capture or extract references.',
     );
   }
+  if (kinds.has('project')) {
+    hints.push(
+      '- Referenced projects: use the absolute path as a read-only reference project when present. Search and read relevant files before applying ideas to the current project; do not edit the referenced project unless the user explicitly asks.',
+    );
+  }
+  if (kinds.has('local-code')) {
+    hints.push(
+      '- Local code folders: use the absolute path as read-only implementation context. Inspect files under that folder when useful, align with its conventions, and make edits only in the active Open Design project unless the user explicitly asks otherwise.',
+    );
+  }
   if (kinds.has('live-artifact')) {
     hints.push(
       '- Live artifact tabs: treat the selected live artifact as the preview target. Inspect or modify its source files rather than editing generated runtime output when possible.',
@@ -1353,7 +1375,7 @@ function renderRunContextPrompt(selection, metadata) {
   if (Array.isArray(context.workspaceItems) && context.workspaceItems.length > 0) {
     lines.push('### Active workspace context');
     lines.push(
-      'The user did not manually choose this context; Open Design selected the currently focused workspace tab. Use it as the default target for phrases like "this", "current", "the browser", "the terminal", or "that file" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files.',
+      'The user selected these workspace contexts or Open Design inferred the currently focused workspace tab. Use them as the default target for phrases like "this", "current", "the browser", "the terminal", "that file", or "the referenced code/project" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files, and treat absolute local paths as reference context unless explicitly asked to edit them.',
     );
     lines.push(formatWorkspaceContextList(context.workspaceItems));
     const toolHints = renderWorkspaceContextToolHints(context.workspaceItems);
@@ -2894,7 +2916,7 @@ function requestRunOverride(runId, tokenRunId) {
 }
 
 function openNativeFolderDialog() {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const platform = process.platform;
     if (platform === 'darwin') {
       // `choose folder` is handled specially by the system: it presents a fully
@@ -2918,10 +2940,12 @@ function openNativeFolderDialog() {
         'zenity',
         ['--file-selection', '--directory', '--title=Select a code folder to link'],
         { timeout: 120_000 },
-        (err, stdout) => {
-          if (err) return resolve(null);
-          const p = stdout.trim();
-          resolve(p || null);
+        (err, stdout, stderr) => {
+          try {
+            resolve(parseLinuxFolderDialogResult(err, stdout, stderr));
+          } catch (folderDialogError) {
+            reject(folderDialogError);
+          }
         },
       );
     } else if (platform === 'win32') {
@@ -3072,24 +3096,45 @@ const projectUpload = multer({
           meta,
         );
         (req as any)._uploadRelDir = relDir;
+        (req as any)._uploadAbsDir = absDir;
         cb(null, absDir);
       } catch (err) {
         cb(err, '');
       }
     },
-    filename: (_req, file, cb) => {
+    filename: (req, file, cb) => {
       // multer@1 hands us latin1-decoded multipart filenames; restore the
       // original UTF-8 so the response (and the on-disk name) preserves
-      // non-ASCII characters instead of mangling them. Then run the
-      // shared sanitiser and prepend a base36 timestamp so multiple
-      // uploads with the same original name don't clobber each other.
+      // non-ASCII characters instead of mangling them. Then run the shared
+      // sanitiser and only add a suffix when that sanitized source name
+      // would collide with an existing or same-batch upload.
       file.originalname = decodeMultipartFilename(file.originalname);
       const safe = sanitizeName(file.originalname);
-      cb(null, `${Date.now().toString(36)}-${safe}`);
+      const uploadDir = typeof (req as any)._uploadAbsDir === 'string' ? (req as any)._uploadAbsDir : '';
+      const reserved = (req as any)._uploadReservedNames instanceof Set
+        ? (req as any)._uploadReservedNames
+        : ((req as any)._uploadReservedNames = new Set());
+      cb(null, uniqueUploadFileName(uploadDir, safe, reserved));
     },
   }),
   limits: { fileSize: 200 * 1024 * 1024 },  // 200MB — covers the largest design assets we expect (PPTX/PDF/raw images)
 });
+
+function uniqueUploadFileName(uploadDir, safeName, reserved) {
+  const parsed = path.parse(safeName);
+  const base = parsed.name || parsed.base || 'file';
+  const ext = parsed.ext || '';
+  for (let index = 0; index < 10_000; index += 1) {
+    const candidate = index === 0 ? safeName : `${base}-${index}${ext}`;
+    if (reserved.has(candidate)) continue;
+    if (uploadDir && fs.existsSync(path.join(uploadDir, candidate))) continue;
+    reserved.add(candidate);
+    return candidate;
+  }
+  const fallback = `${base}-${Date.now().toString(36)}${ext}`;
+  reserved.add(fallback);
+  return fallback;
+}
 
 function handleProjectUpload(req, res, next) {
   projectUpload.array('files', 12)(req, res, (err) => {
@@ -4733,6 +4778,7 @@ export async function startServer({
     connectedExternalMcp,
     appliedPluginSnapshotId,
     mediaExecution,
+    byokMediaDefaults,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -5242,6 +5288,7 @@ export async function startServer({
       locale: typeof locale === 'string' ? locale : undefined,
       sessionMode: normalizeConversationSessionMode(sessionMode),
       mediaExecution,
+      byokMediaDefaults,
       streamFormat,
       executionProfile: executionProfileFromStreamFormat(streamFormat),
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
@@ -5378,6 +5425,8 @@ export async function startServer({
       research,
       context,
       titleGeneration,
+      byokProvider,
+      byokMediaDefaults,
     } = chatBody;
     lifecycle.mark('prompt_build_start');
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
@@ -5404,7 +5453,7 @@ export async function startServer({
         ? getConversation(db, conversationId)
         : null;
     const runSessionMode =
-      sessionMode === 'chat' || sessionMode === 'design'
+      sessionMode === 'chat' || sessionMode === 'design' || sessionMode === 'plan'
         ? normalizeConversationSessionMode(sessionMode)
         : normalizeConversationSessionMode(conversationSession?.sessionMode);
     const def = getAgentDef(agentId);
@@ -5416,6 +5465,19 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    const byokOpenCodeProvider = def.id === 'byok-opencode'
+      ? buildOpenCodeByokProviderConfig(
+          byokProvider,
+          typeof model === 'string' ? model : null,
+        )
+      : null;
+    if (def.id === 'byok-opencode' && !byokOpenCodeProvider) {
+      return design.runs.fail(
+        run,
+        'BYOK_PROVIDER_REQUIRED',
+        'BYOK OpenCode requires a provider, API key, and model for this run.',
+      );
+    }
     // Validate the checked-in `inactivityTimeoutMs` hint immediately
     // after the runtime def is selected and before any side-effectful
     // setup (auto-memory extract, `.mcp.json` write/unlink,
@@ -5699,6 +5761,7 @@ export async function startServer({
         sessionMode: runSessionMode,
         connectedExternalMcp,
         mediaExecution: run?.mediaExecution,
+        byokMediaDefaults,
         // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
@@ -5772,6 +5835,58 @@ export async function startServer({
         // Snapshotting is best-effort; finish falls back to the tool-stream count.
       }
     }
+    const latestRunPromptForHtmlVersionSnapshot = () => {
+      if (run.conversationId) {
+        try {
+          const row = db.prepare(
+            `SELECT content
+               FROM messages
+              WHERE conversation_id = ?
+                AND role = 'user'
+                AND LENGTH(TRIM(content)) > 0
+              ORDER BY COALESCE(ended_at, started_at, created_at, 0) DESC,
+                       position DESC
+              LIMIT 1`,
+          ).get(run.conversationId);
+          if (typeof row?.content === 'string' && row.content.trim()) {
+            return { prompt: row.content.trim(), promptSource: 'message' as const };
+          }
+        } catch {
+          // Version prompt provenance is best-effort.
+        }
+      }
+      const requestPrompt =
+        typeof currentPrompt === 'string' && currentPrompt.trim()
+          ? currentPrompt.trim()
+          : typeof message === 'string' && message.trim()
+            ? message.trim()
+            : null;
+      return requestPrompt ? { prompt: requestPrompt, promptSource: 'message' as const } : { prompt: null };
+    };
+    const snapshotAiHtmlVersionsBeforeSuccess = async () => {
+      if (!run?.id || !run.projectId) return;
+      const artifactBaseline = runArtifactBaselines.peek(run.id);
+      if (!artifactBaseline || artifactBaseline.contended) return;
+      let diff;
+      try {
+        diff = diffRunArtifacts(
+          artifactBaseline.before,
+          snapshotProjectArtifacts(artifactBaseline.cwd),
+        );
+      } catch {
+        return;
+      }
+      const promptInfo = latestRunPromptForHtmlVersionSnapshot();
+      await snapshotAiHtmlVersionsForRun({
+        projectsRoot: PROJECTS_DIR,
+        projectId: run.projectId,
+        projectRoot: artifactBaseline.cwd,
+        diff,
+        prompt: promptInfo.prompt,
+        ...(promptInfo.promptSource ? { promptSource: promptInfo.promptSource } : {}),
+        metadata: projectRecord?.metadata,
+      });
+    };
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
       agentId,
       projectRecord?.metadata,
@@ -6502,6 +6617,9 @@ export async function startServer({
           oauthTokensForSpawn,
           {
             allowedDirectories: [effectiveCwd, ...extraAllowedDirs],
+            ...(byokOpenCodeProvider
+              ? { extraConfig: byokOpenCodeProvider.config }
+              : {}),
           },
         );
       } catch (err) {
@@ -6555,7 +6673,7 @@ export async function startServer({
         failure.code,
         failure.message,
         {
-          retryable: true,
+          retryable: false,
           details: amrAccountFailureDetails(failure),
         },
       ));
@@ -7010,7 +7128,7 @@ export async function startServer({
           stallPayload = createSseErrorPayload(
             logFailure.code,
             logFailure.message,
-            { retryable: true },
+            { retryable: logFailure.retryable },
           );
         }
       }
@@ -7197,6 +7315,7 @@ export async function startServer({
         ...agentSpawnEnv,
         ...(mmdRouteLaunchEnv || {}),
         ...odMediaEnv,
+        ...(byokOpenCodeProvider ? byokOpenCodeProvider.env : {}),
         ...openDesignAmrTraceEnv({
           agentId: def.id,
           runId: run.id,
@@ -7582,23 +7701,20 @@ export async function startServer({
     // be recorded for that failure mode. See PR #3412.
     let firstBufferedStdoutAt: number | null = null;
     // Tracks whether any stream the run is using actually emitted user-
-    // visible content. Only the streams routed through `sendAgentEvent`
-    // contribute to this flag; ACP sessions and plain stdout streams are
-    // covered by their own success/failure paths and the empty-output
-    // guard below skips them via `trackingSubstantiveOutput`.
+    // visible content or a deliverable. Only the streams routed through
+    // `sendAgentEvent` contribute to this flag; ACP sessions and plain stdout
+    // streams are covered by their own success/failure paths and the
+    // empty-output guard below skips them via `trackingSubstantiveOutput`.
     let agentProducedOutput = false;
     let trackingSubstantiveOutput = false;
-    // Event types that count as "the agent actually produced something the
-    // user can see." Lifecycle markers (`status`) and meter readings
-    // (`usage`) deliberately do NOT count — a model can emit token-usage
-    // numbers for an empty completion (issue #691), and a `status:running`
-    // banner without any follow-up is exactly the silent-failure shape we
-    // want to surface as failed instead of succeeded.
+    // Event types that count as "the agent actually produced a response or a
+    // deliverable." Lifecycle markers (`status`), meter readings (`usage`),
+    // reasoning deltas, and tool activity deliberately do NOT count: a run can
+    // think/read/call tools and still terminate before returning text/artifacts
+    // to the user. Treat that as empty output instead of a silent success
+    // (issues #691, #4814).
     const SUBSTANTIVE_AGENT_EVENT_TYPES = new Set([
       'text_delta',
-      'thinking_delta',
-      'tool_use',
-      'tool_result',
       'artifact',
     ]);
     // First-token timing must reflect when the user actually starts seeing
@@ -8085,15 +8201,14 @@ export async function startServer({
           noteAgentActivity();
           if (event === 'error') flushVisibleAgentStderr();
           if (def.id === 'amr' && event === 'error') {
-            const failure = classifyAmrAccountFailure(
-              [
-                typeof data?.message === 'string' ? data.message : '',
-                typeof data?.error?.message === 'string' ? data.error.message : '',
-                typeof data?.error?.code === 'string' ? data.error.code : '',
-                agentStdoutTail,
-                agentStderrTail,
-              ].join('\n'),
-            );
+            const failure = classifyAmrAccountFailureSignal({
+              details: data?.error?.details,
+              message: data?.message,
+              errorMessage: data?.error?.message,
+              errorCode: data?.error?.code,
+              stdoutTail: agentStdoutTail,
+              stderrTail: agentStderrTail,
+            });
             if (failure) {
               sendAmrAccountFailure(failure);
               return;
@@ -8296,9 +8411,10 @@ export async function startServer({
         !run.cancelRequested
       ) {
         if (def.id === 'amr') {
-          const amrFailure = classifyAmrAccountFailure(
-            `${agentStderrTail}\n${agentStdoutTail}`,
-          );
+          const amrFailure = classifyAmrAccountFailureSignal({
+            stdoutTail: agentStdoutTail,
+            stderrTail: agentStderrTail,
+          });
           if (amrFailure) {
             sendAmrAccountFailure(amrFailure);
             return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
@@ -8522,7 +8638,7 @@ export async function startServer({
             send('error', createSseErrorPayload(
               openCodeFailure.code,
               openCodeFailure.message,
-              { retryable: true },
+              { retryable: openCodeFailure.retryable },
             ));
           } else {
             const rewritten = rewriteKnownAgentStreamError(
@@ -8629,6 +8745,24 @@ export async function startServer({
         });
       }
       if (status === 'succeeded') {
+        try {
+          await snapshotAiHtmlVersionsBeforeSuccess();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const details = err instanceof AiHtmlVersionSnapshotError
+            ? { failures: err.failures }
+            : undefined;
+          send('error', createSseErrorPayload(
+            'HTML_VERSION_SNAPSHOT_FAILED',
+            message,
+            {
+              retryable: false,
+              ...(details ? { details } : {}),
+            },
+          ));
+          design.runs.finish(run, 'failed', 1, signal);
+          return;
+        }
         persistDeliveredAgentSessionState();
       }
       finishWithRetryDecision(status, code, signal);

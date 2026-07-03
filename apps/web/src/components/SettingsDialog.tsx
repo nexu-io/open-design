@@ -57,6 +57,7 @@ import {
   amrPlansUrlForProfile,
   amrProfileBadgeLabel,
 } from '../runtime/amr-guidance';
+import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import {
@@ -127,18 +128,28 @@ import { fetchProviderModels } from '../providers/provider-models';
 import {
   fetchConnectors,
   fetchDesignTemplates,
-  fetchLatestGithubReleaseInfo,
   openExternalUrl,
 } from '../providers/registry';
 import { MEDIA_PROVIDERS } from '../media/models';
 import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelOptions } from '../media/aihubmix-image-models';
 import { isVisualStabilityMode } from '../utils/visualStability';
+import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
+import {
+  checkForUpdaterUpdate,
+  deriveUpdaterModel,
+  downloadUpdaterUpdate,
+  openUpdaterInstaller,
+  quitAfterUpdaterInstallerOpen,
+  readUpdaterStatus,
+  subscribeToUpdaterStatus,
+  type UpdaterActionResult,
+  type UpdaterModel,
+} from '../lib/updater';
 import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
-import { SkillsSection } from './SkillsSection';
 import { DesignSystemsSection } from './DesignSystemsSection';
 import { PrivacySection } from './PrivacySection';
 import { ProjectLocationsSection } from './ProjectLocationsSection';
@@ -196,7 +207,6 @@ export type SettingsSection =
   | 'critiqueTheater'
   | 'notifications'
   | 'pet'
-  | 'skills'
   | 'designSystems'
   | 'projectLocations'
   | 'memory'
@@ -222,6 +232,147 @@ interface ByokProviderPreset {
 // card into view on the execution section and plays a highlight (plus a
 // sign-in coachmark when the user has not authorized AMR yet).
 export type SettingsHighlight = 'amr' | null;
+
+const OPEN_DESIGN_RELEASES_URL = 'https://github.com/nexu-io/open-design/releases';
+
+type AboutUpdatePrimaryAction = 'check' | 'download' | 'install' | 'quit';
+type AboutUpdateTone = 'neutral' | 'success' | 'warning' | 'error';
+
+export interface AboutUpdateControl {
+  primaryAction: AboutUpdatePrimaryAction | null;
+  primaryLabelKey: keyof Dict | null;
+  showReleaseLink: boolean;
+  statusKey: keyof Dict;
+  statusTone: AboutUpdateTone;
+  statusVars?: Record<string, string | number>;
+}
+
+export function deriveAboutUpdateControl(
+  model: UpdaterModel,
+  appVersionInfo: AppVersionInfo | null,
+): AboutUpdateControl {
+  if (appVersionInfo?.packaged === false) {
+    return {
+      primaryAction: null,
+      primaryLabelKey: null,
+      showReleaseLink: true,
+      statusKey: 'settings.updateStatusDevelopment',
+      statusTone: 'neutral',
+    };
+  }
+
+  if (model.environment !== 'desktop' || !model.enabled || !model.supported) {
+    return {
+      primaryAction: null,
+      primaryLabelKey: null,
+      showReleaseLink: true,
+      statusKey: 'settings.updateStatusUnsupported',
+      statusTone: 'warning',
+    };
+  }
+
+  switch (model.status?.state) {
+    case 'checking':
+      return {
+        primaryAction: null,
+        primaryLabelKey: 'updater.checking',
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusChecking',
+        statusTone: 'neutral',
+      };
+    case 'not-available':
+      return {
+        primaryAction: 'check',
+        primaryLabelKey: 'settings.updateRecheck',
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusUpToDate',
+        statusTone: 'success',
+      };
+    case 'available':
+      return {
+        primaryAction: model.canDownload ? 'download' : null,
+        primaryLabelKey: model.canDownload ? 'updater.download' : null,
+        showReleaseLink: true,
+        statusKey: model.availableVersion
+          ? 'settings.updateStatusAvailable'
+          : 'settings.updateStatusAvailableUnknown',
+        statusTone: 'warning',
+        ...(model.availableVersion ? { statusVars: { version: model.availableVersion } } : {}),
+      };
+    case 'downloading': {
+      const percent = model.downloadProgress?.percent;
+      return {
+        primaryAction: null,
+        primaryLabelKey: 'updater.downloading',
+        showReleaseLink: true,
+        statusKey: typeof percent === 'number'
+          ? 'settings.updateStatusDownloadingPercent'
+          : 'settings.updateStatusDownloading',
+        statusTone: 'neutral',
+        ...(typeof percent === 'number' ? { statusVars: { percent } } : {}),
+      };
+    }
+    case 'downloaded': {
+      if (model.installerOpened && model.canQuitAfterInstallerOpen) {
+        return {
+          primaryAction: 'quit',
+          primaryLabelKey: 'updater.quitButton',
+          showReleaseLink: false,
+          statusKey: 'settings.updateQuitFailed',
+          statusTone: 'warning',
+        };
+      }
+      const canInstallUpdate = model.canOpenInstaller || model.canApplyInPlace;
+      return {
+        primaryAction: canInstallUpdate ? 'install' : null,
+        primaryLabelKey: canInstallUpdate
+          ? model.updateKind === 'payload'
+            ? 'updater.installRestart'
+            : 'settings.updateNow'
+          : null,
+        showReleaseLink: true,
+        statusKey: model.availableVersion
+          ? 'settings.updateStatusReady'
+          : 'settings.updateStatusReadyUnknown',
+        statusTone: 'success',
+        ...(model.availableVersion ? { statusVars: { version: model.availableVersion } } : {}),
+      };
+    }
+    case 'installing':
+      return {
+        primaryAction: null,
+        primaryLabelKey: 'updater.installingRestart',
+        showReleaseLink: false,
+        statusKey: 'settings.updateStatusInstalling',
+        statusTone: 'neutral',
+      };
+    case 'error':
+      return {
+        primaryAction: 'check',
+        primaryLabelKey: 'settings.updateRetry',
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusFailed',
+        statusTone: 'error',
+      };
+    case 'unsupported':
+      return {
+        primaryAction: null,
+        primaryLabelKey: null,
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusUnsupported',
+        statusTone: 'warning',
+      };
+    case 'idle':
+    default:
+      return {
+        primaryAction: 'check',
+        primaryLabelKey: 'settings.updateCheck',
+        showReleaseLink: true,
+        statusKey: 'settings.updateStatusNotChecked',
+        statusTone: 'neutral',
+      };
+  }
+}
 
 interface Props {
   initial: AppConfig;
@@ -263,20 +414,12 @@ interface Props {
     options?: AgentRefreshOptions,
   ) => AgentInfo[] | Promise<AgentInfo[] | void> | void;
   onAmrLoginStatusChange?: (status: VelaLoginStatus | null) => void;
-  /** Re-fetch functional skills into App state after Settings mutations. */
-  onSkillsRefresh?: () => Promise<void> | void;
   daemonMediaProviders?: AppConfig['mediaProviders'] | null;
   daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
   onProjectsRefresh?: () => Promise<void> | void;
-  /**
-   * Notified by Settings → Skills after a successful skill registry
-   * mutation (create / edit / delete). App.tsx uses this to drop preview
-   * iframes whose project depends on the affected skill — body-only
-   * edits do not move SkillSummary fields, so ProjectView's signature
-   * path can miss them.
-   */
+  /** Same channel for skill registry mutations. */
   onSkillsChanged?: (affectedSkillId?: string) => void;
   /** Same channel for design-system registry mutations. */
   onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
@@ -539,26 +682,6 @@ function providerConnectionTestKey(
   ].join('\n');
 }
 
-function isLocalOllamaBaseUrl(baseUrl: string): boolean {
-  try {
-    const parsed = new URL(baseUrl);
-    const hostname = parsed.hostname.toLowerCase();
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-  } catch {
-    return false;
-  }
-}
-
-function byokProviderRequiresApiKey(
-  protocol: ApiProtocol,
-  provider: KnownProvider | undefined,
-  baseUrl: string,
-): boolean {
-  if (provider?.requiresApiKey === false) return false;
-  if (protocol === 'ollama' && isLocalOllamaBaseUrl(baseUrl)) return false;
-  return true;
-}
-
 type ByokFirstPartyBaseUrlHint = {
   baseUrl: string;
   hostTypo: boolean;
@@ -647,7 +770,6 @@ const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
   claude: 'Anthropic official CLI',
   codex: 'OpenAI official CLI',
   'cursor-agent': 'Cursor command line',
-  gemini: 'Google official CLI',
   opencode: 'Open-source agent CLI',
   qwen: 'Qwen coding CLI',
   copilot: 'GitHub coding CLI',
@@ -1240,13 +1362,11 @@ export function SettingsDialog({
   onClose,
   onRefreshAgents,
   onAmrLoginStatusChange,
-  onSkillsRefresh,
   daemonMediaProviders,
   daemonMediaProvidersFetchState = 'idle',
   mediaProvidersNotice,
   onReloadMediaProviders,
   onProjectsRefresh,
-  onSkillsChanged,
   onDesignSystemsChanged,
   onDesignSystemImportRebuildJob,
   deploymentProviderConfig = null,
@@ -1579,26 +1699,79 @@ export function SettingsDialog({
   const [agentCustomModelIds, setAgentCustomModelIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
-  const [versionChecking, setVersionChecking] = useState(false);
+  const [aboutUpdaterModel, setAboutUpdaterModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
+  const [aboutUpdateActionBusy, setAboutUpdateActionBusy] = useState(false);
   const [aboutToast, setAboutToast] = useState<string | null>(null);
 
-  const handleInstallLatest = useCallback(async () => {
-    if (versionChecking || !appVersionInfo) return;
-    setVersionChecking(true);
+  useEffect(() => {
+    let mounted = true;
+    const unsubscribe = subscribeToUpdaterStatus((status) => {
+      if (!mounted) return;
+      setAboutUpdaterModel(deriveUpdaterModel(status, { hostAvailable: true }));
+    });
+    void readUpdaterStatus({ payload: { source: 'settings-about:mount' } }).then((result) => {
+      if (!mounted) return;
+      setAboutUpdaterModel(result.ok ? result.model : deriveUpdaterModel(null, { hostAvailable: false }));
+    });
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  const aboutUpdateControl = useMemo(
+    () => deriveAboutUpdateControl(aboutUpdaterModel, appVersionInfo),
+    [aboutUpdaterModel, appVersionInfo],
+  );
+
+  const applyAboutUpdaterResult = useCallback((result: UpdaterActionResult): boolean => {
+    if (!result.ok) {
+      setAboutToast(t('settings.updateActionFailed'));
+      return false;
+    }
+    setAboutUpdaterModel(result.model);
+    if (result.model.errorMessage != null) {
+      setAboutToast(t('settings.updateActionFailed'));
+      return false;
+    }
+    return true;
+  }, [t]);
+
+  const handleAboutUpdateAction = useCallback(async () => {
+    if (aboutUpdateActionBusy || aboutUpdaterModel.busy || aboutUpdateControl.primaryAction == null) return;
+    setAboutUpdateActionBusy(true);
     try {
-      const release = await fetchLatestGithubReleaseInfo();
-      const latestTag = (release?.tagName ?? '').replace(/^v/, '');
-      if (release?.stale !== true && latestTag && latestTag === appVersionInfo.version) {
-        setAboutToast(t('settings.alreadyLatest'));
-        return;
+      const options = { payload: { source: 'settings-about' } };
+      if (aboutUpdateControl.primaryAction === 'check') {
+        applyAboutUpdaterResult(await checkForUpdaterUpdate(options));
+      } else if (aboutUpdateControl.primaryAction === 'download') {
+        applyAboutUpdaterResult(await downloadUpdaterUpdate(options));
+      } else if (aboutUpdateControl.primaryAction === 'quit') {
+        const quitResult = await quitAfterUpdaterInstallerOpen(options);
+        if (!quitResult.ok) setAboutToast(t('settings.updateQuitFailed'));
+      } else {
+        const installed = applyAboutUpdaterResult(await openUpdaterInstaller(options));
+        if (installed) {
+          const quitResult = await quitAfterUpdaterInstallerOpen(options);
+          if (!quitResult.ok) setAboutToast(t('settings.updateQuitFailed'));
+        }
       }
     } catch {
-      // network error — fall through to open releases page
+      setAboutToast(t('settings.updateActionFailed'));
     } finally {
-      setVersionChecking(false);
+      setAboutUpdateActionBusy(false);
     }
-    window.open('https://github.com/nexu-io/open-design/releases', '_blank', 'noopener,noreferrer');
-  }, [versionChecking, appVersionInfo, t]);
+  }, [
+    aboutUpdateActionBusy,
+    aboutUpdateControl.primaryAction,
+    aboutUpdaterModel.busy,
+    applyAboutUpdaterResult,
+    t,
+  ]);
+
+  const handleOpenReleaseNotes = useCallback(() => {
+    void openExternalUrl(OPEN_DESIGN_RELEASES_URL);
+  }, []);
 
   // Precise inverse of App.handleCompleteOnboarding: flip
   // onboardingCompleted back to false, mirror it to localStorage and the
@@ -1752,7 +1925,7 @@ export function SettingsDialog({
   }, []);
 
   const installedCount = useMemo(
-    () => agents.filter((a) => a.available).length,
+    () => agents.filter((a) => a.available && isVisibleLocalCliAgent(a)).length,
     [agents],
   );
 
@@ -2536,8 +2709,12 @@ export function SettingsDialog({
         return t('settings.testInvalidBaseUrl');
       case 'rate_limited':
         return t('settings.testRateLimited');
-      case 'upstream_unavailable':
-        return t('settings.testUpstream', { status: result.status ?? 0 });
+      case 'upstream_unavailable': {
+        const baseMessage = t('settings.testUpstream', {
+          status: result.status ?? 0,
+        });
+        return result.detail ? `${baseMessage} ${result.detail}` : baseMessage;
+      }
       case 'timeout':
         return t('settings.testTimeout', { ms });
       case 'agent_not_installed':
@@ -3467,7 +3644,6 @@ export function SettingsDialog({
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
     privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
     pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
-    skills: { title: t('settings.skills'), subtitle: t('settings.skillsHint') },
     designSystems: {
       title: t('settings.designSystems'),
       subtitle: t('settings.designSystemsHint'),
@@ -3483,10 +3659,11 @@ export function SettingsDialog({
     about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
   };
   const activeHeader = sectionHeader[activeSection];
+  const visibleAgents = agents.filter(isVisibleLocalCliAgent);
   const installedAgents = orderAgentsWithOpenDesignFirst(
-    agents.filter((a) => a.available),
+    visibleAgents.filter((a) => a.available),
   );
-  const unavailableAgents = agents.filter((a) => !a.available);
+  const unavailableAgents = visibleAgents.filter((a) => !a.available);
   const initialAgentScanRunning = agentsLoading && agents.length === 0;
   const agentModelOptionLabel = (
     model: ProviderModelOption | undefined,
@@ -3885,17 +4062,6 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
-              className={`settings-nav-item${activeSection === 'skills' ? ' active' : ''}`}
-              onClick={() => setActiveSection('skills')}
-            >
-              <Icon name="grid" size={18} />
-              <span>
-                <strong>{t('settings.skills')}</strong>
-                <small>{t('settings.skillsHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
               className={`settings-nav-item${activeSection === 'mcpClient' ? ' active' : ''}`}
               onClick={() => setActiveSection('mcpClient')}
             >
@@ -4219,7 +4385,6 @@ export function SettingsDialog({
                           const modelSummary = agentModelSummary(a);
                           const amrBenefits = [
                             t('settings.amrBenefitOfficial'),
-                            t('settings.amrBenefitLowerPrice'),
                             t('settings.amrBenefitManyModels'),
                           ];
                           const versionLabel =
@@ -4365,6 +4530,11 @@ export function SettingsDialog({
                                             </span>
                                           </>
                                         ) : null}
+                                        {isAmrAgent && amrCardPlanLabel ? (
+                                          <VisuallyHidden>
+                                            {`, ${t('settings.amrPlan')} ${amrCardPlanLabel}`}
+                                          </VisuallyHidden>
+                                        ) : null}
                                       </div>
                                       {metaLabel ? (
                                         <div className="agent-card-meta">
@@ -4378,15 +4548,23 @@ export function SettingsDialog({
                                           <span className="agent-card-amr-email-text" title={amrCardEmail}>
                                             {amrCardEmail}
                                           </span>
-                                          <PlanBadge
-                                            plan={amrCardPlanLabel}
-                                            size="sm"
-                                            title={
-                                              amrCardPlanLabel
-                                                ? `${t('settings.amrPlan')} ${amrCardPlanLabel}`
-                                                : undefined
-                                            }
-                                          />
+                                          {amrCardPlanLabel ? (
+                                            <span
+                                              className="agent-card-plan-badge-slot"
+                                              aria-hidden="true"
+                                            >
+                                              <PlanBadge
+                                                plan={amrCardPlanLabel}
+                                                size="sm"
+                                                className="agent-card-plan-badge"
+                                                title={
+                                                  amrCardPlanLabel
+                                                    ? `${t('settings.amrPlan')} ${amrCardPlanLabel}`
+                                                    : undefined
+                                                }
+                                              />
+                                            </span>
+                                          ) : null}
                                           {amrCardProfileBadge ? (
                                             <span className="agent-card-amr-profile-badge">
                                               {amrCardProfileBadge}
@@ -4396,22 +4574,20 @@ export function SettingsDialog({
                                       ) : null}
                                       {amrWalletVisible ? (
                                         <div className="agent-card-amr-meta-row">
-                                          {amrWalletVisible ? (
-                                            <span className="agent-card-amr-balance">
-                                              <span className="agent-card-amr-balance-label">
-                                                {t('settings.amrBalance')}
-                                              </span>
-                                              <span className="agent-card-amr-balance-value">
-                                                {amrWalletValueLabel({
-                                                  balance: amrCardBalanceLabel,
-                                                  loadingLabel: t('common.loading'),
-                                                  ready: amrWalletReady || Boolean(amrCardBalanceLabel),
-                                                  snapshot: amrWalletSnapshot,
-                                                  unavailableLabel: t('settings.amrWalletUnavailable'),
-                                                })}
-                                              </span>
+                                          <span className="agent-card-amr-balance">
+                                            <span className="agent-card-amr-balance-label">
+                                              {t('settings.amrBalance')}
                                             </span>
-                                          ) : null}
+                                            <span className="agent-card-amr-balance-value">
+                                              {amrWalletValueLabel({
+                                                balance: amrCardBalanceLabel,
+                                                loadingLabel: t('common.loading'),
+                                                ready: amrWalletReady || Boolean(amrCardBalanceLabel),
+                                                snapshot: amrWalletSnapshot,
+                                                unavailableLabel: t('settings.amrWalletUnavailable'),
+                                              })}
+                                            </span>
+                                          </span>
                                         </div>
                                       ) : null}
                                       {!active && modelSummary ? (
@@ -5397,15 +5573,6 @@ export function SettingsDialog({
             <PetSettings cfg={cfg} setCfg={setCfg} />
           ) : null}
 
-          {activeSection === 'skills' ? (
-            <SkillsSection
-              cfg={cfg}
-              setCfg={setCfg}
-              onSkillsRefresh={onSkillsRefresh}
-              onSkillsChanged={onSkillsChanged}
-            />
-          ) : null}
-
           {activeSection === 'designSystems' ? (
             <DesignSystemsSection
               cfg={cfg}
@@ -5464,18 +5631,51 @@ export function SettingsDialog({
               {appVersionInfo ? (
                 <dl className="settings-about-list">
                   <div className="settings-about-version-row">
-                    <div className="settings-about-version-left">
-                      <dt>{t('settings.appVersion')}</dt>
-                      <span className="settings-about-version-num">{appVersionInfo.version}</span>
+                    <div className="settings-about-version-copy">
+                      <div className="settings-about-version-left">
+                        <dt>{t('settings.appVersion')}</dt>
+                        <span className="settings-about-version-num">{appVersionInfo.version}</span>
+                        <dd
+                          aria-live="polite"
+                          className={`settings-about-update-status settings-about-update-status--${aboutUpdateControl.statusTone}`}
+                        >
+                          {t(aboutUpdateControl.statusKey, aboutUpdateControl.statusVars)}
+                        </dd>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      className="settings-about-download-link"
-                      disabled={versionChecking}
-                      onClick={handleInstallLatest}
-                    >
-                      {versionChecking ? t('common.loading') : t('settings.installLatest')}
-                    </button>
+                    <div className="settings-about-update-actions">
+                      {aboutUpdateControl.primaryLabelKey ? (
+                        <button
+                          type="button"
+                          className={`settings-about-update-button${
+                            aboutUpdateControl.primaryAction === 'download'
+                              || aboutUpdateControl.primaryAction === 'install'
+                              || aboutUpdateControl.primaryAction === 'quit'
+                              ? ' settings-about-update-button--primary'
+                              : ''
+                          }`}
+                          disabled={
+                            aboutUpdateActionBusy
+                            || aboutUpdaterModel.busy
+                            || aboutUpdateControl.primaryAction == null
+                          }
+                          onClick={handleAboutUpdateAction}
+                        >
+                          {aboutUpdateActionBusy
+                            ? t('common.loading')
+                            : t(aboutUpdateControl.primaryLabelKey)}
+                        </button>
+                      ) : null}
+                      {aboutUpdateControl.showReleaseLink ? (
+                        <button
+                          type="button"
+                          className="settings-about-release-link"
+                          onClick={handleOpenReleaseNotes}
+                        >
+                          {t('settings.updateViewReleases')}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                   <div>
                     <dt>{t('settings.appChannel')}</dt>
@@ -7848,7 +8048,22 @@ function IntegrationsSection() {
             }}
             data-lang={snippetLang}
           >
-            <code>
+            <code
+              style={{
+                // Neutralize the global inline-`code` chip style (background,
+                // padding, rounded corners, color, size) so it doesn't paint a
+                // light rounded rectangle behind every wrapped segment of the
+                // dark snippet block — which read as permanent selection
+                // highlights on the wrapped `claude mcp add-json` one-liner.
+                // Issue #4509.
+                background: 'transparent',
+                padding: 0,
+                borderRadius: 0,
+                color: 'inherit',
+                fontFamily: 'inherit',
+                fontSize: 'inherit',
+              }}
+            >
               {snippet ||
                 (infoError
                   ? t('settings.mcpResolvingFailed')

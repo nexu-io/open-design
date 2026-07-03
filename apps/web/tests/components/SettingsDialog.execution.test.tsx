@@ -2,6 +2,8 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
+import { installMockOpenDesignHost } from '@open-design/host/testing';
 import { en } from '../../src/i18n/locales/en';
 
 const {
@@ -90,6 +92,7 @@ vi.mock('../../src/analytics/provider', () => ({
 }));
 
 import { SettingsDialog } from '../../src/components/SettingsDialog';
+import { IntegrationsView } from '../../src/components/IntegrationsView';
 import type { AgentRefreshOptions, SettingsSection } from '../../src/components/SettingsDialog';
 import { reconcileAmrModelChoice } from '../../src/components/SettingsDialog';
 import { reconcileAmrProfileEnv } from '../../src/components/SettingsDialog';
@@ -228,6 +231,30 @@ const sampleDesignSystems = [
   },
 ];
 
+let restoreOpenDesignHost: (() => void) | null = null;
+
+function updateStatus(
+  overrides: Partial<OpenDesignHostUpdaterStatusSnapshot> = {},
+): OpenDesignHostUpdaterStatusSnapshot {
+  return {
+    arch: 'arm64',
+    capabilities: {
+      canApplyInPlace: false,
+      canDownload: true,
+      canOpenInstaller: true,
+      requiresManualInstall: true,
+    },
+    channel: 'beta',
+    currentVersion: '1.2.3-beta.3',
+    enabled: true,
+    mode: 'package-launcher',
+    platform: 'darwin',
+    state: 'idle',
+    supported: true,
+    ...overrides,
+  };
+}
+
 function renderSettingsDialog(
   initial: Partial<AppConfig> = {},
   options: {
@@ -264,6 +291,26 @@ function renderSettingsDialog(
   );
 
   return { onPersist, onPersistComposioKey, onClose, onRefreshAgents, ...view };
+}
+
+function renderIntegrationsView(
+  initial: Partial<AppConfig> = {},
+  options: {
+    initialTab?: 'mcp' | 'connectors' | 'skills' | 'use-everywhere';
+  } = {},
+) {
+  const onConfigPersist = vi.fn();
+  const onPersistComposioKey = vi.fn();
+  const view = render(
+    <IntegrationsView
+      config={{ ...baseConfig, ...initial }}
+      initialTab={options.initialTab ?? 'mcp'}
+      onConfigPersist={onConfigPersist}
+      onPersistComposioKey={onPersistComposioKey}
+    />,
+  );
+
+  return { onConfigPersist, onPersistComposioKey, ...view };
 }
 
 function renderLanguageSettingsDialog(initialLocale: Parameters<typeof I18nProvider>[0]['initial'] = 'en') {
@@ -390,6 +437,11 @@ beforeEach(() => {
     latencyMs: 1,
     models: [],
   });
+});
+
+afterEach(() => {
+  restoreOpenDesignHost?.();
+  restoreOpenDesignHost = null;
 });
 
 describe('SettingsDialog execution settings BYOK interactions', () => {
@@ -1668,6 +1720,41 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(testConnectionCalls).toHaveLength(1);
   });
 
+  it('shows provider upstream detail for failed BYOK connection tests', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          kind: 'upstream_unavailable',
+          latencyMs: 42,
+          status: 400,
+          detail:
+            'The selected NVIDIA model instance is currently unavailable at the provider. Try a different model or retry later.',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog({ apiKey: 'sk-ant-test-provider' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    expect(
+      await screen.findByText(
+        /Provider returned 400\. Try again in a moment\. The selected NVIDIA model instance is currently unavailable/,
+      ),
+    ).toBeTruthy();
+  });
+
   it('blocks an obvious OpenAI key in the Anthropic tab before testing', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (input.toString() === '/api/memory') {
@@ -2151,14 +2238,14 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
   it('lets users switch to Local CLI, select an installed agent, and autosave', async () => {
     const installed = availableAgents[0]!;
     const unavailable: AgentInfo = {
-      id: 'gemini',
-      name: 'Gemini CLI',
-      bin: 'gemini',
+      id: 'kimi',
+      name: 'Kimi CLI',
+      bin: 'kimi',
       available: false,
       version: null,
       models: [],
-      installUrl: 'https://github.com/google-gemini/gemini-cli',
-      docsUrl: 'https://github.com/google-gemini/gemini-cli/blob/main/README.md',
+      installUrl: 'https://github.com/MoonshotAI/kimi-cli',
+      docsUrl: 'https://www.kimi.com/code/docs/en/kimi-cli/guides/getting-started.html?aff=open-design',
     };
     const { onPersist } = renderSettingsDialog(
       { mode: 'daemon', agentId: null },
@@ -2173,12 +2260,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(installGroupSummary.closest('details')?.hasAttribute('open')).toBe(false);
     const codexCard = screen.getByRole('button', { name: /Codex CLI/i }) as HTMLButtonElement;
     fireEvent.click(installGroupSummary);
-    const geminiGroup = screen.getByRole('group', { name: /Gemini CLI/i });
-    expect(within(geminiGroup).getByText('Google official CLI')).toBeTruthy();
+    const kimiGroup = screen.getByRole('group', { name: /Kimi CLI/i });
+    expect(within(kimiGroup).getByText('Moonshot Kimi CLI')).toBeTruthy();
     expect(
-      (within(geminiGroup).getByRole('link', { name: en['settings.agentInstall.install'] }) as HTMLAnchorElement).getAttribute('href'),
+      (within(kimiGroup).getByRole('link', { name: en['settings.agentInstall.install'] }) as HTMLAnchorElement).getAttribute('href'),
     ).toBe(
-      'https://github.com/google-gemini/gemini-cli',
+      'https://github.com/MoonshotAI/kimi-cli',
     );
     expect(
       screen.getByText(en['settings.agentInstall.stepAuth']),
@@ -2487,13 +2574,13 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
   it('rescans automatically when returning after opening an install link', async () => {
     const unavailable: AgentInfo = {
-      id: 'gemini',
-      name: 'Gemini CLI',
-      bin: 'gemini',
+      id: 'kimi',
+      name: 'Kimi CLI',
+      bin: 'kimi',
       available: false,
       version: null,
       models: [],
-      installUrl: 'https://github.com/google-gemini/gemini-cli',
+      installUrl: 'https://github.com/MoonshotAI/kimi-cli',
     };
     const onRefreshAgents = vi.fn(async () => availableAgents);
 
@@ -2620,7 +2707,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(screen.queryByText(/vela/i)).toBeNull();
     expect(screen.queryByText(/Not signed in/i)).toBeNull();
     expect(screen.getByText('Official')).toBeTruthy();
-    expect(screen.getByText('Lower cost')).toBeTruthy();
+    expect(screen.queryByText('Lower cost')).toBeNull();
     expect(screen.getByText('Many models')).toBeTruthy();
     expect(screen.queryByText('Limited bonus: +100%')).toBeNull();
     expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
@@ -2942,6 +3029,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
               email: 'signed-in@example.com',
               name: 'Signed In User',
             },
+            account: { plan: 'pro' },
             configPath: '/Users/test/.amr/config.json',
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
@@ -2960,12 +3048,63 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^Open Design\b/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Plan pro/ })).toBeTruthy();
     expect(screen.getByText('signed-in@example.com')).toBeTruthy();
     expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
     expect(screen.queryByText(/^vela$/i)).toBeNull();
   });
 
-  it('shows the Settings AMR wallet fallback balance for old Vela CLI status payloads', async () => {
+  it('keeps the AMR plan badge on the account row outside the clipped benefits row', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: true,
+            profile: 'local',
+            user: {
+              id: 'user-1',
+              email: 'signed-in@example.com',
+              name: 'Signed In User',
+            },
+            account: { plan: 'pro' },
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+
+    const amrCardButton = await screen.findByRole('button', { name: /Plan pro/ });
+    const planBadge = within(amrCardButton).getByText('pro');
+    const benefits = amrCardButton.querySelector('.agent-card-benefits');
+    const planSlot = planBadge.closest('.agent-card-plan-badge-slot');
+    const accountRow = planBadge.closest('.agent-card-amr-email');
+
+    expect(benefits).toBeTruthy();
+    expect(planSlot).toBeTruthy();
+    expect(accountRow).toBeTruthy();
+    expect(accountRow?.textContent).toContain('signed-in@example.com');
+    expect(planSlot?.getAttribute('aria-hidden')).toBe('true');
+    expect(benefits?.contains(planBadge)).toBe(false);
+  });
+
+  it('loads the Settings AMR wallet fallback balance without a manual card refresh button', async () => {
     let walletCalls = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
@@ -4384,15 +4523,15 @@ describe('SettingsDialog pets interactions', () => {
   });
 });
 
-describe('SettingsDialog skills section', () => {
+describe('IntegrationsView skills tab', () => {
   afterEach(() => {
     cleanup();
   });
 
   it('lists functional skills and filters them by mode + search', async () => {
-    renderSettingsDialog(
+    renderIntegrationsView(
       { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'skills' },
+      { initialTab: 'skills' },
     );
 
     await waitFor(() => {
@@ -4414,9 +4553,9 @@ describe('SettingsDialog skills section', () => {
   });
 
   it('opens a skill detail panel and persists disabled skills from toggle switches', async () => {
-    const { onPersist } = renderSettingsDialog(
+    const { onConfigPersist } = renderIntegrationsView(
       { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'skills' },
+      { initialTab: 'skills' },
     );
 
     await waitFor(() => {
@@ -4432,19 +4571,19 @@ describe('SettingsDialog skills section', () => {
     const toggles = screen.getAllByTitle('Toggle');
     fireEvent.click(toggles[0] as HTMLElement);
 
-    await waitForPersist(
-      onPersist,
-      expect.objectContaining({
-        disabledSkills: ['blog-post'],
-      }),
-      {},
-    );
+    await waitFor(() => {
+      expect(onConfigPersist).toHaveBeenCalledWith(
+        expect.objectContaining({
+          disabledSkills: ['blog-post'],
+        }),
+      );
+    });
   });
 
   it('shows an empty state when search matches nothing', async () => {
-    renderSettingsDialog(
+    renderIntegrationsView(
       { mode: 'daemon', agentId: 'codex' },
-      { initialSection: 'skills' },
+      { initialTab: 'skills' },
     );
 
     await waitFor(() => {
@@ -4621,12 +4760,54 @@ describe('SettingsDialog about interactions', () => {
     expect(second.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('opens the releases page when the latest release info is stale', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
-    fetchLatestGithubReleaseInfoMock.mockResolvedValue({
-      tagName: 'v0.4.1',
-      htmlUrl: 'https://github.com/nexu-io/open-design/releases/tag/v0.4.1',
-      stale: true,
+  it('shows development builds as unsupported for in-app updates', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '0.4.1',
+          channel: 'beta',
+          packaged: false,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+      },
+    );
+
+    expect(screen.getByText(en['settings.updateStatusDevelopment'])).toBeTruthy();
+    expect(screen.queryByRole('button', { name: en['settings.installLatest'] })).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: en['settings.updateViewReleases'] }));
+
+    expect(openExternalUrlMock).toHaveBeenCalledWith('https://github.com/nexu-io/open-design/releases');
+  });
+
+  it('downloads an available packaged update from the about page', async () => {
+    const available = updateStatus({
+      availableVersion: '1.2.3-beta.4',
+      state: 'available',
+    });
+    const downloaded = updateStatus({
+      artifact: {
+        name: 'Open Design Beta.dmg',
+        platformKey: 'macAppleSilicon',
+        type: 'dmg',
+        url: 'https://fixture.test/Open Design Beta.dmg',
+      },
+      availableVersion: '1.2.3-beta.4',
+      downloadPath: '/tmp/open-design-updater/Open Design Beta.dmg',
+      state: 'downloaded',
+    });
+    const download = vi.fn(async () => downloaded);
+    restoreOpenDesignHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          download,
+          status: vi.fn(async () => available),
+        },
+      },
     });
 
     renderSettingsDialog(
@@ -4634,7 +4815,7 @@ describe('SettingsDialog about interactions', () => {
       {
         initialSection: 'about',
         appVersionInfo: {
-          version: '0.4.1',
+          version: '1.2.3-beta.3',
           channel: 'beta',
           packaged: true,
           platform: 'darwin',
@@ -4643,15 +4824,149 @@ describe('SettingsDialog about interactions', () => {
       },
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Install latest' }));
+    expect(
+      await screen.findByText('New version 1.2.3-beta.4 found. Preparing download.'),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: en['updater.download'] }));
 
     await waitFor(() => {
-      expect(openSpy).toHaveBeenCalledWith(
-        'https://github.com/nexu-io/open-design/releases',
-        '_blank',
-        'noopener,noreferrer',
-      );
+      expect(download).toHaveBeenCalledWith({ payload: { source: 'settings-about' } });
     });
-    expect(screen.queryByText(en['settings.alreadyLatest'])).toBeNull();
+    expect(screen.getByText('Version 1.2.3-beta.4 is ready to install.')).toBeTruthy();
+  });
+
+  it('installs a downloaded payload update from the about page', async () => {
+    const payloadReady = updateStatus({
+      artifact: {
+        name: 'open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+        platformKey: 'mac',
+        type: 'payload',
+        url: 'https://fixture.test/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+      },
+      availableVersion: '1.2.3-beta.4',
+      capabilities: {
+        canApplyInPlace: true,
+        canDownload: true,
+        canOpenInstaller: false,
+        requiresManualInstall: false,
+      },
+      downloadPath: '/tmp/open-design-updater/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+      state: 'downloaded',
+    });
+    const installing = updateStatus({
+      ...payloadReady,
+      state: 'installing',
+    });
+    const install = vi.fn(async () => installing);
+    const quit = vi.fn(async () => ({ ok: true as const }));
+    restoreOpenDesignHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => payloadReady),
+        },
+      },
+    });
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '1.2.3-beta.3',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+      },
+    );
+
+    expect(await screen.findByText('Version 1.2.3-beta.4 is ready to install.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: en['updater.installRestart'] }));
+
+    await waitFor(() => {
+      expect(install).toHaveBeenCalledWith({ payload: { source: 'settings-about' } });
+    });
+    await waitFor(() => {
+      expect(quit).toHaveBeenCalledWith({ payload: { source: 'settings-about' } });
+    });
+  });
+
+  it('keeps a quit retry action when update install succeeds but quit fails', async () => {
+    const payloadReady = updateStatus({
+      artifact: {
+        name: 'open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+        platformKey: 'mac',
+        type: 'payload',
+        url: 'https://fixture.test/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+      },
+      availableVersion: '1.2.3-beta.4',
+      capabilities: {
+        canApplyInPlace: true,
+        canDownload: true,
+        canOpenInstaller: false,
+        requiresManualInstall: false,
+      },
+      downloadPath: '/tmp/open-design-updater/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+      state: 'downloaded',
+    });
+    const installed = updateStatus({
+      ...payloadReady,
+      installResult: {
+        dryRun: true,
+        openedAt: '2026-05-19T00:00:00.000Z',
+        path: '/tmp/open-design-updater/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
+      },
+    });
+    const install = vi.fn(async () => installed);
+    const quit = vi.fn(async () => ({
+      ok: false as const,
+      reason: 'desktop quit is not available',
+    }));
+    restoreOpenDesignHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          install,
+          quit,
+          status: vi.fn(async () => payloadReady),
+        },
+      },
+    });
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '1.2.3-beta.3',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+      },
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: en['updater.installRestart'] }));
+
+    await waitFor(() => {
+      expect(install).toHaveBeenCalledWith({ payload: { source: 'settings-about' } });
+    });
+    await waitFor(() => {
+      expect(quit).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByRole('button', { name: en['updater.quitButton'] })).toBeTruthy();
+    expect(screen.getAllByText(en['settings.updateQuitFailed']).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: en['updater.quitButton'] }));
+
+    await waitFor(() => {
+      expect(quit).toHaveBeenCalledTimes(2);
+    });
+    expect(install).toHaveBeenCalledTimes(1);
   });
 });
