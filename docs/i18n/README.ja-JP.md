@@ -126,6 +126,7 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 | [Cline](https://github.com/cline/cline) | ✅ 対応済み | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ 対応済み | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ 対応済み | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ 対応済み | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ 対応済み | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ 対応済み | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 対応済み | `od mcp install hermes` |

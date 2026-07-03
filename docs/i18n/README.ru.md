@@ -126,6 +126,7 @@ Open Design — это то, что получается, когда **аген�
 | [Cline](https://github.com/cline/cline) | ✅ Поддерживается | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Поддерживается | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Поддерживается | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ Поддерживается | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Поддерживается | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Поддерживается | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Поддерживается | `od mcp install hermes` |
