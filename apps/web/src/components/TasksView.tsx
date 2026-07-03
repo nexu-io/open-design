@@ -20,7 +20,10 @@ import { Icon, type IconName } from './Icon';
 import { navigate } from '../router';
 import { useT } from '../i18n';
 import type { SkillSummary } from '../types';
-import { buildCreatorDashboardDataFromOpenDesign } from '../creator-adapters';
+import {
+  buildCreatorDashboardDataFromOpenDesign,
+  CREATOR_FOCUS_ACTIONS,
+} from '../creator-adapters';
 import type { ChatRunStatusResponse, Project } from '@open-design/contracts';
 
 type TranslateFn = ReturnType<typeof useT>;
@@ -543,8 +546,8 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
     if (!focus?.projectId) return;
 
     if (
-      focus.recommendedAction === 'Monitor run' ||
-      focus.recommendedAction === 'Review output'
+      focus.recommendedAction === CREATOR_FOCUS_ACTIONS.monitorRun ||
+      focus.recommendedAction === CREATOR_FOCUS_ACTIONS.reviewOutput
     ) {
       navigate({
         kind: 'project',
@@ -555,7 +558,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       return;
     }
 
-    if (focus.recommendedAction === 'Retry run') {
+    if (focus.recommendedAction === CREATOR_FOCUS_ACTIONS.retryRun) {
       if (focus.assistantMessageId) {
         try {
           window.sessionStorage.setItem(
@@ -575,7 +578,7 @@ export function TasksView({ projects: entryProjects = [], skills = [], designTem
       return;
     }
 
-    if (focus.recommendedAction === 'Start first run') {
+    if (focus.recommendedAction === CREATOR_FOCUS_ACTIONS.startFirstRun) {
       const project = entryProjects.find((candidate) => candidate.id === focus.projectId);
       const pendingPrompt = project?.pendingPrompt?.trim();
       if (pendingPrompt) {

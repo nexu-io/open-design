@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildCreatorDashboardData,
   buildCreatorDashboardDataFromOpenDesign,
+  CREATOR_FOCUS_ACTIONS,
+  CREATOR_FOCUS_REASONS,
   creatorMockData,
   type CreatorDashboardData,
 } from "../../src/creator-adapters/index.js";
@@ -177,8 +179,8 @@ describe("buildCreatorDashboardData", () => {
     const result = buildCreatorDashboardData({ tasks, activities });
 
     expect(result.focus?.projectId).toBe("p-review");
-    expect(result.focus?.reason).toBe("Fresh result to review");
-    expect(result.focus?.recommendedAction).toBe("Review output");
+    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.freshResultToReview);
+    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.reviewOutput);
   });
 
   it("uses latest start activity as a focus fallback when no run metadata exists", () => {
@@ -207,8 +209,8 @@ describe("buildCreatorDashboardData", () => {
     const result = buildCreatorDashboardData({ tasks, activities });
 
     expect(result.focus?.projectId).toBe("p-running");
-    expect(result.focus?.reason).toBe("Run in progress");
-    expect(result.focus?.recommendedAction).toBe("Monitor run");
+    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.runInProgress);
+    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.monitorRun);
   });
 
   it("prefers the newest activity when multiple fallback activities exist for one project", () => {
@@ -244,8 +246,8 @@ describe("buildCreatorDashboardData", () => {
     const result = buildCreatorDashboardData({ tasks, activities });
 
     expect(result.activities.map((item) => item.title)).toEqual(["运行完成", "运行开始"]);
-    expect(result.focus?.reason).toBe("Fresh result to review");
-    expect(result.focus?.recommendedAction).toBe("Review output");
+    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.freshResultToReview);
+    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.reviewOutput);
   });
 });
 
@@ -356,8 +358,8 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
       stageLabel: "剪辑",
       statusLabel: "就绪",
       sourceLabel: "video",
-      reason: "Ready brief, no run yet",
-      recommendedAction: "Start first run",
+      reason: CREATOR_FOCUS_REASONS.readyBriefNoRunYet,
+      recommendedAction: CREATOR_FOCUS_ACTIONS.startFirstRun,
     });
   });
 
@@ -387,8 +389,8 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     expect(firstTask.priorityLabel).toBe("中");
 
     expect(result.focus?.title).toBe("待启动素材整理");
-    expect(result.focus?.reason).toBe("Ready brief, no run yet");
-    expect(result.focus?.recommendedAction).toBe("Start first run");
+    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.readyBriefNoRunYet);
+    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.startFirstRun);
   });
 
   it("maps awaiting_input status into blocked review work", () => {
@@ -513,8 +515,8 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     expect(result.focus?.title).toBe("待处理剪辑");
     expect(result.focus?.conversationId).toBe("conv-1");
     expect(result.focus?.assistantMessageId).toBe("msg-1");
-    expect(result.focus?.reason).toBe("Latest run failed");
-    expect(result.focus?.recommendedAction).toBe("Retry run");
+    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.latestRunFailed);
+    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.retryRun);
   });
 
   it("derives run events and runback rows from succeeded runs", () => {
@@ -581,8 +583,8 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     expect(result.activities.map((item) => item.title)).toEqual(["运行开始"]);
     expect(result.focus?.conversationId).toBe("conv-4");
     expect(result.focus?.assistantMessageId).toBe("msg-4");
-    expect(result.focus?.reason).toBe("Run in progress");
-    expect(result.focus?.recommendedAction).toBe("Monitor run");
+    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.runInProgress);
+    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.monitorRun);
   });
 
   it("skips runback activity for non-succeeded runs", () => {
@@ -683,8 +685,8 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     });
 
     expect(result.focus?.title).toBe("有明确 brief 的项目");
-    expect(result.focus?.reason).toBe("Ready brief, no run yet");
-    expect(result.focus?.recommendedAction).toBe("Start first run");
+    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.readyBriefNoRunYet);
+    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.startFirstRun);
   });
 
   it("keeps focus mapped by projectId when multiple projects share the same name", () => {
@@ -732,8 +734,8 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     expect(result.focus?.projectId).toBe("project-a");
     expect(result.focus?.conversationId).toBe("conv-a");
     expect(result.focus?.assistantMessageId).toBe("msg-a");
-    expect(result.focus?.reason).toBe("Run in progress");
-    expect(result.focus?.recommendedAction).toBe("Monitor run");
+    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.runInProgress);
+    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.monitorRun);
   });
 
   it("maps queued runs into queued focus state", () => {
@@ -767,7 +769,7 @@ describe("buildCreatorDashboardDataFromOpenDesign", () => {
     expect(result.activities.map((item) => item.title)).toEqual(["运行开始"]);
     expect(result.focus?.conversationId).toBe("conv-queued");
     expect(result.focus?.assistantMessageId).toBe("msg-queued");
-    expect(result.focus?.reason).toBe("Run queued");
-    expect(result.focus?.recommendedAction).toBe("Monitor run");
+    expect(result.focus?.reason).toBe(CREATOR_FOCUS_REASONS.runQueued);
+    expect(result.focus?.recommendedAction).toBe(CREATOR_FOCUS_ACTIONS.monitorRun);
   });
 });

@@ -51,6 +51,32 @@ export interface CreatorDashboardData {
   workflows: WorkflowSummaryViewModel[];
 }
 
+export const CREATOR_FOCUS_REASONS = {
+  latestRunFailed: "Latest run failed",
+  runQueued: "Run queued",
+  runInProgress: "Run in progress",
+  freshResultToReview: "Fresh result to review",
+  readyBriefNoRunYet: "Ready brief, no run yet",
+  needsIntervention: "Needs intervention",
+  activePriority: "Active priority",
+  nextBestTask: "Next best task",
+} as const;
+
+export const CREATOR_FOCUS_ACTIONS = {
+  retryRun: "Retry run",
+  monitorRun: "Monitor run",
+  reviewOutput: "Review output",
+  startFirstRun: "Start first run",
+  unblockProject: "Unblock project",
+  continueEditing: "Continue editing",
+  continueTask: "Continue task",
+} as const;
+
+export type CreatorFocusReason =
+  (typeof CREATOR_FOCUS_REASONS)[keyof typeof CREATOR_FOCUS_REASONS];
+export type CreatorFocusAction =
+  (typeof CREATOR_FOCUS_ACTIONS)[keyof typeof CREATOR_FOCUS_ACTIONS];
+
 export interface CreatorFocusCard {
   projectId?: string;
   conversationId?: string | null;
@@ -60,8 +86,8 @@ export interface CreatorFocusCard {
   stageLabel?: string;
   statusLabel?: string;
   sourceLabel?: string;
-  reason: string;
-  recommendedAction: string;
+  reason: CreatorFocusReason;
+  recommendedAction: CreatorFocusAction;
 }
 
 export interface BuildCreatorDashboardDataOptions {
@@ -85,8 +111,8 @@ interface FocusCandidate {
   stageLabel?: string;
   statusLabel?: string;
   sourceLabel?: string;
-  reason: string;
-  recommendedAction: string;
+  reason: CreatorFocusReason;
+  recommendedAction: CreatorFocusAction;
   rank: number;
   moment: number;
 }
@@ -643,8 +669,8 @@ function buildRunFocusCandidate(
       stageLabel: task.stageLabel,
       statusLabel: task.statusLabel,
       sourceLabel: task.sourceLabel,
-      reason: "Latest run failed",
-      recommendedAction: "Retry run",
+      reason: CREATOR_FOCUS_REASONS.latestRunFailed,
+      recommendedAction: CREATOR_FOCUS_ACTIONS.retryRun,
       rank: 100,
       moment: Math.max(run.updatedAt, run.createdAt),
     };
@@ -659,8 +685,8 @@ function buildRunFocusCandidate(
       stageLabel: task.stageLabel,
       statusLabel: task.statusLabel,
       sourceLabel: task.sourceLabel,
-      reason: "Run queued",
-      recommendedAction: "Monitor run",
+      reason: CREATOR_FOCUS_REASONS.runQueued,
+      recommendedAction: CREATOR_FOCUS_ACTIONS.monitorRun,
       rank: 90,
       moment: Math.max(run.updatedAt, run.createdAt),
     };
@@ -675,8 +701,8 @@ function buildRunFocusCandidate(
       stageLabel: task.stageLabel,
       statusLabel: task.statusLabel,
       sourceLabel: task.sourceLabel,
-      reason: "Run in progress",
-      recommendedAction: "Monitor run",
+      reason: CREATOR_FOCUS_REASONS.runInProgress,
+      recommendedAction: CREATOR_FOCUS_ACTIONS.monitorRun,
       rank: 90,
       moment: Math.max(run.updatedAt, run.createdAt),
     };
@@ -691,8 +717,8 @@ function buildRunFocusCandidate(
       stageLabel: task.stageLabel,
       statusLabel: task.statusLabel,
       sourceLabel: task.sourceLabel,
-      reason: "Fresh result to review",
-      recommendedAction: "Review output",
+      reason: CREATOR_FOCUS_REASONS.freshResultToReview,
+      recommendedAction: CREATOR_FOCUS_ACTIONS.reviewOutput,
       rank: 70,
       moment: Math.max(run.updatedAt, run.createdAt),
     };
@@ -715,8 +741,8 @@ function buildPromptFocusCandidate(
     stageLabel: task.stageLabel,
     statusLabel: task.statusLabel,
     sourceLabel: task.sourceLabel,
-    reason: "Ready brief, no run yet",
-    recommendedAction: "Start first run",
+    reason: CREATOR_FOCUS_REASONS.readyBriefNoRunYet,
+    recommendedAction: CREATOR_FOCUS_ACTIONS.startFirstRun,
     rank: 80,
     moment: project.updatedAt,
   };
@@ -725,39 +751,39 @@ function buildPromptFocusCandidate(
 function resolveTaskFocusReason(
   task: TaskCardViewModel,
   activity: ActivityItemViewModel | undefined,
-): string {
+): CreatorFocusReason {
   if (task.status === "blocked") {
-    return "Needs intervention";
+    return CREATOR_FOCUS_REASONS.needsIntervention;
   }
   if (task.status === "ready" && task.priority === "high") {
-    return "Active priority";
+    return CREATOR_FOCUS_REASONS.activePriority;
   }
   if (activity?.title === "运行完成") {
-    return "Fresh result to review";
+    return CREATOR_FOCUS_REASONS.freshResultToReview;
   }
   if (activity?.title === "运行开始") {
-    return "Run in progress";
+    return CREATOR_FOCUS_REASONS.runInProgress;
   }
-  return "Next best task";
+  return CREATOR_FOCUS_REASONS.nextBestTask;
 }
 
 function resolveTaskRecommendedAction(
   task: TaskCardViewModel,
   activity: ActivityItemViewModel | undefined,
-): string {
+): CreatorFocusAction {
   if (task.status === "blocked") {
-    return "Unblock project";
+    return CREATOR_FOCUS_ACTIONS.unblockProject;
   }
   if (task.status === "ready" && task.priority === "high") {
-    return "Continue editing";
+    return CREATOR_FOCUS_ACTIONS.continueEditing;
   }
   if (activity?.title === "运行完成") {
-    return "Review output";
+    return CREATOR_FOCUS_ACTIONS.reviewOutput;
   }
   if (activity?.title === "运行开始") {
-    return "Monitor run";
+    return CREATOR_FOCUS_ACTIONS.monitorRun;
   }
-  return "Continue task";
+  return CREATOR_FOCUS_ACTIONS.continueTask;
 }
 
 function resolveTaskFocusRank(
