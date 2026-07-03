@@ -671,7 +671,18 @@ function resolveOdTeamBin(): OdTeamSpawn | null {
   if (process.env.OD_TEAM_BIN) {
     return { command: process.env.OD_TEAM_BIN, args: [] };
   }
-  // 2. Pre-built binary (e.g. go build -o cmd/odteam/odteam ./cmd/odteam)
+  // 2. Packaged install: DAEMON_RESOURCE_ROOT/bin/odteam
+  //    (bundled by tools-pack via copyBundledOdTeamBinary)
+  if (DAEMON_RESOURCE_ROOT) {
+    const packagedPath = path.join(DAEMON_RESOURCE_ROOT, 'bin', 'odteam');
+    try {
+      if (fs.existsSync(packagedPath) && fs.statSync(packagedPath).isFile()) {
+        fs.accessSync(packagedPath, fs.constants.X_OK);
+        return { command: packagedPath, args: [] };
+      }
+    } catch { /* not executable or doesn't exist */ }
+  }
+  // 3. Pre-built binary in monorepo (e.g. make build)
   const binPath = path.join(PROJECT_ROOT, 'packages', 'multi-agent-team', 'cmd', 'odteam', 'odteam');
   try {
     if (fs.existsSync(binPath) && fs.statSync(binPath).isFile()) {
@@ -679,7 +690,7 @@ function resolveOdTeamBin(): OdTeamSpawn | null {
       return { command: binPath, args: [] };
     }
   } catch { /* not executable or doesn't exist */ }
-  // 3. Dev fallback: go run ./cmd/odteam when source exists but binary
+  // 4. Dev fallback: go run ./cmd/odteam when source exists but binary
   //    hasn't been built yet (go build ./... does not produce an executable)
   const modDir = path.join(PROJECT_ROOT, 'packages', 'multi-agent-team');
   const mainFile = path.join(modDir, 'cmd', 'odteam', 'main.go');

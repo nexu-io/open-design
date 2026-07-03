@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { cp } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { chmod, cp } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -84,4 +84,39 @@ export async function copyBundledResourceTrees({
       recursive: true,
     });
   }
+}
+
+/**
+ * Copy the pre-built odteam binary from the monorepo into the packaged
+ * resource tree so it is available at runtime under DAEMON_RESOURCE_ROOT/bin/.
+ *
+ * This is a best-effort step — the binary may not exist if the Go toolchain
+ * is not installed or `make build` was not run before packaging. In that
+ * case the daemon will fall back to OD_TEAM_BIN or report AGENT_UNAVAILABLE.
+ */
+export async function copyBundledOdTeamBinary({
+  platform,
+  resourceRoot,
+  workspaceRoot,
+}: {
+  platform: "linux" | "mac" | "win";
+  resourceRoot: string;
+  workspaceRoot: string;
+}): Promise<string | null> {
+  const binName = platform === "win" ? "odteam.exe" : "odteam";
+  const source = join(
+    workspaceRoot,
+    "packages",
+    "multi-agent-team",
+    "cmd",
+    "odteam",
+    binName,
+  );
+  if (!existsSync(source)) return null;
+  const target = join(resourceRoot, "bin", binName);
+  await cp(source, target);
+  if (platform !== "win") {
+    await chmod(target, 0o755);
+  }
+  return target;
 }

@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 
 import { hashJson, hashPath, ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
-import { copyBundledResourceTrees, winResources } from "../resources.js";
+import { copyBundledOdTeamBinary, copyBundledResourceTrees, winResources } from "../resources.js";
 import {
   copyOptionalVelaCliBinary,
   resolveOptionalVelaCliBinary,
@@ -75,6 +75,11 @@ export async function prepareResourceTree(
         platform: "win",
         requireBundled: config.requireVelaCli,
         resourceRoot,
+      });
+      await copyBundledOdTeamBinary({
+        platform: "win",
+        resourceRoot,
+        workspaceRoot: config.workspaceRoot,
       });
       return { resourceName: "open-design" };
     },
