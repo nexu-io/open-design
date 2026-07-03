@@ -1231,6 +1231,40 @@ export async function updateUserDesignSystem(
   return listed.find((s) => s.id === `user:${dirId}`) ?? null;
 }
 
+// A design-system workspace project mirrors its design system's title:
+// ensureUserDesignSystemWorkspaceProject re-stamps the project name from
+// the registry title every time the workspace is ensured, so a rename
+// applied only to the project row silently reverts on the next open.
+// Renames on these projects must instead be written through to the
+// design-system title — the sync then carries the new name back onto the
+// project and both records agree.
+export function workspaceRenameDesignSystemId(project: {
+  designSystemId?: string | null;
+  metadata?: unknown;
+}): string | null {
+  const id = typeof project?.designSystemId === 'string' ? project.designSystemId : '';
+  if (!id.startsWith('user:')) return null;
+  const metadata = project?.metadata;
+  const importedFrom =
+    metadata && typeof metadata === 'object'
+      ? (metadata as Record<string, unknown>).importedFrom
+      : undefined;
+  return importedFrom === 'design-system' ? id : null;
+}
+
+export async function propagateWorkspaceProjectRename(
+  root: string,
+  project: { designSystemId?: string | null; metadata?: unknown },
+  name: unknown,
+): Promise<boolean> {
+  const id = workspaceRenameDesignSystemId(project);
+  if (!id) return false;
+  const title = typeof name === 'string' ? name.trim() : '';
+  if (!title) return false;
+  const updated = await updateUserDesignSystem(root, id, { title });
+  return updated != null;
+}
+
 export async function linkUserDesignSystemProject(
   root: string,
   id: string,
