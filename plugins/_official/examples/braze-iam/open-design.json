@@ -71,6 +71,9 @@
   },
   "od": {
     "kind": "scenario",
+    "routing": {
+      "triggers": ["braze", "인앱 메시지", "인앱메시지", "인 앱 메시지", "in-app message", "braze-iam"]
+    },
     "taskKind": "new-generation",
     "mode": "prototype",
     "platform": "mobile",

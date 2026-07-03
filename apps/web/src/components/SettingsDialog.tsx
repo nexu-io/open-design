@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@marketing-ax/components';
 import { validateBaseUrl } from '@marketing-ax/contracts/api/connectionTest';
+import type { InstalledPluginRecord } from '@marketing-ax/contracts';
 import {
   agentIdToTracking,
   byokProtocolToTracking,
@@ -151,6 +152,7 @@ import {
   resolveAccentColor,
 } from '../state/appearance';
 import { isAutosaveDraftOnlyChange } from '../App';
+import { listPlugins } from '../state/projects';
 import {
   FAILURE_SOUNDS,
   SUCCESS_SOUNDS,
@@ -4610,6 +4612,7 @@ export function SettingsDialog({
                   }
                 />
               </div>
+              <DefaultRouterSetting cfg={cfg} setCfg={setCfg} />
             </section>
           ) : null}
 
@@ -7518,4 +7521,62 @@ function testNotificationStatusText(
   if (result === 'permission-denied') return 'settings.notifyDesktopBlocked';
   if (result === 'unsupported') return 'settings.notifyDesktopUnsupported';
   return 'settings.notifyTestFailed';
+}
+
+// Installation-global fallback router for free-form prompts that match no
+// plugin trigger (§ prompt-trigger-routing). Rides the same debounced
+// app-config autosave as the rest of Settings — no dedicated save wiring.
+function DefaultRouterSetting({
+  cfg,
+  setCfg,
+}: {
+  cfg: AppConfig;
+  setCfg: Dispatch<SetStateAction<AppConfig>>;
+}) {
+  const { t } = useI18n();
+  const [routers, setRouters] = useState<InstalledPluginRecord[]>([]);
+
+  useEffect(() => {
+    // Router plugins (e.g. od-default, example-bodoc-router) are hidden
+    // from the marketplace/rail, so includeHidden is required here.
+    void listPlugins({ includeHidden: true }).then((rows) => {
+      setRouters(
+        rows.filter((p) => {
+          const routing = (p.manifest?.od as { routing?: { router?: boolean } } | undefined)?.routing;
+          return routing?.router === true;
+        }),
+      );
+    });
+  }, []);
+
+  const value = cfg.defaultRouterPluginId ?? '';
+
+  return (
+    <div className="memory-field-block instructions-rules-card">
+      <div className="memory-block-head">
+        <div>
+          <h4>{t('settings.defaultRouter.title')}</h4>
+          <p className="hint">{t('settings.defaultRouter.description')}</p>
+        </div>
+      </div>
+      <select
+        aria-label={t('settings.defaultRouter.title')}
+        value={value}
+        onChange={(e) => {
+          const next = e.target.value;
+          setCfg((c) => ({
+            ...c,
+            defaultRouterPluginId: next === '' ? null : next,
+          }));
+        }}
+      >
+        <option value="">{t('settings.defaultRouter.builtin')}</option>
+        {routers.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.title}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 }

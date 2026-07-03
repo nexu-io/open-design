@@ -39,6 +39,9 @@
   "compat": { "agentSkills": [{ "path": "./SKILL.md" }] },
   "od": {
     "kind": "scenario",
+    "routing": {
+      "triggers": ["네이버 블로그", "네이버블로그", "naver blog", "naver-blog", "블로그 글", "블로그 게시물", "블로그 포스트"]
+    },
     "taskKind": "new-generation",
     "mode": "prototype",
     "platform": "desktop",

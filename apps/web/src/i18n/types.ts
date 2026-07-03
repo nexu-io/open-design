@@ -598,6 +598,13 @@ export interface Dict {
   'settings.customInstructionsTitle': string;
   'settings.customInstructionsHint': string;
   'settings.customInstructionsPlaceholder': string;
+
+  // Installation-global default router — free-form prompts matching no
+  // plugin trigger fall through to this router plugin (or the built-in).
+  'settings.defaultRouter.title': string;
+  'settings.defaultRouter.description': string;
+  'settings.defaultRouter.builtin': string;
+
   'settings.memoryDescription': string;
   'settings.memoryEnabled': string;
   'settings.memoryDisabled': string;

@@ -2,7 +2,6 @@ import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { Express, Response } from 'express';
 import {
-  defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
   type PluginManifest,
   type ProjectBadge,
@@ -19,6 +18,7 @@ import {
   resolvePluginSnapshot,
 } from './plugins/index.js';
 import { pickDesignSystemId } from './plugins/apply.js';
+import { resolveRoutedPluginId } from './plugins/prompt-routing.js';
 import { connectorService } from './connectors/service.js';
 import type { RouteDeps } from './server-context.js';
 import { readAnalyticsContext } from './analytics.js';
@@ -1174,13 +1174,37 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // card tag is correct regardless of creation path (chip/CLI/API) and
       // regardless of whether later snapshot resolution succeeds. Cosmetic
       // display field — intentionally bypasses applyPlugin/capability gating.
-      const effectiveBadgePluginId =
+      const explicitBodyPluginId =
         typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
           ? req.body.pluginId.trim()
-          : (initialSessionMode === 'design'
-              ? defaultScenarioPluginIdForProjectMetadata(
-                  (metadata && typeof metadata === 'object' ? metadata : undefined) as any)
-              : null);
+          : null;
+      // 자유입력 라우팅 (스펙 §4.1 ②③): 명시 pluginId 없을 때 pendingPrompt 트리거 매칭 →
+      // 버티컬 직행, 모호/무매칭은 설정된 기본 라우터. badge·DS 스탬핑과 스냅샷 resolve가
+      // 같은 결정을 공유해야 하므로 여기서 한 번만 계산한다.
+      // 라우팅 게이트가 보는 kind/intent는 아래 projectMetadata 빌드와 같은 규칙을 따라야
+      // 한다: metadata 미지정 + skipDiscoveryBrief 아님 + 외부 location 신규 생성이면
+      // projectMetadata가 kind 'prototype'을 주입하므로, raw metadata(undefined)로 게이트를
+      // 판정하면 free-form으로 오판해 example-web-prototype 폴백이 라우터/od-default로 샌다.
+      const routingMetadata =
+        metadata && typeof metadata === 'object'
+          ? metadata
+          : skipDiscoveryBrief !== true && externalProjectDir
+            ? { kind: 'prototype' as const }
+            : null;
+      let routedPluginId: string | null = null;
+      if (!explicitBodyPluginId && initialSessionMode === 'design') {
+        const appCfgForRouting = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR).catch(
+          () => ({} as { defaultRouterPluginId?: string | null }),
+        );
+        routedPluginId = resolveRoutedPluginId({
+          prompt: typeof pendingPrompt === 'string' ? pendingPrompt : null,
+          metadata: routingMetadata,
+          sessionMode: initialSessionMode,
+          installed: listInstalledPlugins(db),
+          defaultRouterPluginId: appCfgForRouting.defaultRouterPluginId ?? null,
+        });
+      }
+      const effectiveBadgePluginId = explicitBodyPluginId ?? routedPluginId;
       // resolveStampBadge는 export된 순수 헬퍼 — snapshot resolve 결과와 독립적.
       const stampedBadge = resolveStampBadge(db, effectiveBadgePluginId);
       // Design-system binding: badge 스탬프와 동일한 방식. body.designSystemId가 없을 때
@@ -1290,9 +1314,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       let resolveBody =
         explicitPlugin ? (req.body as Record<string, unknown>) : null;
       if (!resolveBody && initialSessionMode === 'design') {
-        const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectMetadata);
-        if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
-          resolveBody = { ...(req.body || {}), pluginId: fallbackPluginId };
+        if (routedPluginId && getInstalledPlugin(db, routedPluginId)) {
+          resolveBody = { ...(req.body || {}), pluginId: routedPluginId };
         }
       }
       let resolvedSnapshot = null;

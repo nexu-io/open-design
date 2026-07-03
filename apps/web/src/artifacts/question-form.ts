@@ -25,6 +25,7 @@
  * Splits a final assistant text payload into ordered segments — prose +
  * forms — so AssistantMessage can render the form inline.
  */
+import { FORM_ANSWERS_MARKER } from '@marketing-ax/contracts';
 import { parsePartialJson } from '../runtime/partial-json';
 
 export type QuestionType =
@@ -616,7 +617,7 @@ export function formatFormAnswers(
   answers: Record<string, string | string[]>,
 ): string {
   const lines: string[] = [];
-  lines.push(`[form answers — ${form.id}]`);
+  lines.push(`${FORM_ANSWERS_MARKER}${form.id}]`);
   for (const q of form.questions) {
     const v = answers[q.id];
     let display: string;
