@@ -132,8 +132,19 @@ export function streamAssetFileToResponse(
 ): void {
   const stream = createReadStream(abs);
   stream.on('error', () => {
-    if (res.headersSent) res.destroy();
-    else onOpenError();
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
+    // The route sets success-only headers (Content-Type/-Length, Cache-Control,
+    // Content-Disposition) before streaming. Strip them before the JSON error
+    // fallback so a transient open/read failure isn't returned with stale asset
+    // metadata — in particular the `max-age=3600` directive, which would cache
+    // the 404 for an hour and mask the file once it becomes available again.
+    for (const header of ['Cache-Control', 'Content-Disposition', 'Content-Type', 'Content-Length']) {
+      res.removeHeader(header);
+    }
+    onOpenError();
   });
   stream.pipe(res);
 }
