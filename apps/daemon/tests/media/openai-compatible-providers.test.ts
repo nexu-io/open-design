@@ -557,7 +557,7 @@ process.stdin.on('end', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('normalizes stale Codex service_tier before subscription image generation', async () => {
+  it('removes stale Codex service_tier before subscription image generation', async () => {
     const generatedHome = path.join(root, 'stale-tier-codex-home');
     await writeCodexAuth(generatedHome, {
       auth_mode: 'chatgpt',
@@ -569,8 +569,10 @@ process.stdin.on('end', () => {
       'utf8',
     );
     await installFakeCodex(generatedHome, 'stale-tier-codex-thread', {
-      expectedConfigIncludes: 'service_tier = "fast"',
-      expectedConfigExcludes: 'service_tier = "default"',
+      // The invalid service_tier line is removed entirely (Codex falls back to
+      // its built-in default tier), so the key is gone and the rest remains.
+      expectedConfigIncludes: 'model = "gpt-5.5"',
+      expectedConfigExcludes: 'service_tier',
       expectedArgsExcludes: 'default_permissions',
     });
 
@@ -586,8 +588,9 @@ process.stdin.on('end', () => {
 
     expect(result.providerId).toBe('codex');
     const after = await readFile(path.join(generatedHome, 'config.toml'), 'utf8');
-    expect(after).toContain('service_tier = "fast"');
+    expect(after).not.toContain('service_tier');
     expect(after).not.toContain('"default"');
+    expect(after).toContain('model = "gpt-5.5"');
   });
 
   it('does not reroute OpenAI image models without a Codex twin', async () => {
@@ -695,6 +698,41 @@ process.stdin.on('end', () => {
     expect(result.providerNote).toContain('codex/gpt-image-2');
     const bytes = await readFile(path.join(projectsRoot, 'project-1', 'codex.png'));
     expect(bytes.length).toBeGreaterThan(0);
+  });
+
+  it('reports Codex preview-only imagegen output without leaking ENOENT', async () => {
+    const generatedHome = path.join(root, 'preview-only-codex-home');
+    const codexBin = path.join(root, 'preview-only-codex.mjs');
+    await writeFile(codexBin, `#!/usr/bin/env node
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  if (!stdin.includes('$imagegen')) process.exit(7);
+  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: 'preview-only-thread' }) + '\\n');
+  process.stdout.write(JSON.stringify({
+    type: 'item.completed',
+    item: {
+      type: 'agent_message',
+      text: 'This is preview-only, so I generated it without saving a file to the project.'
+    }
+  }) + '\\n');
+  process.stdout.write(JSON.stringify({ type: 'turn.completed' }) + '\\n');
+});
+`, 'utf8');
+    await chmod(codexBin, 0o755);
+    process.env.CODEX_BIN = codexBin;
+    process.env.CODEX_HOME = generatedHome;
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'codex-gpt-image-2',
+      prompt: 'A compact green app icon with a folded page motif',
+      output: 'codex-preview-only.png',
+    })).rejects.toThrow(/Codex imagegen completed in preview-only mode/i);
   });
 
   it('uses app-config Codex CLI env overrides for subscription image generation', async () => {

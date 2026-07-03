@@ -135,6 +135,33 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(path.isAbsolute(detail.resolvedDir)).toBe(true);
   });
 
+  it('fails GET /api/projects/:id?ensureDir=1 when a managed folder cannot be materialized', async () => {
+    const projectId = `proj-ensure-fails-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Native fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const detailResp = await fetch(`${baseUrl}/api/projects/${projectId}`);
+    expect(detailResp.status).toBe(200);
+    const detail = (await detailResp.json()) as { resolvedDir: string };
+    tempDirs.push(detail.resolvedDir);
+    await writeFile(detail.resolvedDir, 'not a directory');
+
+    const ensureResp = await fetch(`${baseUrl}/api/projects/${projectId}?ensureDir=1`);
+    expect(ensureResp.status).toBe(500);
+    const body = (await ensureResp.json()) as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('PROJECT_DIR_MATERIALIZATION_FAILED');
+    expect(body.error?.message).toMatch(/EEXIST|not a directory|file already exists/i);
+  });
+
   it('persists skipDiscoveryBrief for batch-created projects', async () => {
     const projectId = `proj-skip-discovery-${Date.now()}`;
     const createResp = await fetch(`${baseUrl}/api/projects`, {
@@ -545,6 +572,43 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(deleteResp.status).toBe(200);
     const deleted = (await deleteResp.json()) as { ok: boolean };
     expect(deleted.ok).toBe(true);
+  });
+
+  it('rejects folder create and delete requests for internal file-version storage', async () => {
+    const projectId = `proj-file-version-folder-guard-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'File version folder guard',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const postResp = await fetch(`${baseUrl}/api/projects/${projectId}/folders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '.file-versions' }),
+    });
+    expect(postResp.status).toBe(400);
+
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const versionRoot = path.join(dataDir, 'projects', projectId, '.file-versions');
+    const marker = path.join(versionRoot, 'sentinel', 'manifest.json');
+    await mkdir(path.dirname(marker), { recursive: true });
+    await writeFile(marker, '{}');
+
+    const deleteResp = await fetch(`${baseUrl}/api/projects/${projectId}/folders`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '.file-versions' }),
+    });
+    expect(deleteResp.status).toBe(400);
+    expect((await stat(marker)).isFile()).toBe(true);
   });
 
   // PR #974: `fromTrustedPicker` is privileged the same way `baseDir`

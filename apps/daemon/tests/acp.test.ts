@@ -1425,3 +1425,43 @@ test('attachAcpSession preserves structured OpenCode session error details from 
     },
   });
 });
+
+test('attachAcpSession resumes via session/load when resumeSessionId is set', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    resumeSessionId: 'oc-prev',
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {}); // initialize ack -> drives the resume handshake
+
+  const requests = parseRpcWrites(writes);
+  const loadReq = requests.find((entry) => entry.method === 'session/load');
+  assert.ok(loadReq, 'expected a session/load request on resume');
+  assert.deepEqual(loadReq?.params, {
+    sessionId: 'oc-prev',
+    cwd: path.resolve('/tmp/od-project'),
+  });
+  assert.equal(requests.some((entry) => entry.method === 'session/new'), false);
+});
+
+test('attachAcpSession captures the durable session handle from the result', () => {
+  const child = new FakeAcpChild();
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'vela-opencode-1', openCodeSessionId: 'oc-handle' });
+
+  assert.equal(session.getDurableSessionId(), 'oc-handle');
+});

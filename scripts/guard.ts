@@ -82,6 +82,10 @@ const residualAllowedExactPaths = new Set([
   "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",
+  // Vendored dom-to-pptx browser bundle used by the packaged desktop renderer
+  // for editable PPTX export. It is loaded into the off-screen Chromium page as
+  // an upstream browser asset, not compiled as project-owned TypeScript.
+  "apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js",
   // Shared nav enhancer for the landing-page static `/community/` pages,
   // which are verbatim HTML served straight from `public/` (not Astro-
   // compiled). It must ship as a browser-loadable `.js` asset, same as the
@@ -94,6 +98,14 @@ const residualAllowedExactPaths = new Set([
   // runtime deps (puppeteer-core + a headless Chrome + ffmpeg) are provided by
   // the CI environment and never pulled into the daemon/web TS build or bundle.
   "scripts/bake-plugin-previews.mjs",
+  // Manifest diff guard + its node:test coverage. Run directly by Node from the
+  // bake workflows (no TS build step there) to decide whether a `previews` entry
+  // actually changed, ignoring the per-run `generatedAt` timestamp.
+  "scripts/plugin-previews-diff.mjs",
+  "scripts/plugin-previews-diff.test.mjs",
+  // CI-only R2 garbage collector for orphaned preview clips + its node:test.
+  "scripts/plugin-previews-gc.mjs",
+  "scripts/plugin-previews-gc.test.mjs",
   "scripts/scaffold-html-ppt-skills.mjs",
   "scripts/sync-hyperframes-skill.mjs",
   "scripts/verify-media-models.mjs",
@@ -109,6 +121,9 @@ const residualAllowedExactPaths = new Set([
   "tools/dev/esbuild.config.mjs",
   "tools/pack/bin/tools-pack.mjs",
   "tools/pack/esbuild.config.mjs",
+  // Checked-in bin shim so pnpm can link `tools-release` before dist output exists.
+  "tools/release/bin/tools-release.mjs",
+  "tools/release/esbuild.config.mjs",
   "tools/serve/bin/tools-serve.mjs",
   "tools/serve/esbuild.config.mjs",
   "tools/pack/resources/mac/notarize.cjs",
@@ -131,6 +146,10 @@ const residualAllowedPathPrefixes = [
   "e2e/ui/test-results/",
   // Vendored upstream HyperFrames helper scripts (design template).
   "design-templates/hyperframes/scripts/",
+  // Vendored upstream Web Clone skill helper scripts. These are portable
+  // Node-run skill utilities executed from user workspaces via explicit script
+  // paths, and stay as `.mjs` to preserve the upstream skill packaging.
+  "skills/web-clone/scripts/",
   // Vendored upstream Last30Days runtime helper used by the engine (design template).
   "design-templates/last30days/scripts/lib/vendor/",
   // Vendored upstream html-ppt runtime assets (lewislulu/html-ppt-skill, design template).
@@ -146,6 +165,16 @@ const residualAllowedPathPrefixes = [
   "mocks/lib/",
   "mocks/mock-agent.mjs",
   "mocks/scripts/",
+  // OD Clipper - a standalone Chrome MV3 extension subproject (not a pnpm
+  // workspace package, no build step). It ships hand-written browser-loadable
+  // JavaScript (service worker, content script, popup) the same way as the
+  // web notifications service worker; it must not be retypecast to TypeScript.
+  "clipper/",
+  // OD Figma Import - a standalone Figma plugin subproject (no build step,
+  // not a pnpm workspace package). Figma plugins load hand-written
+  // browser-loadable JavaScript (`code.js` sandbox + `ui.html`); same
+  // precedent as the clipper, and it must not be retypecast to TypeScript.
+  "figma-plugin/",
   "test-results/",
   "vendor/",
 ];
@@ -923,6 +952,7 @@ const toolsRootAllowlist = new Map<string, "directory" | "file">([
   ["AGENTS.md", "file"],
   ["dev", "directory"],
   ["pack", "directory"],
+  ["release", "directory"],
   ["serve", "directory"],
 ]);
 
@@ -937,7 +967,7 @@ async function checkToolsLayout(): Promise<boolean> {
     const repositoryPath = `tools/${entry.name}${entry.isDirectory() ? "/" : ""}`;
 
     if (expected == null) {
-      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, and serve/`);
+      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, release/, and serve/`);
       continue;
     }
 

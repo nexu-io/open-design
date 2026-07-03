@@ -51,8 +51,8 @@ const jsonLd = [
   },
   {
     '@context': 'https://schema.org',
-    '@type': 'Article',
-    headline: page.title,
+    '@type': 'WebPage',
+    name: page.title,
     description: page.description,
     url: pageUrl,
     isPartOf: { '@id': `${SITE}#website` },

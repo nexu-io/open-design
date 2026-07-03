@@ -1,5 +1,8 @@
 import { DEFAULT_MODEL_OPTION, parseLineSeparatedModels } from './shared.js';
+import { agentCapabilities } from '../capabilities.js';
 import type { RuntimeAgentDef } from '../types.js';
+
+const SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 
 export const opencodeAgentDef = {
     id: 'opencode',
@@ -7,6 +10,10 @@ export const opencodeAgentDef = {
     bin: 'opencode-cli',
     fallbackBins: ['opencode'],
     versionArgs: ['--version'],
+    helpArgs: ['run', '--help'],
+    capabilityFlags: {
+      [SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
+    },
     // `opencode models` prints `provider/model` per line. Real-world
     // `opencode models` calls can take >8s (network round-trip to the
     // provider registry), so the previous 8s budget timed out and fell back
@@ -37,18 +44,41 @@ export const opencodeAgentDef = {
     // avoid Windows `spawn ENAMETOOLONG` while preserving OpenCode's
     // structured stream. A literal `-` is parsed as a positional message by
     // OpenCode 1.14.x and can surface as "Session not found".
-    buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
+    buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
       const args = [
         'run',
         '--format',
         'json',
       ];
+      if (agentCapabilities.get('opencode')?.skipPermissions) {
+        args.push(SKIP_PERMISSIONS_FLAG);
+      }
+      // Capture-style resume: OpenCode mints its own session id (reported on
+      // the stream as `sessionID`, e.g. `ses_...`). On a follow-up turn the
+      // daemon continues that session with `-s <id>` instead of re-sending the
+      // flattened transcript, so the first upstream call reuses the warm prefix
+      // cache. `-s` continues an EXISTING session (the create turn passes no id
+      // and we capture the one OpenCode generated), mirroring codex.
+      const resumeSessionId =
+        typeof runtimeContext.resumeSessionId === 'string' &&
+        runtimeContext.resumeSessionId.length > 0
+          ? runtimeContext.resumeSessionId
+          : null;
+      if (resumeSessionId) {
+        args.push('-s', resumeSessionId);
+      }
       if (options.model && options.model !== 'default') {
         args.push('-m', options.model);
       }
       return args;
     },
     promptViaStdin: true,
+    // OpenCode's CLI carries its own session across spawns: on a follow-up turn
+    // the daemon resumes the captured session id (`-s <id>`) instead of
+    // re-flattening the transcript. Capture-style — the resume handle is the
+    // `sessionID` captured from the stream, not a daemon-minted id.
+    resumesSessionViaCli: true,
+    capturesSessionIdFromStream: true,
     streamFormat: 'json-event-stream',
     eventParser: 'opencode',
     // OpenCode reads MCP servers from its layered config (global ~/.config

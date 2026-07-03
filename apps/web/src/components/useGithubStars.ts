@@ -1,7 +1,7 @@
 // Shared GitHub star-count hook backing the topbar pill
 // (`GithubStarBadge`). The browser talks only to the local daemon,
 // which caches GitHub metadata and can return stale-on-error values
-// when the upstream API flakes. This keeps Electron / nightly builds
+// when the upstream API flakes. This keeps Electron / prerelease builds
 // out of the business of making unauthenticated GitHub requests from
 // the renderer.
 

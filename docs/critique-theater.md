@@ -210,7 +210,7 @@ the SSE wire shape, the SQLite schema, and the metrics dashboard stable.
 Per-skill cast configuration is reserved for v2.
 
 **Why is my adapter marked degraded for 24h?** The conformance harness
-runs every adapter nightly against 10 brief templates. If an adapter
+runs every adapter prerelease against 10 brief templates. If an adapter
 drops under the 90% shipped or 95% clean-parse thresholds for two
 consecutive cycles, it gets marked `critique:degraded` for 24h. The mark
 auto-clears on the next clean cycle.

@@ -17,6 +17,7 @@ import {
   checkWindowsCmdShimCommandLineBudget,
   checkWindowsDirectExeCommandLineBudget,
   detectAgents,
+  detectAgentsStream,
   inspectAgentExecutableResolution,
   resolveAgentLaunch,
   resolveAgentExecutable,
@@ -34,6 +35,7 @@ export {
   checkWindowsDirectExeCommandLineBudget,
   chmodSync,
   detectAgents,
+  detectAgentsStream,
   inspectAgentExecutableResolution,
   join,
   mkdirSync,
@@ -83,10 +85,10 @@ export const vibe = requireAgent('vibe');
 export const devin = requireAgent('devin');
 export const pi = requireAgent('pi');
 export const deepseek = requireAgent('deepseek');
-export const gemini = requireAgent('gemini');
 export const qoder = requireAgent('qoder');
 export const qwen = requireAgent('qwen');
 export const opencode = requireAgent('opencode');
+export const mimo = requireAgent('mimo');
 export const grokBuild = requireAgent('grok-build');
 export const aider = requireAgent('aider');
 export const antigravity = requireAgent('antigravity');

@@ -40,7 +40,7 @@ const limitsFaq = page.limitsFaq.map(({ name, text }) => ({ q: name, a: text }))
 // comparison pages and is localized for free. Add a slug here when a new
 // alternatives page lands. `cta` reuses the localized "read the full
 // comparison" label from the compare copy block.
-const COMPARE_SLUGS = ['claude-design', 'figma', 'lovable', 'bolt', 'v0', 'framer'];
+const COMPARE_SLUGS = ['claude-design', 'figma', 'lovable', 'bolt', 'v0', 'framer', 'stitch', 'genspark', 'figma-make', 'qoder', 'trae'];
 const NAMES: Record<string, string> = {
   'claude-design': 'Claude Design',
   figma: 'Figma',
@@ -48,6 +48,11 @@ const NAMES: Record<string, string> = {
   bolt: 'Bolt',
   v0: 'v0',
   framer: 'Framer',
+  stitch: 'Google Stitch',
+  genspark: 'Genspark',
+  'figma-make': 'Figma Make',
+  qoder: 'Qoder',
+  trae: 'Trae',
 };
 const ctaLabel = page.comparisons[0]?.cta ?? 'Read the full comparison ->';
 const comparisons = COMPARE_SLUGS.map((slug) => {

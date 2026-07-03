@@ -77,7 +77,7 @@ describe('AmrAccountControl', () => {
     });
 
     expect(
-      screen.getByRole('group', { name: 'AMR account status' }),
+      screen.getByRole('group', { name: 'Open Design account status' }),
     ).toBeTruthy();
     expect(screen.getByText('Not signed in')).toBeTruthy();
     const signIn = screen.getByRole('button', { name: 'Sign in' });
@@ -98,59 +98,24 @@ describe('AmrAccountControl', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('surfaces the activation URL + code while signing in so the user can finish manually', () => {
+  it('surfaces the activation URL while signing in so the user can reopen the sign-in page', () => {
     renderAccountControl({
       status: 'signing-in',
       compact: true,
       activationUrl: 'https://app.vela.example/device?user_code=AB12-CD34',
-      userCode: 'AB12-CD34',
       onSignIn: vi.fn(),
     });
 
     const link = screen.getByRole('link', { name: 'Open sign-in page' });
+    // The activation URL already carries the device code, so the link alone
+    // completes sign-in — no separate code is rendered.
     expect(link.getAttribute('href')).toBe(
       'https://app.vela.example/device?user_code=AB12-CD34',
     );
-    // The user code is offered with a copy affordance.
-    expect(screen.getByText('AB12-CD34')).toBeTruthy();
+    expect(screen.queryByText('AB12-CD34')).toBeNull();
     expect(
-      screen.getByRole('button', { name: 'Copy verification code' }),
-    ).toBeTruthy();
-  });
-
-  it('resets the copied label when a fresh activation code arrives', async () => {
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText: vi.fn().mockResolvedValue(undefined) },
-    });
-    const view = renderAccountControl({
-      status: 'signing-in',
-      compact: true,
-      activationUrl: 'https://app.vela.example/device?user_code=OLD-CODE',
-      userCode: 'OLD-CODE',
-      onSignIn: vi.fn(),
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Copy verification code' }));
-    await waitFor(() => {
-      expect(screen.getByText('Copied')).toBeTruthy();
-    });
-
-    view.rerender(
-      <I18nProvider initial="en">
-        <AmrAccountControl
-          status="signing-in"
-          compact
-          activationUrl="https://app.vela.example/device?user_code=NEW-CODE"
-          userCode="NEW-CODE"
-          onSignIn={vi.fn()}
-        />
-      </I18nProvider>,
-    );
-
-    expect(screen.getByText('NEW-CODE')).toBeTruthy();
-    expect(screen.getByText('Copy')).toBeTruthy();
-    expect(screen.queryByText('Copied')).toBeNull();
+      screen.queryByRole('button', { name: 'Copy verification code' }),
+    ).toBeNull();
   });
 
   it('shows the browser-failed hint when vela could not open the browser', () => {
@@ -158,7 +123,6 @@ describe('AmrAccountControl', () => {
       status: 'signing-in',
       compact: true,
       activationUrl: 'https://app.vela.example/device?user_code=AB12-CD34',
-      userCode: 'AB12-CD34',
       browserOpenFailed: true,
       onSignIn: vi.fn(),
     });
@@ -204,7 +168,7 @@ describe('AmrAccountControl', () => {
     });
 
     expect(screen.getByRole('alert').textContent).toBe('command failed');
-    expect(screen.queryByText('AMR sign-in failed.')).toBeNull();
+    expect(screen.queryByText('Sign-in failed.')).toBeNull();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
   });
 });
@@ -273,7 +237,7 @@ describe('AmrLoginPill', () => {
     expect(screen.queryByText('LOCAL')).toBeNull();
   });
 
-  it('uses the test-profile AMR console URL for signed-in users', () => {
+  it('uses the test-profile AMR management URL for signed-in users', () => {
     renderAccountControl({
       status: 'signed-in',
       email: 'leaf@example.com',
@@ -284,12 +248,12 @@ describe('AmrLoginPill', () => {
 
     expect(screen.getByText('leaf@example.com')).toBeTruthy();
     expect(screen.getByText('TEST')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'AMR Console' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
       'https://vela.powerformer.net/wallet?source=open_design',
     );
   });
 
-  it('uses the local-profile AMR console URL for signed-in users', () => {
+  it('uses the local-profile AMR management URL for signed-in users', () => {
     renderAccountControl({
       status: 'signed-in',
       email: 'leaf@example.com',
@@ -299,12 +263,12 @@ describe('AmrLoginPill', () => {
     });
 
     expect(screen.getByText('LOCAL')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'AMR Console' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
       'http://localhost:5173/wallet?source=open_design',
     );
   });
 
-  it('uses the production AMR console URL by default', () => {
+  it('uses the production AMR management URL by default', () => {
     renderAccountControl({
       status: 'signed-in',
       email: 'leaf@example.com',
@@ -314,12 +278,12 @@ describe('AmrLoginPill', () => {
     });
 
     expect(screen.queryByText('PROD')).toBeNull();
-    expect(screen.getByRole('link', { name: 'AMR Console' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
       'https://open-design.ai/amr/wallet?source=open_design',
     );
   });
 
-  it('adds Open Design attribution to the signed-in console link on click', () => {
+  it('adds Open Design attribution to the signed-in management link on click', () => {
     const fetchMock = vi.fn(async () => new Response('{}', { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -341,7 +305,7 @@ describe('AmrLoginPill', () => {
       </I18nProvider>,
     );
 
-    const link = screen.getByRole('link', { name: 'AMR Console' }) as HTMLAnchorElement;
+    const link = screen.getByRole('link', { name: 'Manage' }) as HTMLAnchorElement;
     fireEvent.click(link);
 
     const url = new URL(link.href);
@@ -512,7 +476,7 @@ describe('AmrLoginPill', () => {
     expect(screen.getByRole('alert').textContent).toBe(
       'profile "prod" api URL: is not configured',
     );
-    expect(screen.queryByText('AMR sign-in failed.')).toBeNull();
+    expect(screen.queryByText('Sign-in failed.')).toBeNull();
     expect(screen.queryByText('Signing in…')).toBeNull();
   });
 
@@ -644,7 +608,9 @@ describe('AmrLoginPill', () => {
       showActivationDetails: true,
     });
     expect(await screen.findByRole('link', { name: 'Open sign-in page' })).toBeTruthy();
-    expect(screen.getByText('VISIBLE')).toBeTruthy();
+    // The activation URL carries the device code, so the link alone is shown —
+    // the standalone code is never rendered even when present in the status.
+    expect(screen.queryByText('VISIBLE')).toBeNull();
   });
 
   it('recovers from transient /status failures and still flips to signed-in when polling succeeds later', async () => {
@@ -749,7 +715,7 @@ describe('AmrLoginPill', () => {
           (init as RequestInit | undefined)?.method === 'POST',
       ),
     ).toBe(true);
-    expect(screen.getByText('AMR sign-in failed.')).toBeTruthy();
+    expect(screen.getByText('Sign-in failed.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
     expect(screen.queryByText('Signing in…')).toBeNull();
   });

@@ -87,42 +87,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     return false;
   };
 
-  // The canonical POST /api/runs handler lives in `server.ts` — it ran
-  // first in Express's registration order long before this file existed,
-  // so any handler we wired here was shadowed and never executed. Plugin
-  // snapshot resolution, clientType inference, and the daemon-side
-  // run_created/finished analytics all live in `server.ts` now.
-  // POST /api/chat is likewise owned by `server.ts`; keep the chat run
-  // launch path single-sourced so validation changes land on the live route.
-
-  app.get('/api/runs', (req, res) => {
-    const { projectId, conversationId, status } = req.query;
-    const runs = design.runs.list({ projectId, conversationId, status });
-    /** @type {import('@open-design/contracts').ChatRunListResponse} */
-    const body = { runs: runs.map(design.runs.statusBody) };
-    res.json(body);
-  });
-
-  app.get('/api/runs/:id', (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    res.json(design.runs.statusBody(run));
-  });
-
-  app.get('/api/runs/:id/events', (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    design.runs.stream(run, req, res);
-  });
-
-  app.post('/api/runs/:id/cancel', async (req, res) => {
-    const run = design.runs.get(req.params.id);
-    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
-    const status = await design.runs.cancel(run);
-    /** @type {import('@open-design/contracts').ChatRunCancelResponse} */
-    const body = { ok: true, run: status };
-    res.json(body);
-  });
+  // Run lifecycle routes live in `routes/runs.ts`; this file owns feedback,
+  // connection tests, critique handoff, and provider proxy routes.
 
   // Receives the user's thumbs-up/down (+ reason codes) for an assistant
   // turn and forwards it to Langfuse as a `score-create`. Web persists the
@@ -214,19 +180,19 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const protocol = body.protocol;
     if (
       typeof protocol !== 'string' ||
-      !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix'].includes(protocol)
+      !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock'].includes(protocol)
     ) {
       return sendApiError(
         res,
         400,
         'BAD_REQUEST',
-        'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix',
+        'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
       );
     }
     // AIHubMix's catalogue (GET /api/v1/models?type=llm) is public, so its
     // model list loads without a key. Every other protocol needs the key to
     // hit its /v1/models endpoint.
-    const apiKeyRequired = protocol !== 'aihubmix';
+    const apiKeyRequired = protocol !== 'aihubmix' && protocol !== 'bedrock';
     if (
       typeof body.baseUrl !== 'string' ||
       typeof body.apiKey !== 'string' ||
@@ -292,28 +258,31 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         const protocol = body.protocol;
         if (
           typeof protocol !== 'string' ||
-          !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix'].includes(protocol)
+          !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock'].includes(protocol)
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix',
+            'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
           );
         }
+        const apiKeyRequired = protocol !== 'bedrock';
         if (
           typeof body.baseUrl !== 'string' ||
           typeof body.apiKey !== 'string' ||
           typeof body.model !== 'string' ||
           !body.baseUrl.trim() ||
-          !body.apiKey.trim() ||
+          (apiKeyRequired && !body.apiKey.trim()) ||
           !body.model.trim()
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'baseUrl, apiKey, and model are required',
+            apiKeyRequired
+              ? 'baseUrl, apiKey, and model are required'
+              : 'baseUrl and model are required',
           );
         }
         const reasoningDenial = authorizeReasoningEgress({
@@ -476,7 +445,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     //   bare host                            → /v1/<route>            (api.openai.com, api.anthropic.com)
     //   ends in /vN                          → no inject              (api.openai.com/v1, /v1)
     //   /vN sub-path                         → no inject              (api.deepinfra.com/v1/openai, openrouter.ai/api/v1)
-    //   non-versioned compat sub-path        → /v1/<route>            (api.deepseek.com/anthropic, api.minimaxi.com/anthropic)
+    //   non-versioned compat sub-path        → /v1/<route>            (api.deepseek.com/anthropic, api.minimax.io/anthropic)
     // Previously the check was end-of-path only, which broke the
     // /v1/openai sub-path case. A naive "non-empty path → respect"
     // would break the /anthropic sub-path case. Matching `/vN` as a

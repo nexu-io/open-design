@@ -4,7 +4,7 @@
 
 이 문서는 어떤 종류의 기여를 어디서 시작해야 하는지, 그리고 PR이 머지되려면 어떤 기준을 넘어야 하는지 정확히 알려줍니다.
 
-<p align="center"><a href="CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a> · <b>한국어</b></p>
+<p align="center"><a href="../../CONTRIBUTING.md">English</a> · <a href="CONTRIBUTING.pt-BR.md">Português (Brasil)</a> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a> · <b>한국어</b> · <a href="CONTRIBUTING.th.md">ภาษาไทย</a></p>
 
 ---
 
@@ -302,7 +302,7 @@ CLA는 요구하지 않습니다. Apache-2.0으로 충분하며, 당신의 기�
 요컨대 좋은 PR을 내고, 사려 깊게 리뷰하고, [Discussions][discussions]와 [Discord][discord]에서 어울리다 보면 나머지는 알아서 따라옵니다.
 
 [discussions]: https://github.com/nexu-io/open-design/discussions
-[discord]: https://discord.gg/9ptkbbqRu
+[discord]: https://discord.gg/mHAjSMV6gz
 
 ---
 

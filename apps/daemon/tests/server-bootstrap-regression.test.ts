@@ -67,6 +67,16 @@ describe('server route inventory', () => {
       'GET /api/runs/:runId/devloop-iterations',
       'POST /api/runs/:runId/replay',
     ];
+    const runRouteKeys = [
+      'POST /api/runs',
+      'GET /api/runs',
+      'GET /api/runs/:id/result-package',
+      'GET /api/runs/:id',
+      'GET /api/runs/:id/events',
+      'GET /api/runs/:id/agui',
+      'POST /api/runs/:id/cancel',
+      'POST /api/chat',
+    ];
     const pluginEventRouteKeys = [
       'GET /api/plugins/events/snapshot',
       'GET /api/plugins/events/stats',
@@ -82,6 +92,7 @@ describe('server route inventory', () => {
       'POST /api/plugins/:id/uninstall',
       'POST /api/plugins/:id/upgrade',
       'POST /api/plugins/:id/apply',
+      'POST /api/plugins/:id/duplicate-project',
       'POST /api/plugins/:id/share-project',
       'POST /api/plugins/:id/doctor',
       'POST /api/plugins/:id/trust',
@@ -231,6 +242,7 @@ describe('server route inventory', () => {
     expect(routeKeys.filter((key) => automationRouteKeys.includes(key))).toEqual(automationRouteKeys);
     expect(routeKeys.filter((key) => velaRouteKeys.includes(key))).toEqual(velaRouteKeys);
     expect(routeKeys.filter((key) => genuiRouteKeys.includes(key))).toEqual(genuiRouteKeys);
+    expect(routeKeys.filter((key) => runRouteKeys.includes(key))).toEqual(runRouteKeys);
     expect(routeKeys.filter((key) => pluginEventRouteKeys.includes(key))).toEqual(pluginEventRouteKeys);
     expect(routeKeys.filter((key) => pluginLifecycleRouteKeys.includes(key))).toEqual(pluginLifecycleRouteKeys);
     expect(routeKeys.filter((key) => pluginAssetRouteKeys.includes(key))).toEqual(pluginAssetRouteKeys);
@@ -248,7 +260,7 @@ describe('server route inventory', () => {
 
     expect(fallbackIndex).toBeGreaterThan(-1);
     expect(routeKeys.indexOf('GET /api/health')).toBeLessThan(fallbackIndex);
-    expect(routeKeys.indexOf('GET /api/plugins/events/snapshot')).toBeLessThan(routeKeys.indexOf('POST /api/daemon/db/verify'));
+    expect(routeKeys.indexOf('POST /api/daemon/db/verify')).toBeLessThan(routeKeys.indexOf('GET /api/plugins/events/snapshot'));
     expect(routeKeys.indexOf('GET /api/plugins')).toBeLessThan(routeKeys.indexOf('GET /api/atoms'));
     expect(routeKeys.indexOf('GET /api/plugins/:id/preview')).toBeLessThan(fallbackIndex);
     expect(routeKeys.indexOf('GET /api/automation-source-packets')).toBeLessThan(
@@ -262,6 +274,8 @@ describe('server route inventory', () => {
     expect(routeKeys.filter((key) => key === 'GET /api/design-systems/:id')).toHaveLength(1);
     expect(routeKeys.filter((key) => key === 'GET /api/design-systems/:id/preview')).toHaveLength(1);
     expect(routeKeys.filter((key) => key === 'POST /api/projects/:id/upload')).toHaveLength(1);
+    expect(routeKeys.filter((key) => key === 'POST /api/runs')).toHaveLength(1);
+    expect(routeKeys.filter((key) => key === 'POST /api/chat')).toHaveLength(1);
     expect(routeKeys.filter((key) => key === 'POST /api/media/tasks/:id/wait')).toHaveLength(1);
     expect(routeKeys.filter((key) => key === 'GET /api/marketplaces')).toHaveLength(1);
     expect(routeKeys.filter((key) => key === 'POST /api/projects/:id/plugins/share-tasks')).toHaveLength(1);
@@ -367,10 +381,12 @@ describe('bootstrap route regressions', () => {
     let smokeServer: http.Server | undefined;
     const paths = {
       ARTIFACTS_DIR: path.join(tempRoot, 'artifacts'),
+      BRANDS_DIR: path.join(tempRoot, 'brands'),
       BUNDLED_PETS_DIR: path.join(tempRoot, 'pets'),
       CRAFT_DIR: path.join(tempRoot, 'craft'),
       DESIGN_SYSTEMS_DIR: path.join(tempRoot, 'design-systems'),
       DESIGN_TEMPLATES_DIR: path.join(tempRoot, 'design-templates'),
+      LIBRARY_DIR: path.join(tempRoot, 'library'),
       OD_BIN: path.join(tempRoot, 'od'),
       PROJECT_ROOT: tempRoot,
       PROJECTS_DIR: path.join(tempRoot, 'projects'),
@@ -442,6 +458,7 @@ describe('bootstrap route regressions', () => {
       projectFiles: {} as never,
       projectStore: {} as never,
       designSystems: {
+        buildUserDesignSystemArchive: async () => null,
         createUserDesignSystem: async () => designSystemSummary as never,
         deleteUserDesignSystem: async () => false,
         ensureUserDesignSystemWorkspaceProject: async () => null,
@@ -451,6 +468,7 @@ describe('bootstrap route regressions', () => {
         prepareDesignTokenContractRebuild: async () => ({ decision: { available: false } }) as never,
         readAvailableDesignSystem: async (id: string) => id === designSystemId ? designSystemBody : null,
         readAvailableDesignSystemPackageInfo: async () => null,
+        readAvailableDesignSystemStaticFile: async () => null,
         readDesignSystemWorkspaceTextFile: async () => null,
         readUserDesignSystemFile: async () => null,
         renderDesignSystemPreview: (id: string, body: string) =>

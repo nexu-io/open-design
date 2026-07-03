@@ -4,32 +4,32 @@ on:
   workflow_dispatch:
     inputs:
       enable_mac_arm64:
-        description: "Run the self-hosted macOS arm64 beta lane."
+        description: "Run the self-hosted macOS arm64 betas lane."
         required: true
         type: boolean
         default: true
       enable_win_x64:
-        description: "Run the self-hosted Windows x64 beta lane."
+        description: "Run the self-hosted Windows x64 betas lane."
         required: true
         type: boolean
         default: true
       enable_mac_x64:
-        description: "Run the self-hosted macOS x64 beta lane."
+        description: "Run the self-hosted macOS x64 betas lane."
         required: true
         type: boolean
         default: false
       enable_linux_x64:
-        description: "Run the self-hosted Linux x64 beta lane."
+        description: "Run the self-hosted Linux x64 betas lane."
         required: true
         type: boolean
         default: false
       publish:
-        description: "Publish beta assets and metadata to the selected S3-compatible origin."
+        description: "Publish betas assets and metadata to the selected S3-compatible origin."
         required: true
         type: boolean
         default: true
       release_version:
-        description: "Optional beta version override. Empty resolves the next beta version from metadata."
+        description: "Optional betas version override. Empty resolves the next betas version from metadata."
         required: false
         type: string
         default: ""
@@ -265,9 +265,9 @@ on:
         type: string
         default: ""
     outputs:
-      beta_version:
-        description: "The beta version that was built."
-        value: ${{ jobs.metadata.outputs.beta_version }}
+      release_version:
+        description: "The betas version that was built."
+        value: ${{ jobs.metadata.outputs.release_version }}
       branch:
         description: "The branch that was built."
         value: ${{ jobs.metadata.outputs.branch }}
@@ -275,7 +275,7 @@ on:
         description: "The commit SHA that was built."
         value: ${{ jobs.metadata.outputs.commit }}
       previous_commit:
-        description: "Commit SHA of the previously published beta."
+        description: "Commit SHA of the previously published betas."
         value: ${{ jobs.metadata.outputs.previous_commit }}
       release_state:
         description: "complete | partial | failed."
@@ -315,21 +315,21 @@ env:
 
 jobs:
   metadata:
-    name: Prepare beta metadata
+    name: Prepare betas metadata
     if: ${{ inputs.enable_mac_arm64 || inputs.enable_win_x64 || inputs.enable_mac_x64 || inputs.enable_linux_x64 }}
     runs-on: [self-hosted, macOS, ARM64, nexu-mac, release-beta]
     env:
-      OPEN_DESIGN_BETA_METADATA_URL: ${{ inputs.release_public_origin }}/beta/latest/metadata.json
+      OPEN_DESIGN_BETAS_METADATA_URL: ${{ inputs.release_public_origin }}/betas/latest/metadata.json
       OPEN_DESIGN_STABLE_METADATA_URL: https://releases.open-design.ai/stable/latest/metadata.json
     outputs:
-      asset_version_suffix: ${{ steps.beta.outputs.asset_version_suffix }}
-      base_version: ${{ steps.beta.outputs.base_version }}
-      beta_version: ${{ inputs.publish && steps.reserve.outputs.beta_version || inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
-      branch: ${{ steps.beta.outputs.branch }}
-      commit: ${{ steps.beta.outputs.commit }}
+      asset_version_suffix: ${{ steps.betas.outputs.asset_version_suffix }}
+      base_version: ${{ steps.betas.outputs.base_version }}
+      release_version: ${{ inputs.publish && steps.reserve.outputs.release_version || inputs.release_version != '' && inputs.release_version || steps.betas.outputs.release_version }}
+      branch: ${{ steps.betas.outputs.branch }}
+      commit: ${{ steps.betas.outputs.commit }}
       previous_commit: ${{ steps.prev.outputs.previous_commit }}
-      release_name: ${{ inputs.publish && steps.reserve.outputs.release_name || steps.beta.outputs.release_name }}
-      state_source: ${{ inputs.publish && steps.reserve.outputs.state_source || steps.beta.outputs.state_source }}
+      release_name: ${{ inputs.publish && steps.reserve.outputs.release_name || steps.betas.outputs.release_name }}
+      state_source: ${{ inputs.publish && steps.reserve.outputs.state_source || steps.betas.outputs.state_source }}
       version_lock_key: ${{ steps.reserve.outputs.version_lock_key }}
       version_lock_url: ${{ steps.reserve.outputs.version_lock_url }}
     steps:
@@ -384,14 +384,11 @@ jobs:
 
           git config --global --add safe.directory "$repo_dir"
           git -C "$repo_dir" config --local gc.auto 0
-          git -C "$repo_dir" config --local core.sparseCheckout true
+          git -C "$repo_dir" sparse-checkout disable || true
+          git -C "$repo_dir" config --local core.sparseCheckout false
+          git -C "$repo_dir" config --local core.sparseCheckoutCone false
           sparse_path="$(git -C "$repo_dir" rev-parse --git-path info/sparse-checkout)"
-          mkdir -p "$(dirname "$repo_dir/$sparse_path")"
-          cat > "$repo_dir/$sparse_path" <<'EOF'
-          apps/packaged/package.json
-          .github/workflow/scripts/release/storage
-          scripts/release-beta.ts
-          EOF
+          rm -f "$sparse_path"
 
           for attempt in 1 2 3; do
             if git -C "$repo_dir" -c protocol.version=2 -c "$auth_config" fetch --no-tags --prune --no-recurse-submodules --filter=blob:none --depth=1 origin "$fetch_ref"; then
@@ -408,8 +405,23 @@ jobs:
           done
 
           commit="$(git -C "$repo_dir" rev-parse HEAD)"
+          test -d "$repo_dir/packages" || {
+            echo "metadata checkout is missing packages/; pnpm workspace install cannot run" >&2
+            exit 1
+          }
           echo "checked out metadata sources at $commit"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      - name: Install metadata toolchain
+        working-directory: _release-metadata
+        run: |
+          set -euo pipefail
+          if ! command -v rehash >/dev/null 2>&1; then
+            rehash() { hash -r; }
+          fi
+          # shellcheck disable=SC1090
+          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          fnm exec --using=24 -- pnpm install --frozen-lockfile --prefer-offline
 
       - name: Validate self-hosted beta inputs
         run: |
@@ -442,7 +454,7 @@ jobs:
             exit 1
           fi
 
-      - name: Capture previous beta commit
+      - name: Capture previous betas commit
         id: prev
         run: |
           set -euo pipefail
@@ -451,12 +463,12 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          prev="$(curl -fsSL "$OPEN_DESIGN_BETA_METADATA_URL" | jq -r '.github.commit // ""' 2>/dev/null || true)"
-          echo "previous beta commit: ${prev:-<none>}"
+          prev="$(curl -fsSL "$OPEN_DESIGN_BETAS_METADATA_URL" | jq -r '.github.commit // ""' 2>/dev/null || true)"
+          echo "previous betas commit: ${prev:-<none>}"
           echo "previous_commit=$prev" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare beta release metadata
-        id: beta
+      - name: Prepare betas release metadata
+        id: betas
         working-directory: _release-metadata
         env:
           GITHUB_REF_NAME: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
@@ -468,15 +480,15 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- node --experimental-strip-types ./scripts/release-beta.ts
+          fnm exec --using=24 -- pnpm exec tools-release prepare betas
 
-      - name: Reserve beta version
+      - name: Reserve betas version
         if: ${{ inputs.publish }}
         id: reserve
         working-directory: _release-metadata
         env:
-          BASE_VERSION: ${{ steps.beta.outputs.base_version }}
-          RELEASE_CHANNEL: beta
+          BASE_VERSION: ${{ steps.betas.outputs.base_version }}
+          RELEASE_CHANNEL: betas
           RELEASE_COMMIT: ${{ steps.checkout.outputs.commit }}
           RELEASE_LANE: release-beta-s
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-version-reservation
@@ -486,7 +498,7 @@ jobs:
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.NEXU_S3_ENDPOINT }}
           RELEASE_STORAGE_REGION: ${{ secrets.NEXU_S3_REGION }}
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.NEXU_S3_SECRET_ACCESS_KEY }}
-          RELEASE_VERSION_CANDIDATE: ${{ inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
+          RELEASE_VERSION_CANDIDATE: ${{ inputs.release_version != '' && inputs.release_version || steps.betas.outputs.release_version }}
           RELEASE_VERSION_MANUAL_OVERRIDE: ${{ inputs.release_version != '' && 'true' || 'false' }}
         run: |
           set -euo pipefail
@@ -495,7 +507,7 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- node --experimental-strip-types .github/workflow/scripts/release/storage/reserve-beta-version.ts
+          fnm exec --using=24 -- pnpm exec tools-release reserve-version betas
 
   unsupported_mac_x64:
     name: Reject unsupported self-hosted mac_x64
@@ -547,7 +559,7 @@ jobs:
           fnm exec --using=24 -- corepack prepare pnpm@10.33.2 --activate
           fnm exec --using=24 -- pnpm install --frozen-lockfile
 
-      - name: Build beta mac_arm64
+      - name: Build betas mac_arm64
         working-directory: _release-build
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -558,18 +570,19 @@ jobs:
           BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
           BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
           CSC_KEYCHAIN: /Library/Keychains/open-design-release-signing.keychain
-          OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin }}/beta/latest/metadata.json
+          OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin }}/betas/latest/metadata.json
           OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}
           OD_PACKAGED_E2E_MAC_UPDATE_VERSION: ${{ inputs.mac_arm64_update_target_version }}
           RELEASE_BUILD_TARGET: ${{ inputs.mac_arm64_target }}
+          RELEASE_CHANNEL: betas
           RELEASE_DELIVERY_MODE: ${{ inputs.mac_arm64_delivery_mode }}
-          RELEASE_NAMESPACE: release-beta
+          RELEASE_NAMESPACE: release-betas
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-build/mac_arm64/outputs.json
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
           RELEASE_SIGN_MODE: ${{ inputs.mac_arm64_delivery_mode == 'internal-updater' && 'sign-only' || inputs.mac_arm64_sign_mode }}
           RELEASE_SMOKE_MODE: ${{ inputs.mac_arm64_smoke_mode }}
           RELEASE_TARGET: mac_arm64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           RELEASE_WORK_DIR: ${{ runner.temp }}/release-work/mac_arm64
           REQUIRE_VELA_CLI: "true"
           TOOLS_PACK_CACHE_DIR: ${{ env.MAC_TOOLS_PACK_CACHE_DIR }}
@@ -595,7 +608,7 @@ jobs:
             export CSC_KEYCHAIN="${OPEN_DESIGN_MAC_SIGNING_KEYCHAIN:-/Library/Keychains/open-design-release-signing.keychain}"
             security list-keychains -d user -s "$CSC_KEYCHAIN" /Library/Keychains/System.keychain
           fi
-          fnm exec --using=24 -- bash .github/workflow/scripts/release/build-platform.sh
+          fnm exec --using=24 -- bash tools/release/scripts/build-platform.sh
 
       - name: Write mac_arm64 release report
         if: ${{ always() }}
@@ -604,16 +617,16 @@ jobs:
           BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
           BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
           RELEASE_BUILD_TARGET: ${{ inputs.mac_arm64_target }}
-          RELEASE_CHANNEL: beta
+          RELEASE_CHANNEL: betas
           RELEASE_DELIVERY_MODE: ${{ inputs.mac_arm64_delivery_mode }}
-          RELEASE_NAMESPACE: release-beta
+          RELEASE_NAMESPACE: release-betas
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
           RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/mac_arm64/report.json
           RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_arm64/summary.md
           RELEASE_SMOKE_MODE: ${{ inputs.mac_arm64_smoke_mode }}
           RELEASE_TARGET: mac_arm64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
-          REPORT_TITLE: self-hosted mac_arm64 beta build
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          REPORT_TITLE: self-hosted mac_arm64 betas build
         run: |
           set -euo pipefail
           if ! command -v rehash >/dev/null 2>&1; then
@@ -621,7 +634,7 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- node --experimental-strip-types .github/workflow/scripts/release/report/write-report.ts
+          fnm exec --using=24 -- pnpm exec tools-release write-report
 
       - name: Publish mac_arm64 report summary
         if: ${{ always() }}
@@ -634,14 +647,14 @@ jobs:
           RELEASE_ARTIFACT_MODE: dmg-and-payload
           RELEASE_ASSET_SUFFIX: ${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && '.signed' || '.unsigned' }}
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
-          RELEASE_CHANNEL: beta
-          RELEASE_NAMESPACE: release-beta
-          RELEASE_NOTES: Open Design beta ${{ needs.metadata.outputs.beta_version }}${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && '.signed' || '.unsigned' }} ${{ inputs.mac_arm64_delivery_mode }}
+          RELEASE_CHANNEL: betas
+          RELEASE_NAMESPACE: release-betas
+          RELEASE_NOTES: Open Design betas ${{ needs.metadata.outputs.release_version }}${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && '.signed' || '.unsigned' }} ${{ inputs.mac_arm64_delivery_mode }}
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin }}
           RELEASE_TARGET: mac_arm64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           TOOLS_PACK_DIR: ${{ env.MAC_TOOLS_PACK_DIR }}
-        run: bash .github/workflow/scripts/release/prepare-platform-assets.sh
+        run: bash tools/release/scripts/prepare-platform-assets.sh
 
       - name: Publish mac_arm64 platform
         if: ${{ inputs.publish }}
@@ -650,7 +663,7 @@ jobs:
           RELEASE_ASSET_SUFFIX: ${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && '.signed' || '.unsigned' }}
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
           RELEASE_ARTIFACT_MODE: dmg-and-payload
-          RELEASE_CHANNEL: beta
+          RELEASE_CHANNEL: betas
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_arm64.json
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin }}
@@ -663,7 +676,7 @@ jobs:
           RELEASE_STORAGE_REGION: ${{ secrets.NEXU_S3_REGION }}
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.NEXU_S3_SECRET_ACCESS_KEY }}
           RELEASE_TARGET: mac_arm64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
           RELEASE_VERSION_LOCK_REQUIRED: "true"
         run: |
@@ -673,7 +686,16 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- node --experimental-strip-types .github/workflow/scripts/release/storage/publish-platform.ts
+          fnm exec --using=24 -- pnpm exec tools-release publish-platform
+
+      - name: Upload mac_arm64 publish manifest fallback
+        if: ${{ inputs.publish && success() }}
+        uses: actions/upload-artifact@v7
+        continue-on-error: true
+        with:
+          name: open-design-betas-mac-arm64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifests/mac_arm64.json
+          if-no-files-found: warn
 
   build_win_x64:
     name: Build self-hosted beta win_x64
@@ -702,7 +724,7 @@ jobs:
         shell: pwsh
         run: .\.github\scripts\release\probe-win-signing.ps1 -SignMode "${{ inputs.win_x64_sign_mode }}"
 
-      - name: Build beta win_x64
+      - name: Build betas win_x64
         shell: pwsh
         env:
           OD_BETA_WINDOWS_SIGNING_CERTIFICATE_FOUND: ${{ steps.sign_probe.outputs.certificate_found }}
@@ -714,13 +736,15 @@ jobs:
           OD_BETA_WINDOWS_SIGNING_SIGNTOOL_FOUND: ${{ steps.sign_probe.outputs.signtool_found }}
           OD_BETA_WINDOWS_SIGNTOOL_PATH: ${{ steps.sign_probe.outputs.signtool_path }}
           OD_BETA_WINDOWS_SIGN_CERT_SHA1: ${{ steps.sign_probe.outputs.thumbprint }}
+          OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin }}/betas/latest/metadata.json
           OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
           OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
+          RELEASE_CHANNEL: betas
         run: |
-          & "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24 -- pwsh -NoProfile -File .\.github\workflow\scripts\release\build-platform.ps1 `
+          & "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24 -- pwsh -NoProfile -File tools\release\scripts\build-platform.ps1 `
             -ReleaseTarget win_x64 `
-            -ReleaseNamespace release-beta-win `
-            -ReleaseVersion "${{ needs.metadata.outputs.beta_version }}" `
+            -ReleaseNamespace release-betas-win `
+            -ReleaseVersion "${{ needs.metadata.outputs.release_version }}" `
             -SmokeMode "${{ inputs.win_x64_smoke_mode }}" `
             -BuildTarget "${{ inputs.win_x64_target }}" `
             -SignMode "${{ inputs.win_x64_sign_mode }}" `
@@ -739,16 +763,16 @@ jobs:
           BUILD_JSON_PATH: C:\.tmp\runner\od-beta\win_x64\build\build.json
           INDEX_PATH: C:\.tmp\runner\od-beta\win_x64\build\index.json
           RELEASE_BUILD_TARGET: ${{ inputs.win_x64_target }}
-          RELEASE_CHANNEL: beta
-          RELEASE_NAMESPACE: release-beta-win
+          RELEASE_CHANNEL: betas
+          RELEASE_NAMESPACE: release-betas-win
           RELEASE_REPORT_DIR: C:\.tmp\runner\od-beta\win_x64\release-report\win_x64
           RELEASE_REPORT_JSON_PATH: C:\.tmp\runner\od-beta\win_x64\release-report\win_x64\report.json
           RELEASE_REPORT_SUMMARY_PATH: C:\.tmp\runner\od-beta\win_x64\release-report\win_x64\summary.md
           RELEASE_SMOKE_MODE: ${{ inputs.win_x64_smoke_mode }}
           RELEASE_TARGET: win_x64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
-          REPORT_TITLE: self-hosted win_x64 beta build
-        run: '& "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24 -- node --experimental-strip-types .github\workflow\scripts\release\report\write-report.ts'
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          REPORT_TITLE: self-hosted win_x64 betas build
+        run: '& "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24 -- pnpm.cmd exec tools-release write-report'
 
       - name: Publish win_x64 report summary
         if: ${{ always() }}
@@ -759,14 +783,14 @@ jobs:
         if: ${{ inputs.publish }}
         shell: pwsh
         run: |
-          .\.github\workflow\scripts\release\prepare-platform-assets.ps1 `
+          tools\release\scripts\prepare-platform-assets.ps1 `
             -ReleaseTarget win_x64 `
             -ReleaseAssetsDir "C:\.tmp\runner\od-beta\win_x64\release-assets" `
             -BuildJsonPath "C:\.tmp\runner\od-beta\win_x64\build\build.json" `
-            -ReleaseNamespace release-beta-win `
-            -ReleaseVersion "${{ needs.metadata.outputs.beta_version }}" `
+            -ReleaseNamespace release-betas-win `
+            -ReleaseVersion "${{ needs.metadata.outputs.release_version }}" `
             -ReleaseAssetSuffix "${{ inputs.win_x64_sign_mode == 'on' && '.signed' || '.unsigned' }}" `
-            -ReleaseChannel beta `
+            -ReleaseChannel betas `
             -ReleasePublicOrigin "${{ inputs.release_public_origin }}" `
             -IncludeZip $${{ inputs.win_x64_target == 'all' || inputs.win_x64_target == 'zip' }}
 
@@ -775,7 +799,7 @@ jobs:
         env:
           RELEASE_ASSET_SUFFIX: ${{ inputs.win_x64_sign_mode == 'on' && '.signed' || '.unsigned' }}
           RELEASE_ASSETS_DIR: C:\.tmp\runner\od-beta\win_x64\release-assets
-          RELEASE_CHANNEL: beta
+          RELEASE_CHANNEL: betas
           RELEASE_MANIFEST_DIR: C:\.tmp\runner\od-beta\win_x64\release-platform-manifests
           RELEASE_OUTPUTS_PATH: C:\.tmp\runner\od-beta\win_x64\release-platform-outputs\win_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin }}
@@ -788,14 +812,23 @@ jobs:
           RELEASE_STORAGE_REGION: ${{ secrets.NEXU_S3_REGION }}
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.NEXU_S3_SECRET_ACCESS_KEY }}
           RELEASE_TARGET: win_x64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
           RELEASE_VERSION_LOCK_REQUIRED: "true"
         shell: pwsh
-        run: '& "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24 -- node --experimental-strip-types .github\workflow\scripts\release\storage\publish-platform.ts'
+        run: '& "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24 -- pnpm.cmd exec tools-release publish-platform'
+
+      - name: Upload win_x64 publish manifest fallback
+        if: ${{ inputs.publish && success() }}
+        uses: actions/upload-artifact@v7
+        continue-on-error: true
+        with:
+          name: open-design-betas-win-x64-publish-manifest
+          path: C:\.tmp\runner\od-beta\win_x64\release-platform-manifests\win_x64.json
+          if-no-files-found: warn
 
   publish:
-    name: Publish beta metadata to Nexu S3
+    name: Publish betas metadata to Nexu S3
     needs:
       - metadata
       - unsupported_mac_x64
@@ -835,17 +868,40 @@ jobs:
           lfs: false
           path: _release-scripts
           ref: ${{ needs.metadata.outputs.commit }}
-          sparse-checkout: |
-            .github/workflow/scripts/release/storage
+
+      - name: Install release metadata toolchain
+        working-directory: _release-scripts
+        run: |
+          set -euo pipefail
+          if ! command -v rehash >/dev/null 2>&1; then
+            rehash() { hash -r; }
+          fi
+          # shellcheck disable=SC1090
+          source "$OPEN_DESIGN_RELEASE_PROFILE"
+          fnm exec --using=24 -- pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Download mac_arm64 publish manifest fallback
+        if: ${{ inputs.enable_mac_arm64 && needs.build_mac_arm64.result == 'success' }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: open-design-betas-mac-arm64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifest-fallbacks/mac_arm64
 
       - name: Download mac_arm64 platform manifest
         if: ${{ inputs.enable_mac_arm64 && needs.build_mac_arm64.result == 'success' }}
         env:
           RELEASE_ASSET_SUFFIX: ${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && '.signed' || '.unsigned' }}
+          RELEASE_CHANNEL: betas
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
-          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.NEXU_S3_ACCESS_KEY_ID }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.NEXU_S3_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.NEXU_S3_ENDPOINT }}
+          RELEASE_STORAGE_REGION: ${{ secrets.NEXU_S3_REGION }}
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.NEXU_S3_SECRET_ACCESS_KEY }}
           RELEASE_TARGET: mac_arm64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+        working-directory: _release-scripts
         run: |
           set -euo pipefail
           if ! command -v rehash >/dev/null 2>&1; then
@@ -853,27 +909,30 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          mkdir -p "$RELEASE_MANIFEST_DIR"
-          manifest_url="${RELEASE_PUBLIC_ORIGIN%/}/beta/versions/${RELEASE_VERSION}${RELEASE_ASSET_SUFFIX}/platforms/${RELEASE_TARGET}.json"
-          for attempt in 1 2 3; do
-            if curl -fsSL "$manifest_url" -o "$RELEASE_MANIFEST_DIR/$RELEASE_TARGET.json"; then
-              break
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "failed to download $manifest_url after $attempt attempts" >&2
-              exit 1
-            fi
-            sleep "$((attempt * 5))"
-          done
+          fnm exec --using=24 -- pnpm exec tools-release download-platform-manifest
+
+      - name: Download win_x64 publish manifest fallback
+        if: ${{ inputs.enable_win_x64 && needs.build_win_x64.result == 'success' }}
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: open-design-betas-win-x64-publish-manifest
+          path: ${{ runner.temp }}/release-platform-manifest-fallbacks/win_x64
 
       - name: Download win_x64 platform manifest
         if: ${{ inputs.enable_win_x64 && needs.build_win_x64.result == 'success' }}
         env:
           RELEASE_ASSET_SUFFIX: ${{ inputs.win_x64_sign_mode == 'on' && '.signed' || '.unsigned' }}
+          RELEASE_CHANNEL: betas
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
-          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.NEXU_S3_ACCESS_KEY_ID }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.NEXU_S3_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.NEXU_S3_ENDPOINT }}
+          RELEASE_STORAGE_REGION: ${{ secrets.NEXU_S3_REGION }}
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.NEXU_S3_SECRET_ACCESS_KEY }}
           RELEASE_TARGET: win_x64
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+        working-directory: _release-scripts
         run: |
           set -euo pipefail
           if ! command -v rehash >/dev/null 2>&1; then
@@ -881,20 +940,9 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          mkdir -p "$RELEASE_MANIFEST_DIR"
-          manifest_url="${RELEASE_PUBLIC_ORIGIN%/}/beta/versions/${RELEASE_VERSION}${RELEASE_ASSET_SUFFIX}/platforms/${RELEASE_TARGET}.json"
-          for attempt in 1 2 3; do
-            if curl -fsSL "$manifest_url" -o "$RELEASE_MANIFEST_DIR/$RELEASE_TARGET.json"; then
-              break
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              echo "failed to download $manifest_url after $attempt attempts" >&2
-              exit 1
-            fi
-            sleep "$((attempt * 5))"
-          done
+          fnm exec --using=24 -- pnpm exec tools-release download-platform-manifest
 
-      - name: Publish beta metadata
+      - name: Publish betas metadata
         env:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
           ENABLE_LINUX_X64: "false"
@@ -906,7 +954,7 @@ jobs:
           MAC_X64_RESULT: skipped
           RELEASE_LATEST_CAS_REQUIRED: "true"
           RELEASE_ASSET_SUFFIX: auto
-          RELEASE_CHANNEL: beta
+          RELEASE_CHANNEL: betas
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-metadata/outputs.json
@@ -917,7 +965,7 @@ jobs:
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.NEXU_S3_ENDPOINT }}
           RELEASE_STORAGE_REGION: ${{ secrets.NEXU_S3_REGION }}
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.NEXU_S3_SECRET_ACCESS_KEY }}
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
           RELEASE_VERSION_LOCK_REQUIRED: "true"
           STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
@@ -930,7 +978,7 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- node --experimental-strip-types .github/workflow/scripts/release/storage/publish-metadata.ts
+          fnm exec --using=24 -- pnpm exec tools-release publish-metadata
 
       - name: Read metadata outputs
         id: outputs
@@ -941,41 +989,24 @@ jobs:
             const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-metadata/outputs.json`, "utf8"));
             for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
 
-      - name: Verify beta metadata
+      - name: Write betas metadata summary
         env:
-          ENABLE_LINUX_X64: "false"
-          ENABLE_MAC_ARM64: ${{ inputs.enable_mac_arm64 }}
-          ENABLE_MAC_X64: "false"
-          ENABLE_WIN_X64: ${{ inputs.enable_win_x64 }}
-          MAC_ARM64_RESULT: ${{ needs.build_mac_arm64.result }}
-          RELEASE_CHANNEL: beta
-          RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
-          WIN_X64_RESULT: ${{ needs.build_win_x64.result }}
-        working-directory: _release-scripts
-        run: |
-          set -euo pipefail
-          if ! command -v rehash >/dev/null 2>&1; then
-            rehash() { hash -r; }
-          fi
-          # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- node --experimental-strip-types .github/workflow/scripts/release/storage/verify-metadata.ts
-
-      - name: Write beta metadata summary
-        env:
-          RELEASE_CHANNEL: beta
+          RELEASE_STATE: ${{ steps.outputs.outputs.release_state }}
           RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
           RELEASE_SUMMARY_PATH: ${{ runner.temp }}/release-metadata/summary.md
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
         working-directory: _release-scripts
         run: |
           set -euo pipefail
-          if ! command -v rehash >/dev/null 2>&1; then
-            rehash() { hash -r; }
-          fi
-          # shellcheck disable=SC1090
-          source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- node --experimental-strip-types .github/workflow/scripts/release/storage/summary-metadata.ts
+          {
+            echo "## Betas release metadata"
+            echo
+            echo "- version: \`$RELEASE_VERSION\`"
+            echo "- state: \`$RELEASE_STATE\`"
+            echo "- metadata: $RELEASE_METADATA_URL"
+            echo
+            echo "release-beta-s publishes to an internal S3 namespace; public metadata fetch verification is intentionally skipped."
+          } > "$RELEASE_SUMMARY_PATH"
 
       - name: Publish summary
         run: cat "${{ runner.temp }}/release-metadata/summary.md" >> "$GITHUB_STEP_SUMMARY"

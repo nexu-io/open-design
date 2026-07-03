@@ -1,0 +1,280 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 92vw);
+  max-height: min(680px, 86vh);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 12px;
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+
+.heading h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.14s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.close:hover {
+  background: var(--bg-subtle);
+}
+
+.close:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 18px 12px;
+}
+
+.kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: all 0.14s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.chip:hover {
+  background: var(--bg-subtle);
+}
+
+.chipActive {
+  background: var(--text);
+  border-color: var(--text);
+  color: #fff;
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 220px;
+  overflow-y: auto;
+  padding: 4px 18px 14px;
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 220px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(122px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  /* Skip off-screen card layout/paint so a large library opens snappily; the
+     reserved size keeps the modal scrollbar stable. `auto` remembers the real
+     height once a card has rendered. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 150px;
+}
+
+.thumb {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-subtle);
+  transition: border-color 0.14s cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 0.14s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.card:hover .thumb {
+  border-color: var(--text-muted);
+}
+
+.cardSelected .thumb {
+  border-color: var(--selected);
+  box-shadow: 0 0 0 2px var(--selected);
+}
+
+/* Fills the 4:3 thumb box and centers its child — a kind glyph until the
+   real image/video thumbnail lazily mounts on scroll-in. */
+.thumbLazy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Fade in over the shimmer skeleton once the bytes decode (AssetThumb flips
+     data-loaded). Hidden first so the skeleton — not a half-painted image — is
+     what shows while loading. */
+  opacity: 0;
+  transition: opacity 220ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.thumbImg[data-loaded='true'] {
+  opacity: 1;
+}
+
+/* Shimmer skeleton while an image/video thumbnail's bytes load — mirrors the
+   clipper's "Select images to save" picker (clipper/content.js → `.thumb.shim`)
+   and the Library grid (LibrarySection.module.css). Fills the box behind the
+   fading-in media and unmounts once loaded; only in-view, still-loading cards
+   animate (off-screen cells stay on the kind glyph). */
+.thumbSkeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+      100deg,
+      var(--bg-subtle) 30%,
+      color-mix(in srgb, var(--bg-subtle) 55%, #fff) 50%,
+      var(--bg-subtle) 70%
+    )
+    var(--bg-subtle);
+  background-size: 200% 100%;
+  animation: libraryPickerShimmer 1.1s linear infinite;
+}
+@keyframes libraryPickerShimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thumbSkeleton {
+    animation: none;
+  }
+  .thumbImg {
+    transition: none;
+  }
+}
+
+.swatch {
+  width: 100%;
+  height: 100%;
+}
+
+.glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+/* Kind badge — top-right, tinted per asset kind. Mirrors the Library grid card
+   (LibrarySection.module.css) so both surfaces present an asset identically. */
+.kindBadge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px 2px 5px;
+  border-radius: 999px;
+  color: var(--kind-tint, #374151);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(4px);
+}
+
+/* Selection check sits top-left so it never overlaps the top-right kind badge. */
+.check {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--selected);
+  color: #fff;
+}
+
+.label {
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--border);
+}

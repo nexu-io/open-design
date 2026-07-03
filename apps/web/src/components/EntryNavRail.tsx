@@ -2,7 +2,7 @@
 //
 // Renders a narrow icon-only column. The first slot is the brand logo,
 // followed by the primary destinations users expect to keep in reach:
-// New project, home, projects, automations, design systems, plugins,
+// New project, home, projects, brand kit, automations, plugins,
 // and integrations. Footer controls are reserved for lower-frequency
 // support affordances such as the help launcher.
 // Language switching and other account-scoped controls live behind the
@@ -12,6 +12,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { EntryHelpMenu } from './EntryHelpMenu';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
+import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 
 export type EntryView =
   | 'home'
@@ -20,12 +21,15 @@ export type EntryView =
   | 'tasks'
   | 'plugins'
   | 'design-systems'
+  | 'library'
+  | 'brands'
   | 'integrations';
 
 interface Props {
   view: EntryView;
   onViewChange: (view: EntryView) => void;
   onNewProject: () => void;
+  newProjectDisabled?: boolean;
   /** When false the rail is collapsed (hidden off-canvas) on the entry view. */
   open: boolean;
   /** Collapse the rail — called after a destination is chosen or the user dismisses it. */
@@ -37,16 +41,18 @@ interface NavButtonProps {
   ariaLabel: string;
   tooltip: string;
   onClick: () => void;
+  disabled?: boolean;
   testId?: string;
   children: ReactNode;
 }
 
-function NavButton({ active, ariaLabel, tooltip, onClick, testId, children }: NavButtonProps) {
+function NavButton({ active, ariaLabel, tooltip, onClick, disabled, testId, children }: NavButtonProps) {
   return (
     <button
       type="button"
       className={`entry-nav-rail__btn${active ? ' is-active' : ''}`}
       onClick={onClick}
+      disabled={disabled}
       aria-label={ariaLabel}
       aria-current={active ? 'page' : undefined}
       data-tooltip={tooltip}
@@ -57,7 +63,14 @@ function NavButton({ active, ariaLabel, tooltip, onClick, testId, children }: Na
   );
 }
 
-export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }: Props) {
+export function EntryNavRail({
+  view,
+  onViewChange,
+  onNewProject,
+  newProjectDisabled = false,
+  open,
+  onClose,
+}: Props) {
   const t = useT();
   const brandLabel = t('app.brand');
   const homeLabel = t('entry.navHome');
@@ -125,6 +138,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }
           ariaLabel={t('entry.navNewProject')}
           tooltip={t('entry.navNewProject')}
           onClick={onNewProject}
+          disabled={newProjectDisabled}
           testId="entry-nav-new-project"
         >
           <Icon name="plus" size={18} />
@@ -148,6 +162,26 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }
           <Icon name="folder" size={18} />
         </NavButton>
         <NavButton
+          active={view === 'design-systems'}
+          ariaLabel={t('entry.navDesignSystems')}
+          tooltip={t('entry.navDesignSystems')}
+          onClick={() => selectView('design-systems')}
+          testId="entry-nav-design-systems"
+        >
+          <Icon name="palette" size={18} />
+        </NavButton>
+        {LIBRARY_UI_VISIBLE ? (
+          <NavButton
+            active={view === 'library'}
+            ariaLabel="Library"
+            tooltip="Library"
+            onClick={() => selectView('library')}
+            testId="entry-nav-library"
+          >
+            <Icon name="layers-filled" size={18} />
+          </NavButton>
+        ) : null}
+        <NavButton
           active={view === 'tasks'}
           ariaLabel={t('entry.navTasks')}
           tooltip={t('entry.navTasks')}
@@ -155,15 +189,6 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }
           testId="entry-nav-tasks"
         >
           <Icon name="kanban" size={18} />
-        </NavButton>
-        <NavButton
-          active={view === 'design-systems'}
-          ariaLabel={t('entry.navDesignSystems')}
-          tooltip={t('entry.navDesignSystems')}
-          onClick={() => selectView('design-systems')}
-          testId="entry-nav-design-systems"
-        >
-          <Icon name="blocks" size={18} />
         </NavButton>
         <NavButton
           active={view === 'plugins'}

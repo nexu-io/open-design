@@ -50,12 +50,18 @@
  *                                   session/set_model (legacy behaviour)
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { argv, stdin, stdout, stderr, env, exit } from 'node:process';
 
 const SESSION_ID = env.FAKE_VELA_SESSION_ID || 'fake-vela-session-1';
+// Durable upstream (OpenCode) session handle reported on session/new and
+// session/load — the value the daemon captures and replays to resume.
+const OPENCODE_SESSION_ID = env.FAKE_VELA_OPENCODE_SESSION_ID || 'oc-fake-1';
+// When set, a resumed session/prompt fails with the structured resume_failed
+// error (modelling vela's pre-prompt probe finding the session gone).
+const RESUME_FAILED = env.FAKE_VELA_RESUME_FAILED || '';
 const ASSISTANT_TEXT = Object.prototype.hasOwnProperty.call(env, 'FAKE_VELA_TEXT')
   ? env.FAKE_VELA_TEXT
   : 'Hello from fake vela.';
@@ -122,6 +128,13 @@ const DEFAULT_MODEL_LIST_JSON = JSON.stringify({
 let currentModelId = null;
 const sessionsWithModel = new Set();
 const STRICT_SET_MODEL = process.env.FAKE_VELA_REQUIRE_SET_MODEL !== '0';
+// Whether THIS process bound a resumed upstream session via session/load.
+// vela spawns one process per turn, so a fresh session/new turn and a resumed
+// session/load turn are distinct processes — `didLoad` lets the RESUME_FAILED
+// branch fire ONLY on the resume turn (mirroring a session that vanished
+// upstream), so a daemon that clears the dead handle and reseeds with a fresh
+// session/new on the next turn recovers instead of failing forever.
+let didLoad = false;
 
 function writeMessage(obj) {
   stdout.write(`${JSON.stringify(obj)}\n`);
@@ -145,6 +158,19 @@ function writeError(id, message, code = -32603) {
 
 function logDiag(line) {
   stderr.write(`[fake-vela] ${line}\n`);
+}
+
+// Append one line per session-bind method (`new` / `load`) to the file named by
+// FAKE_VELA_INVOCATION_LOG, so a multi-turn server test can assert the resume
+// sequence across the separate per-turn vela processes (e.g. ['new','load','new']).
+function logInvocation(method) {
+  const file = env.FAKE_VELA_INVOCATION_LOG;
+  if (!file) return;
+  try {
+    appendFileSync(file, `${JSON.stringify({ method })}\n`);
+  } catch {
+    /* best-effort diagnostics only */
+  }
 }
 
 function emitSessionUpdates(sessionId) {
@@ -184,18 +210,34 @@ function handleMessage(msg) {
       });
       return;
     case 'session/new':
+      logInvocation('new');
       if (SESSION_NEW_ERROR) {
         writeError(id, SESSION_NEW_ERROR);
         return;
       }
       writeResult(id, {
         sessionId: SESSION_ID,
+        // FAKE_VELA_OMIT_OPENCODE_SESSION_ID models an older vela (or a handshake
+        // that never surfaced the durable handle): the daemon captures a null
+        // handle, which must CLEAR the row so the next turn opens a fresh session
+        // instead of resuming a non-existent one.
+        ...(env.FAKE_VELA_OMIT_OPENCODE_SESSION_ID ? {} : { openCodeSessionId: OPENCODE_SESSION_ID }),
         models: {
           currentModelId,
           availableModels: AVAILABLE_MODELS,
         },
       });
       return;
+    case 'session/load': {
+      // Resume: bind the prior upstream session, echoing back the durable
+      // handle. (vela validates existence before the first prompt, so a missing
+      // session surfaces as resume_failed on session/prompt, not here.)
+      const durable = typeof params?.sessionId === 'string' ? params.sessionId : OPENCODE_SESSION_ID;
+      logInvocation('load');
+      didLoad = true;
+      writeResult(id, { sessionId: SESSION_ID, openCodeSessionId: durable });
+      return;
+    }
     case 'session/set_model': {
       if (SET_MODEL_ERROR) {
         writeError(id, SET_MODEL_ERROR, -32099);
@@ -218,6 +260,22 @@ function handleMessage(msg) {
       return;
     }
     case 'session/prompt': {
+      if (RESUME_FAILED && didLoad) {
+        // Structured resume-miss: the resumed session is gone. Mirrors vela's
+        // pre-prompt probe emitting resume_failed BEFORE any model call. Gated on
+        // `didLoad` so it fires only on a resume turn — a fresh session/new turn
+        // (e.g. the daemon reseeding after it cleared the dead handle) succeeds.
+        writeMessage({
+          jsonrpc: '2.0',
+          id,
+          error: {
+            code: -32600,
+            message: 'the resumed session could not be loaded',
+            data: { kind: 'resume_failed', phase: 'session_load', retryable: true },
+          },
+        });
+        return;
+      }
       if (PROMPT_ERROR) {
         writeError(id, PROMPT_ERROR, -32602);
         return;
@@ -359,6 +417,13 @@ function loginAndExit() {
   else finish();
 }
 
+// `vela --version`: the daemon's executable-resolution probe (def.versionArgs)
+// expects a version string and a clean exit, NOT the ACP stdio loop.
+if (argv[2] === '--version' || (argv.includes('--version') && argv[2] !== 'agent')) {
+  stdout.write('vela 0.0.0-fake\n');
+  exit(0);
+}
+
 if (argv[2] === 'login') {
   loginAndExit();
 }
@@ -366,6 +431,45 @@ if (argv[2] === 'login') {
 if (argv[2] === 'models') {
   stdout.write(`${env.FAKE_VELA_MODELS || DEFAULT_MODELS_STDOUT}\n`);
   exit(0);
+}
+
+// `vela billing summary --format json` → live account projection.
+//   FAKE_VELA_BILLING_TIER         – membershipTier (plan) in the JSON
+//   FAKE_VELA_BILLING_BALANCE_USD  – balanceUsd in the JSON
+// With neither set, behave as if billing is unavailable (exit 1) so the
+// route's cold-cache fallback keeps returning config-only as before.
+if (argv[2] === 'billing' && argv[3] === 'summary') {
+  if (env.FAKE_VELA_BILLING_LOG) {
+    appendFileSync(
+      env.FAKE_VELA_BILLING_LOG,
+      `${Date.now()}\t${env.VELA_RUNTIME_KEY || ''}\n`,
+    );
+  }
+  if (env.FAKE_VELA_BILLING_UNKNOWN_COMMAND) {
+    stderr.write('Error: unknown command "billing" for "vela"\n');
+    exit(1);
+  }
+  const delayMs = Number(env.FAKE_VELA_BILLING_DELAY_MS) || 0;
+  const finishBilling = () => {
+    const tier = env.FAKE_VELA_BILLING_TIER;
+    const balance = env.FAKE_VELA_BILLING_BALANCE_USD;
+    if (!tier && !balance) {
+      stderr.write('billing summary unavailable\n');
+      exit(1);
+    }
+    stdout.write(
+      `${JSON.stringify({
+        ...(tier ? { membershipTier: tier } : {}),
+        balanceUsd: balance ?? null,
+      })}\n`,
+    );
+    exit(0);
+  };
+  if (delayMs > 0) {
+    setTimeout(finishBilling, delayMs);
+  } else {
+    finishBilling();
+  }
 }
 
 if (argv[2] === 'model' && argv[4] === '--format' && argv[5] === 'json') {

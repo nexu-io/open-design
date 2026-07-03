@@ -287,12 +287,13 @@ export const DECK_SKELETON_HTML = `<!doctype html>
         try { localStorage.setItem(STORE, String(idx)); } catch (_) {}
       }
       function onKey(e) {
+        if (e.__odDeckKeyHandled) return;
         var t = e.target;
         if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(idx + 1); }
-        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(idx - 1); }
-        else if (e.key === 'Home') { e.preventDefault(); go(0); }
-        else if (e.key === 'End') { e.preventDefault(); go(slides.length - 1); }
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx + 1); }
+        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.__odDeckKeyHandled = true; e.preventDefault(); go(idx - 1); }
+        else if (e.key === 'Home') { e.__odDeckKeyHandled = true; e.preventDefault(); go(0); }
+        else if (e.key === 'End') { e.__odDeckKeyHandled = true; e.preventDefault(); go(slides.length - 1); }
       }
       // Capture phase + listen on both targets — inside the OD iframe,
       // focus may be on window OR document; a single non-capture listener
@@ -341,7 +342,7 @@ When the user asks for slides, your TodoWrite plan **must** start with "copy the
 4.  Add per-deck classes inside the second <style> block
 5.  Replace each <section class="slide"> SLOT with real content
 6.  Self-check (no rewriting framework chrome / @media print / nav script)
-7.  Emit single <artifact> if a new canonical deck HTML was written this turn; otherwise summarize the edits (see "Artifact emission is conditional" in the discovery layer)
+7.  Summarize the written or changed deck file in a short ordinary assistant message
 \`\`\`
 
 If you find yourself writing \`<style>\` rules for \`.deck-shell\`, \`.deck-stage\`, \`.slide\`, \`.canvas\`, \`fit()\`, \`@media print\`, or a keyboard handler — STOP. The framework already has them. Re-read this directive, then keep going from "fill SLOT content".
@@ -396,7 +397,7 @@ Rules — non-negotiable:
 3. **Body slides: ≤ 3 paragraphs, ≤ 56ch lead text width, ≤ 12 words per line.**
 4. **One idea per slide.** Two ideas = two slides.
 
-## Pre-emit self-check — run this BEFORE writing the \`<artifact>\` tag
+## Pre-handoff self-check — run this BEFORE the final file summary
 
 For every \`<section class="slide">\`, mentally render at 1920×1080 and answer:
 
@@ -405,7 +406,7 @@ For every \`<section class="slide">\`, mentally render at 1920×1080 and answer:
 - [ ] Is the display headline ≤ 140px and ≤ 8 words?
 - [ ] Does the slide carry ≤ one big idea? (No mashed-together masthead + display headline + subtitle + absolute footer + sidebar.)
 
-If any answer is "no", redesign the slide BEFORE emitting. Decks that overflow are the most common single failure mode reported by users; the user has rejected one before and will reject one again.
+If any answer is "no", redesign the slide BEFORE handoff. Decks that overflow are the most common single failure mode reported by users; the user has rejected one before and will reject one again.
 
 ## Prefer the simple-deck skill's layout vocabulary when reachable
 

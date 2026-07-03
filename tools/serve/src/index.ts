@@ -1,11 +1,12 @@
 import { cac } from "cac";
+import type { ReleaseChannel } from "@open-design/release";
 
 import { startReleaseStorageFixtureServer } from "./release-storage-fixture.js";
 import { startUpdaterFixtureServer } from "./updater-fixture.js";
 
 type CliOptions = {
   artifactPath?: string;
-  channel?: "stable" | "beta" | "nightly" | "preview";
+  channel?: ReleaseChannel;
   host?: string;
   json?: boolean;
   platform?: "mac" | "win";
@@ -92,7 +93,7 @@ const cli = cac("tools-serve");
 cli
   .command("start <service>", "Start a local fixture service")
   .option("--artifact-path <path>", "Serve a local update artifact file")
-  .option("--channel <channel>", "Updater channel: stable|beta|nightly|preview", { default: "stable" })
+  .option("--channel <channel>", "Updater channel: stable|beta|betas|prerelease|preview", { default: "stable" })
   .option("--host <host>", "Host to bind", { default: "127.0.0.1" })
   .option("--json", "Print JSON")
   .option("--include-payload", "Include launcher payload metadata")

@@ -77,6 +77,10 @@ export const exampleChatRunStatusResponse: ChatRunStatusResponse = {
   conversationId: 'conversation_1',
   assistantMessageId: 'assistant_1',
   agentId: 'codex',
+  designSystemId: 'default',
+  designSystemRequestedId: 'default',
+  designSystemSelectionSource: 'project',
+  designSystemDigest: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
   status: 'succeeded',
   createdAt: 1_717_200_000_000,
   updatedAt: 1_717_200_030_000,
@@ -87,6 +91,11 @@ export const exampleChatRunStatusResponse: ChatRunStatusResponse = {
   eventsLogPath: null,
   mediaExecution: DEFAULT_MEDIA_EXECUTION_POLICY,
   toolBundle: { mcpServers: [] },
+  promptCache: {
+    stablePromptHash: 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+    hit: false,
+    missReason: 'new-session',
+  },
 };
 
 export const exampleProjectExportManifestResponse: ProjectExportManifestResponse = {
