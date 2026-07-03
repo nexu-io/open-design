@@ -1,48 +1,64 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
-<meta charset="utf-8">
-<title>정형외과 실비 청구, 도수치료 어디까지 될까요?</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>정형외과 실비 청구, 도수치료 어디까지 될까요? — 네이버 블로그 초안</title>
 <style>
-  :root {
-    --od-text: var(--text-primary, #333);
-    --od-rule: var(--border, #e5e5e5);
-    --od-danger: #dc3545;
-    --od-muted: #888;
-  }
-  body { font-family: '나눔고딕', sans-serif; font-size: 15px; line-height: 1.65; color: var(--od-text); max-width: 720px; margin: 0 auto; padding: 24px; }
-  blockquote { border-left: 5px solid #000; padding: 8px 0 8px 14px; margin: 24px 0 16px 0; }
-  hr { border: 0; border-top: 1px solid var(--od-rule); margin: 24px 0; }
-  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
-  th { border: 1px solid var(--od-rule); padding: 10px; text-align: left; color: #333; font-weight: 600; background: #f8f9fa; }
-  td { border: 1px solid var(--od-rule); padding: 10px; color: #333; }
-  .small { font-size: 13px; color: var(--od-muted); margin-top: 24px; }
+  /* 프리뷰 셸 — 네이버 본문 폭·가독성 재현용. 붙여넣기 대상은 .article 내부 HTML.
+     (craft 룰2: 본문엔 font 래퍼 div 없음. 폰트는 셸 body에만.) */
+  :root { --ink:#1D2024; --sub:#5A5E63; --line:#e5e5e5; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background:#f5f6f7; color:var(--ink); font-family:'Nanum Gothic','Apple SD Gothic Neo',-apple-system,system-ui,sans-serif; -webkit-font-smoothing:antialiased; line-height:1.75; }
+  .wrap { max-width:760px; margin:0 auto; padding:40px 20px 80px; }
+  .meta { font-size:12px; letter-spacing:.04em; color:var(--sub); text-transform:uppercase; margin-bottom:8px; }
+  .doc-title { font-size:26px; line-height:1.3; font-weight:800; letter-spacing:-0.02em; margin:0 0 6px; }
+  .doc-sub { font-size:13px; color:var(--sub); margin:0 0 28px; }
+  .paper { background:#fff; border:1px solid var(--line); border-radius:8px; padding:36px 34px; font-size:15px; }
+  .article p { margin:0 0 14px; }
+  .article table { font-size:14px; }
+  @media (max-width:640px) { .paper { padding:26px 20px; } .doc-title { font-size:22px; } }
 </style>
 </head>
 <body>
-<p>도수치료 실비는 가입한 실손보험 세대에 따라 보장 한도가 다릅니다. 1~2세대는 비교적 넓게 보장되지만, 4세대부터는 비급여 특약이 분리되고 자기부담률이 올라가요. 오늘은 세대별 도수치료 한도와 청구가 막히는 경우, 내 보장 확인 방법까지 정리해 드릴게요.</p>
+  <div class="wrap">
+    <div class="meta">네이버 블로그 · 진료과목별 실비청구 · 초안</div>
+    <h1 class="doc-title">정형외과 실비 청구, 도수치료 어디까지 될까요?</h1>
+    <p class="doc-sub">아래 흰 영역이 붙여넣기용 본문입니다. 뷰어의 <strong>"네이버용 서식 복사"</strong>로 복사 → 스마트에디터에 붙여넣으세요.</p>
+    <div class="paper">
+      <div class="article">
 
-<blockquote><strong>실손 세대별 도수치료 한도 🔍</strong></blockquote>
+<p>도수치료 실비는 가입한 실손보험 세대에 따라 보장 한도가 다릅니다. 1~2세대는 비교적 넓게 보장되지만, 4세대부터는 비급여 특약이 분리되고 자기부담률이 올라가요. 이 글에서는 세대별 도수치료 한도부터 청구가 막히는 경우, 내 보장 확인 방법까지 한 번에 정리해 드릴게요.</p>
+
+<blockquote style="border-left:5px solid #000;padding:8px 0 8px 14px;margin:24px 0 16px 0;"><strong>실손 세대별 도수치료 한도 🔍</strong></blockquote>
 <p>도수치료 한도는 실손 세대로 갈린다고 보면 됩니다. 가입 시기를 먼저 확인하는 게 순서예요.</p>
-<table>
-  <thead><tr><th>실손 세대</th><th>도수치료 한도</th></tr></thead>
+<table style="border-collapse:collapse;width:100%;margin:16px 0;font-size:14px;">
+  <thead><tr style="background:#f8f9fa;">
+    <th style="border:1px solid #e5e5e5;padding:10px;text-align:left;color:#333;font-weight:600;">실손 세대</th>
+    <th style="border:1px solid #e5e5e5;padding:10px;text-align:left;color:#333;font-weight:600;">도수치료 한도</th>
+  </tr></thead>
   <tbody>
-    <tr><td>1세대 (~2009)</td><td>약관별 상이 (대부분 보장)</td></tr>
-    <tr><td>2~3세대</td><td>연 350만원·50회 한도 등</td></tr>
-    <tr><td>4세대 (2021~)</td><td>비급여 특약 분리·자기부담 ↑</td></tr>
+    <tr><td style="border:1px solid #e5e5e5;padding:10px;color:#333;">1세대 (~2009)</td><td style="border:1px solid #e5e5e5;padding:10px;color:#333;">약관별 상이 (대부분 보장)</td></tr>
+    <tr><td style="border:1px solid #e5e5e5;padding:10px;color:#333;">2~3세대</td><td style="border:1px solid #e5e5e5;padding:10px;color:#333;">연 350만원·50회 한도 등</td></tr>
+    <tr><td style="border:1px solid #e5e5e5;padding:10px;color:#333;">4세대 (2021~)</td><td style="border:1px solid #e5e5e5;padding:10px;color:#333;">비급여 특약 분리·자기부담 ↑</td></tr>
   </tbody>
 </table>
 
-<hr>
+<hr style="border:0;border-top:1px solid #e5e5e5;margin:24px 0;">
 
-<blockquote><strong>이런 경우엔 청구가 막힐 수 있어요 ⚠️</strong></blockquote>
-<p>치료 목적이 아니라 <span style="color:#dc3545;font-weight:bold;">미용·체형 교정</span> 목적이면 거절될 수 있습니다. 진단명과 치료 기록이 약관 기준에 맞는지 확인이 필요해요.</p>
+<blockquote style="border-left:5px solid #000;padding:8px 0 8px 14px;margin:24px 0 16px 0;"><strong>이런 경우엔 청구가 막힐 수 있어요 ⚠️</strong></blockquote>
+<p>치료 목적이 아니라 <span style="color:#dc3545;font-weight:bold;">미용·체형 교정</span> 목적이면 거절될 수 있습니다. 진단명과 치료 기록이 약관 기준에 맞는지 확인이 필요해요. 도수치료를 몰아 받기 전에 내 세대의 횟수·금액 제한을 먼저 확인해두면 손해를 줄일 수 있거든요.</p>
 
-<hr>
+<hr style="border:0;border-top:1px solid #e5e5e5;margin:24px 0;">
 
-<blockquote><strong>내 도수치료 보장, 얼마까지 받을 수 있을까 ✅</strong></blockquote>
-<p>세대마다 한도가 달라 직접 약관을 비교하기는 번거롭습니다. 보닥 앱의 보험 진단으로 내 보장 내역과 실손 세대를 확인하면 청구 가능 범위를 한눈에 볼 수 있어요.</p>
+<blockquote style="border-left:5px solid #000;padding:8px 0 8px 14px;margin:24px 0 16px 0;"><strong>내 도수치료 보장, 얼마까지 받을 수 있을까 ✅</strong></blockquote>
+<p>세대마다 한도가 달라 직접 약관을 비교하기는 번거롭습니다. 보닥 앱의 보험 진단으로 내 보장 내역과 실손 세대를 확인하면 청구 가능 범위를 한눈에 볼 수 있어요. 이미 청구가 거절됐다면, 손해사정사 상담으로 약관 해석을 다시 점검해볼 수 있습니다.</p>
 
-<p class="small">※ 본 콘텐츠는 일반적인 정보 제공을 목적으로 하며 특정 보험 상품의 가입을 권유하지 않습니다. 개별 계약의 보장 여부·지급 기준은 가입 약관과 상품에 따라 달라질 수 있으니, 구체적인 사안은 보험사 또는 손해사정사에게 확인하세요.</p>
+<p style="font-size:13px;color:#888;margin-top:24px;">※ 본 콘텐츠는 일반적인 정보 제공을 목적으로 하며 특정 보험 상품의 가입을 권유하지 않습니다. 개별 계약의 보장 여부·지급 기준은 가입 약관과 상품에 따라 달라질 수 있으니, 구체적인 사안은 보험사 또는 손해사정사에게 확인하세요.</p>
+
+      </div>
+    </div>
+  </div>
 </body>
 </html>
