@@ -591,7 +591,7 @@ describe('HomeView prompt handoff', () => {
     })));
   });
 
-  it('routes free-form submits through the hidden default plugin without applying a visible chip', async () => {
+  it('submits free-form prompts without stamping a plugin so the daemon routes them', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [HIDDEN_DEFAULT_PLUGIN, DEFAULT_PLUGIN] }), {
@@ -620,7 +620,7 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByTestId('home-hero-active-plugin')).toBeNull();
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       prompt: 'Make a launch page for a robotics studio',
-      pluginId: 'od-default',
+      pluginId: null,
       appliedPluginSnapshotId: null,
       pluginInputs: { prompt: 'Make a launch page for a robotics studio' },
       projectKind: 'other',
