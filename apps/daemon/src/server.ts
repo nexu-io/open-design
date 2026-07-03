@@ -4279,6 +4279,7 @@ export async function startServer({
     conversations: conversationDeps,
     projectFiles: projectFileDeps,
     validation: validationDeps,
+    appConfig: appConfigDeps,
   });
 
   // Resource catalog

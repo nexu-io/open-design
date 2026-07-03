@@ -1,3 +1,4 @@
+import type { FormEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
@@ -12,8 +13,10 @@ interface Props {
   workingDir: string | null;
   /** Most-recently-used directories, most-recent-first. */
   recentDirs: string[];
-  /** Open the native folder picker. */
-  onPickDirectory: () => void;
+  /** Open the native folder picker. Return false when no directory was selected. */
+  onPickDirectory: () => void | boolean | Promise<void | boolean>;
+  /** Manually submit an absolute directory path when the native picker is unavailable. */
+  onSubmitManualPath?: (dir: string) => void | Promise<void>;
   /** Re-select a previously used directory. */
   onSelectRecent: (dir: string) => void;
   /** Clear the current selection. Only reachable when `workingDir` is set. */
@@ -48,6 +51,7 @@ export function WorkingDirPicker({
   workingDir,
   recentDirs,
   onPickDirectory,
+  onSubmitManualPath,
   onSelectRecent,
   onClear,
   className,
@@ -58,7 +62,29 @@ export function WorkingDirPicker({
   const t = useT();
   const [open, setOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
+  const [manualPath, setManualPath] = useState('');
+  const [manualSubmitting, setManualSubmitting] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  async function handlePickDirectory() {
+    const picked = await onPickDirectory();
+    if (picked !== false) setOpen(false);
+  }
+
+  async function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!onSubmitManualPath) return;
+    const nextPath = manualPath.trim();
+    if (!nextPath || manualSubmitting) return;
+    setManualSubmitting(true);
+    try {
+      await onSubmitManualPath(nextPath);
+      setManualPath('');
+      setOpen(false);
+    } finally {
+      setManualSubmitting(false);
+    }
+  }
 
   useEffect(() => {
     if (!open) {
@@ -119,14 +145,35 @@ export function WorkingDirPicker({
             role="menuitem"
             className={styles.item}
             data-testid="working-dir-pick"
-            onClick={() => {
-              setOpen(false);
-              onPickDirectory();
-            }}
+            onClick={() => void handlePickDirectory()}
           >
             <Icon name="folder" size={14} className={styles.itemIcon} />
             <span>{workingDir ? t('homeWorkingDir.replace') : t('homeWorkingDir.pick')}</span>
           </button>
+
+          {onSubmitManualPath ? (
+            <form className={styles.manualForm} onSubmit={handleManualSubmit}>
+              <Icon name="folder" size={14} className={styles.manualIcon} aria-hidden />
+              <input
+                className={styles.manualInput}
+                data-testid="working-dir-manual-input"
+                value={manualPath}
+                onChange={(event) => setManualPath(event.target.value)}
+                placeholder={t('settings.projectLocationsManualPlaceholder')}
+                aria-label={t('settings.projectLocationsManualPlaceholder')}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button
+                type="submit"
+                className={styles.manualSubmit}
+                data-testid="working-dir-manual-submit"
+                disabled={!manualPath.trim() || manualSubmitting}
+              >
+                {t('common.save')}
+              </button>
+            </form>
+          ) : null}
 
           <div
             className={styles.submenuRow}

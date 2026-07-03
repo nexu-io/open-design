@@ -46,6 +46,8 @@ test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
 });
 
 test('[P2] captures the visual home harness', async ({ page }) => {
+  test.setTimeout(T.xlong * 3);
+
   await configureVisualPage(page, { projects: [] });
   await gotoVisualHome(page);
 

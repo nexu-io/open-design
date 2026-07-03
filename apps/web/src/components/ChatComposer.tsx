@@ -2086,9 +2086,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       });
       void rememberRecentDir(dir);
     }
-    async function handlePickWorkingDir() {
+    async function handlePickWorkingDir(): Promise<boolean> {
       const selected = await openFolderDialog();
-      if (selected) await setWorkingDirFolder(selected);
+      if (!selected) return false;
+      await setWorkingDirFolder(selected);
+      return true;
     }
     async function clearWorkingDir() {
       if (!projectId) return;
@@ -3054,8 +3056,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 // composer's working_dir* elements so one dashboard counts the
                 // action across both surfaces.
                 trackComposerBar({ element: 'working_dir' });
-                void handlePickWorkingDir();
+                return handlePickWorkingDir();
               }}
+              onSubmitManualPath={(dir) => setWorkingDirFolder(dir)}
               onSelectRecent={(dir) => {
                 trackComposerBar({ element: 'working_dir_recent' });
                 void setWorkingDirFolder(dir);

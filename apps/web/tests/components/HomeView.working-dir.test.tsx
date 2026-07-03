@@ -97,6 +97,27 @@ describe('HomeView working-dir picker host fallback', () => {
     expect(mockedPickHostWorkingDir).not.toHaveBeenCalled();
   });
 
+  it('accepts a manual folder path when the web folder picker returns nothing', async () => {
+    mockedIsHostAvailable.mockReturnValue(false);
+    mockedOpenFolderDialog.mockResolvedValue(null);
+
+    renderHome();
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(screen.getByTestId('working-dir-pick'));
+
+    expect(await screen.findByTestId('working-dir-manual-input')).toBeTruthy();
+
+    fireEvent.change(screen.getByTestId('working-dir-manual-input'), {
+      target: { value: '/home/abhishek/forge/design' },
+    });
+    fireEvent.click(screen.getByTestId('working-dir-manual-submit'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('working-dir-trigger').textContent).toContain('design');
+    });
+  });
+
   // An explicit cancel of the host picker must not pop a second dialog.
   it('does not fall back to the browser dialog when the user cancels the host picker', async () => {
     mockedIsHostAvailable.mockReturnValue(true);
@@ -110,6 +131,7 @@ describe('HomeView working-dir picker host fallback', () => {
     await waitFor(() => {
       expect(mockedPickHostWorkingDir).toHaveBeenCalledTimes(1);
     });
+    expect(screen.getByTestId('working-dir-manual-input')).toBeTruthy();
     expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
   });
 });
