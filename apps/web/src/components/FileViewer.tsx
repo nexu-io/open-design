@@ -9182,6 +9182,8 @@ function HtmlViewer({
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
+  const [socialShareModalOpen, setSocialShareModalOpen] = useState(false);
+  const [activeSocialShareProviderId, setActiveSocialShareProviderId] = useState<WebDeployProviderId | null>(null);
   const previewStateKey = `${projectId}:${file.name}`;
   // A configured portal is an overlay contract from the first render, even
   // before the host DOM node has been resolved. Treating that lookup window as
@@ -15291,6 +15293,78 @@ function HtmlViewer({
     () => pickLatestShareDeployment(deploymentsByProvider),
     [deploymentsByProvider],
   );
+
+  const closeSocialShareModal = () => setSocialShareModalOpen(false);
+  const latestSocialShareDeployment = latestShareDeployment;
+  const latestShareDeploymentDefault = latestShareDeployment;
+
+  const deployCopyLinks = DEPLOY_PROVIDER_OPTIONS.map((option) => ({
+    providerId: option.id,
+    providerLabel: t(option.labelKey),
+    url: deploymentsByProvider[option.id]?.url?.trim() || '',
+  })).filter((item) => item.url);
+
+  const copyDeployMenuLabel = (providerLabel: string, url: string) =>
+    copiedDeployLink === url.trim()
+      ? t('fileViewer.copied')
+      : providerLabel.toLowerCase().includes('cloudflare')
+        ? t('fileViewer.copyCloudflareLink')
+        : t('fileViewer.copyProviderLink', { provider: providerLabel });
+
+  const socialShareResultCards = useMemo(() => {
+    const dep = latestSocialShareDeployment;
+    if (!dep) return [];
+    const depState = deployResultState(dep.status);
+    const depDelayed = dep.status === 'link-delayed';
+    const depProtected = dep.status === 'protected';
+    const depUrl = shareUrlForDeployment(dep);
+    const depCloudflare = dep.providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? dep.cloudflarePages : undefined;
+    const depCloudflareCustomDomain = depCloudflare?.customDomain;
+
+    if (depCloudflare) {
+      const cards: DeployResultCard[] = [];
+      const pagesDevUrl = depCloudflare.pagesDev?.url || depUrl;
+      if (pagesDevUrl) {
+        cards.push({
+          id: 'pages-dev',
+          label: t('fileViewer.cloudflarePagesDevLinkLabel'),
+          url: pagesDevUrl,
+          status: depCloudflare.pagesDev?.status || dep.status || 'link-delayed',
+          message: depCloudflare.pagesDev?.statusMessage,
+        });
+      }
+      if (depCloudflareCustomDomain?.url) {
+        cards.push({
+          id: 'custom-domain',
+          label: t('fileViewer.cloudflareCustomDomainLinkLabel'),
+          url: depCloudflareCustomDomain.url,
+          status: depCloudflareCustomDomain.status,
+          message:
+            depCloudflareCustomDomain.errorMessage ||
+            depCloudflareCustomDomain.statusMessage,
+        });
+      }
+      return cards;
+    }
+
+    return depUrl
+      ? [{
+          id: 'default',
+          label: depProtected
+            ? t('fileViewer.deployLinkProtectedLabel')
+            : depDelayed
+              ? t('fileViewer.deployLinkPreparingLabel')
+              : t('fileViewer.deployResultLabel'),
+          url: depUrl,
+          status: dep.status || 'ready',
+          message: depProtected
+            ? t('fileViewer.deployLinkProtected')
+            : depDelayed
+              ? t('fileViewer.deployLinkDelayed')
+              : dep.statusMessage,
+        }]
+      : [];
+  }, [latestSocialShareDeployment, t]);
   const latestDeployedShareUrl = latestShareDeployment
     ? shareUrlForDeployment(latestShareDeployment)
     : '';

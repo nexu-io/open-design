@@ -7546,6 +7546,16 @@ describe('FileViewer SVG artifacts', () => {
           target: 'preview',
         }), { status: 200 });
       }
+      if (url === '/api/deploy/config' && method === 'PUT') {
+        return new Response(JSON.stringify({
+          providerId: 'vercel-self',
+          configured: true,
+          tokenMask: 'saved-token',
+          teamId: '',
+          teamSlug: '',
+          target: 'preview',
+        }), { status: 200 });
+      }
       if (url === '/api/projects/project-1/deploy' && method === 'POST') {
         return new Response(JSON.stringify({
           id: 'vercel-deploy',
