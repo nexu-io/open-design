@@ -1,10 +1,14 @@
 import type http from 'node:http';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
 
 let server: http.Server;
 let baseUrl: string;
+const tempDirs: string[] = [];
 
 async function createProject(body: Record<string, unknown>) {
   const resp = await fetch(`${baseUrl}/api/projects`, {
@@ -43,6 +47,9 @@ afterAll(async () => {
   // 다른 스위트로 새지 않게 라우터 설정 원복 (fileParallelism: false — 순차 실행)
   await putAppConfig({ defaultRouterPluginId: null });
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  for (const dir of tempDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 describe('free-form prompt trigger routing at project create (스펙 §4.1)', () => {
@@ -83,6 +90,34 @@ describe('free-form prompt trigger routing at project create (스펙 §4.1)', ()
       conversationMode: 'design',
     });
     expect(project.designSystemId ?? null).not.toBe('bodoc');
+  });
+
+  it('(RED→GREEN) external-location create with no metadata keeps the prototype kind fallback', async () => {
+    // 앞 테스트(③)가 설정한 defaultRouterPluginId 누수 차단 — 이 케이스는 라우터 미설정이 전제
+    await putAppConfig({ defaultRouterPluginId: null });
+    const extDir = mkdtempSync(path.join(tmpdir(), 'od-route-ext-'));
+    tempDirs.push(extDir);
+    const locResp = await fetch(`${baseUrl}/api/project-locations`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ locations: [{ id: 'route-ext', name: 'Route External', path: extDir }] }),
+    });
+    expect(locResp.ok).toBe(true);
+
+    // 회귀 케이스: metadata·pendingPrompt 없이 projectLocationId만 — projectMetadata 빌드가
+    // kind 'prototype'을 주입하므로 example-web-prototype이 pin돼야 한다 (free-form 아님).
+    const { project } = await createProject({
+      id: `proj-route-ext-${Date.now()}`,
+      name: 'route external',
+      projectLocationId: 'route-ext',
+    });
+    expect(project.appliedPluginSnapshotId).toBeTruthy();
+    const snapResp = await fetch(
+      `${baseUrl}/api/applied-plugins/${project.appliedPluginSnapshotId}`,
+    );
+    expect(snapResp.ok).toBe(true);
+    const snap = (await snapResp.json()) as { pluginId?: string };
+    expect(snap.pluginId).toBe('example-web-prototype');
   });
 
   it('explicit pluginId still wins (① 현행 유지)', async () => {
