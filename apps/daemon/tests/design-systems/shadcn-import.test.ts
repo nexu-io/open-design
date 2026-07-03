@@ -9,7 +9,7 @@ import {
   renderShadcnSourceCss,
   wrapShadcnColorValue,
   type ShadcnFetch,
-} from '../../src/design-systems/shadcn-import.js';
+} from '../../src/design-systems/import/shadcn-import.js';
 
 // A minimal fetch stub: serve a fixed map of URL -> value, 404 otherwise.
 // Object values are returned as JSON (registry documents); string values are

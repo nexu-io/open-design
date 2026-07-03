@@ -1,3 +1,8 @@
+/** @module shadcn-import
+ * Fetches a shadcn registry item (by GitHub shorthand or direct URL) and imports it as a design system.
+ * Includes SSRF protection, fetch budgets, size limits, and materialization into a temp project the local importer can scan.
+ */
+
 // Import a shadcn registry item as an Open Design design system.
 //
 // A shadcn registry item carries a `cssVars` theme (`theme` / `light` /
@@ -136,6 +141,10 @@ type ResolvedShadcnItem = {
   rawBaseUrl?: string;
 };
 
+/**
+ * Fetches a shadcn registry item (by GitHub shorthand or direct URL) and imports it as a design system with SSRF protection and fetch budgets.
+ * Materializes the registry item into a temp directory and hands it to the local importer.
+ */
 export async function importShadcnDesignSystemProject(
   reference: string,
   tmpRoot: string,
@@ -192,6 +201,10 @@ export async function importShadcnDesignSystemProject(
 // Reference parsing
 // ---------------------------------------------------------------------------
 
+/**
+ * Parses a shadcn reference (GitHub shorthand like "owner/repo/item" or URL) into structured components with validation.
+ * Throws LocalDesignSystemImportError if the reference is invalid.
+ */
 export function parseShadcnReference(input: string): ParsedShadcnReference {
   const trimmed = (input ?? '').trim();
   if (!trimmed) {
@@ -253,6 +266,10 @@ export function parseShadcnReference(input: string): ParsedShadcnReference {
 
 type HostClass = 'loopback' | 'blocked' | 'public';
 
+/**
+ * Validates that a URL is safe to fetch, enforcing SSRF protection rules.
+ * Allows loopback over http or https; refuses private/link-local/non-routable addresses for both schemes; requires https for public hosts.
+ */
 // Allow loopback over http or https (self-hosted local registry / tests).
 // Refuse private, link-local, ULA, and non-routable internal addresses for
 // both schemes. Require https for any other (public) host.
@@ -275,6 +292,10 @@ function assertFetchableUrl(url: URL): void {
   }
 }
 
+/**
+ * Classifies a hostname as loopback, blocked (non-routable), or public to enforce SSRF policy.
+ * Performs static checks against IPv4/IPv6 ranges and DNS hostnames without network resolution.
+ */
 function classifyHost(rawHost: string): HostClass {
   let host = rawHost.trim().toLowerCase();
   if (!host) return 'blocked';
@@ -294,6 +315,10 @@ function classifyHost(rawHost: string): HostClass {
   return 'public';
 }
 
+/**
+ * Classifies an IPv4 address as loopback, blocked (private/reserved), or public.
+ * Validates format and checks against RFC ranges including loopback, private, link-local, and CGNAT spaces.
+ */
 function classifyIpv4(ip: string): HostClass {
   const parts = ip.split('.').map((part) => Number(part));
   if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) {
@@ -311,6 +336,10 @@ function classifyIpv4(ip: string): HostClass {
   return 'public';
 }
 
+/**
+ * Classifies an IPv6 address as loopback, blocked (private/link-local/ULA), or public.
+ * Checks against IPv6 loopback, unspecified, ULA, and link-local prefixes; also detects IPv4-mapped addresses.
+ */
 function classifyIpv6(ip: string): HostClass {
   const host = ip.toLowerCase();
   if (host === '::1') return 'loopback';
@@ -323,10 +352,18 @@ function classifyIpv6(ip: string): HostClass {
   return 'public';
 }
 
+/**
+ * Validates that a string is a safe shadcn reference segment (owner/repo/item).
+ * Allows alphanumeric, underscore, dot, and hyphen characters; rejects leading/trailing dots.
+ */
 function isShadcnSegment(value: string): boolean {
   return /^[A-Za-z0-9_.-]+$/.test(value) && !value.startsWith('.') && !value.endsWith('.');
 }
 
+/**
+ * Validates that a string is a safe git reference (branch/tag/sha).
+ * Rejects patterns with .. and leading slashes; allows alphanumeric, dot, underscore, forward slash, and hyphen.
+ */
 function isGitRef(value: string): boolean {
   return /^[A-Za-z0-9._/-]+$/.test(value) && !value.includes('..') && !value.startsWith('/');
 }
@@ -335,6 +372,10 @@ function isGitRef(value: string): boolean {
 // Resolution (network)
 // ---------------------------------------------------------------------------
 
+/**
+ * Resolves a shadcn reference (URL or GitHub shorthand) to a registry item, fetching and following includes as needed.
+ * Tries multiple GitHub refs (main/master) if no explicit ref is specified; validates URLs against SSRF policy.
+ */
 async function resolveShadcnItem(
   parsed: ParsedShadcnReference,
   fetchImpl: ShadcnFetch,
@@ -406,11 +447,10 @@ async function resolveShadcnItem(
   );
 }
 
-// Resolve an item by name from a registry document, following the shadcn
-// `include` layout (a root registry.json may delegate to nested registry.json
-// files instead of listing items inline). The item's relative file paths are
-// resolved against the registry.json that declares it, so we surface that
-// declaring URL for the caller's rawBaseUrl.
+/**
+ * Locates a registry item by name, recursively following shadcn's include layout to nested registry files.
+ * Returns the item and the declaring registry URL so relative file paths resolve correctly; enforces depth and breadth limits.
+ */
 async function locateItemInRegistry(
   registryUrl: string,
   itemName: string,
@@ -453,8 +493,10 @@ async function locateItemInRegistry(
   return undefined;
 }
 
-// Directory URL of a registry.json / item.json (drops the trailing filename),
-// used as the base for resolving the item's relative file paths.
+/**
+ * Extracts the directory URL from a registry.json or item.json path, dropping the trailing filename.
+ * Used as the base for resolving the item's relative file paths according to the shadcn spec.
+ */
 function registryFileDir(url: string): string {
   try {
     return new URL('.', url).toString().replace(/\/+$/, '');
@@ -463,6 +505,10 @@ function registryFileDir(url: string): string {
   }
 }
 
+/**
+ * Type guard that checks if an object is a usable shadcn registry item.
+ * An item is usable if it has a name, cssVars, or files array; returns false for non-objects and null.
+ */
 function isUsableItem(item: unknown): item is ShadcnRegistryItem {
   if (typeof item !== 'object' || item === null) return false;
   const candidate = item as ShadcnRegistryItem;
@@ -473,6 +519,10 @@ function isUsableItem(item: unknown): item is ShadcnRegistryItem {
   );
 }
 
+/**
+ * Fetches and parses a JSON document from a URL, enforcing size limits and request budgets.
+ * Throws LocalDesignSystemImportError on network, timeout, or invalid JSON.
+ */
 async function fetchJsonDocument(url: string, fetchImpl: ShadcnFetch): Promise<unknown> {
   const text = await fetchText(url, fetchImpl);
   try {
@@ -482,6 +532,10 @@ async function fetchJsonDocument(url: string, fetchImpl: ShadcnFetch): Promise<u
   }
 }
 
+/**
+ * Fetches text from a URL with SSRF validation, size limits, and per-request timeout.
+ * Supports both streaming and non-streaming responses; validates the URL at every hop including redirects.
+ */
 async function fetchText(url: string, fetchImpl: ShadcnFetch): Promise<string> {
   // Defense in depth: validate every URL we actually contact — not just the
   // user-supplied entry point, but raw GitHub URLs, `include` targets, and raw
@@ -549,6 +603,10 @@ async function fetchText(url: string, fetchImpl: ShadcnFetch): Promise<string> {
   }
 }
 
+/**
+ * Reads a ReadableStream into a string with a byte limit, canceling the reader if exceeded.
+ * Uses TextDecoder('utf-8') for decoding and throws LocalDesignSystemImportError on size violation or abort.
+ */
 async function readBoundedStream(
   body: ReadableStream<Uint8Array>,
   maxBytes: number,
@@ -592,6 +650,10 @@ async function readBoundedStream(
 // Materialization (temp project the local importer can scan)
 // ---------------------------------------------------------------------------
 
+/**
+ * Materializes a shadcn registry item into a temp directory with theme.css, package.json, README.md, and fetched files.
+ * Prepares the directory structure for the local design system importer to scan and process.
+ */
 async function materializeShadcnItem(
   item: ShadcnRegistryItem,
   tempDir: string,
@@ -614,6 +676,10 @@ async function materializeShadcnItem(
   await writeShadcnFiles(item, tempDir, resolved, fetchImpl);
 }
 
+/**
+ * Renders shadcn CSS variables into a CSS string with root theme and optional dark mode declarations.
+ * Separates theme/light variables into :root and dark variables into .dark selector.
+ */
 export function renderShadcnSourceCss(cssVars: ShadcnCssVars | undefined): string {
   const rootLines: string[] = [];
   if (cssVars?.theme) {
@@ -633,6 +699,10 @@ export function renderShadcnSourceCss(cssVars: ShadcnCssVars | undefined): strin
   return css;
 }
 
+/**
+ * Converts a CSS custom property key-value pair into a declaration string with validation.
+ * Rejects invalid property names and unsafe values containing semicolons, braces, or newlines.
+ */
 function declaration(key: string, value: unknown): string {
   const name = normalizeVarName(key);
   // Reject anything that isn't a clean custom-property ident or whose value
@@ -654,6 +724,10 @@ function declaration(key: string, value: unknown): string {
   return `  ${name}: ${wrapShadcnColorValue(raw)};`;
 }
 
+/**
+ * Normalizes a CSS custom property name by ensuring it starts with -- and removing leading dashes.
+ * Idempotent: applying it multiple times produces the same result.
+ */
 function normalizeVarName(key: string): string {
   return `--${key.trim().replace(/^--/, '')}`;
 }
@@ -664,6 +738,11 @@ function normalizeVarName(key: string): string {
 // bare HSL triplets back into `hsl(...)` to preserve brand fidelity. Values
 // that are already functions/hex/keywords (incl. Tailwind v4 `oklch(...)`)
 // pass through untouched.
+
+/**
+ * Wraps bare HSL triplets (e.g., "222.2 47.4% 11.2%") into hsl() function calls while preserving hex, rgb, oklch, and other color formats.
+ * Ensures shadcn color values are recognized by the design-system token importer.
+ */
 export function wrapShadcnColorValue(value: string): string {
   const trimmed = value.trim();
   if (/^(#|rgb|hsl|hwb|oklch|oklab|lab|lch|color|var|color-mix|calc)/i.test(trimmed)) {
@@ -675,6 +754,10 @@ export function wrapShadcnColorValue(value: string): string {
   return trimmed;
 }
 
+/**
+ * Renders a README.md for a shadcn registry item, documenting source, item name, homepage, and dependencies.
+ * Includes npm and registry dependencies in the output.
+ */
 function renderShadcnReadme(item: ShadcnRegistryItem, resolved: ResolvedShadcnItem): string {
   const dependencies = stringArray(item.dependencies);
   const registryDependencies = stringArray(item.registryDependencies);
@@ -696,6 +779,10 @@ function renderShadcnReadme(item: ShadcnRegistryItem, resolved: ResolvedShadcnIt
   ].join('\n');
 }
 
+/**
+ * Writes shadcn registry files to a temp directory under a dedicated subdir to prevent overwriting importer-generated files.
+ * Validates file paths, detects duplicates, fetches content if needed, and enforces per-file and total file count limits.
+ */
 async function writeShadcnFiles(
   item: ShadcnRegistryItem,
   tempDir: string,
@@ -772,6 +859,10 @@ async function writeShadcnFiles(
   }
 }
 
+/**
+ * Fetches raw file content from a base URL, sanitizing the file path and encoding path segments.
+ * Rejects paths with .. or segments that result in no valid path components.
+ */
 async function fetchRawFileContent(
   rawBaseUrl: string,
   filePath: string,
@@ -788,6 +879,10 @@ async function fetchRawFileContent(
   return await fetchText(`${rawBaseUrl}/${safe}`, fetchImpl);
 }
 
+/**
+ * Sanitizes a shadcn file path by stripping path prefixes (@component, ~), normalizing separators, and removing . and .. segments.
+ * Returns the cleaned relative path or undefined if the result contains no valid segments.
+ */
 function sanitizeShadcnFilePath(input: string | undefined): string | undefined {
   if (typeof input !== 'string') return undefined;
   let value = input.trim();
@@ -804,9 +899,10 @@ function sanitizeShadcnFilePath(input: string | undefined): string | undefined {
 // Small helpers
 // ---------------------------------------------------------------------------
 
-// Wrap a fetch with one shared, whole-import budget: a hard request count and
-// a wall-clock deadline. Layered on top of fetchText's per-request timeout so
-// an `include` tree or a long file list cannot run unbounded.
+/**
+ * Wraps a fetch implementation with a shared whole-import budget: request count and wall-clock deadline.
+ * Layered on top of per-request timeout so include trees and file lists cannot run unbounded.
+ */
 function withFetchBudget(fetchImpl: ShadcnFetch): ShadcnFetch {
   // Real wall-clock deadline (not the injected `now`, which is only for
   // deterministic output timestamps).
@@ -827,6 +923,10 @@ function withFetchBudget(fetchImpl: ShadcnFetch): ShadcnFetch {
   };
 }
 
+/**
+ * Creates the default fetch implementation using global fetch with redirect:'error' to prevent SSRF via redirects.
+ * Throws LocalDesignSystemImportError if global fetch is not available.
+ */
 function defaultShadcnFetch(): ShadcnFetch {
   if (typeof fetch !== 'function') {
     throw new LocalDesignSystemImportError('INTERNAL_ERROR', 'global fetch is not available in this runtime');
@@ -837,23 +937,43 @@ function defaultShadcnFetch(): ShadcnFetch {
   return (url, init) => fetch(url, { ...init, redirect: 'error' });
 }
 
+/**
+ * Checks if an error is an AbortError by examining the error's name property.
+ * Used to distinguish timeout/abort errors from network or other error types.
+ */
 function isAbortError(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { name?: unknown }).name === 'AbortError';
 }
 
+/**
+ * Extracts an array of non-empty strings from an unknown value, filtering out non-string and blank entries.
+ * Returns an empty array if the input is not an array.
+ */
 function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
 }
 
+/**
+ * Cleans a shadcn design system name by replacing hyphens/underscores with spaces and collapsing whitespace.
+ * Falls back to 'shadcn design system' if the result is empty.
+ */
 function cleanShadcnName(value: string): string {
   return value.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim() || 'shadcn design system';
 }
 
+/**
+ * Creates a LocalDesignSystemImportError with BAD_REQUEST status for invalid shadcn references or input.
+ * Used to signal user-error conditions in reference parsing, validation, and URL checks.
+ */
 function badReference(message: string): LocalDesignSystemImportError {
   return new LocalDesignSystemImportError('BAD_REQUEST', message);
 }
 
+/**
+ * Formats an unknown error value into a readable string.
+ * Extracts the message property from Error objects; falls back to string coercion for non-Error values.
+ */
 function formatError(err: unknown): string {
   if (err instanceof Error && err.message) return err.message;
   return String(err);

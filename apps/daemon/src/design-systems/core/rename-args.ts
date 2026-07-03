@@ -1,11 +1,8 @@
-// Pure argument parser for `od design-systems rename <id> --title <new>`.
-// Kept out of cli.ts (a top-level dispatch script that runs on import) so it
-// can be unit-tested directly, mirroring research/cli-args.ts.
-//
-// Accepts the new name either as a `--title <value>` / `--title=<value>` flag
-// or as the trailing positional(s) after the id (so `rename <id> "New name"`
-// works). String flags that take a separate value (`--daemon-url <url>`, etc.)
-// have that value skipped so it is never mistaken for the id or title.
+/** @module rename-args
+ * Pure argument parser for `od design-systems rename <id> --title <new>`.
+ * Kept out of cli.ts so it can be unit-tested directly; mirrors the pattern in research/cli-args.ts.
+ * Accepts the title as `--title <value>`, `--title=<value>`, or trailing positionals after the id.
+ */
 
 export interface DesignSystemRenameArgs {
   id: string;
@@ -22,6 +19,9 @@ function isFlagValue(token: string | undefined): token is string {
   return token !== undefined && !token.startsWith('-');
 }
 
+/**
+ * Parses `od design-systems rename <id> --title <new>` arguments. Accepts title as `--title <value>`, `--title=<value>`, or as trailing positionals; returns null if id or title is missing.
+ */
 export function parseDesignSystemRenameArgs(args: string[]): DesignSystemRenameArgs | null {
   let flagTitle: string | undefined;
   const positionals: string[] = [];

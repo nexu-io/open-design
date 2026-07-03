@@ -1,17 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
+import type { DesignSystemListOptions, DesignSystemSummary } from './core/index.js';
 
 type JsonRecord = Record<string, unknown>;
 type SkillEntry = { id: string } & JsonRecord;
-type DesignSystemSummary = {
-  id: string;
-  source?: string;
-  status?: string;
-  title?: string;
-  updatedAt?: string;
-  projectId?: string;
-} & JsonRecord;
 
 type ProjectRecord = {
   id: string;
@@ -39,13 +32,11 @@ type ProjectPatch = Partial<Omit<ProjectInsert, 'id' | 'createdAt'>> & {
   updatedAt?: number;
 };
 
-type DesignSystemListOptions = {
-  idPrefix?: string;
-  source?: string;
-  isEditable?: boolean;
-  defaultStatus?: string;
-};
-
+/**
+ * Factory function that creates and returns an object containing all design-system
+ * and skill-related query and mutation services. Closes over the provided dependency
+ * injections (roots, paths, skills, designSystems, projects).
+ */
 export function createDesignSystemServerServices({
   roots,
   paths,
@@ -91,25 +82,31 @@ export function createDesignSystemServerServices({
     isSafeId: (id: string) => boolean;
   };
 }) {
+  /** Fetches the list of all skills from the skill roots. */
   async function listAllSkills() {
     return skills.listSkills(roots.SKILL_ROOTS);
   }
 
+  /** Fetches the list of all design templates from the design-template roots. */
   async function listAllDesignTemplates() {
     return skills.listSkills(roots.DESIGN_TEMPLATE_ROOTS);
   }
 
+  /** Fetches the list of all skill-like entries from all skill-like roots. */
   async function listAllSkillLikeEntries() {
     return skills.listSkills(roots.ALL_SKILL_LIKE_ROOTS);
   }
 
+  /** Fetches and merges all design systems (built-in and user), with user systems sorted newest-first. */
   async function listAllDesignSystems() {
-    const builtIn = (await designSystems.listDesignSystems(paths.DESIGN_SYSTEMS_DIR)).map((s) => ({
-      ...s,
-      source: 'built-in',
-      isEditable: false,
-      status: 'published',
-    }));
+    const builtIn = (await designSystems.listDesignSystems(paths.DESIGN_SYSTEMS_DIR)).map(
+      (s): DesignSystemSummary => ({
+        ...s,
+        source: 'built-in',
+        isEditable: false,
+        status: 'published',
+      }),
+    );
     let installed: DesignSystemSummary[] = [];
     try {
       installed = await designSystems.listDesignSystems(paths.USER_DESIGN_SYSTEMS_DIR, {
@@ -131,6 +128,7 @@ export function createDesignSystemServerServices({
     ];
   }
 
+  /** Reads a design system from either built-in or user sources, preferring user source if the ID starts with `user:`. */
   async function readAvailableDesignSystem(id: string) {
     if (typeof id === 'string' && id.startsWith('user:')) {
       return designSystems.readDesignSystem(paths.USER_DESIGN_SYSTEMS_DIR, id, { idPrefix: 'user:' });
@@ -141,6 +139,7 @@ export function createDesignSystemServerServices({
     );
   }
 
+  /** Reads design-system package info from either built-in or user sources, preferring user source if the ID starts with `user:`. */
   async function readAvailableDesignSystemPackageInfo(id: string) {
     if (typeof id === 'string' && id.startsWith('user:')) {
       return designSystems.readDesignSystemPackageInfo(paths.USER_DESIGN_SYSTEMS_DIR, id, { idPrefix: 'user:' });
@@ -151,10 +150,12 @@ export function createDesignSystemServerServices({
     );
   }
 
+  /** Returns true if the design-system summary is in a published state (not draft). */
   function isProjectUsableDesignSystem(summary: DesignSystemSummary | null | undefined) {
     return summary?.status !== 'draft';
   }
 
+  /** Validates a design-system ID by checking it exists and is in a published state, returning an error object on failure. */
   async function validateProjectDesignSystemId(id: unknown) {
     if (id === undefined || id === null || id === '') return { ok: true, id: null };
     if (typeof id !== 'string') {
@@ -183,6 +184,7 @@ export function createDesignSystemServerServices({
     return { ok: true, id };
   }
 
+  /** Validates a skill ID by checking it exists in all skill-like roots, returning an error object on failure. */
   async function validateProjectSkillId(id: unknown) {
     if (id === undefined || id === null || id === '') {
       return { ok: true, id: null };
@@ -206,6 +208,7 @@ export function createDesignSystemServerServices({
     return { ok: true, id: resolved.id };
   }
 
+  /** Derives a workspace project ID from a `user:` design-system ID. Returns null if the ID is invalid or does not start with `user:`. */
   function userDesignSystemWorkspaceProjectId(id: string) {
     if (typeof id !== 'string' || !id.startsWith('user:')) return null;
     const dirId = id.slice('user:'.length);
@@ -213,6 +216,7 @@ export function createDesignSystemServerServices({
     return `ds-${dirId}`.slice(0, 128);
   }
 
+  /** Returns the project ID from the summary if valid, otherwise derives one from the design-system ID itself. */
   function projectBackedDesignSystemProjectId(id: string, summary: DesignSystemSummary) {
     if (typeof summary?.projectId === 'string' && projects.isSafeId(summary.projectId)) {
       return summary.projectId;
@@ -220,6 +224,7 @@ export function createDesignSystemServerServices({
     return userDesignSystemWorkspaceProjectId(id);
   }
 
+  /** Creates or updates a workspace project for a user design system, copying files and removing legacy artifacts. Returns the project and file list on success, null on failure. */
   async function ensureUserDesignSystemWorkspaceProject(dbHandle: Database.Database, id: string) {
     const systems = await listAllDesignSystems();
     const summary = systems.find((s) => s.id === id && s.source === 'user');
@@ -288,6 +293,7 @@ export function createDesignSystemServerServices({
     return { project, files: projectFiles };
   }
 
+  /** Determines if a workspace file can be safely overwritten. Small scaffold files (UI kit components) and legacy-reference docs are replaceable. */
   function isReplaceableDesignSystemWorkspaceFile(filePath: string, file: { buffer?: Buffer } | null | undefined) {
     const buffer = file?.buffer;
     if (!Buffer.isBuffer(buffer)) return false;
@@ -301,10 +307,12 @@ export function createDesignSystemServerServices({
     return hasLegacyDesignSystemPackageReferences(text);
   }
 
+  /** Returns true if text contains references to legacy design-system artifact paths. */
   function hasLegacyDesignSystemPackageReferences(text: string) {
     return /preview\/(colors-node-types|colors-ui-palette|typography-scale|spacing-system|logo-variants)\.html|ui_kits\/generated_interface(?:\/index\.html|\/)?/u.test(text);
   }
 
+  /** Removes legacy design-system artifacts from a workspace project when all replacement artifacts are in place. */
   async function removeLegacyDesignSystemWorkspaceArtifacts(project: ProjectRecord) {
     if (project?.metadata?.importedFrom !== 'design-system') return;
     const dir = projects.resolveProjectDir(paths.PROJECTS_DIR, project.id, project.metadata);
@@ -328,6 +336,7 @@ export function createDesignSystemServerServices({
     }
   }
 
+  /** Reads a text file from a design-system workspace project via its backed project ID. Returns null if the project is missing or the file is unreadable. */
   async function readDesignSystemWorkspaceTextFile(
     dbHandle: Database.Database,
     summary: DesignSystemSummary | null | undefined,
@@ -366,6 +375,7 @@ export function createDesignSystemServerServices({
   };
 }
 
+/** Helper to check if an error object has a specific Node.js error code (e.g., 'ENOENT'). */
 function isNodeErrorCode(error: unknown, code: string): boolean {
   return (
     error !== null &&

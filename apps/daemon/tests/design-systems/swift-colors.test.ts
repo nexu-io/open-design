@@ -5,7 +5,7 @@ import {
   extractSwiftColors,
   hsbToHex,
   rgbUnitToHex,
-} from '../../src/design-systems/swift-colors.js';
+} from '../../src/design-systems/core/swift-colors.js';
 
 describe('evalSwiftNumber', () => {
   it('reads decimals, ints, hex bytes, and single divisions', () => {

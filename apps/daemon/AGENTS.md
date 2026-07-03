@@ -141,6 +141,32 @@ For local runtime validation, start through the repo control plane, not daemon p
 pnpm tools-dev run web --daemon-port <port> --web-port <port>
 ```
 
+## Capability Barrel Pattern
+
+Large domain modules under `src/` use the **capability barrel pattern** to enforce internal structure without exposing implementation details.
+
+**Reference implementation:** `src/design-systems/` (see `src/design-systems/README.md` for full rationale and history.)
+
+**Rules:**
+1. The domain root has a single `index.ts` barrel that is the **only** public API surface. External code must import via this barrel — never from a subdir directly.
+2. Domain subdirectories are internal layers (e.g. `core/`, `catalog/`, `user/`). Each subdir has its own `index.ts` barrel for its internal boundary.
+3. One subdir is the **foundation** (`core/`): the shared kernel of types and primitives. Every sibling may import it directly (any path); the foundation itself imports no sibling.
+4. Other cross-subdir dependencies are a **declared acyclic layering**. A non-foundation subdir may depend on another non-foundation sibling only when that edge is registered in the domain's `allowedEdges`, and only through the sibling's **barrel** (`../<sibling>/index.js`), never a private file. The edge set must stay acyclic — a two-way dependency between siblings is a design smell, not an allowlist entry (relocate the shared piece to `core/` instead). Reference layering: `core` → `catalog` → `user`, `tokens` → `import`, and `jobs` depending on `user` + `catalog`.
+5. A subdir must **not** import the domain root barrel (`../index.js`); it re-exports every subdir and invites a circular dependency. Reach `core/` or an allowed sibling barrel directly.
+6. Every source file has an `@module` JSDoc docblock (2-3 sentences). Every function (exported and private) has a 1-3 sentence JSDoc prose docblock.
+
+**Enforcement:** `scripts/check-barrel-imports.ts` runs as part of `pnpm guard`. Each domain declares its `foundation` and `allowedEdges`; the check validates that config is acyclic before scanning, then enforces rules 1, 4, and 5. To protect a new domain module, add it to the `CAPABILITY_BARREL_DOMAINS` registry in that file.
+
+**Applying to a new module:**
+1. Organize source files into subdirectory layers that reflect the module's domain structure, and pick the `core/` foundation (shared types + primitives with no sibling dependencies).
+2. Add `index.ts` barrel to each subdir, re-exporting its public surface.
+3. Update the domain root `index.ts` to re-export only from subdir barrels (not internal file paths).
+4. Add `@module` docblocks to all files and per-function JSDoc to all functions.
+5. Register the domain in `scripts/check-barrel-imports.ts`, declaring its `foundation` and the acyclic `allowedEdges` between non-foundation siblings.
+6. Add a `README.md` at the domain root explaining the structure.
+
+**Next candidate:** `src/media/` — currently a flat module with a 4 000-line `index.ts` god file. The pattern should be applied there once the `index.ts` is split into layers.
+
 ## Review Checklist
 
 Before handing off daemon changes, check:

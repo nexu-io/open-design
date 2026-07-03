@@ -220,9 +220,9 @@ import {
   updateUserDesignSystem,
   updateUserDesignSystemRevisionStatus,
 } from './design-systems/index.js';
-import { createDesignSystemGenerationJobStore } from './design-systems/generation-jobs.js';
+import { createDesignSystemGenerationJobStore } from './design-systems/index.js';
 import { createDesignSystemServerServices } from './design-systems/server-services.js';
-import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
+import { prepareDesignTokenContractRebuild } from './design-systems/index.js';
 import {
   applyDiffReviewDecisionToCwd,
   applyPlugin,
@@ -296,8 +296,8 @@ import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
-import { renderDesignSystemPreview } from './design-systems/preview.js';
-import { renderDesignSystemShowcase } from './design-systems/showcase.js';
+import { renderDesignSystemPreview } from './design-systems/index.js';
+import { renderDesignSystemShowcase } from './design-systems/index.js';
 import { createChatRunService } from './runtimes/runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
