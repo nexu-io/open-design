@@ -52,6 +52,8 @@ export interface AppConfigPrefs {
   projectLocations?: ProjectLocationPrefs[];
   /** Project location id used for new projects when the create request does not choose one explicitly. */
   defaultProjectLocationId?: string | null;
+  /** 자유입력 라우팅이 모호/무매칭일 때 pin할 기본 라우터 플러그인 id. null/미설정 = od-default. */
+  defaultRouterPluginId?: string | null;
   /**
    * Most-recently-used local working directories the user granted the agent
    * read access to (via the Home composer's working-directory picker). These

@@ -507,6 +507,21 @@ describe('app-config', () => {
       expect(cfg.agentId).toBe('test');
     });
   });
+
+  describe('defaultRouterPluginId', () => {
+    it('round-trips through writeAppConfig/readAppConfig as an allowed key', async () => {
+      await writeAppConfig(dataDir, { defaultRouterPluginId: 'example-bodoc-router' });
+      const cfg = await readAppConfig(dataDir);
+      expect(cfg.defaultRouterPluginId).toBe('example-bodoc-router');
+    });
+
+    it('accepts null to reset to the built-in default', async () => {
+      await writeAppConfig(dataDir, { defaultRouterPluginId: 'example-bodoc-router' });
+      await writeAppConfig(dataDir, { defaultRouterPluginId: null });
+      const cfg = await readAppConfig(dataDir);
+      expect(cfg.defaultRouterPluginId).toBeNull();
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

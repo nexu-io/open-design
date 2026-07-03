@@ -117,6 +117,8 @@ export interface AppConfigPrefs {
   customInstructions?: string | null;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
+  /** 자유입력 라우팅이 모호/무매칭일 때 pin할 기본 라우터 플러그인 id. null/미설정 = od-default. */
+  defaultRouterPluginId?: string | null;
   // Most-recently-used local working directories the user granted the agent
   // read access to from the Home composer. Become a project's
   // `metadata.linkedDirs` (read-only `--add-dir` awareness, no Design Files
@@ -145,6 +147,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'customInstructions',
   'projectLocations',
   'defaultProjectLocationId',
+  'defaultRouterPluginId',
   'recentLinkedDirs',
 ] as const);
 
@@ -471,7 +474,7 @@ function applyConfigValue(
     if (typeof value === 'boolean') target[key] = value;
     return;
   }
-  if (key === 'agentId' || key === 'skillId' || key === 'designSystemId') {
+  if (key === 'agentId' || key === 'skillId' || key === 'designSystemId' || key === 'defaultRouterPluginId') {
     if (typeof value === 'string' || value === null) target[key] = value;
     return;
   }
