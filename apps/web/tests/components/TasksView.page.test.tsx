@@ -380,6 +380,9 @@ describe('TasksView page shell', () => {
     fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
     fireEvent.click(await screen.findByRole('button', { name: 'Retry run' }));
 
+    expect(window.sessionStorage.getItem('od:creator-retry-assistant:project-retry-1')).toBe(
+      'msg-retry-1',
+    );
     expect(navigateSpy).toHaveBeenCalledWith({
       kind: 'project',
       projectId: 'project-retry-1',
