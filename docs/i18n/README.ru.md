@@ -31,9 +31,9 @@
 
 ## Что такое Open Design
 
-🎨 **Локальная по умолчанию, открытая альтернатива Claude Design.** &nbsp;🖥️ **Нативное десктопное приложение для macOS и Windows.** &nbsp;⚡ **100+ навыков** · ✨ **150 систем `DESIGN.md` брендового уровня** · 📦 **261 готовый к использованию плагин.** &nbsp;🖼️ Генерирует **веб-, десктопные и мобильные прототипы**, **живые дашборды / артефакты**, **презентации**, **изображения**, **видео**, а также моушн-графику **HyperFrames**. 🔒 Предпросмотр в изолированном iframe · экспорт HTML / PDF / PPTX / MP4. &nbsp;🤖 **Работает на Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity и 21 локальном CLI**, либо на любом OpenAI-совместимом эндпоинте через BYOK.
+🎨 **Открытая альтернатива Claude Design.** &nbsp;🖥️ **Локальное по умолчанию нативное десктопное приложение для macOS и Windows.** &nbsp;⚡ **Комбинируемые навыки, брендовые дизайн-системы `DESIGN.md` и готовые к использованию плагины.** &nbsp;🖼️ Генерирует **веб-, десктопные и мобильные прототипы**, **живые дашборды / артефакты**, **презентации**, **изображения**, **видео**, а также моушн-графику **HyperFrames**. 🔒 Предпросмотр в изолированном iframe · экспорт HTML / PDF / PPTX / MP4. &nbsp;🤖 **Работает на Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity и 22 локальных CLI**, либо на любом OpenAI-совместимом эндпоинте через BYOK.
 
-Open Design — это то, что получается, когда **агентно-нативный** цикл, который Anthropic выпустила вместе с Claude Design — изучить бриф, зафиксировать направление, поток артефакта, критика, поставка — перестаёт быть закрытым и становится **файловой системой навыков, дизайн-систем и плагинов**, которые уже стоящие на вашем ноутбуке кодинг-агенты могут читать, писать и ремиксовать. Ваш CLI становится дизайн-движком, ваш ноутбук становится студией, а `DESIGN.md` вашей команды становится брендовым контрактом.
+Open Design — это то, что получается, когда **агентно-нативный** цикл, который Anthropic выпустила вместе с Claude Design — изучить бриф, зафиксировать направление, потоково собрать артефакт, провести ревью и передать результат — перестаёт быть закрытым и становится **файловой системой навыков, дизайн-систем и плагинов**, которую уже установленные на вашем ноутбуке кодинг-агенты могут читать, писать и ремиксовать. Ваш CLI становится дизайн-движком, ноутбук — студией, а `DESIGN.md` вашей команды — брендовым контрактом.
 
 Это также **альтернатива Figma для эпохи агентов** — вместо того чтобы двигать пиксели на холсте, она поставляет одностраничные артефакты в настоящем CSS, настоящих шрифтах, настоящих компонентах, экспортируемые сразу в HTML / PDF / PPTX / MP4 — уже оформленные вашей дизайн-системой, уже запускаемые внутри агента, которым вы пользуетесь каждый день.
 
@@ -42,7 +42,7 @@ Open Design — это то, что получается, когда **аген�
 
 ## Обзор продукта
 
-Краткий взгляд на то, что такое Open Design и что он делает. Начните с **Home**, организуйте повторяющиеся рабочие процессы с помощью **Automation**, дистиллируйте брендовый контракт в **Design System** и расширяйте возможности с помощью **Plugins** и **интеграций**; внутри **Studio** любого проекта та же дизайн-система выдаёт потоком прототипы, живые артефакты, HyperFrames, презентации и изображения.
+Краткий взгляд на то, что такое Open Design и что он делает. Начните с **Home**, организуйте повторяющиеся рабочие процессы с помощью **Automation**, оформите брендовый контракт в **Design System** и расширяйте возможности через **Plugins** и **интеграции**; внутри **Studio** любого проекта та же дизайн-система потоком выдаёт прототипы, живые артефакты, HyperFrames, презентации и изображения.
 
 ### Основные страницы
 
@@ -300,11 +300,18 @@ Open Design (OD) — это открытая альтернатива. Тот ж
 Вы можете использовать Open Design, ни разу не открыв GUI — вызывайте его как навык, плагин или MCP-сервер внутри Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi и других.
 
 ```bash
-# One-line install into the agent you're using:
+# Установка одной командой в агент, которым вы пользуетесь:
 od mcp install <agent>
 # <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
 #         | pi | vibe | hermes | cline | kimi | trae | opencode
+
+# Аналогичная установка через hosted shell-скрипт:
+curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 ```
+
+`install.sh` — тонкая shell-обертка вокруг `od mcp install`. Она нужна, чтобы hosted URL возвращал shell-скрипт вместо HTML-fallback лендинга и быстро падал, если ваша оболочка находит не Open Design, а другой бинарник `od`.
+
+> **Пользователям WSL2:** если CLI ваших кодинг-агентов запускаются внутри WSL2, сначала выполните шаги из [`гайда по настройке WSL2`](../../docs/wsl-setup.md). Linux-команда `/usr/bin/od` может перекрывать команду `od` из Open Design.
 
 Затем, внутри агента:
 
@@ -325,6 +332,8 @@ docker compose up -d
 # open http://localhost:7456
 ```
 
+> **Пользователям macOS:** если веб-интерфейс показывает `Authorization: Bearer <OD_API_TOKEN> required`, причина в bridge networking Docker Desktop. Решение описано в разделе [Docker Desktop on macOS](../../deploy/README.md#docker-desktop-on-macos).
+
 ### 🚀 Развертывание на Sealos
 
 [![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
@@ -340,16 +349,16 @@ corepack enable && pnpm install
 pnpm tools-dev run web
 ```
 
-Node `~24`, pnpm `10.33.x`. Пользователям Windows см. [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Полный быстрый старт, переменные окружения, Nix flake и процесс упакованной сборки → [`QUICKSTART.md`](../../QUICKSTART.md).
+Node `~24`, pnpm `10.33.x`. Пользователям WSL2 см. [`docs/wsl-setup.md`](../../docs/wsl-setup.md); пользователям нативной Windows — [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Полный быстрый старт, переменные окружения, Nix flake и процесс упакованной сборки → [`QUICKSTART.md`](../../QUICKSTART.md).
 
 ### Полный рабочий процесс — от брифа до артефакта
 
 `brief → plugin → direction → design system → artifact → handoff → memory`
 
 1. **PM подаёт бриф.** Выбор плагина предлагает лендинг · питч-презентацию · дашборд · пост для соцсетей · PM-спецификацию · OKR-карту…
-2. **Дизайнер (или агент) фиксирует направление.** Нет бренда? Выберите из 5 кураторских направлений. Есть бренд? Бросьте скриншот / URL → агент подключает GitHub, импортирует Figma и кодифицирует переиспользуемый `DESIGN.md`.
+2. **Дизайнер (или агент) фиксирует направление.** Нет бренда? Выберите одно из 5 кураторских направлений. Есть бренд? Добавьте скриншот или URL → агент подключит GitHub, импортирует Figma и кодифицирует переиспользуемый `DESIGN.md`.
 3. **Агент выдаёт первый `<artifact>`.** Плагин + навык + `DESIGN.md` привязаны. Он стримится в изолированный iframe, редактируемый на месте — а не «перегенерировать с нуля».
-4. **Передача в разработку.** Артефакт — это настоящий HTML/CSS — бросьте его в Cursor, Codex или Claude Code, чтобы продолжать сборку как код. Или экспортируйте PPTX / PDF / MP4 сразу в маркетинг.
+4. **Передача в разработку.** Артефакт — это настоящий HTML/CSS. Откройте его в Cursor, Codex или Claude Code, чтобы продолжать сборку как код, либо сразу экспортируйте PPTX / PDF / MP4 для маркетинга.
 5. **Open Design становится умнее по мере использования.** Ваши скриншоты, шрифты, палитры и подтверждённые артефакты накапливаются как значения по умолчанию для следующей сессии. Меньше переделок, меньше дрейфа.
 
 ---
@@ -492,11 +501,11 @@ od plugin uninstall od-default       # uninstall
 
 ```
 my-plugin/
-├── SKILL.md            ← required: YAML frontmatter (name · description) + trigger phrasing + workflow (aim for < 500 lines)
-├── open-design.json    ← needed to list: marketplace metadata + inputs + pipeline + capabilities
-├── README.md           ← optional: usage, install, registry links
-├── preview/            ← optional: index.html / poster.png (strongly recommended for visual plugins)
-└── examples/           ← optional: concrete use cases
+├── SKILL.md            ← обязательно: YAML-фронтматтер (name · description) + условия запуска + процесс (лучше < 500 строк)
+├── open-design.json    ← нужно для каталога: метаданные маркетплейса + inputs + pipeline + capabilities
+├── README.md           ← опционально: использование, установка, ссылки на registry
+├── preview/            ← опционально: index.html / poster.png (очень желательно для визуальных плагинов)
+└── examples/           ← опционально: конкретные сценарии использования
 ```
 
 Основные поля `open-design.json`: `specVersion` (сейчас `1.0.0`), `name` (стабильный ID), `version` (semver), `compat.agentSkills[].path` (указывает на `./SKILL.md`), `od.kind` (`skill` / `scenario` / `atom` / `bundle`), `od.taskKind` (`new-generation` / `figma-migration` / `code-migration` / `tune-collab`), `od.mode` (поверхность вывода, например `prototype` / `deck` / `live-artifact` / `image` / `video` / `hyperframes` / `audio` / `design-system` / `scenario`), `od.capabilities[]` (**декларируйте минимум** — ограниченная установка по умолчанию даёт только `prompt:inject`), `od.inputs[]` (параметры на момент применения).
@@ -513,7 +522,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ### Вклад в виде плагина
 
-1. Бросьте папку плагина в [`plugins/community/`](../../plugins/community/) (сторонние плагины), или — чтобы поставлять его вместе с Open Design — в соответствующий уровень [`plugins/_official/`](../../plugins/_official/).
+1. Поместите папку плагина в [`plugins/community/`](../../plugins/community/) (сторонние плагины), или — чтобы поставлять его вместе с Open Design — в соответствующий уровень [`plugins/_official/`](../../plugins/_official/).
 2. Пройдите валидацию: `od plugin validate`, `pnpm guard`, `pnpm --filter @open-design/plugin-runtime typecheck`.
 3. Заполните PR, используя шаблон в [`plugins/spec/CONTRIBUTING.md`](../../plugins/spec/CONTRIBUTING.md) (ID, версия, линия, режим, возможности, примеры триггеров; приложите скриншот / предпросмотр для визуальных плагинов).
 4. Чтобы опубликовать во внешнем реестре (skills.sh / ClawHub / отдельный GitHub) → [`plugins/spec/PUBLISHING-REGISTRIES.md`](../../plugins/spec/PUBLISHING-REGISTRIES.md).
@@ -627,19 +636,19 @@ git clone https://github.com/nexu-io/open-design.git
 cd open-design && corepack enable && pnpm install
 pnpm tools-dev run web
 
-# 2. Find a good-first-issue and assign yourself
+# 2. Найдите good-first-issue и назначьте себя
 gh issue list --label "good first issue" --state open --limit 20
-gh issue develop <number>   # create a branch and worktree
+gh issue develop <number>   # создать ветку и worktree
 
-# 3. Make the change, run the checks
+# 3. Внесите изменение и запустите проверки
 pnpm guard && pnpm typecheck
 pnpm --filter @open-design/<package> test
 
-# 4. Open the PR
+# 4. Откройте PR
 gh pr create --fill
 ```
 
-Полный процесс вклада, дружественный к агентам, стиль кода и планка PR → [`CONTRIBUTING.md`](../../CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)).
+Полный процесс вклада, дружественный к агентам, стиль кода и планка PR → [`CONTRIBUTING.md`](../../CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [한국어](CONTRIBUTING.ko.md) · [Português](CONTRIBUTING.pt-BR.md) · [ภาษาไทย](CONTRIBUTING.th.md)).
 
 ### 🏅 Программа Open Design Fellow
 
@@ -670,7 +679,7 @@ gh pr create --fill
   </tr>
 </table>
 
-Правила мейнтейнеров, критерии повышения и протокол выхода → [`MAINTAINERS.md`](../../MAINTAINERS.md) (также [Deutsch](MAINTAINERS.de.md) · [Français](MAINTAINERS.fr.md) · [简体中文](MAINTAINERS.zh-CN.md) · [日本語](MAINTAINERS.ja-JP.md) · [Português](MAINTAINERS.pt-BR.md)).
+Правила мейнтейнеров, критерии повышения и протокол выхода → [`MAINTAINERS.md`](../../MAINTAINERS.md) (также [Deutsch](MAINTAINERS.de.md) · [Français](MAINTAINERS.fr.md) · [简体中文](MAINTAINERS.zh-CN.md) · [日本語](MAINTAINERS.ja-JP.md) · [한국어](MAINTAINERS.ko.md) · [Português](MAINTAINERS.pt-BR.md) · [ภาษาไทย](MAINTAINERS.th.md)).
 
 ## Контрибьюторы
 
