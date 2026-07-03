@@ -356,8 +356,19 @@ export function ComposerPlusMenu({
   function scheduleCloseSubmenu() {
     cancelSubmenuClose();
     submenuCloseTimer.current = setTimeout(() => {
-      setSubmenu(null);
       submenuCloseTimer.current = null;
+      // Typing into a flyout's search box narrows its list, which reflows rows
+      // out from under a stationary cursor — the browser then synthesizes a
+      // `mouseleave` on the flyout even though the pointer never moved. Honoring
+      // that close would yank the search box (and its preview column) away
+      // mid-search, making the plugin impossible to pick. Keep the submenu open
+      // while its own search input still owns focus; the outside-click / Escape
+      // handlers remain the deliberate ways to dismiss it.
+      const active = document.activeElement;
+      if (active && popupRef.current?.contains(active) && active.tagName === 'INPUT') {
+        return;
+      }
+      setSubmenu(null);
     }, 200);
   }
 

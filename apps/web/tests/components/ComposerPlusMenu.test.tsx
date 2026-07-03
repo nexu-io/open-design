@@ -7,7 +7,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { ComposerPlusMenu } from '../../src/components/ComposerPlusMenu';
@@ -84,6 +84,42 @@ describe('ComposerPlusMenu pick-row caret protection', () => {
 
     fireEvent.click(screen.getByRole('menuitem', { name: /^MCP/i }));
     expectPickRowPreventsMousedown(/Linear/i);
+  });
+
+  it('keeps the plugin flyout open when filtering reflows fire a mouseleave mid-search', () => {
+    vi.useFakeTimers();
+    try {
+      renderMenu({
+        plugins: [
+          PLUGIN,
+          { id: 'p2', title: 'Slide Builder', manifest: {} } as never,
+        ],
+      });
+      fireEvent.click(screen.getByTestId('plus-trigger'));
+      fireEvent.click(screen.getByRole('menuitem', { name: /Plugins/i }));
+
+      // The user clicks into the search box (focus enters the flyout) and types,
+      // pruning the list. In a real browser the shrinking list reflows rows out
+      // from under the stationary cursor, so Chromium synthesizes a `mouseleave`
+      // on the flyout even though the pointer never moved.
+      const search = screen.getByPlaceholderText('Plugins') as HTMLInputElement;
+      search.focus();
+      fireEvent.change(search, { target: { value: 'deck' } });
+      const flyout = document.querySelector('.plus-menu__flyout') as HTMLElement;
+      fireEvent.mouseLeave(flyout);
+
+      // The hover-close grace period elapses; the panel must survive because the
+      // search box still owns focus — yanking it away would make the plugin
+      // impossible to pick.
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+
+      expect(screen.queryByPlaceholderText('Plugins')).not.toBeNull();
+      expect(screen.getByRole('menuitem', { name: /Deck Maker/i })).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('resets the shared search query when switching submenus', () => {
