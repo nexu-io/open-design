@@ -294,42 +294,39 @@ describe('API proxy routes', () => {
     });
   });
 
-  it.each([
-    {
-      missing: 'projectId',
-      body: {
-        providerRunId: 'conversation_1',
-        providerOperationId: 'message_1',
-      },
-      message: 'Deployment provider run sessions require projectId.',
-    },
-    {
-      missing: 'providerRunId',
-      body: {
-        projectId: 'project_1',
-        providerOperationId: 'message_1',
-      },
-      message: 'Deployment provider run sessions require providerRunId.',
-    },
-    {
-      missing: 'providerOperationId',
-      body: {
-        projectId: 'project_1',
-        providerRunId: 'conversation_1',
-      },
-      message: 'Deployment provider run sessions require providerOperationId.',
-    },
-  ])('rejects deployment provider proxy run sessions without $missing', async ({ body, message }) => {
+  it('uses route-owned deployment provider run-session ids for minimal OpenAI-compatible proxy requests', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
       OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
       OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
       OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
     }, async () => {
+      let fallbackRunId: string | undefined;
       const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
         const url = String(input);
         if (url.startsWith(baseUrl)) return realFetch(input, init);
-        throw new Error(`unexpected egress to ${url}`);
+        if (url === 'https://authority.example.test/api/runs') {
+          const requestBody = JSON.parse(String(init?.body));
+          expect(requestBody).toMatchObject({
+            purpose: 'chat-completion',
+            allowed_surfaces: ['reasoning'],
+            max_total_cost_usd: 0.05,
+          });
+          expect(requestBody.od_run_id).toMatch(/^proxy:/);
+          expect(requestBody.od_project_id).toBe(requestBody.od_run_id);
+          fallbackRunId = requestBody.od_run_id;
+          return Promise.resolve(Response.json({
+            schema: 'deployment-provider.run-session.v1',
+            run_session_id: 'odrs_proxy_minimal',
+          }, { status: 201 }));
+        }
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        const providerBody = JSON.parse(String(init?.body));
+        expect(providerBody.metadata).toMatchObject({
+          opendesign_run_session_id: 'odrs_proxy_minimal',
+          opendesign_idempotency_key: fallbackRunId,
+        });
+        return Promise.resolve(sseResponse('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n'));
       });
       vi.stubGlobal('fetch', fetchMock);
 
@@ -339,48 +336,16 @@ describe('API proxy routes', () => {
         body: JSON.stringify({
           credentialSource: 'deployment',
           model: 'gpt-routed',
-          ...body,
           messages: [{ role: 'user', content: 'hello' }],
         }),
       });
 
-      expect(res.status).toBe(400);
-      await expect(res.json()).resolves.toMatchObject({
-        error: {
-          code: 'BAD_REQUEST',
-          message,
-        },
-      });
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(res.status).toBe(200);
+      await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
     });
   });
 
-  it.each([
-    {
-      missing: 'projectId',
-      body: {
-        providerRunId: 'conversation_1',
-        providerOperationId: 'message_1',
-      },
-      message: 'Deployment provider run sessions require projectId.',
-    },
-    {
-      missing: 'providerRunId',
-      body: {
-        projectId: 'project_1',
-        providerOperationId: 'message_1',
-      },
-      message: 'Deployment provider run sessions require providerRunId.',
-    },
-    {
-      missing: 'providerOperationId',
-      body: {
-        projectId: 'project_1',
-        providerRunId: 'conversation_1',
-      },
-      message: 'Deployment provider run sessions require providerOperationId.',
-    },
-  ])('rejects deployment provider connection-test run sessions without $missing', async ({ body, message }) => {
+  it('honors explicit deployment provider connection-test run-session ids', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
       OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
@@ -390,7 +355,27 @@ describe('API proxy routes', () => {
       const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
         const url = String(input);
         if (url.startsWith(baseUrl)) return realFetch(input, init);
-        throw new Error(`unexpected egress to ${url}`);
+        if (url === 'https://authority.example.test/api/runs') {
+          const requestBody = JSON.parse(String(init?.body));
+          expect(requestBody).toMatchObject({
+            od_project_id: 'project_1',
+            od_run_id: 'conversation_1',
+            purpose: 'connection-test',
+          });
+          return Promise.resolve(Response.json({
+            schema: 'deployment-provider.run-session.v1',
+            run_session_id: 'odrs_connection_explicit',
+          }, { status: 201 }));
+        }
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        const providerBody = JSON.parse(String(init?.body));
+        expect(providerBody.metadata).toMatchObject({
+          opendesign_run_session_id: 'odrs_connection_explicit',
+          opendesign_idempotency_key: 'message_1',
+        });
+        return Promise.resolve(Response.json({
+          choices: [{ message: { content: 'ok' } }],
+        }));
       });
       vi.stubGlobal('fetch', fetchMock);
 
@@ -402,18 +387,18 @@ describe('API proxy routes', () => {
           protocol: 'openai',
           credentialSource: 'deployment',
           model: 'gpt-routed',
-          ...body,
+          projectId: 'project_1',
+          providerRunId: 'conversation_1',
+          providerOperationId: 'message_1',
         }),
       });
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(200);
       await expect(res.json()).resolves.toMatchObject({
-        error: {
-          code: 'BAD_REQUEST',
-          message,
-        },
+        ok: true,
+        kind: 'success',
+        model: 'gpt-routed',
       });
-      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 

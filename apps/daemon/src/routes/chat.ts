@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Express } from 'express';
 import type { RouteDeps } from '../server-context.js';
 import { seedProviderIfMissing } from '../media/config.js';
@@ -78,12 +79,28 @@ const PROVIDER_PROTOCOLS: ReadonlySet<ConnectionTestProtocol> = new Set([
   'bedrock',
 ]);
 
+function routeRunStringOrFallback(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function deploymentRouteRunMetadataBody(
+  sourceBody: Record<string, unknown>,
+  routePrefix: string,
+  purpose: 'chat-completion' | 'connection-test',
+): Record<string, unknown> {
+  const fallbackId = `${routePrefix}:${randomUUID()}`;
+  return {
+    ...sourceBody,
+    projectId: routeRunStringOrFallback(sourceBody.projectId, fallbackId),
+    providerRunId: routeRunStringOrFallback(sourceBody.providerRunId, fallbackId),
+    providerOperationId: routeRunStringOrFallback(sourceBody.providerOperationId, fallbackId),
+    providerRunPurpose: sourceBody.providerRunPurpose ?? purpose,
+  };
+}
+
 function deploymentProxyRunMetadataBody(proxyBody: Partial<ProxyStreamRequest>): Record<string, unknown> {
   const body = proxyBody as Record<string, unknown>;
-  return {
-    ...body,
-    providerRunPurpose: body.providerRunPurpose ?? 'chat-completion',
-  };
+  return deploymentRouteRunMetadataBody(body, 'proxy', 'chat-completion');
 }
 
 function isProviderProtocol(value: unknown): value is ConnectionTestProtocol {
@@ -384,10 +401,11 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         if (deploymentProfile) {
           const runMetadata = await deploymentProviderRunMetadata(
             deploymentProfile,
-            {
-              ...(body as Record<string, unknown>),
-              providerRunPurpose: body.providerRunPurpose ?? 'connection-test',
-            },
+            deploymentRouteRunMetadataBody(
+              body as Record<string, unknown>,
+              `connection-test:${protocol}`,
+              'connection-test',
+            ),
             controller.signal,
           );
           if (!runMetadata.ok) {

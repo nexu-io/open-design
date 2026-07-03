@@ -943,12 +943,12 @@ describe('POST /api/test/connection provider mode', () => {
           );
           const requestBody = JSON.parse(String(init?.body));
           expect(requestBody).toMatchObject({
-            od_project_id: 'connection-test',
             purpose: 'connection-test',
             allowed_surfaces: ['reasoning'],
             max_total_cost_usd: 0.05,
           });
           expect(requestBody.od_run_id).toMatch(/^connection-test:openai:/);
+          expect(requestBody.od_project_id).toBe(requestBody.od_run_id);
           expect(requestBody.od_run_id).not.toBe('connection-test:openai:gpt-routed');
           fallbackRunId = requestBody.od_run_id;
           return jsonResponse({ run_session_id: 'odrs_connection' }, { status: 201 });
