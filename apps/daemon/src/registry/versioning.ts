@@ -92,8 +92,28 @@ function resolveRequestedVersion(
     .filter((version) => {
       const parsed = parseSemver(version);
       if (!parsed) return false;
+      // npm excludes prerelease candidates from a range unless the range is
+      // itself a prerelease of the same major.minor.patch tuple (so `^0.2.0`
+      // never matches `0.2.1-beta.1`, but `^0.2.1-beta.1` matches 0.2.1-beta.2).
+      if (
+        parsed.prerelease &&
+        !(base.prerelease &&
+          parsed.major === base.major &&
+          parsed.minor === base.minor &&
+          parsed.patch === base.patch)
+      ) {
+        return false;
+      }
       if (range.startsWith('^')) {
-        return parsed.major === base.major && compareSemver(parsed, base) >= 0;
+        // npm caret locks the leftmost non-zero component: `^1.2.3` allows
+        // `<2.0.0`, but `^0.2.3` only `<0.3.0` and `^0.0.3` only `<0.0.4`.
+        // Locking major alone wrongly resolves `^0.2.0` to a breaking `0.3.0`.
+        if (parsed.major !== base.major) return false;
+        if (base.major === 0) {
+          if (parsed.minor !== base.minor) return false;
+          if (base.minor === 0 && parsed.patch !== base.patch) return false;
+        }
+        return compareSemver(parsed, base) >= 0;
       }
       return parsed.major === base.major &&
         parsed.minor === base.minor &&
@@ -107,20 +127,58 @@ interface SemverParts {
   major: number;
   minor: number;
   patch: number;
+  prerelease: string | null;
 }
 
 function parseSemver(value: string): SemverParts | null {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(value);
+  // Capture an optional `-prerelease`; `+build` metadata is ignored for
+  // precedence (semver §10). The prerelease drives npm's caret/tilde exclusion.
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([^+]*))?(?:\+.*)?$/.exec(value);
   if (!match) return null;
   return {
     major: Number(match[1] ?? 0),
     minor: Number(match[2] ?? 0),
     patch: Number(match[3] ?? 0),
+    prerelease: match[4] || null,
   };
 }
 
 function compareSemver(left: SemverParts, right: SemverParts): number {
-  return left.major - right.major ||
+  const core =
+    left.major - right.major ||
     left.minor - right.minor ||
     left.patch - right.patch;
+  if (core !== 0) return core;
+  return comparePrerelease(left.prerelease, right.prerelease);
+}
+
+// semver §11 precedence: a normal release outranks a prerelease of the same
+// core version; otherwise compare dot-separated identifiers left to right —
+// numeric ones numerically and ranked below alphanumeric, and a longer set of
+// identifiers wins when all preceding ones are equal.
+function comparePrerelease(left: string | null, right: string | null): number {
+  if (!left && !right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+  const a = left.split('.');
+  const b = right.split('.');
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const x = a[i];
+    const y = b[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const xNum = /^\d+$/.test(x);
+    const yNum = /^\d+$/.test(y);
+    if (xNum && yNum) {
+      const d = Number(x) - Number(y);
+      if (d !== 0) return d < 0 ? -1 : 1;
+    } else if (xNum) {
+      return -1;
+    } else if (yNum) {
+      return 1;
+    } else if (x !== y) {
+      return x < y ? -1 : 1;
+    }
+  }
+  return 0;
 }
