@@ -1,0 +1,53 @@
+name: landing-page-daily-feishu
+
+# Every morning at 09:00 Asia/Shanghai, summarize landing-related PR activity
+# added after the latest successful landing-page-production deployment and post
+# it to Feishu for QA. The card marks merged PRs that are already included in
+# staging.open-design.ai by comparing their merge commit against successful
+# landing-page-staging runs. If a staging deploy is still running, the card
+# links the in-flight CI run.
+
+on:
+  schedule:
+    # 01:00 UTC = 09:00 Asia/Shanghai
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: landing-page-daily-feishu
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    name: Notify Feishu with landing PR summary
+    if: github.repository == 'nexu-io/open-design' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main history
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Check landing Feishu summary script
+        run: node --experimental-strip-types .github/scripts/landing-page-daily-feishu.ts self-check
+
+      - name: Post landing PR summary to Feishu
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_LANDING_WEBHOOK || secrets.FEISHU_RELEASE_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_LANDING_SIGN_SECRET || secrets.FEISHU_RELEASE_SIGN_SECRET }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node --experimental-strip-types .github/scripts/landing-page-daily-feishu.ts

@@ -14,6 +14,7 @@ export {
   readDesignSystem,
   readDesignSystemPackageInfo,
   readDesignSystemPullFile,
+  readDesignSystemStaticFile,
 } from './reader.js';
 export * from './source-context.js';
 export * from './showcase.js';

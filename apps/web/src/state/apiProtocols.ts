@@ -102,6 +102,14 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
     'deepseek-chat',
     'deepseek-reasoner',
   ],
+  bedrock: [
+    'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    'anthropic.claude-3-5-haiku-20241022-v1:0',
+    'anthropic.claude-3-haiku-20240307-v1:0',
+    'amazon.nova-pro-v1:0',
+    'amazon.nova-lite-v1:0',
+    'amazon.nova-micro-v1:0',
+  ],
   ollama: [
     'cogito-2.1:671b',
     'deepseek-v3.1:671b',
@@ -119,22 +127,26 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
     'glm-4.7',
     'glm-5',
     'glm-5.1',
+    'glm-5.2',
     'gpt-oss:20b',
     'gpt-oss:120b',
     'kimi-k2:1t',
     'kimi-k2-thinking',
     'kimi-k2.5',
     'kimi-k2.6',
+    'kimi-k2.7-code',
     'minimax-m2',
     'minimax-m2.1',
     'minimax-m2.5',
     'minimax-m2.7',
+    'minimax-m3',
     'ministral-3:3b',
     'ministral-3:8b',
     'ministral-3:14b',
     'mistral-large-3:675b',
     'nemotron-3-nano:30b',
     'nemotron-3-super',
+    'nemotron-3-ultra',
     'qwen3-coder:480b',
     'qwen3-coder-next',
     'qwen3-next:80b',
@@ -162,6 +174,7 @@ export const FAST_MODEL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   ollama: 'gemma3:4b',
   senseaudio: 'senseaudio-s2-flash',
   aihubmix: 'gpt-4o-mini',
+  bedrock: 'amazon.nova-lite-v1:0',
 };
 
 export const API_PROTOCOL_TABS: ReadonlyArray<{
@@ -185,6 +198,7 @@ export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   ollama: 'Ollama Cloud API',
   senseaudio: 'SenseAudio API',
   aihubmix: 'AIHubMix API',
+  bedrock: 'AWS Bedrock',
 };
 
 export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
@@ -195,6 +209,7 @@ export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   ollama: 'Ollama API key',
   senseaudio: 'SenseAudio API key',
   aihubmix: 'sk-...',
+  bedrock: 'AWS credentials',
 };
 
 // Default base URL the daemon assumes when the user leaves the field
@@ -208,6 +223,7 @@ export const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   ollama: 'https://ollama.com',
   senseaudio: 'https://api.senseaudio.cn',
   aihubmix: 'https://aihubmix.com/v1',
+  bedrock: 'https://bedrock-runtime.us-east-1.amazonaws.com',
 };
 
 // Fixed-origin gateways: managed single-endpoint providers where the user only

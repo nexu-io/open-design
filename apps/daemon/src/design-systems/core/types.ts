@@ -74,6 +74,21 @@ export type DesignSystemPullFileDetail = {
   content: string;
 };
 
+/**
+ * A design-system file resolved for static HTTP serving: raw bytes plus the
+ * `Content-Type` used to serve them. Unlike {@link DesignSystemPullFileDetail}
+ * the payload is always the raw `Buffer`, never base64-encoded.
+ */
+export type DesignSystemStaticFileDetail = {
+  path: string;
+  name: string;
+  kind: DesignSystemFileKind;
+  size: number;
+  updatedAt: string;
+  contentType: string;
+  bytes: Buffer;
+};
+
 /** Aggregated package metadata returned by `readDesignSystemPackageInfo`. */
 export type DesignSystemPackageInfo = {
   manifest?: DesignSystemProjectManifest;
@@ -191,6 +206,7 @@ export type DesignSystemProjectManifest = {
 /** Source context captured when a user design system was created. */
 export type DesignSystemProvenance = {
   companyBlurb?: string;
+  sourceUrls?: string[];
   githubUrls?: string[];
   localCodeFiles?: string[];
   figFiles?: string[];

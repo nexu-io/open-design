@@ -165,7 +165,7 @@ const REPO_CONTRIBUTORS = `${REPO}/graphs/contributors`;
 const REPO_DAEMON = `${REPO}/tree/main/apps/daemon`;
 const REPO_SKILLS = `${REPO}/tree/main/skills`;
 const REPO_DOCS = `${REPO}#readme`;
-const DISCORD = 'https://discord.gg/9ptkbbqRu';
+const DISCORD = 'https://discord.gg/mHAjSMV6gz';
 const X_TWITTER = 'https://x.com/OpenDesignHQ';
 const YOUTUBE = 'https://www.youtube.com/channel/UChtshixMhvtgBWzoD9R_Qfg';
 
@@ -490,6 +490,9 @@ export default function Page({
               <p className='hero-sub' data-reveal>
                 <BreakText text={t.heroSub} />
               </p>
+              {/* Product shot sits just under the hero copy. fetchPriority=low
+                  lets the full-bleed hero-bg (the LCP element, fetchpriority
+                  high) win the connection first; this still loads, just yields. */}
               <div className='hero-shot' data-reveal>
                 <img
                   src={heroProductImage}
@@ -499,6 +502,7 @@ export default function Page({
                   height={1450}
                   alt='Open Design desktop — design files & index.html preview'
                   decoding='async'
+                  fetchPriority='low'
                   className='hero-shot-img'
                 />
               </div>
@@ -731,7 +735,7 @@ export default function Page({
                 The app-window chrome is gone; the Dock magnifies on hover and
                 its tiles switch / auto-cycle the preview image in place
                 (enhancers in `pages/index.astro`). */}
-            <div className='lab-stage' data-reveal>
+            <div className='lab-stage' data-reveal data-precise-bg>
               {/* Floating artifact card layered over the painting background.
                   `enhanceLabSwitch` (pages/index.astro) swaps its src from the
                   dock and toggles visibility; the "图片" tile maps to the
@@ -948,7 +952,7 @@ export default function Page({
             JSON-LD, so the visible answers match the structured data. */}
         <section className='cta' id='contact' data-od-id='cta'>
           <div className='container'>
-            <div className='cta-dance'>
+            <div className='cta-dance' data-precise-bg>
               {/* Open Design Home window floating over the mural — sits above the
                   painting (::before) but below the CTA copy. Bottom is clipped by
                   the block's overflow:hidden, matching the reference comp.
@@ -961,6 +965,7 @@ export default function Page({
                 width={2996}
                 height={1870}
                 decoding='async'
+                loading='lazy'
                 data-reveal
               />
               <div className='cta-dance-inner'>

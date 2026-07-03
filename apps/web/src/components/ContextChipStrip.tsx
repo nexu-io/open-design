@@ -7,8 +7,7 @@
 // the parent can decide whether removing the chip should clear the
 // applied plugin (typical) or just hide it. Clicking the chip body
 // (when `onSelect` is wired) lets the host open a detail view —
-// ChatComposer uses this to surface the PluginDetailsModal for
-// `kind === 'plugin'` chips.
+// ChatComposer uses this to surface details modals for plugin and skill chips.
 
 import type { ContextItem, ContextItemKind } from '@open-design/contracts';
 import { Icon } from './Icon';

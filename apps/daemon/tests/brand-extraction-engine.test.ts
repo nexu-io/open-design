@@ -1,31 +1,43 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs, { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Brand } from '@open-design/contracts';
 
 import {
   closeDatabase,
+  deleteConversation,
   getProject,
+  listConversations,
+  listMessages,
+  listProjects,
   listTabs,
   openDatabase,
+  upsertMessage,
 } from '../src/db.js';
 import {
+  backfillBrandExtractionTranscriptForProject,
+  continueBrandExtraction,
   finalizeBrand,
   readBrandDetail,
+  reconcileProgrammaticExtractionTranscript,
   renderBrandPreviewIntoProject,
   startBrandExtraction,
 } from '../src/brands/index.js';
+import { findChrome } from '../src/brands/chrome.js';
 import { patchMeta } from '../src/brands/store.js';
 import { ensureLogoFallback } from '../src/brands/logo-fallback.js';
+import { brandFromMaterial } from '../src/brands/provisional.js';
 import { listDesignSystems } from '../src/design-systems/index.js';
+import { buildBrandSystem, deriveTokens, seedFromMaterial } from '../src/brands/engine/index.js';
 import {
   adoptExistingImagery,
   findImageRefs,
   imageSize,
   type ImagerySlot,
 } from '../src/brands/imagery-fallback.js';
-import { isChallengePage } from '../src/brands/prefetch.js';
+import { isChallengePage, type PrefetchResult } from '../src/brands/prefetch.js';
 
 // Real repo skills root so the bundled brand-kit template resolves.
 const SKILLS_ROOT = path.resolve(
@@ -55,6 +67,19 @@ function startOfflineBrandExtraction(
   });
 }
 
+// Regression guard for the seeded brand-extraction prompts. The daemon folds a
+// skill body into the SYSTEM prompt when a project has an active `skillId`; it
+// does NOT register `skills/` as Claude-Code `Skill` / slash commands. A seeded
+// prompt that tells the agent to "use the `brand-extract` skill" is therefore
+// executed as a `Skill {"skill":"brand-extract"}` tool call that has no registry
+// to resolve against and always fails — the red Skill card users hit mid-
+// extraction. The seeded prompt must never instruct loading/invoking a skill.
+function expectNoPhantomSkillCall(prompt: string): void {
+  expect(prompt).not.toMatch(/use the `?brand-extract`? skill/i);
+  expect(prompt).not.toMatch(/\buse the `[^`]+` skill\b/i);
+  expect(prompt).not.toMatch(/\bload the `?brand-extract`? skill\b/i);
+}
+
 /** Build a tiny but structurally-valid PNG buffer with the given dimensions so
  *  the imagery size gate decodes a real width/height (header-only). */
 function pngBuffer(width: number, height: number): Buffer {
@@ -74,6 +99,8 @@ const VALID_BRAND = {
   name: 'Acme',
   tagline: 'We make things',
   description: 'Acme makes excellent things for everyone.',
+  sourceUrl: 'https://acme.com/',
+  logo: { primary: null, alternates: [], notes: '' },
   colors: [
     { role: 'background', hex: '#f5f4ed', oklch: 'oklch(96% 0.01 90)', name: 'Parchment', usage: 'page background' },
     { role: 'surface', hex: '#ffffff', oklch: 'oklch(100% 0 0)', name: 'Card', usage: 'cards' },
@@ -87,13 +114,132 @@ const VALID_BRAND = {
     display: { family: 'Tiempos', fallbacks: ['Georgia', 'serif'], weights: [400, 600] },
     body: { family: 'Inter', fallbacks: ['system-ui'], weights: [400, 700] },
   },
-};
+  voice: {
+    adjectives: [],
+    tone: '',
+    messagingPillars: [],
+    vocabulary: { use: [], avoid: [] },
+  },
+  imagery: {
+    style: '',
+    subjects: [],
+    treatment: '',
+    avoid: [],
+    samples: [],
+  },
+  layout: {
+    radius: '',
+    borderWeight: '',
+    spacing: '',
+    postureRules: [],
+  },
+} satisfies Brand;
+
+const DESIGN_MD_INPUT = `---
+name: Heritage
+colors:
+  primary: "#1A1C1E"
+  secondary: "#6C7278"
+  tertiary: "#B8422E"
+  neutral: "#F7F5F2"
+typography:
+  h1:
+    fontFamily: Public Sans
+    fontSize: 3rem
+  body-md:
+    fontFamily: Public Sans
+    fontSize: 1rem
+rounded:
+  sm: 4px
+  md: 8px
+components:
+  button-primary:
+    backgroundColor: "{colors.tertiary}"
+---
+
+# Heritage
+
+## Overview
+Architectural Minimalism meets Journalistic Gravitas.
+
+## Colors
+- **Tertiary (#B8422E):** Boston Clay for interaction.
+`;
+
+function programmaticPrefetchResult(url: string): PrefetchResult {
+  return {
+    url,
+    finalUrl: url,
+    siteName: 'Acme',
+    title: 'Acme',
+    description: 'Acme makes excellent things for everyone.',
+    colors: [
+      { hex: '#f5f4ed', count: 12 },
+      { hex: '#141413', count: 9 },
+      { hex: '#b8422e', count: 8 },
+      { hex: '#3d7a4f', count: 3 },
+    ],
+    fonts: [{ family: 'Inter', count: 10 }],
+    fontFaceFamilies: [],
+    googleFontsUrls: [],
+    fontFiles: [],
+    logos: [],
+    headings: ['Excellent things'],
+    paragraphs: ['Acme makes useful products for careful teams.'],
+    navLabels: ['Product', 'Pricing'],
+    extraPages: [],
+    screenshot: null,
+    thin: false,
+    blocked: false,
+    materialMd: '# Acme\n\nExcellent things',
+  };
+}
 
 describe('agent-driven brand extraction engine', () => {
   let tempDir: string;
   let brandsRoot: string;
   let projectsRoot: string;
   let userDesignSystemsRoot: string;
+
+  it('keeps the generated default theme light even when the source canvas is dark', () => {
+    const darkCanvasBrand: Brand = {
+      ...VALID_BRAND,
+      name: 'Open Design',
+      colors: [
+        { role: 'background', hex: '#050505', oklch: 'oklch(14% 0 0)', name: 'Black', usage: 'source hero background' },
+        { role: 'surface', hex: '#0a0a0a', oklch: 'oklch(17% 0 0)', name: 'Panel', usage: 'source cards' },
+        { role: 'foreground', hex: '#f4f4f4', oklch: 'oklch(96% 0 0)', name: 'White', usage: 'source text' },
+        { role: 'accent', hex: '#56fe13', oklch: 'oklch(86% 0.29 142)', name: 'Signal Green', usage: 'primary actions' },
+      ],
+    };
+
+    const system = buildBrandSystem(darkCanvasBrand);
+
+    expect(system.themes.default.colorBgContainer).toBe('#ffffff');
+    expect(system.themes.default.colorText).toBe('#1f1f1f');
+    expect(system.themes.dark.colorBgContainer).toBe('#141414');
+    expect(system.themes.dark.colorText).toBe('#dcdcdc');
+    expect(system.files['kit.html']).toContain('--brand-color-bg-container: #ffffff;');
+    expect(system.files['kit.html']).toContain('--brand-color-text: #1f1f1f;');
+    expect(system.files['kit.html']).not.toContain('--brand-color-bg-container: #141414;');
+    expect(system.files['kit.dark.html']).toContain('--brand-color-bg-container: #141414;');
+  });
+
+  it('keeps programmatic dark-site material on a light default seed', () => {
+    const seed = seedFromMaterial({
+      colors: [
+        { hex: '#050505', count: 120 },
+        { hex: '#56fe13', count: 28 },
+      ],
+      fonts: [{ family: 'Albert Sans', count: 12 }],
+      fontFaceFamilies: [],
+    } as unknown as PrefetchResult);
+
+    expect(seed.colorBgBase).toBe('#ffffff');
+    expect(seed.colorTextBase).toBe('#000000');
+    expect(deriveTokens(seed, 'default').colorBgContainer).toBe('#ffffff');
+    expect(deriveTokens(seed, 'dark').colorBgContainer).toBe('#141414');
+  });
 
   beforeEach(() => {
     tempDir = mkdtempSync(path.join(os.tmpdir(), 'od-brand-engine-'));
@@ -108,6 +254,93 @@ describe('agent-driven brand extraction engine', () => {
   afterEach(() => {
     closeDatabase();
     rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('keeps the system Chrome fallback disabled unless explicitly opted in', () => {
+    const previousAllow = process.env.OD_BRAND_ALLOW_SYSTEM_CHROME;
+    const previousChrome = process.env.BRANDING_AGENT_CHROME;
+    delete process.env.OD_BRAND_ALLOW_SYSTEM_CHROME;
+    delete process.env.BRANDING_AGENT_CHROME;
+    try {
+      expect(findChrome()).toBeNull();
+    } finally {
+      if (previousAllow === undefined) delete process.env.OD_BRAND_ALLOW_SYSTEM_CHROME;
+      else process.env.OD_BRAND_ALLOW_SYSTEM_CHROME = previousAllow;
+      if (previousChrome === undefined) delete process.env.BRANDING_AGENT_CHROME;
+      else process.env.BRANDING_AGENT_CHROME = previousChrome;
+    }
+  });
+
+  it('prefers source-backed human brand tokens over script/debug color noise', () => {
+    const brand = brandFromMaterial({
+      url: 'https://open-design.ai/',
+      finalUrl: 'https://open-design.ai/',
+      siteName: 'Open Design',
+      title: 'Open Design',
+      description: 'Open Design design system.',
+      colors: [
+        { hex: '#262626', count: 19, sources: ['css-var:--ink'] },
+        { hex: '#15140f', count: 15, sources: ['css-var:--shadow-ink'] },
+        { hex: '#d8ffb5', count: 7, sources: ['selector:.hero-discord-pill:hover prop:background'] },
+        { hex: '#ffa500', count: 6, sources: ['prop:fillStyle selector:matter-debug-canvas'] },
+        { hex: '#83ff3b', count: 3, sources: ['css-var:--coral-soft'] },
+        { hex: '#63fe13', count: 2, sources: ['css-var:--coral', 'css-var:--mustard'] },
+        { hex: '#ffffff', count: 46, extreme: true, sources: ['css-var:--bone'] },
+        { hex: '#000000', count: 15, extreme: true, sources: ['prop:box-shadow'] },
+      ],
+      fonts: [{ family: 'Albert Sans', count: 2 }],
+      fontFaceFamilies: ['Albert Sans'],
+      googleFontsUrls: [],
+      fontFiles: [],
+      logos: [],
+      headings: ['Open Design The Open-source Claude Design alternative'],
+      paragraphs: ['Open Design is a local-first design platform.'],
+      navLabels: [],
+      extraPages: [],
+      screenshot: null,
+      thin: false,
+      blocked: false,
+      materialMd: '',
+    }, 'https://open-design.ai/');
+
+    expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe('#63fe13');
+    expect(brand.typography.body.family).toBe('Albert Sans');
+  });
+
+  it('allows a dominant near-black system to beat generic generated blue effects', () => {
+    const brand = brandFromMaterial({
+      url: 'https://refly.ai/',
+      finalUrl: 'https://refly.ai/',
+      siteName: 'Refly.ai-Vibe Workflow for Non-Technical Users',
+      title: 'Refly.ai-Vibe Workflow for Non-Technical Users',
+      description: 'Refly.ai empowers non-technical creators through natural language and a visual canvas.',
+      colors: [
+        { hex: '#d5dbe6', count: 191, sources: ['css-var:--token-f195ea74-7512-4096-8d91-0e7c7e10d0ab'] },
+        { hex: '#cfe7ff', count: 123, sources: ['prop:box-shadow selector:.framer-card'] },
+        { hex: '#0099ff', count: 117, sources: ['prop:background-color selector:.framer-generated-effect'] },
+        { hex: '#10131c', count: 66, sources: ['css-var:--token-f213e283-24d0-40a3-a2dc-bca1da07b971'] },
+        { hex: '#0e9f77', count: 18, sources: ['logo-svg:header-img-3.svg'] },
+        { hex: '#04070d', count: 174, extreme: true, sources: ['css-var:--token-eb09dbbf-ef85-4b7f-81a5-44e9b062efb7'] },
+        { hex: '#ffffff', count: 157, extreme: true, sources: ['css-var:--token-a85af9cb-7834-4006-a277-2dd1295ae376'] },
+        { hex: '#000000', count: 156, extreme: true, sources: ['prop:background selector:footer'] },
+      ],
+      fonts: [{ family: 'Inter', count: 157 }],
+      fontFaceFamilies: ['Inter'],
+      googleFontsUrls: [],
+      fontFiles: [],
+      logos: [],
+      headings: ['The World’s First Vibe Workflow Platform'],
+      paragraphs: ['Refly.ai empowers non-technical creators through natural language and a visual canvas.'],
+      navLabels: [],
+      extraPages: [],
+      screenshot: null,
+      thin: false,
+      blocked: false,
+      materialMd: '',
+    }, 'https://refly.ai/');
+
+    expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe('#04070d');
+    expect(brand.colors.find((color) => color.role === 'accent-secondary')?.hex).toBe('#0e9f77');
   });
 
   it('startBrandExtraction reserves the brand and seeds a live brand.html tab', async () => {
@@ -151,11 +384,821 @@ describe('agent-driven brand extraction engine', () => {
     expect(tabs.browserTabs?.[0]?.url).toBe('https://acme.com/');
   });
 
+  it('localizes the seeded brand.html copy from the creation locale', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      locale: 'zh-CN',
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+
+    const html = readFileSync(path.join(projectsRoot, result.projectId, 'brand.html'), 'utf8');
+    expect(html).toContain('<html lang="zh-CN">');
+    expect(html).toContain('<title>品牌设计体系</title>');
+    expect(html).toContain('"logo":"标志"');
+    expect(html).toContain('"brandReady":"设计体系已就绪"');
+  });
+
+  it('rolls back the reserved draft design system when brand startup fails', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    closeDatabase();
+
+    await expect(startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    })).rejects.toThrow();
+
+    const systems = await listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    });
+    expect(systems).toHaveLength(0);
+  });
+
+  it('rolls back brand startup state when setup fails after project insert', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+
+    await expect(startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      randomId: () => {
+        throw new Error('conversation id failed');
+      },
+    })).rejects.toThrow('conversation id failed');
+
+    expect(listProjects(db)).toHaveLength(0);
+    expect(readdirSync(projectsRoot)).toEqual([]);
+    expect(readdirSync(brandsRoot)).toEqual([]);
+    const systems = await listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    });
+    expect(systems).toHaveLength(0);
+  });
+
+  it('rolls back brand startup state when design-md staging fails before draft reservation', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const mkdirSyncOriginal = fs.mkdirSync.bind(fs);
+    const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementation(((target, options) => {
+      if (String(target).endsWith(`${path.sep}context`)) {
+        throw new Error('design-md staging failed');
+      }
+      return mkdirSyncOriginal(target, options as fs.MakeDirectoryOptions);
+    }) as typeof fs.mkdirSync);
+
+    try {
+      await expect(startOfflineBrandExtraction({
+        designMd: DESIGN_MD_INPUT,
+        brandsRoot,
+        projectsRoot,
+        userDesignSystemsRoot,
+        skillsRoot: SKILLS_ROOT,
+        db,
+        logoFallback: NO_LOGO_FALLBACK,
+      })).rejects.toThrow('design-md staging failed');
+    } finally {
+      mkdirSpy.mockRestore();
+    }
+
+    expect(listProjects(db)).toHaveLength(0);
+    expect(readdirSync(projectsRoot)).toEqual([]);
+    expect(readdirSync(brandsRoot)).toEqual([]);
+    const systems = await listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    });
+    expect(systems).toHaveLength(0);
+  });
+
+  it('seeds a running chat transcript immediately and completes it when the programmatic pass returns ready', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const startedBeforeRequest = Date.now();
+    let backgroundExtraction: Promise<unknown> | null = null;
+
+    const result = await startOfflineBrandExtraction({
+      designMd: DESIGN_MD_INPUT,
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+    });
+    const returnedAfterRequest = Date.now();
+
+    expect(result.status).toBe('extracting');
+    expect(result.designSystemId).toMatch(/^user:/);
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    const initialMessages = listMessages(db, result.conversationId);
+    expect(initialMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(initialMessages[0]?.content).toContain('pasted DESIGN.md');
+    expect(initialMessages[1]?.content).toContain('Programmatic design-system extraction started');
+    expect(initialMessages[1]?.agentId).toBe('claude');
+    expect(initialMessages[1]?.agentName).toBe('Claude');
+    expect(initialMessages[1]?.runStatus).toBe('running');
+    expect(initialMessages[0]?.createdAt).toBe(initialMessages[1]?.startedAt);
+    expect(initialMessages[1]?.startedAt).toBeGreaterThanOrEqual(startedBeforeRequest);
+    expect(initialMessages[1]?.endedAt).toBeUndefined();
+    expect(getProject(db, result.projectId)?.pendingPrompt).toBeUndefined();
+
+    await backgroundExtraction;
+    for (let i = 0; i < 20; i += 1) {
+      const messages = listMessages(db, result.conversationId);
+      if (messages.some((message) => message.content.includes('Programmatic extraction finished'))) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    const endedAfterCompletion = Date.now();
+
+    const completedMessages = listMessages(db, result.conversationId);
+    expect(completedMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(completedMessages[1]?.content).toContain('Programmatic extraction finished');
+    expect(completedMessages[1]?.agentId).toBe('claude');
+    expect(completedMessages[1]?.agentName).toBe('Claude');
+    expect(completedMessages[1]?.runStatus).toBe('succeeded');
+    expect(completedMessages[0]?.createdAt).toBe(completedMessages[1]?.startedAt);
+    expect(completedMessages[1]?.startedAt).toBe(initialMessages[1]?.startedAt);
+    expect(completedMessages[1]?.endedAt).toBeGreaterThanOrEqual(returnedAfterRequest);
+    expect(completedMessages[1]?.endedAt).toBeLessThanOrEqual(endedAfterCompletion);
+    expect(completedMessages[1]?.endedAt).toBeGreaterThanOrEqual(completedMessages[1]?.startedAt ?? 0);
+    const producedFiles = (Array.isArray(completedMessages[1]?.producedFiles)
+      ? completedMessages[1].producedFiles
+      : []) as Array<{ name?: unknown }>;
+    const producedNames = producedFiles
+      .map((file) => file.name)
+      .filter((name): name is string => typeof name === 'string');
+    expect(producedNames).toContain('brand.html');
+    expect(producedNames.some((name: string) => name.startsWith('system/'))).toBe(true);
+    expect(producedNames.length).toBeGreaterThan(1);
+    const detail = readBrandDetail(brandsRoot, result.id);
+    expect(detail?.meta.status).toBe('ready');
+    expect(detail?.meta.designSystemId?.startsWith('user:')).toBe(true);
+  });
+
+  it('keeps the programmatic transcript when other messages arrive before background completion', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let releasePrefetch!: () => void;
+    const prefetchGate = new Promise<void>((resolve) => {
+      releasePrefetch = resolve;
+    });
+    let backgroundExtraction: Promise<unknown> | null = null;
+
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async (url) => {
+        await prefetchGate;
+        return programmaticPrefetchResult(url);
+      },
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+
+    expect(result.status).toBe('extracting');
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    const initialMessages = listMessages(db, result.conversationId);
+    expect(initialMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(initialMessages[0]?.content).toContain('https://acme.com/');
+    expect(initialMessages[1]?.content).toContain('Programmatic design-system extraction started');
+    expect(initialMessages[1]?.agentId).toBe('claude');
+    expect(initialMessages[1]?.runStatus).toBe('running');
+    expect(initialMessages[1]?.startedAt).toBe(initialMessages[0]?.createdAt);
+
+    upsertMessage(db, result.conversationId, {
+      id: 'manual-user-message',
+      role: 'user',
+      content: 'hello while extraction is still running',
+    });
+
+    releasePrefetch();
+    await backgroundExtraction;
+    for (let i = 0; i < 20; i += 1) {
+      const messages = listMessages(db, result.conversationId);
+      if (messages.some((message) => message.content.includes('Programmatic extraction finished'))) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    const messages = listMessages(db, result.conversationId);
+    expect(messages.some((message) => message.content === 'hello while extraction is still running')).toBe(true);
+    const assistant = messages.find((message) => message.content.includes('Programmatic extraction finished'));
+    expect(assistant?.role).toBe('assistant');
+    expect(assistant?.agentId).toBe('claude');
+    expect(assistant?.runStatus).toBe('succeeded');
+    expect(assistant?.producedFiles?.length).toBeGreaterThan(1);
+  });
+
+  it('stops the programmatic pass without finalizing or seeding a fallback run prompt', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const controller = new AbortController();
+    let releasePrefetch!: () => void;
+    const prefetchGate = new Promise<void>((resolve) => {
+      releasePrefetch = resolve;
+    });
+    let backgroundExtraction: Promise<unknown> | null = null;
+
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async (url) => {
+        await prefetchGate;
+        return programmaticPrefetchResult(url);
+      },
+      programmaticAbortSignal: controller.signal,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+
+    expect(getProject(db, result.projectId)?.pendingPrompt).toBeUndefined();
+    controller.abort();
+    releasePrefetch();
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const detail = readBrandDetail(brandsRoot, result.id);
+    expect(detail?.meta.status).toBe('extracting');
+    // Entity-first: the user:<id> design system exists as a DRAFT from the start
+    // (so it shows under "Your systems" and stays editable), but the brand is
+    // not finalized — the draft was never promoted to published.
+    expect(detail?.meta.designSystemId).toMatch(/^user:/);
+    const stoppedSystems = await listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    });
+    expect(stoppedSystems.find((s) => s.id === detail?.meta.designSystemId)?.status).toBe('draft');
+    expect(getProject(db, result.projectId)?.pendingPrompt).toBeUndefined();
+    const messages = listMessages(db, result.conversationId);
+    expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(messages[1]?.runStatus).toBe('running');
+    expect(messages[1]?.content).toContain('Programmatic design-system extraction started');
+  });
+
+  // Regression for the "Spotify" P1: a blocked / give-up origin used to leave the
+  // synthetic "AMR · Working" row counting up forever while the brand stayed
+  // `extracting`. The give-up now retires the row into the actionable terminal so
+  // the user sees a next step instead of an infinite clock.
+  it('retires the synthetic row into an actionable terminal when the programmatic pass gives up', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
+    const result = await startOfflineBrandExtraction({
+      url: 'blocked.example',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async () => null,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
+
+    const messages = listMessages(db, result.conversationId);
+    expect(messages[1]?.runStatus).toBe('failed');
+    expect(messages[1]?.endedAt).toBeGreaterThan(0);
+    expect(messages[1]?.content).toContain('needs a hand');
+    // The agent fallback still takes over from the scaffold.
+    expect(getProject(db, result.projectId)?.pendingPrompt).toContain('DESIGN SYSTEM EXTRACTION');
+    // The automatic pass is terminal; the user can restart it explicitly or use
+    // the Browser/agent fallback from the saved draft.
+    expect(readBrandDetail(brandsRoot, result.id)?.meta.status).toBe('failed');
+  });
+
+  it('continues an incomplete programmatic extraction in the same project and design system', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let firstBackground: Promise<unknown> | null = null;
+    const result = await startOfflineBrandExtraction({
+      url: 'blocked.example',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async () => null,
+      onBackgroundExtraction: (settled) => {
+        firstBackground = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    if (!firstBackground) throw new Error('expected background extraction promise');
+    await firstBackground;
+
+    const draftDesignSystemId = readBrandDetail(brandsRoot, result.id)?.meta.designSystemId;
+    expect(draftDesignSystemId).toMatch(/^user:/);
+    expect(listMessages(db, result.conversationId).map((message) => message.role)).toEqual(['user', 'assistant']);
+
+    let retryBackground: Promise<unknown> | null = null;
+    const retry = await continueBrandExtraction({
+      id: result.id,
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+      prefetch: async (url) => programmaticPrefetchResult(url),
+      onBackgroundExtraction: (settled) => {
+        retryBackground = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+
+    expect(retry.projectId).toBe(result.projectId);
+    expect(retry.conversationId).toBe(result.conversationId);
+    expect(retry.designSystemId).toBe(draftDesignSystemId);
+    expect(retry.status).toBe('extracting');
+    const retryStartedMessages = listMessages(db, result.conversationId);
+    expect(retryStartedMessages.map((message) => message.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+    expect(retryStartedMessages[3]?.runStatus).toBe('running');
+    expect(retryStartedMessages[3]?.content).toContain('Programmatic design-system extraction started');
+
+    if (!retryBackground) throw new Error('expected retry background extraction promise');
+    await retryBackground;
+    for (let i = 0; i < 20; i += 1) {
+      const messages = listMessages(db, result.conversationId);
+      if (messages.some((message) => message.content.includes('Programmatic extraction finished'))) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    const completed = readBrandDetail(brandsRoot, result.id);
+    expect(completed?.meta.status).toBe('ready');
+    expect(completed?.meta.designSystemId).toBe(draftDesignSystemId);
+    const systems = await listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    });
+    expect(systems.filter((system) => system.id === draftDesignSystemId)).toHaveLength(1);
+    const messages = listMessages(db, result.conversationId);
+    expect(messages[3]?.runStatus).toBe('succeeded');
+  });
+
+  it('ignores a stale programmatic attempt that resumes after a newer retry finalizes', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let releaseFirstPrefetch!: () => void;
+    const firstPrefetchGate = new Promise<void>((resolve) => {
+      releaseFirstPrefetch = resolve;
+    });
+    let firstBackground: Promise<unknown> | null = null;
+    const staleMaterial = (url: string): PrefetchResult => ({
+      ...programmaticPrefetchResult(url),
+      siteName: 'Staleco',
+      title: 'Staleco',
+      description: 'Staleco should never overwrite the retry.',
+      headings: ['Staleco stale attempt'],
+      paragraphs: ['Staleco resumed after a newer retry completed.'],
+      materialMd: '# Staleco\n\nStale attempt',
+    });
+    const retryMaterial = (url: string): PrefetchResult => ({
+      ...programmaticPrefetchResult(url),
+      siteName: 'Retryco',
+      title: 'Retryco',
+      description: 'Retryco is the newer successful retry.',
+      headings: ['Retryco retry attempt'],
+      paragraphs: ['Retryco completed before the original attempt resumed.'],
+      materialMd: '# Retryco\n\nNewer retry attempt',
+    });
+
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async (url) => {
+        await firstPrefetchGate;
+        return staleMaterial(url);
+      },
+      onBackgroundExtraction: (settled) => {
+        firstBackground = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    const firstAttemptId = readBrandDetail(brandsRoot, result.id)?.meta.extractionAttemptId;
+    expect(firstAttemptId).toBeTruthy();
+
+    let retryBackground: Promise<unknown> | null = null;
+    await continueBrandExtraction({
+      id: result.id,
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+      prefetch: async (url) => retryMaterial(url),
+      onBackgroundExtraction: (settled) => {
+        retryBackground = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    const retryAttemptId = readBrandDetail(brandsRoot, result.id)?.meta.extractionAttemptId;
+    expect(retryAttemptId).toBeTruthy();
+    expect(retryAttemptId).not.toBe(firstAttemptId);
+
+    if (!retryBackground) throw new Error('expected retry background extraction promise');
+    await retryBackground;
+    expect(readBrandDetail(brandsRoot, result.id)?.brand?.name).toBe('Retryco');
+
+    releaseFirstPrefetch();
+    if (!firstBackground) throw new Error('expected first background extraction promise');
+    await firstBackground;
+
+    const completed = readBrandDetail(brandsRoot, result.id);
+    expect(completed?.meta.status).toBe('ready');
+    expect(completed?.meta.extractionAttemptId).toBe(retryAttemptId);
+    expect(completed?.brand?.name).toBe('Retryco');
+    expect(getProject(db, result.projectId)?.name).toBe('Retryco Design System');
+  });
+
+  it('continues a brand extraction with a fresh conversation when the recorded one was deleted', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let firstBackground: Promise<unknown> | null = null;
+    const result = await startOfflineBrandExtraction({
+      url: 'blocked.example',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async () => null,
+      onBackgroundExtraction: (settled) => {
+        firstBackground = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    if (!firstBackground) throw new Error('expected background extraction promise');
+    await firstBackground;
+
+    const draftDesignSystemId = readBrandDetail(brandsRoot, result.id)?.meta.designSystemId;
+    deleteConversation(db, result.conversationId);
+    expect(listConversations(db, result.projectId).some((conversation) => (
+      conversation.id === result.conversationId
+    ))).toBe(false);
+
+    const ids = ['retry-conversation', 'retry-user-message', 'retry-assistant-message'];
+    let idIndex = 0;
+    let retryBackground: Promise<unknown> | null = null;
+    const retry = await continueBrandExtraction({
+      id: result.id,
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      randomId: () => ids[idIndex++] ?? `retry-extra-${idIndex}`,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+      prefetch: async (url) => programmaticPrefetchResult(url),
+      onBackgroundExtraction: (settled) => {
+        retryBackground = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+
+    expect(retry.projectId).toBe(result.projectId);
+    expect(retry.conversationId).toBe('retry-conversation');
+    expect(retry.conversationId).not.toBe(result.conversationId);
+    expect(retry.designSystemId).toBe(draftDesignSystemId);
+    expect(readBrandDetail(brandsRoot, result.id)?.meta.conversationId).toBe('retry-conversation');
+    const retryStartedMessages = listMessages(db, retry.conversationId);
+    expect(retryStartedMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(retryStartedMessages[1]?.runStatus).toBe('running');
+
+    if (!retryBackground) throw new Error('expected retry background extraction promise');
+    await retryBackground;
+
+    const completed = readBrandDetail(brandsRoot, result.id);
+    expect(completed?.meta.status).toBe('ready');
+    expect(completed?.meta.designSystemId).toBe(draftDesignSystemId);
+    expect(listMessages(db, retry.conversationId)[1]?.runStatus).toBe('succeeded');
+  });
+
+  // Regression for the "Whole Foods" P1: a brand that finalizes AFTER the stall
+  // checkpoint already posted the "needs a hand" card used to leave the row stuck
+  // `running`. A finalize now authoritatively overwrites whatever the row showed
+  // with `succeeded`, and that success is never downgraded afterwards.
+  it('overwrites a stalled row with success on finalize and never downgrades it', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async () => null,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
+    expect(listMessages(db, result.conversationId)[1]?.runStatus).toBe('failed');
+
+    // Simulate the brand finalizing `ready` later (heavy site / agent finished).
+    patchMeta(brandsRoot, result.id, { status: 'ready', designSystemId: 'user:acme-late' });
+    await reconcileProgrammaticExtractionTranscript({
+      db,
+      brandsRoot,
+      projectsRoot,
+      brandId: result.id,
+      outcome: 'succeeded',
+    });
+    const afterSuccess = listMessages(db, result.conversationId)[1];
+    expect(afterSuccess?.runStatus).toBe('succeeded');
+    expect(afterSuccess?.content).toContain('user:acme-late');
+
+    // A later stall/give-up reconcile must NOT downgrade a recorded success.
+    await reconcileProgrammaticExtractionTranscript({
+      db,
+      brandsRoot,
+      projectsRoot,
+      brandId: result.id,
+      outcome: 'needs_attention',
+    });
+    expect(listMessages(db, result.conversationId)[1]?.runStatus).toBe('succeeded');
+  });
+
+  // Models the HTTP cancel route: a deliberate Stop on a still-running pass
+  // retires the row into the `canceled` terminal so Stop visibly works.
+  it('reconciles a still-running row to canceled on user stop', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const controller = new AbortController();
+    let releasePrefetch!: () => void;
+    const prefetchGate = new Promise<void>((resolve) => {
+      releasePrefetch = resolve;
+    });
+    let backgroundExtraction: Promise<unknown> | null = null;
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async (url) => {
+        await prefetchGate;
+        return programmaticPrefetchResult(url);
+      },
+      programmaticAbortSignal: controller.signal,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    expect(listMessages(db, result.conversationId)[1]?.runStatus).toBe('running');
+
+    controller.abort();
+    releasePrefetch();
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
+    // The engine abort path leaves the row running; the cancel route owns the flip.
+    await reconcileProgrammaticExtractionTranscript({
+      db,
+      brandsRoot,
+      projectsRoot,
+      brandId: result.id,
+      outcome: 'stopped',
+    });
+    const stopped = listMessages(db, result.conversationId)[1];
+    expect(stopped?.runStatus).toBe('canceled');
+    expect(stopped?.content).toContain('stopped');
+  });
+
+  it('lets user stop overwrite an earlier stalled programmatic transcript row', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const controller = new AbortController();
+    let releasePrefetch!: () => void;
+    const prefetchGate = new Promise<void>((resolve) => {
+      releasePrefetch = resolve;
+    });
+    let backgroundExtraction: Promise<unknown> | null = null;
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async (url) => {
+        await prefetchGate;
+        return programmaticPrefetchResult(url);
+      },
+      programmaticAbortSignal: controller.signal,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+
+    await reconcileProgrammaticExtractionTranscript({
+      db,
+      brandsRoot,
+      projectsRoot,
+      brandId: result.id,
+      outcome: 'needs_attention',
+    });
+    const stalled = listMessages(db, result.conversationId)[1];
+    expect(stalled?.runStatus).toBe('failed');
+    expect(stalled?.content).toContain('needs a hand');
+    expect(stalled?.content).toContain('<od-card type="brand-browser-assist">');
+    expect(stalled?.content).toContain('"browserTabId":"__browser__:1"');
+
+    controller.abort();
+    releasePrefetch();
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
+    await reconcileProgrammaticExtractionTranscript({
+      db,
+      brandsRoot,
+      projectsRoot,
+      brandId: result.id,
+      outcome: 'stopped',
+    });
+
+    const stopped = listMessages(db, result.conversationId)[1];
+    expect(stopped?.runStatus).toBe('canceled');
+    expect(stopped?.content).toContain('stopped');
+  });
+
+  it('backfills a programmatic transcript for empty legacy brand conversations', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+    expect(listMessages(db, result.conversationId)).toEqual([]);
+    const project = getProject(db, result.projectId);
+    if (!project) throw new Error('expected project');
+    let seq = 0;
+
+    await backfillBrandExtractionTranscriptForProject({
+      db,
+      conversationId: result.conversationId,
+      randomId: () => `backfill-message-${seq += 1}`,
+      brandsRoot,
+      projectsRoot,
+      project,
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+
+    const messages = listMessages(db, result.conversationId);
+    expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(messages[1]?.content).toContain('Programmatic design-system extraction started');
+    expect(messages[1]?.agentId).toBe('claude');
+    expect(messages[1]?.runStatus).toBe('running');
+  });
+
   it('rejects a non-http(s) URL', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     await expect(
       startOfflineBrandExtraction({ url: 'ftp://nope', brandsRoot, projectsRoot, skillsRoot: SKILLS_ROOT, db }),
     ).rejects.toThrow(/valid http/i);
+  });
+
+  // The bug: an extraction run opened with a seeded prompt that said "use the
+  // `brand-extract` skill", which the agent ran as a `Skill {"skill":
+  // "brand-extract"}` tool call that always fails (the daemon does not expose
+  // `skills/` as Claude-Code slash skills). These tests pin every seeded prompt
+  // the agent can actually receive so the inducement can never come back.
+  it('website ENRICHMENT prompt never tells the agent to invoke a brand-extract skill', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    // No userDesignSystemsRoot → no programmatic pass → the enrichment prompt is
+    // seeded directly (matches the "reserves the brand" baseline test).
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+    const prompt = getProject(db, result.projectId)?.pendingPrompt ?? '';
+    expect(prompt).toContain('DESIGN SYSTEM ENRICHMENT');
+    // Workflow stays inline and the real measurement tool is still named.
+    expect(prompt).toContain('agent-browser');
+    expectNoPhantomSkillCall(prompt);
+    // And it positively steers the agent away from the phantom call.
+    expect(prompt).toContain('Do NOT try to load or invoke a `brand-extract` skill');
+  });
+
+  it('website EXTRACTION fallback prompt never tells the agent to invoke a brand-extract skill', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
+    // userDesignSystemsRoot + a fully blocked origin → the programmatic pass
+    // bails and the agent drives from the scaffold on the fallback prompt.
+    const result = await startOfflineBrandExtraction({
+      url: 'blocked.example',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      userDesignSystemsRoot,
+      prefetch: async () => null,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+    });
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
+    const prompt = getProject(db, result.projectId)?.pendingPrompt ?? '';
+    expect(prompt).toContain('DESIGN SYSTEM EXTRACTION');
+    expect(prompt).toContain('agent-browser');
+    expectNoPhantomSkillCall(prompt);
+    expect(prompt).toContain('Do NOT try to load or invoke a `brand-extract` skill');
+  });
+
+  it('DESIGN.md enrichment prompt never tells the agent to invoke a brand-extract skill', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
+    // Pasted DESIGN.md (no website) → the programmatic parser registers a system
+    // and seeds the DESIGN.md enrichment prompt. This branch never used the skill
+    // phrasing, but the guard keeps it that way as the prompts evolve.
+    const result = await startOfflineBrandExtraction({
+      designMd: DESIGN_MD_INPUT,
+      description: 'A custom newsroom system for sharp editorial tools.',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      userDesignSystemsRoot,
+      prefetch: async () => {
+        throw new Error('website prefetch should not run for DESIGN.md-only input');
+      },
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+    });
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
+    const prompt = getProject(db, result.projectId)?.pendingPrompt ?? '';
+    expect(prompt).toContain('context/input-DESIGN.md');
+    expectNoPhantomSkillCall(prompt);
   });
 
   it('renderBrandPreviewIntoProject re-renders brand.html from a partial brand.json', async () => {
@@ -194,6 +1237,13 @@ describe('agent-driven brand extraction engine', () => {
     // The partial palette flowed into the embedded payload, still "extracting".
     expect(html).toContain('"status":"extracting"');
     expect(html).toContain('#d97757');
+    expect(html).toContain('data-od-id="brand-name"');
+    expect(html).toContain('data-od-id="brand-color-hex-');
+    expect(html).toContain('data-od-id="brand-palette"');
+    expect(html).toContain("e.key === 'ArrowLeft'");
+    expect(html).toContain('showLight(lightIdx - 1)');
+    expect(html).toContain("e.key === 'ArrowRight'");
+    expect(html).toContain('showLight(lightIdx + 1)');
   });
 
   it('finalizeBrand registers the kit, marks it ready, and lights up the assets', async () => {
@@ -378,7 +1428,7 @@ describe('agent-driven brand extraction engine', () => {
     expect(html).toContain('imagery/product.webp');
     // The kit template ships the gallery + font-specimen-tile renderers.
     expect(html).toContain('<div class="gallery">');
-    expect(html).toContain('<div class="fonts">');
+    expect(html).toContain('<div class="fonts" data-od-id="brand-fonts"');
   });
 
   it('preview falls back to a logo alternate when logo.primary is empty', async () => {
@@ -748,8 +1798,9 @@ describe('agent-driven brand extraction engine', () => {
     expect(html).toContain('imagery/cover-0.jpg');
   });
 
-  it('startBrandExtraction finalizes a usable design system programmatically before returning', async () => {
+  it('startBrandExtraction starts programmatic design-system extraction in the background', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
 
     // Stub the network harvest: write a real logo into the brand dir and return
     // measured material, exactly as the live prefetch would, but offline.
@@ -802,19 +1853,45 @@ describe('agent-driven brand extraction engine', () => {
       prefetch: stubPrefetch,
       logoFallback: NO_LOGO_FALLBACK,
       imageryFallback: NO_IMAGERY_FALLBACK,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
     });
 
-    // The design system is registered + ready the moment startBrandExtraction
-    // returns — no agent run required (the instant "aha").
+    // The project and transcript are available immediately while the
+    // deterministic harvest continues in the background.
+    expect(result.status).toBe('extracting');
+    expect(result.designSystemId).toMatch(/^user:/);
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    const initialMessages = listMessages(db, result.conversationId);
+    expect(initialMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(initialMessages[0]?.content).toContain('https://acme.com/');
+    expect(initialMessages[1]?.content).toContain('Programmatic design-system extraction started');
+    expect(initialMessages[1]?.runStatus).toBe('running');
+
+    await backgroundExtraction;
+    for (let i = 0; i < 20; i += 1) {
+      const messages = listMessages(db, result.conversationId);
+      if (messages.some((message) => message.content.includes('Programmatic extraction finished'))) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    // The background pass registers and syncs the usable design system — no
+    // agent run required.
     const detail = readBrandDetail(brandsRoot, result.id);
     expect(detail?.meta.status).toBe('ready');
     expect(detail?.meta.designSystemId?.startsWith('user:')).toBe(true);
     expect(detail?.brand?.name).toBe('Acme');
     expect(detail?.brand?.tagline).toBe('We make things');
     expect(detail?.brand?.logo.primary).toBe('logos/header.svg');
+    const completedMessages = listMessages(db, result.conversationId);
+    const completedAssistant = completedMessages.find((message) =>
+      message.content.includes('Programmatic extraction finished'),
+    );
+    expect(completedAssistant?.runStatus).toBe('succeeded');
 
     // The backing project's design system page renders ready, with the six
-    // artifacts built, so it is immediately applyable.
+    // artifacts built, so it is applyable once the background pass settles.
     const projectDir = path.join(projectsRoot, result.projectId);
     const html = readFileSync(path.join(projectDir, 'brand.html'), 'utf8');
     expect(html).toContain('"status":"ready"');
@@ -835,11 +1912,75 @@ describe('agent-driven brand extraction engine', () => {
     expect(project?.designSystemId).toBe(detail?.meta.designSystemId);
   });
 
-  it('startBrandExtraction stays in extracting when the programmatic harvest fails', async () => {
+  it('startBrandExtraction registers directly from a pasted DESIGN.md without a website', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
+
+    const result = await startOfflineBrandExtraction({
+      designMd: DESIGN_MD_INPUT,
+      description: 'A custom newsroom system for sharp editorial tools.',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      userDesignSystemsRoot,
+      prefetch: async () => {
+        throw new Error('website prefetch should not run for DESIGN.md-only input');
+      },
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+    });
+
+    expect(result.status).toBe('extracting');
+    expect(result.designSystemId).toMatch(/^user:/);
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    const initialMessages = listMessages(db, result.conversationId);
+    expect(initialMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(initialMessages[0]?.content).toContain('pasted DESIGN.md');
+    expect(initialMessages[1]?.content).toContain('Programmatic design-system extraction started');
+    expect(initialMessages[1]?.runStatus).toBe('running');
+
+    await backgroundExtraction;
+    for (let i = 0; i < 20; i += 1) {
+      const messages = listMessages(db, result.conversationId);
+      if (messages.some((message) => message.content.includes('Programmatic extraction finished'))) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    const detail = readBrandDetail(brandsRoot, result.id);
+    expect(detail?.meta.status).toBe('ready');
+    expect(detail?.meta.sourceUrl).toBe('designmd://heritage');
+    expect(detail?.meta.designSystemId?.startsWith('user:')).toBe(true);
+    expect(detail?.brand?.name).toBe('Heritage');
+    expect(detail?.brand?.description).toContain('custom newsroom');
+    expect(detail?.brand?.colors.find((color) => color.role === 'accent')?.hex).toBe('#b8422e');
+    expect(detail?.brand?.typography.display.family).toBe('Public Sans');
+    const completedMessages = listMessages(db, result.conversationId);
+    const completedAssistant = completedMessages.find((message) =>
+      message.content.includes('Programmatic extraction finished'),
+    );
+    expect(completedAssistant?.runStatus).toBe('succeeded');
+
+    const projectDir = path.join(projectsRoot, result.projectId);
+    expect(readFileSync(path.join(projectDir, 'context', 'input-DESIGN.md'), 'utf8')).toContain('name: Heritage');
+    expect(existsSync(path.join(projectDir, 'system', 'scripts', 'apply-design-tokens.mjs'))).toBe(true);
+    const project = getProject(db, result.projectId);
+    expect(project?.pendingPrompt ?? '').toContain('context/input-DESIGN.md');
+    expect(project?.designSystemId).toBe(detail?.meta.designSystemId);
+    const tabs = listTabs(db, result.projectId);
+    expect('browserTabs' in tabs ? tabs.browserTabs ?? [] : []).toHaveLength(0);
+  });
+
+  it('startBrandExtraction renders a failed preview when the programmatic harvest fails', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
 
     // Prefetch returns null (fully blocked / unreachable origin) → no design
-    // system is built and the agent takes over from the scaffold.
+    // system is built; once the background pass settles, the draft becomes
+    // editable and the agent/browser fallback can continue from it.
     const result = await startOfflineBrandExtraction({
       url: 'acme.com',
       brandsRoot,
@@ -850,23 +1991,101 @@ describe('agent-driven brand extraction engine', () => {
       prefetch: async () => null,
       logoFallback: NO_LOGO_FALLBACK,
       imageryFallback: NO_IMAGERY_FALLBACK,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
     });
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
 
     const detail = readBrandDetail(brandsRoot, result.id);
-    expect(detail?.meta.status).toBe('extracting');
-    expect(detail?.meta.designSystemId).toBeUndefined();
+    expect(detail?.meta.status).toBe('failed');
+    // Entity-first: the draft design system exists, but was not finalized.
+    expect(detail?.meta.designSystemId).toMatch(/^user:/);
+    const draftSystems = await listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    });
+    expect(draftSystems.find((s) => s.id === detail?.meta.designSystemId)?.status).toBe('draft');
 
     const html = readFileSync(path.join(projectsRoot, result.projectId, 'brand.html'), 'utf8');
-    expect(html).toContain('"status":"extracting"');
+    expect(html).toContain('"status":"failed"');
+    expect(html).toContain('"extractionFailed":"Extraction failed"');
+  });
+
+  it('renders stopped programmatic extraction previews as a saved draft', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+    });
+
+    patchMeta(brandsRoot, result.id, { status: 'failed', error: 'Stopped by user' });
+    await renderBrandPreviewIntoProject({
+      id: result.id,
+      brandsRoot,
+      skillsRoot: SKILLS_ROOT,
+      projectsRoot,
+      projectId: result.projectId,
+      previewStatus: 'draft',
+    });
+
+    const html = readFileSync(path.join(projectsRoot, result.projectId, 'brand.html'), 'utf8');
+    expect(html).toContain('"status":"draft"');
+    expect(html).toContain('"draftSaved":"Draft saved"');
+    expect(html).not.toContain('"status":"extracting"');
+  });
+
+  it('renders genuinely failed extraction previews as failed', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+    });
+
+    patchMeta(brandsRoot, result.id, {
+      status: 'failed',
+      error: 'Daemon extraction failed',
+    });
+    await renderBrandPreviewIntoProject({
+      id: result.id,
+      brandsRoot,
+      skillsRoot: SKILLS_ROOT,
+      projectsRoot,
+      projectId: result.projectId,
+    });
+
+    const html = readFileSync(path.join(projectsRoot, result.projectId, 'brand.html'), 'utf8');
+    expect(html).toContain('"status":"failed"');
+    expect(html).toContain('"extractionFailed":"Extraction failed"');
   });
 
   it('does not finalize blocked or thin programmatic harvests as ready', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
 
-    for (const [host, flags] of [
-      ['blocked.example', { blocked: true, thin: true }],
-      ['thin.example', { blocked: false, thin: true }],
+    for (const [host, flags, expectedStatus, expectedKitStatus] of [
+      // A blocked origin is recoverable via the in-app Browser tab + Continue, so
+      // it parks in the calm `needs_input` state (kit shows the in-progress
+      // "extracting" view) rather than the red `failed` terminal.
+      ['blocked.example', { blocked: true, thin: true }, 'needs_input', 'extracting'],
+      // A genuinely thin, non-blocked harvest is unrecoverable and stays `failed`.
+      ['thin.example', { blocked: false, thin: true }, 'failed', 'failed'],
     ] as const) {
+      let backgroundExtraction: Promise<unknown> | null = null;
       const result = await startOfflineBrandExtraction({
         url: host,
         brandsRoot,
@@ -899,13 +2118,19 @@ describe('agent-driven brand extraction engine', () => {
         }),
         logoFallback: NO_LOGO_FALLBACK,
         imageryFallback: NO_IMAGERY_FALLBACK,
+        onBackgroundExtraction: (settled) => {
+          backgroundExtraction = settled;
+        },
       });
+      if (!backgroundExtraction) throw new Error('expected background extraction promise');
+      await backgroundExtraction;
 
       const detail = readBrandDetail(brandsRoot, result.id);
-      expect(detail?.meta.status).toBe('extracting');
-      expect(detail?.meta.designSystemId).toBeUndefined();
+      expect(detail?.meta.status).toBe(expectedStatus);
+      // Entity-first: the draft exists after the give-up but is not promoted.
+      expect(detail?.meta.designSystemId).toMatch(/^user:/);
       const html = readFileSync(path.join(projectsRoot, result.projectId, 'brand.html'), 'utf8');
-      expect(html).toContain('"status":"extracting"');
+      expect(html).toContain(`"status":"${expectedKitStatus}"`);
 
       const project = getProject(db, result.projectId);
       expect(project?.pendingPrompt ?? '').toContain('DESIGN SYSTEM EXTRACTION');
@@ -920,7 +2145,10 @@ describe('agent-driven brand extraction engine', () => {
       isEditable: true,
       defaultStatus: 'draft',
     });
-    expect(systems).toHaveLength(0);
+    // Entity-first: each blocked/thin extraction leaves a draft behind (editable),
+    // but NONE were finalized to published.
+    expect(systems).toHaveLength(2);
+    expect(systems.every((s) => s.status === 'draft')).toBe(true);
   });
 
   it('classifies EO_Bot_Ssid verification pages as anti-bot challenges', () => {
@@ -995,8 +2223,6 @@ describe('agent-driven brand extraction engine', () => {
       prefetch: stubPrefetch,
       logoFallback: NO_LOGO_FALLBACK,
       imageryFallback: NO_IMAGERY_FALLBACK,
-      // Keep the test snappy: a short sync budget, well under the slow harvest.
-      programmaticSyncBudgetMs: 200,
       onBackgroundExtraction: (settled) => {
         background = settled;
       },
@@ -1009,6 +2235,8 @@ describe('agent-driven brand extraction engine', () => {
 
     // At return time the brand is still extracting (skeleton page), so the user
     // sees a progress state rather than waiting on the network.
+    expect(result.status).toBe('extracting');
+    expect(result.designSystemId).toMatch(/^user:/);
     expect(readBrandDetail(brandsRoot, result.id)?.meta.status).toBe('extracting');
 
     // Once the background harvest settles, the brand finalizes to ready.

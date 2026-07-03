@@ -20,6 +20,7 @@ export type {
   DesignSystemRevisionFileChange,
   DesignSystemRevisionStatus,
   DesignSystemSource,
+  DesignSystemStaticFileDetail,
   DesignSystemStatus,
   DesignSystemSummary,
   DesignSystemSurface,
@@ -45,9 +46,12 @@ export {
   readDesignSystem,
   readDesignSystemPackageInfo,
   readDesignSystemPullFile,
+  readDesignSystemStaticFile,
 } from './catalog/index.js';
 
 export {
+  buildDesignSystemSkillsMarkdown,
+  buildUserDesignSystemArchive,
   createUserDesignSystem,
   createUserDesignSystemRevision,
   deleteUserDesignSystem,

@@ -66,9 +66,17 @@ export type AgentRichBlock =
   | { kind: 'code'; lang: string; code: string }
   | { kind: 'image'; src: string; alt: string; caption?: string }
   | {
+      // Image + prose side by side (editorial two-column). Stacks on mobile.
+      kind: 'split';
+      imageSide: 'left' | 'right';
+      image: { src: string; alt: string; caption?: string };
+      text: string[]; // paragraphs, rendered as set:html (may contain <a>)
+    }
+  | {
       kind: 'table';
       columns: string[];
       rows: string[][];
+      compact?: boolean; // narrow tables (e.g. a decision matrix) — cap width, no sprawl
     };
 
 export type AgentRichSection = {
@@ -773,9 +781,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           heroCtaLead:
             'Open Design is the open-source, local-first design layer around the coding agent you already use — your key, your files, a curated skill and design-system library.',
           heroCtaActions: [
-            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
             { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
           ],
           heroImage: {
             src: '/alternatives/lovable/lovable-hero.webp',
@@ -895,9 +902,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           ctaBody:
             'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
           ctaActions: [
-            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
             { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
           ],
           hubLinkLabel: 'See all comparisons',
         },
@@ -978,9 +984,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           heroCtaLead:
             'Open Design is the open-source, local-first design layer around the coding agent you already use — your key, your files, a curated skill and design-system library.',
           heroCtaActions: [
-            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
             { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
           ],
           heroImage: {
             src: '/alternatives/figma/figma-hero.webp',
@@ -1098,9 +1103,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           ctaBody:
             'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
           ctaActions: [
-            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
             { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
           ],
           hubLinkLabel: 'See all comparisons',
         },
@@ -1181,9 +1185,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           heroCtaLead:
             'Open Design is the open-source, local-first design layer around the coding agent you already use — your key, your files, a curated skill and design-system library.',
           heroCtaActions: [
-            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
             { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
           ],
           heroImage: {
             src: '/alternatives/bolt/bolt-hero.webp',
@@ -1301,9 +1304,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           ctaBody:
             'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
           ctaActions: [
-            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
             { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
           ],
           hubLinkLabel: 'See all comparisons',
         },
@@ -1384,9 +1386,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           heroCtaLead:
             'Open Design is the open-source, local-first design layer around the coding agent you already use — your key, your files, a curated skill and design-system library.',
           heroCtaActions: [
-            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
             { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
           ],
           heroImage: {
             src: '/alternatives/v0/v0-hero.webp',
@@ -1504,9 +1505,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           ctaBody:
             'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
           ctaActions: [
-            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
             { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
           ],
           hubLinkLabel: 'See all comparisons',
         },
@@ -1587,9 +1587,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           heroCtaLead:
             'Open Design is the open-source, local-first design layer around the coding agent you already use — your key, your files, a curated skill and design-system library.',
           heroCtaActions: [
-            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
             { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
           ],
           heroImage: {
             src: '/alternatives/framer/framer-hero.webp',
@@ -1707,9 +1706,1088 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           ctaBody:
             'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
           ctaActions: [
-            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
             { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all comparisons',
+        },
+      },
+      stitch: {
+        title: 'Best Google Stitch alternative for design — Open Design',
+        description:
+          'Google Stitch is a free Gemini-powered UI generator from Google Labs, capped at ~350 standard generations/month in a hosted canvas. Open Design is the open-source, local-first alternative — BYOK, no Google account, design system as files you own.',
+        breadcrumb: 'Best Google Stitch alternative',
+        label: 'Alternative · Google Stitch',
+        heading: 'Best Google Stitch alternative for design.',
+        lead:
+          'Google Stitch turns a prompt into a polished, Gemini-generated UI inside a hosted Google Labs canvas — free, but capped at ~350 standard generations a month and tied to a Google account. Open Design is a local-first, open-source design agent you point your own coding agent at: same prompt-to-UI surface, but the source, the design system, and the output stay as files you own.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Google Stitch is a free, Gemini 3-powered UI generator from Google Labs — fast first drafts, Figma paste, HTML/CSS and React export, but cloud-only, closed-source, monthly generation caps, and no enforceable design system. Open Design is the open-source, local-first alternative: BYOK with your own coding agent, a portable DESIGN.md brand in your repo, and no account gating. This page is honest about where Stitch genuinely wins.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'],
+        whyTitle: 'Why people search for a Google Stitch alternative',
+        whyLead: 'A few specific frustrations keep showing up once teams move past the first few Stitch drafts:',
+        reasons: [
+          { label: 'Generation caps you cannot lift.', body: 'The free tier runs roughly 350 standard generations (Gemini 2.5 Flash) plus a much smaller experimental pool (Gemini 2.5 Pro) per month, with no paid tier and no way to add your own API key for more — designers report hitting the wall mid-iteration.' },
+          { label: 'No enforceable design system.', body: 'You cannot upload a brand kit, token set, or component library that Stitch obeys across generations. Brand colors must be re-prompted as hex values every time, and the same prompt produces a different result on each run.' },
+          { label: 'Cloud-only and account-gated.', body: 'Stitch lives entirely at stitch.withgoogle.com behind a Google sign-in. There is no local mode, no self-host, and your work is state inside a Google Labs project rather than files in your repo.' },
+          { label: 'Closed-source, not embeddable.', body: 'Stitch is a closed Google Labs experiment with no public API — you cannot fork it, run it in CI, or drive it from the coding agent you already use. Design stays in a separate browser tab, disconnected from your codebase.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs on your own machine — no design output is forced through a vendor cloud, and your brand lives in your repo as a portable DESIGN.md file every skill respects. There is no monthly generation cap baked into the product.',
+          'You bring your own agent key — Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. Credentials stay in local config or environment variables (Open Design never proxies them), model spend bills directly to your provider account, and you can drive everything from the od CLI or the local HTTP daemon, not just a web UI.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'License', od: 'Apache-2.0, full source on GitHub', cd: 'Closed-source Google Labs experiment' },
+          { name: 'Runtime', od: 'Local daemon on your machine', cd: 'Cloud-only (stitch.withgoogle.com)' },
+          { name: 'Account', od: 'None required; runs locally', cd: 'Google account sign-in required' },
+          { name: 'Pricing / limits', od: 'Free; you pay your own model API spend, no app-level cap', cd: 'Free; ~350 standard + smaller experimental generations per month, no paid tier' },
+          { name: 'Model', od: 'BYOK — Claude, GPT/Codex, Gemini, Qwen, and more', cd: 'Gemini (Flash standard / Pro experimental; Gemini 3 added Dec 2025)' },
+          { name: 'Output formats', od: 'Real files: HTML/CSS, React, decks, design-system DESIGN.md', cd: 'HTML/CSS + React export, paste-to-Figma' },
+          { name: 'Design system', od: 'Portable DESIGN.md every skill enforces', cd: 'No enforceable brand kit; re-prompt hex each time' },
+          { name: 'Portability', od: 'Files in your project directory / git', cd: 'Hosted project state + manual export' },
+          { name: 'Self-host', od: 'Yes, anywhere Node 24 runs', cd: 'No' },
+          { name: 'Code ownership', od: 'Output lands in your repo, you own it', cd: 'Exported snapshot; tool not in your workflow' },
+          { name: 'Flows vs screens', od: 'Multi-artifact projects, prototypes, decks', cd: 'Screens + multi-screen Prototypes canvas (2025–26)' },
+          { name: 'CLI / CI / API', od: 'od CLI + local HTTP daemon', cd: 'Web canvas only; no public API' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick Google Stitch if',
+        pickClaude: [
+          'You want a free, zero-setup UI generator backed by Google and Gemini, and a Google account is no obstacle.',
+          'You value polished first drafts and a clean paste-into-Figma handoff over owning the source.',
+          'Your volume fits comfortably inside the monthly generation caps, and a hosted canvas suits how you work.',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'You want the UI, code, and design system as version-controlled files you own — not state in a hosted project.',
+          'You want BYOK with your existing coding agent and no per-month generation cap or Google account.',
+          'You need open source you can fork, rebrand, self-host, or embed in CI and the od CLI.',
+          'You want one DESIGN.md per brand that every render respects, instead of re-prompting hex codes.',
+        ],
+        migrateTitle: 'Migration / first run',
+        migrateLead: 'There is no automatic import from Google Stitch today, so start design-first with a one-time brand-extraction run:',
+        migrateSteps: [
+          'Install Open Design from the download page and bring your own agent key (Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen).',
+          'Open the web UI and point your agent at a Stitch HTML/CSS export, Figma paste, or screenshot you like the look of.',
+          'Ask the agent to extract the brand — colors, type, spacing — into a DESIGN.md file in your repo.',
+          'Pick a skill and render it against your new brand; from then on every skill reuses it without re-prompting.',
+        ],
+        migrateClosing:
+          'From then on, every skill renders in your brand without re-prompting hex codes — and the files stay in your repo under version control.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'What are Google Stitch’s generation limits?', text: 'Stitch’s free tier runs roughly 350 standard generations per month on Gemini 2.5 Flash, plus a smaller experimental pool on Gemini 2.5 Pro (commonly reported around 50). Reports through 2026 show the cap shifting and sometimes resetting daily; either way there is no paid tier to raise it and no bring-your-own-key option. Open Design has no app-level cap — you pay your own model API spend.' },
+          { name: 'Is Google Stitch free?', text: 'Yes. Stitch is a free Google Labs experiment with no subscription, but it requires a Google account and the work lives in Google’s cloud. Open Design is also free and open source (Apache-2.0); you bring your own agent key, so model spend bills to you with no vendor cap.' },
+          { name: 'Can I self-host an alternative to Google Stitch?', text: 'Stitch is cloud-only and closed-source — there is no self-host option. Open Design runs locally and self-hosts anywhere Node 24 runs, with full source on GitHub under Apache-2.0.' },
+          { name: 'How does export compare?', text: 'Stitch exports HTML/CSS and React and supports paste-into-Figma (auto-layout, named layers, editable text — a real starting point, not pixel-perfect). Open Design writes real files into your repo — HTML/CSS, React, decks, and a portable DESIGN.md — that you own and version directly.' },
+          { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable. Google Stitch is a closed-source Google Labs product.' },
+          { name: 'Is Open Design affiliated with Google or Stitch?', text: 'No. Open Design is an independent, open-source project. Google Stitch is a product of Google Labs (built on the 2025 Galileo AI acquisition); this is an unaffiliated comparison.' },
+        ],
+        ctaTitle: 'Own your design, in three commands.',
+        ctaBody:
+          'Star the repo, grab the desktop build, or run the install in your terminal. No generation cap, no Google account — your DESIGN.md system stays in your repo from the first render onward.',
+        rich: {
+          heroCtaLead:
+            'Open Design is the open-source, local-first alternative to Google Stitch — prompt-to-UI with the coding agent you already use, your key, your files, and a portable design system you keep in your repo.',
+          heroCtaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          ],
+          heroImage: {
+            src: '/alternatives/stitch/stitch-hero.webp',
+            alt: 'Open Design vs Google Stitch — warm-paper editorial illustration of a prompt converging into a design hub you own',
+          },
+          intro: [
+            'Google Stitch is a Google Labs design tool that turns a natural-language prompt — or a screenshot, sketch, or voice description — into a high-fidelity UI, generated by Gemini inside a hosted canvas. It launched at Google I/O in May 2025 on the back of Google’s <b>Galileo AI</b> acquisition, gained <b>Gemini 3</b> and a multi-screen "Prototypes" canvas through late 2025, and is genuinely good at producing a clean first draft fast. It is also <b>free</b> — with the catch that it is cloud-only, tied to a Google account, and capped at roughly <b>350 standard generations a month</b>.',
+            'Open Design is the <b>open-source, local-first</b> alternative: a design agent you point <b>your own coding agent</b> at (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen) over BYOK. Same prompt-to-UI surface — but the source, the design system, and the output stay as <b>files you own</b> in your repo, with no per-month cap and no vendor sign-in. This page is honest about where Stitch genuinely wins and where Open Design does.',
+          ],
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-stitch', label: 'What Google Stitch is' },
+            { id: 'compare', label: 'Feature comparison' },
+            { id: 'why-switch', label: 'Why switch' },
+            { id: 'local-byok', label: 'Local-first + BYOK' },
+            { id: 'decision', label: 'Which to pick' },
+            { id: 'migrate', label: 'Migration' },
+          ],
+          sections: [
+            {
+              id: 'what-is-stitch',
+              heading: 'What Google Stitch is',
+              blocks: [
+                { kind: 'p', text: 'Google Stitch (<a href="https://stitch.withgoogle.com" target="_blank" rel="noopener">stitch.withgoogle.com</a>) is a Google Labs design tool that converts a natural-language prompt — or an uploaded image, sketch, screenshot, or voice description — into a high-fidelity web or mobile UI, with Gemini doing the design work as you direct it by conversation. It runs entirely in the browser, requires a Google account, and is free. Under the hood it began life as <b>Galileo AI</b>, the prompt-to-UI startup Google acquired and relaunched as Stitch at Google I/O in May 2025.' },
+                { kind: 'split', imageSide: 'right', image: { src: '/alternatives/stitch/stitch-product.webp', alt: 'Google Stitch — describe a UI in natural language and Gemini generates it in a hosted canvas', caption: 'Google Stitch: describe a UI and Gemini generates it in a hosted canvas (screenshot: stitch.withgoogle.com).' }, text: [
+                  'Stitch runs in <b>two modes</b>: a <b>Standard</b> mode on Gemini 2.5 Flash for fast generation (roughly <b>350 generations a month</b>) and an <b>Experimental</b> mode on Gemini 2.5 Pro for higher fidelity with a much smaller monthly pool (commonly reported around 50). A December 2025 update brought <b>Gemini 3</b> for sharper layouts, and a multi-screen <b>Prototypes</b> canvas lets you stitch screens into a clickable flow.',
+                  'For output, Stitch exports <b>HTML/CSS</b> and <b>React</b>, and supports <b>paste-into-Figma</b> with auto-layout, named layers, and editable text — a real starting point to refine, not a flat screenshot. What it does not have: a paid tier to lift the cap, a bring-your-own-key option, an enforceable design system, or any local / self-host mode.',
+                ] },
+                { kind: 'ul', items: [
+                  'Vendor: Google Labs — cloud-only at stitch.withgoogle.com, Google account required, closed-source',
+                  'Model: Gemini (2.5 Flash standard / 2.5 Pro experimental; Gemini 3 added Dec 2025)',
+                  'Pricing: free, no paid tier — capped at ~350 standard + a smaller experimental pool per month',
+                  'Output: high-fidelity screens + multi-screen Prototypes; HTML/CSS and React export, paste-to-Figma',
+                ] },
+              ],
+            },
+            {
+              id: 'compare',
+              heading: 'Open Design vs Google Stitch, feature by feature',
+              blocks: [
+                { kind: 'table', columns: ['Feature', 'Open Design', 'Google Stitch'], rows: [
+                  ['License', 'Apache-2.0, full source on GitHub', 'Closed-source Google Labs experiment'],
+                  ['Runtime', 'Local daemon on your machine', 'Cloud-only (stitch.withgoogle.com)'],
+                  ['Account', 'None required; runs locally', 'Google account sign-in required'],
+                  ['Pricing / limits', 'Free; your own model API spend, no app-level cap', 'Free; ~350 standard + smaller experimental gens/month, no paid tier'],
+                  ['Model', 'BYOK — Claude, GPT/Codex, Gemini, Qwen, more', 'Gemini (Flash standard / Pro experimental; Gemini 3 Dec 2025)'],
+                  ['Output formats', 'Real files: HTML/CSS, React, decks, DESIGN.md', 'HTML/CSS + React export, paste-to-Figma'],
+                  ['Portability', 'Files in your project dir / git', 'Hosted project state + manual export'],
+                  ['Self-host', 'Yes, anywhere Node 24 runs', 'No'],
+                  ['Design system', 'Portable DESIGN.md every skill enforces', 'No enforceable brand kit; re-prompt hex each time'],
+                  ['Code ownership', 'Lands in your repo, you own it', 'Exported snapshot; tool not in your codebase'],
+                  ['Flows vs screens', 'Multi-artifact projects, prototypes, decks', 'Screens + multi-screen Prototypes canvas'],
+                  ['CLI / CI / API', 'od CLI + local HTTP daemon', 'Web canvas only; no public API'],
+                ] },
+                { kind: 'p', text: 'Read it honestly: Stitch wins on <b>zero-setup speed</b> and a <b>free, Gemini-backed first draft</b> with a clean Figma paste. Open Design wins everywhere the work has to <b>outlive the draft</b> — open source, local-first, no monthly cap, BYOK with the agent you already use, and a design system that lives as files in your repo instead of styling you re-prompt every session.' },
+              ],
+            },
+            {
+              id: 'why-switch',
+              heading: 'Why teams look for a Google Stitch alternative',
+              blocks: [
+                { kind: 'p', text: 'Stitch is a great way to get a first screen on the canvas. The frustrations start once you iterate hard, need brand consistency, or want the design to live inside your codebase — exactly the points where a hosted Labs experiment is structurally limited.' },
+                { kind: 'steps', items: [
+                  { label: 'You run out of generations', body: 'The ~350 standard generations a month, plus a much smaller experimental pool, sound generous until you are iterating on a real project. There is no paid tier and no bring-your-own-key escape hatch — so heavy days mean waiting for a reset. Open Design has no app-level cap; you pay your own model spend and keep going.' },
+                  { label: 'The brand never sticks', body: 'Stitch has no enforceable design system: you re-prompt brand colors as hex values every time, the same prompt yields a different result each run, and navigation can drift between screens. Open Design centralizes brand in one DESIGN.md that every render obeys, so iterations stay consistent.' },
+                  { label: 'It lives in a separate tab', body: 'Design happens in Stitch’s cloud canvas, disconnected from your repo — you export a snapshot and re-integrate by hand, with no API to wire it into CI or an agent loop. Open Design output lands as files in your project and is drivable from the od CLI and local HTTP daemon.' },
+                  { label: 'You cannot own or fork it', body: 'Stitch is closed-source and Google-hosted: no self-host, no audit, no rebrand for your studio. Open Design is Apache-2.0 — fork it, run it on your own machine, embed it in pipelines, and own every artifact it produces.' },
+                ] },
+              ],
+            },
+            {
+              id: 'local-byok',
+              heading: 'Local-first + BYOK, explained',
+              blocks: [
+                { kind: 'split', imageSide: 'left', image: { src: '/alternatives/stitch/stitch-design-systems.webp', alt: 'The Open Design design-system library — brands and tokens kept as files you own', caption: 'Your design system lives as files in Open Design — portable, versioned, rendered by every skill.' }, text: [
+                  'Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs <b>on your machine</b>. No design output is forced through a vendor cloud, and your brand lives in your repo as a <b>portable DESIGN.md</b> file every skill respects.',
+                  'You <b>bring your own agent key</b>. Credentials stay in local config or environment variables — Open Design never proxies them — and the API spend <b>bills directly to you</b>.',
+                ] },
+                { kind: 'p', text: 'New to the idea? Read <a href="/blog/what-is-vibe-design/">what vibe design is</a>, browse the <a href="/plugins/">plugin and design-system library</a>, see <a href="/compare/">all Open Design comparisons</a> — including <a href="/alternatives/figma/">Figma</a> and <a href="/alternatives/lovable/">Lovable</a> — or <a href="/download/">download Open Design</a> to try it.' },
+              ],
+            },
+            {
+              id: 'decision',
+              heading: 'Where Google Stitch genuinely wins — and which to pick',
+              blocks: [
+                { kind: 'p', text: 'Credit where it is due: for a <b>fast, free first draft</b>, Stitch is hard to beat. It is zero-setup (sign in with a Google account and type), Gemini 3 produces clean, on-trend layouts from a sentence or a screenshot, and the <b>paste-into-Figma</b> handoff gives designers a real, editable starting point rather than a flat image. If your job is to get a polished concept screen in front of someone in two minutes and you are happy living in a hosted canvas, Stitch does that exceptionally well — and the price is zero. The trade-off is everything that comes after the draft: the cap, the missing design system, and the fact that the output never lives in your codebase.' },
+                { kind: 'p', text: 'A quick way to decide by what you actually want to do — <b>most paths point to Open Design</b>, but the honest exceptions are listed too:' },
+                { kind: 'table', compact: true, columns: ['If you want to…', 'Best pick'], rows: [
+                  ['Own your UI, code, and design system as files in git', 'Open Design'],
+                  ['Iterate heavily without a monthly generation cap', 'Open Design'],
+                  ['Enforce one brand (DESIGN.md) across every render', 'Open Design'],
+                  ['Run open-source you can self-host, fork, or rebrand', 'Open Design'],
+                  ['Drive design from your coding agent / CLI / CI (BYOK)', 'Open Design'],
+                  ['Get a free, zero-setup first draft in two minutes', 'Google Stitch'],
+                  ['Paste a quick concept straight into Figma to refine', 'Google Stitch'],
+                ] },
+              ],
+            },
+            {
+              id: 'migrate',
+              heading: 'Moving a design from Google Stitch into Open Design',
+              blocks: [
+                { kind: 'p', text: 'There is no automatic import from Google Stitch today, so start design-first with a one-time brand-extraction run — it takes a few minutes and pays off on every render after.' },
+                { kind: 'ol', items: [
+                  'Install Open Design from the download page and bring your own agent key (Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen).',
+                  'Open the web UI and point your agent at a Stitch HTML/CSS export, Figma paste, or screenshot whose look you want to keep.',
+                  'Ask the agent to extract the brand — colors, type, spacing — into a DESIGN.md file in your repo.',
+                  'Pick a skill and render it against your new brand to confirm it matches.',
+                ] },
+                { kind: 'p', text: 'From then on, every skill renders in your brand <b>without re-prompting hex codes</b> — and the files stay in your repo under version control.' },
+              ],
+            },
+          ],
+          faqTitle: 'FAQ',
+          faq: [
+            { name: 'What are Google Stitch’s generation limits?', text: 'Stitch’s free tier runs roughly 350 standard generations per month on Gemini 2.5 Flash, plus a smaller experimental pool on Gemini 2.5 Pro (commonly reported around 50). Reports through 2026 show the cap shifting and at times resetting daily; either way there is no paid tier to raise it and no bring-your-own-key option. Open Design has no app-level cap — you pay your own model API spend and keep going.' },
+            { name: 'Is Google Stitch free?', text: 'Yes. Stitch is a free Google Labs experiment with no subscription, but it requires a Google account and the work lives in Google’s cloud. Open Design is also free and open source (Apache-2.0); you bring your own agent key, so model spend bills to you with no vendor-set cap.' },
+            { name: 'Can I self-host an alternative to Google Stitch?', text: 'Stitch is cloud-only and closed-source — there is no self-host option. Open Design runs locally and self-hosts anywhere Node 24 runs, with full source on GitHub under Apache-2.0.' },
+            { name: 'How does export compare?', text: 'Stitch exports HTML/CSS and React and supports paste-into-Figma (auto-layout, named layers, editable text — a real starting point, not pixel-perfect). Open Design writes real files into your repo — HTML/CSS, React, decks, and a portable DESIGN.md — that you own and version directly.' },
+            { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable. Google Stitch is a closed-source Google Labs product.' },
+            { name: 'Is Open Design affiliated with Google or Stitch?', text: 'No. Open Design is an independent, open-source project. Google Stitch is a product of Google Labs (built on the 2025 Galileo AI acquisition); this is an unaffiliated comparison.' },
+          ],
+          ctaTitle: 'Own your design, in three commands.',
+          ctaBody:
+            'Star the repo, grab the desktop build, or run the install in your terminal. No generation cap, no Google account — your DESIGN.md system stays in your repo from the first render onward.',
+          ctaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all comparisons',
+        },
+      },
+      genspark: {
+        title: 'Best Genspark AI Designer alternative for design — Open Design',
+        description:
+          'Looking for a Genspark AI Designer alternative for product design? Open Design is an open-source, local-first design agent. Drive it with your own coding agent (BYOK) and own every file — UI, code, and design system — in your repo.',
+        breadcrumb: 'Best Genspark AI Designer alternative',
+        label: 'Alternative · Genspark AI Designer',
+        heading: 'Best Genspark AI Designer alternative for design.',
+        lead:
+          'Genspark AI Designer (launched Aug 2025) is Genspark\'s one-prompt design product — strongest at graphic and marketing design: logos, posters, social graphics, packaging, whole brand systems. Open Design is an open-source, local-first design agent for product UI: your coding agent, your key, files you own.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Genspark AI Designer is a closed, credit-metered SaaS that excels at marketing graphics in one shot. Open Design is the open-source (Apache-2.0), local-first alternative for product UI: BYOK with your own agent, a portable DESIGN.md in your repo, and output you keep as files. They do different jobs — this page is honest about where Genspark wins.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'],
+        whyTitle: 'Why people search for a Genspark alternative',
+        whyLead: 'A few reasons keep showing up when teams look past Genspark for product UI:',
+        reasons: [
+          { label: 'Product UI, not marketing graphics.', body: 'Genspark AI Designer is built for posters, logos and social assets. If the job is screens, flows, components and a design system — plus the code behind them — that is a different deliverable.' },
+          { label: 'Own the output as files.', body: 'Genspark assets live in its cloud (AI Drive) tied to an account. Open Design writes UI, code and design tokens as files in your repo that you keep whether or not you keep the tool.' },
+          { label: 'Open source.', body: 'Genspark is closed-source SaaS. Open Design is Apache-2.0 — read it, fork it, run it locally, audit what touches your designs.' },
+          { label: 'BYOK over metered credits.', body: 'Genspark meters every generation in credits (and reviewers report being charged for failed or low-quality retries). Open Design runs on your own coding agent and key, so spend is just provider rates.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs on your machine. Output lands as files in your repo, and your brand lives as a portable DESIGN.md every skill respects.',
+          'You bring your own agent key (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen). Credentials stay local and API spend bills to you.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'Primary job', od: 'Product UI design + the code behind it', cd: 'Graphic & marketing design (logos, posters, social, packaging, brand systems)' },
+          { name: 'License', od: 'Apache-2.0, full source on GitHub', cd: 'Closed-source / proprietary' },
+          { name: 'Runtime', od: 'Local-first on your machine', cd: 'Hosted SaaS in Genspark cloud' },
+          { name: 'Account', od: 'None required — runs locally', cd: 'Genspark account required' },
+          { name: 'Pricing', od: 'Free, open source (you pay your own model usage)', cd: 'Free tier, then Plus $24.99/mo & Pro $249.99/mo' },
+          { name: 'Credits', od: 'None — no metering', cd: 'Credit-metered: 100 free/day; 10k/mo Plus, 125k/mo Pro' },
+          { name: 'Model', od: 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', cd: "Genspark's agents + image models (Nano Banana, GPT Image, Flux)" },
+          { name: 'Design system', od: 'Portable DESIGN.md in your repo', cd: 'Cloud project / brand kit' },
+          { name: 'Output / portability', od: 'Code + assets as files in your project dir', cd: 'Image assets stored in / exported from cloud' },
+          { name: 'Code ownership', od: 'Yes — real UI code you own', cd: 'No — flattened graphic assets, not editable code' },
+          { name: 'Self-host', od: 'Yes, run anywhere Node 24 runs', cd: 'No' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick Genspark if',
+        pickClaude: [
+          'Your main need is graphic or marketing design — posters, logos, social graphics — polished fast.',
+          'You prefer one all-in-one hosted tool with zero setup and bundled AI.',
+          'UI prototyping is a nice-to-have, not the core deliverable.',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'You are designing product UI and want the code behind it, not just an exported image.',
+          'You want open source (Apache-2.0) you can read, fork, and self-host.',
+          'You want the output as files you own in your own repo.',
+          'You want BYOK with your own coding agent and model.',
+        ],
+        migrateTitle: 'Migration / first run',
+        migrateLead: 'There is no automatic import from Genspark; start design-first with a one-time brand-extraction run:',
+        migrateSteps: [
+          'Pull your brand basics (colors, type, logo, spacing) from your existing Genspark assets.',
+          'Capture them in a portable DESIGN.md in your repo.',
+          'Point your coding agent at the repo with your own API key.',
+          'Generate product UI against your design system — it lands as files you own.',
+        ],
+        migrateClosing:
+          'From then on, every skill renders in your brand — and the files stay in your repo. Keep Genspark for marketing graphics if you like; the roles do not overlap.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'Is Genspark AI Designer for graphic design or product UI?', text: 'Mainly graphic and marketing design — logos, posters, flyers, social graphics, packaging and brand systems from one prompt. It can output UI prototypes too, but that is a slice of a broad visual-design surface, not its core. Open Design is built for product UI and the code behind it.' },
+          { name: 'How much does Genspark cost?', text: 'Genspark has a free tier (100 credits/day), a Plus plan at $24.99/mo ($19.99/mo billed annually) with 10,000 credits/mo, and a Pro plan at $249.99/mo ($199.99/mo annually) with 125,000 credits/mo. Extra credit packs start around $20 for 10,000 credits.' },
+          { name: 'Is Open Design free?', text: 'Open Design is free and open source (Apache-2.0). There is no subscription and no credit meter — you bring your own agent key, so model spend bills to your account at provider rates.' },
+          { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable. Genspark is closed-source.' },
+          { name: 'Who owns the output each produces?', text: 'With Open Design you own everything — UI, code and design system are written as plain files into your own repository, no proprietary cloud format. Genspark assets live in its cloud (AI Drive) tied to your account and are exported as flattened images.' },
+          { name: 'Is Open Design affiliated with Genspark?', text: 'No. Open Design is an independent, open-source project, not affiliated with Genspark or Mainfunc. This is an unaffiliated comparison.' },
+        ],
+        ctaTitle: 'Designing product UI? Own it as files.',
+        ctaBody:
+          'Star the repo, grab the desktop build, or run the install in your terminal. Keep Genspark for marketing graphics — bring Open Design in for the product.',
+        rich: {
+          heroCtaLead:
+            'Open Design is the open-source, local-first alternative to Genspark for product UI — your coding agent, your key, your files, and a portable design system you keep in your repo.',
+          heroCtaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          ],
+          heroImage: {
+            src: '/alternatives/genspark/genspark-hero.webp',
+            alt: 'Open Design vs Genspark — warm-paper editorial illustration of a prompt converging into a design hub you own',
+          },
+          intro: [
+            '<b>Genspark AI Designer</b> (launched August 2025 at <a href="https://www.genspark.ai/ai_designer" target="_blank" rel="noopener">genspark.ai/ai_designer</a>) is the design product inside Genspark\'s all-in-one AI super-agent. You hand it one prompt — say "a logo and launch poster for a vegan ramen shop" — and a top-level agent deconstructs the brief, routes it across specialist agents, and returns finished, on-brand assets. Its turf is <b>graphic and marketing design</b>: logos, posters, flyers, social graphics, packaging, menus, product ads, even full brand systems. It runs as a closed-source, hosted SaaS metered in credits.',
+            'Open Design plays a different position, so this is an honest comparison — the two tools do <b>different jobs</b>. Open Design is an <b>open-source (Apache-2.0)</b>, <b>local-first</b> design agent for <b>product UI</b>: screens, flows, components and a design system, plus the code behind them. You drive it with <b>your own coding agent (BYOK)</b> and everything lands as <b>files in your repo</b>. Below we are upfront about where Genspark genuinely wins (marketing-graphic breadth, one-shot polish) and where Open Design wins (open source, local-first, product UI, code you own).',
+          ],
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-genspark', label: 'What Genspark AI Designer is' },
+            { id: 'why-switch', label: 'Why teams look for an alternative' },
+            { id: 'compare', label: 'Feature comparison' },
+            { id: 'wins', label: 'Where Genspark wins' },
+            { id: 'local-byok', label: 'Local-first + BYOK' },
+            { id: 'decision', label: 'Which to pick' },
+            { id: 'migrate', label: 'Migration' },
+          ],
+          sections: [
+            {
+              id: 'what-is-genspark',
+              heading: 'What Genspark AI Designer is',
+              blocks: [
+                { kind: 'p', text: 'Genspark AI Designer (<a href="https://www.genspark.ai/ai_designer" target="_blank" rel="noopener">genspark.ai/ai_designer</a>) launched in <b>August 2025</b> as part of Genspark\'s all-in-one AI super-agent, pitched as "your first AI employee." You give it one natural-language prompt and it returns finished, on-brand assets — its strongest work is <b>graphic and marketing design</b>: logos, color palettes, posters, flyers, social graphics, packaging, menus, product ads, store interiors and complete brand systems. It can also produce UI prototypes, but that is one slice of a broad visual-design surface.' },
+                { kind: 'split', imageSide: 'right', image: { src: '/alternatives/genspark/genspark-product.webp', alt: 'Genspark AI Designer — generates posters, logos and social graphics from a prompt', caption: 'Genspark AI Designer: its strongest use cases are logos, posters and social graphics (screenshot: genspark.ai).' }, text: [
+                  'Genspark frames its approach as <b>"construction, not generation"</b>: instead of one diffusion pass, a top-level <b>Super Agent</b> deconstructs the brief and coordinates subordinate specialist agents — a <b>Mixture-of-Experts</b> stack. In its Mixture-of-Agents mode it draws on several image models at once, including <b>Nano Banana, GPT Image and Flux.1 Kontext</b>, and returns multiple style options to pick from.',
+                  'It runs as a closed-source, hosted SaaS — your work lives in Genspark\'s cloud (AI Drive) and the output is exported as flattened image assets, not editable source. For a marketer who needs a logo and a launch poster by tonight, that all-in-one, zero-setup convenience is the point.',
+                ] },
+                { kind: 'p', text: 'Genspark is <b>metered in credits</b>. The free tier gives <b>100 credits/day</b> (reset at midnight); a single design costs a few credits depending on complexity. Paid plans are <b>Plus at $24.99/mo</b> ($19.99/mo billed annually) with 10,000 credits/mo and 50 GB AI Drive, and <b>Pro at $249.99/mo</b> ($199.99/mo annually) with 125,000 credits/mo and 1 TB; extra credit packs start around <b>$20 for 10,000 credits</b>. Reviewers note credits can burn fast on complex or Mixture-of-Agents runs, and that you can be charged for retries and failed outputs.' },
+                { kind: 'ul', items: [
+                  'Closed-source, hosted SaaS — no self-host; projects and assets live in Genspark cloud',
+                  'Graphic & marketing design is the main job; product UI is secondary',
+                  'Output is flattened image assets, not editable UI code you own',
+                  'Bundled, credit-metered billing — runs on Genspark keys, not BYOK',
+                ] },
+              ],
+            },
+            {
+              id: 'why-switch',
+              heading: 'Why teams look for a Genspark alternative',
+              blocks: [
+                { kind: 'p', text: 'Genspark AI Designer is a strong marketing-graphics tool. Teams reach past it when the deliverable is product UI and they care about owning what comes out:' },
+                { kind: 'steps', items: [
+                  { label: 'Product UI, not marketing graphics', body: 'The job is screens, flows, components and a design system — plus the working code — not a poster or a logo. Genspark\'s polish is aimed at flat brand assets; you would still have to rebuild the UI in code afterwards.' },
+                  { label: 'Own the output as files', body: 'Genspark assets live in its cloud (AI Drive) tied to your account and export as flattened images. Open Design writes UI, components and tokens as real files you commit to git and keep forever — the implication: no migration cost if you leave the tool.' },
+                  { label: 'Open source you can audit', body: 'Genspark is closed-source SaaS; you cannot read, fork or self-host it. Open Design is Apache-2.0, so security teams can audit exactly what runs against the codebase and run it on infrastructure you control.' },
+                  { label: 'BYOK over a credit meter', body: 'Genspark bills generations in credits (100/day free, then 10k–125k/mo on paid plans) and reviewers report paying for failed retries. Open Design runs on the coding agent and key you already have, so spend is provider rates with no per-design meter.' },
+                ] },
+              ],
+            },
+            {
+              id: 'compare',
+              heading: 'Open Design vs Genspark AI Designer, feature by feature',
+              blocks: [
+                { kind: 'table', columns: ['Feature', 'Open Design', 'Genspark AI Designer'], rows: [
+                  ['Primary job', 'Product UI + the code behind it', 'Graphic & marketing design (logos, posters, social, packaging)'],
+                  ['License', 'Apache-2.0, full source on GitHub', 'Closed-source / proprietary'],
+                  ['Runtime', 'Local-first on your machine', 'Hosted SaaS in Genspark cloud'],
+                  ['Account', 'None required — runs locally', 'Genspark account required'],
+                  ['Pricing', 'Free, open source', 'Free tier, then Plus $24.99/mo, Pro $249.99/mo'],
+                  ['Credits', 'None — no metering', '100 free/day; 10k/mo Plus; 125k/mo Pro'],
+                  ['Model', 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', "Genspark agents + Nano Banana / GPT Image / Flux"],
+                  ['API spend', 'Bills to your account at provider rates', "Bundled into Genspark's credit subscription"],
+                  ['Design system', 'Portable DESIGN.md in your repo', 'Cloud project / brand kit'],
+                  ['Output / portability', 'Code + assets as files in your project dir', 'Image assets stored in / exported from cloud'],
+                  ['Code ownership', 'Yes — real UI code you own', 'No — flattened assets, not editable code'],
+                  ['Self-host', 'Yes, run anywhere Node 24 runs', 'No'],
+                ] },
+              ],
+            },
+            {
+              id: 'wins',
+              heading: 'Where Genspark AI Designer genuinely wins',
+              blocks: [
+                { kind: 'p', text: 'Credit where it is due: for <b>marketing and graphic design</b>, Genspark AI Designer covers a far broader visual surface than Open Design and is built for exactly that. From a single prompt it will return a logo, a color palette, a poster, social graphics, packaging, a menu and a one-page web mockup — a whole brand system in minutes, polished enough to ship for many small businesses, with zero setup and no repo or coding agent required. Its Mixture-of-Agents image stack (Nano Banana, GPT Image, Flux.1 Kontext) gives it strong one-shot range across illustration styles. If your job is "I need on-brand marketing assets fast," that all-in-one breadth is a real strength, and Open Design does not try to compete there — Open Design\'s job is product UI and the code behind it.' },
+              ],
+            },
+            {
+              id: 'local-byok',
+              heading: 'Local-first + BYOK, explained',
+              blocks: [
+                { kind: 'split', imageSide: 'left', image: { src: '/alternatives/genspark/genspark-design-systems.webp', alt: 'The Open Design design-system library — brands and tokens kept as files you own', caption: 'Your design system lives as files in Open Design — portable, versioned, rendered by every skill.' }, text: [
+                  '<b>Local-first</b> means the agent runs on your machine and writes to your repo. Product UI, components, and a portable <b>DESIGN.md</b> land as real <b>files you commit to git</b> — yours whether or not you keep using the tool.',
+                  '<b>BYOK</b> means you supply the model. Open Design runs on the <b>coding agent you already use</b> (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen) with <b>your own key</b>; inference bills to you at provider rates.',
+                ] },
+                { kind: 'p', text: 'New to the idea? Read <a href="/blog/what-is-vibe-design/">what vibe design is</a>, browse the <a href="/plugins/">plugin and design-system library</a>, see <a href="/compare/">all Open Design comparisons</a> — including <a href="/alternatives/figma/">Figma</a> and <a href="/alternatives/lovable/">Lovable</a> — or <a href="/download/">download Open Design</a>.' },
+              ],
+            },
+            {
+              id: 'decision',
+              heading: 'Which should you pick',
+              blocks: [
+                { kind: 'p', text: 'A quick way to decide by what you actually want to do:' },
+                { kind: 'table', compact: true, columns: ['If you want to…', 'Best pick'], rows: [
+                  ['Design product UI plus the code and a design system', 'Open Design'],
+                  ['Own the output as editable files in your repo', 'Open Design'],
+                  ['Run an open-source design agent you can fork and audit', 'Open Design'],
+                  ['Keep everything local and self-hosted, no account', 'Open Design'],
+                  ['Bring your own coding agent and model (BYOK)', 'Open Design'],
+                  ['Generate logos, posters and social graphics fast', 'Genspark'],
+                  ['Spin up a whole brand system in one prompt, zero setup', 'Genspark'],
+                ] },
+              ],
+            },
+            {
+              id: 'migrate',
+              heading: 'Moving from Genspark to Open Design',
+              blocks: [
+                { kind: 'p', text: 'There is no automatic import; start design-first with a one-time brand-extraction run.' },
+                { kind: 'ol', items: [
+                  'Pull your brand basics (colors, type, logo) from your existing Genspark assets.',
+                  'Capture them in a portable DESIGN.md in your repo.',
+                  'Point your coding agent at the repo with your own API key.',
+                  'Generate product UI against your design system — it lands as files you own.',
+                ] },
+                { kind: 'p', text: 'Keep Genspark for marketing graphics if you like — the two roles do not overlap.' },
+              ],
+            },
+          ],
+          faqTitle: 'FAQ',
+          faq: [
+            { name: 'Is Genspark AI Designer for graphic design or product UI?', text: 'Mainly graphic and marketing design — logos, posters, flyers, social graphics, packaging and full brand systems from one prompt. It can output UI prototypes too, but that is one slice of a broad visual-design surface, not its core. Open Design is built specifically for product UI and the code behind it.' },
+            { name: 'How much does Genspark cost, and how do credits work?', text: 'Genspark is metered in credits. The free tier gives 100 credits/day (reset midnight); a design costs a few credits depending on complexity. Plus is $24.99/mo ($19.99/mo annual) with 10,000 credits/mo; Pro is $249.99/mo ($199.99/mo annual) with 125,000 credits/mo. Extra credit packs start around $20 for 10,000 credits.' },
+            { name: 'Is Open Design free?', text: 'Yes — Open Design is free and open source (Apache-2.0), with no subscription and no credit meter. You bring your own agent key, so model spend bills to your account at provider rates.' },
+            { name: 'Is Open Design really open source?', text: 'Yes — github.com/nexu-io/open-design under Apache-2.0, fully self-hostable. Genspark is closed-source.' },
+            { name: 'Who owns the output each one produces?', text: 'With Open Design you own everything — UI, code and design system land as plain files in your own repository. Genspark assets live in its cloud (AI Drive) tied to your account and export as flattened images.' },
+            { name: 'Is Open Design affiliated with Genspark?', text: 'No. Open Design is an independent, open-source project, not affiliated with Genspark or Mainfunc. This is an unaffiliated comparison.' },
+          ],
+          ctaTitle: 'Designing product UI? Own it as files.',
+          ctaBody:
+            'Star the repo, grab the desktop build, or run the install in your terminal. Keep Genspark for the logo and the launch poster — bring Open Design in for the product UI, the design system, and the code you own.',
+          ctaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all comparisons',
+        },
+      },
+      'figma-make': {
+        title: 'Best Figma Make alternative for design — Open Design',
+        description:
+          'Figma Make turns prompts into React apps inside Figma\'s cloud — behind a Full seat and AI credits. Open Design is the open-source, local-first, BYOK alternative.',
+        breadcrumb: 'Best Figma Make alternative',
+        label: 'Alternative · Figma Make',
+        heading: 'Best Figma Make alternative for design.',
+        lead:
+          'Figma Make turns a prompt — or an existing Figma frame — into a running React app, hosted inside Figma and powered by Claude Sonnet. Open Design is the open-source, local-first alternative: your coding agent, your key, output you own as files in your repo.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Figma Make ships React apps inside Figma\'s cloud, behind a paid Full seat and AI credits that reset monthly. Open Design ships product UI as files you own — open source, local-first, driven by your own agent (BYOK). For a full move off Figma the design tool, see the Figma comparison; this page is about Figma Make.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'],
+        whyTitle: 'Why people search for a Figma Make alternative',
+        whyLead: 'Figma Make is a strong fit for staying in Figma. Teams look past it when these matter more:',
+        reasons: [
+          { label: 'The app lives in Figma\'s cloud, not your repo.', body: 'Make exports React/TSX, but the running app, its publish targets and Supabase wiring stay in Figma\'s runtime behind a Full seat. Open Design writes UI, code, and your design system straight into your repo.' },
+          { label: 'AI usage is metered and unpredictable.', body: 'Teams burn a 3,000-credit monthly allowance in a day, mostly fixing imperfect output — and undo never refunds a credit. Open Design is BYOK: pay your provider directly, no credit ledger.' },
+          { label: 'Authoring needs a paid Full seat.', body: 'A View or Dev seat can\'t build in Make — you need a Full seat (~$16–$90/user/mo) on top of credits. Open Design is Apache-2.0 and free to run.' },
+          { label: 'Closed-source and cloud-only.', body: 'No self-host, no local mode, no on-premise option. Open Design is open source and local-first — it runs on your machine and you can audit it.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Local-first means the agent runs on your machine, against your repo, and the artifacts are committed as files you control — reviewable in pull requests, diffable, usable even if you stop using the tool.',
+          'BYOK means Open Design runs on the coding agent you already use (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen) with your own key — you own the output and the engine driving it.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'License', od: 'Apache-2.0, full source on GitHub', cd: 'Proprietary / closed-source' },
+          { name: 'Where it runs', od: 'Local-first, your machine & repo', cd: "Figma's hosted cloud only (sandboxed runtime)" },
+          { name: 'Account / seat', od: 'None — clone the repo and run', cd: 'Paid Figma Full seat to author (Dev/Collab = trial only)' },
+          { name: 'Pricing model', od: 'Free to run; pay your own model provider (BYOK)', cd: 'Full seat ~$16–$90/user/mo plus metered AI credits' },
+          { name: 'AI usage limits', od: 'None imposed — bounded only by your key', cd: 'Credits 500–4,250/mo, reset monthly, no rollover; undo ≠ refund' },
+          { name: 'AI model', od: 'Any, via your coding agent', cd: 'Anthropic Claude Sonnet (fixed)' },
+          { name: 'Output & portability', od: 'Files in your repo — UI, components, design system', cd: 'React/TSX, ZIP or GitHub; running app stays in Figma' },
+          { name: 'Self-host / on-prem', od: 'Yes — fully local', cd: 'No — Figma cloud only' },
+          { name: 'Backend', od: 'Any — agent writes against your stack', cd: 'Supabase only (auth, Postgres, storage)' },
+          { name: 'Hosting / publishing', od: 'Your infra / wherever you deploy', cd: 'Figma-hosted: template, password URL, public, Figma Sites' },
+          { name: 'Design system', od: 'Portable DESIGN.md every skill obeys', cd: 'Figma libraries + Make Kits, bound to Figma' },
+          { name: 'Code ownership', od: 'You own the files outright in git', cd: 'Export available; production-ready needs rebuild' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick Figma Make if',
+        pickClaude: [
+          'Your design work already lives in Figma and you want to attach a real frame and stay on the canvas.',
+          'You want one-click hosted publish plus the Figma Sites integration.',
+          'A fast designer-led prototype with Supabase auth built in matters more than owning the files.',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'You want output as files in your own repo, owned outright.',
+          'Open source (Apache-2.0) matters: read, self-host, fork, audit.',
+          'You want no per-seat paywall and no AI credit cap.',
+          'You want BYOK and freedom to use any model and any coding agent.',
+        ],
+        migrateTitle: 'Migration / first run',
+        migrateLead: 'Moving a Figma Make prototype toward an Open Design workflow:',
+        migrateSteps: [
+          'Install your coding agent (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen) and add your own key — no Figma seat, no credits.',
+          'Point Open Design at your repo; it runs locally and writes UI and code where your build and CI already are.',
+          'Capture your brand once in a portable DESIGN.md every skill respects.',
+          'Generate, review the diff in version control, and deploy on your own infrastructure.',
+        ],
+        migrateClosing:
+          'For a broader move off Figma the design tool, see the Open Design vs Figma comparison; this page is about Figma Make specifically.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'How much does Figma Make cost?', text: 'Authoring requires a paid Figma Full seat (~$16/user/mo on Professional up to $90 on Enterprise) plus AI credits metered per action. Credit allowances run 500/mo (Starter) to 4,250/mo (Enterprise), reset monthly, no rollover; a full app generation can cost 100+ credits. Open Design is free to run — you only pay your own model provider via your key.' },
+          { name: 'Can I self-host Figma Make or run it locally?', text: 'No. Figma Make runs exclusively inside Figma\'s hosted cloud — no local mode, self-host, or on-premise option. Open Design is local-first and runs entirely on your machine.' },
+          { name: 'Do I need a paid Figma seat to use Figma Make?', text: 'Yes. Authoring in Make requires a paid Full seat; Dev and Collab seats get trial access only and a View seat can\'t author. Open Design needs no account or seat — clone the repo and run it with your own coding agent.' },
+          { name: 'Can I export the code Figma Make generates?', text: 'Yes — download the React/TypeScript app as a ZIP or push it to a GitHub repo. The caveat: the export is source, not a turnkey deploy, and the running app and Supabase wiring stay tied to Figma\'s runtime. With Open Design the output is files in your repo from the start.' },
+          { name: 'Is Open Design open source?', text: 'Yes — Apache-2.0, local-first, BYOK with your own coding agent (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen) and your own model key. Figma Make is proprietary and closed-source.' },
+          { name: 'Is Open Design affiliated with Figma?', text: 'No. Open Design is an independent, open-source project, not affiliated with or endorsed by Figma. Figma and Figma Make are trademarks of Figma, Inc.; this is an unaffiliated comparison.' },
+        ],
+        ctaTitle: 'Own your output — from prompt to repo.',
+        ctaBody:
+          'Figma Make is the fastest path from a Figma frame to a hosted prototype — if you author behind a Full seat, spend AI credits, and keep the running app in Figma\'s cloud. Open Design takes the other path: open source, local-first, your own agent and key, every generation a file you own.',
+        rich: {
+          heroCtaLead:
+            'Open Design is the open-source, local-first alternative to Figma Make — your coding agent, your key, your files, and a portable design system you keep in your repo, with no Figma cloud lock-in and no credit meter.',
+          heroCtaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          ],
+          heroImage: {
+            src: '/alternatives/figma-make/figma-make-hero.webp',
+            alt: 'Open Design vs Figma Make — warm-paper editorial illustration of a prompt converging into a design hub you own',
+          },
+          intro: [
+            'Figma Make is Figma\'s prompt-to-app tool (<a href="https://www.figma.com/make/" target="_blank" rel="noopener">figma.com/make</a>): you describe an app — or <b>attach an existing Figma frame as the source of truth</b> — and it generates a running, interactive <b>React + TypeScript</b> web app you refine on the Figma canvas through chat, point-and-edit, and point-and-prompt. It reached general availability on <b>July 24, 2025</b>, is powered by <b>Anthropic\'s Claude Sonnet</b>, and can wire up a <b>Supabase backend</b> (auth, Postgres, storage) when your prompt calls for it. For designers who already live in Figma, it is the shortest path from a frame to something clickable and publishable.',
+            'The catch is where all of that lives. Figma Make runs <b>only inside Figma\'s hosted cloud</b>, authoring requires a <b>paid Full seat</b>, and every meaningful action spends <b>AI credits</b> that reset monthly and don\'t roll over — a full app generation can cost 100+ credits, and undo never refunds them. This page compares Figma Make specifically — not all of Figma (see <a href="/alternatives/figma/">the Open Design vs Figma comparison</a> for that) — against <b>Open Design</b>, an <b>open-source (Apache-2.0), local-first</b> design agent you drive with your own coding agent. We credit what Figma Make does genuinely well, and we are specific about where its cloud-only, seat-gated, credit-metered model pushes teams to look elsewhere.',
+          ],
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-figma-make', label: 'What Figma Make is' },
+            { id: 'compare', label: 'Feature comparison' },
+            { id: 'why-switch', label: 'Why switch' },
+            { id: 'local-byok', label: 'Local-first + BYOK' },
+            { id: 'decision', label: 'Which to pick' },
+            { id: 'migrate', label: 'Migration' },
+          ],
+          sections: [
+            {
+              id: 'what-is-figma-make',
+              heading: 'What Figma Make is',
+              blocks: [
+                { kind: 'p', text: 'Figma Make is the AI sub-product inside Figma (<a href="https://www.figma.com/make/" target="_blank" rel="noopener">figma.com/make</a>), GA since <b>July 24, 2025</b> and powered by <b>Claude Sonnet</b> — not a standalone app builder. You write a prompt or <b>attach a real Figma design/frame</b>, and it generates a live React/TSX app rendered in Figma\'s sandboxed runtime. You iterate the Figma way: chat to change behavior, click an element and prompt against just that element, or hand-edit on the canvas. When a prompt implies data, it offers to add a <b>Supabase</b> backend — email/password and magic-link auth, social login, a Postgres database, file storage, Edge Functions — connected via your own Supabase project.' },
+                { kind: 'split', imageSide: 'right', image: { src: '/alternatives/figma-make/figma-make-product.webp', alt: 'Figma Make — prompt-to-app inside the Figma ecosystem', caption: 'Figma Make: prompt-to-React-app, hosted inside Figma (screenshot: figma.com/make).' }, text: [
+                  'Output is <b>React + TypeScript only</b> — no Vue, Svelte, or other frameworks. You can take the code with you (download a ZIP or push to a GitHub repo) and publish without leaving Figma: as a team template, a password-protected internal URL, or a public deploy. The same engine feeds <b>Figma Sites</b> through "Code Layers" — draw a code layer on the canvas (the Make tool, shortcut E) and Make populates it with React you can edit or extend with npm packages.',
+                  'Commercially, Make sits on Figma\'s <b>seat + credit</b> model. Authoring requires a paid <b>Full seat</b> (Dev and Collab seats get trial access only), and AI usage is metered: a font tweak can cost 30+ credits and a full app generation 100+, against a monthly allowance that does not roll over. As of March 18, 2026 those seat-level credit limits are enforced, with pay-as-you-go overage around $0.03/credit. This page is about Figma Make specifically; for a full move off Figma the design tool, see <a href="/alternatives/figma/">the Open Design vs Figma comparison</a>.',
+                ] },
+                { kind: 'ul', items: [
+                  '<b>Where it runs:</b> Figma\'s hosted cloud only — no local mode, no self-host, no on-premise option',
+                  '<b>What you need:</b> a paid Figma <b>Full seat</b> to author; teammates need a seat to open and run the app',
+                  '<b>What it outputs:</b> React + TSX, exportable as ZIP or to GitHub; backend is Supabase only',
+                  '<b>What it costs:</b> Full seat (~$16–$90/user/mo) <b>plus</b> AI credits — 500–4,250/mo, reset monthly, no rollover, undo doesn\'t refund',
+                ] },
+              ],
+            },
+            {
+              id: 'compare',
+              heading: 'Open Design vs Figma Make, feature by feature',
+              blocks: [
+                { kind: 'table', columns: ['Feature', 'Open Design', 'Figma Make'], rows: [
+                  ['License', 'Apache-2.0, full source on GitHub', 'Proprietary / closed-source'],
+                  ['Where it runs', 'Local-first, your machine & repo', "Figma's hosted cloud only (sandboxed runtime)"],
+                  ['Account / seat', 'None — clone the repo and run', 'Paid Figma Full seat to author (Dev/Collab = trial only)'],
+                  ['Pricing model', 'Free to run; pay your own model provider (BYOK)', 'Full seat ~$16–$90/user/mo plus metered AI credits'],
+                  ['AI usage limits', 'None imposed — bounded only by your key', 'Credits 500–4,250/mo, reset monthly, no rollover; undo ≠ refund'],
+                  ['AI model', 'Any, via your coding agent', 'Anthropic Claude Sonnet (fixed)'],
+                  ['Output & portability', 'Files in your repo — UI, components, design system', 'React/TSX, ZIP or GitHub; running app stays in Figma'],
+                  ['Self-host / on-prem', 'Yes — fully local', 'No — Figma cloud only'],
+                  ['Backend', 'Any — agent writes against your stack', 'Supabase only (auth, Postgres, storage)'],
+                  ['Hosting / publishing', 'Your infra / wherever you deploy', 'Figma-hosted: template, password URL, public, Figma Sites'],
+                  ['Design system', 'Portable DESIGN.md every skill obeys', 'Figma libraries + Make Kits, bound to Figma'],
+                  ['Code ownership', 'You own the files outright in git', 'Export available; production-ready needs rebuild'],
+                ] },
+                { kind: 'p', text: 'Where Figma Make genuinely wins: if your team already lives in Figma, it is hard to beat for the first mile. You can <b>attach a real, existing Figma frame as the source of truth</b> — not re-describe it in prose — and get a clickable React app without leaving the canvas or opening an IDE. The chat / point-and-edit / point-and-prompt loop is genuinely designer-friendly, <b>one-click publish</b> (internal password URL or public deploy) and the Figma Sites "Code Layers" path turn a prototype into a shared, even shippable, surface in minutes, and the <b>Supabase integration</b> gives you real auth and a Postgres database with no backend setup — enough to validate an idea end to end. Open Design optimizes for <b>ownership</b>, <b>openness</b>, and <b>control</b> instead — open source, local-first, your output as files you own.' },
+              ],
+            },
+            {
+              id: 'why-switch',
+              heading: 'Why teams look for a Figma Make alternative',
+              blocks: [
+                { kind: 'p', text: 'Figma Make is a strong fit for staying inside Figma. Teams start looking for an alternative when the cloud-only, seat-gated, credit-metered model gets in the way.' },
+                { kind: 'steps', items: [
+                  { label: 'The app lives in Figma\'s cloud, not your repo', body: 'Make can hand you a React/TSX ZIP, but the running app — its preview, publish targets, Supabase wiring — lives in Figma\'s runtime behind a Full seat. The export gives you source, not a turnkey deploy; reviewers flag excessive div nesting, thin error handling, and architecture that needs substantial rebuilding. In Open Design the output is the artifact — UI, components, and design system land as files in your own repo, already where your build and CI live.' },
+                  { label: 'AI usage is metered, and the meter is unpredictable', body: 'The loudest complaint on Figma\'s own forum is credits: teams burn a full 3,000-credit monthly allowance in a day across ~100 prompts, and most of those go to fixing imperfect output — exactly the iteration the tool depends on. Undo reverts your file but never refunds the credit, and you can\'t predict the cap before you hit it. Open Design is BYOK: bring your own model key and pay your provider directly, so iteration cost is transparent and uncapped.' },
+                  { label: 'Authoring is gated behind a paid Full seat', body: 'A View or Dev seat won\'t let you build in Make — you need a paid Full seat (~$16–$90/user/month) just to author, on top of credits. For a team where engineers, PMs, or contractors want to generate UI, that\'s a per-head paywall before anyone writes a prompt. Open Design is Apache-2.0 and free to run; anyone with a repo checkout can drive it.' },
+                  { label: 'It\'s closed-source and cloud-only by design', body: 'Make runs exclusively in Figma\'s hosted cloud — there is no self-host, no local mode, and no on-premise option, a hard stop for teams with code-can\'t-leave-the-building policies or air-gapped requirements. Open Design is open source and local-first: it runs on your machine, your code never has to touch a third-party runtime, and you can audit exactly what the agent does.' },
+                ] },
+              ],
+            },
+            {
+              id: 'local-byok',
+              heading: 'Local-first + BYOK, explained',
+              blocks: [
+                { kind: 'split', imageSide: 'left', image: { src: '/alternatives/figma-make/figma-make-design-systems.webp', alt: 'The Open Design design-system library — brands and tokens kept as files you own', caption: 'Your design system lives as files in Open Design — portable, versioned, rendered by every skill.' }, text: [
+                  '<b>Local-first</b> means the agent runs on your machine, against your repo, and the artifacts — components, pages, tokens, the design system — are committed as <b>files you control</b>. No hosted workspace has to stay alive, and no Full seat has to stay paid, for your work to exist.',
+                  '<b>BYOK</b> means you point Open Design at the <b>coding agent you already trust</b> (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen) with <b>your own key</b>. You pick the model, pay your provider directly, and own both the output and the engine driving it — no credit meter in between.',
+                ] },
+                { kind: 'p', text: 'New to the idea? Read <a href="/blog/what-is-vibe-design/">what vibe design is</a>, browse the <a href="/plugins/">plugin and design-system library</a>, see <a href="/compare/">all Open Design comparisons</a> — including <a href="/alternatives/figma/">Figma</a> and <a href="/alternatives/lovable/">Lovable</a> — or <a href="/download/">download Open Design</a>.' },
+              ],
+            },
+            {
+              id: 'decision',
+              heading: 'Which should you pick',
+              blocks: [
+                { kind: 'p', text: 'A quick way to decide by what you actually want to do:' },
+                { kind: 'table', compact: true, columns: ['If you want…', 'Best pick'], rows: [
+                  ['Output as files in your own repo, owned outright', 'Open Design'],
+                  ['Open-source, auditable, self-hostable / local', 'Open Design'],
+                  ['No per-seat paywall and no AI credit cap', 'Open Design'],
+                  ['Freedom to use any model and any coding agent (BYOK)', 'Open Design'],
+                  ['To attach an existing Figma frame and stay on the canvas', 'Figma Make'],
+                  ['One-click hosted publish + Figma Sites integration', 'Figma Make'],
+                  ['A fast designer-led prototype with Supabase auth built in', 'Figma Make'],
+                ] },
+              ],
+            },
+            {
+              id: 'migrate',
+              heading: 'Moving from Figma Make to Open Design',
+              blocks: [
+                { kind: 'p', text: 'Getting from a Figma Make prototype to an Open Design workflow:' },
+                { kind: 'ol', items: [
+                  'Install your coding agent (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen) and add your own model key — no Figma seat, no credits.',
+                  'Point Open Design at your repo; it runs locally and writes generated UI, components, and code where your build and CI already are.',
+                  'Capture your brand once in a portable DESIGN.md; every skill respects it, so output is on-brand from the first generation.',
+                  'Prompt the agent, review the changes as ordinary files in version control, and deploy on your own infrastructure — no cloud runtime, no credit meter, no export-then-rebuild.',
+                ] },
+                { kind: 'p', text: 'For a broader move off Figma the design tool, see <a href="/alternatives/figma/">the Open Design vs Figma comparison</a>.' },
+              ],
+            },
+          ],
+          faqTitle: 'FAQ',
+          faq: [
+            { name: 'How much does Figma Make cost?', text: 'Authoring requires a paid Figma Full seat (~$16/user/mo on Professional up to $90 on Enterprise) plus AI credits metered per action. Credit allowances run 500/mo (Starter) to 4,250/mo (Enterprise), reset monthly, no rollover; a full app generation can cost 100+ credits. Open Design is free to run — you only pay your own model provider via your key.' },
+            { name: 'Can I self-host Figma Make or run it locally?', text: 'No. Figma Make runs exclusively inside Figma\'s hosted cloud — no local mode, self-host, or on-premise option. Open Design is local-first and runs entirely on your machine.' },
+            { name: 'Do I need a paid Figma seat to use Figma Make?', text: 'Yes. Authoring in Make requires a paid Full seat; Dev and Collab seats get trial access only and a View seat can\'t author. Open Design needs no account or seat — clone the repo and run it with your own coding agent.' },
+            { name: 'Can I export the code Figma Make generates?', text: 'Yes — download the React/TypeScript app as a ZIP or push it to a GitHub repo. The caveat: the export is source, not a turnkey deploy, and the running app and Supabase wiring stay tied to Figma\'s runtime. With Open Design the output is files in your repo from the start.' },
+            { name: 'Is Open Design open source?', text: 'Yes — Apache-2.0, local-first, BYOK with your own coding agent (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen) and your own model key. Figma Make is proprietary and closed-source.' },
+            { name: 'Is Open Design affiliated with Figma?', text: 'No. Open Design is an independent, open-source project, not affiliated with or endorsed by Figma. Figma and Figma Make are trademarks of Figma, Inc.; this is an unaffiliated comparison.' },
+          ],
+          ctaTitle: 'Own your output — from prompt to repo.',
+          ctaBody:
+            'Figma Make is the fastest path from a Figma frame to a hosted prototype — if you author behind a Full seat, spend AI credits, and keep the running app in Figma\'s cloud. Open Design takes the other path: open source, local-first, drive it with the coding agent and key you already have, and every generation lands as files you own in your own repo.',
+          ctaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all comparisons',
+        },
+      },
+      qoder: {
+        title: 'Best QoderWork Design alternative for design — Open Design',
+        description:
+          'Looking for a QoderWork Design alternative? Open Design is the open-source, local-first design agent: drive it with your own coding agent, own every file it writes, no IDE or vendor lock-in.',
+        breadcrumb: 'Best QoderWork Design alternative',
+        label: 'Alternative · QoderWork Design',
+        heading: 'Best QoderWork Design alternative for design.',
+        lead:
+          'QoderWork Design and Open Design agree on the big idea — design-as-code, prompt-to-UI, editable output. They diverge on everything around it: Open Design is open source, local-first, and runs on your own agent (BYOK); Qoder is closed-source and bound to Alibaba\'s IDE and models.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Qoder is one of the closest products in spirit to Open Design — both do design-as-code. The difference is openness: Open Design is Apache-2.0, local-first, and BYOK with your own coding agent; Qoder is closed-source and built around Qoder IDE. It is honest about where Qoder wins.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'],
+        whyTitle: 'Why people search for a Qoder alternative',
+        whyLead: 'QoderWork Design is genuinely good. Teams still look for an alternative for ownership and freedom, not quality:',
+        reasons: [
+          { label: 'You want open source.', body: 'Qoder is closed-source, built by Alibaba. Open Design is Apache-2.0 — read, self-host, fork, audit.' },
+          { label: 'You want BYOK and agent choice.', body: 'Qoder runs its own models inside its product; Open Design runs on the coding agent you already use, with your keys.' },
+          { label: 'You don\'t want IDE lock-in.', body: 'Qoder\'s smoothest path runs through Qoder IDE; Open Design works alongside whatever you already have.' },
+          { label: 'You want to truly own output.', body: 'With Open Design the deliverable is files in your repo — committed, versioned, yours from the first keystroke.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Local-first means your design work lives where your code lives: real source — components, styles, a portable DESIGN.md every skill follows — written into your repo, versioned in git, usable even if you stop using Open Design.',
+          'BYOK means Open Design ships no model and charges no inference. You point it at the agent and key you already have (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen); you choose the model and see the cost.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'License', od: 'Open source (Apache-2.0)', cd: 'Closed-source (Alibaba)' },
+          { name: 'Agent & model', od: 'BYOK — your own Claude Code / Codex / Cursor / Gemini / OpenCode / Qwen', cd: "Bound to Qoder's own models" },
+          { name: 'Where it runs', od: 'Local-first, in your repo, any editor', cd: 'Hosted canvas; pin to local folder; Qoder IDE handoff' },
+          { name: 'Output', od: 'Real files in your repo (+ DESIGN.md)', cd: 'HTML or React (shadcn/ui, Spark, Ant Design)' },
+          { name: 'Design system', od: 'Portable DESIGN.md every skill obeys', cd: 'Inside the Qoder product' },
+          { name: 'Canvas / visual editing', od: 'Code-/file-driven', cd: 'Infinite canvas, marquee-select, Nudge' },
+          { name: 'IDE / ecosystem lock-in', od: 'None — works alongside your stack', cd: 'Smoothest inside the Qoder ecosystem' },
+          { name: 'Self-host / fork', od: 'Yes', cd: 'No' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick QoderWork Design if',
+        pickClaude: [
+          'You want the most polished interactive canvas — marquee-select, annotate, Nudge — out of the box.',
+          'You like the Questions → Design Plan → Nudge loop built in.',
+          'You\'re happy in the Qoder ecosystem and want one-click handoff into Qoder IDE.',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'You want an open-source (Apache-2.0) tool you can audit, self-host, and fork.',
+          'You already pay for a coding agent and want to drive design with it via your own keys.',
+          'You want every deliverable to be real files in your repo, yours forever.',
+          'You don\'t want your design workflow tied to one IDE or vendor.',
+        ],
+        migrateTitle: 'Migration / first run',
+        migrateLead: 'Moving from Qoder to Open Design — since both speak code, your existing output is the starting point:',
+        migrateSteps: [
+          'Export the HTML or React Qoder generated into your repository.',
+          'Capture your design language (colors, spacing, radii, components) in a portable DESIGN.md.',
+          'Point Open Design at the coding agent you already use with your own key.',
+          'Describe changes; your agent edits the real files. Review in pull requests, commit, ship.',
+        ],
+        migrateClosing:
+          'From here the work is versioned and owned, end to end — no canvas you have to stay inside.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'Open Design and Qoder look really similar — what\'s the difference?', text: 'They are close: both do prompt-to-UI, design-as-code, editable output. The difference is everything around generation. Open Design is open source (Apache-2.0), local-first, and BYOK with your own agent, output in your repo. Qoder is closed-source, built around Alibaba\'s models and Qoder IDE.' },
+          { name: 'Is Open Design really open source?', text: 'Yes — Apache-2.0. Read the source, self-host, fork, audit. QoderWork Design is closed-source.' },
+          { name: 'Which AI agent do I use with Open Design?', text: 'Whichever you already have — Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen, via BYOK with your own keys.' },
+          { name: 'Does Qoder also keep my work local?', text: 'Partly — it can pin a project to a local folder and hand off to Qoder IDE. But the primary surface is a hosted canvas. In Open Design, the repo itself is the product.' },
+          { name: 'Does Open Design have an interactive canvas?', text: 'No — a deliberate trade. Qoder\'s canvas with marquee-select and Nudge is excellent for visual editing. Open Design is code- and file-driven through your coding agent.' },
+          { name: 'Is Open Design affiliated with Qoder or Alibaba?', text: 'No. Open Design is an independent, open-source project, not affiliated with Qoder or Alibaba. This is an unaffiliated comparison.' },
+        ],
+        ctaTitle: 'Own your design workflow — end to end.',
+        ctaBody:
+          'Open Design runs on the coding agent you already use and writes files you actually own. No lock-in, no second subscription, no canvas you can\'t leave.',
+        rich: {
+          heroCtaLead:
+            'Open Design is the open-source, local-first alternative to QoderWork Design — the same design-as-code idea, but Apache-2.0, BYOK with your own coding agent, and output that lives in your repo and belongs to you.',
+          heroCtaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          ],
+          heroImage: {
+            src: '/alternatives/qoder/qoder-hero.webp',
+            alt: 'Open Design vs Qoder — warm-paper editorial illustration of a prompt converging into a design hub you own',
+          },
+          intro: [
+            'Of every tool in this comparison series, QoderWork Design is the closest to Open Design in spirit. Built by the Qoder team at Alibaba (<a href="https://qoder.com" target="_blank" rel="noopener">qoder.com</a>), it bills itself as <b>"AI-native design as code"</b>: you describe what you want, it renders a real, runnable design on an infinite canvas, you clarify intent through <b>Questions</b>, preview a structured <b>Design Plan</b> before it builds, and then <b>Nudge</b> color, spacing and radius after the fact. The output is genuine front-end code — HTML or React on shadcn/ui, Spark Design or Ant Design — not a flattened vector mock. That is a real product with a polished loop, and it deserves the credit.',
+            'Because the two tools share a thesis — prompt to UI, design as <i>code</i>, editable output you can ship — the honest comparison is not about who generates nicer screens. It is about everything <i>around</i> generation. Open Design is <b>Apache-2.0</b>, <b>local-first</b>, and <b>BYOK</b>: it ships no model, runs on the coding agent you already pay for, and writes its output straight into your repository. QoderWork Design is <b>closed-source</b>, runs on <b>Qoder\'s own (undisclosed) models</b> behind a credit meter, and is at its best inside Alibaba\'s own IDE. If you want the most polished integrated canvas, Qoder is excellent. If you want openness, your own agent, and a workflow that is not bet on a single vendor, that is the gap Open Design fills.',
+          ],
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-qoder', label: 'What QoderWork Design is' },
+            { id: 'why-switch', label: 'Why teams look for an alternative' },
+            { id: 'compare', label: 'Feature comparison' },
+            { id: 'qoder-wins', label: 'Where Qoder genuinely wins' },
+            { id: 'decision', label: 'Which to pick' },
+            { id: 'local-byok', label: 'Local-first + BYOK' },
+            { id: 'migrate', label: 'Migration / first run' },
+          ],
+          sections: [
+            {
+              id: 'what-is-qoder',
+              heading: 'What QoderWork Design actually is',
+              blocks: [
+                { kind: 'p', text: 'QoderWork Design is the first vertical workbench inside QoderWork, the desktop agent surface of Qoder — Alibaba\'s agentic coding platform, launched in public preview in August 2025. Where a traditional design tool centers on cloud-based vector editing, QoderWork Design treats the design as a <b>code asset the team co-owns</b>: from the first prompt, designers and engineers operate on the same runnable file, and it can be handed off to the Qoder IDE in a single click with no lossy export step between design and development.' },
+                { kind: 'split', imageSide: 'right', image: { src: '/alternatives/qoder/qoder-product.webp', alt: 'QoderWork Design — design-as-code on an infinite canvas with Questions, Design Plan and Nudge', caption: 'QoderWork Design: design-as-code on an infinite canvas, with the Questions → Design Plan → Nudge loop (screenshot: qoder.com).' }, text: [
+                  'Three mechanisms make the loop feel deliberate rather than slot-machine. <b>Questions</b>: when your prompt is underspecified, the agent asks structured clarifying questions to align on intent before it generates, instead of guessing. <b>Design Plan</b>: under a Plan tab it previews a structured plan — layout, style, content hierarchy — that you can read and correct <i>before</i> any pixels are produced. <b>Nudge</b>: after generation it exposes the key decisions (color, spacing, corner radius) as adjustable parameters, so you tune them directly instead of re-describing the whole screen.',
+                  'On the canvas you can also <b>marquee-select a region and annotate it</b>: select an area, tell the agent what to change there, and it edits in place using the surrounding canvas context rather than regenerating the entire frame. Output ships as <b>HTML or React</b> targeting shadcn/ui, Spark Design or Ant Design; a <b>Design Files</b> tab lets you edit the underlying code, a project can be <b>pinned to a local folder</b> on your machine, and the <b>one-click handoff into Qoder IDE</b> carries the work straight into development.',
+                ] },
+                { kind: 'ul', items: [
+                  '<b>Design-as-code on an infinite canvas</b> — intent in, runnable HTML/React out, edited via the Design Files tab',
+                  '<b>Questions → Design Plan → Nudge</b> loop, plus marquee-select-and-annotate for region-level edits',
+                  '<b>Outputs to shadcn/ui, Spark Design, or Ant Design</b>; pins to a local folder; one-click handoff to Qoder IDE',
+                  '<b>Closed-source, Alibaba-built</b>; runs on Qoder\'s own undisclosed models behind a credit-based meter',
+                ] },
+              ],
+            },
+            {
+              id: 'why-switch',
+              heading: 'Why teams look for a QoderWork Design alternative',
+              blocks: [
+                { kind: 'p', text: 'QoderWork Design is genuinely good at what it does, so the reasons teams still go looking are rarely about output quality. They are about <b>ownership, freedom, and not building a workflow on top of a single closed vendor</b>. Four come up again and again.' },
+                { kind: 'steps', items: [
+                  { label: 'You want open source', body: 'Qoder is closed-source and built by Alibaba — you cannot read how it works, self-host it, or fork it if priorities change. Open Design is Apache-2.0: the entire agent, skill library and renderer are on GitHub to read, audit, run on your own machine, and fork. For anyone with a security-review or supply-chain requirement, "we can read the code" is not a nice-to-have.' },
+                  { label: 'You want BYOK and agent choice', body: 'QoderWork Design runs on Qoder\'s own models — which it does not publicly name — and meters them in credits you buy from Alibaba. Open Design ships no model and resells no inference. You point it at the coding agent and key you already pay for (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen), pick the model, and see the real cost — no second subscription, no opaque per-credit pricing.' },
+                  { label: 'You don\'t want IDE or vendor lock-in', body: 'Qoder\'s smoothest path runs through the standalone Qoder IDE and the broader Alibaba ecosystem; the one-click handoff is great precisely because it assumes you live there. Open Design is just files in a repo, so it works alongside VS Code, JetBrains, Neovim, your CI, and your existing review process — nothing has to route through one editor.' },
+                  { label: 'You want to truly own the output', body: 'In Open Design the deliverable is real source committed to your repository — components, styles, and a portable DESIGN.md — versioned in git and fully usable even if you stop using Open Design tomorrow. Qoder can pin to a local folder, but the product surface is a hosted canvas you have to stay inside; the files are a sync target downstream of it, not the source of truth.' },
+                ] },
+              ],
+            },
+            {
+              id: 'compare',
+              heading: 'Open Design vs QoderWork Design, feature by feature',
+              blocks: [
+                { kind: 'table', columns: ['Feature', 'Open Design', 'QoderWork Design'], rows: [
+                  ['License', 'Open source (Apache-2.0)', 'Closed-source (Alibaba)'],
+                  ['Agent & model', 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', "Qoder's own models (not publicly named)"],
+                  ['Where it runs', 'Local-first, in your repo, any editor', 'Hosted canvas; pin to local folder; Qoder IDE handoff'],
+                  ['Output format', 'Real files in your repo (+ DESIGN.md)', 'HTML or React you can inspect and edit'],
+                  ['Component libraries', 'Any — your real components & tokens', 'shadcn/ui, Spark Design, Ant Design'],
+                  ['Design system', 'Portable DESIGN.md every skill obeys', 'Configured inside the Qoder product'],
+                  ['Canvas / visual editing', 'Code-/file-driven (no canvas)', 'Infinite canvas, marquee-select + annotate, Nudge'],
+                  ['Generation loop', 'Agent + skills + DESIGN.md context', 'Questions → Design Plan → Nudge'],
+                  ['IDE / ecosystem lock-in', 'None — works alongside any stack', 'Smoothest inside the Qoder IDE / Alibaba ecosystem'],
+                  ['Self-host / fork', 'Yes', 'No'],
+                  ['Ownership', 'Files in your repo, yours forever', 'Files exportable; canvas is the primary surface'],
+                  ['Pricing', 'Free & open; you pay only your own agent', 'Credit-based: Pro ~$30/mo, Pro+ ~$60, Ultra ~$200'],
+                ] },
+              ],
+            },
+            {
+              id: 'qoder-wins',
+              heading: 'Where QoderWork Design genuinely wins',
+              blocks: [
+                { kind: 'p', text: 'Be clear-eyed about this, because Qoder is the strongest peer in the field. Its <b>interactive canvas is the best part</b>: marquee-selecting a region and annotating the exact change is faster and more intuitive than describing edits in prose, and because it edits using surrounding canvas context it does not blow away the rest of the frame. The <b>Questions → Design Plan → Nudge loop is well-engineered</b> — clarifying intent up front and exposing color, spacing and radius as live parameters genuinely reduces the re-prompt churn that plagues most generate-a-screen tools. And if your team already lives in Alibaba\'s stack, the <b>one-click handoff into Qoder IDE</b> is seamless in a way a file-based tool cannot match. Open Design deliberately trades that single, polished, integrated canvas for <b>openness</b>, <b>your own coding agent</b>, and <b>repo-native ownership</b>. If the canvas is what you value most, Qoder is the better fit — and that is an honest call, not a hedge.' },
+              ],
+            },
+            {
+              id: 'decision',
+              heading: 'Which should you pick',
+              blocks: [
+                { kind: 'p', text: 'A quick way to decide by what you care most about:' },
+                { kind: 'table', compact: true, columns: ['If you care most about…', 'Lean toward'], rows: [
+                  ['Open source you can read, audit, fork, and self-host', 'Open Design'],
+                  ['Using your own coding agent and keys (BYOK)', 'Open Design'],
+                  ['Output that lives and stays in your own repo', 'Open Design'],
+                  ['Freedom from any one IDE, vendor, or ecosystem', 'Open Design'],
+                  ['No credit meter — you pay only your own agent', 'Open Design'],
+                  ['A polished, interactive visual canvas with marquee-edit', 'QoderWork Design'],
+                  ['One-click handoff into the Qoder IDE / Alibaba stack', 'QoderWork Design'],
+                ] },
+              ],
+            },
+            {
+              id: 'local-byok',
+              heading: 'Local-first + BYOK, explained',
+              blocks: [
+                { kind: 'split', imageSide: 'left', image: { src: '/alternatives/qoder/qoder-design-systems.webp', alt: 'The Open Design design-system library — brands and tokens kept as files you own', caption: 'Your design system lives as files in Open Design — portable, versioned, rendered by every skill.' }, text: [
+                  '<b>Local-first</b> means your design work lives as <b>files in your own repo</b>: real source and a portable <b>DESIGN.md</b> that every skill obeys, versioned in git, reviewable in pull requests, and fully usable even if you stopped using Open Design tomorrow. QoderWork Design can pin a project to a local folder and hand it to Qoder IDE — real and useful — but the product surface is still the hosted canvas, and the local files are a sync target downstream of it. In Open Design the repo <i>is</i> the surface; there is no canvas you have to stay inside.',
+                  '<b>BYOK</b> means Open Design ships no model and charges no inference. Point it at <b>your own agent and key</b> — Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — pick the model, and pay your provider directly. No credits to top up, no opaque per-task burn, and you upgrade to a better model the day it ships instead of waiting for a vendor to wire it in.',
+                ] },
+                { kind: 'p', text: 'New to the idea? Read <a href="/blog/what-is-vibe-design/">what vibe design is</a>, browse the <a href="/plugins/">plugin and design-system library</a>, see <a href="/compare/">all Open Design comparisons</a> — including <a href="/alternatives/figma/">Figma</a>, <a href="/alternatives/lovable/">Lovable</a>, and <a href="/alternatives/v0/">v0</a> — or <a href="/download/">download Open Design</a>.' },
+              ],
+            },
+            {
+              id: 'migrate',
+              heading: 'Migration / first run',
+              blocks: [
+                { kind: 'p', text: 'Because both tools speak code, there is no lossy conversion — your existing QoderWork Design output is the starting point, not something you redraw.' },
+                { kind: 'ol', items: [
+                  'Export the HTML or React QoderWork Design generated (shadcn/ui, Spark, or Ant Design components) into your repository, or pull from the local folder you pinned.',
+                  'Capture your design language — colors, spacing, radii, type scale, components — once in a portable DESIGN.md that every Open Design skill will follow.',
+                  'Point Open Design at the coding agent you already use, authenticated with your own key (BYOK); nothing routes through Open Design\'s servers.',
+                  'Describe changes in plain language; your agent edits the real files. Review the diff in a pull request, commit, ship.',
+                ] },
+                { kind: 'p', text: 'From there the work is versioned and owned end to end — no canvas to stay inside, no second subscription, no vendor between you and your own files.' },
+              ],
+            },
+          ],
+          faqTitle: 'FAQ',
+          faq: [
+            { name: 'QoderWork Design and Open Design both do design-as-code — how are they actually different?', text: 'They are the closest peers in this comparison: both turn a prompt into runnable, editable UI code rather than a flattened mock. The difference is everything around generation. Open Design is open source (Apache-2.0), local-first, and BYOK — it runs on the coding agent you already pay for and writes output straight into your repo. QoderWork Design is closed-source, runs on Qoder\'s own undisclosed models behind a credit meter, and is at its best inside Alibaba\'s Qoder IDE. Same idea; opposite stances on openness and ownership.' },
+            { name: 'Is Open Design really open source?', text: 'Yes — Apache-2.0. The whole thing — the agent, the skill and design-system library, and the renderer — is on GitHub to read, self-host, fork, and audit. QoderWork Design is closed-source.' },
+            { name: 'Which AI agent and model does Open Design use?', text: 'Whichever you already have. Open Design is BYOK and ships no model of its own: Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen, with your own keys, and you choose the underlying model. QoderWork Design instead runs on Qoder\'s own models, which it does not publicly name, metered in credits.' },
+            { name: 'Does QoderWork Design also keep my work local?', text: 'Partly. It can pin a project to a local folder and hand off to the Qoder IDE in one click, which is genuinely useful. But the primary working surface is a hosted canvas, so the local files are a sync target downstream of it. In Open Design the repo itself is the product — there is no hosted canvas in the loop.' },
+            { name: 'Will my workflow be locked into Qoder IDE or the Alibaba ecosystem?', text: 'With QoderWork Design the smoothest path assumes you do — the one-click handoff lands in Qoder IDE, and the experience is tuned for the Qoder/Alibaba stack. Open Design has no IDE lock-in: output is just files in a repo, so it works alongside VS Code, JetBrains, Neovim, your CI, and your existing review process.' },
+            { name: 'How much does each cost?', text: 'Open Design is free and open source; the only thing you pay for is your own coding agent (BYOK), so there is no separate seat or credit charge. Qoder is credit-based — Pro is roughly $30/month for around 2,000 credits, Pro+ about $60, and Ultra about $200, with extra credits sold per-credit; credit-heavy tasks can burn a Pro plan in days. Check qoder.com for current numbers.' },
+            { name: 'Is Open Design affiliated with Qoder or Alibaba?', text: 'No. Open Design is an independent, open-source project and is not affiliated with, endorsed by, or sponsored by Qoder or Alibaba. Qoder and QoderWork are trademarks of their respective owners. This is an unaffiliated comparison.' },
+          ],
+          ctaTitle: 'Own your design workflow — end to end.',
+          ctaBody:
+            'Open Design runs on the coding agent you already use and writes files you actually own. No closed vendor, no credit meter, no canvas you can\'t leave.',
+          ctaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all comparisons',
+        },
+      },
+      trae: {
+        title: 'Best Trae alternative for design — Open Design',
+        description:
+          'Looking for a Trae alternative for design? Open Design is an open-source, local-first design agent that runs on your own coding agent and keeps your design system as files you own. Many teams run both.',
+        breadcrumb: 'Best Trae alternative',
+        label: 'Alternative · Trae',
+        heading: 'Best Trae alternative for design.',
+        lead:
+          'Trae is ByteDance\'s free, VS Code–based AI IDE — strong at turning screenshots and Figma frames into UI, and at SOLO full-stack generation. Open Design is a design-first agent that owns your design system as portable files — they sit at different layers, and many teams run both.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Trae is ByteDance\'s free, VS Code–based AI IDE; design-to-code (screenshot/Figma → React/Tailwind) and SOLO full-stack generation are features inside it. Open Design is design-first: it owns your design system (DESIGN.md) as files, is open source (Apache-2.0) and local-first, and runs on the coding agent you already use. They are complementary — Trae writes code, Open Design governs the design system.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Using them together', 'FAQ'],
+        whyTitle: 'Why people search for a Trae alternative for design',
+        whyLead: 'In Trae, design lives inside a code editor. Teams whose actual problem is the design system look for a tool whose first job is design:',
+        reasons: [
+          { label: 'Design-first, not an IDE feature.', body: 'A tool whose first concern is the design system — tokens, components, consistency — not the code editor.' },
+          { label: 'Own the design system as files.', body: 'A DESIGN.md and design artifacts in your repo — version-controlled, diffable, portable.' },
+          { label: 'Open source.', body: 'Trae is closed-source; Open Design is Apache-2.0 — read, fork, run it locally.' },
+          { label: 'Agent freedom + BYOK.', body: 'Drive it with the coding agent you already use, with your own key — not one bundled model.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Local-first means the work product lives with you: a portable DESIGN.md plus the design artifacts Open Design generates, committed to your repo, reviewable in pull requests, yours to keep.',
+          'BYOK means Open Design doesn\'t ship its own model. Point it at the coding agent you already trust (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen) with your own key — you control the model, cost, and data path.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'Primary job', od: 'Design-first — design system & workflow', cd: 'Coding IDE — write/ship application code' },
+          { name: 'License', od: 'Open source (Apache-2.0)', cd: 'Closed-source' },
+          { name: 'Where it runs', od: 'Local-first; files in your own repo', cd: 'Hosted AI IDE (forked from VS Code core)' },
+          { name: 'Model / agent', od: 'BYOK — Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', cd: 'Built-in agent; bundled models (Claude, GPT-4o, Gemini, DeepSeek)' },
+          { name: 'Design system', od: 'Portable DESIGN.md every skill follows', cd: 'Generated inline; in the hosted product' },
+          { name: 'Output ownership', od: 'Files you own and version-control', cd: 'App code in the editor; product hosted' },
+          { name: 'Design-to-code (screenshot/Figma)', od: 'Possible via your agent', cd: 'Core, polished feature' },
+          { name: 'Full-stack generation (SOLO)', od: 'Out of scope by design', cd: 'SOLO: frontend/backend/config/terminal' },
+          { name: 'Self-host', od: 'Yes — clone and run it yourself', cd: 'No — hosted service' },
+          { name: 'Pricing', od: 'Free + open; you pay only your own model usage', cd: 'Free tier + paid tiers (~$3–$100/mo)' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick Trae if',
+        pickClaude: [
+          'Your main job is writing code in an AI IDE.',
+          'You want fast screenshot/Figma → React/Tailwind.',
+          'You want natural-language → full-stack app generation (SOLO).',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'Your main job is design: a design system, kept consistent, owned as files.',
+          'You want open source (Apache-2.0) you can self-host and fork.',
+          'You want to bring your own coding agent and API key (BYOK).',
+          'You want the design system in your repo, versioned in git.',
+        ],
+        migrateTitle: 'Using them together',
+        migrateLead: 'For many teams the answer is both — Trae writes and ships the code, Open Design owns the design system that feeds it:',
+        migrateSteps: [
+          'Keep Trae as your IDE for writing, refactoring, and shipping code (including SOLO and design-to-code).',
+          'Add Open Design as your design layer; point it at your coding agent with your own key.',
+          'Make DESIGN.md the source of truth — every Open Design skill follows it.',
+          'Loop them: reconcile Trae\'s UI against your design system; commit design-system changes as files Trae picks up.',
+        ],
+        migrateClosing:
+          'They sit at different layers — IDE and design agent — so running them together is a natural fit, not a compromise.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'Isn\'t Trae an IDE? What\'s its relationship to Open Design?', text: 'Yes — Trae is an AI-native IDE (a code editor forked from the VS Code core) from ByteDance, and design-to-code is a feature inside it. Open Design is a design-first agent that owns your design system as files. They are complementary and sit at different layers, not direct competitors.' },
+          { name: 'Can I use Trae and Open Design together?', text: 'Yes, and many teams do. Trae writes and ships code (including SOLO and design-to-code); Open Design owns the design system (DESIGN.md) the code consumes. Open Design produces files in your repo, so any IDE — Trae included — picks them up.' },
+          { name: 'Is Trae free? How does its pricing work?', text: 'Trae has a free tier (around 5,000 autocompletions/month and limited premium-model requests) plus paid tiers — as of early 2026 roughly Lite $3, Pro $10, Pro+ $30, and Ultra $100 per month — on a token-based Basic+Bonus usage model. Open Design is free and open-source; you pay only for your own model usage via BYOK.' },
+          { name: 'Is Open Design open source?', text: 'Yes — Apache-2.0. Read it, fork it, self-host it, run it locally. Trae is closed-source and hosted.' },
+          { name: 'Which AI agent or model does Open Design use?', text: 'Whichever you choose — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen, using your own key. Trae instead bundles models (Claude Sonnet, GPT-4o, Gemini 2.5 Pro, DeepSeek, and ByteDance\'s own) that you switch between in-product.' },
+          { name: 'Is Open Design affiliated with Trae or ByteDance?', text: 'No. Open Design is an independent, open-source project, not affiliated with Trae or ByteDance. Trae is a ByteDance product and trademark. This is an unaffiliated comparison.' },
+        ],
+        ctaTitle: 'Own your design system, on your own terms.',
+        ctaBody:
+          'Open Design is the open-source, local-first design agent that runs on the coding agent you already use — and pairs cleanly with an IDE like Trae. Keep your design system as portable files you control.',
+        rich: {
+          heroCtaLead:
+            'Open Design is the open-source, local-first, design-first alternative to Trae for design — it owns your design system as portable files, runs on your own coding agent (BYOK), and pairs cleanly with the IDE you already use.',
+          heroCtaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          ],
+          heroImage: {
+            src: '/alternatives/trae/trae-hero.webp',
+            alt: 'Open Design vs Trae — warm-paper editorial illustration of a prompt converging into a design hub you own',
+          },
+          intro: [
+            'Trae and Open Design are easy to put side by side, but they solve different jobs. Trae is an AI-native IDE from ByteDance (<a href="https://www.trae.ai" target="_blank" rel="noopener">trae.ai</a>) — a coding environment forked from the <b>VS Code core</b> (it imports VS Code extensions and settings) where AI helps you write, refactor, and ship code. Its design abilities — multimodal chat that takes screenshots and mockups, and design-to-code that turns a Figma frame into React/Tailwind — are features layered on a code editor. The center of gravity is code.',
+            'Open Design starts from the other end: a design-first agent whose primary job is the design workflow — establishing a design system, keeping it consistent, and producing artifacts you own as files. It doesn\'t replace your IDE; it runs on <b>your own coding agent</b> and writes a portable <b>DESIGN.md</b> every skill follows — <b>open-source</b> (Apache-2.0) and <b>local-first</b>. So this isn\'t "which IDE is better" — it\'s two complementary tools. If you want a Trae alternative <i>for design</i> — a tool whose first concern is the design system — that\'s where Open Design fits.',
+          ],
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-trae', label: 'What Trae is' },
+            { id: 'compare', label: 'Feature comparison' },
+            { id: 'why-switch', label: 'Why switch' },
+            { id: 'local-byok', label: 'Local-first + BYOK' },
+            { id: 'decision', label: 'Which to pick' },
+            { id: 'migrate', label: 'Using them together' },
+          ],
+          sections: [
+            {
+              id: 'what-is-trae',
+              heading: 'What Trae is',
+              blocks: [
+                { kind: 'p', text: 'Trae is ByteDance\'s AI-native IDE (<a href="https://www.trae.ai" target="_blank" rel="noopener">trae.ai</a>), forked from the <b>VS Code core</b> — so it keeps the familiar editor, file explorer, and extension model while wrapping it in an AI-first interface. Its headline is a tight, multimodal AI loop: chat that accepts screenshots and mockups, <b>design-to-code</b> that turns a Figma frame or UI image into working React/Tailwind (extended in 2026 with a Figma-to-code agent over MCP), and an agentic builder that takes a project from a plain-language description to running code.' },
+                { kind: 'split', imageSide: 'right', image: { src: '/alternatives/trae/trae-product.webp', alt: 'Trae — ByteDance AI-native IDE with design-to-code', caption: 'Trae: an AI IDE with strong design-to-code and SOLO full-stack generation (screenshot: trae.ai).' }, text: [
+                  'That agentic capability — <b>TRAE SOLO</b> — is the flagship. On March 31, 2026 ByteDance shipped SOLO as a standalone app (desktop and web) that no longer needs the IDE plugin, in two modes: <b>Code</b> (the agentic coding loop) and <b>MTC ("More Than Coding")</b> for broader product work. You describe a project and it plans, then works through frontend, backend, config, and terminal commands toward something running.',
+                  'On pricing, Trae is genuinely cheap to start. There is a <b>free tier</b> (around 5,000 autocompletions/month and limited premium-model requests), then paid tiers (as of early 2026, roughly <b>Lite $3</b>, <b>Pro $10</b>, <b>Pro+ $30</b>, and <b>Ultra $100</b> per month) on a token-based Basic+Bonus usage model. You select among bundled models — Claude Sonnet, GPT-4o, Gemini 2.5 Pro, DeepSeek, plus ByteDance\'s own — and switch between them in a session without managing your own keys.',
+                  'Taken together, Trae is best understood as a complete coding IDE with strong design-to-code, not a standalone design workspace. It is <b>closed-source</b> and hosted, and (like other ByteDance tools) has drawn telemetry/privacy scrutiny.',
+                ] },
+                { kind: 'ul', items: [
+                  'ByteDance\'s AI-native IDE, forked from the VS Code core; imports VS Code extensions',
+                  'Design-to-code (screenshot/Figma → React/Tailwind) + SOLO: NL → frontend/backend/config/terminal',
+                  'Free tier + paid tiers (~$3–$100/mo); bundled models (Claude, GPT-4o, Gemini, DeepSeek) — no BYOK needed',
+                  'Closed-source and hosted — a product, not files you own',
+                ] },
+              ],
+            },
+            {
+              id: 'compare',
+              heading: 'Open Design vs Trae, feature by feature',
+              blocks: [
+                { kind: 'table', columns: ['Feature', 'Open Design', 'Trae'], rows: [
+                  ['Primary job', 'Design-first — design system & workflow', 'Coding IDE — write/ship application code'],
+                  ['License', 'Open source (Apache-2.0)', 'Closed-source'],
+                  ['Where it runs', 'Local-first; files in your own repo', 'Hosted AI IDE (forked from VS Code core)'],
+                  ['Model / agent', 'BYOK — Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', 'Built-in agent; bundled models (Claude, GPT-4o, Gemini, DeepSeek)'],
+                  ['Design system', 'Portable DESIGN.md every skill follows', 'Generated inline; lives in the hosted product'],
+                  ['Output ownership', 'Files you own and version-control in git', 'App code in the editor; product hosted'],
+                  ['Design-to-code (screenshot/Figma)', 'Possible via your agent', 'Core, polished feature'],
+                  ['Full-stack generation (SOLO)', 'Out of scope by design', 'SOLO: frontend/backend/config/terminal'],
+                  ['Self-host', 'Yes — clone and run it yourself', 'No — hosted service'],
+                  ['Pricing', 'Free + open; you pay only your own model usage', 'Free tier + paid tiers (~$3–$100/mo)'],
+                ] },
+                { kind: 'p', text: 'Where Trae wins: for several jobs it is the better pick and it is not close. It is a complete, polished AI IDE — if you want one environment to write and ship code, Trae does that and Open Design does not. Its design-to-code is first-class, SOLO\'s end-to-end full-stack generation has no equivalent in Open Design, and it is free to start. If those are your core needs, choose Trae. Open Design instead owns the design system as <b>files you own</b> — <b>open-source</b>, <b>local-first</b>, driven by <b>your own coding agent</b>.' },
+              ],
+            },
+            {
+              id: 'why-switch',
+              heading: 'Why teams look for a Trae alternative for design',
+              blocks: [
+                { kind: 'p', text: 'Trae is a strong AI IDE. Teams look for an alternative for design when the actual problem is the design system, not the code editor.' },
+                { kind: 'steps', items: [
+                  { label: 'Design-first, not an IDE feature', body: 'A tool whose first job is the design system — tokens, components, consistency.' },
+                  { label: 'Own the design system as files', body: 'A DESIGN.md and artifacts in your repo, version-controlled and portable.' },
+                  { label: 'Open source', body: 'Apache-2.0 vs closed; read it, fork it, run it locally.' },
+                  { label: 'Agent freedom + BYOK', body: 'Your own coding agent and key, not one bundled model.' },
+                ] },
+              ],
+            },
+            {
+              id: 'local-byok',
+              heading: 'Local-first + BYOK, explained',
+              blocks: [
+                { kind: 'split', imageSide: 'left', image: { src: '/alternatives/trae/trae-design-systems.webp', alt: 'The Open Design design-system library — brands and tokens kept as files you own', caption: 'Your design system lives as files in Open Design — portable, versioned, rendered by every skill.' }, text: [
+                  '<b>Local-first</b> means the work product lives with you, not in someone else\'s cloud. Open Design produces a portable <b>DESIGN.md</b> plus design artifacts directly in <b>your repository</b> — committed alongside your code, reviewable in pull requests, yours even if you stop using the tool.',
+                  '<b>BYOK</b> means Open Design doesn\'t ship or lock you into a model. Point it at the <b>coding agent you already trust</b> (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen) with <b>your own key</b>.',
+                ] },
+                { kind: 'p', text: 'New to the idea? Read <a href="/blog/what-is-vibe-design/">what vibe design is</a>, browse the <a href="/plugins/">plugin and design-system library</a>, see <a href="/compare/">all Open Design comparisons</a> — including <a href="/alternatives/figma/">Figma</a> and <a href="/alternatives/lovable/">Lovable</a> — or <a href="/download/">download Open Design</a>.' },
+              ],
+            },
+            {
+              id: 'decision',
+              heading: 'Which should you pick',
+              blocks: [
+                { kind: 'p', text: 'A quick way to decide by what you actually want:' },
+                { kind: 'table', compact: true, columns: ['If you want…', 'Pick'], rows: [
+                  ['A design-first workflow, not a code editor', 'Open Design'],
+                  ['To own your design system as files (DESIGN.md)', 'Open Design'],
+                  ['Open source you can self-host and fork', 'Open Design'],
+                  ['To bring your own coding agent and key (BYOK)', 'Open Design'],
+                  ['A full AI IDE to write, refactor, and ship code', 'Trae'],
+                  ['Fast screenshot/Figma → React/Tailwind', 'Trae'],
+                  ['Natural-language → full-stack app generation (SOLO)', 'Trae'],
+                ] },
+                { kind: 'p', text: 'Most teams find these rows are not in conflict: Trae owns the rows about writing and shipping code, Open Design owns the rows about the design system itself. That is exactly why so many run both.' },
+              ],
+            },
+            {
+              id: 'migrate',
+              heading: 'Using Trae and Open Design together',
+              blocks: [
+                { kind: 'p', text: 'A common setup runs both — Trae as the IDE, Open Design as the design layer:' },
+                { kind: 'ol', items: [
+                  'Keep Trae for writing, refactoring, and shipping code (including SOLO and design-to-code).',
+                  'Add Open Design; point it at the coding agent you already use with your own key.',
+                  'Make DESIGN.md the source of truth — every Open Design skill follows it.',
+                  'Loop them: reconcile Trae\'s UI against your design system; commit design-system changes as files Trae picks up.',
+                ] },
+                { kind: 'p', text: 'The design system stays owned, versioned, and portable across both tools.' },
+              ],
+            },
+          ],
+          faqTitle: 'FAQ',
+          faq: [
+            { name: 'Isn\'t Trae an IDE? What\'s its relationship to Open Design?', text: 'Yes — Trae is an AI-native IDE (a code editor forked from the VS Code core) from ByteDance, and design-to-code is a feature inside it. Open Design is a design-first agent that owns your design system as files. They are complementary and sit at different layers, not direct competitors.' },
+            { name: 'Can I use Trae and Open Design together?', text: 'Yes, and many teams do. Trae writes and ships code (including SOLO and design-to-code); Open Design owns the design system (DESIGN.md) the code consumes. Open Design produces files in your repo, so any IDE — Trae included — picks them up.' },
+            { name: 'Is Trae free? How does its pricing work?', text: 'Trae has a free tier (around 5,000 autocompletions/month and limited premium-model requests) plus paid tiers — as of early 2026 roughly Lite $3, Pro $10, Pro+ $30, and Ultra $100 per month — on a token-based Basic+Bonus usage model. Open Design is free and open-source; you pay only for your own model usage via BYOK.' },
+            { name: 'Is Open Design open source?', text: 'Yes — Apache-2.0. Read it, fork it, self-host it, run it locally. Trae is closed-source and hosted.' },
+            { name: 'Which AI agent or model does Open Design use?', text: 'Whichever you choose — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen, using your own key. Trae instead bundles models (Claude Sonnet, GPT-4o, Gemini 2.5 Pro, DeepSeek, and ByteDance\'s own) that you switch between in-product.' },
+            { name: 'Is Open Design affiliated with Trae or ByteDance?', text: 'No. Open Design is an independent, open-source project, not affiliated with Trae or ByteDance. Trae is a ByteDance product and trademark. This is an unaffiliated comparison.' },
+          ],
+          ctaTitle: 'Own your design system, on your own terms.',
+          ctaBody:
+            'Open Design is the open-source, local-first design agent that runs on the coding agent you already use — and pairs cleanly with an IDE like Trae. Keep your design system as portable files you control.',
+          ctaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
           ],
           hubLinkLabel: 'See all comparisons',
         },
@@ -1792,9 +2870,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           heroCtaLead:
             'Open Design is the open-source, local-first design layer around the coding agent you already use — your key, your files, a curated skill and design-system library.',
           heroCtaActions: [
-            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
             { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
           ],
           heroImage: {
             src: '/alternatives/claude-design/claude-design-hero.webp',
@@ -1913,9 +2990,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           ctaBody:
             'Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.',
           ctaActions: [
-            { label: 'Get started', href: '/quickstart/', variant: 'primary' },
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
             { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
-            { label: 'Download the desktop app', href: 'https://github.com/nexu-io/open-design/releases', variant: 'ghost', external: true },
           ],
           hubLinkLabel: 'See all comparisons',
         },

@@ -162,6 +162,7 @@ export function hasProvenance(provenance: DesignSystemProvenance): boolean {
     provenance.companyBlurb
       || provenance.notes
       || provenance.sourceNotes
+      || provenance.sourceUrls?.length
       || provenance.githubUrls?.length
       || provenance.localCodeFiles?.length
       || provenance.figFiles?.length
@@ -178,12 +179,14 @@ export function hasProvenance(provenance: DesignSystemProvenance): boolean {
 export function parseProvenance(raw: unknown): DesignSystemProvenance | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const value = raw as Record<string, unknown>;
+  const sourceUrls = parseStringList(value.sourceUrls);
   const githubUrls = parseStringList(value.githubUrls);
   const localCodeFiles = parseStringList(value.localCodeFiles);
   const figFiles = parseStringList(value.figFiles);
   const assetFiles = parseStringList(value.assetFiles);
   return normalizeProvenance({
     ...(typeof value.companyBlurb === 'string' ? { companyBlurb: value.companyBlurb } : {}),
+    ...(sourceUrls ? { sourceUrls } : {}),
     ...(githubUrls ? { githubUrls } : {}),
     ...(localCodeFiles ? { localCodeFiles } : {}),
     ...(figFiles ? { figFiles } : {}),
@@ -206,6 +209,7 @@ export function normalizeProvenance(
   fallback: { companyBlurb?: string; sourceNotes?: string } = {},
 ): DesignSystemProvenance | undefined {
   const companyBlurb = cleanMultiline(raw?.companyBlurb) || cleanMultiline(fallback.companyBlurb);
+  const sourceUrls = uniqueCleanList(raw?.sourceUrls);
   const githubUrls = uniqueCleanList(raw?.githubUrls);
   const localCodeFiles = uniqueCleanList(raw?.localCodeFiles);
   const figFiles = uniqueCleanList(raw?.figFiles);
@@ -214,6 +218,7 @@ export function normalizeProvenance(
   const sourceNotes = cleanMultiline(raw?.sourceNotes) || cleanMultiline(fallback.sourceNotes);
   const provenance: DesignSystemProvenance = {
     ...(companyBlurb ? { companyBlurb } : {}),
+    ...(sourceUrls.length > 0 ? { sourceUrls } : {}),
     ...(githubUrls.length > 0 ? { githubUrls } : {}),
     ...(localCodeFiles.length > 0 ? { localCodeFiles } : {}),
     ...(figFiles.length > 0 ? { figFiles } : {}),
@@ -235,7 +240,8 @@ export function provenanceToNotes(provenance: DesignSystemProvenance | undefined
   if (!provenance) return '';
   const lines: string[] = [];
   if (provenance.companyBlurb) lines.push(`Company/product context: ${provenance.companyBlurb}`);
-  if (provenance.githubUrls?.length) lines.push(`GitHub/code links: ${provenance.githubUrls.join(', ')}`);
+  if (provenance.sourceUrls?.length) lines.push(`Source links: ${provenance.sourceUrls.join(', ')}`);
+  if (provenance.githubUrls?.length) lines.push(`GitHub repositories: ${provenance.githubUrls.join(', ')}`);
   if (provenance.localCodeFiles?.length) lines.push(`Local code references: ${provenance.localCodeFiles.join(', ')}`);
   if (provenance.figFiles?.length) lines.push(`Figma files: ${provenance.figFiles.join(', ')}`);
   if (provenance.assetFiles?.length) lines.push(`Fonts, logos and assets: ${provenance.assetFiles.join(', ')}`);
@@ -680,8 +686,11 @@ export function renderProvenanceMarkdown(
   }
   const sections = [
     provenance.companyBlurb ? `## Company / Product\n\n${provenance.companyBlurb}` : '',
+    provenance.sourceUrls?.length
+      ? `## Source Links\n\n${provenance.sourceUrls.map((value) => `- ${value}`).join('\n')}`
+      : '',
     provenance.githubUrls?.length
-      ? `## GitHub / Code Links\n\n${provenance.githubUrls.map((value) => `- ${value}`).join('\n')}`
+      ? `## GitHub Repositories\n\n${provenance.githubUrls.map((value) => `- ${value}`).join('\n')}`
       : '',
     provenance.localCodeFiles?.length
       ? `## Local Code References\n\n${provenance.localCodeFiles.map((value) => `- ${value}`).join('\n')}`

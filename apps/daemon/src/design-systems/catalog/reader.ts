@@ -19,6 +19,8 @@ import {
 import {
   buildDesignSystemPullFileAllowlist,
   buildDesignSystemPullIndex,
+  designSystemStaticContentType,
+  isAllowedDesignSystemStaticFile,
   readDesignSystemSourceEvidence,
 } from './assets.js';
 import {
@@ -37,6 +39,7 @@ import type {
   DesignSystemListOptions,
   DesignSystemPackageInfo,
   DesignSystemPullFileDetail,
+  DesignSystemStaticFileDetail,
   DesignSystemSummary,
   DesignSystemSurface,
   SwatchRow,
@@ -285,6 +288,51 @@ export async function readDesignSystemPullFile(
       updatedAt: stats.mtime.toISOString(),
       encoding,
       content: encoding === 'utf8' ? bytes.toString('utf8') : bytes.toString('base64'),
+    };
+  } catch (err) {
+    if (isAbsenceError(err)) return null;
+    throw err;
+  }
+}
+
+/**
+ * Reads a design-system file as raw bytes for static HTTP serving, or `null`
+ * when the id/path is invalid, the file is not manifest-declared (see
+ * {@link isAllowedDesignSystemStaticFile}), escapes the design-system root, or
+ * does not exist. The returned payload carries the resolved `Content-Type`.
+ */
+export async function readDesignSystemStaticFile(
+  root: string,
+  id: string,
+  relativePath: string,
+  options: { idPrefix?: string } = {},
+): Promise<DesignSystemStaticFileDetail | null> {
+  const dirId = stripPrefixAndValidateId(id, options.idPrefix);
+  const cleanPath = sanitizeRelativeFilePath(relativePath);
+  if (!dirId || !cleanPath) return null;
+
+  const brandRoot = path.join(root, dirId);
+  const manifest = await readProjectManifest(brandRoot, dirId);
+  if (!(await isAllowedDesignSystemStaticFile(brandRoot, manifest, cleanPath))) return null;
+
+  const resolvedRoot = path.resolve(brandRoot);
+  const filePath = path.resolve(brandRoot, cleanPath);
+  if (filePath !== resolvedRoot && !filePath.startsWith(`${resolvedRoot}${path.sep}`)) {
+    return null;
+  }
+
+  try {
+    const stats = await stat(filePath);
+    if (!stats.isFile()) return null;
+    const bytes = await readFile(filePath);
+    return {
+      path: cleanPath,
+      name: path.basename(cleanPath),
+      kind: classifyDesignSystemFile(cleanPath, false),
+      size: stats.size,
+      updatedAt: stats.mtime.toISOString(),
+      contentType: designSystemStaticContentType(cleanPath),
+      bytes,
     };
   } catch (err) {
     if (isAbsenceError(err)) return null;

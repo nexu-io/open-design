@@ -364,11 +364,13 @@ describe('ChatPane streaming state', () => {
     expect(copied).toContain('error_code: AGENT_EXECUTION_FAILED');
     expect(copied).toContain('project_id: project-1');
     expect(copied).toContain('conversation_id: conv-1');
-    expect(copied).toContain('json-rpc id 4: Connection reset by server');
+    expect(copied).toMatch(/^json-rpc id 4: Connection reset by server\n\nOpen Design run error diagnostics/);
+    expect(copied).not.toContain('raw_error:');
+    expect(copied).not.toContain('\nerror:\n');
   });
 
   it('formats run error diagnostics with a raw error when guidance copy differs', () => {
-    expect(buildRunErrorDiagnosticText({
+    const text = buildRunErrorDiagnosticText({
       message: 'Service unavailable. Try again.',
       rawMessage: 'json-rpc id 4: Connection reset by server',
       errorCode: 'UPSTREAM_UNAVAILABLE',
@@ -377,7 +379,30 @@ describe('ChatPane streaming state', () => {
       conversationId: 'conv-1',
       assistantMessageId: 'assistant-1',
       agentId: 'amr',
-    })).toContain('raw_error:\njson-rpc id 4: Connection reset by server');
+    });
+
+    expect(text).toMatch(/^json-rpc id 4: Connection reset by server\n\nOpen Design run error diagnostics/);
+    expect(text).not.toContain('raw_error:');
+    expect(text).toContain('error_code: UPSTREAM_UNAVAILABLE');
+    expect(text).not.toContain('\nerror:\n');
+  });
+
+  it('falls back to the display message when raw error text is unavailable', () => {
+    const text = buildRunErrorDiagnosticText({
+      message: 'Connection dropped. Try again.',
+      rawMessage: '  ',
+      errorCode: 'AGENT_CONNECTION_DROPPED',
+      traceId: 'run-abc',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      agentId: 'amr',
+    });
+
+    expect(text).toMatch(/^Connection dropped\. Try again\.\n\nOpen Design run error diagnostics/);
+    expect(text).not.toContain('raw_error:');
+    expect(text).toContain('error_code: AGENT_CONNECTION_DROPPED');
+    expect(text).not.toContain('\nerror:\n');
   });
 
   it('renders user turns with the chat bubble styling hook', () => {

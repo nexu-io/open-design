@@ -83,6 +83,10 @@ const residualAllowedExactPaths = new Set([
   "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",
+  // Vendored dom-to-pptx browser bundle used by the packaged desktop renderer
+  // for editable PPTX export. It is loaded into the off-screen Chromium page as
+  // an upstream browser asset, not compiled as project-owned TypeScript.
+  "apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js",
   // Shared nav enhancer for the landing-page static `/community/` pages,
   // which are verbatim HTML served straight from `public/` (not Astro-
   // compiled). It must ship as a browser-loadable `.js` asset, same as the
@@ -158,6 +162,16 @@ const residualAllowedPathPrefixes = [
   "mocks/lib/",
   "mocks/mock-agent.mjs",
   "mocks/scripts/",
+  // OD Clipper - a standalone Chrome MV3 extension subproject (not a pnpm
+  // workspace package, no build step). It ships hand-written browser-loadable
+  // JavaScript (service worker, content script, popup) the same way as the
+  // web notifications service worker; it must not be retypecast to TypeScript.
+  "clipper/",
+  // OD Figma Import - a standalone Figma plugin subproject (no build step,
+  // not a pnpm workspace package). Figma plugins load hand-written
+  // browser-loadable JavaScript (`code.js` sandbox + `ui.html`); same
+  // precedent as the clipper, and it must not be retypecast to TypeScript.
+  "figma-plugin/",
   "test-results/",
   "vendor/",
 ];

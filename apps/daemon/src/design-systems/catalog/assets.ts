@@ -251,6 +251,97 @@ export async function buildDesignSystemPullFileAllowlist(
   return allowed;
 }
 
+const DESIGN_SYSTEM_STATIC_SYSTEM_FILES = new Set([
+  'system/index.html',
+  'system/kit.html',
+  'system/kit.dark.html',
+  'system/tokens.default.json',
+  'system/artifacts/landing.html',
+  'system/artifacts/deck.html',
+  'system/artifacts/poster.html',
+  'system/artifacts/email.html',
+  'system/artifacts/newsletter.html',
+  'system/artifacts/form.html',
+]);
+
+/**
+ * Returns true when `relativePath` is permitted to be served as a static file
+ * for a design system: either a well-known rendered system artifact, or a file
+ * declared by the package manifest (design/tokens/components, preview pages,
+ * fonts, and the recursively-expanded `assets/` directory).
+ *
+ * @param brandRoot - Absolute path to the design-system directory.
+ * @param manifest - Parsed manifest, or `null` when the package has none.
+ * @param relativePath - POSIX-normalised relative path to test.
+ */
+export async function isAllowedDesignSystemStaticFile(
+  brandRoot: string,
+  manifest: DesignSystemProjectManifest | null,
+  relativePath: string,
+): Promise<boolean> {
+  if (!isSafeManifestPath(relativePath)) return false;
+  if (DESIGN_SYSTEM_STATIC_SYSTEM_FILES.has(relativePath)) return true;
+
+  const allowed = new Set<string>();
+  const add = (filePath: string | undefined): void => {
+    const cleanPath = typeof filePath === 'string' ? sanitizeRelativeFilePath(filePath) : null;
+    if (cleanPath) allowed.add(cleanPath);
+  };
+
+  add(manifest?.files.design ?? 'DESIGN.md');
+  add(manifest?.files.tokens ?? 'tokens.css');
+  add(manifest?.files.components ?? 'components.html');
+  add(manifest?.files.designTokens);
+  add(manifest?.files.tailwind);
+  add(manifest?.usage ?? 'USAGE.md');
+  add(manifest?.componentsManifest ?? 'components.manifest.json');
+  for (const page of manifest?.preview?.pages ?? []) add(page.path);
+  for (const font of manifest?.fonts ?? []) add(font.file);
+
+  if (manifest?.assetsDir === 'assets') {
+    await addFilesUnderDeclaredDir(brandRoot, 'assets', allowed);
+  }
+
+  return allowed.has(relativePath);
+}
+
+/**
+ * Maps a design-system static file's extension to the HTTP `Content-Type`
+ * header value used when serving it. Falls back to `application/octet-stream`.
+ */
+export function designSystemStaticContentType(relativePath: string): string {
+  const ext = path.extname(relativePath).toLowerCase();
+  switch (ext) {
+    case '.html':
+      return 'text/html; charset=utf-8';
+    case '.css':
+      return 'text/css; charset=utf-8';
+    case '.json':
+      return 'application/json; charset=utf-8';
+    case '.svg':
+      return 'image/svg+xml';
+    case '.png':
+      return 'image/png';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.webp':
+      return 'image/webp';
+    case '.gif':
+      return 'image/gif';
+    case '.woff':
+      return 'font/woff';
+    case '.woff2':
+      return 'font/woff2';
+    case '.ttf':
+      return 'font/ttf';
+    case '.otf':
+      return 'font/otf';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
 /**
  * @internal
  * Recursively adds all files under a declared directory to the pull-file allowlist.

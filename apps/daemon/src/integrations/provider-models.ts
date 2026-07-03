@@ -18,6 +18,14 @@ type ProviderModelsInput = ProviderModelsRequest & {
 };
 
 const PROVIDER_MODELS_TIMEOUT_MS = 12_000;
+const BEDROCK_MODEL_OPTIONS: ProviderModelOption[] = [
+  { id: 'anthropic.claude-3-5-sonnet-20241022-v2:0', label: 'Claude 3.5 Sonnet v2' },
+  { id: 'anthropic.claude-3-5-haiku-20241022-v1:0', label: 'Claude 3.5 Haiku' },
+  { id: 'anthropic.claude-3-haiku-20240307-v1:0', label: 'Claude 3 Haiku' },
+  { id: 'amazon.nova-pro-v1:0', label: 'Amazon Nova Pro' },
+  { id: 'amazon.nova-lite-v1:0', label: 'Amazon Nova Lite' },
+  { id: 'amazon.nova-micro-v1:0', label: 'Amazon Nova Micro' },
+];
 
 function appendVersionedApiPath(baseUrl: string, suffix: string): string {
   const url = new URL(baseUrl);
@@ -84,6 +92,32 @@ function uniqueModels(models: ProviderModelOption[]): ProviderModelOption[] {
   return out.sort((a, b) => a.id.localeCompare(b.id));
 }
 
+function isOpenAiChatModelId(id: string): boolean {
+  const normalized = id.trim().toLowerCase();
+  if (!normalized) return false;
+  if (
+    normalized.includes('embedding') ||
+    normalized.includes('moderation') ||
+    normalized.includes('rerank') ||
+    normalized.includes('whisper') ||
+    normalized.includes('tts') ||
+    normalized.includes('transcribe') ||
+    normalized.includes('speech') ||
+    normalized.includes('image') ||
+    normalized.includes('video') ||
+    normalized.includes('dall-e') ||
+    normalized.includes('stable-diffusion') ||
+    normalized.includes('flux') ||
+    (
+      normalized.includes('wan') &&
+      /(?:^|[-_.:])(?:t2v|i2v|v2v)(?:[-_.:]|$)/u.test(normalized)
+    )
+  ) {
+    return false;
+  }
+  return !/(?:^|[-_.:])(?:t2i|i2i|t2v|i2v|v2v|tts|asr|ocr)(?:[-_.:]|$)/u.test(normalized);
+}
+
 function extractOpenAiModels(data: unknown): ProviderModelOption[] {
   const items = (data as { data?: unknown }).data;
   if (!Array.isArray(items)) return [];
@@ -91,6 +125,7 @@ function extractOpenAiModels(data: unknown): ProviderModelOption[] {
     items
       .map((item) => (item as { id?: unknown })?.id)
       .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      .filter(isOpenAiChatModelId)
       .map((id) => ({ id, label: id })),
   );
 }
@@ -228,6 +263,15 @@ export async function listProviderModels(
       kind: validated.forbidden ? 'forbidden' : 'invalid_base_url',
       latencyMs: Date.now() - start,
       detail: validated.error ?? '',
+    };
+  }
+  if (input.protocol === 'bedrock') {
+    return {
+      ok: true,
+      kind: 'success',
+      latencyMs: Date.now() - start,
+      models: BEDROCK_MODEL_OPTIONS,
+      detail: 'AWS Bedrock uses a static seed until AWS credential-backed discovery is available.',
     };
   }
 

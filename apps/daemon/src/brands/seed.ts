@@ -24,6 +24,12 @@ export type BrandSeed = {
   primaryFontFamily: string;
 };
 
+type SeedCandidate = {
+  hex: string;
+  count: number;
+  sources: string[];
+};
+
 // ─── inline color utils ──────────────────────────────────────────────
 
 /** Normalize a #rgb/#rrggbb (with optional alpha) string to lowercase #rrggbb, or null. */
@@ -82,6 +88,49 @@ function isExtreme(hex: string): boolean {
   return l > 0.92 || l < 0.06;
 }
 
+function isVeryDark(hex: string): boolean {
+  return luminance(hex) < 0.12;
+}
+
+function sourceText(candidate: SeedCandidate): string {
+  return candidate.sources.join(' ').toLowerCase();
+}
+
+function isOpaqueGeneratedToken(source: string): boolean {
+  return /css-var:--(?:token|framer)-[0-9a-f-]{8,}/i.test(source);
+}
+
+function tokenNameScore(source: string): number {
+  const matches = [...source.matchAll(/css-var:(--[-\w]+)/gi)].map((m) => (m[1] ?? '').toLowerCase());
+  let score = 0;
+  for (const name of matches) {
+    if (isOpaqueGeneratedToken(`css-var:${name}`)) continue;
+    if (/\b(?:bg|background|paper|surface|canvas|ink|text|foreground|muted|border|line|shadow|white|black|grey|gray|neutral|bone)\b/.test(name)) {
+      continue;
+    }
+    if (/(?:brand|primary|accent|coral|mustard|olive|cta|action|highlight|link)/.test(name)) {
+      score += 4.5;
+    }
+    if (/(?:soft|tint|subtle|faint|hover|active|bg|background|border|shadow)/.test(name)) {
+      score -= 1.8;
+    }
+  }
+  return score;
+}
+
+function semanticScore(candidate: SeedCandidate): number {
+  const source = sourceText(candidate);
+  let score = tokenNameScore(source);
+  if (/logo-svg:/.test(source)) score += 2.2;
+  if (/(?:selector|prop):[^;]*(?:brand|accent|cta|button|hero|label|dot|selected|active|focus|primary)/.test(source)) {
+    score += 1.6;
+  }
+  if (/(?:fillstyle|strokestyle|wireframe|collisions|inspector|mouseposition|runner|matter)/.test(source)) {
+    score -= 4;
+  }
+  return score;
+}
+
 /**
  * Score a color candidate as a brand-primary contender. Higher is better.
  * Rewards usage frequency (log-damped so a single ubiquitous border color
@@ -100,38 +149,95 @@ export function primaryScore(hex: string, count: number): number {
   return sat * 2 + freq * 0.6 - valPenalty;
 }
 
+function chromaticScore(candidate: SeedCandidate): number {
+  return primaryScore(candidate.hex, candidate.count);
+}
+
+function explicitSemanticPrimary(candidates: SeedCandidate[]): string | null {
+  let winner: SeedCandidate | null = null;
+  let best = -Infinity;
+  for (const candidate of candidates) {
+    if (isExtreme(candidate.hex)) continue;
+    const semantic = semanticScore(candidate);
+    if (semantic < 3.2) continue;
+    const score = chromaticScore(candidate) + semantic;
+    if (score > best) {
+      best = score;
+      winner = candidate;
+    }
+  }
+  return winner?.hex ?? null;
+}
+
+function dominantDarkPrimary(candidates: SeedCandidate[]): string | null {
+  const darkCandidates = candidates.filter((candidate) => isVeryDark(candidate.hex));
+  const darkCount = darkCandidates.reduce((sum, candidate) => sum + candidate.count, 0);
+  const topChromaticCount = candidates.reduce((max, candidate) => {
+    if (saturation(candidate.hex) < 0.18 || isExtreme(candidate.hex)) return max;
+    return Math.max(max, candidate.count);
+  }, 0);
+  if (darkCount < 60 || darkCount < topChromaticCount * 1.35) return null;
+  return darkCandidates
+    .slice()
+    .sort((a, b) => b.count - a.count || luminance(a.hex) - luminance(b.hex))[0]?.hex ?? null;
+}
+
+function fallbackChromaticPrimary(candidates: SeedCandidate[]): string {
+  let primaryHex = DEFAULT_PRIMARY;
+  let best = -Infinity;
+  for (const candidate of candidates) {
+    const score = chromaticScore(candidate);
+    if (score > best) {
+      best = score;
+      primaryHex = candidate.hex;
+    }
+  }
+  return primaryHex;
+}
+
+function secondaryScore(candidate: SeedCandidate): number {
+  const semantic = semanticScore(candidate);
+  const chromatic = chromaticScore(candidate);
+  const logo = /logo-svg:/.test(sourceText(candidate)) ? 2.5 : 0;
+  return (Number.isFinite(chromatic) ? chromatic : -2) + semantic + logo;
+}
+
+function chooseSecondary(candidates: SeedCandidate[], primaryHex: string): string {
+  let linkHex = '';
+  let best = -Infinity;
+  for (const candidate of candidates) {
+    if (candidate.hex === primaryHex) continue;
+    if (saturation(candidate.hex) < 0.18 || isExtreme(candidate.hex)) continue;
+    const score = secondaryScore(candidate);
+    if (score > best) {
+      best = score;
+      linkHex = candidate.hex;
+    }
+  }
+  return best > -Infinity ? linkHex : '';
+}
+
 /**
  * Deterministically infer a small brand seed from raw prefetch material.
  * Same input always yields the same seed — no Date/random, no network.
  */
 export function seedFromMaterial(material: PrefetchResult): BrandSeed {
   const candidates = (material.colors ?? [])
-    .map((c) => ({ hex: normalizeHex(c.hex), count: c.count }))
-    .filter((c): c is { hex: string; count: number } => c.hex !== null);
+    .map((c) => ({ hex: normalizeHex(c.hex), count: c.count, sources: c.sources ?? [] }))
+    .filter((c): c is SeedCandidate => c.hex !== null);
 
-  // ── primary: best-scoring chromatic candidate ──
-  let primaryHex = DEFAULT_PRIMARY;
-  let best = -Infinity;
-  for (const c of candidates) {
-    const s = primaryScore(c.hex, c.count);
-    if (s > best) {
-      best = s;
-      primaryHex = c.hex;
-    }
-  }
+  // ── primary: prefer explicit human-readable brand evidence. If a site is
+  // mostly monochrome and only has generic generated chromatic effects, allow
+  // a dominant near-black to be the brand primary. Otherwise fall back to the
+  // old chromatic heuristic.
+  const primaryHex =
+    explicitSemanticPrimary(candidates) ??
+    dominantDarkPrimary(candidates) ??
+    fallbackChromaticPrimary(candidates);
 
-  // ── link/secondary: next best-scoring chromatic candidate that isn't the
-  // primary again. Empty when nothing else stands out. ──
-  let linkHex = '';
-  let secondBest = -Infinity;
-  for (const c of candidates) {
-    if (c.hex === primaryHex) continue;
-    const s = primaryScore(c.hex, c.count);
-    if (s > secondBest && s > -Infinity) {
-      secondBest = s;
-      linkHex = c.hex;
-    }
-  }
+  // ── link/secondary: strongest remaining chromatic evidence, with logo and
+  // semantic sources preferred over generic generated decoration.
+  const linkHex = chooseSecondary(candidates, primaryHex);
 
   // ── light vs dark cast: count-weighted mean luminance over the measured
   // colors. Extremes are kept here on purpose — they reveal whether the canvas

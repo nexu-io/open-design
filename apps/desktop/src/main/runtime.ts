@@ -11,13 +11,19 @@ import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
   DESKTOP_UPDATE_STATES,
+  type DesktopExportArtifactInput,
+  type DesktopExportArtifactResult,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
+  type DesktopRenderSlidesInput,
+  type DesktopRenderSlidesResult,
   type DesktopUpdateStatusSnapshot,
 } from "@open-design/sidecar-proto";
 import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
 
+import { renderDeckSlides } from "./deck-capture.js";
 import { openValidatedDirectory } from "./open-path.js";
+import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
@@ -316,7 +322,9 @@ export type DesktopRuntime = {
   click(input: DesktopClickInput): Promise<DesktopClickResult>;
   console(): DesktopConsoleResult;
   eval(input: DesktopEvalInput): Promise<DesktopEvalResult>;
+  exportArtifact(input: DesktopExportArtifactInput): Promise<DesktopExportArtifactResult>;
   exportPdf(input: DesktopExportPdfInput): Promise<DesktopExportPdfResult>;
+  renderSlides(input: DesktopRenderSlidesInput): Promise<DesktopRenderSlidesResult>;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
   show(): void;
   status(): DesktopStatusSnapshot;
@@ -1390,33 +1398,50 @@ export function hideWindowExitingFullscreen(window: WindowFullscreenSurface): vo
   window.hide();
 }
 
-// Some exports reach the renderer through a normal `<a download>` link
-// (server-written PPTX, browser-generated image blobs). Without this hook
-// Electron writes the bytes straight to the OS Downloads folder, so the user
-// never gets to pick a destination. setSaveDialogOptions makes Electron show
-// the native Save As panel before the download starts.
+// Some image exports reach the renderer through a normal `<a download>` link.
+// Without this hook Electron writes the bytes straight to the OS Downloads
+// folder, so the user never gets to pick a destination. setSaveDialogOptions
+// makes Electron show the native Save As panel before the download starts.
 const IMAGE_SAVE_AS_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
-const SAVE_AS_EXTENSIONS = new Set([".pptx", ...IMAGE_SAVE_AS_EXTENSIONS]);
+// Every programmatic export that streams a download must prompt Save As, incl.
+// the screenshot PDF (the default Export PDF flow) — otherwise it silently lands
+// in the OS Downloads folder while PPTX/images prompt correctly.
+const SAVE_AS_EXTENSIONS = new Set([".pptx", ".pdf", ...IMAGE_SAVE_AS_EXTENSIONS]);
+
+interface SaveAsDialogOptions {
+  title: string;
+  defaultPath: string;
+  filters: Array<{ name: string; extensions: string[] }>;
+}
+
+// Pure: the Save As dialog options for a downloaded filename, or null when the
+// extension isn't one we intercept. Exported for tests.
+export function saveAsDialogOptionsForFilename(filename: string): SaveAsDialogOptions | null {
+  const dot = filename.lastIndexOf(".");
+  const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : "";
+  if (!SAVE_AS_EXTENSIONS.has(ext)) return null;
+  const filters = IMAGE_SAVE_AS_EXTENSIONS.has(ext)
+    ? [
+        { name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] },
+        { name: "All Files", extensions: ["*"] },
+      ]
+    : ext === ".pdf"
+      ? [
+          { name: "PDF Document", extensions: ["pdf"] },
+          { name: "All Files", extensions: ["*"] },
+        ]
+      : [
+          { name: "PowerPoint Presentation", extensions: ["pptx"] },
+          { name: "All Files", extensions: ["*"] },
+        ];
+  return { title: "Save As", defaultPath: filename, filters };
+}
 
 function attachDownloadSaveAsDialog(window: BrowserWindow): void {
   window.webContents.session.on("will-download", (_event, item) => {
-    const filename = item.getFilename();
-    const dot = filename.lastIndexOf(".");
-    const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : "";
-    if (!SAVE_AS_EXTENSIONS.has(ext)) return;
-    item.setSaveDialogOptions({
-      title: "Save As",
-      defaultPath: filename,
-      filters: IMAGE_SAVE_AS_EXTENSIONS.has(ext)
-        ? [
-            { name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] },
-            { name: "All Files", extensions: ["*"] },
-          ]
-        : [
-            { name: "PowerPoint Presentation", extensions: ["pptx"] },
-            { name: "All Files", extensions: ["*"] },
-          ],
-    });
+    const options = saveAsDialogOptionsForFilename(item.getFilename());
+    if (!options) return;
+    item.setSaveDialogOptions(options);
   });
 }
 
@@ -2308,8 +2333,14 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         return { error: error instanceof Error ? error.message : String(error), ok: false };
       }
     },
+    exportArtifact(input) {
+      return exportArtifactFromHtml(input);
+    },
     exportPdf(input) {
       return exportPdfFromHtml(input);
+    },
+    renderSlides(input) {
+      return renderDeckSlides(input);
     },
     async screenshot(input) {
       if (window.isDestroyed()) throw new Error("desktop window is destroyed");

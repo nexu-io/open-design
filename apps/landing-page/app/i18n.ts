@@ -3,7 +3,7 @@ import { EXTRA_LOCALIZED_LANDING_UI_COPY } from './landing-ui-i18n';
 
 export const DEFAULT_LOCALE = 'en';
 
-export const LANDING_LOCALES = [
+const ALL_LANDING_LOCALES = [
   {
     code: 'en',
     htmlLang: 'en',
@@ -150,8 +150,31 @@ export const LANDING_LOCALES = [
   },
 ] as const;
 
-export type LandingLocaleCode = (typeof LANDING_LOCALES)[number]['code'];
-export type LandingLocale = (typeof LANDING_LOCALES)[number];
+// Full historical locale set — retained ONLY so existing per-locale translation
+// data stays type-valid. Do NOT use this for routing / sitemap / hreflang; use
+// LANDING_LOCALES below.
+export type LandingLocaleCode = (typeof ALL_LANDING_LOCALES)[number]['code'];
+export type LandingLocale = (typeof ALL_LANDING_LOCALES)[number];
+
+// Locales retired 2026-06 after a GSC review (near-zero Google return). Pages
+// are no longer generated for them and incoming URLs are 301'd to the English
+// page in public/_redirects. Any NEW page automatically ships only the active
+// set below, so the retired languages cannot silently reappear.
+const RETIRED_LOCALE_CODES = new Set<LandingLocaleCode>([
+  'zh-tw',
+  'vi',
+  'pl',
+  'id',
+  'nl',
+  'ar',
+  'uk',
+]);
+
+// Single source of truth for the locales we actually ship: routing, the
+// language switcher, hreflang, and the sitemap all consume this filtered list.
+export const LANDING_LOCALES: readonly LandingLocale[] = ALL_LANDING_LOCALES.filter(
+  (locale) => !RETIRED_LOCALE_CODES.has(locale.code),
+);
 
 export interface HeaderCopy {
   brandMetaTitle: string;
@@ -203,6 +226,14 @@ export interface HeaderCopy {
   starAria: string;
   starTitle: string;
   starPrefix: string;
+  /** Open Design Cloud account entry — see header-enhancer.astro. */
+  signIn: string;
+  /** aria-label for the signed-in avatar / account menu trigger. */
+  accountAria: string;
+  /** Avatar dropdown: open the Cloud console. */
+  menuConsole: string;
+  /** Avatar dropdown: sign out of the Cloud session. */
+  menuSignOut: string;
 }
 
 export interface HeaderProductMenuCopy {
@@ -228,12 +259,18 @@ export interface HeaderProductMenuCopy {
   useCaseItems: [string, string, string, string, string, string];
   roles: string;
   roleItems: [string, string, string, string, string];
+  // Tool / generator pages (`/solutions/ai-<x>-generator/`). Group label plus
+  // the three tool names, in the same Wireframe → UI → Design-to-code order
+  // the hub and the dropdown render.
+  tools: string;
   agent: string;
   plugins: string;
   pluginItems: { templates: string; skills: string; systems: string };
+  pricing: string;
   resources: string;
   resourceItems: {
     blog: string;
+    stories: string;
     tutorials: string;
     compare: string;
     newsletter: string;
@@ -263,6 +300,7 @@ export interface CommonCopy {
 
 const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy> = {
   en: {
+    pricing: "Pricing",
     toggleNavigationMenu: 'Toggle navigation menu',
     product: 'Product',
     openDesignName: 'Open Design',
@@ -271,7 +309,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / data to ship-ready HTML, by your local agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'A prompt, article, or repo to a real MP4 — by your local agent.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Design Agent',
     amrBlurb: 'Professional design Agent, zero-config use, built-in SOTA models & Harness',
     tutorialsName: 'Tutorials',
@@ -281,12 +319,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototype', 'Dashboard', 'Slides', 'Image', 'Video', 'Design System'],
     roles: 'Roles',
     roleItems: ['Solo Builder', 'Designer', 'Engineering', 'Product Managers', 'Marketing'],
+    tools: 'Tools',
     agent: 'Agent',
     plugins: 'Plugins',
     pluginItems: { templates: 'Templates', skills: 'Skills', systems: 'Systems' },
     resources: 'Resources',
     resourceItems: {
       blog: 'Blog',
+      stories: 'Stories',
       tutorials: 'Tutorials',
       compare: 'Compare',
       newsletter: 'Weekly Newsletter',
@@ -301,6 +341,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   zh: {
+    pricing: "价格",
     toggleNavigationMenu: '切换导航菜单',
     product: '产品',
     openDesignName: 'Open Design',
@@ -309,7 +350,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / 数据变成可交付 HTML，由本地 Agent 完成。',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: '一个 prompt、文章或仓库，变成真实 MP4——由你的本地 Agent 完成。',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: '设计 Agent',
     amrBlurb: '专业设计Agent、零配置使用、自带SOTA模型与Harness',
     tutorialsName: '教程',
@@ -319,12 +360,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['原型', '看板', '幻灯片', '图片', '视频', '设计系统'],
     roles: '角色',
     roleItems: ['独立开发者', '设计师', '工程', '产品经理', '市场'],
+    tools: '工具',
     agent: 'Agent',
     plugins: '插件',
     pluginItems: { templates: '模板', skills: '技能', systems: '设计系统' },
     resources: '资源',
     resourceItems: {
       blog: '博客',
+      stories: '客户故事',
       tutorials: '教程',
       compare: '比较',
       newsletter: '每周通讯',
@@ -339,6 +382,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   'zh-tw': {
+    pricing: "價格",
     toggleNavigationMenu: '切換導覽選單',
     product: '產品',
     openDesignName: 'Open Design',
@@ -347,7 +391,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / 資料變成可交付 HTML，由本地 Agent 完成。',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: '一個 prompt、文章或倉庫，變成真實 MP4——由你的本地 Agent 完成。',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: '設計 Agent',
     amrBlurb: '專業設計 Agent、零配置使用、內建 SOTA 模型與 Harness',
     tutorialsName: '教學',
@@ -357,12 +401,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['原型', '儀表板', '投影片', '圖片', '影片', '設計系統'],
     roles: '角色',
     roleItems: ['獨立開發者', '設計師', '工程', '產品經理', '行銷'],
+    tools: '工具',
     agent: 'Agent',
     plugins: '外掛',
     pluginItems: { templates: '模板', skills: '技能', systems: '設計系統' },
     resources: '資源',
     resourceItems: {
       blog: '部落格',
+      stories: '客戶故事',
       tutorials: '教程',
       compare: '比較',
       newsletter: '每週通訊',
@@ -377,6 +423,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ja: {
+    pricing: "料金",
     toggleNavigationMenu: 'ナビゲーションメニューを切り替え',
     product: 'プロダクト',
     openDesignName: 'Open Design',
@@ -385,7 +432,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / データをローカル Agent で納品可能な HTML へ。',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'プロンプト、記事、リポジトリを本物のMP4に — あなたのローカルエージェントで。',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'デザイン Agent',
     amrBlurb: 'プロ向けデザイン Agent、ゼロ設定で利用、SOTA モデルと Harness 内蔵',
     tutorialsName: 'チュートリアル',
@@ -395,12 +442,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['プロトタイプ', 'ダッシュボード', 'スライド', '画像', '動画', 'デザインシステム'],
     roles: 'ロール',
     roleItems: ['ソロビルダー', 'デザイナー', 'エンジニアリング', 'プロダクトマネージャー', 'マーケティング'],
+    tools: 'ツール',
     agent: 'エージェント',
     plugins: 'プラグイン',
     pluginItems: { templates: 'テンプレート', skills: 'スキル', systems: 'システム' },
     resources: 'リソース',
     resourceItems: {
       blog: 'ブログ',
+      stories: '導入事例',
       tutorials: 'チュートリアル',
       compare: '比較',
       newsletter: '週刊ニュースレター',
@@ -415,6 +464,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ko: {
+    pricing: "요금제",
     toggleNavigationMenu: '내비게이션 메뉴 전환',
     product: '제품',
     openDesignName: 'Open Design',
@@ -423,7 +473,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / 데이터를 로컬 Agent로 배포 가능한 HTML로 변환.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: '프롬프트, 글, 레포만 있으면 — 로컬 에이전트가 진짜 MP4로.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: '디자인 Agent',
     amrBlurb: '전문 디자인 Agent, 무설정 사용, SOTA 모델과 Harness 내장',
     tutorialsName: '튜토리얼',
@@ -433,12 +483,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['프로토타입', '대시보드', '슬라이드', '이미지', '영상', '디자인 시스템'],
     roles: '역할',
     roleItems: ['솔로 빌더', '디자이너', '엔지니어링', '프로덕트 매니저', '마케팅'],
+    tools: '도구',
     agent: '에이전트',
     plugins: '플러그인',
     pluginItems: { templates: '템플릿', skills: '스킬', systems: '시스템' },
     resources: '리소스',
     resourceItems: {
       blog: '블로그',
+      stories: '고객 사례',
       tutorials: '튜토리얼',
       compare: '비교',
       newsletter: '주간 뉴스레터',
@@ -453,6 +505,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   de: {
+    pricing: "Preise",
     toggleNavigationMenu: 'Navigationsmenu umschalten',
     product: 'Produkt',
     openDesignName: 'Open Design',
@@ -461,7 +514,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / Daten werden durch deinen lokalen Agent zu fertigem HTML.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Eine Idee, ein Artikel oder ein Repo – per lokalem Agent zu einem echten MP4.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Design-Agent',
     amrBlurb: 'Professioneller Design-Agent, null Konfiguration, integrierte SOTA-Modelle & Harness',
     tutorialsName: 'Tutorials',
@@ -471,12 +524,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototyp', 'Dashboard', 'Slides', 'Bild', 'Video', 'Designsystem'],
     roles: 'Rollen',
     roleItems: ['Solo-Builder', 'Designer', 'Engineering', 'Produktmanager', 'Marketing'],
+    tools: 'Tools',
     agent: 'Agent',
     plugins: 'Plugins',
     pluginItems: { templates: 'Vorlagen', skills: 'Skills', systems: 'Systeme' },
     resources: 'Ressourcen',
     resourceItems: {
       blog: 'Blog',
+      stories: 'Kundenstories',
       tutorials: 'Tutorials',
       compare: 'Vergleich',
       newsletter: 'Wöchentlicher Newsletter',
@@ -491,6 +546,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   fr: {
+    pricing: "Tarifs",
     toggleNavigationMenu: 'Basculer le menu de navigation',
     product: 'Produit',
     openDesignName: 'Open Design',
@@ -499,7 +555,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / données vers du HTML prêt à livrer via votre agent local.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Une consigne, un article ou un repo vers une vraie vidéo MP4 — par votre agent local.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent de design professionnel, zéro configuration, modèles SOTA et Harness intégrés',
     tutorialsName: 'Tutoriels',
@@ -509,12 +565,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototype', 'Tableau de bord', 'Diapositives', 'Image', 'Vidéo', 'Système de design'],
     roles: 'Rôles',
     roleItems: ['Créateur solo', 'Designer', 'Ingénierie', 'Product managers', 'Marketing'],
+    tools: 'Outils',
     agent: 'Agent',
     plugins: 'Plugins',
     pluginItems: { templates: 'Modèles', skills: 'Skills', systems: 'Systèmes' },
     resources: 'Ressources',
     resourceItems: {
       blog: 'Blog',
+      stories: 'Témoignages',
       tutorials: 'Tutoriels',
       compare: 'Comparaison',
       newsletter: 'Newsletter hebdomadaire',
@@ -529,6 +587,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ru: {
+    pricing: "Цены",
     toggleNavigationMenu: 'Переключить меню навигации',
     product: 'Продукт',
     openDesignName: 'Open Design',
@@ -537,7 +596,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / данные в готовый HTML через локального Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Промпт, статья или репозиторий — в настоящий MP4 с помощью локального агента.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Дизайн-Agent',
     amrBlurb: 'Профессиональный дизайн-Agent, без настройки, со встроенными SOTA-моделями и Harness',
     tutorialsName: 'Руководства',
@@ -547,12 +606,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Прототип', 'Дашборд', 'Слайды', 'Изображение', 'Видео', 'Дизайн-система'],
     roles: 'Роли',
     roleItems: ['Соло-разработчик', 'Дизайнер', 'Инженерия', 'Продакт-менеджеры', 'Маркетинг'],
+    tools: 'Инструменты',
     agent: 'Агенты',
     plugins: 'Плагины',
     pluginItems: { templates: 'Шаблоны', skills: 'Skills', systems: 'Системы' },
     resources: 'Ресурсы',
     resourceItems: {
       blog: 'Блог',
+      stories: 'Истории клиентов',
       tutorials: 'Уроки',
       compare: 'Сравнение',
       newsletter: 'Еженедельная рассылка',
@@ -567,6 +628,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   es: {
+    pricing: "Precios",
     toggleNavigationMenu: 'Alternar menú de navegación',
     product: 'Producto',
     openDesignName: 'Open Design',
@@ -575,7 +637,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / datos a HTML listo para entregar con tu Agent local.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Una idea, artículo o repo a un MP4 real — con tu agente local.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent diseño',
     amrBlurb: 'Agent de diseño profesional, uso sin configuración, modelos SOTA y Harness integrados',
     tutorialsName: 'Tutoriales',
@@ -585,12 +647,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototipo', 'Panel', 'Diapositivas', 'Imagen', 'Vídeo', 'Sistema de diseño'],
     roles: 'Roles',
     roleItems: ['Creador en solitario', 'Diseñador', 'Ingeniería', 'Product Managers', 'Marketing'],
+    tools: 'Herramientas',
     agent: 'Agente',
     plugins: 'Plugins',
     pluginItems: { templates: 'Plantillas', skills: 'Skills', systems: 'Sistemas' },
     resources: 'Recursos',
     resourceItems: {
       blog: 'Blog',
+      stories: 'Casos de éxito',
       tutorials: 'Tutoriales',
       compare: 'Comparar',
       newsletter: 'Newsletter semanal',
@@ -605,6 +669,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   'pt-br': {
+    pricing: "Preços",
     toggleNavigationMenu: 'Alternar menu de navegação',
     product: 'Produto',
     openDesignName: 'Open Design',
@@ -613,7 +678,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / dados viram HTML pronto com seu Agent local.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Uma ideia, artigo ou repo vira um MP4 de verdade — pelo seu agente local.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent de design profissional, uso sem configuração, modelos SOTA e Harness integrados',
     tutorialsName: 'Tutoriais',
@@ -623,12 +688,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Protótipo', 'Painel', 'Slides', 'Imagem', 'Vídeo', 'Sistema de design'],
     roles: 'Funções',
     roleItems: ['Criador solo', 'Designer', 'Engenharia', 'Product Managers', 'Marketing'],
+    tools: 'Ferramentas',
     agent: 'Agente',
     plugins: 'Plugins',
     pluginItems: { templates: 'Modelos', skills: 'Skills', systems: 'Sistemas' },
     resources: 'Recursos',
     resourceItems: {
       blog: 'Blog',
+      stories: 'Casos de sucesso',
       tutorials: 'Tutoriais',
       compare: 'Comparar',
       newsletter: 'Newsletter semanal',
@@ -643,6 +710,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   it: {
+    pricing: "Prezzi",
     toggleNavigationMenu: 'Apri o chiudi il menu di navigazione',
     product: 'Prodotto',
     openDesignName: 'Open Design',
@@ -651,7 +719,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / dati in HTML pronto alla consegna con il tuo Agent locale.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Una richiesta, un articolo o un repo in un vero MP4 — dal tuo agente locale.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent di design professionale, uso senza configurazione, modelli SOTA e Harness integrati',
     tutorialsName: 'Tutorial',
@@ -661,12 +729,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototipo', 'Dashboard', 'Slide', 'Immagine', 'Video', 'Design system'],
     roles: 'Ruoli',
     roleItems: ['Solo builder', 'Designer', 'Ingegneria', 'Product Manager', 'Marketing'],
+    tools: 'Strumenti',
     agent: 'Agente',
     plugins: 'Plugin',
     pluginItems: { templates: 'Template', skills: 'Skill', systems: 'Sistemi' },
     resources: 'Risorse',
     resourceItems: {
       blog: 'Blog',
+      stories: 'Storie dei clienti',
       tutorials: 'Tutorial',
       compare: 'Confronta',
       newsletter: 'Newsletter settimanale',
@@ -681,6 +751,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   vi: {
+    pricing: "Giá",
     toggleNavigationMenu: 'Chuyển menu điều hướng',
     product: 'Sản phẩm',
     openDesignName: 'Open Design',
@@ -689,7 +760,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / dữ liệu thành HTML sẵn sàng giao bằng Agent cục bộ.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Một prompt, bài viết hay repo thành video MP4 thật — bằng agent của bạn.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent thiết kế',
     amrBlurb: 'Agent thiết kế chuyên nghiệp, dùng không cần cấu hình, tích hợp mô hình SOTA và Harness',
     tutorialsName: 'Hướng dẫn',
@@ -699,12 +770,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Nguyên mẫu', 'Dashboard', 'Slide', 'Hình ảnh', 'Video', 'Hệ thống thiết kế'],
     roles: 'Vai trò',
     roleItems: ['Nhà phát triển độc lập', 'Nhà thiết kế', 'Kỹ thuật', 'Quản lý sản phẩm', 'Tiếp thị'],
+    tools: 'Công cụ',
     agent: 'Agent',
     plugins: 'Plugin',
     pluginItems: { templates: 'Mẫu', skills: 'Skill', systems: 'Hệ thống' },
     resources: 'Tài nguyên',
     resourceItems: {
       blog: 'Blog',
+      stories: 'Câu chuyện khách hàng',
       tutorials: 'Hướng dẫn',
       compare: 'So sánh',
       newsletter: 'Bản tin hằng tuần',
@@ -719,6 +792,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   pl: {
+    pricing: "Cennik",
     toggleNavigationMenu: 'Przełącz menu nawigacji',
     product: 'Produkt',
     openDesignName: 'Open Design',
@@ -727,7 +801,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / dane do gotowego HTML przez lokalnego Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Prompt, artykuł lub repo w prawdziwe MP4 — dzięki Twojemu lokalnemu agentowi.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent designu',
     amrBlurb: 'Profesjonalny Agent do projektowania, zero konfiguracji, wbudowane modele SOTA i Harness',
     tutorialsName: 'Poradniki',
@@ -737,12 +811,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototyp', 'Dashboard', 'Slajdy', 'Grafika', 'Wideo', 'System projektowy'],
     roles: 'Role',
     roleItems: ['Samodzielny twórca', 'Projektant', 'Inżynieria', 'Menedżerowie produktu', 'Marketing'],
+    tools: 'Narzędzia',
     agent: 'Agent',
     plugins: 'Wtyczki',
     pluginItems: { templates: 'Szablony', skills: 'Skills', systems: 'Systemy' },
     resources: 'Zasoby',
     resourceItems: {
       blog: 'Blog',
+      stories: 'Historie klientów',
       tutorials: 'Samouczki',
       compare: 'Porównanie',
       newsletter: 'Cotygodniowy newsletter',
@@ -757,6 +833,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   id: {
+    pricing: "Harga",
     toggleNavigationMenu: 'Alihkan menu navigasi',
     product: 'Produk',
     openDesignName: 'Open Design',
@@ -765,7 +842,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / data menjadi HTML siap kirim lewat Agent lokal.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Prompt, artikel, atau repo jadi MP4 sungguhan — lewat agent lokalmu.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent desain',
     amrBlurb: 'Agent desain profesional, tanpa konfigurasi, model SOTA dan Harness bawaan',
     tutorialsName: 'Tutorial',
@@ -775,12 +852,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototipe', 'Dashboard', 'Slide', 'Gambar', 'Video', 'Sistem Desain'],
     roles: 'Peran',
     roleItems: ['Solo Builder', 'Desainer', 'Teknik', 'Product Manager', 'Pemasaran'],
+    tools: 'Alat',
     agent: 'Agent',
     plugins: 'Plugin',
     pluginItems: { templates: 'Templat', skills: 'Skill', systems: 'Sistem' },
     resources: 'Sumber Daya',
     resourceItems: {
       blog: 'Blog',
+      stories: 'Kisah Pelanggan',
       tutorials: 'Tutorial',
       compare: 'Bandingkan',
       newsletter: 'Buletin mingguan',
@@ -795,6 +874,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   nl: {
+    pricing: "Prijzen",
     toggleNavigationMenu: 'Navigatiemenu wisselen',
     product: 'Product',
     openDesignName: 'Open Design',
@@ -803,7 +883,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / data naar opleverklare HTML via je lokale Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Een prompt, artikel of repo naar een echte MP4 — door je lokale agent.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Design-Agent',
     amrBlurb: 'Professionele design-Agent, nul configuratie, ingebouwde SOTA-modellen en Harness',
     tutorialsName: 'Tutorials',
@@ -813,12 +893,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototype', 'Dashboard', 'Slides', 'Afbeelding', 'Video', 'Designsysteem'],
     roles: 'Rollen',
     roleItems: ['Solobouwer', 'Ontwerper', 'Engineering', 'Productmanagers', 'Marketing'],
+    tools: 'Tools',
     agent: 'Agent',
     plugins: 'Plug-ins',
     pluginItems: { templates: 'Sjablonen', skills: 'Skills', systems: 'Systemen' },
     resources: 'Bronnen',
     resourceItems: {
       blog: 'Blog',
+      stories: 'Klantverhalen',
       tutorials: 'Tutorials',
       compare: 'Vergelijken',
       newsletter: 'Wekelijkse nieuwsbrief',
@@ -833,6 +915,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ar: {
+    pricing: "الأسعار",
     toggleNavigationMenu: 'تبديل قائمة التنقل',
     product: 'المنتج',
     openDesignName: 'Open Design',
@@ -841,7 +924,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / البيانات إلى HTML جاهز عبر Agent المحلي.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'موجِّه أو مقال أو مستودع إلى فيديو MP4 حقيقي — بواسطة وكيلك المحلي.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent تصميم',
     amrBlurb: 'Agent تصميم احترافي، استخدام بلا إعداد، نماذج SOTA و Harness مدمجة',
     tutorialsName: 'الدروس',
@@ -851,12 +934,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['نموذج أولي', 'لوحة بيانات', 'شرائح', 'صورة', 'فيديو', 'نظام التصميم'],
     roles: 'الأدوار',
     roleItems: ['مطوّر فردي', 'مصمّم', 'الهندسة', 'مديرو المنتجات', 'التسويق'],
+    tools: 'الأدوات',
     agent: 'الوكلاء',
     plugins: 'الإضافات',
     pluginItems: { templates: 'قوالب', skills: 'Skills', systems: 'أنظمة' },
     resources: 'الموارد',
     resourceItems: {
       blog: 'المدونة',
+      stories: 'قصص العملاء',
       tutorials: 'الدروس',
       compare: 'مقارنة',
       newsletter: 'نشرة أسبوعية',
@@ -871,6 +956,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   tr: {
+    pricing: "Fiyatlandırma",
     toggleNavigationMenu: 'Gezinme menüsünü aç/kapat',
     product: 'Ürün',
     openDesignName: 'Open Design',
@@ -879,7 +965,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / veriler yerel Agent ile teslim edilebilir HTML olur.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Bir prompt, makale ya da repo\'dan gerçek bir MP4\'e — yerel ajanınla.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Tasarım Agent',
     amrBlurb: 'Profesyonel tasarım Agent, sıfır yapılandırma, yerleşik SOTA modelleri ve Harness',
     tutorialsName: 'Eğitimler',
@@ -889,12 +975,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototip', 'Pano', 'Slaytlar', 'Görsel', 'Video', 'Tasarım Sistemi'],
     roles: 'Roller',
     roleItems: ['Tek Kişilik Geliştirici', 'Tasarımcı', 'Mühendislik', 'Ürün Yöneticileri', 'Pazarlama'],
+    tools: 'Araçlar',
     agent: 'Agent',
     plugins: 'Eklentiler',
     pluginItems: { templates: 'Şablonlar', skills: 'Skill', systems: 'Sistemler' },
     resources: 'Kaynaklar',
     resourceItems: {
       blog: 'Blog',
+      stories: 'Müşteri Hikayeleri',
       tutorials: 'Eğitimler',
       compare: 'Karşılaştır',
       newsletter: 'Haftalık bülten',
@@ -909,6 +997,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   uk: {
+    pricing: "Ціни",
     toggleNavigationMenu: 'Перемкнути меню навігації',
     product: 'Продукт',
     openDesignName: 'Open Design',
@@ -917,7 +1006,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / дані у готовий HTML через локального Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Підказка, стаття чи репозиторій — у справжнє MP4 від вашого локального агента.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Дизайн-Agent',
     amrBlurb: 'Професійний дизайн-Agent, без налаштувань, із вбудованими SOTA-моделями та Harness',
     tutorialsName: 'Навчальні матеріали',
@@ -927,12 +1016,14 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Прототип', 'Панель', 'Слайди', 'Зображення', 'Відео', 'Дизайн-система'],
     roles: 'Ролі',
     roleItems: ['Соло-розробник', 'Дизайнер', 'Інженерія', 'Продакт-менеджери', 'Маркетинг'],
+    tools: 'Інструменти',
     agent: 'Агенти',
     plugins: 'Плагіни',
     pluginItems: { templates: 'Шаблони', skills: 'Skills', systems: 'Системи' },
     resources: 'Ресурси',
     resourceItems: {
       blog: 'Блог',
+      stories: 'Історії клієнтів',
       tutorials: 'Туторіали',
       compare: 'Порівняння',
       newsletter: 'Щотижнева розсилка',
@@ -1552,6 +1643,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Star Open Design on GitHub',
       starTitle: 'Click to star us on GitHub',
       starPrefix: 'Star',
+      signIn: 'Sign in',
+      accountAria: 'Account menu',
+      menuConsole: 'Console',
+      menuSignOut: 'Sign out',
     },
   },
   zh: {
@@ -1594,6 +1689,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: '在 GitHub 为 Open Design 点 Star',
       starTitle: '去 GitHub 点 Star',
       starPrefix: 'Star',
+      signIn: '登录',
+      accountAria: '账户菜单',
+      menuConsole: '控制台',
+      menuSignOut: '退出登录',
     },
   },
   'zh-tw': {
@@ -1636,6 +1735,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: '在 GitHub 為 Open Design 按 Star',
       starTitle: '去 GitHub 按 Star',
       starPrefix: '點星',
+      signIn: '登入',
+      accountAria: '帳戶選單',
+      menuConsole: '控制台',
+      menuSignOut: '登出',
     },
   },
   ja: {
@@ -1678,6 +1781,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'GitHub で Open Design にスター',
       starTitle: 'GitHub でスターする',
       starPrefix: 'スター',
+      signIn: 'ログイン',
+      accountAria: 'アカウントメニュー',
+      menuConsole: 'コンソール',
+      menuSignOut: 'ログアウト',
     },
   },
   ko: {
@@ -1720,6 +1827,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'GitHub에서 Open Design에 스타 주기',
       starTitle: 'GitHub에서 스타 주기',
       starPrefix: '스타',
+      signIn: '로그인',
+      accountAria: '계정 메뉴',
+      menuConsole: '콘솔',
+      menuSignOut: '로그아웃',
     },
   },
   de: {
@@ -1762,6 +1873,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Open Design auf GitHub mit Stern markieren',
       starTitle: 'Auf GitHub sternen',
       starPrefix: 'Stern',
+      signIn: 'Anmelden',
+      accountAria: 'Kontomenü',
+      menuConsole: 'Konsole',
+      menuSignOut: 'Abmelden',
     },
   },
   fr: {
@@ -1804,6 +1919,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Ajouter une étoile à Open Design sur GitHub',
       starTitle: 'Mettre une étoile sur GitHub',
       starPrefix: 'Étoile',
+      signIn: 'Se connecter',
+      accountAria: 'Menu du compte',
+      menuConsole: 'Console',
+      menuSignOut: 'Se déconnecter',
     },
   },
   ru: {
@@ -1846,6 +1965,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Поставить звезду Open Design на GitHub',
       starTitle: 'Поставить звезду на GitHub',
       starPrefix: 'Звезда',
+      signIn: 'Войти',
+      accountAria: 'Меню аккаунта',
+      menuConsole: 'Консоль',
+      menuSignOut: 'Выйти',
     },
   },
   es: {
@@ -1888,6 +2011,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Dar Star a Open Design en GitHub',
       starTitle: 'Dar Star en GitHub',
       starPrefix: 'Estrella',
+      signIn: 'Iniciar sesión',
+      accountAria: 'Menú de cuenta',
+      menuConsole: 'Consola',
+      menuSignOut: 'Cerrar sesión',
     },
   },
   'pt-br': {
@@ -1930,6 +2057,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Dar Star no Open Design no GitHub',
       starTitle: 'Dar Star no GitHub',
       starPrefix: 'Estrela',
+      signIn: 'Entrar',
+      accountAria: 'Menu da conta',
+      menuConsole: 'Console',
+      menuSignOut: 'Sair',
     },
   },
   it: {
@@ -1972,6 +2103,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Metti una Star a Open Design su GitHub',
       starTitle: 'Metti una Star su GitHub',
       starPrefix: 'Stella',
+      signIn: 'Accedi',
+      accountAria: 'Menu account',
+      menuConsole: 'Console',
+      menuSignOut: 'Esci',
     },
   },
   vi: {
@@ -2014,6 +2149,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Star Open Design trên GitHub',
       starTitle: 'Star trên GitHub',
       starPrefix: 'Sao',
+      signIn: 'Đăng nhập',
+      accountAria: 'Menu tài khoản',
+      menuConsole: 'Bảng điều khiển',
+      menuSignOut: 'Đăng xuất',
     },
   },
   pl: {
@@ -2056,6 +2195,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Daj gwiazdkę Open Design na GitHubie',
       starTitle: 'Daj gwiazdkę na GitHubie',
       starPrefix: 'Gwiazdka',
+      signIn: 'Zaloguj się',
+      accountAria: 'Menu konta',
+      menuConsole: 'Konsola',
+      menuSignOut: 'Wyloguj się',
     },
   },
   id: {
@@ -2098,6 +2241,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Beri Star Open Design di GitHub',
       starTitle: 'Beri Star di GitHub',
       starPrefix: 'Bintang',
+      signIn: 'Masuk',
+      accountAria: 'Menu akun',
+      menuConsole: 'Konsol',
+      menuSignOut: 'Keluar',
     },
   },
   nl: {
@@ -2140,6 +2287,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Geef Open Design een Star op GitHub',
       starTitle: 'Star op GitHub',
       starPrefix: 'Ster',
+      signIn: 'Inloggen',
+      accountAria: 'Accountmenu',
+      menuConsole: 'Console',
+      menuSignOut: 'Uitloggen',
     },
   },
   ar: {
@@ -2182,6 +2333,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'ضع نجمة لـ Open Design على GitHub',
       starTitle: 'ضع نجمة على GitHub',
       starPrefix: 'نجمة',
+      signIn: 'تسجيل الدخول',
+      accountAria: 'قائمة الحساب',
+      menuConsole: 'لوحة التحكم',
+      menuSignOut: 'تسجيل الخروج',
     },
   },
   tr: {
@@ -2224,6 +2379,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: "GitHub'da Open Design'a Star ver",
       starTitle: "GitHub'da Star ver",
       starPrefix: 'Yıldız',
+      signIn: 'Giriş yap',
+      accountAria: 'Hesap menüsü',
+      menuConsole: 'Konsol',
+      menuSignOut: 'Çıkış yap',
     },
   },
   uk: {
@@ -2266,100 +2425,104 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Поставити зірку Open Design на GitHub',
       starTitle: 'Поставити зірку на GitHub',
       starPrefix: 'Зірка',
+      signIn: 'Увійти',
+      accountAria: 'Меню облікового запису',
+      menuConsole: 'Консоль',
+      menuSignOut: 'Вийти',
     },
   },
 };
 
 const HOME_SEO_COPY: Record<LandingLocaleCode, HomeSeoCopy> = {
   en: {
-    title: 'Open Design — Official open-source Claude Design alternative',
+    title: 'Open Design — Best open-source Claude Design alternative',
     description:
-      'Open Design is the official open-source, local-first Claude Design alternative. Generate decks, landing pages, dashboards, and brand systems with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — driven by {skills} composable skills and {systems} portable DESIGN.md systems.',
+      'Open Design is the best open-source, local-first Claude Design alternative. Generate decks, landing pages, dashboards, and brand systems with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — driven by {skills} composable skills and {systems} portable DESIGN.md systems.',
   },
   zh: {
-    title: 'Open Design —— 官方 Claude Design 开源替代',
+    title: 'Open Design —— 最佳 Claude Design 开源替代',
     description:
-      'Open Design 是官方的开源、本地优先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成演示文稿、落地页和仪表盘，背后由 {skills} 个可组合 SKILL.md 工作流驱动。',
+      'Open Design 是最佳的开源、本地优先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成演示文稿、落地页和仪表盘，背后由 {skills} 个可组合 SKILL.md 工作流驱动。',
   },
   'zh-tw': {
-    title: 'Open Design —— 官方 Claude Design 開源替代',
+    title: 'Open Design —— 最佳 Claude Design 開源替代',
     description:
-      'Open Design 是官方的開源、本地優先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成簡報、落地頁、儀表板與品牌系統，背後由 {skills} 個可組合 Skill 與 {systems} 套 DESIGN.md 系統驅動。',
+      'Open Design 是最佳的開源、本地優先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成簡報、落地頁、儀表板與品牌系統，背後由 {skills} 個可組合 Skill 與 {systems} 套 DESIGN.md 系統驅動。',
   },
   ja: {
-    title: 'Open Design — 公式のオープンソース Claude Design 代替',
+    title: 'Open Design — 最高のオープンソース Claude Design 代替',
     description:
-      'Open Design は公式のオープンソースかつローカル優先の Claude Design 代替です。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen と {skills} 個のスキル、{systems} 個の DESIGN.md システムでデッキ、ランディングページ、ダッシュボード、ブランドシステムを生成します。',
+      'Open Design は最高のオープンソースかつローカル優先の Claude Design 代替です。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen と {skills} 個のスキル、{systems} 個の DESIGN.md システムでデッキ、ランディングページ、ダッシュボード、ブランドシステムを生成します。',
   },
   ko: {
-    title: 'Open Design — 공식 오픈소스 Claude Design 대안',
+    title: 'Open Design — 최고의 오픈소스 Claude Design 대안',
     description:
-      'Open Design은 공식 오픈소스, 로컬 우선 Claude Design 대안입니다. Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen과 {skills}개의 조합형 스킬, {systems}개의 DESIGN.md 시스템으로 덱, 랜딩 페이지, 대시보드, 브랜드 시스템을 만듭니다.',
+      'Open Design은 최고의 오픈소스, 로컬 우선 Claude Design 대안입니다. Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen과 {skills}개의 조합형 스킬, {systems}개의 DESIGN.md 시스템으로 덱, 랜딩 페이지, 대시보드, 브랜드 시스템을 만듭니다.',
   },
   de: {
-    title: 'Open Design — offizielle Open-Source-Alternative zu Claude Design',
+    title: 'Open Design — beste Open-Source-Alternative zu Claude Design',
     description:
-      'Open Design ist die offizielle Open-Source- und Local-first-Alternative zu Claude Design. Erzeuge Decks, Landingpages, Dashboards und Brand-Systeme mit Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen — mit {skills} kombinierbaren Skills und {systems} portablen DESIGN.md-Systemen.',
+      'Open Design ist die beste Open-Source- und Local-first-Alternative zu Claude Design. Erzeuge Decks, Landingpages, Dashboards und Brand-Systeme mit Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen — mit {skills} kombinierbaren Skills und {systems} portablen DESIGN.md-Systemen.',
   },
   fr: {
-    title: "Open Design — l'alternative open source officielle à Claude Design",
+    title: "Open Design — la meilleure alternative open source à Claude Design",
     description:
-      "Open Design est l'alternative officielle, open source et local-first à Claude Design. Générez des decks, landing pages, dashboards et systèmes de marque avec Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen — grâce à {skills} skills composables et {systems} systèmes DESIGN.md portables.",
+      "Open Design est la meilleure alternative open source et local-first à Claude Design. Générez des decks, landing pages, dashboards et systèmes de marque avec Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen — grâce à {skills} skills composables et {systems} systèmes DESIGN.md portables.",
   },
   ru: {
-    title: 'Open Design — официальная open-source альтернатива Claude Design',
+    title: 'Open Design — лучшая open-source альтернатива Claude Design',
     description:
-      'Open Design — официальная open-source и local-first альтернатива Claude Design. Создавайте презентации, лендинги, дашборды и бренд-системы через Claude Code, Codex, Cursor, Gemini, OpenCode или Qwen на базе {skills} skills и {systems} DESIGN.md-систем.',
+      'Open Design — лучшая open-source и local-first альтернатива Claude Design. Создавайте презентации, лендинги, дашборды и бренд-системы через Claude Code, Codex, Cursor, Gemini, OpenCode или Qwen на базе {skills} skills и {systems} DESIGN.md-систем.',
   },
   es: {
-    title: 'Open Design — alternativa open source oficial a Claude Design',
+    title: 'Open Design — la mejor alternativa open source a Claude Design',
     description:
-      'Open Design es la alternativa oficial, open source y local-first a Claude Design. Genera decks, landing pages, dashboards y sistemas de marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, impulsado por {skills} skills componibles y {systems} sistemas DESIGN.md portables.',
+      'Open Design es la mejor alternativa open source y local-first a Claude Design. Genera decks, landing pages, dashboards y sistemas de marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, impulsado por {skills} skills componibles y {systems} sistemas DESIGN.md portables.',
   },
   'pt-br': {
-    title: 'Open Design — alternativa open source oficial ao Claude Design',
+    title: 'Open Design — a melhor alternativa open source ao Claude Design',
     description:
-      'Open Design é a alternativa oficial, open source e local-first ao Claude Design. Gere decks, landing pages, dashboards e sistemas de marca com Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen, usando {skills} skills combináveis e {systems} sistemas DESIGN.md portáteis.',
+      'Open Design é a melhor alternativa open source e local-first ao Claude Design. Gere decks, landing pages, dashboards e sistemas de marca com Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen, usando {skills} skills combináveis e {systems} sistemas DESIGN.md portáteis.',
   },
   it: {
-    title: "Open Design — l'alternativa open source ufficiale a Claude Design",
+    title: "Open Design — la migliore alternativa open source a Claude Design",
     description:
-      "Open Design è l'alternativa ufficiale, open source e local-first a Claude Design. Genera deck, landing page, dashboard e sistemi di marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, usando {skills} skill componibili e {systems} sistemi DESIGN.md portabili.",
+      "Open Design è la migliore alternativa open source e local-first a Claude Design. Genera deck, landing page, dashboard e sistemi di marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, usando {skills} skill componibili e {systems} sistemi DESIGN.md portabili.",
   },
   vi: {
-    title: 'Open Design — lựa chọn mã nguồn mở chính thức thay Claude Design',
+    title: 'Open Design — lựa chọn mã nguồn mở tốt nhất thay Claude Design',
     description:
-      'Open Design là lựa chọn mã nguồn mở, local-first chính thức thay Claude Design. Tạo deck, landing page, dashboard và hệ thống thương hiệu bằng Claude Code, Codex, Cursor, Gemini, OpenCode hoặc Qwen, với {skills} skill có thể ghép và {systems} hệ DESIGN.md di động.',
+      'Open Design là lựa chọn mã nguồn mở, local-first tốt nhất thay Claude Design. Tạo deck, landing page, dashboard và hệ thống thương hiệu bằng Claude Code, Codex, Cursor, Gemini, OpenCode hoặc Qwen, với {skills} skill có thể ghép và {systems} hệ DESIGN.md di động.',
   },
   pl: {
-    title: 'Open Design — oficjalna open-source alternatywa dla Claude Design',
+    title: 'Open Design — najlepsza open-source alternatywa dla Claude Design',
     description:
-      'Open Design to oficjalna, open-source i local-first alternatywa dla Claude Design. Twórz decki, landing page, dashboardy i systemy marki z Claude Code, Codex, Cursor, Gemini, OpenCode lub Qwen, używając {skills} kompozycyjnych skills i {systems} przenośnych systemów DESIGN.md.',
+      'Open Design to najlepsza, open-source i local-first alternatywa dla Claude Design. Twórz decki, landing page, dashboardy i systemy marki z Claude Code, Codex, Cursor, Gemini, OpenCode lub Qwen, używając {skills} kompozycyjnych skills i {systems} przenośnych systemów DESIGN.md.',
   },
   id: {
-    title: 'Open Design — alternatif open source resmi untuk Claude Design',
+    title: 'Open Design — alternatif open source terbaik untuk Claude Design',
     description:
-      'Open Design adalah alternatif resmi, open source, dan local-first untuk Claude Design. Buat deck, landing page, dashboard, dan sistem merek dengan Claude Code, Codex, Cursor, Gemini, OpenCode, atau Qwen, didukung {skills} skill komposable dan {systems} sistem DESIGN.md portabel.',
+      'Open Design adalah alternatif terbaik, open source, dan local-first untuk Claude Design. Buat deck, landing page, dashboard, dan sistem merek dengan Claude Code, Codex, Cursor, Gemini, OpenCode, atau Qwen, didukung {skills} skill komposable dan {systems} sistem DESIGN.md portabel.',
   },
   nl: {
-    title: 'Open Design — officieel open-source alternatief voor Claude Design',
+    title: 'Open Design — het beste open-source alternatief voor Claude Design',
     description:
-      'Open Design is het officiële open-source en local-first alternatief voor Claude Design. Maak decks, landingspagina’s, dashboards en merksystemen met Claude Code, Codex, Cursor, Gemini, OpenCode of Qwen, aangedreven door {skills} combineerbare skills en {systems} draagbare DESIGN.md-systemen.',
+      'Open Design is het beste open-source en local-first alternatief voor Claude Design. Maak decks, landingspagina’s, dashboards en merksystemen met Claude Code, Codex, Cursor, Gemini, OpenCode of Qwen, aangedreven door {skills} combineerbare skills en {systems} draagbare DESIGN.md-systemen.',
   },
   ar: {
-    title: 'Open Design — البديل الرسمي مفتوح المصدر لـ Claude Design',
+    title: 'Open Design — أفضل بديل مفتوح المصدر لـ Claude Design',
     description:
-      'Open Design هو البديل الرسمي مفتوح المصدر والمحلي أولاً لـ Claude Design. أنشئ عروضاً وصفحات هبوط ولوحات بيانات وأنظمة علامة عبر Claude Code أو Codex أو Cursor أو Gemini أو OpenCode أو Qwen، مع {skills} مهارة قابلة للتركيب و {systems} نظام DESIGN.md قابل للنقل.',
+      'Open Design هو أفضل بديل مفتوح المصدر والمحلي أولاً لـ Claude Design. أنشئ عروضاً وصفحات هبوط ولوحات بيانات وأنظمة علامة عبر Claude Code أو Codex أو Cursor أو Gemini أو OpenCode أو Qwen، مع {skills} مهارة قابلة للتركيب و {systems} نظام DESIGN.md قابل للنقل.',
   },
   tr: {
-    title: "Open Design — Claude Design'ın resmi açık kaynak alternatifi",
+    title: "Open Design — Claude Design'ın en iyi açık kaynak alternatifi",
     description:
-      "Open Design, Claude Design'ın resmi, açık kaynak ve local-first alternatifidir. Claude Code, Codex, Cursor, Gemini, OpenCode veya Qwen ile deck, landing page, dashboard ve marka sistemleri üretin; {skills} birleştirilebilir skill ve {systems} taşınabilir DESIGN.md sistemiyle çalışır.",
+      "Open Design, Claude Design'ın en iyi, açık kaynak ve local-first alternatifidir. Claude Code, Codex, Cursor, Gemini, OpenCode veya Qwen ile deck, landing page, dashboard ve marka sistemleri üretin; {skills} birleştirilebilir skill ve {systems} taşınabilir DESIGN.md sistemiyle çalışır.",
   },
   uk: {
-    title: 'Open Design — офіційна open-source альтернатива Claude Design',
+    title: 'Open Design — найкраща open-source альтернатива Claude Design',
     description:
-      'Open Design — офіційна open-source і local-first альтернатива Claude Design. Створюйте презентації, лендинги, дашборди та бренд-системи через Claude Code, Codex, Cursor, Gemini, OpenCode або Qwen на базі {skills} skills і {systems} DESIGN.md-систем.',
+      'Open Design — найкраща open-source і local-first альтернатива Claude Design. Створюйте презентації, лендинги, дашборди та бренд-системи через Claude Code, Codex, Cursor, Gemini, OpenCode або Qwen на базі {skills} skills і {systems} DESIGN.md-систем.',
   },
 };
 

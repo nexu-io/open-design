@@ -12,6 +12,7 @@ interface FakeMessage {
   content: string;
   attachments?: Array<Record<string, unknown>>;
   producedFiles?: Array<Record<string, unknown>>;
+  traceObjectFiles?: Array<Record<string, unknown>>;
 }
 
 function makeDb(messagesByConvo: Record<string, FakeMessage[]> = {}) {
@@ -852,6 +853,89 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       status: 'ok',
       stored_in_open_design: true,
     });
+  });
+
+  it('uploads modified existing files from traceObjectFiles and records object summary metadata', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: true },
+    });
+    const projectDir = path.join(dataDir, 'projects', 'proj-1');
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(path.join(projectDir, 'existing.html'), '<!doctype html><h1>modified</h1>');
+    const uploadedFilenames: string[] = [];
+    const fetchSpy = vi.fn(async (url: string, init: RequestInit) => {
+      if (url.includes('/api/objects/authorize')) {
+        return new Response(JSON.stringify({ upload_token: 'upload-token' }), { status: 200 });
+      }
+      if (url.includes('/api/objects/batch')) {
+        const parsed = JSON.parse(init.body as string) as {
+          objects: Array<{ storage_ref: string; filename: string; content_base64: string }>;
+        };
+        uploadedFilenames.push(...parsed.objects.map((object) => object.filename));
+        return new Response(
+          JSON.stringify({
+            objects: parsed.objects.map((object) => ({
+              storage_ref: object.storage_ref,
+              status: 'available',
+              size_bytes: Buffer.from(object.content_base64, 'base64').byteLength,
+              sha256: 'sha256:uploaded-artifact',
+            })),
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response('{}', { status: 207 });
+    });
+
+    process.env.OPEN_DESIGN_OBJECT_RELAY_URL = 'https://telemetry.open-design.ai/api/objects/batch';
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [
+            { id: 'user-1', role: 'user', content: 'Update the existing page.' },
+            {
+              id: 'msg-1',
+              role: 'assistant',
+              content: 'done',
+              producedFiles: [],
+              traceObjectFiles: [
+                {
+                  name: 'existing.html',
+                  kind: 'html',
+                  size: 34,
+                  traceObjectReason: 'modified',
+                },
+              ],
+            },
+          ],
+        }),
+        dataDir,
+        run: makeRun() as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    expect(uploadedFilenames).toEqual(['existing.html']);
+    const finalBatch = JSON.parse(fetchSpy.mock.calls.at(-1)![1]!.body as string).batch as any[];
+    expect(finalBatch[0].body.metadata.trace_object_summary).toEqual({
+      new_file_count: 0,
+      modified_file_count: 1,
+      recovered_file_count: 0,
+      candidate_file_count: 1,
+      uploaded_file_count: 1,
+      skipped_file_count: 0,
+      skip_reasons: {},
+    });
+    expect(finalBatch[0].body.metadata.artifacts).toEqual([
+      { slug: 'existing.html', type: 'html', sizeBytes: 34 },
+    ]);
   });
 
   it('derives manifest completeness from merged uploaded and fallback manifests', async () => {
@@ -1807,6 +1891,9 @@ function makeDbWithListMessages(messagesByConvo: Record<string, FakeMessage[]>) 
             commentAttachmentsJson: null,
             producedFilesJson: m.producedFiles
               ? JSON.stringify(m.producedFiles)
+              : null,
+            traceObjectFilesJson: m.traceObjectFiles
+              ? JSON.stringify(m.traceObjectFiles)
               : null,
             createdAt: 0,
             startedAt: null,

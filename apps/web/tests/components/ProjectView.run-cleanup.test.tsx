@@ -37,6 +37,7 @@ const patchConversation = vi.fn();
 const patchProject = vi.fn();
 const saveTabs = vi.fn();
 const writeProjectTextFile = vi.fn();
+const cancelBrandExtraction = vi.fn();
 
 const replayArtifact: Artifact = {
   identifier: 'real-daemon-smoke',
@@ -122,6 +123,14 @@ vi.mock('../../src/providers/project-events', () => ({
   useProjectFileEvents: vi.fn(),
 }));
 
+vi.mock('../../src/runtime/brands', async () => {
+  const actual = await vi.importActual<typeof import('../../src/runtime/brands')>('../../src/runtime/brands');
+  return {
+    ...actual,
+    cancelBrandExtraction: (...args: unknown[]) => cancelBrandExtraction(...args),
+  };
+});
+
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
 }));
@@ -159,6 +168,7 @@ vi.mock('../../src/components/ChatPane', () => ({
 
 const fileWorkspaceSpy = vi.fn();
 vi.mock('../../src/components/FileWorkspace', () => ({
+  DESIGN_SYSTEM_TAB: '__design_system__',
   FileWorkspace: (props: Record<string, unknown>) => {
     fileWorkspaceSpy(props);
     return null;
@@ -334,6 +344,7 @@ describe('retry target resolution', () => {
 describe('ProjectView daemon cleanup', () => {
   beforeEach(() => {
     listProjectRuns.mockResolvedValue([]);
+    cancelBrandExtraction.mockResolvedValue({ ok: true, status: 'failed' });
   });
 
   afterEach(() => {
@@ -710,6 +721,102 @@ describe('ProjectView daemon cleanup', () => {
     }
   });
 
+  it('reloads an empty brand-extraction transcript without auto-sending the fallback prompt', async () => {
+    const programmaticMessages: ChatMessage[] = [
+      {
+        id: 'brand-user-1',
+        role: 'user',
+        content: 'Extract a design system from https://refly.ai/.',
+        createdAt: 1,
+      },
+      {
+        id: 'brand-assistant-1',
+        role: 'assistant',
+        content: 'Programmatic design-system extraction started from https://refly.ai/.',
+        createdAt: 1,
+        startedAt: 1,
+        runStatus: 'running',
+      },
+    ];
+    listConversations.mockResolvedValue([{ id: 'conv-brand', title: 'Conversation' }]);
+    listMessages
+      .mockResolvedValueOnce([])
+      .mockResolvedValue(programmaticMessages);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: ['brand.html'], activeTabId: 'brand.html' });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+
+    window.sessionStorage.setItem('od:auto-send-first:brand-project', '1');
+
+    render(
+      <ProjectView
+        project={{
+          id: 'brand-project',
+          name: 'refly.ai Design System',
+          skillId: null,
+          designSystemId: null,
+          pendingPrompt: 'Extract refly.ai into a design system.',
+          metadata: {
+            kind: 'brand',
+            importedFrom: 'brand-extraction',
+            brandId: 'refly-ai',
+            brandSourceUrl: 'https://refly.ai/',
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.messages).toEqual(programmaticMessages);
+    });
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.streaming).toBe(true);
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
+    const latestChatPaneProps = chatPaneSpy.mock.calls.at(-1)?.[0] as {
+      onStop?: () => void;
+    };
+    latestChatPaneProps.onStop?.();
+    await waitFor(() => expect(cancelBrandExtraction).toHaveBeenCalledWith('refly-ai'));
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'brand-project',
+        'conv-brand',
+        expect.objectContaining({
+          id: 'brand-assistant-1',
+          runStatus: 'canceled',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+    expect(streamViaDaemon).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem('od:auto-send-first:brand-project')).toBeNull();
+  });
+
   it('waits for pendingPrompt hydration before consuming an auto-send flag', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
@@ -866,6 +973,96 @@ describe('ProjectView daemon cleanup', () => {
     } finally {
       window.sessionStorage.removeItem('od:auto-send-first:project-files');
       window.sessionStorage.removeItem('od:auto-send-attachments:project-files');
+    }
+  });
+
+  it('passes Home-staged workspace contexts into the project composer during auto-send', async () => {
+    const workspaceItems = [
+      {
+        id: 'project:reference-a',
+        kind: 'project',
+        label: 'Reference A',
+        title: 'Reference A',
+        path: 'reference-a',
+        absolutePath: '/Users/me/reference-a',
+      },
+      {
+        id: 'project:reference-b',
+        kind: 'project',
+        label: 'Reference B',
+        title: 'Reference B',
+        path: 'reference-b',
+        absolutePath: '/Users/me/reference-b',
+      },
+    ];
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+
+    chatPaneSpy.mockClear();
+    window.sessionStorage.setItem('od:auto-send-first:project-context', '1');
+    window.sessionStorage.setItem(
+      'od:auto-send-context:project-context',
+      JSON.stringify({ workspaceItems }),
+    );
+
+    try {
+      render(
+        <ProjectView
+          project={{
+            id: 'project-context',
+            name: 'Project',
+            skillId: null,
+            designSystemId: null,
+            pendingPrompt: 'Inspect the reference dir.',
+            metadata: { kind: 'prototype', linkedDirs: ['/Users/me/reference-a', '/Users/me/reference-b'] },
+          } as never}
+          routeFileName={null}
+          config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+          agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+          skills={[]}
+          designTemplates={[]}
+          designSystems={[]}
+          daemonLive
+          onModeChange={() => {}}
+          onAgentChange={() => {}}
+          onAgentModelChange={() => {}}
+          onRefreshAgents={() => {}}
+          onOpenSettings={() => {}}
+          onBack={() => {}}
+          onClearPendingPrompt={() => {}}
+          onTouchProject={() => {}}
+          onProjectChange={() => {}}
+          onProjectsRefresh={() => {}}
+        />,
+      );
+
+      const chatProps = await waitForReadyChatPaneProps() as {
+        initialWorkspaceContexts?: unknown[];
+      };
+      expect(chatProps.initialWorkspaceContexts).toEqual(workspaceItems);
+
+      await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+      expect(streamViaDaemon.mock.calls[0]?.[0]).toMatchObject({
+        history: [
+          expect.objectContaining({
+            content: 'Inspect the reference dir.',
+            runContext: { workspaceItems },
+          }),
+        ],
+      });
+      expect(window.sessionStorage.getItem('od:auto-send-context:project-context')).toBeNull();
+    } finally {
+      window.sessionStorage.removeItem('od:auto-send-first:project-context');
+      window.sessionStorage.removeItem('od:auto-send-context:project-context');
     }
   });
 

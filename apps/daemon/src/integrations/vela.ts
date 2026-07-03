@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -33,6 +34,10 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'generation_preview_authorize_retry',
   'generation_preview_recharge',
   'generation_preview_switch_retry_card',
+  'settings_amr_upgrade',
+  'inline_amr_upgrade',
+  'avatar_amr_upgrade',
+  'avatar_amr_agent_card',
 ]);
 
 const AMR_ONBOARDING_PROFILE_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
@@ -72,6 +77,10 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   generation_preview_authorize_retry: 'file_manager',
   generation_preview_recharge: 'file_manager',
   generation_preview_switch_retry_card: 'file_manager',
+  settings_amr_upgrade: 'settings',
+  inline_amr_upgrade: 'chat_panel',
+  avatar_amr_upgrade: 'chat_panel',
+  avatar_amr_agent_card: 'chat_panel',
 };
 
 const AMR_ANALYTICS_EVENTS_URL =
@@ -165,6 +174,12 @@ export interface VelaUser {
   name?: string;
   image?: string | null;
   plan?: string;
+  /**
+   * Wallet balance (USD, string), surfaced live from the control-plane
+   * `/api/v1/me` endpoint. `null` when unknown (lookup failed, not yet warmed,
+   * or upstream does not return it). Absent on stale config-only reads.
+   */
+  balanceUsd?: string | null;
 }
 
 export interface VelaLoginStatus {
@@ -172,6 +187,15 @@ export interface VelaLoginStatus {
   loginInFlight: boolean;
   profile: string;
   user: VelaUser | null;
+  /**
+   * Live billing projection (plan tier + wallet balance) for the signed-in
+   * account. Kept SEPARATE from `user` so env-backed sessions (where `user` is
+   * null) can surface plan/balance without fabricating a blank identity, and so
+   * `user.id === null` keeps meaning "no account identity available" for
+   * analytics and other callers. Absent until the live summary resolves;
+   * absent means unknown / hidden.
+   */
+  account?: VelaLiveAccount;
   configPath: string;
   /**
    * Device-authorization URL parsed from `vela login` stdout, surfaced so the
@@ -225,6 +249,23 @@ export interface VelaCredentialRevision {
   loggedIn: boolean;
   userId: string;
   userEmail: string;
+  configMtimeMs: number | null;
+  /**
+   * Non-secret fingerprint of the configured AMR env credentials
+   * (`VELA_RUNTIME_KEY` / `VELA_LINK_URL`, which can come from `agentCliEnv.amr`
+   * in app-config, not just process env). Env-backed sessions report
+   * `user: null`, so without this an account switch that only rewrites the
+   * Settings-backed env (leaving `~/.amr/config.json` untouched) would reuse the
+   * previous account's cached plan/balance. Empty for non-env auth.
+   */
+  credentialFingerprint: string;
+}
+
+export interface VelaControlApiContext {
+  profile: string;
+  apiUrl: string;
+  controlKey: string;
+  user: VelaUser | null;
   configMtimeMs: number | null;
 }
 
@@ -334,6 +375,101 @@ export function readVelaLoginStatus(
   return { loggedIn: true, loginInFlight, profile, user, configPath };
 }
 
+/**
+ * Live account fields (plan tier + wallet balance) sourced from the vela CLI
+ * (`vela billing summary`). Cached separately from the config-only
+ * {@link readVelaLoginStatus} read so the status route can merge live data
+ * without blocking: the route reads this cache synchronously and triggers a
+ * background CLI refresh for the next poll. The CLI spawn itself lives in the
+ * route layer (which already resolves the vela launch path for models).
+ */
+export interface VelaLiveAccount {
+  plan?: string;
+  balanceUsd?: string | null;
+}
+
+const liveAccountCache = new Map<string, VelaLiveAccount>();
+const liveAccountFetchedAt = new Map<string, number>();
+const LIVE_ACCOUNT_TTL_MS = 60_000;
+
+/**
+ * Cache key for the live account. Derived from the full credential revision
+ * (auth source + profile + signed-in user + config mtime), NOT just the
+ * profile — so a logout or an account switch on the same profile produces a
+ * fresh key and the previous account's plan/balance can never leak into a new
+ * session before the background refresh completes.
+ */
+export function velaLiveAccountCacheKey(
+  revision: VelaCredentialRevision,
+): string {
+  return [
+    revision.authSource,
+    revision.profile,
+    revision.loggedIn ? '1' : '0',
+    revision.userId,
+    revision.configMtimeMs ?? '',
+    revision.credentialFingerprint,
+  ].join('|');
+}
+
+/** Synchronous, non-blocking read of the most recent live-account projection. */
+export function peekVelaLiveAccount(cacheKey: string): VelaLiveAccount | null {
+  return liveAccountCache.get(cacheKey) ?? null;
+}
+
+/**
+ * TTL gate for the background refresh. Returns true (and records the attempt)
+ * at most once per cache key per {@link LIVE_ACCOUNT_TTL_MS}, so concurrent
+ * status polls don't all spawn the CLI.
+ */
+export function shouldRefreshVelaLiveAccount(cacheKey: string): boolean {
+  const last = liveAccountFetchedAt.get(cacheKey) ?? 0;
+  if (Date.now() - last < LIVE_ACCOUNT_TTL_MS) return false;
+  liveAccountFetchedAt.set(cacheKey, Date.now());
+  return true;
+}
+
+/** Store a freshly fetched live-account projection. */
+export function setVelaLiveAccount(
+  cacheKey: string,
+  account: VelaLiveAccount,
+): void {
+  liveAccountCache.set(cacheKey, account);
+  // Stamp the fetch time so the warm-path TTL gate doesn't immediately trigger
+  // a redundant refresh right after a (blocking) cold fetch populated the cache.
+  liveAccountFetchedAt.set(cacheKey, Date.now());
+}
+
+/** Clear the refresh throttle so a failed fetch can retry on the next poll. */
+export function clearVelaLiveAccountRefreshThrottle(cacheKey: string): void {
+  liveAccountFetchedAt.delete(cacheKey);
+}
+
+/**
+ * Drop every cached live-account projection + throttle. Call on logout so a
+ * subsequent login can never surface the signed-out account's plan or balance.
+ */
+export function clearAllVelaLiveAccounts(): void {
+  liveAccountCache.clear();
+  liveAccountFetchedAt.clear();
+}
+
+/**
+ * Attach a fetched live account (plan tier + wallet balance) to a login status
+ * on the dedicated {@link VelaLoginStatus.account} field. Deliberately does NOT
+ * touch `status.user`: env-backed sessions keep `user: null` (no fabricated
+ * blank identity), and the billing projection rides on its own field so every
+ * surface can read plan/balance uniformly. No-op when signed out or when there
+ * is no account to apply.
+ */
+export function applyVelaLiveAccount(
+  status: VelaLoginStatus,
+  account: VelaLiveAccount | null,
+): void {
+  if (!status.loggedIn || !account) return;
+  status.account = account;
+}
+
 export function readVelaCredentialRevision(
   env: NodeJS.ProcessEnv = process.env,
   configuredEnv: Record<string, string> = {},
@@ -343,16 +479,31 @@ export function readVelaCredentialRevision(
   const hasEnvCredentials =
     (mergedEnv.VELA_RUNTIME_KEY?.trim() ?? '').length > 0 &&
     (mergedEnv.VELA_LINK_URL?.trim() ?? '').length > 0;
+  // One-way hash (never the raw key) so the cache key distinguishes env-backed
+  // accounts whose only difference is the configured runtime credential.
+  const credentialFingerprint = hasEnvCredentials
+    ? createHash('sha256')
+        .update(
+          `${mergedEnv.VELA_RUNTIME_KEY ?? ''}\n${mergedEnv.VELA_LINK_URL ?? ''}`,
+        )
+        .digest('hex')
+        .slice(0, 16)
+    : '';
   return {
     authSource: hasEnvCredentials ? 'env' : status.loggedIn ? 'file' : 'none',
     profile: status.profile,
     loggedIn: status.loggedIn,
     userId: status.user?.id ?? '',
     userEmail: status.user?.email ?? '',
-    configMtimeMs:
-      hasEnvCredentials || !existsSync(status.configPath)
-        ? null
-        : statSync(status.configPath).mtimeMs,
+    // Include the config mtime even for env-backed auth: the live billing
+    // summary is fetched with the config profile's controlKey, so a config
+    // rewrite (account switch) must invalidate the cached plan/balance — even
+    // when VELA_RUNTIME_KEY is the active runtime credential. Otherwise an
+    // env-backed session keeps serving the previous account's plan/balance.
+    configMtimeMs: existsSync(status.configPath)
+      ? statSync(status.configPath).mtimeMs
+      : null,
+    credentialFingerprint,
   };
 }
 

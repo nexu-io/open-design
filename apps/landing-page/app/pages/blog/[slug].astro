@@ -9,7 +9,7 @@
 import { getCollection, render } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import GoogleAnalytics from '../../_components/google-analytics.astro';
+import SiteAnalytics from '../../_components/site-analytics.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
 import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
@@ -91,6 +91,13 @@ const localizedBodyHtml =
   ) ??
   fallbackPost.bodyHtml;
 
+// A localized bodyHtml can differ in length from the English Markdown; prefer a
+// per-locale readingTime when one is set so the estimate matches what the reader
+// actually sees, and fall back to the shared English value otherwise.
+const localizedReadingTime =
+  (localizedPostI18n as { readingTime?: number } | undefined)?.readingTime ??
+  post.data.readingTime;
+
 // Build the table of contents. For pre-rendered bodyHtml (rich/localized
 // posts) inject heading ids and collect the TOC in one pass; for the Markdown
 // `<Content />` path use Astro's already-slugged `headings` array.
@@ -98,7 +105,16 @@ let bodyHtmlToRender = localizedBodyHtml;
 let toc: TocEntry[];
 if (localizedBodyHtml) {
   const injected = injectTocIntoHtml(localizedBodyHtml);
-  bodyHtmlToRender = injected.html;
+  // Localize root-relative internal links (e.g. related-post `/blog/...`
+  // anchors) to the current locale so a non-English reader stays on their
+  // locale's routes instead of being dropped back onto the English ones.
+  // `localizedHref` leaves external, mailto/tel, and `#` links untouched, and
+  // is a no-op for the default locale. Only `<a>` carries `href` in post HTML
+  // (`<img>` uses `src`), so matching every `href` attribute is safe.
+  bodyHtmlToRender = injected.html.replace(
+    /href="([^"]+)"/g,
+    (_match, link) => `href="${localizedHref(link, locale)}"`,
+  );
   toc = injected.toc;
 } else {
   toc = tocFromHeadings(headings);
@@ -109,17 +125,34 @@ const tocLabel = getInfoPageCopy(locale).common.onThisPage;
 // `od-site-illustration` skill). Surfaced as a hero banner on the post itself,
 // not just on the index card.
 const coverSrc = `/blog/${post.id}-cover.webp`;
+const socialImageSrc = ((post.data as { socialImage?: string }).socialImage ?? coverSrc).trim();
+const coverImage = new URL(socialImageSrc, Astro.site ?? 'https://open-design.ai/').toString();
 
-const DISCORD = 'https://discord.gg/9ptkbbqRu';
+const DISCORD = 'https://discord.gg/mHAjSMV6gz';
 const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/blog/${post.id}.md`;
 const category = post.data.category.toLowerCase();
 // Optional per-post override: `ctaKind: download-app` in frontmatter points the
 // primary CTA at the desktop client download page (/download); Discord stays the
 // secondary button. Falls back to the category-based default when unset, so the
 // existing posts are unaffected.
-const ctaKind = (post.data as { ctaKind?: string }).ctaKind;
+const ctaConfig = post.data as {
+  ctaKind?: string;
+  ctaHref?: string;
+  ctaTitle?: string;
+  ctaBody?: string;
+  ctaLabel?: string;
+};
+const ctaKind = ctaConfig.ctaKind;
 const bottomCta =
-  ctaKind === 'download-app'
+  ctaKind === 'event-register'
+    ? {
+        title: ctaConfig.ctaTitle ?? ui.blog.cta.repoTitle,
+        body: ctaConfig.ctaBody ?? ui.blog.cta.repoBody,
+        href: ctaConfig.ctaHref ?? 'https://github.com/nexu-io/open-design',
+        label: ctaConfig.ctaLabel ?? ui.blog.cta.repoLabel,
+        external: true,
+      }
+    : ctaKind === 'download-app'
     ? {
         title: ui.blog.cta.downloadTitle,
         body: ui.blog.cta.downloadBody,
@@ -203,11 +236,12 @@ const author = getBlogAuthor((post.data as { author?: string }).author);
       title={localizedPostField('title')}
       description={localizedPostField('summary')}
       pathname={Astro.url.pathname}
+      image={coverImage}
       datePublished={post.data.date}
       category={post.data.category}
     />
     <script is:inline type='application/ld+json' set:html={JSON.stringify(breadcrumbJsonLd)} />
-    <GoogleAnalytics />
+    <SiteAnalytics />
   </head>
   <body>
     <div class='shell'>
@@ -233,7 +267,7 @@ const author = getBlogAuthor((post.data as { author?: string }).author);
 
             <div class='post-meta'>
               <span>{fmtDate(post.data.date)}</span>
-              <span>{post.data.readingTime} {ui.blog.minRead}</span>
+              <span>{localizedReadingTime} {ui.blog.minRead}</span>
               <span>{localizedPostField('category')}</span>
             </div>
 

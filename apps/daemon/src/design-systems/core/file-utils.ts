@@ -178,6 +178,11 @@ export async function collectDesignSystemFiles(
   const entries = await readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
+    // Never list or archive symlinks: `readFile`/`stat` would follow them out of
+    // the design-system root, letting a crafted package exfiltrate arbitrary
+    // daemon-readable files through the ZIP download. Excluding them here keeps
+    // both the file listing and `buildUserDesignSystemArchive` inside `base`.
+    if (entry.isSymbolicLink()) continue;
     if (!relativeDir && (entry.name === 'metadata.json' || entry.name === 'revisions')) continue;
     const relativePath = relativeDir
       ? path.posix.join(relativeDir.replaceAll(path.sep, '/'), entry.name)

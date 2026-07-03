@@ -13,6 +13,7 @@
 import Layout from './sub-page-layout.astro';
 import { getInfoPageCopy, getAlternativeCopy } from '../info-page-i18n';
 import { localeFromPath, localizedHref } from '../i18n';
+import '../_partials/comparison-v4.css';
 
 interface Props {
   slug: string;
@@ -83,122 +84,134 @@ const jsonLd = [
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>
 
-  <article class={`info-page${rich ? ' solution-page agent-rich' : ''}`}>
+  <article class={rich ? 'v4' : 'info-page'}>
     {rich ? (
       <>
-        <header class="catalog-head agent-rich-head">
-          <span class="label">{page.label}</span>
-          <h1 class="display">{page.heading}</h1>
-          <p class="lead">{page.lead}</p>
-          <div class="solution-hero-cta">
-            {rich.heroCtaActions.map((a) => (
-              <a
-                class={`btn ${a.variant === 'primary' ? 'btn-primary' : 'btn-ghost'}`}
-                href={ctaHref(a)}
-                {...(a.external ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
-              >{a.label}</a>
-            ))}
+        <section class="v4band v4hero">
+          <div class="v4in">
+            <p class="v4eye">{page.label}</p>
+            <h1 class="v4h1">{page.heading}</h1>
+            <p class="v4dek">{rich.heroCtaLead}</p>
+            <div class="v4cta-row">
+              {rich.heroCtaActions.map((a) => (
+                <a
+                  class={a.variant === 'primary' ? 'v4btn-p' : 'v4btn-g'}
+                  href={ctaHref(a)}
+                  {...(a.external ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
+                >{a.label}</a>
+              ))}
+            </div>
+            {rich.heroImage ? (
+              <figure class="v4heroimg">
+                <img src={rich.heroImage.src} alt={rich.heroImage.alt} loading="eager" decoding="async" width={1280} height={720} />
+              </figure>
+            ) : null}
           </div>
-        </header>
+        </section>
 
-        {rich.heroImage ? (
-          <figure class="agent-hero-banner">
-            <img src={rich.heroImage.src} alt={rich.heroImage.alt} loading="eager" decoding="async" width={1280} height={720} />
-          </figure>
-        ) : null}
+        <section class="v4band alt">
+          <div class="v4in">
+            {rich.intro.map((p) => (<p set:html={p} />))}
+            <nav class="v4toc" aria-label={rich.tocLabel}>
+              {rich.toc.map((t) => (<a href={`#${t.id}`}>{t.label}</a>))}
+            </nav>
+          </div>
+        </section>
 
-        <div class="agent-intro">
-          <p class="agent-hero-lead">{rich.heroCtaLead}</p>
-          {rich.intro.map((p) => (<p>{p}</p>))}
-        </div>
-
-        <nav class="info-toc" aria-label={rich.tocLabel}>
-          <span>{rich.tocLabel}</span>
-          {rich.toc.map((t) => (<a href={`#${t.id}`}>{t.label}</a>))}
-        </nav>
-
-        {rich.sections.map((section) => (
-          <section class="info-section" id={section.id}>
-            <h2>{section.heading}</h2>
-            {section.blocks.map((block) => {
-              if (block.kind === 'p') return <p>{block.text}</p>;
-              if (block.kind === 'ul') return <ul>{block.items.map((i) => (<li>{i}</li>))}</ul>;
-              if (block.kind === 'ol') return <ol>{block.items.map((i) => (<li>{i}</li>))}</ol>;
-              if (block.kind === 'steps')
-                return (
-                  <ul class="agent-steps">
-                    {block.items.map((i) => (<li><strong>{i.label}:</strong> {i.body}</li>))}
-                  </ul>
-                );
-              if (block.kind === 'code')
-                return (<pre class="agent-code"><code>{block.code}</code></pre>);
-              if (block.kind === 'image')
-                return (
-                  <figure class="agent-section-img">
-                    <img src={block.src} alt={block.alt} loading="lazy" decoding="async" />
-                    {block.caption ? <figcaption>{block.caption}</figcaption> : null}
-                  </figure>
-                );
-              if (block.kind === 'table')
-                return (
-                  <div class="compare-table-wrap">
-                    <table class="compare-table">
-                      <thead>
-                        <tr>{block.columns.map((c) => (<th>{c}</th>))}</tr>
-                      </thead>
-                      <tbody>
-                        {block.rows.map((row) => (
-                          <tr>
-                            {row.map((cell, ci) => (
-                              ci === 0 ? <th scope="row">{cell}</th> : <td>{cell}</td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              return null;
-            })}
+        {rich.sections.map((section, i) => (
+          <section class={`v4band${i % 2 === 1 ? ' alt' : ''}`} id={section.id}>
+            <div class="v4in">
+              <p class="v4eye">{String(i + 1).padStart(2, '0')}</p>
+              <h2 class="v4h2">{section.heading}</h2>
+              {section.blocks.map((block) => {
+                if (block.kind === 'p') return <p set:html={block.text} />;
+                if (block.kind === 'ul') return <ul>{block.items.map((it) => (<li set:html={it} />))}</ul>;
+                if (block.kind === 'ol') return <ol>{block.items.map((it) => (<li set:html={it} />))}</ol>;
+                if (block.kind === 'steps')
+                  return (
+                    <ul class="v4steps">
+                      {block.items.map((it) => (<li><strong>{it.label}:</strong> <span set:html={it.body} /></li>))}
+                    </ul>
+                  );
+                if (block.kind === 'code')
+                  return (<pre class="agent-code"><code>{block.code}</code></pre>);
+                if (block.kind === 'image')
+                  return (
+                    <figure class="v4heroimg">
+                      <img src={block.src} alt={block.alt} loading="lazy" decoding="async" />
+                      {block.caption ? <figcaption>{block.caption}</figcaption> : null}
+                    </figure>
+                  );
+                if (block.kind === 'split')
+                  return (
+                    <Fragment>
+                      {block.text.map((t) => (<p set:html={t} />))}
+                      <figure class="v4figure">
+                        <img src={block.image.src} alt={block.image.alt} loading="lazy" decoding="async" />
+                        {block.image.caption ? <figcaption>{block.image.caption}</figcaption> : null}
+                      </figure>
+                    </Fragment>
+                  );
+                if (block.kind === 'table')
+                  return (
+                    <div class={`compare-table-wrap${block.compact ? ' compare-table-wrap--compact' : ''}`}>
+                      <table class="compare-table">
+                        <thead>
+                          <tr>{block.columns.map((c) => (<th set:html={c} />))}</tr>
+                        </thead>
+                        <tbody>
+                          {block.rows.map((row) => (
+                            <tr>
+                              {row.map((cell, ci) => (
+                                ci === 0 ? <th scope="row" set:html={cell} /> : <td set:html={cell} />
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                return null;
+              })}
+            </div>
           </section>
         ))}
 
-        <section class="info-section" id="faq">
-          <h2>{rich.faqTitle}</h2>
-          <ol class="faq-list">
-            {faqEntries.map(({ name, text }, idx) => (
-              <li class="faq-item">
-                <details>
-                  <summary>
-                    <span class="faq-index">{String(idx + 1).padStart(2, '0')}</span>
-                    <span class="faq-q">{name}</span>
-                    <span class="faq-toggle" aria-hidden="true">+</span>
-                  </summary>
-                  <p class="faq-a">{text}</p>
-                </details>
-              </li>
-            ))}
-          </ol>
+        <section class="v4band alt" id="faq">
+          <div class="v4in">
+            <p class="v4eye">FAQ</p>
+            <h2 class="v4h2">{rich.faqTitle}</h2>
+            <ol class="faq-list">
+              {faqEntries.map(({ name, text }, idx) => (
+                <li class="faq-item">
+                  <details>
+                    <summary>
+                      <span class="faq-index">{String(idx + 1).padStart(2, '0')}</span>
+                      <span class="faq-q">{name}</span>
+                      <span class="faq-toggle" aria-hidden="true">+</span>
+                    </summary>
+                    <p class="faq-a">{text}</p>
+                  </details>
+                </li>
+              ))}
+            </ol>
+          </div>
         </section>
 
-        <section class="info-cta" aria-label="Open Design call to action">
-          <div>
-            <h2>{rich.ctaTitle}</h2>
-            <p>{rich.ctaBody}</p>
-          </div>
-          <div class="info-cta-actions">
-            {rich.ctaActions.map((a) => (
-              <a
-                class={`btn ${a.variant === 'primary' ? 'btn-primary' : 'btn-ghost'}`}
-                href={ctaHref(a)}
-                {...(a.external ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
-              >{a.label}</a>
-            ))}
-          </div>
-          <div class="info-cta-meta">
-            <span class="stamp">● {common.apache}</span>
-            <span>{common.localFirst} · {common.byok}</span>
-            <span><a class="inline-link" href={href('/compare/')}>{rich.hubLinkLabel}</a></span>
+        <section class="v4band v4final">
+          <div class="v4in">
+            <h2 class="v4final-h">{rich.ctaTitle}</h2>
+            <p class="v4final-p">{rich.ctaBody}</p>
+            <div class="v4cta-row">
+              {rich.ctaActions.map((a) => (
+                <a
+                  class={a.variant === 'primary' ? 'v4btn-coral' : 'v4btn-gd'}
+                  href={ctaHref(a)}
+                  {...(a.external ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
+                >{a.label}</a>
+              ))}
+            </div>
+            <p class="v4final-meta">● {common.apache} · {common.localFirst} · {common.byok} · <a href={href('/compare/')}>{rich.hubLinkLabel}</a></p>
           </div>
         </section>
       </>

@@ -13,6 +13,8 @@ import type {
   PluginReplacementModalSurfaceViewProps,
   PluginDetailModalSurfaceViewProps,
   PluginImportModalSurfaceViewProps,
+  ProjectReferenceModalSurfaceViewProps,
+  FigmaHelpModalSurfaceViewProps,
   DesignSystemsTemplatesModalSurfaceViewProps,
   AssistantFeedbackReasonPanelSurfaceViewProps,
   QuestionsFormSurfaceViewProps,
@@ -51,6 +53,11 @@ import type {
   DesignSystemsTemplatesModalClickProps,
   DesignSystemsTemplatesModalSharePopoverClickProps,
   DesignSystemsCreateClickProps,
+  DesignSystemsPresetBrandPickerClickProps,
+  DesignSystemsPresetBrandPickerSurfaceViewProps,
+  DesignSystemEnrichClickProps,
+  DesignSystemEnrichResultProps,
+  DesignSystemEditClickProps,
   IntegrationsTabClickProps,
   IntegrationsMcpTabClickProps,
   IntegrationsConnectorsTabClickProps,
@@ -107,6 +114,7 @@ import type {
   RunCreatedProps,
   RunFinishedProps,
   FileUploadResultProps,
+  ContextLinkResultProps,
   ArtifactExportResultProps,
   ArtifactDeployResultProps,
   FeedbackSubmitResultProps,
@@ -199,6 +207,20 @@ export function trackPluginDetailModalSurfaceView(
 export function trackPluginImportModalSurfaceView(
   track: Track,
   props: PluginImportModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackProjectReferenceModalSurfaceView(
+  track: Track,
+  props: ProjectReferenceModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackFigmaHelpModalSurfaceView(
+  track: Track,
+  props: FigmaHelpModalSurfaceViewProps,
 ): void {
   send(track, 'surface_view', props);
 }
@@ -490,6 +512,41 @@ export function trackDesignSystemsTemplatesModalSharePopoverClick(
 export function trackDesignSystemsCreateClick(
   track: Track,
   props: DesignSystemsCreateClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDesignSystemsPresetBrandPickerClick(
+  track: Track,
+  props: DesignSystemsPresetBrandPickerClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDesignSystemsPresetBrandPickerSurfaceView(
+  track: Track,
+  props: DesignSystemsPresetBrandPickerSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackDesignSystemEnrichClick(
+  track: Track,
+  props: DesignSystemEnrichClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDesignSystemEnrichResult(
+  track: Track,
+  props: DesignSystemEnrichResultProps,
+): void {
+  send(track, 'design_system_enrich_result', props);
+}
+
+export function trackDesignSystemEditClick(
+  track: Track,
+  props: DesignSystemEditClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -839,6 +896,13 @@ export function trackFileUploadResult(
   options?: { requestId?: string },
 ): void {
   send(track, 'file_upload_result', props, options);
+}
+
+export function trackContextLinkResult(
+  track: Track,
+  props: ContextLinkResultProps,
+): void {
+  send(track, 'context_link_result', props);
 }
 
 export function trackArtifactExportResult(
