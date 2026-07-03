@@ -8,7 +8,7 @@ import {
   removeJsonInstall,
   type JsonInstallPlan,
   type McpLaunchSpec,
-} from '../src/mcp-agent-install.js';
+} from '../src/mcp/index.js';
 
 const SPEC: McpLaunchSpec = {
   command: '/usr/local/bin/node',

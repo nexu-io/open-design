@@ -12,7 +12,7 @@ import {
   readMcpConfig,
   sanitizeMcpServer,
   writeMcpConfig,
-} from '../src/mcp-config.js';
+} from '../src/mcp/index.js';
 
 describe('mcp-config storage', () => {
   let dataDir: string;

@@ -22,7 +22,7 @@ import {
   type OAuthTokenResponse,
   type PendingAuthCache,
   type PendingAuthState,
-} from '../mcp-oauth.js';
+} from '../mcp/index.js';
 
 // ───────────────────────────────────────────────────────────────────────
 // xAI OAuth constants.

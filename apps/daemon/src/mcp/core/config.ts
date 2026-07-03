@@ -1,3 +1,10 @@
+/**
+ * @module mcp/core/config
+ * Config schema + on-disk store for the external MCP servers Open Design
+ * connects to as a client, plus the per-agent config builders (Claude `.mcp.json`,
+ * ACP `mcpServers`, OpenCode) that hand those servers to a launching agent. Part
+ * of the MCP `core` kernel; depends on no sibling subdirectory.
+ */
 // External MCP server configuration storage + spawn-time wiring.
 //
 // Open Design acts as an MCP CLIENT to one or more external MCP servers
@@ -27,9 +34,15 @@ import path from 'node:path';
 // definitions in `contracts` (consumed by the web app) and re-stating the
 // minimal mirror in the daemon keeps the existing module-resolution shape
 // for the rest of the codebase intact. Both sides MUST stay in sync.
+/** Wire-level transport discriminator for how the daemon connects to an external MCP server. */
 export type McpTransport = 'stdio' | 'sse' | 'http';
+/** Authentication mode for remote MCP servers: `'none'` for local/loopback targets, `'oauth'` for remote ones. */
 export type McpAuthMode = 'none' | 'oauth';
 
+/**
+ * Persisted configuration for a single external MCP server the user has added.
+ * Stored as an element of `McpConfig.servers` in `<dataDir>/mcp-config.json`.
+ */
 export interface McpServerConfig {
   id: string;
   label?: string;
@@ -44,10 +57,12 @@ export interface McpServerConfig {
   headers?: Record<string, string>;
 }
 
+/** Top-level on-disk shape of `<dataDir>/mcp-config.json`. */
 export interface McpConfig {
   servers: McpServerConfig[];
 }
 
+/** Descriptor for a single user-fillable field in an `McpTemplate` (e.g. an API key or URL override). */
 export interface McpTemplateField {
   key: string;
   label?: string;
@@ -59,6 +74,10 @@ export interface McpTemplateField {
 // Mirrors `McpTemplateCategory` in `packages/contracts/src/api/mcp.ts`.
 // Stable string union; both sides MUST stay in sync (the web UI uses this
 // to group + order entries in the picker).
+/**
+ * Stable string union used to group and order entries in the Settings "Add MCP server" picker.
+ * Mirrors `McpTemplateCategory` in `packages/contracts/src/api/mcp.ts`; both sides must stay in sync.
+ */
 export type McpTemplateCategory =
   | 'image-generation'
   | 'image-editing'
@@ -69,6 +88,12 @@ export type McpTemplateCategory =
   | 'publishing'
   | 'utilities';
 
+/**
+ * Built-in server preset surfaced in the Settings "Add MCP server" picker.
+ * Selecting one pre-fills the form fields with known defaults; the user can
+ * still edit any field before saving. The resulting `McpServerConfig` flows
+ * through the same persistence path as a fully-custom entry.
+ */
 export interface McpTemplate {
   id: string;
   label: string;
@@ -147,6 +172,13 @@ function isLoopbackHost(hostname: string): boolean {
   return Boolean(mapped);
 }
 
+/**
+ * Infer the appropriate `McpAuthMode` for a given server URL.
+ * Returns `'none'` for loopback targets (localhost, 127.x.x.x, ::1)
+ * and `'oauth'` for everything else, including when `rawUrl` is absent or unparseable.
+ * @param rawUrl The server URL string to inspect, if any.
+ * @returns The inferred `McpAuthMode`.
+ */
 export function inferMcpAuthModeForUrl(rawUrl: string | undefined): McpAuthMode {
   if (!rawUrl) return 'oauth';
   try {
@@ -217,6 +249,13 @@ export function sanitizeMcpServer(raw: unknown): McpServerConfig | null {
   return next;
 }
 
+/**
+ * Coerce and de-duplicate a freeform JSON blob into a valid `McpConfig`.
+ * Entries that fail `sanitizeMcpServer` are silently dropped; duplicate ids
+ * are kept first-wins. Returns `{ servers: [] }` for any non-object input.
+ * @param raw The raw parsed JSON to sanitize.
+ * @returns A clean `McpConfig` guaranteed to have only valid, unique server entries.
+ */
 export function sanitizeMcpConfig(raw: unknown): McpConfig {
   if (!isPlainObject(raw)) return { servers: [] };
   const list = Array.isArray(raw.servers) ? raw.servers : [];
@@ -232,6 +271,12 @@ export function sanitizeMcpConfig(raw: unknown): McpConfig {
   return { servers: out };
 }
 
+/**
+ * Read and sanitize the MCP config from `<dataDir>/mcp-config.json`.
+ * Returns `{ servers: [] }` when the file does not exist or contains invalid JSON.
+ * @param dataDir The daemon's resolved runtime data directory.
+ * @returns The sanitized `McpConfig`, never rejects on missing-file or corrupt-JSON.
+ */
 export async function readMcpConfig(dataDir: string): Promise<McpConfig> {
   try {
     const raw = await readFile(configFile(dataDir), 'utf8');
@@ -250,6 +295,15 @@ export async function readMcpConfig(dataDir: string): Promise<McpConfig> {
 
 const writeLocks = new Map<string, Promise<unknown>>();
 
+/**
+ * Sanitize and atomically write the MCP config to `<dataDir>/mcp-config.json`.
+ * Uses a per-`dataDir` promise-chain mutex so concurrent writes serialize
+ * instead of racing. The body is sanitized through `sanitizeMcpConfig` before
+ * being written, and the file is replaced via an atomic rename-over-tmp.
+ * @param dataDir The daemon's resolved runtime data directory.
+ * @param body The raw config body to sanitize and persist.
+ * @returns The sanitized `McpConfig` that was written to disk.
+ */
 export async function writeMcpConfig(
   dataDir: string,
   body: unknown,
@@ -383,6 +437,14 @@ export interface AcpMcpServer {
   env: Array<{ name: string; value: string }>;
 }
 
+/**
+ * Convert user-configured external MCP servers into the ACP `mcpServers` array
+ * that Hermes/Kimi accept. Only stdio servers are included — SSE/HTTP are dropped
+ * because ACP currently models stdio only. Returns an empty array when no enabled
+ * stdio servers exist.
+ * @param servers The full server list from `McpConfig`.
+ * @returns ACP-shaped server entries for all enabled stdio servers.
+ */
 export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
   const enabled = servers.filter((s) => s.enabled && s.transport === 'stdio');
   const out: AcpMcpServer[] = [];
@@ -448,8 +510,11 @@ export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
  * works the same way for OpenCode users without forcing them to
  * re-authenticate inside OpenCode.
  */
+/** Options for `buildOpenCodeMcpConfigContent`. */
 export interface OpenCodeConfigBuildOptions {
+  /** Absolute filesystem paths OpenCode's `external_directory` permission should allow. */
   allowedDirectories?: string[];
+  /** Additional top-level keys merged into the emitted config object (e.g. `provider`). */
   extraConfig?: Record<string, unknown>;
 }
 
@@ -564,6 +629,11 @@ function joinPermissionGlob(dir: string, suffix: '*' | '**'): string {
 // flows through the same persistence path as a fully-custom entry.
 // ───────────────────────────────────────────────────────────────────────
 
+/**
+ * Built-in MCP server preset catalog surfaced in the Settings "Add MCP server"
+ * picker. Each entry is an `McpTemplate` whose fields pre-fill the add-server
+ * form; after saving, the result is persisted as a normal `McpServerConfig`.
+ */
 export const MCP_TEMPLATES: McpTemplate[] = [
   // ── image-generation ────────────────────────────────────────────────
   {

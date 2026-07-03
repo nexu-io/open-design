@@ -406,23 +406,20 @@ import {
   isManagedProjectCwd,
   readMcpConfig,
   writeMcpConfig,
-} from './mcp-config.js';
-import {
-  resolveExternalMcpServersForRun,
-} from './run-tool-bundle.js';
-import {
   beginAuth,
   exchangeCodeForToken,
   PendingAuthCache,
   refreshAccessToken,
-} from './mcp-oauth.js';
-import {
   clearToken,
   getToken,
   isTokenExpired,
   readAllTokens,
   setToken,
-} from './mcp-tokens.js';
+  buildMcpInstallPayload,
+} from './mcp/index.js';
+import {
+  resolveExternalMcpServersForRun,
+} from './run-tool-bundle.js';
 import { agentCliEnvForAgent, readAppConfig, readPluginEnvKnobs, writeAppConfig } from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
 import { buildOrbitNoLiveArtifactSummary } from './orbit-agent-summary.js';
@@ -431,7 +428,6 @@ import {
   validateSchedule as validateRoutineSchedule,
   validateTarget as validateRoutineTarget,
 } from './routines.js';
-import { buildMcpInstallPayload } from './mcp-install-info.js';
 import { createDiagnosticsExportHandler } from './diagnostics-export.js';
 import { DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
 import {
@@ -548,7 +544,7 @@ import { registerHostToolsRoutes } from './routes/host-tools.js';
 import { registerPluginAssetRoutes } from './routes/plugins/assets.js';
 import { registerPluginMarketplaceRoutes } from './routes/plugins/marketplaces.js';
 import { registerPluginEventRoutes, registerPluginRoutes, registerProjectPluginRoutes } from './routes/plugins/index.js';
-import { registerMcpRoutes } from './mcp-routes.js';
+import { registerMcpRoutes } from './routes/mcp.js';
 import { registerXaiRoutes } from './routes/xai.js';
 import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';

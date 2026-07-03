@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { handleMcpToolCall } from '../src/mcp.js';
+import { handleMcpToolCall } from '../src/mcp/index.js';
 
 const originalFetch = globalThis.fetch;
 

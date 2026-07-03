@@ -1,5 +1,5 @@
 import { test } from 'vitest';
-import { createLiveArtifactsMcpTools, handleLiveArtifactsMcpRequest } from '../../src/mcp-live-artifacts-server.js';
+import { createLiveArtifactsMcpTools, handleLiveArtifactsMcpRequest } from '../../src/mcp/index.js';
 import { AGENT_DEFS, assert, buildLiveArtifactsMcpServersForAgent, hermes } from './helpers/test-helpers.js';
 
 test('live artifact MCP discovery is limited to mature ACP agents', () => {

@@ -1,3 +1,11 @@
+/**
+ * @module mcp/client/client
+ * The stdio MCP server behind `od mcp`: proxies project tool calls
+ * (get_artifact / get_file / create_artifact / list_projects / active-context …)
+ * to the running daemon's HTTP API so an agent in another repo can reach a local
+ * Open Design project. Holds no state; every tool resolves to a fetch. Depends on
+ * the daemon HTTP API and `mcp/core`; imports no sibling MCP subdirectory.
+ */
 // `od mcp` - stdio MCP server that proxies project tool calls to the
 // running daemon's HTTP API. Lets a coding agent in a *different* repo
 // (Claude Code, Cursor, Zed) pull files from a local Open Design
@@ -21,7 +29,7 @@ import {
 import { buildProjectRawFileUrl } from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
 
-import { postCreateArtifactRequest } from './artifacts/create.js';
+import { postCreateArtifactRequest } from '../../artifacts/create.js';
 
 const SERVER_NAME = 'open-design';
 const SERVER_VERSION = '0.2.0';
@@ -50,6 +58,15 @@ interface McpIdleExitControllerOptions {
   onIdle: () => void;
 }
 
+/**
+ * Create an idle-exit controller that calls `onIdle` after `idleMs` of
+ * inactivity. Activity is tracked via `noteActivity()` and `trackRequest()`;
+ * in-flight requests defer the idle timer. Used to auto-close the stdio MCP
+ * server process after 30 minutes of no tool calls.
+ * @param options Idle duration in ms and the callback to invoke on idle.
+ * @returns An object with `noteActivity`, `trackRequest`, and `dispose` methods.
+ * @internal
+ */
 export function _createMcpIdleExitController({
   idleMs,
   onIdle,
@@ -496,6 +513,13 @@ const TOOL_DEFS = [
   },
 ];
 
+/**
+ * Start the stdio MCP server for `od mcp`.
+ * Connects to the MCP SDK's `StdioServerTransport`, registers all tool and
+ * resource handlers, arms the 30-minute idle-exit controller, and holds the
+ * process open until stdin closes. Resolves when the transport closes cleanly.
+ * @param options.daemonUrl Base URL of the running Open Design daemon (e.g. `http://127.0.0.1:17456`).
+ */
 export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
   const baseUrl = String(daemonUrl).replace(/\/$/, '');
   let closeTransportForIdle: (() => void) | null = null;
@@ -748,6 +772,15 @@ function requireString(v: unknown, name: string): asserts v is string {
   }
 }
 
+/**
+ * Dispatch a single MCP tool call to the appropriate daemon HTTP endpoint.
+ * Routes `name` through a switch over all registered tool names and returns
+ * a standard MCP content response or an `isError:true` result. All network
+ * errors are caught and formatted via `formatError`.
+ * @param baseUrl Daemon base URL (no trailing slash).
+ * @param name The tool name from the MCP request.
+ * @param args Parsed tool arguments from the MCP request.
+ */
 async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) {
   try {
     switch (name) {
@@ -878,6 +911,13 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
   }
 }
 
+/**
+ * Handle the `write_file` tool: write (or overwrite) any project file.
+ * Unlike `create_artifact`, does not require an `ArtifactManifest` and tolerates
+ * existing targets, making it the right tool for iterating on existing files.
+ * @param baseUrl Daemon base URL.
+ * @param args Tool arguments including `path`, `content`, and optional `encoding`.
+ */
 async function writeFile(baseUrl: string, args: McpArgs) {
   const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
   // The daemon route requires its argv field to be called `name`; the
@@ -901,6 +941,12 @@ async function writeFile(baseUrl: string, args: McpArgs) {
   return ok(withActiveEcho(json, active, resolved));
 }
 
+/**
+ * Handle the `delete_file` tool: delete one project file by path.
+ * Uses the `/api/projects/:id/raw/*` route to support nested paths.
+ * @param baseUrl Daemon base URL.
+ * @param args Tool arguments including the required `path`.
+ */
 async function deleteFile(baseUrl: string, args: McpArgs) {
   const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
   requireString(args.path, 'path');
@@ -920,6 +966,13 @@ async function deleteFile(baseUrl: string, args: McpArgs) {
   return ok(withActiveEcho(json, active, resolved));
 }
 
+/**
+ * Handle the `delete_project` tool: permanently delete a project.
+ * Active-context fallback is intentionally disabled — both an explicit `project`
+ * and `confirm: true` are required to guard against accidental irreversible deletion.
+ * @param baseUrl Daemon base URL.
+ * @param args Tool arguments; must include `project` and `confirm: true`.
+ */
 async function deleteProject(baseUrl: string, args: McpArgs) {
   // Active-context fallback is intentionally disabled: the daemon's
   // DELETE /api/projects/:id is irreversible (purges the row and the
@@ -983,6 +1036,13 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 // <question-form> output ends up dropped from the MCP response because
 // no project file is produced. Better to let the outer agent gather
 // requirements directly and pass a precise prompt to start_run.
+/**
+ * Handle the `create_project` tool: create a new empty Open Design project.
+ * Sets `skipDiscoveryBrief: true` so the outer MCP agent drives the brief
+ * rather than triggering OD's own interactive discovery stage.
+ * @param baseUrl Daemon base URL.
+ * @param args Tool arguments; `name` is required, `id`/`designSystem`/`skill` are optional.
+ */
 async function createProject(baseUrl: string, args: McpArgs) {
   requireString(args.name, 'name');
   const id =
@@ -1071,6 +1131,13 @@ function slugifyProjectId(name: string): string {
 // Returns the runId immediately so the caller can poll get_run —
 // start+poll because MCP is request/response and generation is
 // minutes-long.
+/**
+ * Handle the `start_run` tool: commission Open Design to generate or refine a design.
+ * POSTs to `/api/runs` and returns `runId` immediately. The daemon spawns its own
+ * agent; the caller is expected to poll `get_run` until the run reaches a terminal status.
+ * @param baseUrl Daemon base URL.
+ * @param args Tool arguments; `prompt`, `skill`, `plugin`, `agent`, `model`, and `inputs` are optional.
+ */
 async function startRun(baseUrl: string, args: McpArgs) {
   const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
   const body: JsonObject = { projectId: id };
@@ -1114,6 +1181,14 @@ async function startRun(baseUrl: string, args: McpArgs) {
 //     relay it to the user (without this, the run looks like a
 //     "succeeded with empty output" mystery), and
 // (3) a hint that tells the outer agent how to surface both.
+/**
+ * Handle the `get_run` tool: poll a run started by `start_run`.
+ * Enriches the daemon's status response with `previewUrl`, `agentMessage`
+ * (inner agent text output from the SSE event log), and `studioUrl` when
+ * available. Non-terminal and failed runs receive a tail-hint for live monitoring.
+ * @param baseUrl Daemon base URL.
+ * @param args Tool arguments; `runId` is required.
+ */
 async function getRun(baseUrl: string, args: McpArgs) {
   requireString(args.runId, 'runId');
   const status = await getJson<JsonObject>(
@@ -1213,6 +1288,11 @@ let webBaseUrlCache: WebBaseUrlCache | null = null;
 // blocks inside the same vitest module load, so an earlier test that
 // returns `null` would otherwise poison subsequent tests for 5s. Test
 // files call this in afterEach to start each case with a clean cache.
+/**
+ * Reset the module-level `webBaseUrl` cache. Called in test `afterEach`
+ * blocks to prevent a cached `null` from the previous test poisoning the next.
+ * @internal
+ */
 export function _resetWebBaseUrlCache(): void {
   webBaseUrlCache = null;
 }
@@ -1334,6 +1414,14 @@ async function buildRunPreviewUrl(baseUrl: string, projectId: string): Promise<s
   }
 }
 
+/**
+ * Handle the `create_artifact` tool: write a new project artifact entry file.
+ * Rejects existing targets and optionally persists an `artifactManifest` sidecar.
+ * HTML, Markdown, and SVG entries receive a default manifest when `artifactManifest`
+ * is omitted, via the daemon's `postCreateArtifactRequest` helper.
+ * @param baseUrl Daemon base URL.
+ * @param args Tool arguments; `name` and `content` are required.
+ */
 async function createArtifact(baseUrl: string, args: McpArgs) {
   const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project);
   requireString(args.name, 'name');
@@ -1403,6 +1491,15 @@ async function fetchProjectList(baseUrl: string): Promise<ProjectSummary[]> {
 // caller, the active-context payload that was used. Throws a clear
 // error when neither is available so the agent can prompt the user
 // rather than guessing.
+/**
+ * Resolve the `project` tool argument to a project id.
+ * When `arg` is a non-empty string, delegates to `resolveProjectId`.
+ * When `arg` is omitted, falls back to the active project from `/api/active`.
+ * Throws with a user-friendly message when neither is available.
+ * @param baseUrl Daemon base URL.
+ * @param arg The raw `project` argument value from the MCP tool call.
+ * @returns The resolved project id, an optional `ResolvedProject` echo, and the active-context payload when used.
+ */
 async function resolveProjectArg(baseUrl: string, arg: unknown): Promise<{ id: string; resolved: ResolvedProject | null; active: ActiveContext | null }> {
   if (typeof arg === 'string' && arg.length > 0) {
     const resolved = await resolveProjectId(baseUrl, arg);
@@ -1424,6 +1521,15 @@ async function resolveProjectArg(baseUrl: string, arg: unknown): Promise<{ id: s
   return { id: active.projectId, resolved: null, active };
 }
 
+/**
+ * Resolve a project id or name substring to a concrete project record.
+ * Resolution order: UUID pass-through → exact id match → case-insensitive exact
+ * name match → slug match → unique substring match. Throws when zero or multiple
+ * projects match a substring, prompting the caller to use a UUID instead.
+ * @param baseUrl Daemon base URL.
+ * @param arg The project id or name (or substring) to resolve.
+ * @returns A `ResolvedProject` with the concrete id, name, and resolution source.
+ */
 async function resolveProjectId(baseUrl: string, arg: unknown): Promise<ResolvedProject> {
   if (typeof arg !== 'string' || !arg) {
     throw new Error('project is required (string).');
@@ -1474,6 +1580,18 @@ async function getJson<T>(url: string): Promise<T> {
   return (await resp.json()) as T;
 }
 
+/**
+ * Fetch one project file from the daemon and return a windowed slice of its lines.
+ * Only textual MIME types are supported; binary files return an error result.
+ * Stamps `[od:file-window ...]` markers when the file is longer than the requested slice.
+ * @param baseUrl Daemon base URL.
+ * @param project Resolved project id.
+ * @param relPath Project-relative file path.
+ * @param active Active-context payload, if resolution came from `/api/active`.
+ * @param resolved Resolved-project echo, if resolution used name matching.
+ * @param offset Zero-indexed starting line (default `0`).
+ * @param limit Maximum lines to return (default `2000`).
+ */
 async function getFile(baseUrl: string, project: string, relPath: string, active: ActiveContext | null, resolved?: ResolvedProject | null, offset = 0, limit = 2000) {
   const segments = String(relPath)
     .split('/')
@@ -1525,6 +1643,14 @@ async function getFile(baseUrl: string, project: string, relPath: string, active
 // project came from /api/active. Plain pass-through when the caller
 // supplied project explicitly - keeps token overhead at zero for the
 // explicit path.
+/**
+ * Stamp `usedActiveContext` and/or `resolvedProject` onto a JSON tool response
+ * when the project was resolved via active context or a name/substring match.
+ * Returns the payload unchanged when the project was specified explicitly by UUID.
+ * @param payload The raw daemon response object.
+ * @param active Active-context payload used during resolution, or `null`.
+ * @param resolved Resolved-project metadata when name matching was used, or `null`.
+ */
 function withActiveEcho<T extends JsonObject>(payload: T, active: ActiveContext | null, resolved?: ResolvedProject | null): T & JsonObject {
   const result = active ? { ...payload, usedActiveContext: activeEchoPayload(active) } : payload;
   if (resolved && (resolved.source === 'slug' || resolved.source === 'substring')) {
@@ -1565,6 +1691,20 @@ function totalTextBytes(files: ProjectFileBundleEntry[]): number {
   return n;
 }
 
+/**
+ * Handle the `get_artifact` tool: bundle the entry file and its transitive
+ * references into a single response. Supports three `include` modes:
+ * - `'shallow'` — entry file only.
+ * - `'all'` — every file in the project up to the byte/file caps.
+ * - `'auto'` — BFS from the entry, following `<script>`, `<link>`, CSS `url()`,
+ *   JS `import`/`require`, up to depth 3.
+ * Sets `truncated: true` when the byte or file cap is reached before all files are fetched.
+ * @param baseUrl Daemon base URL.
+ * @param projectArg Raw `project` argument (id, name, or omitted for active context).
+ * @param entryArg Raw `entry` argument (project-relative path, or omitted for default).
+ * @param includeMode One of `'auto'`, `'all'`, `'shallow'`, or `null` (defaults to `'auto'`).
+ * @param maxBytesArg Soft byte cap override, or `null` for the default 1.5 MB.
+ */
 async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unknown, includeMode: unknown, maxBytesArg: unknown) {
   const include = includeMode == null || includeMode === '' ? 'auto' : includeMode;
   if (typeof include !== 'string' || !VALID_INCLUDE_MODES.has(include)) {
@@ -1678,6 +1818,16 @@ async function getArtifact(baseUrl: string, projectArg: unknown, entryArg: unkno
 // failure of the whole bundle.
 class BudgetExceededError extends Error {}
 
+/**
+ * Fetch one project file from the daemon's raw route and return a bundle entry.
+ * Binary files return a stub with `content: null`. Throws `BudgetExceededError`
+ * when the server-advertised `content-length` would exceed `remainingBytes`,
+ * so callers can set `truncated: true` without issuing a large allocation.
+ * @param baseUrl Daemon base URL.
+ * @param projectId The project's id.
+ * @param relPath Project-relative file path.
+ * @param remainingBytes Byte budget remaining; files larger than this are rejected with `BudgetExceededError`.
+ */
 async function fetchProjectFile(baseUrl: string, projectId: string, relPath: string, remainingBytes = Infinity): Promise<ProjectFileBundleEntry> {
   const segments = String(relPath)
     .split('/')
@@ -1747,6 +1897,17 @@ function isHtmlLike(mime: string | undefined, fromPath: string): boolean {
   return /\.html?$/i.test(fromPath);
 }
 
+/**
+ * Extract all relative (non-absolute, non-CDN, non-data-URI) file references from
+ * the text content of a project file, normalized to project-root-relative paths.
+ * Runs HTML, CSS, and/or JS pattern sets based on the file's MIME type and extension.
+ * Skips `https?:`, `//`, `data:`, `mailto:`, `tel:`, and `#` prefixes; drops any
+ * reference that would escape the project root via `..` traversal.
+ * @param text The textual content of the file.
+ * @param fromPath The project-relative path of the file (used for relative-path resolution).
+ * @param fromMime The MIME type of the file (used to select reference-extraction patterns).
+ * @returns Deduplicated project-relative paths of all referenced files found.
+ */
 function extractRelativeRefs(text: string, fromPath: string, fromMime: string): string[] {
   if (!text) return [];
   const refs = new Set<string>();

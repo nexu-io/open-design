@@ -12,7 +12,7 @@ import {
   sanitizeTokensFile,
   setToken,
   type StoredMcpToken,
-} from '../src/mcp-tokens.js';
+} from '../src/mcp/index.js';
 
 describe('mcp-tokens storage', () => {
   let dataDir: string;

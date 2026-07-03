@@ -1,3 +1,10 @@
+/**
+ * @module mcp/agent-install/install
+ * Plans and applies registration of Open Design's stdio MCP server into external
+ * coding agents' own configs (`od mcp install <agent>`): the agent-slug registry,
+ * the CLI/JSON/manual install-plan shapes, and the JSON apply/remove primitives.
+ * Pure planning logic; imports no sibling MCP subdirectory.
+ */
 // Per-agent MCP registration planner.
 //
 // `od mcp install <agent>` (and the hosted `install.sh | sh -s <agent>`
@@ -29,6 +36,10 @@
 
 import path from 'node:path';
 
+/**
+ * Exhaustive tuple of all agent slugs recognized by `od mcp install`.
+ * Used as the source of truth for the `AgentSlug` union type and the `isAgentSlug` guard.
+ */
 export const AGENT_SLUGS = [
   'claude',
   'codex',
@@ -45,8 +56,15 @@ export const AGENT_SLUGS = [
   'opencode',
 ] as const;
 
+/** Union of all valid agent slugs accepted by `od mcp install`. */
 export type AgentSlug = (typeof AGENT_SLUGS)[number];
 
+/**
+ * Type guard: returns `true` when `value` is a recognized `AgentSlug`.
+ * Used by the CLI argument parser to surface a clear error for unknown slugs.
+ * @param value The string to test.
+ * @returns `true` if `value` is a valid `AgentSlug`, `false` otherwise.
+ */
 export function isAgentSlug(value: string): value is AgentSlug {
   return (AGENT_SLUGS as readonly string[]).includes(value);
 }
@@ -59,6 +77,11 @@ export interface McpLaunchSpec {
   env: Record<string, string>;
 }
 
+/**
+ * Environment context injected into `planAgentInstall`.
+ * Kept as a plain-data interface so unit tests can supply a fake home dir
+ * and platform without touching the real filesystem.
+ */
 export interface PlanContext {
   /** Absolute home directory (os.homedir()). Injected for testability. */
   home: string;
@@ -104,6 +127,7 @@ export interface ManualInstallPlan {
   reason: string;
 }
 
+/** Discriminated union of all installation plan shapes returned by `planAgentInstall`. */
 export type InstallPlan = CliInstallPlan | JsonInstallPlan | ManualInstallPlan;
 
 function envFlags(env: Record<string, string>, flag: string): string[] {

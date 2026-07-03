@@ -1,6 +1,6 @@
-import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp-config.js';
+import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp/index.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
-import { sanitizeMcpConfig, sanitizeMcpServer } from './mcp-config.js';
+import { sanitizeMcpConfig, sanitizeMcpServer } from './mcp/index.js';
 
 export interface RunToolBundle {
   mcpServers: McpServerConfig[];

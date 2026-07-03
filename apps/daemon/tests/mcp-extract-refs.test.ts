@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractRelativeRefs } from '../src/mcp.js';
+import { extractRelativeRefs } from '../src/mcp/index.js';
 
 describe('extractRelativeRefs', () => {
   it('flat project: index.html referencing tokens.css resolves to tokens.css', () => {

@@ -16,7 +16,7 @@ import {
   generateState,
   getOrRegisterClient,
   refreshAccessToken,
-} from '../src/mcp-oauth.js';
+} from '../src/mcp/index.js';
 
 // Tiny fetch mock — looks up the URL in a Map and returns canned JSON.
 type FetchInput = Parameters<typeof fetch>[0];

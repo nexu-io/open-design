@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
-import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
+import { runLiveArtifactsMcpServer } from './mcp/index.js';
 import { runArtifactsCli } from './artifacts-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
@@ -25,7 +25,7 @@ import {
   planAgentInstall,
   applyJsonInstall,
   removeJsonInstall,
-} from './mcp-agent-install.js';
+} from './mcp/index.js';
 
 const argv = process.argv.slice(2);
 
@@ -1167,7 +1167,7 @@ async function runMcp(args) {
 
   const daemonUrl = await cliDaemonUrl(flags);
 
-  const { runMcpStdio } = await import('./mcp.js');
+  const { runMcpStdio } = await import('./mcp/index.js');
   await runMcpStdio({ daemonUrl });
 }
 

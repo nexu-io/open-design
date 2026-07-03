@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-import { PendingAuthCache } from '../../../src/mcp-oauth.js';
+import { PendingAuthCache } from '../../../src/mcp/index.js';
 import {
   XAI_OAUTH_AUTHORIZATION_ENDPOINT,
   XAI_OAUTH_CLIENT_ID,

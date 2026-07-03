@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { _resetWebBaseUrlCache, handleMcpToolCall } from '../src/mcp.js';
+import { _resetWebBaseUrlCache, handleMcpToolCall } from '../src/mcp/client/index.js';
 
 const originalFetch = globalThis.fetch;
 

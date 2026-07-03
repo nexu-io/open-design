@@ -1,3 +1,10 @@
+/**
+ * @module mcp/core/install-info
+ * Pure builder for the `/api/mcp/install-info` payload (command/args/env) shared
+ * by the production route, the Settings → MCP panel, and its test fixture, so
+ * every install surface configures byte-identical bytes. Part of the MCP `core`
+ * kernel; intentionally side-effect-free and depends on no sibling subdirectory.
+ */
 // Pure builder for the /api/mcp/install-info payload. Extracted from
 // the Express handler so the test fixture and the production handler
 // share the exact env/argv/buildHint shape; a divergence here is the
@@ -11,6 +18,11 @@
 // and free of @open-design/sidecar-proto so it can be unit-tested
 // without booting the daemon.
 
+/**
+ * All runtime facts the daemon resolves before calling `buildMcpInstallPayload`.
+ * Kept as a plain-data interface so the builder stays side-effect-free and
+ * can be unit-tested with fake filesystem/env values.
+ */
 export interface BuildMcpInstallPayloadInputs {
   cliPath: string;
   cliExists: boolean;
@@ -37,6 +49,11 @@ export interface BuildMcpInstallPayloadInputs {
   webBaseUrl?: string | null;
 }
 
+/**
+ * The `/api/mcp/install-info` response shape: the command/args/env an MCP
+ * client must use to spawn `od mcp`, plus diagnostic flags and a human-readable
+ * `buildHint` describing any missing prerequisites.
+ */
 export interface McpInstallPayload {
   command: string;
   args: string[];
@@ -52,6 +69,15 @@ export interface McpInstallPayload {
   buildHint: string | null;
 }
 
+/**
+ * Build the `McpInstallPayload` from resolved runtime facts.
+ * Decides whether to bake `--daemon-url` into args (direct launch) or omit it
+ * (sidecar mode, where the spawned process discovers the URL via the IPC socket).
+ * Also pins `OD_DATA_DIR` to prevent EPERM failures in packaged installs
+ * (issue #848) and injects `ELECTRON_RUN_AS_NODE=1` when running under Electron.
+ * @param inputs Runtime facts collected by the production route or test fixture.
+ * @returns The install payload; `buildHint` is non-null when prerequisites are missing.
+ */
 export function buildMcpInstallPayload(
   inputs: BuildMcpInstallPayloadInputs,
 ): McpInstallPayload {

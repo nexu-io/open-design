@@ -28,7 +28,7 @@ import type { Express } from 'express';
 
 import { proxyDispatcherRequestInit } from '../connectionTest.js';
 import { mediaConfigDir, resolveProviderConfig } from '../media/config.js';
-import { PendingAuthCache } from '../mcp-oauth.js';
+import { PendingAuthCache } from '../mcp/index.js';
 import { beginXAIAuth, completeXAIAuth } from '../integrations/xai-oauth.js';
 import {
   startCallbackListener,

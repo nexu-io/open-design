@@ -64,6 +64,16 @@ export const CAPABILITY_BARREL_DOMAINS: CapabilityBarrelDomain[] = [
       ['jobs', 'catalog'],
     ],
   },
+  {
+    name: 'mcp',
+    root: 'apps/daemon/src/mcp',
+    subdirs: ['core', 'client', 'agent-install', 'live-artifacts'],
+    foundation: 'core',
+    // Pure star: the client, agent-install, and live-artifacts concerns are mutually
+    // independent and lean only on the `core` kernel (config / oauth / tokens /
+    // install-info), so there are no cross-sibling edges to declare.
+    allowedEdges: [],
+  },
 ];
 
 export type BarrelImportViolation = {

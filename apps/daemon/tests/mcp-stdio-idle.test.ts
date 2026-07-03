@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { _createMcpIdleExitController } from '../src/mcp.js';
+import { _createMcpIdleExitController } from '../src/mcp/client/index.js';
 
 describe('MCP stdio idle exit controller', () => {
   afterEach(() => {

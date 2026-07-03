@@ -1,3 +1,9 @@
+/**
+ * @module mcp/live-artifacts/server
+ * The live-artifacts MCP tool surface an agent run exposes back to itself: builds
+ * the tool schema, handles JSON-RPC requests, and runs the standalone stdio
+ * server. Self-contained; imports no sibling MCP subdirectory.
+ */
 import readline from 'node:readline';
 
 type JsonObject = Record<string, unknown>;
@@ -39,6 +45,13 @@ const ARTIFACT_INPUT_SCHEMA = {
   description: 'LiveArtifactCreateInput/LiveArtifactUpdateInput JSON plus optional templateHtml and provenanceJson fields.',
 } satisfies JsonObject;
 
+/**
+ * Build and return the MCP tool schema array for the live-artifacts server.
+ * Includes `live_artifacts_create`, `live_artifacts_list`, `live_artifacts_update`,
+ * `live_artifacts_refresh`, `connectors_list`, and `connectors_execute`.
+ * Called once on `initialize` and again on `tools/list` requests.
+ * @returns The array of `McpTool` descriptors to advertise to the agent.
+ */
 export function createLiveArtifactsMcpTools(): McpTool[] {
   return [
     {
@@ -201,6 +214,14 @@ async function callTool(name: string, args: JsonObject): Promise<unknown> {
   throw new Error(`unknown MCP tool: ${name}`);
 }
 
+/**
+ * Handle a single JSON-RPC 2.0 request from the MCP client.
+ * Dispatches `initialize`, `tools/list`, and `tools/call` to their respective
+ * handlers; returns `undefined` for notification-only messages (e.g. `notifications/initialized`);
+ * returns a JSON-RPC error object for unknown methods or tool execution failures.
+ * @param request The parsed JSON-RPC request.
+ * @returns A JSON-RPC 2.0 response object, or `undefined` for notifications.
+ */
 export async function handleLiveArtifactsMcpRequest(request: JsonRpcRequest): Promise<JsonObject | undefined> {
   const id = request.id ?? null;
   const method = request.method;
@@ -246,6 +267,14 @@ export async function handleLiveArtifactsMcpRequest(request: JsonRpcRequest): Pr
   }
 }
 
+/**
+ * Run the live-artifacts MCP server in stdio mode.
+ * Reads newline-delimited JSON-RPC requests from `process.stdin`, dispatches each
+ * to `handleLiveArtifactsMcpRequest`, and writes the response to `process.stdout`.
+ * Exits cleanly (exitCode 0) when stdin closes. Reads `OD_DAEMON_URL` and
+ * `OD_TOOL_TOKEN` from the environment for authenticating against the daemon.
+ * @returns A `McpServerResult` with `exitCode: 0` when the input stream closes.
+ */
 export async function runLiveArtifactsMcpServer(): Promise<McpServerResult> {
   const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 

@@ -2,7 +2,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { resolveProjectId, withActiveEcho } from '../src/mcp.js';
+import { resolveProjectId, withActiveEcho } from '../src/mcp/index.js';
 
 // Two projects whose names share the substring 'app' for ambiguity testing.
 const PROJECTS = [

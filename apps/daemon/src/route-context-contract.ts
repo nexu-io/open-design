@@ -8,7 +8,7 @@ import type { RegisterGenuiRoutesDeps } from './routes/genui.js';
 import type { RegisterHandoffRoutesDeps } from './routes/handoff.js';
 import type { RegisterHostToolsRoutesDeps } from './routes/host-tools.js';
 import type { RegisterLiveArtifactRoutesDeps } from './routes/live-artifact.js';
-import type { RegisterMcpRoutesDeps } from './mcp-routes.js';
+import type { RegisterMcpRoutesDeps } from './routes/mcp.js';
 import type { RegisterMediaRoutesDeps } from './routes/media.js';
 import type { RegisterMemoryRoutesDeps } from './routes/memory.js';
 import type { RegisterOpenDesignPublicMetadataRoutesDeps } from './routes/open-design-public-metadata.js';

@@ -1,3 +1,10 @@
+/**
+ * @module mcp/core/oauth
+ * Daemon-side OAuth 2.1 / PKCE client for remote (HTTP / SSE) MCP servers:
+ * auth-server discovery, dynamic client registration, the authorize/token/refresh
+ * exchanges, and the in-memory `PendingAuthCache`. Part of the MCP `core` kernel;
+ * depends on no sibling subdirectory.
+ */
 // Daemon-side OAuth 2.1 client for HTTP / SSE MCP servers.
 //
 // Replaces the per-agent `mcp-remote` subprocess that bound a transient
@@ -95,14 +102,30 @@ function base64url(buf: Buffer): string {
     .replace(/=+$/g, '');
 }
 
+/**
+ * Generate a cryptographically random PKCE code verifier (RFC 7636 §4.1).
+ * Produces a 64-byte base64url-encoded string, within the 43–128 character range.
+ * @returns A fresh code verifier string for use in a single authorization request.
+ */
 export function generateCodeVerifier(): string {
   return base64url(randomBytes(VERIFIER_LEN));
 }
 
+/**
+ * Derive the S256 PKCE code challenge from a code verifier (RFC 7636 §4.2).
+ * Computes `BASE64URL(SHA256(ASCII(verifier)))`.
+ * @param verifier The code verifier string produced by `generateCodeVerifier`.
+ * @returns The base64url-encoded SHA-256 hash to pass as `code_challenge`.
+ */
 export function deriveCodeChallenge(verifier: string): string {
   return base64url(createHash('sha256').update(verifier).digest());
 }
 
+/**
+ * Generate a cryptographically random OAuth `state` parameter.
+ * Used as the CSRF token for the authorization request; must be unique per flow.
+ * @returns A base64url-encoded 32-byte random string.
+ */
 export function generateState(): string {
   return base64url(randomBytes(32));
 }
@@ -321,6 +344,7 @@ export async function getOrRegisterClient(
 // Authorization URL builder.
 // ───────────────────────────────────────────────────────────────────────
 
+/** Inputs required to assemble the authorization redirect URL. */
 export interface AuthorizeUrlInput {
   authServer: AuthorizationServerMetadata;
   clientId: string;
@@ -328,9 +352,17 @@ export interface AuthorizeUrlInput {
   state: string;
   codeChallenge: string;
   scope?: string;
+  /** RFC 8707 resource indicator — narrows the issued token to the target MCP server. */
   resource?: string;
 }
 
+/**
+ * Assemble the authorization endpoint URL the user's browser must be directed to.
+ * Sets PKCE parameters (`code_challenge`, `code_challenge_method=S256`), the `state`
+ * CSRF token, and optionally the RFC 8707 `resource` indicator.
+ * @param input All parameters needed to build the URL.
+ * @returns The fully-qualified authorization URL as a string.
+ */
 export function buildAuthorizeUrl(input: AuthorizeUrlInput): string {
   const u = new URL(input.authServer.authorization_endpoint);
   u.searchParams.set('response_type', 'code');
@@ -351,6 +383,7 @@ export function buildAuthorizeUrl(input: AuthorizeUrlInput): string {
 // Token endpoint: code exchange + refresh.
 // ───────────────────────────────────────────────────────────────────────
 
+/** Inputs for the authorization-code → token exchange (RFC 6749 §4.1.3). */
 export interface ExchangeCodeInput {
   tokenEndpoint: string;
   clientId: string;
@@ -358,9 +391,18 @@ export interface ExchangeCodeInput {
   redirectUri: string;
   code: string;
   codeVerifier: string;
+  /** RFC 8707 resource indicator to include in the token request. */
   resource?: string;
 }
 
+/**
+ * Exchange an authorization code for access and refresh tokens (RFC 6749 §4.1.3).
+ * Includes the PKCE `code_verifier` and, when supplied, the RFC 8707 `resource`
+ * indicator. Throws when the token endpoint returns a non-2xx status.
+ * @param input The code-exchange parameters.
+ * @param fetchImpl Injectable fetch, defaults to the global `fetch`.
+ * @returns The token endpoint response containing at least an `access_token`.
+ */
 export async function exchangeCodeForToken(
   input: ExchangeCodeInput,
   fetchImpl: typeof fetch = fetch,
@@ -375,15 +417,25 @@ export async function exchangeCodeForToken(
   return tokenRequest(input.tokenEndpoint, form, input.clientSecret, fetchImpl);
 }
 
+/** Inputs for the refresh-token → new-access-token exchange (RFC 6749 §6). */
 export interface RefreshTokenInput {
   tokenEndpoint: string;
   clientId: string;
   clientSecret?: string;
   refreshToken: string;
   scope?: string;
+  /** RFC 8707 resource indicator, included when the original token was resource-scoped. */
   resource?: string;
 }
 
+/**
+ * Exchange a refresh token for a new access token (RFC 6749 §6).
+ * Preserves scope and resource binding from the original authorization.
+ * Throws when the token endpoint returns a non-2xx status.
+ * @param input The refresh parameters.
+ * @param fetchImpl Injectable fetch, defaults to the global `fetch`.
+ * @returns A fresh `OAuthTokenResponse`; the server may issue a new refresh token.
+ */
 export async function refreshAccessToken(
   input: RefreshTokenInput,
   fetchImpl: typeof fetch = fetch,
@@ -459,6 +511,12 @@ export class PendingAuthCache {
 
   constructor(private readonly ttlMs: number = 10 * 60 * 1000) {}
 
+  /**
+   * Store a pending auth state keyed by the OAuth `state` parameter.
+   * Starts the TTL sweeper if it is not already running.
+   * @param state The random `state` string from the authorization request.
+   * @param value The associated pending auth metadata to stash.
+   */
   put(state: string, value: PendingAuthState): void {
     this.store.set(state, value);
     this.startSweeper();
@@ -474,6 +532,7 @@ export class PendingAuthCache {
     return v;
   }
 
+  /** Return the number of pending auth states currently held in the cache. */
   size(): number {
     return this.store.size;
   }
@@ -512,18 +571,28 @@ export class PendingAuthCache {
 // Top-level "begin auth" helper.
 // ───────────────────────────────────────────────────────────────────────
 
+/** Inputs for the full pre-redirect OAuth dance. */
 export interface BeginAuthInput {
+  /** The `McpServerConfig.id` of the server being authorized. */
   serverId: string;
+  /** The MCP server endpoint URL (used for protected-resource discovery). */
   serverUrl: string;
+  /** The OAuth redirect URI the daemon has registered. */
   redirectUri: string;
+  /** The daemon's resolved data directory (for caching the client registration). */
   dataDir: string;
   scope?: string;
+  /** Injectable fetch implementation; defaults to the global `fetch`. */
   fetchImpl?: typeof fetch;
 }
 
+/** Result of `beginAuth`: everything needed to redirect the browser and later complete the flow. */
 export interface BeginAuthResult {
+  /** The fully-qualified authorization URL to redirect the user's browser to. */
   authorizeUrl: string;
+  /** The random `state` string; must be passed to `PendingAuthCache.put` before redirecting. */
   state: string;
+  /** The pending-auth metadata to store in `PendingAuthCache` keyed by `state`. */
   pending: PendingAuthState;
 }
 

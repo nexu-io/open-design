@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import express from 'express';
 import type { Express } from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { getArtifact, fetchProjectFile } from '../src/mcp.js';
+import { getArtifact, fetchProjectFile } from '../src/mcp/index.js';
 
 // A minimal mock of the daemon's project file endpoints. Tests control
 // the file list and per-file response via the opts object.

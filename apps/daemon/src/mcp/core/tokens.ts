@@ -1,3 +1,9 @@
+/**
+ * @module mcp/core/tokens
+ * Persistent, 0600-guarded OAuth-token store for remote MCP servers, keyed by
+ * server id, with expiry checks. The durable counterpart to `oauth`'s live flow.
+ * Part of the MCP `core` kernel; depends on no sibling subdirectory.
+ */
 // Persistent OAuth-token storage for external HTTP / SSE MCP servers.
 //
 // The daemon owns the OAuth flow end-to-end so the user never needs a
@@ -145,6 +151,12 @@ function sanitizeToken(raw: unknown): StoredMcpToken | null {
   return out;
 }
 
+/**
+ * Read and sanitize the MCP token store from `<dataDir>/mcp-tokens.json`.
+ * Returns an empty store when the file does not exist or contains invalid JSON.
+ * @param dataDir The daemon's resolved runtime data directory.
+ * @returns The sanitized token file, never rejects on missing-file or corrupt-JSON.
+ */
 export async function readTokensFile(dataDir: string): Promise<McpTokensFile> {
   try {
     const raw = await readFile(tokensFile(dataDir), 'utf8');

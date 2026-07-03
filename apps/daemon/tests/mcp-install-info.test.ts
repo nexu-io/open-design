@@ -6,7 +6,7 @@ import express from 'express';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { isLocalSameOrigin } from '../src/origin-validation.js';
-import { buildMcpInstallPayload } from '../src/mcp-install-info.js';
+import { buildMcpInstallPayload } from '../src/mcp/index.js';
 
 // The install-info endpoint is a self-contained handler that resolves
 // absolute paths to node + cli.js so the Settings → MCP server panel

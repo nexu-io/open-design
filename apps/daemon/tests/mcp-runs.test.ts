@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildProjectRawFileUrl } from '@open-design/contracts';
 
-import { _resetWebBaseUrlCache, handleMcpToolCall } from '../src/mcp.js';
+import { _resetWebBaseUrlCache, handleMcpToolCall } from '../src/mcp/client/index.js';
 
 const originalFetch = globalThis.fetch;
 

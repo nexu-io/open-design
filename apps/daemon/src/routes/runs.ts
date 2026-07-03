@@ -38,7 +38,7 @@ import {
   readTelemetrySinkConfig,
 } from '../langfuse-trace.js';
 import { parseMediaExecutionPolicyInput } from '../media/policy.js';
-import { isManagedProjectCwd } from '../mcp-config.js';
+import { isManagedProjectCwd } from '../mcp/index.js';
 import {
   buildConnectorProbe,
   getInstalledPlugin,
