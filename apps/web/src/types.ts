@@ -444,6 +444,10 @@ export interface AppConfig {
   customInstructions?: string;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
+  // Installation-global fallback router plugin id for free-form prompts
+  // that match no plugin trigger (Settings → Instructions). `null`/undefined
+  // falls back to the built-in default design router.
+  defaultRouterPluginId?: string | null;
 }
 
 export interface TelemetryConfig {

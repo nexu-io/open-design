@@ -778,6 +778,9 @@ export function mergeDaemonConfig(
   if (daemonConfig.defaultProjectLocationId !== undefined) {
     next.defaultProjectLocationId = daemonConfig.defaultProjectLocationId ?? 'default';
   }
+  if (daemonConfig.defaultRouterPluginId !== undefined) {
+    next.defaultRouterPluginId = daemonConfig.defaultRouterPluginId;
+  }
   return next;
 }
 
@@ -895,6 +898,7 @@ export async function syncConfigToDaemon(
     customInstructions: config.customInstructions ?? null,
     projectLocations: config.projectLocations ?? [],
     defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',
+    defaultRouterPluginId: config.defaultRouterPluginId ?? null,
   };
   try {
     const response = await fetch('/api/app-config', {
