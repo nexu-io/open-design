@@ -1,32 +1,36 @@
-// OD Library reconcile — mirror design systems and agent-produced project
-// deliverables into the Library as *referenced* assets, so the Library is the
-// single place a user sees everything they've made (clips, uploads, design
-// systems, agent output) and can re-consume any of it.
-//
-// Why referenced (not owned): the bytes already live in a project / design
-// system; copying them would duplicate potentially large files and go stale.
-// `registerLibraryAsset({ storage: 'referenced', absPath })` stores only a
-// pointer (an absolute filePath), and `resolveAssetBytesPath` already serves it.
-//
-// Idempotent by design. Each pass:
-//   - skips a project file already mirrored (origin_project_id + rel_path) WITHOUT
-//     reading its bytes (the cheap guard that keeps auto-reconcile-on-open fast),
-//   - skips a design system that already has its one `design-system` card,
-//   - and even if it didn't, content-hash dedup + source-row dedup collapse
-//     repeats. So this is safe to run on every Library open.
-//
-// Best-effort: a single bad project / unreadable file must never abort the pass
-// or throw into the caller (a route handler), so every unit is try-wrapped.
+/**
+ * @module library/sync
+ *
+ * OD Library reconcile — mirror design systems and agent-produced project
+ * deliverables into the Library as *referenced* assets, so the Library is the
+ * single place a user sees everything they've made (clips, uploads, design
+ * systems, agent output) and can re-consume any of it.
+ *
+ * Why referenced (not owned): the bytes already live in a project / design
+ * system; copying them would duplicate potentially large files and go stale.
+ * `registerLibraryAsset({ storage: 'referenced', absPath })` stores only a
+ * pointer (an absolute filePath), and `resolveAssetBytesPath` already serves it.
+ *
+ * Idempotent by design. Each pass:
+ *   - skips a project file already mirrored (origin_project_id + rel_path) WITHOUT
+ *     reading its bytes (the cheap guard that keeps auto-reconcile-on-open fast),
+ *   - skips a design system that already has its one `design-system` card,
+ *   - and even if it didn't, content-hash dedup + source-row dedup collapse
+ *     repeats. So this is safe to run on every Library open.
+ *
+ * Best-effort: a single bad project / unreadable file must never abort the pass
+ * or throw into the caller (a route handler), so every unit is try-wrapped.
+ */
 
 import path from 'node:path';
 import { lstat, readFile, realpath, stat } from 'node:fs/promises';
 import type Database from 'better-sqlite3';
 import type { LibraryAssetKind, LibrarySourceKind } from '@open-design/contracts';
-import { listConversations, listMessages, listProjects } from './db.js';
-import { listDesignSystems } from './design-systems/index.js';
-import { listFiles, resolveProjectDir } from './projects.js';
-import { registerLibraryAsset } from './library.js';
-import { findReferencedAssetByOrigin, hasDesignSystemSource } from './library-store.js';
+import { listConversations, listMessages, listProjects } from '../../db.js';
+import { listDesignSystems } from '../../design-systems/index.js';
+import { listFiles, resolveProjectDir } from '../../projects.js';
+import { registerLibraryAsset } from '../assets/index.js';
+import { findReferencedAssetByOrigin, hasDesignSystemSource } from '../store/index.js';
 
 type SqliteDb = Database.Database;
 

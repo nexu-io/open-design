@@ -26,7 +26,7 @@ import {
 } from '../design-systems/index.js';
 import { listPromptTemplates, readPromptTemplate } from '../prompt-templates.js';
 import { readAppConfig } from '../app-config.js';
-import { installFromTarget, uninstallById } from '../library-install.js';
+import { installFromTarget, uninstallById } from '../library/index.js';
 import type { RouteDeps } from '../server-context.js';
 
 export interface RegisterAtomRoutesDeps {

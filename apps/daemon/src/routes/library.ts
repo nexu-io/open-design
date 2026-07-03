@@ -32,9 +32,6 @@ import {
   getLibraryAsset,
   listLibraryAssets,
   updateLibraryAsset,
-  type LibraryAssetRecord,
-} from '../library-store.js';
-import {
   detectMime,
   extForMime,
   registerLibraryAsset,
@@ -43,15 +40,15 @@ import {
   resolveAssetFigmaSidecarPath,
   writeElementSidecar,
   writeFigmaSidecar,
-} from '../library.js';
-import { reconcileLibrary, type ReconcileLibraryResult } from '../library-sync.js';
-import { ensureProjectSubdir } from '../projects.js';
-import {
+  reconcileLibrary,
   confirmPairing,
   libraryConnectionStatus,
   startPairing,
   validateLibraryToken,
-} from '../library-tokens.js';
+  type LibraryAssetRecord,
+  type ReconcileLibraryResult,
+} from '../library/index.js';
+import { ensureProjectSubdir } from '../projects.js';
 
 export interface RegisterLibraryRoutesDeps
   extends RouteDeps<

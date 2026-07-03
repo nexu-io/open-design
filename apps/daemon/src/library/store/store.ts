@@ -1,18 +1,22 @@
-// SQLite persistence for the OD Library (global asset registry).
-//
-// One logical asset per content hash. An asset may carry many source records
-// (1 asset : N sources) so the same bytes captured/used in several places
-// collapse to one row with several back-links. Owned assets keep their bytes
-// under LIBRARY_DIR (content-addressed); referenced assets only point at a
-// file already living inside a project / design system.
-//
-// This module is pure persistence — no filesystem writes, no hashing, no HTTP.
-// Higher-level orchestration (storage, enrichment) lives in `library.ts`.
+/**
+ * @module library/store
+ *
+ * SQLite persistence for the OD Library (global asset registry).
+ *
+ * One logical asset per content hash. An asset may carry many source records
+ * (1 asset : N sources) so the same bytes captured/used in several places
+ * collapse to one row with several back-links. Owned assets keep their bytes
+ * under LIBRARY_DIR (content-addressed); referenced assets only point at a
+ * file already living inside a project / design system.
+ *
+ * This module is pure persistence — no filesystem writes, no hashing, no HTTP.
+ * Higher-level orchestration (storage, enrichment) lives in `assets/`. Shared
+ * record projections (`LibraryAssetRecord`, `LibraryTokenRow`) live in `core/`.
+ */
 
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import type {
-  LibraryAsset,
   LibraryAssetFilter,
   LibraryAssetKind,
   LibraryAssetSource,
@@ -22,9 +26,11 @@ import type {
   LibraryTaskError,
   LibraryTaskStatus,
 } from '@open-design/contracts';
+import type { LibraryAssetRecord, LibraryTokenRow } from '../core/index.js';
 
 type SqliteDb = Database.Database;
 
+/** Create the Library tables and indexes if absent. Idempotent DDL run at daemon boot. */
 export function migrateLibrary(db: SqliteDb): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS library_assets (
@@ -171,12 +177,6 @@ function parseJson<T>(value: string | null | undefined, fallback: T): T {
   }
 }
 
-/** Internal projection that also exposes the on-disk path for raw serving. */
-export interface LibraryAssetRecord extends LibraryAsset {
-  /** Absolute path for owned assets; project-relative resolution otherwise. */
-  filePath?: string;
-}
-
 function normalizeAsset(raw: RawAssetRow, sources: LibraryAssetSource[]): LibraryAssetRecord {
   // Build with required fields, then add optionals only when present — the
   // daemon compiles under exactOptionalPropertyTypes, which rejects an
@@ -236,6 +236,7 @@ export interface InsertLibraryAssetInput {
   metadata?: Record<string, unknown> | undefined;
 }
 
+/** Insert a new asset row (one row per content hash; caller ensures uniqueness). */
 export function insertLibraryAsset(db: SqliteDb, input: InsertLibraryAssetInput): void {
   const now = Date.now();
   db.prepare(
@@ -284,6 +285,7 @@ export interface LibraryAssetPatch {
   metadata?: Record<string, unknown> | null;
 }
 
+/** Patch mutable asset columns (caption / ocr / palette / dims / mime / tags / metadata). No-op if the patch is empty. */
 export function updateLibraryAsset(db: SqliteDb, id: string, patch: LibraryAssetPatch): void {
   const sets: string[] = [];
   const args: unknown[] = [];
@@ -306,6 +308,7 @@ export function updateLibraryAsset(db: SqliteDb, id: string, patch: LibraryAsset
   db.prepare(`UPDATE library_assets SET ${sets.join(', ')} WHERE id = ?`).run(...args);
 }
 
+/** Look up an asset by content hash (the dedup key), with its source back-links. */
 export function findLibraryAssetByHash(db: SqliteDb, contentHash: string): LibraryAssetRecord | null {
   const raw = db
     .prepare(`SELECT ${ASSET_COLS} FROM library_assets WHERE content_hash = ?`)
@@ -314,6 +317,7 @@ export function findLibraryAssetByHash(db: SqliteDb, contentHash: string): Libra
   return normalizeAsset(raw, listLibraryAssetSources(db, raw.id));
 }
 
+/** Look up an asset by id, with its source back-links. */
 export function getLibraryAsset(db: SqliteDb, id: string): LibraryAssetRecord | null {
   const raw = db
     .prepare(`SELECT ${ASSET_COLS} FROM library_assets WHERE id = ?`)
@@ -359,10 +363,12 @@ export function hasDesignSystemSource(db: SqliteDb, designSystemId: string): boo
   return Boolean(row);
 }
 
+/** Delete an asset row; its sources, tasks, and embeddings cascade away. */
 export function deleteLibraryAsset(db: SqliteDb, id: string): void {
   db.prepare(`DELETE FROM library_assets WHERE id = ?`).run(id);
 }
 
+/** List assets matching a filter (kind / domain / date / text / tag / source / project / DS), newest archive-date first, capped at the filter limit. */
 export function listLibraryAssets(db: SqliteDb, filter: LibraryAssetFilter = {}): LibraryAssetRecord[] {
   const where: string[] = [];
   const args: unknown[] = [];
@@ -458,6 +464,7 @@ function normalizeSource(raw: RawSourceRow): LibraryAssetSource {
   return source;
 }
 
+/** The source back-links recorded for one asset, oldest first. */
 export function listLibraryAssetSources(db: SqliteDb, assetId: string): LibraryAssetSource[] {
   const raws = db
     .prepare(`SELECT ${SOURCE_COLS} FROM library_asset_sources WHERE asset_id = ? ORDER BY created_at ASC`)
@@ -567,6 +574,7 @@ function normalizeTask(raw: RawTaskRow): LibraryTask {
 const TASK_COLS = `id, asset_id AS assetId, status, progress_json AS progressJson,
   error_json AS errorJson, started_at AS startedAt, ended_at AS endedAt`;
 
+/** Insert an enrichment-task row for an asset. */
 export function insertLibraryTask(db: SqliteDb, task: LibraryTask): void {
   db.prepare(
     `INSERT INTO library_tasks (id, asset_id, status, progress_json, error_json, started_at, ended_at)
@@ -582,6 +590,7 @@ export function insertLibraryTask(db: SqliteDb, task: LibraryTask): void {
   );
 }
 
+/** Look up an enrichment task by id. */
 export function getLibraryTask(db: SqliteDb, id: string): LibraryTask | null {
   const raw = db.prepare(`SELECT ${TASK_COLS} FROM library_tasks WHERE id = ?`).get(id) as
     | RawTaskRow
@@ -589,6 +598,7 @@ export function getLibraryTask(db: SqliteDb, id: string): LibraryTask | null {
   return raw ? normalizeTask(raw) : null;
 }
 
+/** Patch an enrichment task's status / progress / error / endedAt. No-op if the task is missing. */
 export function updateLibraryTask(
   db: SqliteDb,
   id: string,
@@ -612,14 +622,7 @@ export function updateLibraryTask(
 // Tokens (browser-extension pairing)
 // ---------------------------------------------------------------------------
 
-export interface LibraryTokenRow {
-  tokenHash: string;
-  label: string;
-  extensionOrigin: string;
-  createdAt: number;
-  lastUsedAt: number;
-}
-
+/** Upsert an extension pairing token row (keyed by token hash). */
 export function insertLibraryToken(db: SqliteDb, row: LibraryTokenRow): void {
   db.prepare(
     `INSERT OR REPLACE INTO library_tokens (token_hash, label, extension_origin, created_at, last_used_at)
@@ -627,6 +630,7 @@ export function insertLibraryToken(db: SqliteDb, row: LibraryTokenRow): void {
   ).run(row.tokenHash, row.label, row.extensionOrigin, row.createdAt, row.lastUsedAt);
 }
 
+/** Look up a token row by its SHA-256 hash. */
 export function findLibraryTokenByHash(db: SqliteDb, tokenHash: string): LibraryTokenRow | null {
   const raw = db
     .prepare(
@@ -638,10 +642,12 @@ export function findLibraryTokenByHash(db: SqliteDb, tokenHash: string): Library
   return raw ?? null;
 }
 
+/** Bump a token's last-used timestamp (called on each successful validation). */
 export function touchLibraryToken(db: SqliteDb, tokenHash: string): void {
   db.prepare(`UPDATE library_tokens SET last_used_at = ? WHERE token_hash = ?`).run(Date.now(), tokenHash);
 }
 
+/** All token rows, newest first. */
 export function listLibraryTokens(db: SqliteDb): LibraryTokenRow[] {
   return db
     .prepare(
@@ -652,6 +658,7 @@ export function listLibraryTokens(db: SqliteDb): LibraryTokenRow[] {
     .all() as LibraryTokenRow[];
 }
 
+/** Distinct extension origins across all tokens — seeds the in-memory allowlist at boot. */
 export function listLibraryTokenOrigins(db: SqliteDb): string[] {
   const rows = db
     .prepare(`SELECT DISTINCT extension_origin AS origin FROM library_tokens`)

@@ -126,6 +126,24 @@ export const CAPABILITY_BARREL_DOMAINS: CapabilityBarrelDomain[] = [
       ['connectors', 'llm'],
     ],
   },
+  {
+    name: 'library',
+    root: 'apps/daemon/src/library',
+    subdirs: ['core', 'store', 'assets', 'sync', 'tokens', 'install'],
+    foundation: 'core',
+    // Persistence (store/) is the base; the asset-orchestration layer registers
+    // into it (assets -> store); the reconcile sync sits on top of both
+    // (sync -> assets, sync -> store); extension pairing rides the store
+    // (tokens -> store). Shared record types + pure media/path primitives were
+    // lifted into core/ so store/ imports no sibling. install/ (skill/DS
+    // install) is an independent leaf with no internal edges.
+    allowedEdges: [
+      ['assets', 'store'],
+      ['sync', 'store'],
+      ['sync', 'assets'],
+      ['tokens', 'store'],
+    ],
+  },
 ];
 
 export type BarrelImportViolation = {

@@ -1,20 +1,34 @@
 // @ts-nocheck
-// Install/uninstall logic for user-managed skills and design systems.
-// Installed items live under ~/.open-design/skills/ and
-// ~/.open-design/design-systems/ respectively.
+/**
+ * @module library/install
+ *
+ * Install/uninstall logic for user-managed skills and design systems.
+ * Installed items live under ~/.open-design/skills/ and
+ * ~/.open-design/design-systems/ respectively. This concern is grouped under
+ * `library/` by history; it holds no internal edges to the other subdirs.
+ */
 
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { isBlocked } from './linked-dirs.js';
-import { listSkills, findSkillById } from './skills.js';
-import { listDesignSystems } from './design-systems/index.js';
+import { isBlocked } from '../../linked-dirs.js';
+import { listSkills, findSkillById } from '../../skills.js';
+import { listDesignSystems } from '../../design-systems/index.js';
 
 /** @typedef {{ source: 'github', url: string } | { source: 'local', path: string }} InstallTarget */
 
+/** Matches a bare `https://github.com/<owner>/<repo>` URL — the only accepted remote install source. */
 export const GITHUB_URL_RE = /^https:\/\/github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/?$/;
+/** Allowed characters for a derived install directory name. */
 export const SAFE_NAME_RE = /^[a-zA-Z0-9_.-]+$/;
 
+/**
+ * Derive a safe install directory name from a GitHub URL: strips a trailing
+ * slash and `.git`, and falls back to a timestamped `skill-…` name if the
+ * remaining segment contains unsafe characters. Truncated to 64 chars.
+ * @param {string} url
+ * @returns {string}
+ */
 export function sanitizeRepoName(url) {
   const trimmed = url.replace(/\/+$/, '');
   const segments = trimmed.split('/');

@@ -1,16 +1,23 @@
-// OD Library orchestration — the single registration hook every ingest point
-// calls, plus content-addressed owned storage and the programmatic enrichment
-// layer (mime / size / image dimensions / derived tags).
-//
-// `registerLibraryAsset` is idempotent by content hash: the same bytes seen
-// twice collapse to one asset row, and each call appends a source record so
-// "this image was used in two tasks" becomes one asset with two back-links.
-// It must never throw into a caller's main flow — every existing ingest point
-// wraps it best-effort.
-//
-// AI enrichment (caption / OCR / embedding) is intentionally out of this first
-// slice: the recorded enrichment task marks those stages `skipped` so the UI
-// can later offer a reindex once a model is configured.
+/**
+ * @module library/assets
+ *
+ * OD Library orchestration — the single registration hook every ingest point
+ * calls, plus content-addressed owned storage, sidecar writing, and the
+ * programmatic enrichment layer (mime / size / image dimensions / derived tags).
+ *
+ * `registerLibraryAsset` is idempotent by content hash: the same bytes seen
+ * twice collapse to one asset row, and each call appends a source record so
+ * "this image was used in two tasks" becomes one asset with two back-links.
+ * It must never throw into a caller's main flow — every existing ingest point
+ * wraps it best-effort.
+ *
+ * AI enrichment (caption / OCR / embedding) is intentionally out of this first
+ * slice: the recorded enrichment task marks those stages `skipped` so the UI
+ * can later offer a reindex once a model is configured.
+ *
+ * Pure media/path primitives (`libraryObjectPath`, `detectMime`, …) live in
+ * `core/`; persistence lives in `store/`.
+ */
 
 import type Database from 'better-sqlite3';
 import { createHash, randomUUID } from 'node:crypto';
@@ -22,26 +29,24 @@ import type {
   LibrarySourceKind,
 } from '@open-design/contracts';
 import {
+  archivedDateFor,
+  detectMime,
+  extForMime,
+  kindForMime,
+  libraryObjectPath,
+  sniffImageDimensions,
+  type LibraryAssetRecord,
+} from '../core/index.js';
+import {
   addLibraryAssetSource,
   findLibraryAssetByHash,
   getLibraryAsset,
   insertLibraryAsset,
   insertLibraryTask,
   updateLibraryAsset,
-  type LibraryAssetRecord,
-} from './library-store.js';
+} from '../store/index.js';
 
 type SqliteDb = Database.Database;
-
-export function libraryObjectsDir(libraryDir: string): string {
-  return path.join(libraryDir, 'objects');
-}
-
-/** Content-addressed path: <library>/objects/<hh>/<hash><ext>. */
-export function libraryObjectPath(libraryDir: string, contentHash: string, ext: string): string {
-  const shard = contentHash.slice(0, 2);
-  return path.join(libraryObjectsDir(libraryDir), shard, `${contentHash}${ext}`);
-}
 
 // Sidecars live next to an owned content-addressed object, keyed by the same
 // content hash with a distinguishing suffix. They hold derived data that should
@@ -111,115 +116,7 @@ export function writeElementSidecar(libraryDir: string, contentHash: string, htm
   return writeAssetSidecar(libraryDir, contentHash, ELEMENT_SIDECAR_EXT, html);
 }
 
-/** Local `YYYY-MM-DD` for the daily archive feed. */
-export function archivedDateFor(ts: number): string {
-  const d = new Date(ts);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-const EXT_FOR_MIME: Record<string, string> = {
-  'image/png': '.png',
-  'image/jpeg': '.jpg',
-  'image/gif': '.gif',
-  'image/webp': '.webp',
-  'image/svg+xml': '.svg',
-  'image/avif': '.avif',
-  'video/mp4': '.mp4',
-  'video/webm': '.webm',
-  'text/html': '.html',
-  'text/plain': '.txt',
-  'application/json': '.json',
-};
-
-export function extForMime(mime: string | undefined, filename?: string): string {
-  if (filename) {
-    const ext = path.extname(filename);
-    if (ext) return ext.toLowerCase();
-  }
-  if (mime && EXT_FOR_MIME[mime]) return EXT_FOR_MIME[mime];
-  return '.bin';
-}
-
-/** Magic-byte + filename-extension mime sniffing for the common cases. */
-export function detectMime(bytes: Buffer, filename?: string): string {
-  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
-    return 'image/png';
-  }
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return 'image/jpeg';
-  }
-  if (bytes.length >= 4 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
-    return 'image/gif';
-  }
-  if (
-    bytes.length >= 12 &&
-    bytes.toString('ascii', 0, 4) === 'RIFF' &&
-    bytes.toString('ascii', 8, 12) === 'WEBP'
-  ) {
-    return 'image/webp';
-  }
-  const head = bytes.toString('utf8', 0, Math.min(bytes.length, 256)).trimStart().toLowerCase();
-  if (head.startsWith('<svg') || head.startsWith('<?xml')) return 'image/svg+xml';
-  if (head.startsWith('<!doctype html') || head.startsWith('<html')) return 'text/html';
-  if (filename) {
-    const ext = path.extname(filename).toLowerCase();
-    for (const [mime, candidate] of Object.entries(EXT_FOR_MIME)) {
-      if (candidate === ext) return mime;
-    }
-  }
-  return 'application/octet-stream';
-}
-
-export function kindForMime(mime: string): LibraryAssetKind {
-  if (mime.startsWith('image/')) return 'image';
-  if (mime.startsWith('video/')) return 'video';
-  if (mime.startsWith('font/') || mime === 'application/font-woff') return 'font';
-  if (mime === 'text/html') return 'html';
-  if (mime.startsWith('text/')) return 'text';
-  return 'image';
-}
-
-/** Best-effort raster dimensions for PNG / JPEG / GIF (no decode, no deps). */
-export function sniffImageDimensions(bytes: Buffer): { width: number; height: number } | null {
-  // PNG: IHDR width/height are big-endian uint32 at offset 16/20.
-  if (bytes.length >= 24 && bytes[0] === 0x89 && bytes[1] === 0x50) {
-    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
-  }
-  // GIF: logical screen descriptor at offset 6/8, little-endian uint16.
-  if (bytes.length >= 10 && bytes.toString('ascii', 0, 3) === 'GIF') {
-    return { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) };
-  }
-  // JPEG: walk segments to the first Start-Of-Frame marker.
-  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
-    let offset = 2;
-    while (offset + 9 < bytes.length) {
-      if (bytes[offset] !== 0xff) {
-        offset += 1;
-        continue;
-      }
-      const marker = bytes[offset + 1];
-      if (marker === undefined) break;
-      // SOF0..SOF15 except DHT(C4), JPG(C8), DAC(CC).
-      if (
-        marker >= 0xc0 &&
-        marker <= 0xcf &&
-        marker !== 0xc4 &&
-        marker !== 0xc8 &&
-        marker !== 0xcc
-      ) {
-        return { height: bytes.readUInt16BE(offset + 5), width: bytes.readUInt16BE(offset + 7) };
-      }
-      const segLen = bytes.readUInt16BE(offset + 2);
-      if (segLen < 2) break;
-      offset += 2 + segLen;
-    }
-  }
-  return null;
-}
-
+/** @internal Host of a source URL (for the derived `sourceDomain` tag), or undefined. */
 function domainFromUrl(url: string | undefined): string | undefined {
   if (!url) return undefined;
   try {
@@ -229,6 +126,7 @@ function domainFromUrl(url: string | undefined): string | undefined {
   }
 }
 
+/** @internal Lower-case, trim, and de-duplicate a tag list, dropping empties. */
 function dedupeTags(tags: Array<string | undefined | null>): string[] {
   const seen = new Set<string>();
   const out: string[] = [];

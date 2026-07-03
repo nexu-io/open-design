@@ -20,8 +20,7 @@ import {
   openDatabase,
   upsertMessage,
 } from '../src/db.js';
-import { listLibraryAssets } from '../src/library-store.js';
-import { reconcileLibrary } from '../src/library-sync.js';
+import { listLibraryAssets, reconcileLibrary } from '../src/library/index.js';
 import type Database from 'better-sqlite3';
 
 let db: Database.Database;

@@ -196,7 +196,7 @@ import {
   splitDerivedSkillId,
 } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
-import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
+import { installFromTarget, uninstallById, sanitizeRepoName } from './library/index.js';
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
 import {
   AssetCacheError,
@@ -609,8 +609,8 @@ import { registerLibraryRoutes } from './routes/library.js';
 import {
   libraryExtensionAllowedOrigins,
   seedLibraryExtensionOrigins,
-} from './library-tokens.js';
-import { listLibraryTokenOrigins } from './library-store.js';
+  listLibraryTokenOrigins,
+} from './library/index.js';
 import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 

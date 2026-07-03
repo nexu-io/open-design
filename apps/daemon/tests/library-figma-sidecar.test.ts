@@ -9,14 +9,14 @@ import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 
-import { migrateLibrary } from '../src/library-store.js';
 import {
+  migrateLibrary,
   registerLibraryAsset,
   resolveAssetElementSidecarPath,
   resolveAssetFigmaSidecarPath,
   writeElementSidecar,
   writeFigmaSidecar,
-} from '../src/library.js';
+} from '../src/library/index.js';
 
 let db: Database.Database;
 let libraryDir: string;
