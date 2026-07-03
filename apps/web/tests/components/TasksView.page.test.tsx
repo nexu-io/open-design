@@ -183,6 +183,23 @@ describe('TasksView page shell', () => {
     expect(within(creatorDashboard).getByText('Media production pipeline')).toBeTruthy();
   });
 
+  it('renders the creator workbench empty focus state when no projects exist', async () => {
+    mockTasksViewFetch({ creatorProjects: [], creatorRuns: [] });
+
+    render(<TasksView projects={[]} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+
+    const creatorDashboard = await screen.findByTestId('creator-dashboard');
+    expect(within(creatorDashboard).getByText('No active task')).toBeTruthy();
+    expect(
+      within(creatorDashboard).getByText(
+        'Queue a topic, material, or editing task to start the chain.',
+      ),
+    ).toBeTruthy();
+    expect(within(creatorDashboard).queryByRole('button', { name: /Open project/i })).toBeNull();
+  });
+
   it('opens the focus project from the creator workbench hero action', async () => {
     const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
     const creatorProjects: Project[] = [
