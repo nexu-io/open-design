@@ -1,0 +1,68 @@
+{
+  "candidateId": "a4893bec-1f96-4fb2-aff1-a017346476dd",
+  "projectId": "brand-anthropic-a38199",
+  "runId": "d8e12cc2-426d-48f9-90a3-ce29e615ab8b",
+  "conversationId": "05128f01-0c8c-43bb-9672-78ed2973b1fd",
+  "provenance": {
+    "summary": "Detected from context/source-context.md, README.md, SKILL.md, plugin-source/design-system-source-context-mr0bb87z/references/source-2-SKILL.md, plugin-source/design-system-source-context-mr0bb87z/references/source-1-source-context.md, plugin-source/design-system-source-context-mr0bb87z/SKILL.md, SECURITY.md, CONTRIBUTING.md after a successful run.",
+    "detectedAt": 1783069603071
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 8961,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 15370,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 9055,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/design-system-source-context-mr0bb87z/references/source-2-SKILL.md",
+      "label": "plugin-source/design-system-source-context-mr0bb87z/references/source-2-SKILL.md",
+      "size": 5815,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/design-system-source-context-mr0bb87z/references/source-1-source-context.md",
+      "label": "plugin-source/design-system-source-context-mr0bb87z/references/source-1-source-context.md",
+      "size": 8961,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "plugin-source/design-system-source-context-mr0bb87z/SKILL.md",
+      "label": "plugin-source/design-system-source-context-mr0bb87z/SKILL.md",
+      "size": 9056,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SECURITY.md",
+      "label": "SECURITY.md",
+      "size": 1699,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "CONTRIBUTING.md",
+      "label": "CONTRIBUTING.md",
+      "size": 2249,
+      "copied": true
+    }
+  ]
+}
