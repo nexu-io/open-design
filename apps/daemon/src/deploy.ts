@@ -734,7 +734,7 @@ export async function deployToNetlify({
   config: DeployConfig;
   files: DeployFile[];
   projectId: string;
-  projectsRoot: string;
+  projectsRoot?: string | undefined;
   projectMetadata?: JsonObject | undefined;
   priorMetadata?: JsonObject | undefined;
 }) {
@@ -762,12 +762,14 @@ export async function deployToNetlify({
 
   // 2. Write netlify.toml and ensure GitHub repository exists
   const netlifyToml = `[build]\n  command = ""\n  publish = "."\n`;
-  const projectDir = resolveProjectDir(projectsRoot, projectId, projectMetadata);
-  const tomlPath = path.join(projectDir, 'netlify.toml');
-  try {
-    await writeFile(tomlPath, netlifyToml, 'utf8');
-  } catch (err) {
-    // Best effort on read-only environments
+  if (projectsRoot) {
+    try {
+      const projectDir = resolveProjectDir(projectsRoot, projectId, projectMetadata);
+      const tomlPath = path.join(projectDir, 'netlify.toml');
+      await writeFile(tomlPath, netlifyToml, 'utf8');
+    } catch (err) {
+      // Best effort on read-only environments
+    }
   }
 
   // Add netlify.toml to files array if not present
@@ -945,7 +947,8 @@ export async function deployToNetlify({
       }),
     });
     if (!updateSiteResp.ok) {
-      console.warn('Failed to update Netlify site repository settings:', await updateSiteResp.text());
+      const errText = await updateSiteResp.text();
+      throw new DeployError(`Failed to update Netlify site repository settings: ${errText}`, 502);
     }
   } else {
     // Create a new site linked to the GitHub repo
@@ -1008,7 +1011,8 @@ export async function deployToNetlify({
         }),
       });
       if (!updateSiteResp.ok) {
-        console.warn('Failed to update fallback Netlify site repository settings:', await updateSiteResp.text());
+        const errText = await updateSiteResp.text();
+        throw new DeployError(`Failed to update fallback Netlify site repository settings: ${errText}`, 502);
       }
     }
   }
@@ -1151,11 +1155,14 @@ async function createOrUpdateGitHubFile(
   const base64Content = Buffer.from(content).toString('base64');
   const url = `https://api.github.com/repos/${username}/${repo}/contents/${filePath}`;
 
+  const size = typeof content === 'string' ? Buffer.byteLength(content) : content.length;
+  const acceptHeader = size > 1_000_000 ? 'application/vnd.github.object+json' : 'application/vnd.github.v3+json';
+
   let sha: string | undefined;
   const getResp = await fetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github.v3+json',
+      Accept: acceptHeader,
       'User-Agent': 'Open-Design-Daemon',
     },
   });
@@ -1309,7 +1316,7 @@ export async function deployToRender({
   config: DeployConfig;
   files: DeployFile[];
   projectId: string;
-  projectsRoot: string;
+  projectsRoot?: string | undefined;
   projectMetadata?: JsonObject | undefined;
   priorMetadata?: JsonObject | undefined;
 }) {
@@ -1344,12 +1351,14 @@ export async function deployToRender({
     staticPublishPath: "."
 `;
 
-  const projectDir = resolveProjectDir(projectsRoot, projectId, projectMetadata);
-  const yamlPath = path.join(projectDir, 'render.yaml');
-  try {
-    await writeFile(yamlPath, yamlContent, 'utf8');
-  } catch (err) {
-    // Best effort on read-only environments
+  if (projectsRoot) {
+    try {
+      const projectDir = resolveProjectDir(projectsRoot, projectId, projectMetadata);
+      const yamlPath = path.join(projectDir, 'render.yaml');
+      await writeFile(yamlPath, yamlContent, 'utf8');
+    } catch (err) {
+      // Best effort on read-only environments
+    }
   }
 
   // Add render.yaml to files array if not present
@@ -1931,7 +1940,8 @@ export async function deployToRailway({
     const result = (await resp.json().catch(() => null)) as any;
     if (!resp.ok || result?.errors) {
       const msg = result?.errors?.[0]?.message || `Railway API request failed with status ${resp.status}`;
-      throw new DeployError(msg, resp.status || 502, result);
+      const status = resp.status === 200 ? 502 : (resp.status || 502);
+      throw new DeployError(msg, status, result);
     }
     return result.data;
   }

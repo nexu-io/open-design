@@ -2180,7 +2180,9 @@ describe('netlify and railway deploys', () => {
       }
       if (url.startsWith('https://api.github.com/repos/octo/od-railway-p1/contents/') && method === 'GET') {
         const headers = init?.headers as Record<string, string>;
-        getHeaders = new Headers(headers);
+        if (url.includes('large-image.png')) {
+          getHeaders = new Headers(headers);
+        }
         return new Response(
           JSON.stringify({
             type: 'file',
