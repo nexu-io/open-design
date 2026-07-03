@@ -448,6 +448,36 @@ describe('TasksView page shell', () => {
     });
   });
 
+  it('routes continue-task focus action into the project workspace', async () => {
+    const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
+    const creatorProjects: Project[] = [
+      {
+        id: 'project-todo-1',
+        name: '待整理的摄影任务',
+        skillId: null,
+        designSystemId: null,
+        createdAt: Date.now() - 30_000,
+        updatedAt: Date.now() - 10_000,
+        metadata: { kind: 'other' },
+        status: { value: 'not_started' },
+      },
+    ];
+    mockTasksViewFetch({ creatorProjects, creatorRuns: [] });
+
+    render(<TasksView projects={creatorProjects} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    expect(await screen.findByText('Next best task')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue task' }));
+
+    expect(navigateSpy).toHaveBeenCalledWith({
+      kind: 'project',
+      projectId: 'project-todo-1',
+      conversationId: null,
+      fileName: null,
+    });
+  });
+
   it('opens a project from the creator task list', async () => {
     const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
     const creatorProjects: Project[] = [
