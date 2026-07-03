@@ -12,7 +12,6 @@
   .prompt-template-modal-backdrop,
   .prompt-template-lightbox-backdrop,
   .home-hero-confirm__backdrop,
-  .project-ds-picker-fullscreen,
   .staged-preview-modal,
   .qs-overlay
 ) {
@@ -30,7 +29,6 @@
   .prompt-template-modal-backdrop,
   .prompt-template-lightbox-backdrop,
   .home-hero-confirm__backdrop,
-  .project-ds-picker-fullscreen,
   .staged-preview-modal,
   .qs-overlay
 )::before {

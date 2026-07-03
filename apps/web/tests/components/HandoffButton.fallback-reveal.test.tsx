@@ -134,7 +134,7 @@ describe('HandoffButton zero-editors fallback', () => {
       '/api/integrations/vela/analytics-entry',
       expect.objectContaining({ method: 'POST' }),
     );
-    expect(screen.getByTestId('handoff-cli-item-amr').textContent).toContain('Open Design AMR');
+    expect(screen.getByTestId('handoff-cli-item-amr').textContent).toContain('Open Design');
     expect(screen.getByTestId('handoff-cli-item-amr').textContent).not.toContain('未安装');
     expect(
       screen.getByTestId('handoff-cli-item-amr').compareDocumentPosition(

@@ -11,7 +11,7 @@
 import { getCollection, render } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import GoogleAnalytics from '../../_components/google-analytics.astro';
+import SiteAnalytics from '../../_components/site-analytics.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
 import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
@@ -19,6 +19,7 @@ import SeoHead from '../../_components/seo-head.astro';
 import SiteFooter from '../../_components/site-footer.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
+import { getLocalizedTutorial } from '../../_data/tutorials-longform-i18n';
 import {
   DEFAULT_LOCALE,
   getHeaderLocaleSwitcher,
@@ -87,6 +88,11 @@ const localizedCategory = (category: string) => {
   if (value === 'community') return ui.tutorials.categories.community;
   return category;
 };
+// Non-default locales prefer a real translated long-form body when one exists
+// (see `_data/tutorials-longform-i18n.ts`); otherwise fall back to the generic
+// localized placeholder so the short catalogue entries keep current behavior.
+const localizedLongform =
+  locale === DEFAULT_LOCALE ? undefined : getLocalizedTutorial(entry.id, locale);
 const tutorialCopy =
   locale === DEFAULT_LOCALE
     ? {
@@ -95,24 +101,31 @@ const tutorialCopy =
         category: entry.data.category,
         bodyHtml: undefined as string | undefined,
       }
-    : {
-        title: ui.tutorials.localizedTitle(entry.data.title, entry.data.author),
-        summary: ui.tutorials.localizedSummary(
-          entry.data.title,
-          entry.data.author,
-          localizedCategory(entry.data.category),
-        ),
-        category: localizedCategory(entry.data.category),
-        bodyHtml: ui.tutorials.localizedBodyHtml(
-          entry.data.title,
-          entry.data.author,
-          ui.tutorials.localizedSummary(
+    : localizedLongform
+      ? {
+          title: localizedLongform.title,
+          summary: localizedLongform.summary,
+          category: localizedCategory(entry.data.category),
+          bodyHtml: localizedLongform.bodyHtml,
+        }
+      : {
+          title: ui.tutorials.localizedTitle(entry.data.title, entry.data.author),
+          summary: ui.tutorials.localizedSummary(
             entry.data.title,
             entry.data.author,
             localizedCategory(entry.data.category),
           ),
-        ),
-      };
+          category: localizedCategory(entry.data.category),
+          bodyHtml: ui.tutorials.localizedBodyHtml(
+            entry.data.title,
+            entry.data.author,
+            ui.tutorials.localizedSummary(
+              entry.data.title,
+              entry.data.author,
+              localizedCategory(entry.data.category),
+            ),
+          ),
+        };
 ---
 
 <!doctype html>
@@ -128,7 +141,7 @@ const tutorialCopy =
       datePublished={entry.data.date}
       category={tutorialCopy.category}
     />
-    <GoogleAnalytics />
+    <SiteAnalytics />
   </head>
   <body>
     <div class='shell'>
@@ -451,6 +464,70 @@ const tutorialCopy =
       }
       .tut-body :global(li) {
         margin-bottom: 0.4em;
+      }
+      .tut-body :global(img) {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin: 1.8em 0 0.5em;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+      /* Italic line in the paragraph directly after an image acts as a caption */
+      .tut-body :global(p:has(> img) + p > em:only-child) {
+        display: block;
+        font-size: 14px;
+        line-height: 1.5;
+        color: var(--ink-faint, var(--ink-soft));
+        font-style: italic;
+      }
+      .tut-body :global(pre) {
+        background: var(--ink);
+        color: #f3f1ea;
+        border-radius: 10px;
+        padding: 16px 18px;
+        overflow-x: auto;
+        margin: 0 0 1.4em;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      .tut-body :global(pre code) {
+        font-family: var(--mono, ui-monospace, monospace);
+        background: none;
+        padding: 0;
+        color: inherit;
+        font-size: 14px;
+      }
+      .tut-body :global(:not(pre) > code) {
+        font-family: var(--mono, ui-monospace, monospace);
+        font-size: 0.9em;
+        background: var(--paper-2, rgba(0, 0, 0, 0.05));
+        padding: 0.12em 0.4em;
+        border-radius: 5px;
+      }
+      .tut-body :global(table) {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0 0 1.6em;
+        font-size: 15px;
+      }
+      .tut-body :global(th),
+      .tut-body :global(td) {
+        border: 1px solid var(--line);
+        padding: 8px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+      .tut-body :global(th) {
+        font-family: var(--sans);
+        font-weight: 600;
+        color: var(--ink);
+        background: var(--paper-2, rgba(0, 0, 0, 0.03));
+      }
+      .tut-body :global(hr) {
+        border: 0;
+        border-top: 1px solid var(--line);
+        margin: 2em 0 1.6em;
       }
       .tut-foot {
         display: flex;

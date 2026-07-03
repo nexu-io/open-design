@@ -13,8 +13,12 @@ import {
   normalizeDesktopSidecarMessage,
   type DesktopClickInput,
   type DesktopEvalInput,
+  type DesktopExportArtifactInput,
   type DesktopExportPdfInput,
+  type DesktopRenderSlidesInput,
   type DesktopScreenshotInput,
+  type DesktopStatusSnapshot,
+  type DesktopUpdateStatusSnapshot,
   type DesktopUpdateInput,
   type RegisterDesktopAuthResult,
   type SidecarStamp,
@@ -130,6 +134,7 @@ export type DesktopMainOptions = {
    */
   discoverDaemonUrl?: () => Promise<string | null>;
   preloadPath?: string;
+  windowTitle?: string;
   onDesktopReady?: (controls: { show(): void }) => void;
   /**
    * Optional pre-created splash window. The packaged entry creates it before
@@ -328,6 +333,7 @@ function installDesktopMenu(
 ): () => void {
   let developMenuVisible = false;
   let lastKnownAmrProfile: AmrEnvironmentProfile = "prod";
+  const developMenuAccelerator = process.platform === "darwin" ? "Command+Option+Shift+D" : "Control+Alt+Shift+D";
 
   const showDevelopMenuError = (message: string, error: unknown): void => {
     const detail = error instanceof Error ? error.message : String(error);
@@ -363,6 +369,23 @@ function installDesktopMenu(
       })
       .catch((error: unknown) => {
         showDevelopMenuError("AMR Environment Profile switch failed", error);
+      });
+  };
+
+  const toggleDevelopMenu = (): void => {
+    if (developMenuVisible) {
+      developMenuVisible = false;
+      rebuild();
+      return;
+    }
+    void readCurrentAmrProfile()
+      .then((profile) => {
+        lastKnownAmrProfile = profile;
+        developMenuVisible = true;
+        rebuild();
+      })
+      .catch((error: unknown) => {
+        showDevelopMenuError("Develop menu unavailable", error);
       });
   };
 
@@ -421,6 +444,12 @@ function installDesktopMenu(
           { role: "forceReload" },
           { role: "toggleDevTools" },
           { type: "separator" },
+          {
+            accelerator: developMenuAccelerator,
+            label: developMenuVisible ? "Hide Develop Menu" : "Show Develop Menu",
+            click: toggleDevelopMenu,
+          },
+          { type: "separator" },
           { role: "resetZoom" },
           { role: "zoomIn" },
           { role: "zoomOut" },
@@ -472,7 +501,7 @@ function installDesktopMenu(
           {
             label: "Join Discord",
             click() {
-              void shell.openExternal("https://discord.gg/9ptkbbqRu");
+              void shell.openExternal("https://discord.gg/mHAjSMV6gz");
             },
           },
           { type: "separator" },
@@ -484,33 +513,40 @@ function installDesktopMenu(
   };
 
   rebuild();
-  const accelerator = process.platform === "darwin" ? "Command+Option+Shift+D" : "Control+Alt+Shift+D";
-  const registered = globalShortcut.register(accelerator, () => {
-    if (developMenuVisible) {
-      developMenuVisible = false;
-      rebuild();
-      return;
-    }
-    void readCurrentAmrProfile()
-      .then((profile) => {
-        lastKnownAmrProfile = profile;
-        developMenuVisible = true;
-        rebuild();
-      })
-      .catch((error: unknown) => {
-        showDevelopMenuError("Develop menu unavailable", error);
-      });
-  });
+  const registered = globalShortcut.register(developMenuAccelerator, toggleDevelopMenu);
   if (!registered) {
-    showDevelopMenuError("Develop menu shortcut unavailable", new Error(`Failed to register ${accelerator}`));
+    console.warn("[open-design desktop] develop menu shortcut unavailable", { accelerator: developMenuAccelerator });
   }
   return () => {
-    globalShortcut.unregister(accelerator);
+    if (registered) {
+      globalShortcut.unregister(developMenuAccelerator);
+    }
   };
 }
 
 const REGISTER_DESKTOP_AUTH_RETRY_DELAYS_MS = [120, 240, 480, 960, 1500];
 const REGISTER_DESKTOP_AUTH_TIMEOUT_MS = 800;
+
+function summarizeDesktopIpcInput(input: unknown): Record<string, unknown> | null {
+  if (input == null || typeof input !== "object") return null;
+  if ("expression" in input && typeof (input as { expression?: unknown }).expression === "string") {
+    const expression = (input as { expression: string }).expression;
+    return {
+      expressionLength: expression.length,
+      expressionPreview: expression.length > 120 ? `${expression.slice(0, 120)}...` : expression,
+    };
+  }
+  if ("path" in input && typeof (input as { path?: unknown }).path === "string") {
+    return { path: (input as { path: string }).path };
+  }
+  if ("action" in input && typeof (input as { action?: unknown }).action === "string") {
+    return { action: (input as { action: string }).action };
+  }
+  if ("selector" in input && typeof (input as { selector?: unknown }).selector === "string") {
+    return { selector: (input as { selector: string }).selector };
+  }
+  return null;
+}
 
 /**
  * Sends a fresh, per-process secret to the daemon over its sidecar IPC
@@ -649,6 +685,47 @@ export async function runDesktopMain(
   let ipcServer: JsonIpcServerHandle | null = null;
   let shuttingDown = false;
 
+  async function snapshotUpdateForStatus(): Promise<{
+    update: DesktopUpdateStatusSnapshot;
+    updateStatusError?: string;
+  }> {
+    const timeoutMs = 250;
+    let timeout: NodeJS.Timeout | null = null;
+    try {
+      const update = await Promise.race([
+        updater.status(),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => {
+            reject(new Error(`desktop updater status timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        }),
+      ]);
+      return { update };
+    } catch (error) {
+      return {
+        update: updater.snapshot(),
+        updateStatusError: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      if (timeout != null) clearTimeout(timeout);
+    }
+  }
+
+  async function desktopStatusSnapshot(activeDesktop: DesktopRuntime | null): Promise<DesktopStatusSnapshot> {
+    const update = await snapshotUpdateForStatus();
+    if (activeDesktop == null) {
+      return {
+        pid: process.pid,
+        state: "idle",
+        updatedAt: new Date().toISOString(),
+        url: null,
+        windowVisible: false,
+        ...update,
+      };
+    }
+    return { ...activeDesktop.status(), ...update };
+  }
+
   async function shutdown(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
@@ -667,6 +744,67 @@ export async function runDesktopMain(
     void shutdown().finally(() => process.exit(0));
   }
 
+  console.info("[open-design desktop] starting desktop IPC server", { ipc: runtime.ipc });
+  ipcServer = await createJsonIpcServer({
+    socketPath: runtime.ipc,
+    handler: async (message: unknown) => {
+      const request = normalizeDesktopSidecarMessage(message);
+      const startedAt = Date.now();
+      const input = "input" in request ? summarizeDesktopIpcInput(request.input) : null;
+      console.info("[open-design desktop] desktop IPC request start", { input, type: request.type });
+      try {
+        const activeDesktop = desktop;
+        switch (request.type) {
+          case SIDECAR_MESSAGES.STATUS:
+            return await desktopStatusSnapshot(activeDesktop);
+          case SIDECAR_MESSAGES.SHUTDOWN:
+            setImmediate(() => {
+              shutdownAndExit();
+            });
+            return { accepted: true };
+        }
+        if (activeDesktop == null) {
+          throw new Error("desktop runtime is not initialized");
+        }
+        switch (request.type) {
+          case SIDECAR_MESSAGES.EVAL:
+            return await activeDesktop.eval(request.input as DesktopEvalInput);
+          case SIDECAR_MESSAGES.SCREENSHOT:
+            return await activeDesktop.screenshot(request.input as DesktopScreenshotInput);
+          case SIDECAR_MESSAGES.CONSOLE:
+            return activeDesktop.console();
+          case SIDECAR_MESSAGES.SHOW:
+            activeDesktop.show();
+            return { accepted: true };
+          case SIDECAR_MESSAGES.CLICK:
+            return await activeDesktop.click(request.input as DesktopClickInput);
+          case SIDECAR_MESSAGES.EXPORT_PDF:
+            return await activeDesktop.exportPdf(request.input as DesktopExportPdfInput);
+          case SIDECAR_MESSAGES.RENDER_SLIDES:
+            return await activeDesktop.renderSlides(request.input as DesktopRenderSlidesInput);
+          case SIDECAR_MESSAGES.EXPORT_ARTIFACT:
+            return await activeDesktop.exportArtifact(request.input as DesktopExportArtifactInput);
+          case SIDECAR_MESSAGES.UPDATE:
+            return await updater.handle((request.input as DesktopUpdateInput).action);
+        }
+      } catch (error) {
+        console.error("[open-design desktop] desktop IPC request failed", {
+          durationMs: Date.now() - startedAt,
+          error: error instanceof Error ? error.message : String(error),
+          type: request.type,
+        });
+        throw error;
+      } finally {
+        console.info("[open-design desktop] desktop IPC request end", {
+          durationMs: Date.now() - startedAt,
+          type: request.type,
+        });
+      }
+    },
+  });
+  console.info("[open-design desktop] desktop IPC server listening", { ipc: runtime.ipc });
+
+  console.info("[open-design desktop] creating desktop runtime");
   desktop = await createDesktopRuntime({
     desktopAuthSecret,
     discoverUrl: options.discoverWebUrl ?? createWebDiscovery(runtime),
@@ -684,7 +822,9 @@ export async function runDesktopMain(
     splashWindow: options.splashWindow,
     splashStartedAt: options.splashStartedAt,
     updater,
+    windowTitle: options.windowTitle,
   });
+  console.info("[open-design desktop] desktop runtime created");
   options.onDesktopReady?.({ show: () => desktop?.show() });
   disposeMenu = installDesktopMenu(runtime, options);
   removeDiagnosticsIpc = registerDesktopDiagnosticsIpc({
@@ -704,41 +844,6 @@ export async function runDesktopMain(
     if (shuttingDown) return;
     event.preventDefault();
     void shutdown().finally(() => process.exit(0));
-  });
-
-  ipcServer = await createJsonIpcServer({
-    socketPath: runtime.ipc,
-    handler: async (message: unknown) => {
-      const request = normalizeDesktopSidecarMessage(message);
-      const activeDesktop = desktop;
-      if (activeDesktop == null) {
-        throw new Error("desktop runtime is not initialized");
-      }
-      switch (request.type) {
-        case SIDECAR_MESSAGES.STATUS:
-          return { ...activeDesktop.status(), update: await updater.status() };
-        case SIDECAR_MESSAGES.EVAL:
-          return await activeDesktop.eval(request.input as DesktopEvalInput);
-        case SIDECAR_MESSAGES.SCREENSHOT:
-          return await activeDesktop.screenshot(request.input as DesktopScreenshotInput);
-        case SIDECAR_MESSAGES.CONSOLE:
-          return activeDesktop.console();
-        case SIDECAR_MESSAGES.SHOW:
-          activeDesktop.show();
-          return { accepted: true };
-        case SIDECAR_MESSAGES.CLICK:
-          return await activeDesktop.click(request.input as DesktopClickInput);
-        case SIDECAR_MESSAGES.EXPORT_PDF:
-          return await activeDesktop.exportPdf(request.input as DesktopExportPdfInput);
-        case SIDECAR_MESSAGES.UPDATE:
-          return await updater.handle((request.input as DesktopUpdateInput).action);
-        case SIDECAR_MESSAGES.SHUTDOWN:
-          setImmediate(() => {
-            shutdownAndExit();
-          });
-          return { accepted: true };
-      }
-    },
   });
 
   app.on("before-quit", (event) => {

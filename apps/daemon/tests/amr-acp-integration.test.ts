@@ -50,6 +50,82 @@ function spawnFixtureScript(source: string): ChildProcess {
   });
 }
 
+function spawnAcpUpdateFixture(updates: unknown[], usage: unknown = {}): ChildProcess {
+  return spawnFixtureScript(`
+    const updates = ${JSON.stringify(updates)};
+    const usage = ${JSON.stringify(usage)};
+    function write(obj) { process.stdout.write(JSON.stringify(obj) + '\\n'); }
+    process.stdin.setEncoding('utf8');
+    let buffer = '';
+    process.stdin.on('data', (chunk) => {
+      buffer += chunk;
+      const lines = buffer.split('\\n');
+      buffer = lines.pop() || '';
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) continue;
+        const msg = JSON.parse(line);
+        if (msg.method === 'initialize') {
+          write({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: 1 } });
+        } else if (msg.method === 'session/new') {
+          write({ jsonrpc: '2.0', id: msg.id, result: { sessionId: 's1', models: { currentModelId: null, availableModels: [] } } });
+        } else if (msg.method === 'session/set_model' || msg.method === 'session/set_config_option') {
+          write({ jsonrpc: '2.0', id: msg.id, result: {} });
+        } else if (msg.method === 'session/prompt') {
+          for (const update of updates) {
+            write({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: 's1', update } });
+          }
+          write({ jsonrpc: '2.0', id: msg.id, result: { stopReason: 'end_turn', usage } });
+        } else if (msg.method === 'session/cancel') {
+          write({ jsonrpc: '2.0', id: msg.id, result: {} });
+        }
+      }
+    });
+    process.stdin.on('end', () => process.exit(0));
+  `);
+}
+
+function spawnAcpStderrRetryFixture(stderrChunks: string | string[]): ChildProcess {
+  return spawnFixtureScript(`
+    const stderrChunks = ${JSON.stringify(
+      typeof stderrChunks === 'string' ? [stderrChunks] : stderrChunks,
+    )};
+    function write(obj) { process.stdout.write(JSON.stringify(obj) + '\\n'); }
+    process.stdin.setEncoding('utf8');
+    let buffer = '';
+    process.stdin.on('data', (chunk) => {
+      buffer += chunk;
+      const lines = buffer.split('\\n');
+      buffer = lines.pop() || '';
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) continue;
+        const msg = JSON.parse(line);
+        if (msg.method === 'initialize') {
+          write({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: 1 } });
+        } else if (msg.method === 'session/new') {
+          write({ jsonrpc: '2.0', id: msg.id, result: { sessionId: 's1', models: { currentModelId: null, availableModels: [] } } });
+        } else if (msg.method === 'session/set_model' || msg.method === 'session/set_config_option') {
+          write({ jsonrpc: '2.0', id: msg.id, result: {} });
+        } else if (msg.method === 'session/prompt') {
+          stderrChunks.forEach((stderrChunk, index) => {
+            setTimeout(() => {
+              process.stderr.write(stderrChunk);
+              if (index === stderrChunks.length - 1) {
+                process.stderr.write('\\n');
+                setTimeout(() => process.exit(0), 25);
+              }
+            }, index * 5);
+          });
+        } else if (msg.method === 'session/cancel') {
+          write({ jsonrpc: '2.0', id: msg.id, result: {} });
+        }
+      }
+    });
+    process.stdin.on('end', () => process.exit(0));
+  `);
+}
+
 async function waitForExit(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null) return;
   await new Promise<void>((resolve) => {
@@ -91,6 +167,7 @@ describe('AMR runtime def', () => {
   it('normalizes Vela public model ids to link-canonical ACP model ids', () => {
     expect(normalizeVelaModelId('public_model_deepseek_v3_2')).toBe('deepseek-v3.2');
     expect(normalizeVelaModelId('public_model_kimi_k2_6')).toBe('kimi-k2.6');
+    expect(normalizeVelaModelId('public_model_kimi_k2_7_code')).toBe('kimi-k2.7-code');
     expect(normalizeVelaModelId('public_model_gemini_2_5_flash')).toBe('gemini-2.5-flash');
     expect(normalizeVelaModelId('public_model_gemini_3_1_flash_lite_preview')).toBe(
       'gemini-3.1-flash-lite-preview',
@@ -138,10 +215,11 @@ describe('AMR runtime def', () => {
     expect(models.map((model) => model.id)).not.toContain('seedance-2');
   });
 
-  it('parses Vela preset and remote JSON without legacy id normalization', () => {
+  it('parses Vela JSON catalog ids through normalizeVelaModelId on the live AMR path', () => {
     const models = parseVelaModelJson(JSON.stringify({
       source: 'remote',
       data: [
+        { id: 'public_model_kimi_k2_7_code' },
         { id: 'public_model_deepseek_v3_2' },
         { id: 'deepseek-v4-flash' },
         { id: 'gpt-image-2' },
@@ -150,8 +228,11 @@ describe('AMR runtime def', () => {
     }), 'remote');
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
-      { id: 'public_model_deepseek_v3_2', label: 'public_model_deepseek_v3_2' },
+      { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
+      { id: 'kimi-k2.7-code', label: 'kimi-k2.7-code' },
     ]);
+    expect(models.map((m) => m.id)).not.toContain('gpt-image-2');
+    expect(models.map((m) => m.id)).not.toContain('public_model_kimi_k2_7_code');
     expect(() => parseVelaModelJson(JSON.stringify({ source: 'preset', data: [] }), 'remote'))
       .toThrow(/expected remote/);
   });
@@ -183,6 +264,54 @@ describe('AMR runtime def', () => {
       { id: 'minimax-m2.7', label: 'minimax-m2.7' },
       { id: 'qwen3-235b-a22b', label: 'qwen3-235b-a22b' },
     ]);
+  });
+
+  it('regression #4410: normalizes kimi_k2_7_code from live catalog and routes it via session/set_model', async () => {
+    const rawListJson = JSON.stringify({
+      source: 'remote',
+      data: [
+        { id: 'public_model_kimi_k2_7_code' },
+        { id: 'deepseek-v4-flash' },
+      ],
+    });
+
+    // Step 1: live catalog path normalizes the raw id to the canonical form.
+    const models = await amrAgentDef.fetchModels?.(FAKE_VELA, {
+      ...process.env,
+      FAKE_VELA_MODEL_LIST_JSON: rawListJson,
+    });
+    const ids = (models ?? []).map((m) => m.id);
+    expect(ids).toContain('kimi-k2.7-code');
+    expect(ids).not.toContain('public_model_kimi_k2_7_code');
+    expect(ids).not.toContain('kimi-k2-7-code');
+
+    // Step 2: the normalized id survives the full ACP session/set_model flow.
+    const child = spawnFakeVela({
+      FAKE_VELA_TEXT: 'K2.7 response.',
+      FAKE_VELA_MODEL_LIST_JSON: rawListJson,
+    });
+    const events: Array<{ event: string; payload: unknown }> = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Hello',
+        cwd: process.cwd(),
+        model: 'kimi-k2.7-code',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => events.push({ event, payload }),
+      });
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(false);
+      expect(session.completedSuccessfully()).toBe(true);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    const textDeltas = events
+      .filter((e) => e.event === 'agent' && (e.payload as { type?: unknown }).type === 'text_delta')
+      .map((e) => (e.payload as { delta?: unknown }).delta);
+    expect(textDeltas.join('')).toBe('K2.7 response.');
   });
 
   it('retries transient `vela model list --format json` failures before succeeding', async () => {
@@ -445,6 +574,54 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     expect(thinkingDeltas.join('')).toBe('thinking-chunk');
   });
 
+  it('resumes a prior session via session/load and captures the durable handle', async () => {
+    const child = spawnFakeVela({ FAKE_VELA_TEXT: 'Resumed.' });
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'continue',
+        cwd: process.cwd(),
+        model: 'deepseek-v3.2',
+        // A stored durable handle drives session/load instead of session/new.
+        resumeSessionId: 'oc-prev-handle',
+        mcpServers: [],
+        send: () => {},
+      });
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(false);
+      expect(session.completedSuccessfully()).toBe(true);
+      // The fake echoes the requested handle back as the durable id; the daemon
+      // would persist this to resume again next turn.
+      expect(session.getDurableSessionId()).toBe('oc-prev-handle');
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+  });
+
+  it('surfaces resume_failed (no completion) when the resumed session is gone', async () => {
+    const child = spawnFakeVela({ FAKE_VELA_RESUME_FAILED: '1' });
+    const events: Array<{ event: string; payload: unknown }> = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'continue',
+        cwd: process.cwd(),
+        model: 'deepseek-v3.2',
+        resumeSessionId: 'oc-gone',
+        mcpServers: [],
+        send: (event, payload) => events.push({ event, payload }),
+      });
+      await waitForExit(child);
+      expect(session.completedSuccessfully()).toBe(false);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+    // The structured resume_failed marker reaches the host (the daemon matches
+    // it on stdout to clear the stale handle and reseed). It must never look
+    // like a successful turn.
+    expect(JSON.stringify(events)).toContain('resume_failed');
+  });
+
   it('regression: stub mirrors real vela by rejecting session/prompt before session/set_model', async () => {
     const child = spawnFakeVela({ FAKE_VELA_TEXT: 'unused' });
     const errors: Array<{ event: string; payload: unknown }> = [];
@@ -654,6 +831,179 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     });
   });
 
+  it('promotes ACP retry status insufficient-balance updates to AMR recharge failures', async () => {
+    const child = spawnAcpUpdateFixture([
+      {
+        sessionUpdate: 'status',
+        type: 'retry',
+        status: 'retry',
+        message: '[code=insufficient_balance] insufficient wallet balance',
+      },
+    ]);
+    const errors: Array<{ event: string; payload: unknown }> = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Say hello',
+        cwd: process.cwd(),
+        model: 'claude-opus-4-6',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'error') errors.push({ event, payload });
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(true);
+      expect(session.completedSuccessfully()).toBe(false);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    const payload = errors[0]?.payload as {
+      message?: unknown;
+      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
+    };
+    expect(payload?.error?.code).toBe('AMR_INSUFFICIENT_BALANCE');
+    expect(payload?.error?.retryable).toBe(false);
+    expect(payload?.error?.details).toMatchObject({
+      kind: 'amr_account',
+      action: 'recharge',
+    });
+    expect(String(payload?.message ?? '')).toContain('AMR Cloud reported insufficient balance');
+  });
+
+  it('promotes structured manual-topup recovery retry updates to AMR recharge failures', async () => {
+    const child = spawnAcpUpdateFixture([
+      {
+        sessionUpdate: 'status',
+        type: 'retry',
+        status: 'retry',
+        recovery: {
+          status: 'waiting_payment',
+          manualTopupRequired: true,
+          pauseReason: 'insufficient_balance',
+          error: {
+            code: 'insufficient_balance',
+            message: 'insufficient wallet balance',
+          },
+        },
+      },
+    ]);
+    const errors: Array<{ event: string; payload: unknown }> = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Say hello',
+        cwd: process.cwd(),
+        model: 'claude-opus-4-6',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'error') errors.push({ event, payload });
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(true);
+      expect(session.completedSuccessfully()).toBe(false);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    const payload = errors[0]?.payload as {
+      message?: unknown;
+      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
+    };
+    expect(payload?.error?.code).toBe('AMR_INSUFFICIENT_BALANCE');
+    expect(payload?.error?.retryable).toBe(false);
+    expect(payload?.error?.details).toMatchObject({
+      kind: 'amr_account',
+      action: 'recharge',
+      promoted_by: 'open_design_acp_retry_status',
+    });
+    expect(String(payload?.message ?? '')).toContain('AMR Cloud reported insufficient balance');
+  });
+
+  it('promotes OpenCode stderr retry status insufficient-balance logs to AMR recharge failures', async () => {
+    const child = spawnAcpStderrRetryFixture(
+      'opencode_event_stream_failure: phase=event_stream session=ses_123 error="{\\"id\\":\\"evt_123\\",\\"properties\\":{\\"sessionID\\":\\"ses_123\\",\\"status\\":{\\"attempt\\":1,\\"message\\":\\"[code=insufficient_balance] insufficient wallet balance\\",\\"next\\":1782915664490,\\"type\\":\\"retry\\"}},\\"type\\":\\"session.status\\"}"',
+    );
+    const errors: Array<{ event: string; payload: unknown }> = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Say hello',
+        cwd: process.cwd(),
+        model: 'claude-opus-4-6',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'error') errors.push({ event, payload });
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(true);
+      expect(session.completedSuccessfully()).toBe(false);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    const payload = errors[0]?.payload as {
+      message?: unknown;
+      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
+    };
+    expect(payload?.error?.code).toBe('AMR_INSUFFICIENT_BALANCE');
+    expect(payload?.error?.retryable).toBe(false);
+    expect(payload?.error?.details).toMatchObject({
+      kind: 'amr_account',
+      action: 'recharge',
+      promoted_by: 'open_design_acp_stderr_retry_status',
+    });
+    expect(String(payload?.message ?? '')).toContain('AMR Cloud reported insufficient balance');
+  });
+
+  it('promotes OpenCode stderr retry status when the balance log is split across chunks', async () => {
+    const child = spawnAcpStderrRetryFixture([
+      'opencode_event_stream_failure: phase=event_stream session=ses_123 error="{\\"id\\":\\"evt_123\\",\\"properties\\":{\\"sessionID\\":\\"ses_123\\",\\"status\\":{\\"attempt\\":1,\\"message\\":\\"[code=',
+      'insufficient_balance] insufficient wallet balance\\",\\"next\\":1782915664490,\\"type\\":\\"retry\\"}},\\"type\\":\\"session.status\\"}"',
+    ]);
+    const errors: Array<{ event: string; payload: unknown }> = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Say hello',
+        cwd: process.cwd(),
+        model: 'claude-opus-4-6',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'error') errors.push({ event, payload });
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(true);
+      expect(session.completedSuccessfully()).toBe(false);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    const payload = errors[0]?.payload as {
+      message?: unknown;
+      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
+    };
+    expect(payload?.error?.code).toBe('AMR_INSUFFICIENT_BALANCE');
+    expect(payload?.error?.retryable).toBe(false);
+    expect(payload?.error?.details).toMatchObject({
+      kind: 'amr_account',
+      action: 'recharge',
+      promoted_by: 'open_design_acp_stderr_retry_status',
+    });
+  });
+
   it('allows non-AMR ACP completions that produce no assistant text', async () => {
     const child = spawnFakeVela({ FAKE_VELA_TEXT: '' });
     const errors: Array<{ event: string; payload: unknown }> = [];
@@ -680,7 +1030,11 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
   });
 
   it('maps AMR empty-text completions to AMR_MODEL_UNAVAILABLE', async () => {
-    const child = spawnFakeVela({ FAKE_VELA_TEXT: '' });
+    const child = spawnAcpUpdateFixture([], {
+      inputTokens: 12,
+      outputTokens: 0,
+      totalTokens: 12,
+    });
     const errors: Array<{ event: string; payload: unknown }> = [];
     try {
       const session = attachAcpSession({
@@ -711,6 +1065,291 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     );
     expect(message).toContain('without producing any assistant text');
     expect(payload?.error?.code).toBe('AMR_MODEL_UNAVAILABLE');
+  });
+
+  it('fails AMR turns that report activity but produce no visible text or concrete tool event', async () => {
+    const child = spawnAcpUpdateFixture(
+      [
+        {
+          sessionUpdate: 'tool_call',
+          toolCallId: 'call_1',
+          title: 'Thinking',
+          status: 'pending',
+        },
+        {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: 'call_1',
+          title: 'Thinking',
+          status: 'completed',
+        },
+      ],
+      { inputTokens: 75_734, outputTokens: 5_071, totalTokens: 80_805 },
+    );
+    const errors: Array<{ event: string; payload: unknown }> = [];
+    const agentEvents: unknown[] = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Generate a test',
+        cwd: process.cwd(),
+        model: 'step-3.7-flash',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'error') errors.push({ event, payload });
+          if (event === 'agent') agentEvents.push(payload);
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(true);
+      expect(session.completedSuccessfully()).toBe(false);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    const payload = errors[0]?.payload as {
+      message?: unknown;
+      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
+    };
+    expect(String(payload?.message ?? '')).toContain('did not produce visible assistant text');
+    expect(payload?.error?.code).toBe('AGENT_EXECUTION_FAILED');
+    expect(payload?.error?.retryable).toBe(true);
+    expect(payload?.error?.details).toMatchObject({
+      kind: 'acp_no_visible_output',
+      output_tokens: 5_071,
+      raw_tool_update_seen: true,
+    });
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'diagnostic',
+        name: 'acp_raw_event_shape',
+        shape: expect.objectContaining({
+          sessionUpdate: 'tool_call',
+          hasToolCallId: true,
+          titlePresent: true,
+        }),
+      }),
+    );
+    expect(agentEvents).not.toContainEqual(expect.objectContaining({ type: 'tool_use' }));
+  });
+
+  it('accepts ACP message chunks that carry text outside content.text', async () => {
+    const child = spawnAcpUpdateFixture([
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: [{ type: 'text', text: 'Hello ' }],
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        delta: 'world',
+      },
+    ], { inputTokens: 1, outputTokens: 2, totalTokens: 3 });
+    const text: string[] = [];
+    const errors: unknown[] = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Say hello',
+        cwd: process.cwd(),
+        model: 'step-3.7-flash',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'error') errors.push(payload);
+          if (
+            event === 'agent' &&
+            typeof (payload as { type?: unknown; delta?: unknown }).delta === 'string' &&
+            (payload as { type?: unknown }).type === 'text_delta'
+          ) {
+            text.push((payload as { delta: string }).delta);
+          }
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(false);
+      expect(session.completedSuccessfully()).toBe(true);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    expect(errors).toHaveLength(0);
+    expect(text.join('')).toBe('Hello world');
+  });
+
+  it('records suppressed artifact echo after an ACP artifact write without claiming visible streaming', async () => {
+    const child = spawnAcpUpdateFixture([
+      {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'write_1',
+        title: 'Write index.html',
+        status: 'pending',
+      },
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'write_1',
+        title: 'Write index.html',
+        status: 'completed',
+        locations: [{ path: 'index.html' }],
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: {
+          type: 'text',
+          text: '<artifact identifier="page" type="text/html"><!doctype html><html></html></artifact>',
+        },
+      },
+    ], { inputTokens: 1, outputTokens: 50, totalTokens: 51 });
+    const agentEvents: unknown[] = [];
+    const errors: unknown[] = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Build a page',
+        cwd: process.cwd(),
+        model: 'step-3.7-flash',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'agent') agentEvents.push(payload);
+          if (event === 'error') errors.push(payload);
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(false);
+      expect(session.completedSuccessfully()).toBe(true);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    expect(errors).toHaveLength(0);
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_use',
+        id: 'write_1',
+        name: 'Write',
+        input: { file_path: 'index.html' },
+      }),
+    );
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'diagnostic',
+        name: 'acp_artifact_text_suppression',
+        reason: 'artifact_echo',
+        suppressedChars: expect.any(Number),
+        openedBlocks: 1,
+        closedBlocks: 1,
+      }),
+    );
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'diagnostic',
+        name: 'unexpected_text_artifact_in_filesystem_run',
+        suppressedChars: expect.any(Number),
+        openedBlocks: 1,
+        closedBlocks: 1,
+      }),
+    );
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'diagnostic',
+        name: 'acp_artifact_text_suppression_summary',
+        suppressedChars: expect.any(Number),
+        openedBlocks: 1,
+        closedBlocks: 1,
+      }),
+    );
+    expect(agentEvents).not.toContainEqual(expect.objectContaining({ type: 'text_delta' }));
+    expect(agentEvents).not.toContainEqual(
+      expect.objectContaining({ type: 'status', label: 'streaming' }),
+    );
+  });
+
+  it('suppresses XML tool-call text that AMR emits as an assistant message chunk', async () => {
+    const child = spawnAcpUpdateFixture([
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: '<od-card type="task-brief">ok</od-card>' },
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: {
+          type: 'text',
+          text: '<edit>\n<parameter=filePath>/tmp/index.html</parameter>\n',
+        },
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: {
+          type: 'text',
+          text: '<parameter=newString><section>new</section></parameter>\n',
+        },
+      },
+      {
+        sessionUpdate: 'agent_message_chunk',
+        content: {
+          type: 'text',
+          text: '<parameter=oldString><section>old</section></parameter>\n</function>\n</tool_call>',
+        },
+      },
+    ], { inputTokens: 1, outputTokens: 50, totalTokens: 51 });
+    const agentEvents: unknown[] = [];
+    const errors: unknown[] = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Edit a page',
+        cwd: process.cwd(),
+        model: 'step-3.7-flash',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'agent') agentEvents.push(payload);
+          if (event === 'error') errors.push(payload);
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(false);
+      expect(session.completedSuccessfully()).toBe(true);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    expect(errors).toHaveLength(0);
+    const visibleText = agentEvents
+      .filter((event): event is { type: 'text_delta'; delta: string } =>
+        typeof event === 'object' &&
+        event !== null &&
+        (event as { type?: unknown }).type === 'text_delta' &&
+        typeof (event as { delta?: unknown }).delta === 'string',
+      )
+      .map((event) => event.delta)
+      .join('');
+    expect(visibleText).toBe('<od-card type="task-brief">ok</od-card>');
+    expect(visibleText).not.toContain('<edit>');
+    expect(visibleText).not.toContain('<parameter=');
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'diagnostic',
+        name: 'acp_tool_call_text_suppression',
+        reason: 'tool_call_xml',
+        suppressedChars: expect.any(Number),
+        openedBlocks: 1,
+        closedBlocks: 1,
+      }),
+    );
+    expect(agentEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'diagnostic',
+        name: 'acp_tool_call_text_suppression_summary',
+        suppressedChars: expect.any(Number),
+        openedBlocks: 1,
+        closedBlocks: 1,
+      }),
+    );
   });
 
   it('surfaces an actionable error when the ACP child exits before initialize completes', async () => {

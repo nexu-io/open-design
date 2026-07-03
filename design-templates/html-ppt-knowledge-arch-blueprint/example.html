@@ -299,7 +299,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
 <span class="kw">on_miss</span>:    record(<span class="st">query, reason=</span><span class="hl">"not-in-vault"</span>)
 <span class="kw">on_wrong</span>:   record(<span class="st">query, correction, path</span>)
 
-<span class="kw">nightly</span>:
+<span class="kw">prerelease</span>:
   - <span class="st">aggregate misses → suggest new notes</span>
   - <span class="st">aggregate wrongs → diff-patch old notes</span>
   - <span class="st">commit to git, open PR for human review</span></pre>
@@ -352,7 +352,7 @@ h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
         <!-- bottom feedback to sources -->
         <path d="M 940 300 Q 940 420, 670 420 Q 140 420, 140 300" fill="none" stroke="#B5392A" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow-r)"/>
         <rect x="560" y="400" width="220" height="30" rx="6" fill="#F0EAE0" stroke="#B5392A" stroke-width="1"/>
-        <text x="670" y="420" text-anchor="middle" fill="#B5392A" font-size="12">NIGHTLY · suggest new sources</text>
+        <text x="670" y="420" text-anchor="middle" fill="#B5392A" font-size="12">PRERELEASE · suggest new sources</text>
       </g>
     </svg>
     <div class="kb-footer"><span>Diagram · Feedback Loop</span><span>05 / 08</span></div>

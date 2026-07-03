@@ -51,6 +51,35 @@
   border-radius: var(--radius-sm);
 }
 
+.settings-skills .skills-edit-builtin-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 2px 14px 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--warning, #d97706) 30%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warning, #d97706) 8%, var(--bg-panel));
+  color: var(--text);
+}
+.settings-skills .skills-edit-builtin-warning p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.settings-skills .skills-edit-builtin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.settings-skills .skills-edit-builtin-actions .btn {
+  min-height: 30px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+}
+
 .settings-skills .skills-row-detail {
   display: flex;
   flex-direction: column;

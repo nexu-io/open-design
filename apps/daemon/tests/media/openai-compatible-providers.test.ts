@@ -700,6 +700,41 @@ process.stdin.on('end', () => {
     expect(bytes.length).toBeGreaterThan(0);
   });
 
+  it('reports Codex preview-only imagegen output without leaking ENOENT', async () => {
+    const generatedHome = path.join(root, 'preview-only-codex-home');
+    const codexBin = path.join(root, 'preview-only-codex.mjs');
+    await writeFile(codexBin, `#!/usr/bin/env node
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  if (!stdin.includes('$imagegen')) process.exit(7);
+  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: 'preview-only-thread' }) + '\\n');
+  process.stdout.write(JSON.stringify({
+    type: 'item.completed',
+    item: {
+      type: 'agent_message',
+      text: 'This is preview-only, so I generated it without saving a file to the project.'
+    }
+  }) + '\\n');
+  process.stdout.write(JSON.stringify({ type: 'turn.completed' }) + '\\n');
+});
+`, 'utf8');
+    await chmod(codexBin, 0o755);
+    process.env.CODEX_BIN = codexBin;
+    process.env.CODEX_HOME = generatedHome;
+
+    await expect(generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'image',
+      model: 'codex-gpt-image-2',
+      prompt: 'A compact green app icon with a folded page motif',
+      output: 'codex-preview-only.png',
+    })).rejects.toThrow(/Codex imagegen completed in preview-only mode/i);
+  });
+
   it('uses app-config Codex CLI env overrides for subscription image generation', async () => {
     const dataDir = path.join(root, 'app-data');
     const generatedHome = path.join(root, 'configured-codex-home');

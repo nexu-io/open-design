@@ -547,9 +547,9 @@
   border-color: rgba(28, 138, 115, 0.28);
 }
 .design-card-tag.tag-brand {
-  color: #5f3db8;
-  background: rgba(95, 61, 184, 0.11);
-  border-color: rgba(95, 61, 184, 0.26);
+  color: var(--purple);
+  background: var(--purple-bg);
+  border-color: var(--purple-border);
 }
 .design-card-tag.tag-design-system {
   color: var(--red);
@@ -1355,6 +1355,30 @@
   overflow: hidden;
   text-overflow: ellipsis;
   transition: background 120ms var(--ease-out), color 120ms var(--ease-out), border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
+}
+.protocol-chip--provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.protocol-chip-status {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: var(--text-disabled, #94a3b8);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-disabled, #94a3b8) 16%, transparent);
+}
+.protocol-chip-status.is-configured {
+  background: var(--success, #22c55e);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success, #22c55e) 18%, transparent);
+}
+.protocol-chip-status.is-unset {
+  background: var(--text-disabled, #94a3b8);
+}
+.protocol-chip.active .protocol-chip-status {
+  background: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 22%, transparent);
 }
 .protocol-chip:hover:not(.active) {
   background: var(--bg-subtle);

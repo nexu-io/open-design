@@ -34,6 +34,8 @@ export type ColorCandidate = {
   count: number;
   /** True for near-white / near-black — listed but de-prioritized. */
   extreme?: boolean;
+  /** Compact evidence strings such as css-var:--accent, prop:background, logo-svg:mark.svg. */
+  sources?: string[];
 };
 
 export type FontCandidate = { family: string; count: number };
@@ -82,6 +84,20 @@ export type PrefetchResult = {
 
 export type PrefetchProgress = (step: string, detail?: string) => void;
 
+/** Per-fetch deadline, also abortable by the caller's signal (a user Stop on the
+ *  programmatic pass) so an in-flight request tears down promptly instead of
+ *  running out its full timeout. */
+function fetchDeadline(signal?: AbortSignal | null): AbortSignal {
+  const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+function throwIfPrefetchAborted(signal?: AbortSignal | null): void {
+  if (!signal?.aborted) return;
+  if (typeof signal.throwIfAborted === "function") signal.throwIfAborted();
+  throw signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError");
+}
+
 async function fetchText(
   url: string,
   cap: number,
@@ -91,13 +107,15 @@ async function fetchText(
      *  that body is signal (it routes us into the blocked-mode pipeline),
      *  not an error. */
     allowHttpError?: boolean;
+    /** Caller cancellation (user Stop) layered onto the per-fetch timeout. */
+    signal?: AbortSignal;
   },
 ): Promise<{ text: string; finalUrl: string; contentType: string; ok: boolean } | null> {
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml,text/css,*/*" },
       redirect: "follow",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: fetchDeadline(opts?.signal),
     });
     if (!res.ok && !opts?.allowHttpError) return null;
     const buf = Buffer.from(await res.arrayBuffer());
@@ -121,6 +139,7 @@ async function fetchText(
 async function fetchBinary(
   url: string,
   referer?: string,
+  signal?: AbortSignal,
 ): Promise<{ buf: Buffer; contentType: string } | null> {
   const attempt = async (): Promise<{ buf: Buffer; contentType: string } | null> => {
     try {
@@ -134,7 +153,7 @@ async function fetchBinary(
           ...(referer ? { Referer: referer } : {}),
         },
         redirect: "follow",
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        signal: fetchDeadline(signal),
       });
       if (!res.ok) return null;
       const buf = Buffer.from(await res.arrayBuffer());
@@ -154,16 +173,48 @@ async function fetchBinary(
 
 const CHALLENGE_TITLE_RE =
   /just a moment|attention required|access denied|verifying you are human|checking your browser|security check|please verify|are you a robot|ddos[- ]guard|captcha/i;
-const CHALLENGE_BODY_RE =
-  /challenges\.cloudflare\.com|cf-browser-verification|_cf_chl_opt|cf-turnstile|this website uses a security service|enable javascript and cookies to continue|verify you are human|px-captcha|datadome|_incapsula_|EO_Bot_Ssid|__tst_status/i;
+// Markers that only ever appear on the interstitial itself — the legacy CF
+// verification shell, the challenge opt blob, the "turn on JS and cookies"
+// copy, the PerimeterX/Imperva/EdgeOne block-page resources. Their presence is
+// proof the body IS the wall, never the real site.
+const CHALLENGE_DEFINITIVE_RE =
+  /cf-browser-verification|_cf_chl_opt|this website uses a security service|enable javascript and cookies to continue|verify you are human|px-captcha|_incapsula_|EO_Bot_Ssid|__tst_status/i;
+// Markers a *real* page can legitimately carry: a Cloudflare Turnstile or
+// DataDome widget embedded on a login / subscribe / comment surface. The
+// Economist's homepage, for instance, still references challenges.cloudflare.com
+// once you are past the wall. These count as a challenge ONLY when the page is
+// otherwise content-sparse (a bare verification widget and little else).
+const CHALLENGE_AMBIGUOUS_RE = /challenges\.cloudflare\.com|cf-turnstile|datadome/i;
+
+/** A real interstitial is content-sparse: a verification widget and not much
+ *  else. A real page that merely embeds an anti-bot widget still ships a full
+ *  nav and body. Count the cheap structural signals a harvest feeds on — links,
+ *  headings, paragraphs — to tell the two apart. */
+function looksContentRich(html: string): boolean {
+  const scan = html.slice(0, 400_000);
+  const anchors = (scan.match(/<a\s[^>]*\bhref=/gi) ?? []).length;
+  const headings = (scan.match(/<h[1-3][\s/>]/gi) ?? []).length;
+  const paragraphs = (scan.match(/<p[\s/>]/gi) ?? []).length;
+  return anchors >= 8 || headings >= 3 || (anchors >= 3 && paragraphs >= 3);
+}
 
 /** True when the HTML is a bot-protection interstitial (Cloudflare, DataDome,
  *  PerimeterX, …) rather than the real site. Harvesting one of these poisons
- *  every downstream field — "Just a moment…" becomes the brand name. */
+ *  every downstream field — "Just a moment…" becomes the brand name.
+ *
+ *  The check is deliberately asymmetric: a challenge *title* or a challenge-only
+ *  body marker blocks unconditionally, but an embeddable widget marker
+ *  (Turnstile / DataDome) blocks only when the page is also sparse. That
+ *  asymmetry is what lets the in-app browser's post-wall DOM — a real,
+ *  content-rich page that still references the widget — survive the harvest
+ *  instead of being discarded as if it were the wall itself. */
 export function isChallengePage(html: string): boolean {
   const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? "";
   if (CHALLENGE_TITLE_RE.test(title)) return true;
-  return CHALLENGE_BODY_RE.test(html.slice(0, 60_000));
+  const head = html.slice(0, 60_000);
+  if (CHALLENGE_DEFINITIVE_RE.test(head)) return true;
+  if (CHALLENGE_AMBIGUOUS_RE.test(head)) return !looksContentRich(html);
+  return false;
 }
 
 export function previewablePrefetchHtml(html: string, cap = HTML_CAP): string {
@@ -280,25 +331,129 @@ function luma(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-export function extractColors(css: string): ColorCandidate[] {
-  const counts = new Map<string, number>();
-  const re = /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]{1,48}\)|hsla?\([^)]{1,48}\)|oklch\([^)]{1,64}\)/g;
-  for (const m of css.matchAll(re)) {
-    const norm = normalizeColor(m[0]) ?? m[0].trim().toLowerCase();
-    counts.set(norm, (counts.get(norm) ?? 0) + 1);
+function addColorCandidate(
+  counts: Map<string, { count: number; sources: Set<string> }>,
+  raw: string,
+  source?: string,
+  weight = 1,
+): void {
+  const norm = normalizeColor(raw) ?? raw.trim().toLowerCase();
+  const existing = counts.get(norm) ?? { count: 0, sources: new Set<string>() };
+  existing.count += weight;
+  if (source) existing.sources.add(source);
+  counts.set(norm, existing);
+}
+
+function colorSourceForMatch(css: string, index: number): string | undefined {
+  const before = css.slice(Math.max(0, index - 900), index);
+  const declStart = Math.max(before.lastIndexOf(';'), before.lastIndexOf('{'));
+  const declaration = before.slice(declStart + 1);
+  const prop = /([-\w]+)\s*:\s*[^:]*$/i.exec(declaration)?.[1]?.trim();
+
+  const selectorStart = before.lastIndexOf('}');
+  const blockStart = before.lastIndexOf('{');
+  const selector =
+    blockStart > selectorStart
+      ? before.slice(selectorStart + 1, blockStart).replace(/\s+/g, ' ').trim().slice(-160)
+      : '';
+
+  const parts: string[] = [];
+  if (prop) parts.push(prop.startsWith('--') ? `css-var:${prop}` : `prop:${prop}`);
+  if (selector) parts.push(`selector:${selector}`);
+  return parts.length ? parts.join(' ') : undefined;
+}
+
+function mergeColorCandidates(...groups: ColorCandidate[][]): ColorCandidate[] {
+  const counts = new Map<string, { count: number; sources: Set<string>; extreme?: boolean }>();
+  for (const group of groups) {
+    for (const candidate of group) {
+      const existing = counts.get(candidate.hex) ?? { count: 0, sources: new Set<string>() };
+      existing.count += candidate.count;
+      existing.extreme ||= candidate.extreme;
+      for (const source of candidate.sources ?? []) existing.sources.add(source);
+      counts.set(candidate.hex, existing);
+    }
   }
+  return sortColorCandidates(counts);
+}
+
+function hasHighSignalColorSource(candidate: ColorCandidate): boolean {
+  const source = (candidate.sources ?? []).join(' ').toLowerCase();
+  if (/logo-svg:/.test(source)) return true;
+  return /css-var:--(?!token-|framer-)[-\w]*(?:brand|primary|accent|coral|mustard|olive|cta|action|highlight|link)/i.test(source);
+}
+
+function sortColorCandidates(
+  counts: Map<string, { count: number; sources: Set<string>; extreme?: boolean }>,
+): ColorCandidate[] {
   const all = [...counts.entries()]
-    .map(([hex, count]): ColorCandidate => {
+    .map(([hex, value]): ColorCandidate => {
       const isHex = hex.startsWith("#") && hex.length === 7;
-      const extreme = isHex ? luma(hex) > 0.96 || luma(hex) < 0.04 : false;
-      return extreme ? { hex, count, extreme } : { hex, count };
+      const extreme = value.extreme ?? (isHex ? luma(hex) > 0.96 || luma(hex) < 0.04 : false);
+      const sources = [...value.sources].slice(0, 12);
+      return {
+        hex,
+        count: value.count,
+        ...(extreme ? { extreme } : {}),
+        ...(sources.length ? { sources } : {}),
+      };
     })
     .sort((a, b) => b.count - a.count);
-  // Chromatic colors first (capped), then a couple of extremes so the agent
-  // still sees the site's actual black/white.
+  // Keep high-signal brand evidence even when its literal appears only once or
+  // twice. Then add the frequency-ranked chromatic set and a few extremes so
+  // the agent still sees the site's actual black/white.
+  const highSignal = all.filter((c) => !c.extreme && hasHighSignalColorSource(c)).slice(0, 8);
   const chromatic = all.filter((c) => !c.extreme).slice(0, 15);
   const extremes = all.filter((c) => c.extreme).slice(0, 4);
-  return [...chromatic, ...extremes];
+  const out: ColorCandidate[] = [];
+  const seen = new Set<string>();
+  for (const candidate of [...highSignal, ...chromatic, ...extremes]) {
+    if (seen.has(candidate.hex)) continue;
+    seen.add(candidate.hex);
+    out.push(candidate);
+  }
+  return out;
+}
+
+export function extractColors(css: string): ColorCandidate[] {
+  const counts = new Map<string, { count: number; sources: Set<string> }>();
+  const re = /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]{1,48}\)|hsla?\([^)]{1,48}\)|oklch\([^)]{1,64}\)/g;
+  for (const m of css.matchAll(re)) {
+    addColorCandidate(counts, m[0], colorSourceForMatch(css, m.index ?? 0));
+  }
+  return sortColorCandidates(counts);
+}
+
+function extractSvgLogoColors(svg: string, label: string): ColorCandidate[] {
+  const counts = new Map<string, { count: number; sources: Set<string> }>();
+  const addFromValue = (value: string) => {
+    if (/^(none|currentcolor|transparent|inherit)$/i.test(value.trim())) return;
+    const colorRe = /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]{1,48}\)|hsla?\([^)]{1,48}\)|oklch\([^)]{1,64}\)/g;
+    for (const match of value.matchAll(colorRe)) {
+      addColorCandidate(counts, match[0], `logo-svg:${label}`, 18);
+    }
+  };
+  for (const match of svg.matchAll(/(?:fill|stroke|stop-color|color)=["']([^"']+)["']/gi)) {
+    addFromValue(match[1] ?? '');
+  }
+  for (const match of svg.matchAll(/style=["']([^"']+)["']/gi)) {
+    addFromValue(match[1] ?? '');
+  }
+  return sortColorCandidates(counts);
+}
+
+function extractLogoSvgColorCandidates(logosDir: string, logos: LogoCandidate[]): ColorCandidate[] {
+  const groups: ColorCandidate[][] = [];
+  for (const logo of logos) {
+    if (!/\.svg$/i.test(logo.file)) continue;
+    try {
+      const svg = fs.readFileSync(path.join(logosDir, logo.file), 'utf8');
+      groups.push(extractSvgLogoColors(svg, logo.file));
+    } catch {
+      /* best-effort evidence only */
+    }
+  }
+  return groups.length ? mergeColorCandidates(...groups) : [];
 }
 
 // ─── fonts ───────────────────────────────────────────────────────────
@@ -311,21 +466,29 @@ const GENERIC_FONTS = new Set([
   "apple color emoji", "segoe ui emoji", "segoe ui symbol", "noto color emoji",
 ]);
 
+function isIconFontFamily(family: string): boolean {
+  return /\b(icon|icons|symbol|symbols|fontawesome|remix|material icons|material symbols|lucide)\b/i.test(family);
+}
+
 export function extractFonts(css: string): { fonts: FontCandidate[]; fontFaceFamilies: string[] } {
   const counts = new Map<string, number>();
   for (const m of css.matchAll(/font-family\s*:\s*([^;}{!]+)/gi)) {
     // First non-generic family in the stack is the intended face.
     for (const partRaw of m[1].split(",")) {
-      const part = partRaw.trim().replace(/^["']|["']$/g, "").trim();
+      const part = decodeEntities(partRaw).trim().replace(/^["']|["']$/g, "").trim();
       if (!part || part.startsWith("var(")) continue;
+      if (part.includes('&quot') || /placeholder$/i.test(part)) continue;
       if (GENERIC_FONTS.has(part.toLowerCase())) continue;
+      if (isIconFontFamily(part)) continue;
       counts.set(part, (counts.get(part) ?? 0) + 1);
       break;
     }
   }
   const fontFace = new Set<string>();
   for (const m of css.matchAll(/@font-face\s*{[^}]*font-family\s*:\s*["']?([^;"'}]+)/gi)) {
-    fontFace.add(m[1].trim());
+    const family = decodeEntities(m[1]).trim().replace(/^["']|["']$/g, "").trim();
+    if (!family || /placeholder$/i.test(family) || isIconFontFamily(family)) continue;
+    fontFace.add(family);
   }
   return {
     fonts: [...counts.entries()]
@@ -477,6 +640,27 @@ function extractNavLinks(html: string, baseUrl: string): Array<{ label: string; 
   return out.slice(0, 20);
 }
 
+function inlineStyleSelector(tagName: string, attrs: string): string {
+  const tag = tagName.toLowerCase();
+  const classAttr = /class=["']([^"']+)["']/i.exec(attrs)?.[1] ?? '';
+  const classes = classAttr
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((name) => `.${name.replace(/[^\w-]/g, '')}`)
+    .join('');
+  const framerName = /data-framer-name=["']([^"']+)["']/i.exec(attrs)?.[1];
+  const ariaLabel = /aria-label=["']([^"']+)["']/i.exec(attrs)?.[1];
+  const role = /role=["']([^"']+)["']/i.exec(attrs)?.[1];
+  const extras = [
+    framerName ? `[data-framer-name="${framerName.replace(/["\\]/g, '')}"]` : '',
+    ariaLabel ? `[aria-label="${ariaLabel.replace(/["\\]/g, '')}"]` : '',
+    role ? `[role="${role.replace(/["\\]/g, '')}"]` : '',
+    /\sdata-highlight=["']?true["']?/i.test(attrs) ? '[data-highlight="true"]' : '',
+  ].join('');
+  return `${tag}${classes}${extras}`.slice(0, 220) || tag;
+}
+
 // ─── material.md ─────────────────────────────────────────────────────
 
 function buildMaterialMd(r: Omit<PrefetchResult, "materialMd" | "thin">): string {
@@ -498,7 +682,8 @@ function buildMaterialMd(r: Omit<PrefetchResult, "materialMd" | "thin">): string
   lines.push("## Measured colors (frequency-ranked from the site's actual CSS)", "");
   if (r.colors.length === 0) lines.push("(none found)");
   for (const c of r.colors) {
-    lines.push(`- \`${c.hex}\` ×${c.count}${c.extreme ? " (near-white/black)" : ""}`);
+    const sources = c.sources?.length ? ` — ${c.sources.slice(0, 3).join("; ")}` : "";
+    lines.push(`- \`${c.hex}\` ×${c.count}${c.extreme ? " (near-white/black)" : ""}${sources}`);
   }
   lines.push("");
 
@@ -565,14 +750,19 @@ const EXTRA_PAGE_HINTS = /\/(about|company|pricing|product|features|story|missio
 export async function prefetchBrand(
   url: string,
   brandDir: string,
-  onProgress: PrefetchProgress = () => {},
+  opts: { onProgress?: PrefetchProgress; signal?: AbortSignal } = {},
 ): Promise<PrefetchResult | null> {
+  const onProgress = opts.onProgress ?? (() => {});
+  const { signal } = opts;
+  throwIfPrefetchAborted(signal);
   onProgress("fetch", url);
-  let page = await fetchText(url, HTML_CAP, { allowHttpError: true });
+  let page = await fetchText(url, HTML_CAP, { allowHttpError: true, signal });
+  throwIfPrefetchAborted(signal);
   // A non-2xx body is only useful when it's a bot-wall challenge page (it
   // routes into blocked mode below). A site's own 404/500 page is not the
   // brand — treat that as a failed fetch.
   if (page && !page.ok && !isChallengePage(page.text)) page = null;
+  throwIfPrefetchAborted(signal);
   let html: string;
   let baseUrl: string;
   let renderedDom: string | null = null; // set once Chrome has rendered the page
@@ -582,6 +772,7 @@ export async function prefetchBrand(
   } else {
     // Plain fetch blocked or answered with a bot challenge → headless-Chrome
     // fallback (real browser fingerprint).
+    throwIfPrefetchAborted(signal);
     onProgress(
       "chrome",
       page
@@ -589,6 +780,7 @@ export async function prefetchBrand(
         : "plain fetch blocked — rendering with headless Chrome",
     );
     renderedDom = await chromeDumpDom(url);
+    throwIfPrefetchAborted(signal);
     if (renderedDom) {
       html = renderedDom.slice(0, HTML_CAP);
       baseUrl = page?.finalUrl ?? url;
@@ -602,6 +794,41 @@ export async function prefetchBrand(
       return null;
     }
   }
+  return harvestFromHtml(html, baseUrl, brandDir, { url, renderedDom, onProgress, signal });
+}
+
+interface HarvestFromHtmlOptions {
+  /** Original input URL recorded as `result.url`. */
+  url: string;
+  /** Pre-rendered DOM (headless Chrome) captured during fetch, used as a logo
+   *  fallback source. Null for the extract-from-html path. */
+  renderedDom?: string | null;
+  /** Extra CSS folded into the harvest before parsing (e.g. stylesheet text the
+   *  web read out of the rendered browser page). */
+  cssSeed?: string;
+  /** Whether headless-Chrome rescue passes (thin-CSS re-harvest, screenshot) may
+   *  run. False when the caller already supplied rendered DOM. Defaults true. */
+  allowChrome?: boolean;
+  onProgress?: PrefetchProgress;
+  /** Caller cancellation (user Stop) threaded into the harvest's sub-fetches. */
+  signal?: AbortSignal;
+}
+
+/** Turn page HTML (+ optional seed CSS) into a PrefetchResult: harvest colors,
+ *  fonts, logos, and copy, self-host webfonts, and build the material digest.
+ *  `prefetchBrand` feeds fetched / Chrome-rendered HTML; `prefetchFromHtml`
+ *  feeds the DOM the web read out of the unblocked in-app browser tab. */
+async function harvestFromHtml(
+  html: string,
+  baseUrl: string,
+  brandDir: string,
+  opts: HarvestFromHtmlOptions,
+): Promise<PrefetchResult> {
+  const { url, signal } = opts;
+  const onProgress: PrefetchProgress = opts.onProgress ?? (() => {});
+  const allowChrome = opts.allowChrome ?? true;
+  let renderedDom = opts.renderedDom ?? null;
+  throwIfPrefetchAborted(signal);
   // Chrome can render a challenge page too (interactive Turnstile etc.) —
   // re-check the HTML we actually ended up with.
   const blocked = isChallengePage(html);
@@ -620,8 +847,11 @@ export async function prefetchBrand(
   if (!blocked) {
     onProgress("css");
     const cssChunks: string[] = [];
+    if (opts.cssSeed && opts.cssSeed.trim()) cssChunks.push(opts.cssSeed);
     for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) cssChunks.push(m[1]);
-    for (const m of html.matchAll(/style=["']([^"']{1,2000})["']/gi)) cssChunks.push(m[1] + ";");
+    for (const m of html.matchAll(/<([a-z][\w:-]*)([^>]{0,2000}?)\sstyle=["']([^"']{1,2000})["'][^>]*>/gi)) {
+      cssChunks.push(`${inlineStyleSelector(m[1], m[2] ?? '')}{${m[3]};}`);
+    }
 
     const cssLinks: string[] = [];
     for (const m of html.matchAll(/<link[^>]+rel=["']stylesheet["'][^>]*>|<link[^>]+href=["'][^"']+["'][^>]+rel=["']stylesheet["'][^>]*>/gi)) {
@@ -636,12 +866,12 @@ export async function prefetchBrand(
       }
     }
     const cssResults = await Promise.all(
-      cssLinks.slice(0, MAX_CSS_FILES).map((u) => fetchText(u, CSS_CAP)),
+      cssLinks.slice(0, MAX_CSS_FILES).map((u) => fetchText(u, CSS_CAP, { signal })),
     );
     for (const r of cssResults) if (r) cssChunks.push(r.text);
     // Google Fonts CSS carries the canonical family names — fetch those too.
     const gfResults = await Promise.all(
-      googleFontsUrls.slice(0, 2).map((u) => fetchText(u, CSS_CAP)),
+      googleFontsUrls.slice(0, 2).map((u) => fetchText(u, CSS_CAP, { signal })),
     );
     for (const r of gfResults) if (r) cssChunks.push(r.text);
     allCss = cssChunks.join("\n");
@@ -652,13 +882,17 @@ export async function prefetchBrand(
     // CSS-in-JS rescue: a thin static harvest usually means styles are injected
     // at runtime. Render once with headless Chrome — the dumped DOM carries the
     // injected <style> tags and inline styles — and re-extract.
-    if (colors.filter((c) => !c.extreme).length < 3 && !renderedDom && findChrome()) {
+    if (colors.filter((c) => !c.extreme).length < 3 && !renderedDom && allowChrome && findChrome()) {
+      throwIfPrefetchAborted(signal);
       onProgress("chrome", "thin static CSS — re-harvesting from the rendered DOM");
       renderedDom = await chromeDumpDom(baseUrl);
+      throwIfPrefetchAborted(signal);
       if (renderedDom) {
         const domCss: string[] = [];
         for (const m of renderedDom.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) domCss.push(m[1]);
-        for (const m of renderedDom.matchAll(/style=["']([^"']{1,2000})["']/gi)) domCss.push(m[1] + ";");
+        for (const m of renderedDom.matchAll(/<([a-z][\w:-]*)([^>]{0,2000}?)\sstyle=["']([^"']{1,2000})["'][^>]*>/gi)) {
+          domCss.push(`${inlineStyleSelector(m[1], m[2] ?? '')}{${m[3]};}`);
+        }
         if (domCss.length) {
           allCss = [allCss, ...domCss].join("\n");
           colors = extractColors(allCss);
@@ -709,7 +943,7 @@ export async function prefetchBrand(
   if (refs.length === 0 && renderedDom && !blocked) refs = findLogoRefs(renderedDom, baseUrl);
   for (const ref of refs) {
     if (logos.length >= MAX_LOGOS) break;
-    const bin = await fetchBinary(ref.url, baseUrl);
+    const bin = await fetchBinary(ref.url, baseUrl, signal);
     if (!bin) continue;
     const file = `${ref.kind}-${logos.length}${extFor(bin.contentType, ref.url)}`;
     fs.writeFileSync(path.join(logosDir, file), bin.buf);
@@ -731,16 +965,22 @@ export async function prefetchBrand(
       /* unparseable baseUrl — skip the service tier */
     }
   }
+  if (!blocked && logos.length > 0) {
+    const logoColors = extractLogoSvgColorCandidates(logosDir, logos);
+    if (logoColors.length > 0) colors = mergeColorCandidates(colors, logoColors);
+  }
   // Still nothing → grab a page screenshot instead; the synthesis agent Reads
   // it with vision to locate the logo and judge visual style. Pointless for a
   // challenge page — the screenshot would show the interstitial.
   const prefetchDir = path.join(brandDir, "prefetch");
   fs.mkdirSync(prefetchDir, { recursive: true });
   let screenshot: string | null = null;
-  if (logos.length === 0 && !blocked && findChrome()) {
+  if (logos.length === 0 && !blocked && allowChrome && findChrome()) {
+    throwIfPrefetchAborted(signal);
     onProgress("chrome", "no logo downloadable — capturing a page screenshot");
     const shotPath = path.join(prefetchDir, "screenshot.png");
     if (await chromeScreenshot(baseUrl, shotPath)) screenshot = "prefetch/screenshot.png";
+    throwIfPrefetchAborted(signal);
   }
   onProgress("logos-done", `${logos.length} candidates${screenshot ? " + page screenshot" : ""}`);
 
@@ -781,7 +1021,7 @@ export async function prefetchBrand(
   const candidates = navLinks.filter((l) => sameHost(l.url) && EXTRA_PAGE_HINTS.test(l.url));
   for (const cand of candidates.slice(0, MAX_EXTRA_PAGES)) {
     onProgress("extra-page", cand.url);
-    const extra = await fetchText(cand.url, HTML_CAP);
+    const extra = await fetchText(cand.url, HTML_CAP, { signal });
     if (!extra) continue;
     const t = decodeEntities(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(extra.text)?.[1] ?? "").trim();
     const text = [
@@ -820,9 +1060,37 @@ export async function prefetchBrand(
 
   // Persist raw material for the agent to Read deeper if it wants to.
   fs.writeFileSync(path.join(prefetchDir, "material.md"), materialMd);
-  fs.writeFileSync(path.join(prefetchDir, "page.html"), html.slice(0, HTML_CAP));
-  fs.writeFileSync(path.join(prefetchDir, "page-preview.html"), previewablePrefetchHtml(html));
+  fs.writeFileSync(path.join(prefetchDir, "page.html"), previewablePrefetchHtml(html));
   fs.writeFileSync(path.join(prefetchDir, "styles.css"), allCss.slice(0, 2_000_000));
 
   return { ...partial, thin, materialMd };
+}
+
+/** Harvest a brand from HTML the web already rendered (e.g. the in-app browser
+ *  tab after the user cleared an anti-bot wall) instead of fetching it. Skips
+ *  all main-page network fetching and headless-Chrome rescue; logo/webfont
+ *  downloads still run best-effort against `baseUrl`. Returns null on empty
+ *  input. The provided `css` (stylesheet text + computed styles collected from
+ *  the rendered page) is folded in alongside the inline `<style>` in `html`. */
+export async function prefetchFromHtml(
+  html: string,
+  css: string,
+  baseUrl: string,
+  brandDir: string,
+  onProgress: PrefetchProgress = () => {},
+): Promise<PrefetchResult | null> {
+  if (!html || !html.trim()) return null;
+  let resolvedBase = baseUrl;
+  try {
+    resolvedBase = new URL(baseUrl).href;
+  } catch {
+    // Keep the raw string; downstream `new URL(..., baseUrl)` calls guard themselves.
+  }
+  return harvestFromHtml(html.slice(0, HTML_CAP), resolvedBase, brandDir, {
+    url: baseUrl,
+    cssSeed: css ?? "",
+    renderedDom: null,
+    allowChrome: false,
+    onProgress,
+  });
 }

@@ -1,5 +1,4 @@
-/* Structured profile editor — light/white form rhythm matching the rest of
- * the Memory settings surface. */
+/* Structured profile editor matching the Memory settings surface. */
 
 .panel {
   display: flex;
@@ -21,8 +20,8 @@
   height: 28px;
   flex: 0 0 auto;
   border-radius: var(--radius-md, 8px);
-  background: var(--bg-subtle, rgba(0, 0, 0, 0.04));
-  color: var(--accent, #5b5bd6);
+  background: var(--bg-subtle);
+  color: var(--accent);
 }
 
 .title {
@@ -35,7 +34,7 @@
   margin: 2px 0 0;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--text-muted, #6b6b6b);
+  color: var(--text-muted);
 }
 
 .fields {
@@ -63,7 +62,7 @@
   font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
 }
 
 .field input,
@@ -87,7 +86,7 @@
 .savedPill {
   font-size: 12px;
   font-weight: 500;
-  color: #1f7d5c;
+  color: var(--green);
 }
 
 @media (max-width: 560px) {

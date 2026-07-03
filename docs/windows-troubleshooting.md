@@ -2,7 +2,7 @@
 
 Open Design runs on Windows natively, but the path is less travelled than macOS, Linux, or WSL2. This guide covers the most common errors you will hit on a fresh Windows machine and the exact fix for each.
 
-> **Tip:** If you already have WSL2 set up, that is the smoothest path on Windows. This guide is for native Windows (PowerShell).
+> **Tip:** If your coding-agent CLIs run inside WSL2, use the dedicated [`WSL2 setup guide`](wsl-setup.md). This guide is for native Windows (PowerShell).
 
 ---
 

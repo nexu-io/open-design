@@ -32,11 +32,19 @@ e2e/ui/reports
 e2e/ui/test-results
 apps/web/playwright/
 
+# Playwright MCP capture output (YAML page snapshots + PNG screenshots).
+# Written ad-hoc during local visual checks; never commit — these hold local
+# UI/session state and are not a maintained test fixture.
+.playwright-mcp/
+
 # Legacy folder name from before the rename; keep ignored so existing
 # clones don't accidentally stage stale runtime data.
 .ocd
 
 tsconfig.tsbuildinfo
+
+# Generated from the checked-in compressed vendor source during postinstall.
+apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js
 
 **/.claude-sessions/*
 
@@ -76,6 +84,11 @@ docs/superpowers/
 # `skills/<slug>/example.html` and `templates/live-artifacts/<slug>/`
 # on every deploy. Should not be committed (~70MB of PNGs).
 apps/landing-page/public/previews/
+
+# On-demand enhancement runtimes (matter-js / cobe), regenerated from
+# node_modules by `scripts/vendor-enhancers.ts` on every build/dev. Generated
+# artifact, not source — must not be committed.
+apps/landing-page/public/enhancers/
 
 # Ad-hoc local e2e scripts and their screenshots
 e2e/scripts/test-fal-webui.ts

@@ -1,5 +1,12 @@
 // @ts-nocheck
-import type { DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
+import type {
+  DesktopExportArtifactInput,
+  DesktopExportArtifactResult,
+  DesktopExportPdfInput,
+  DesktopExportPdfResult,
+  DesktopRenderSlidesInput,
+  DesktopRenderSlidesResult,
+} from '@open-design/sidecar-proto';
 import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
@@ -10,7 +17,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
-import { PLUGIN_SHARE_ACTION_PLUGIN_IDS } from '@open-design/contracts';
+import { executionProfileFromStreamFormat, PLUGIN_SHARE_ACTION_PLUGIN_IDS } from '@open-design/contracts';
 import {
   composeSystemPrompt,
   resolveExclusiveSurface,
@@ -116,6 +123,7 @@ export {
   bufferedAntigravityGeminiFirstTokenAt,
   classifyChatRunCloseStatus,
   looksLikeGeminiJsonEventStream,
+  resolveAcpStageTimeoutMs,
   resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
   resolveChatRunInactivityTimeoutMs,
@@ -146,13 +154,14 @@ import {
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
+import { buildOpenCodeByokProviderConfig } from './runtimes/byok-opencode.js';
 import {
   readVelaLoginStatus,
   resolveAmrProfile,
 } from './integrations/vela.js';
 import {
   amrAccountFailureDetails,
-  classifyAmrAccountFailure,
+  classifyAmrAccountFailureSignal,
 } from './integrations/vela-errors.js';
 import { amrModelLoadingCache } from './runtimes/amr-model-cache.js';
 import {
@@ -189,7 +198,11 @@ import {
 } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
-import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
+import {
+  buildWindowsFolderDialogCommand,
+  parseFolderDialogStdout,
+  parseLinuxFolderDialogResult,
+} from './native-folder-dialog.js';
 import {
   AssetCacheError,
   assetCacheRewriteUrl,
@@ -204,6 +217,7 @@ import {
   resolveSandboxRuntimeConfig,
 } from './sandbox-mode.js';
 import {
+  buildUserDesignSystemArchive,
   createUserDesignSystem,
   deleteUserDesignSystem,
   digestDesignSystemContext,
@@ -214,6 +228,7 @@ import {
   listUserDesignSystemRevisions,
   readDesignSystem,
   readDesignSystemPackageInfo,
+  readDesignSystemStaticFile,
   readUserDesignSystemFile,
   resolveDesignSystemAssets,
   updateUserDesignSystem,
@@ -222,6 +237,7 @@ import {
 import { createDesignSystemGenerationJobStore } from './design-systems/generation-jobs.js';
 import { createDesignSystemServerServices } from './design-systems/server-services.js';
 import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
+import { registerBrandRoutes } from './brand-routes.js';
 import {
   applyDiffReviewDecisionToCwd,
   applyPlugin,
@@ -259,7 +275,12 @@ import {
   marketplaceManifestUrlForRegistry,
   marketplaceRegistryIdFromUrl,
 } from './plugins/marketplaces.js';
-import { composeMemoryBody, extractFromMessage } from './memory.js';
+import {
+  composeMemoryBody,
+  extractFromMessage,
+  listActiveRuleEntries,
+  readMemoryConfig,
+} from './memory.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
@@ -295,9 +316,14 @@ import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
+import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
 import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
+import {
+  createRunLifecycleTracer,
+  runLifecycleMarkersForStreamEvent,
+} from './run-lifecycle-tracer.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
 import { decideSafeRunRetry } from './run-retry-policy.js';
@@ -312,15 +338,20 @@ import {
 } from './runtimes/run-artifacts.js';
 import {
   createRunArtifactBaselines,
+  diffRunArtifacts,
   snapshotProjectArtifacts,
 } from './run-artifact-fs.js';
+import {
+  AiHtmlVersionSnapshotError,
+  snapshotAiHtmlVersionsForRun,
+} from './run-html-version-snapshots.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import { buildPromptStackTelemetry } from './prompt-telemetry.js';
 import { readAnalyticsContext } from './analytics.js';
 import {
   agentIdToTracking,
   modelIdForTracking,
-  projectKindToTracking,
+  projectKindFromMetadataToTracking,
 } from '@open-design/contracts/analytics';
 import {
   mergeNoProxyWithLoopbackDefaults,
@@ -343,7 +374,7 @@ import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
 import { skillCwdAliasSegment, stageActiveSkill } from './cwd-aliases.js';
-import { buildDesktopPdfExportInput } from './pdf-export.js';
+import { buildDesktopArtifactExportInput, buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media/index.js';
 import { listElevenLabsVoiceOptions } from './integrations/elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
@@ -427,6 +458,7 @@ import {
   resolveProjectDir,
   SandboxImportedProjectError,
   sanitizeName,
+  sanitizePath,
   searchProjectFiles,
   resolveProjectDir,
   resolveProjectFilePath,
@@ -479,7 +511,6 @@ import {
   updateRoutine,
   updateRoutineRun,
   clearAgentSession,
-  updateAgentSessionStableHash,
   upsertAgentSession,
   upsertDeployment,
   upsertMessage,
@@ -488,7 +519,7 @@ import {
 import {
   computeIncludeStable,
   hashStableInstructions,
-  isClaudeResumeFailure,
+  isAgentResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
 } from './agent-session-resume.js';
@@ -577,7 +608,14 @@ import {
   configuredAllowedOrigins,
   isAllowedBrowserOrigin,
   isLocalSameOrigin,
+  isZeroConfigClipperLibraryRequest,
 } from './origin-validation.js';
+import { registerLibraryRoutes } from './routes/library.js';
+import {
+  libraryExtensionAllowedOrigins,
+  seedLibraryExtensionOrigins,
+} from './library-tokens.js';
+import { listLibraryTokenOrigins } from './library-store.js';
 import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 
@@ -805,6 +843,9 @@ const CRITIQUE_ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'critique-artifacts')
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
 const USER_SKILLS_DIR = path.join(RUNTIME_DATA_DIR, 'skills');
 const USER_DESIGN_SYSTEMS_DIR = path.join(RUNTIME_DATA_DIR, 'design-systems');
+// Brand metadata (brand.json + meta.json per brand) lives here; each brand
+// also registers a `user:<id>` design system under USER_DESIGN_SYSTEMS_DIR.
+const BRANDS_DIR = path.join(RUNTIME_DATA_DIR, 'brands');
 const PLUGIN_REGISTRY_ROOTS = registryRootsForDataDir(RUNTIME_DATA_DIR);
 // Disk cache + same-origin proxy for external preview media (cross-border CDN
 // images/videos referenced by plugin example.html). See plugin-asset-cache.ts.
@@ -829,8 +870,12 @@ const ALL_SKILL_LIKE_ROOTS = [
   SKILLS_DIR,
   DESIGN_TEMPLATES_DIR,
 ];
+// Global OD Library data root — owned, content-addressed assets captured by
+// the clipper / `od library import`. Derived from RUNTIME_DATA_DIR per the
+// daemon data directory contract.
+const LIBRARY_DIR = path.join(RUNTIME_DATA_DIR, 'library');
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
-for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR, USER_DESIGN_TEMPLATES_DIR, PLUGIN_REGISTRY_ROOTS.userPluginsRoot]) {
+for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR, BRANDS_DIR, USER_DESIGN_TEMPLATES_DIR, PLUGIN_REGISTRY_ROOTS.userPluginsRoot, LIBRARY_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 fs.mkdirSync(CRITIQUE_ARTIFACTS_DIR, { recursive: true });
@@ -1128,6 +1173,8 @@ const WORKSPACE_CONTEXT_KINDS = new Set([
   'design-system',
   'file',
   'folder',
+  'project',
+  'local-code',
   'browser',
   'terminal',
   'side-chat',
@@ -1299,6 +1346,16 @@ function renderWorkspaceContextToolHints(items) {
       '- File and Design Files tabs: use project-relative paths exactly as shown. Read before editing, and keep generated screenshots/briefs/assets in Design Files when the user asks to capture or extract references.',
     );
   }
+  if (kinds.has('project')) {
+    hints.push(
+      '- Referenced projects: use the absolute path as a read-only reference project when present. Search and read relevant files before applying ideas to the current project; do not edit the referenced project unless the user explicitly asks.',
+    );
+  }
+  if (kinds.has('local-code')) {
+    hints.push(
+      '- Local code folders: use the absolute path as read-only implementation context. Inspect files under that folder when useful, align with its conventions, and make edits only in the active Open Design project unless the user explicitly asks otherwise.',
+    );
+  }
   if (kinds.has('live-artifact')) {
     hints.push(
       '- Live artifact tabs: treat the selected live artifact as the preview target. Inspect or modify its source files rather than editing generated runtime output when possible.',
@@ -1313,7 +1370,7 @@ function renderRunContextPrompt(selection, metadata) {
   if (Array.isArray(context.workspaceItems) && context.workspaceItems.length > 0) {
     lines.push('### Active workspace context');
     lines.push(
-      'The user did not manually choose this context; Open Design selected the currently focused workspace tab. Use it as the default target for phrases like "this", "current", "the browser", "the terminal", or "that file" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files.',
+      'The user selected these workspace contexts or Open Design inferred the currently focused workspace tab. Use them as the default target for phrases like "this", "current", "the browser", "the terminal", "that file", or "the referenced code/project" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files, and treat absolute local paths as reference context unless explicitly asked to edit them.',
     );
     lines.push(formatWorkspaceContextList(context.workspaceItems));
     const toolHints = renderWorkspaceContextToolHints(context.workspaceItems);
@@ -1449,10 +1506,17 @@ function resolveRunProjectKindForAnalytics({
 }) {
   if (typeof hintProjectKind === 'string') return hintProjectKind;
   if (projectMetadata?.importedFrom === 'design-system') return 'design_system';
-  // Pass videoModel so a HyperFrames project (kind=video + videoModel=
-  // hyperframes-html) is reported as project_kind=hyperframes, not generic
-  // video. The web-supplied `hintProjectKind` already encodes this when set.
-  return projectKindToTracking(projectMetadata?.kind, projectMetadata?.videoModel);
+  // Brand-extraction backing projects (kind:'brand', importedFrom:
+  // 'brand-extraction') ARE design systems — a brand is one source for a DS,
+  // not a separate object. Report them as design_system so DS-project runs
+  // (creation + later edits) drill down cleanly. See design-system tracking spec §1.
+  if (projectMetadata?.importedFrom === 'brand-extraction') return 'design_system';
+  // Derive straight from the persisted metadata: videoModel splits HyperFrames
+  // (kind=video) out of generic video, and the prototype/other subtype fields
+  // (fidelity / intent / platform) split wireframe/mobile/live_artifact/document
+  // out so the run's project_kind matches the Home card the user picked. The
+  // web-supplied `hintProjectKind` already encodes all of this when set.
+  return projectKindFromMetadataToTracking(projectMetadata);
 }
 
 export function __forTestResolveRunProjectKindForAnalytics(args) {
@@ -1517,6 +1581,68 @@ function scanRunEventsForRetrySideEffects(events) {
 
 export function __forTestScanRunEventsForRetrySideEffects(events) {
   return scanRunEventsForRetrySideEffects(events);
+}
+
+function fileNameFromToolInputPath(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/\\/g, '/');
+  return normalized.split('/').filter(Boolean).at(-1) ?? trimmed;
+}
+
+function filesystemWriteFileNamesFromRunEvents(events) {
+  const names = [];
+  const seen = new Set();
+  for (const rec of Array.isArray(events) ? events : []) {
+    const data = rec?.data;
+    if (!data || typeof data !== 'object') continue;
+    if (data.type !== 'tool_use' && data.type !== 'artifact') continue;
+
+    const toolName = typeof data.name === 'string' ? data.name : '';
+    const isFileTool =
+      data.type === 'artifact' ||
+      /^(Write|Edit|MultiEdit|write_file|edit_file|replace_file)$/i.test(toolName);
+    if (!isFileTool) continue;
+
+    const input = data.input && typeof data.input === 'object' ? data.input : {};
+    const candidate =
+      fileNameFromToolInputPath(input.file_path) ||
+      fileNameFromToolInputPath(input.filePath) ||
+      fileNameFromToolInputPath(input.path) ||
+      fileNameFromToolInputPath(input.filename) ||
+      fileNameFromToolInputPath(data.path) ||
+      fileNameFromToolInputPath(data.filePath) ||
+      fileNameFromToolInputPath(data.name);
+    if (!candidate || seen.has(candidate)) continue;
+    seen.add(candidate);
+    names.push(candidate);
+  }
+  return names;
+}
+
+export function __forTestFilesystemWriteFileNamesFromRunEvents(events) {
+  return filesystemWriteFileNamesFromRunEvents(events);
+}
+
+function filesystemEmptyAnswerFallbackText(fileNames) {
+  if (!Array.isArray(fileNames) || fileNames.length === 0) {
+    return 'Wrote project files.';
+  }
+  const shown = fileNames.slice(0, 3);
+  if (fileNames.length === 1) {
+    return `Wrote ${shown[0]}.`;
+  }
+  if (fileNames.length <= 3) {
+    const last = shown.at(-1);
+    const first = shown.slice(0, -1).join(', ');
+    return `Wrote ${first} and ${last}.`;
+  }
+  return `Wrote ${shown.join(', ')}, and ${fileNames.length} files total.`;
+}
+
+export function __forTestFilesystemEmptyAnswerFallbackText(fileNames) {
+  return filesystemEmptyAnswerFallbackText(fileNames);
 }
 
 function retryFinalResultForRunStatus(status, retryAttemptCount) {
@@ -1961,6 +2087,26 @@ export function daemonAgentPayloadToPersistedAgentEvent(data) {
       outputTokens: usage.output_tokens,
       ...(typeof data.costUsd === 'number' ? { costUsd: data.costUsd } : {}),
       ...(typeof data.durationMs === 'number' ? { durationMs: data.durationMs } : {}),
+    };
+  }
+  if (type === 'diagnostic' && typeof data.name === 'string') {
+    return {
+      kind: 'diagnostic',
+      name: data.name,
+      ...(typeof data.source === 'string' ? { source: data.source } : {}),
+      ...(typeof data.elapsedMs === 'number' ? { elapsedMs: data.elapsedMs } : {}),
+      ...(typeof data.reason === 'string' ? { reason: data.reason } : {}),
+      ...(typeof data.suppressedChars === 'number' ? { suppressedChars: data.suppressedChars } : {}),
+      ...(typeof data.suppressedChunks === 'number' ? { suppressedChunks: data.suppressedChunks } : {}),
+      ...(typeof data.openedBlocks === 'number' ? { openedBlocks: data.openedBlocks } : {}),
+      ...(typeof data.closedBlocks === 'number' ? { closedBlocks: data.closedBlocks } : {}),
+      ...(typeof data.fileCount === 'number' ? { fileCount: data.fileCount } : {}),
+      ...(Array.isArray(data.files) ? { files: data.files.filter((file) => typeof file === 'string').slice(0, 8) } : {}),
+      ...(typeof data.pendingCandidateChars === 'number'
+        ? { pendingCandidateChars: data.pendingCandidateChars }
+        : {}),
+      ...(typeof data.suppressing === 'boolean' ? { suppressing: data.suppressing } : {}),
+      ...(data.shape && typeof data.shape === 'object' ? { shape: data.shape } : {}),
     };
   }
   if (type === 'fabricated_role_marker' && typeof data.marker === 'string') {
@@ -2765,7 +2911,7 @@ function requestRunOverride(runId, tokenRunId) {
 }
 
 function openNativeFolderDialog() {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const platform = process.platform;
     if (platform === 'darwin') {
       // `choose folder` is handled specially by the system: it presents a fully
@@ -2789,10 +2935,12 @@ function openNativeFolderDialog() {
         'zenity',
         ['--file-selection', '--directory', '--title=Select a code folder to link'],
         { timeout: 120_000 },
-        (err, stdout) => {
-          if (err) return resolve(null);
-          const p = stdout.trim();
-          resolve(p || null);
+        (err, stdout, stderr) => {
+          try {
+            resolve(parseLinuxFolderDialogResult(err, stdout, stderr));
+          } catch (folderDialogError) {
+            reject(folderDialogError);
+          }
         },
       );
     } else if (platform === 'win32') {
@@ -2824,7 +2972,7 @@ function rewriteKnownAgentStreamError(agentId, message, failureText = '') {
   if (
     /bufio\.scanner:\s*token too long/i.test(combined) &&
     /opencode/i.test(combined) &&
-    (agentId === 'opencode' || agentId === 'amr' || /json-rpc id \d+/i.test(combined))
+    (agentId === 'opencode' || agentId === 'mimo' || agentId === 'amr' || /json-rpc id \d+/i.test(combined))
   ) {
     return 'The run failed due to an unknown upstream streaming error. Please retry.';
   }
@@ -2893,6 +3041,14 @@ const pluginUpload = multer({
   },
 });
 
+// Figma `.fig` import — memory storage so the offline decoder gets the raw
+// bytes without a temp-file round-trip. The decoder unzips + kiwi-decodes
+// in-process and writes the snapshot under the project cwd.
+const figmaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 200 * 1024 * 1024 },  // community kits run large
+});
+
 const pluginShareTaskStore = createPluginShareTaskStore({
   randomUUID,
   execCommandViaLoginShell,
@@ -2935,24 +3091,45 @@ const projectUpload = multer({
           meta,
         );
         (req as any)._uploadRelDir = relDir;
+        (req as any)._uploadAbsDir = absDir;
         cb(null, absDir);
       } catch (err) {
         cb(err, '');
       }
     },
-    filename: (_req, file, cb) => {
+    filename: (req, file, cb) => {
       // multer@1 hands us latin1-decoded multipart filenames; restore the
       // original UTF-8 so the response (and the on-disk name) preserves
-      // non-ASCII characters instead of mangling them. Then run the
-      // shared sanitiser and prepend a base36 timestamp so multiple
-      // uploads with the same original name don't clobber each other.
+      // non-ASCII characters instead of mangling them. Then run the shared
+      // sanitiser and only add a suffix when that sanitized source name
+      // would collide with an existing or same-batch upload.
       file.originalname = decodeMultipartFilename(file.originalname);
       const safe = sanitizeName(file.originalname);
-      cb(null, `${Date.now().toString(36)}-${safe}`);
+      const uploadDir = typeof (req as any)._uploadAbsDir === 'string' ? (req as any)._uploadAbsDir : '';
+      const reserved = (req as any)._uploadReservedNames instanceof Set
+        ? (req as any)._uploadReservedNames
+        : ((req as any)._uploadReservedNames = new Set());
+      cb(null, uniqueUploadFileName(uploadDir, safe, reserved));
     },
   }),
   limits: { fileSize: 200 * 1024 * 1024 },  // 200MB — covers the largest design assets we expect (PPTX/PDF/raw images)
 });
+
+function uniqueUploadFileName(uploadDir, safeName, reserved) {
+  const parsed = path.parse(safeName);
+  const base = parsed.name || parsed.base || 'file';
+  const ext = parsed.ext || '';
+  for (let index = 0; index < 10_000; index += 1) {
+    const candidate = index === 0 ? safeName : `${base}-${index}${ext}`;
+    if (reserved.has(candidate)) continue;
+    if (uploadDir && fs.existsSync(path.join(uploadDir, candidate))) continue;
+    reserved.add(candidate);
+    return candidate;
+  }
+  const fallback = `${base}-${Date.now().toString(36)}${ext}`;
+  reserved.add(fallback);
+  return fallback;
+}
 
 function handleProjectUpload(req, res, next) {
   projectUpload.array('files', 12)(req, res, (err) => {
@@ -3181,6 +3358,8 @@ export function createSseResponse(
 }
 
 export type DesktopPdfExporter = (input: DesktopExportPdfInput) => Promise<DesktopExportPdfResult>;
+export type DesktopSlideRenderer = (input: DesktopRenderSlidesInput) => Promise<DesktopRenderSlidesResult>;
+export type DesktopArtifactExporter = (input: DesktopExportArtifactInput) => Promise<DesktopExportArtifactResult>;
 
 // Loosely typed shape — we only access `namespace`, `base`, `mode`, and
 // `source` from the runtime context when building the diagnostics export.
@@ -3194,7 +3373,9 @@ export interface DaemonRuntimeContext {
 }
 
 export interface StartServerOptions {
+  desktopArtifactExporter?: DesktopArtifactExporter | null;
   desktopPdfExporter?: DesktopPdfExporter | null;
+  desktopSlideRenderer?: DesktopSlideRenderer | null;
   host?: string;
   port?: number;
   returnServer?: boolean;
@@ -3213,6 +3394,8 @@ export async function startServer({
   host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
   returnServer = false,
   desktopPdfExporter = null,
+  desktopSlideRenderer = null,
+  desktopArtifactExporter = null,
   runtime = null,
 }: StartServerOptions = {}) {
   host = normalizeDaemonBindHost(host);
@@ -3245,6 +3428,19 @@ export async function startServer({
 
   const app = express();
   installRouteRegistrationGuard(app);
+  // Clipper page captures are self-contained HTML with inlined images plus a
+  // Figma IR, which for an image-heavy site (The Economist, news front pages)
+  // runs to tens of MB — far past a normal JSON body. Give the ingest route a
+  // dedicated generous limit so a full-page capture doesn't 413; the rest of the
+  // API stays at the conservative 4mb. Registered first so this parser claims
+  // the ingest body before the global one (express.json is a no-op once a body
+  // has already been read).
+  app.use('/api/library/ingest', express.json({ limit: '128mb' }));
+  // Brand extract-from-html carries the full rendered page DOM (+ collected CSS)
+  // the web read out of the in-app browser tab after the user cleared an anti-bot
+  // wall — well past 4mb for image/markup-heavy sites. Give it a dedicated limit
+  // (registered before the global parser so it claims the body first).
+  app.use('/api/brands/:id/extract-from-html', express.json({ limit: '32mb' }));
   app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
@@ -3304,6 +3500,7 @@ export async function startServer({
       listDesignSystems,
       readDesignSystem,
       readDesignSystemPackageInfo,
+      readDesignSystemStaticFile,
       listUserDesignSystemFiles,
       readUserDesignSystemFile,
       linkUserDesignSystemProject,
@@ -3329,6 +3526,7 @@ export async function startServer({
     listAllSkills,
     readAvailableDesignSystem,
     readAvailableDesignSystemPackageInfo,
+    readAvailableDesignSystemStaticFile,
     readDesignSystemWorkspaceTextFile,
     validateProjectDesignSystemId,
     validateProjectSkillId,
@@ -3355,6 +3553,18 @@ export async function startServer({
     // the structured error shape and preflight headers for preview embeds.
     if (/^\/live-artifacts\/[^/]+\/preview$/.test(req.path)) return next();
 
+    // Zero-config browser extension: the OD Clipper only needs a liveness probe
+    // plus POST /api/library/ingest. A web page cannot forge a
+    // chrome-extension:// (or moz-extension://) origin, and the daemon is
+    // loopback-bound, so these two bootstrap routes are auto-trusted without a
+    // pairing handshake. Library read routes still fall through to the normal
+    // origin guard.
+    // NOTE: `req.path` here is mount-relative (the `/api` prefix is stripped),
+    // so the predicate matches `/library/ingest`, not `/api/library/ingest`.
+    if (isZeroConfigClipperLibraryRequest(req.method, req.path, req.headers.origin)) {
+      return next();
+    }
+
     const origin = req.headers.origin;
     // Non-browser client → allow.
     if (origin == null || origin === '') return next();
@@ -3376,7 +3586,10 @@ export async function startServer({
     }
 
     const ports = allowedBrowserPorts(resolvedPort);
-    if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, extraAllowedOrigins)) {
+    // Paired browser-extension origins are persisted in library_tokens and
+    // seeded into this in-memory allowlist at boot / on pairing.
+    const allowedOrigins = [...extraAllowedOrigins, ...libraryExtensionAllowedOrigins()];
+    if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, allowedOrigins)) {
       if (req.method !== 'GET' || !isPortlessLoopbackOrigin(String(origin))) {
         return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
       }
@@ -3384,6 +3597,14 @@ export async function startServer({
     next();
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
+  // Restore paired browser-extension origins into the in-memory allowlist the
+  // /api origin middleware above consults, so a paired clipper survives daemon
+  // restarts without re-pairing.
+  try {
+    seedLibraryExtensionOrigins(listLibraryTokenOrigins(db));
+  } catch {
+    // best-effort: a fresh db with no library_tokens is fine
+  }
   const pluginInstallation = createPluginInstallationHelpers({
     db,
     installFromLocalFolder,
@@ -3694,6 +3915,8 @@ export async function startServer({
     PROJECT_ROOT,
     PROJECTS_DIR,
     ARTIFACTS_DIR,
+    LIBRARY_DIR,
+    BRANDS_DIR,
     RUNTIME_DATA_DIR,
     RUNTIME_DATA_DIR_CANONICAL,
     DESIGN_SYSTEMS_DIR,
@@ -3799,6 +4022,7 @@ export async function startServer({
     deleteProjectFile,
     writeProjectFile,
     sanitizeName,
+    sanitizePath,
     listTabs,
     setTabs,
   };
@@ -3829,7 +4053,10 @@ export async function startServer({
     buildProjectArchive,
     buildBatchArchive,
     buildDesktopPdfExportInput,
+    buildDesktopArtifactExportInput,
     desktopPdfExporter,
+    desktopSlideRenderer,
+    desktopArtifactExporter,
     daemonUrlRef,
     sanitizeArchiveFilename,
   };
@@ -3970,6 +4197,56 @@ export async function startServer({
     projectStore: projectStoreDeps,
     projectFiles: projectFileDeps,
   });
+  // OD Library — global asset registry (clipper ingest, grid, pairing, apply).
+  registerLibraryRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    projectFiles: projectFileDeps,
+    conversations: conversationDeps,
+    auth: authDeps,
+  });
+  app.post('/api/projects/:id/figma/import', (req, res) => {
+    figmaUpload.single('file')(req, res, async (err) => {
+      if (err) return sendMulterError(res, err);
+      try {
+        const project = getProject(db, req.params.id);
+        if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+
+        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const figmaUrl = typeof body.figmaUrl === 'string' ? body.figmaUrl.trim() : '';
+        if (!req.file) {
+          if (figmaUrl) {
+            return sendApiError(
+              res,
+              409,
+              'FIGMA_URL_NEEDS_MIGRATION',
+              'Figma URL imports must run through the Figma migration flow.',
+              { details: { figmaUrl } },
+            );
+          }
+          return sendApiError(res, 400, 'BAD_REQUEST', 'file is required');
+        }
+
+        const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
+        const notes = typeof body.notes === 'string' ? body.notes : undefined;
+        const result = await importFigmaFromBytes(req.file.buffer, {
+          cwd: projectRoot,
+          label: decodeMultipartFilename(req.file.originalname || 'figma-import.fig'),
+          notes,
+        });
+        return res.json(result);
+      } catch (caught) {
+        return sendApiError(
+          res,
+          400,
+          'FIGMA_IMPORT_FAILED',
+          caught instanceof Error ? caught.message : String(caught),
+        );
+      }
+    });
+  });
   registerSocialShareRoutes(app, { http: httpDeps });
   registerProjectRoutes(app, {
     db,
@@ -3985,6 +4262,7 @@ export async function startServer({
     ids: idDeps,
     telemetry: { reportFinalizedMessage },
     appConfig: appConfigDeps,
+    agents: agentDeps,
     validation: validationDeps,
   });
   registerTerminalRoutes(app, {
@@ -4043,6 +4321,7 @@ export async function startServer({
     projectStore: projectStoreDeps,
     projectFiles: projectFileDeps,
     designSystems: {
+      buildUserDesignSystemArchive,
       createUserDesignSystem,
       deleteUserDesignSystem,
       ensureUserDesignSystemWorkspaceProject,
@@ -4052,6 +4331,7 @@ export async function startServer({
       prepareDesignTokenContractRebuild,
       readAvailableDesignSystem,
       readAvailableDesignSystemPackageInfo,
+      readAvailableDesignSystemStaticFile,
       readDesignSystemWorkspaceTextFile,
       readUserDesignSystemFile,
       renderDesignSystemPreview,
@@ -4060,6 +4340,34 @@ export async function startServer({
       updateUserDesignSystemRevisionStatus,
     },
     generationJobs: designSystemGenerationJobs,
+  });
+  registerBrandRoutes(app, {
+    brandsRoot: BRANDS_DIR,
+    userDesignSystemsRoot: USER_DESIGN_SYSTEMS_DIR,
+    projectsRoot: PROJECTS_DIR,
+    skillsRoot: SKILLS_DIR,
+    dataDir: RUNTIME_DATA_DIR,
+    db,
+    runs: design.runs,
+    randomId,
+    resolveTranscriptAgent: async () => {
+      const config = await readAppConfig(RUNTIME_DATA_DIR);
+      let agentId = typeof config.agentId === 'string' && config.agentId
+        ? config.agentId
+        : null;
+      let detectedAgentName: string | null = null;
+      if (!agentId) {
+        const agents = await detectAgents(config.agentCliEnv ?? {}).catch(() => []);
+        const available = agents.find((agent) => agent.available);
+        agentId = available?.id ?? null;
+        detectedAgentName = available?.name ?? null;
+      }
+      if (!agentId) return null;
+      return {
+        agentId,
+        agentName: getAgentDef(agentId)?.name ?? detectedAgentName ?? agentId,
+      };
+    },
   });
   registerProjectArtifactRoutes(app, {
     http: httpDeps,
@@ -4118,6 +4426,8 @@ export async function startServer({
     db,
     http: httpDeps,
     paths: pathDeps,
+    node: nodeDeps,
+    ids: idDeps,
     projectStore: projectStoreDeps,
     exports: projectExportDeps,
     projectFiles: projectFileDeps,
@@ -4163,6 +4473,7 @@ export async function startServer({
   const pluginRouteHelpers = {
     PLUGIN_PREVIEWS_DIR,
     applyBakedPreviews,
+    assembleExample,
     pluginUpload,
     pluginInstallation,
     sendMulterError,
@@ -4376,6 +4687,9 @@ export async function startServer({
   registerPluginRoutes(app, {
     db,
     paths: { PROJECTS_DIR, PLUGIN_REGISTRY_ROOTS, PLUGIN_LOCKFILE_PATH },
+    ids: idDeps,
+    projectStore: projectStoreDeps,
+    conversations: conversationDeps,
     plugins: {
       listInstalledPlugins,
       getInstalledPlugin,
@@ -4425,6 +4739,9 @@ export async function startServer({
   registerProjectPluginRoutes(app, {
     db,
     paths: { PROJECTS_DIR, PLUGIN_REGISTRY_ROOTS, PLUGIN_LOCKFILE_PATH },
+    ids: idDeps,
+    projectStore: projectStoreDeps,
+    conversations: conversationDeps,
     plugins: {
       listInstalledPlugins,
       getInstalledPlugin,
@@ -4460,6 +4777,7 @@ export async function startServer({
     connectedExternalMcp,
     appliedPluginSnapshotId,
     mediaExecution,
+    byokMediaDefaults,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -4673,6 +4991,24 @@ export async function startServer({
       memoryBody = await composeMemoryBody(RUNTIME_DATA_DIR);
     } catch (err) {
       console.warn('[memory] composeMemoryBody failed', err);
+    }
+
+    // Per-hook switches for the two-loop memory feature. Read alongside the
+    // memory body so the composer can gate the PRE intent-gateway brief and
+    // the POST self-verify scorecard on the same config the settings panel
+    // writes. Read failure falls through to undefined hooks, which the
+    // composer treats as on-by-default — matching the config's default-on
+    // semantics.
+    let memoryHooks: { profile?: boolean; rewrite?: boolean; verify?: boolean } | undefined;
+    try {
+      const memCfg = await readMemoryConfig(RUNTIME_DATA_DIR);
+      memoryHooks = {
+        profile: memCfg.profileEnabled,
+        rewrite: memCfg.rewriteEnabled,
+        verify: memCfg.verifyEnabled,
+      };
+    } catch (err) {
+      console.warn('[memory] readMemoryConfig failed', err);
     }
 
     // User-level custom instructions from app-config.json.
@@ -4931,6 +5267,7 @@ export async function startServer({
       craftBody,
       craftSections,
       memoryBody,
+      memoryHooks,
       metadata,
       template,
       audioVoiceOptions,
@@ -4950,7 +5287,9 @@ export async function startServer({
       locale: typeof locale === 'string' ? locale : undefined,
       sessionMode: normalizeConversationSessionMode(sessionMode),
       mediaExecution,
+      byokMediaDefaults,
       streamFormat,
+      executionProfile: executionProfileFromStreamFormat(streamFormat),
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
         ? connectedExternalMcp
         : undefined,
@@ -5059,10 +5398,8 @@ export async function startServer({
   };
 
   const startChatRun = async (chatBody, run) => {
-    run.analyticsTelemetry = {
-      ...(run.analyticsTelemetry ?? {}),
-      startChatRunStartedAt: Date.now(),
-    };
+    const lifecycle = createRunLifecycleTracer(run);
+    lifecycle.mark('chat_run_started');
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
     chatBody = chatBody || {};
     const {
@@ -5087,11 +5424,10 @@ export async function startServer({
       research,
       context,
       titleGeneration,
+      byokProvider,
+      byokMediaDefaults,
     } = chatBody;
-    run.analyticsTelemetry = {
-      ...(run.analyticsTelemetry ?? {}),
-      promptBuildStartAt: Date.now(),
-    };
+    lifecycle.mark('prompt_build_start');
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
       run.conversationId = conversationId;
@@ -5116,7 +5452,7 @@ export async function startServer({
         ? getConversation(db, conversationId)
         : null;
     const runSessionMode =
-      sessionMode === 'chat' || sessionMode === 'design'
+      sessionMode === 'chat' || sessionMode === 'design' || sessionMode === 'plan'
         ? normalizeConversationSessionMode(sessionMode)
         : normalizeConversationSessionMode(conversationSession?.sessionMode);
     const def = getAgentDef(agentId);
@@ -5128,6 +5464,19 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    const byokOpenCodeProvider = def.id === 'byok-opencode'
+      ? buildOpenCodeByokProviderConfig(
+          byokProvider,
+          typeof model === 'string' ? model : null,
+        )
+      : null;
+    if (def.id === 'byok-opencode' && !byokOpenCodeProvider) {
+      return design.runs.fail(
+        run,
+        'BYOK_PROVIDER_REQUIRED',
+        'BYOK OpenCode requires a provider, API key, and model for this run.',
+      );
+    }
     // Validate the checked-in `inactivityTimeoutMs` hint immediately
     // after the runtime def is selected and before any side-effectful
     // setup (auto-memory extract, `.mcp.json` write/unlink,
@@ -5411,6 +5760,7 @@ export async function startServer({
         sessionMode: runSessionMode,
         connectedExternalMcp,
         mediaExecution: run?.mediaExecution,
+        byokMediaDefaults,
         // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
@@ -5484,6 +5834,58 @@ export async function startServer({
         // Snapshotting is best-effort; finish falls back to the tool-stream count.
       }
     }
+    const latestRunPromptForHtmlVersionSnapshot = () => {
+      if (run.conversationId) {
+        try {
+          const row = db.prepare(
+            `SELECT content
+               FROM messages
+              WHERE conversation_id = ?
+                AND role = 'user'
+                AND LENGTH(TRIM(content)) > 0
+              ORDER BY COALESCE(ended_at, started_at, created_at, 0) DESC,
+                       position DESC
+              LIMIT 1`,
+          ).get(run.conversationId);
+          if (typeof row?.content === 'string' && row.content.trim()) {
+            return { prompt: row.content.trim(), promptSource: 'message' as const };
+          }
+        } catch {
+          // Version prompt provenance is best-effort.
+        }
+      }
+      const requestPrompt =
+        typeof currentPrompt === 'string' && currentPrompt.trim()
+          ? currentPrompt.trim()
+          : typeof message === 'string' && message.trim()
+            ? message.trim()
+            : null;
+      return requestPrompt ? { prompt: requestPrompt, promptSource: 'message' as const } : { prompt: null };
+    };
+    const snapshotAiHtmlVersionsBeforeSuccess = async () => {
+      if (!run?.id || !run.projectId) return;
+      const artifactBaseline = runArtifactBaselines.peek(run.id);
+      if (!artifactBaseline || artifactBaseline.contended) return;
+      let diff;
+      try {
+        diff = diffRunArtifacts(
+          artifactBaseline.before,
+          snapshotProjectArtifacts(artifactBaseline.cwd),
+        );
+      } catch {
+        return;
+      }
+      const promptInfo = latestRunPromptForHtmlVersionSnapshot();
+      await snapshotAiHtmlVersionsForRun({
+        projectsRoot: PROJECTS_DIR,
+        projectId: run.projectId,
+        projectRoot: artifactBaseline.cwd,
+        diff,
+        prompt: promptInfo.prompt,
+        ...(promptInfo.promptSource ? { promptSource: promptInfo.promptSource } : {}),
+        metadata: projectRecord?.metadata,
+      });
+    };
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
       agentId,
       projectRecord?.metadata,
@@ -5522,14 +5924,93 @@ export async function startServer({
     // prompt-composition skipTranscript choice, the buildArgs flags, and the
     // create-turn persistence below.
     const agentSupportsSessionResume =
-      def.resumesSessionViaCli === true || def.streamFormat === 'pi-rpc';
+      def.resumesSessionViaCli === true ||
+      def.streamFormat === 'pi-rpc' ||
+      def.resumesSessionViaAcpLoad === true;
+    // Capture-style adapters (codex) mint their OWN session id and report it on
+    // the stream; the daemon captures it here and persists THAT as the resume
+    // handle instead of `agentResumeCtx.newSessionId` (which such CLIs ignore).
+    // Set from the `status` event's `sessionId` in `sendAgentEvent` below.
+    const agentCapturesSessionId = def.capturesSessionIdFromStream === true;
+    let capturedSessionId: string | null = null;
+    // --- Model resolution hoisted above the resume-identity guard ---
+    // The guard (and the persisted `agent_sessions.model`) must key off the
+    // CONCRETE model actually launched, not the raw request token: a user who
+    // picked `default` would otherwise store `default`/null, so changing the
+    // effective default between turns would still pass the guard and resume the
+    // old upstream session under the wrong model (#4704, reported by @nettee).
+    // resolveModelForAgent is hoisted here; the AMR `default`->live-catalog
+    // rewrite is mirrored below so `safeModel` is final before the guard. The
+    // preflight further down stays authoritative for auth/availability and
+    // re-runs the (cached, idempotent) resolution.
+    let configuredAgentEnv = {};
+    try {
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
+      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
+    } catch {
+      configuredAgentEnv = {};
+    }
+    const requestedLiveModelScope = def.id === 'amr'
+      ? resolveAmrProfile({
+          ...process.env,
+          ...(def.env || {}),
+          ...configuredAgentEnv,
+        })
+      : null;
+    let safeModel = resolveModelForAgent(
+      def,
+      typeof model === 'string'
+        ? isKnownModel(def, model, requestedLiveModelScope)
+          ? model
+          : sanitizeCustomModel(model)
+        : null,
+      process.env,
+      requestedLiveModelScope,
+    );
+    const safeReasoning =
+      typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
+        ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
+        : null;
+    const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
+    const resolvedBin = agentLaunch.selectedPath;
+    if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
+      // Concretize a default/empty model to the live catalog's first entry, the
+      // same rewrite the AMR preflight applies — done here only so the resume
+      // guard sees the launched model. Read-only + cached (hot on follow-up
+      // turns); the preflight below remains the authoritative gate.
+      try {
+        const resumeProbe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
+        const resumeCatalog = await amrModelLoadingCache.get(resumeProbe.cacheKey, {
+          fetchPreset: () => fetchVelaPresetModels(resumeProbe.launchPath, resumeProbe.env),
+          fetchRemote: () => fetchVelaRemoteModelsWithRetry(resumeProbe.launchPath, resumeProbe.env),
+        });
+        const resumeLiveModels = preferFreshLiveModels(
+          resumeCatalog.models ?? [],
+          getRememberedLiveModels(def.id, requestedLiveModelScope),
+        );
+        const resumeModelIds = new Set(resumeLiveModels.map((c) => c?.id).filter(Boolean));
+        const askedForDefault =
+          typeof model !== 'string' || !model.trim() || model.trim().toLowerCase() === 'default';
+        if (!safeModel || safeModel === 'default' || (askedForDefault && !resumeModelIds.has(safeModel))) {
+          safeModel = resumeLiveModels[0]?.id ?? safeModel ?? null;
+          agentOptions.model = safeModel;
+        }
+      } catch {
+        // Degrade silently: keep the requested value. The preflight below records
+        // the probe failure and applies the identical fallback.
+      }
+    }
     const agentResumeCtx =
       agentSupportsSessionResume && run.conversationId
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
             agentId: def.id,
+            currentModel: safeModel ?? null,
+            currentCwd: effectiveCwd,
+            currentAssistantMessageId: run.assistantMessageId ?? null,
           })
-        : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null };
+        : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null, invalidationReason: null };
     const userRequestPrompt = composeChatUserRequestForAgent(
       message,
       currentPrompt,
@@ -5680,44 +6161,10 @@ export async function startServer({
         },
       ],
     });
-    run.analyticsTelemetry = {
-      ...(run.analyticsTelemetry ?? {}),
-      promptBuildEndAt: Date.now(),
-    };
-    let configuredAgentEnv = {};
-    try {
-      const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
-      configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
-    } catch {
-      configuredAgentEnv = {};
-    }
-    // Per-agent model + reasoning the user picked in the model menu.
-    // Trust the value when it matches the most recent /api/agents listing
-    // (live or fallback). Otherwise allow it through if it passes a
-    // permissive sanitizer — that's the path for user-typed custom model
-    // ids the CLI's listing didn't surface yet.
-    const requestedLiveModelScope = def.id === 'amr'
-      ? resolveAmrProfile({
-          ...process.env,
-          ...(def.env || {}),
-          ...configuredAgentEnv,
-        })
-      : null;
-    let safeModel = resolveModelForAgent(
-      def,
-      typeof model === 'string'
-        ? isKnownModel(def, model, requestedLiveModelScope)
-          ? model
-          : sanitizeCustomModel(model)
-        : null,
-      process.env,
-      requestedLiveModelScope,
-    );
-    const safeReasoning =
-      typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
-        ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
-        : null;
-    const agentOptions = { model: safeModel, reasoning: safeReasoning };
+    lifecycle.mark('prompt_build_end');
+    lifecycle.mark('launch_preflight_start');
+    // (model resolution + AMR concretization hoisted above the resume guard)
+    const executionProfile = executionProfileFromStreamFormat(def.streamFormat);
     // Accumulates the agent's visible text this run so the close handler can
     // tell whether the turn ended on a clarifying question form. The
     // `od-plugin-authoring` plugin's turn-1 flow is to emit a
@@ -5733,7 +6180,18 @@ export async function startServer({
     // `emittedRenderableQuestionForm`).
     const CLARIFYING_QUESTION_BUFFER_CAP = 256 * 1024;
     let clarifyingQuestionText = '';
+    let visibleAssistantText = '';
     const send = (event, data) => {
+      const lifecycleMarkers = runLifecycleMarkersForStreamEvent(event, data);
+      if (lifecycleMarkers.firstModelEventType) {
+        lifecycle.markFirstModelEvent(lifecycleMarkers.firstModelEventType);
+      }
+      if (lifecycleMarkers.firstVisibleOutput) {
+        lifecycle.mark('first_visible_output');
+      }
+      if (lifecycleMarkers.firstArtifactWrite) {
+        lifecycle.mark('first_artifact_write');
+      }
       if (
         event === 'agent' &&
         data &&
@@ -5745,6 +6203,14 @@ export async function startServer({
           0,
           CLARIFYING_QUESTION_BUFFER_CAP,
         );
+      }
+      if (
+        event === 'agent' &&
+        data &&
+        data.type === 'text_delta' &&
+        typeof data.delta === 'string'
+      ) {
+        visibleAssistantText += data.delta;
       }
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
@@ -5825,6 +6291,7 @@ export async function startServer({
       run.error = null;
       run.errorCode = null;
       run.stdinOpen = false;
+      lifecycle.resetForAttempt(run.retryAttemptCount ?? 0);
       run.analyticsTelemetry = {
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
@@ -5913,10 +6380,7 @@ export async function startServer({
       return 'unknown';
     };
     const finishWithRetryDecision = (status, code = null, signal = null) => {
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        finalizeStartAt: run.analyticsTelemetry?.finalizeStartAt ?? Date.now(),
-      };
+      lifecycle.mark('finalize_start');
       const result = runResultFromStatus(status);
       const errorCode = deriveRunErrorCode({
         status,
@@ -5991,7 +6455,9 @@ export async function startServer({
       );
       const liveSessionId = agentResumeCtx.isResuming
         ? agentResumeCtx.resumeSessionId
-        : agentResumeCtx.newSessionId;
+        : agentCapturesSessionId
+          ? capturedSessionId
+          : agentResumeCtx.newSessionId;
       const resumableFailure =
         result === 'failed' &&
         def.resumesSessionViaCli === true &&
@@ -6006,6 +6472,9 @@ export async function startServer({
           agentId: def.id,
           sessionId: liveSessionId,
           stablePromptHash: currentStableHash,
+          model: safeModel ?? null,
+          cwd: effectiveCwd,
+          lastMessageId: run.assistantMessageId ?? null,
         });
       }
       finalizeRetryTelemetry(status, decision, failure, errorCode);
@@ -6017,6 +6486,22 @@ export async function startServer({
         ...(typeof code === 'number' ? { exit_code: code } : {}),
         ...(signal ? { signal } : {}),
       });
+      if (executionProfile === 'filesystem' && result === 'success' && visibleAssistantText.trim().length === 0) {
+        const fileNames = filesystemWriteFileNamesFromRunEvents(run.events);
+        if (fileNames.length > 0) {
+          send('agent', {
+            type: 'diagnostic',
+            name: 'filesystem_empty_answer_autofilled',
+            source: 'daemon-run-finalize',
+            fileCount: fileNames.length,
+            files: fileNames.slice(0, 8),
+          });
+          send('agent', {
+            type: 'text_delta',
+            delta: filesystemEmptyAnswerFallbackText(fileNames),
+          });
+        }
+      }
       pendingRpcCloseReason = null;
       design.runs.finish(run, status, code, signal);
       return false;
@@ -6122,13 +6607,18 @@ export async function startServer({
     // mcp section for this single invocation, which is exactly the kind
     // of surprise the previous silent-failure UX taught us to avoid.
     let opencodeConfigContent: string | null = null;
-    if (def.externalMcpInjection === 'opencode-env-content') {
+    const isOpenCodeContent = def.externalMcpInjection === 'opencode-env-content';
+    const isMiMoContent = def.externalMcpInjection === 'mimo-env-content';
+    if (isOpenCodeContent || isMiMoContent) {
       try {
         opencodeConfigContent = buildOpenCodeMcpConfigContent(
           enabledExternalMcp,
           oauthTokensForSpawn,
           {
             allowedDirectories: [effectiveCwd, ...extraAllowedDirs],
+            ...(byokOpenCodeProvider
+              ? { extraConfig: byokOpenCodeProvider.config }
+              : {}),
           },
         );
       } catch (err) {
@@ -6172,9 +6662,7 @@ export async function startServer({
       ).catch(() => null);
     }
 
-    const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
-    const resolvedBin = agentLaunch.selectedPath;
-
+    // agentLaunch / resolvedBin are resolved above the resume guard (hoisted).
     // Hoisted above the AMR catalog preflight: the empty-catalog branch
     // below calls `sendAmrAccountFailure(...)` to surface AMR_AUTH_REQUIRED
     // for signed-out users, and a `const` declared later in the same outer
@@ -6184,7 +6672,7 @@ export async function startServer({
         failure.code,
         failure.message,
         {
-          retryable: true,
+          retryable: false,
           details: amrAccountFailureDetails(failure),
         },
       ));
@@ -6475,17 +6963,42 @@ export async function startServer({
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
         persisted = true;
-        if (!agentResumeCtx.isResuming && agentResumeCtx.newSessionId) {
+        // The id to persist for a create turn: capture-style adapters store the
+        // session id the CLI minted and reported on the stream; specify-style
+        // adapters store the daemon-minted id they passed to the CLI. A
+        // capture-style run that never reported an id (CLI died before
+        // `thread.started`) leaves nothing to resume — correct, the next turn
+        // starts fresh and re-seeds the transcript.
+        const createTurnSessionId = agentCapturesSessionId
+          ? capturedSessionId
+          : agentResumeCtx.newSessionId;
+        if (!agentResumeCtx.isResuming && createTurnSessionId) {
           upsertAgentSession(db, {
             conversationId: run.conversationId,
             agentId: def.id,
-            sessionId: agentResumeCtx.newSessionId,
+            sessionId: createTurnSessionId,
             stablePromptHash: currentStableHash,
+            model: safeModel ?? null,
+            cwd: effectiveCwd,
+            lastMessageId: run.assistantMessageId ?? null,
           });
           return;
         }
-        if (agentResumeCtx.isResuming && includeStableInstructions) {
-          updateAgentSessionStableHash(db, run.conversationId, def.id, currentStableHash);
+        if (agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId) {
+          // Advance the resume identity guard after a successful resume turn:
+          // the conversation grew by this turn, so the cursor must move to the
+          // new max position (otherwise the next turn sees `cursor + 4` and
+          // falsely reseeds). model/cwd are unchanged (they matched on resume);
+          // refresh the stable hash to what the session now holds.
+          upsertAgentSession(db, {
+            conversationId: run.conversationId,
+            agentId: def.id,
+            sessionId: agentResumeCtx.resumeSessionId,
+            stablePromptHash: currentStableHash,
+            model: safeModel ?? null,
+            cwd: effectiveCwd,
+            lastMessageId: run.assistantMessageId ?? null,
+          });
         }
       };
     }
@@ -6614,7 +7127,7 @@ export async function startServer({
           stallPayload = createSseErrorPayload(
             logFailure.code,
             logFailure.message,
-            { retryable: true },
+            { retryable: logFailure.retryable },
           );
         }
       }
@@ -6801,6 +7314,7 @@ export async function startServer({
         ...agentSpawnEnv,
         ...(mmdRouteLaunchEnv || {}),
         ...odMediaEnv,
+        ...(byokOpenCodeProvider ? byokOpenCodeProvider.env : {}),
         ...openDesignAmrTraceEnv({
           agentId: def.id,
           runId: run.id,
@@ -6818,7 +7332,7 @@ export async function startServer({
         // user's saved `~/.config/opencode/opencode.json` continues
         // to apply as-is.
         ...(opencodeConfigContent
-          ? { OPENCODE_CONFIG_CONTENT: opencodeConfigContent }
+          ? { [isMiMoContent ? 'MIMOCODE_CONFIG_CONTENT' : 'OPENCODE_CONFIG_CONTENT']: opencodeConfigContent }
           : {}),
       }, agentLaunch);
       spawnedAgentEnv = env;
@@ -6827,10 +7341,8 @@ export async function startServer({
         args,
         env,
       });
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        processSpawnStartedAt: Date.now(),
-      };
+      lifecycle.mark('launch_preflight_end');
+      lifecycle.mark('process_spawn_start');
       child = spawn(invocation.command, invocation.args, {
         env,
         stdio: [stdinMode, 'pipe', 'pipe'],
@@ -6842,10 +7354,7 @@ export async function startServer({
         // breaks paths containing spaces (issue #315).
         windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        processSpawnedAt: Date.now(),
-      };
+      lifecycle.mark('process_spawned');
       run.child = child;
       run.childPid = typeof child.pid === 'number' ? child.pid : null;
       run.processGroupId =
@@ -6969,21 +7478,41 @@ export async function startServer({
       // a Claude Code (anthropic) chat from triggering OpenAI/gpt-4o-
       // mini extraction in the background just because the user has
       // an OpenAI key parked in media-config.
+      const memoryOptions = {
+        projectRoot: PROJECT_ROOT,
+        chatAgentId: typeof agentId === 'string' ? agentId : null,
+        chatModel: typeof safeModel === 'string' ? safeModel : null,
+      };
       void import('./memory-llm.js')
-        .then(({ extractWithLLM }) =>
-          extractWithLLM(
+        .then(({ extractWithLLM, distillAnnotationsToMemory }) => {
+          const generalPass = extractWithLLM(
             RUNTIME_DATA_DIR,
             {
               userMessage: userMsg,
               assistantMessage: captured,
             },
-              {
-                projectRoot: PROJECT_ROOT,
-                chatAgentId: typeof agentId === 'string' ? agentId : null,
-                chatModel: typeof safeModel === 'string' ? safeModel : null,
-              },
-            ),
-        )
+            memoryOptions,
+          );
+          // Auto-distill any inline preview feedback (comments / highlights /
+          // drawn marks) from this turn into durable feedback + rule memory.
+          // This closes the "interaction → memory" loop automatically: the
+          // agent no longer has to propose a rule and the user no longer has
+          // to click Keep — a review turn that carried annotations mines
+          // itself in the background and writes straight to the store.
+          const annotationPass =
+            safeCommentAttachments.length > 0
+              ? distillAnnotationsToMemory(
+                  RUNTIME_DATA_DIR,
+                  {
+                    annotations: safeCommentAttachments,
+                    userMessage: userMsg,
+                    assistantMessage: captured,
+                  },
+                  memoryOptions,
+                )
+              : Promise.resolve([]);
+          return Promise.allSettled([generalPass, annotationPass]);
+        })
         .catch((err) => console.warn('[memory-llm] background failed', err));
     });
 
@@ -7171,23 +7700,20 @@ export async function startServer({
     // be recorded for that failure mode. See PR #3412.
     let firstBufferedStdoutAt: number | null = null;
     // Tracks whether any stream the run is using actually emitted user-
-    // visible content. Only the streams routed through `sendAgentEvent`
-    // contribute to this flag; ACP sessions and plain stdout streams are
-    // covered by their own success/failure paths and the empty-output
-    // guard below skips them via `trackingSubstantiveOutput`.
+    // visible content or a deliverable. Only the streams routed through
+    // `sendAgentEvent` contribute to this flag; ACP sessions and plain stdout
+    // streams are covered by their own success/failure paths and the
+    // empty-output guard below skips them via `trackingSubstantiveOutput`.
     let agentProducedOutput = false;
     let trackingSubstantiveOutput = false;
-    // Event types that count as "the agent actually produced something the
-    // user can see." Lifecycle markers (`status`) and meter readings
-    // (`usage`) deliberately do NOT count — a model can emit token-usage
-    // numbers for an empty completion (issue #691), and a `status:running`
-    // banner without any follow-up is exactly the silent-failure shape we
-    // want to surface as failed instead of succeeded.
+    // Event types that count as "the agent actually produced a response or a
+    // deliverable." Lifecycle markers (`status`), meter readings (`usage`),
+    // reasoning deltas, and tool activity deliberately do NOT count: a run can
+    // think/read/call tools and still terminate before returning text/artifacts
+    // to the user. Treat that as empty output instead of a silent success
+    // (issues #691, #4814).
     const SUBSTANTIVE_AGENT_EVENT_TYPES = new Set([
       'text_delta',
-      'thinking_delta',
-      'tool_use',
-      'tool_result',
       'artifact',
     ]);
     // First-token timing must reflect when the user actually starts seeing
@@ -7203,10 +7729,8 @@ export async function startServer({
     ]);
     const noteFirstTokenAt = (timestamp = Date.now()) => {
       if (run.analyticsTelemetry?.firstTokenAt) return;
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        firstTokenAt: timestamp,
-      };
+      lifecycle.mark('first_token', timestamp);
+      lifecycle.mark('first_visible_output', timestamp);
     };
     // Subsegment markers inside `processSpawnedAt -> firstTokenAt` (#3408 §4).
     // `cliReadyAt` is the first well-formed adapter output and is stamped for
@@ -7450,6 +7974,18 @@ export async function startServer({
       // First well-formed decoded stream event = CLI ready for the
       // json-event-stream / qoder / pi-rpc families (#3408 §4 marker).
       noteCliReadyAt();
+      // Capture-style resume: codex reports its own thread id on the
+      // `thread.started` status event. Persist the most recent non-empty id we
+      // see so the create-turn store (and the resumable-failure store) use the
+      // CLI's real session handle, not the unused daemon-minted `newSessionId`.
+      if (
+        agentCapturesSessionId &&
+        ev?.type === 'status' &&
+        typeof ev.sessionId === 'string' &&
+        ev.sessionId.length > 0
+      ) {
+        capturedSessionId = ev.sessionId;
+      }
       lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
       noteAgentActivity();
       // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
@@ -7639,7 +8175,7 @@ export async function startServer({
         uploadRoot: UPLOAD_DIR,
       });
     } else if (def.streamFormat === 'acp-json-rpc') {
-      const acpStageTimeoutMs = resolveAcpStageTimeoutMs();
+      const acpStageTimeoutMs = resolveAcpStageTimeoutMs(def.inactivityTimeoutMs);
       acpSession = attachAcpSession({
         child,
         prompt: composed,
@@ -7648,7 +8184,13 @@ export async function startServer({
         imagePaths: def.supportsImagePaths ? amrStagedImages : [],
         mcpServers,
         envFormat: def.acpMcpEnvFormat ?? 'array',
+        executionProfile,
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
+        // Resume the prior upstream session (drives `session/load`) when the
+        // resume-identity guard says it is safe; otherwise a fresh session/new.
+        ...(def.resumesSessionViaAcpLoad === true && agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
+          ? { resumeSessionId: agentResumeCtx.resumeSessionId }
+          : {}),
         onCliReady: () => noteCliReadyAt(),
         onSessionInit: () => noteSessionInitDoneAt(),
         send: (event, data) => {
@@ -7658,19 +8200,47 @@ export async function startServer({
           noteAgentActivity();
           if (event === 'error') flushVisibleAgentStderr();
           if (def.id === 'amr' && event === 'error') {
-            const failure = classifyAmrAccountFailure(
-              [
-                typeof data?.message === 'string' ? data.message : '',
-                typeof data?.error?.message === 'string' ? data.error.message : '',
-                typeof data?.error?.code === 'string' ? data.error.code : '',
-                agentStdoutTail,
-                agentStderrTail,
-              ].join('\n'),
-            );
+            const failure = classifyAmrAccountFailureSignal({
+              details: data?.error?.details,
+              message: data?.message,
+              errorMessage: data?.error?.message,
+              errorCode: data?.error?.code,
+              stdoutTail: agentStdoutTail,
+              stderrTail: agentStderrTail,
+            });
             if (failure) {
               sendAmrAccountFailure(failure);
               return;
             }
+          }
+          // Hold back the `resume_failed` error so the same-turn reseed stays
+          // transparent. When this run is resuming an upstream session via
+          // `session/load` and the agent reports that session is gone, the ACP
+          // bridge has already called `fail()` -> `send('error')` for the failed
+          // load. The child-close handler then clears the stale handle and
+          // re-runs this turn fresh (the resume-target-missing block below), so
+          // forwarding this error would flash an execution failure — and trip
+          // clients that treat an SSE `error` as terminal — a beat before the
+          // invisible recovery. Suppress it and leave a diagnostic instead; the
+          // close handler is the sole authority on whether this turn ends in an
+          // error or a transparent reseed. The `resumeAutoReseeded` guard lets a
+          // second resume failure in one run fall through to the explicit
+          // "resend your message" affordance the close handler emits.
+          if (
+            event === 'error' &&
+            def.resumesSessionViaAcpLoad === true &&
+            agentResumeCtx.isResuming &&
+            agentResumeCtx.resumeSessionId &&
+            !run.resumeAutoReseeded &&
+            isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
+          ) {
+            design.runs.emit(run, 'diagnostic', {
+              type: 'agent_resume_failed_suppressed',
+              agent_id: def.id,
+              reason: 'resume_failed',
+              previous_session_id: agentResumeCtx.resumeSessionId ?? null,
+            });
+            return;
           }
           if (event === 'agent' && data?.type === 'text_delta' && typeof data.delta === 'string') {
             if (emitTitleFilteredGuardedTextDelta(data.delta)) {
@@ -7775,6 +8345,56 @@ export async function startServer({
       }
       revokeToolToken('child_exit');
       unregisterChatAgentEventSink();
+      // Resume-target-missing recovery runs BEFORE the generic fatal/stream-error
+      // short-circuits. The signal arrives differently per adapter: codex reports
+      // "no rollout found for thread id" as a stream `error` event, while AMR/vela
+      // reports a structured `resume_failed` JSON-RPC error that the ACP bridge
+      // turns into a FATAL. Either would otherwise be swallowed by the
+      // `fatal_rpc_error` / `stream_error` paths below and leave the dead session
+      // id stored — so every later turn would retry the same broken resume (#4275
+      // class). Clearing the stale handle here lets the next turn start fresh +
+      // re-seed the full transcript: one cold turn, never a broken conversation.
+      if (
+        !run.cancelRequested &&
+        (def.resumesSessionViaCli === true || def.resumesSessionViaAcpLoad === true) &&
+        agentResumeCtx.isResuming &&
+        run.conversationId &&
+        isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
+      ) {
+        // The resumed upstream session is gone (expired / pruned). Clear the dead
+        // handle and TRANSPARENTLY re-run this same turn with a fresh session +
+        // the full transcript rebuilt from the DB — exactly the pre-session-reuse
+        // path. The user sees one (slightly slower) turn, never an error or a
+        // "resend" prompt. Re-spawn reuses the same-run retry machinery; because
+        // the session row is now cleared, the re-spawn resolves isResuming=false
+        // (fresh session, full transcript), so it CANNOT resume-fail again — the
+        // `resumeAutoReseeded` guard is belt-and-suspenders against any loop.
+        clearAgentSession(db, run.conversationId, def.id);
+        if (!run.resumeAutoReseeded) {
+          run.resumeAutoReseeded = true;
+          run.resumeAutoReseededFrom = agentResumeCtx.resumeSessionId ?? null;
+          // Persisted to the per-run events.jsonl that the help → diagnostics
+          // export bundles, so the whole resume → fail → auto-reseed chain is
+          // visible in a support bundle without any user-facing signal.
+          design.runs.emit(run, 'diagnostic', {
+            type: 'agent_resume_auto_reseed',
+            agent_id: def.id,
+            reason: 'resume_failed',
+            previous_session_id: agentResumeCtx.resumeSessionId ?? null,
+            stale_session_cleared: true,
+          });
+          scheduleRetryRestart(0);
+          return;
+        }
+        // Unreachable in practice (the reseed runs fresh); if a second resume
+        // failure ever surfaces in one run, fall back to the explicit affordance.
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          'The previous session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
+          { retryable: true },
+        ));
+        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+      }
       if (acpSession?.hasFatalError()) {
         markRpcCloseReason('fatal_rpc_error');
         return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
@@ -7790,9 +8410,10 @@ export async function startServer({
         !run.cancelRequested
       ) {
         if (def.id === 'amr') {
-          const amrFailure = classifyAmrAccountFailure(
-            `${agentStderrTail}\n${agentStdoutTail}`,
-          );
+          const amrFailure = classifyAmrAccountFailureSignal({
+            stdoutTail: agentStdoutTail,
+            stderrTail: agentStderrTail,
+          });
           if (amrFailure) {
             sendAmrAccountFailure(amrFailure);
             return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
@@ -7810,26 +8431,6 @@ export async function startServer({
           ));
           return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
         }
-      }
-      if (
-        code !== 0 &&
-        !run.cancelRequested &&
-        def.resumesSessionViaCli === true &&
-        agentResumeCtx.isResuming &&
-        run.conversationId &&
-        isClaudeResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
-      ) {
-        // The stored session id no longer resolves (pruned / machine moved
-        // / ~/.claude cleared). Drop it so the next turn starts a fresh
-        // session seeded with the full transcript, and surface a retryable
-        // error rather than a confusing hard failure.
-        clearAgentSession(db, run.conversationId, def.id);
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'The previous Claude session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
-          { retryable: true },
-        ));
-        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
       }
       // Empty-output guard: a clean `code === 0` exit with no visible
       // output means the run silently finished without producing anything.
@@ -8036,7 +8637,7 @@ export async function startServer({
             send('error', createSseErrorPayload(
               openCodeFailure.code,
               openCodeFailure.message,
-              { retryable: true },
+              { retryable: openCodeFailure.retryable },
             ));
           } else {
             const rewritten = rewriteKnownAgentStreamError(
@@ -8115,10 +8716,52 @@ export async function startServer({
             agentId: def.id,
             sessionId: sessionPath,
             stablePromptHash: currentStableHash,
+            model: safeModel ?? null,
+            cwd: effectiveCwd,
+            lastMessageId: run.assistantMessageId ?? null,
           });
         }
       }
+      // ACP session/load adapters (AMR/vela) report a durable upstream handle
+      // from the ACP session; persist it (under the resume-identity guard) so
+      // the next turn resumes via session/load. A missing handle clears the row
+      // (so a fresh session is opened next turn), mirroring the capture-style
+      // adapters.
+      if (
+        def.resumesSessionViaAcpLoad === true &&
+        status === 'succeeded' &&
+        acpSession &&
+        typeof acpSession.getDurableSessionId === 'function'
+      ) {
+        persistCapturedAgentSession(db, {
+          conversationId: run.conversationId,
+          agentId: def.id,
+          sessionId: acpSession.getDurableSessionId(),
+          stablePromptHash: currentStableHash,
+          model: safeModel ?? null,
+          cwd: effectiveCwd,
+          lastMessageId: run.assistantMessageId ?? null,
+        });
+      }
       if (status === 'succeeded') {
+        try {
+          await snapshotAiHtmlVersionsBeforeSuccess();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const details = err instanceof AiHtmlVersionSnapshotError
+            ? { failures: err.failures }
+            : undefined;
+          send('error', createSseErrorPayload(
+            'HTML_VERSION_SNAPSHOT_FAILED',
+            message,
+            {
+              retryable: false,
+              ...(details ? { details } : {}),
+            },
+          ));
+          design.runs.finish(run, 'failed', 1, signal);
+          return;
+        }
         persistDeliveredAgentSessionState();
       }
       finishWithRetryDecision(status, code, signal);
@@ -8136,9 +8779,11 @@ export async function startServer({
     });
     if (writePromptToChildStdin && child.stdin) {
       const promptInputFormat = def.promptInputFormat ?? 'text';
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        modelCallStartAt: Date.now(),
+      lifecycle.mark('model_call_start');
+      lifecycle.mark('stdin_write_start');
+      const markStdinWriteEnd = (err?: Error | null) => {
+        if (err) return;
+        lifecycle.mark('stdin_write_end');
       };
       if (promptInputFormat === 'stream-json') {
         // Wrap the prompt as an Anthropic user message and write it as one
@@ -8155,7 +8800,7 @@ export async function startServer({
           },
         });
         try {
-          child.stdin.write(`${userMessage}\n`, 'utf8');
+          child.stdin.write(`${userMessage}\n`, 'utf8', markStdinWriteEnd);
         } catch (err) {
           // Swallow EPIPE here for the same reason as the listener above —
           // a fast-exiting child has already routed its failure through
@@ -8164,7 +8809,7 @@ export async function startServer({
         }
         run.stdinOpen = true;
       } else {
-        child.stdin.end(composed, 'utf8');
+        child.stdin.end(composed, 'utf8', markStdinWriteEnd);
       }
     }
   };

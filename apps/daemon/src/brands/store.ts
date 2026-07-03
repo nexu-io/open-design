@@ -16,10 +16,12 @@ import type { Brand, BrandMeta } from '@open-design/contracts';
 
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 
-type BrandMetaPatch = Partial<Omit<BrandMeta, 'error' | 'extractionTerminalRunId' | 'extractionTerminalError'>> & {
+type BrandMetaPatch = Partial<Omit<BrandMeta, 'error' | 'extractionTerminalRunId' | 'extractionTerminalError' | 'extractionRunId' | 'blockedReason'>> & {
   error?: string | undefined;
   extractionTerminalRunId?: string | undefined;
   extractionTerminalError?: string | undefined;
+  extractionRunId?: string | undefined;
+  blockedReason?: string | undefined;
 };
 
 /** True when `id` is a safe single-segment brand directory name. */
@@ -121,6 +123,8 @@ export function patchMeta(
     error: patchError,
     extractionTerminalRunId: patchExtractionTerminalRunId,
     extractionTerminalError: patchExtractionTerminalError,
+    extractionRunId: patchExtractionRunId,
+    blockedReason: patchBlockedReason,
     ...rest
   } = patch;
   const next: BrandMeta = { ...current, ...rest, updatedAt: Date.now() };
@@ -143,6 +147,20 @@ export function patchMeta(
       delete next.extractionTerminalError;
     } else {
       next.extractionTerminalError = patchExtractionTerminalError;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'extractionRunId')) {
+    if (patchExtractionRunId === undefined) {
+      delete next.extractionRunId;
+    } else {
+      next.extractionRunId = patchExtractionRunId;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'blockedReason')) {
+    if (patchBlockedReason === undefined) {
+      delete next.blockedReason;
+    } else {
+      next.blockedReason = patchBlockedReason;
     }
   }
   writeMeta(brandsRoot, id, next);

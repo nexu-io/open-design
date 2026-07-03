@@ -60,20 +60,20 @@ describe("resolveWinInstallIdentity", () => {
     });
   });
 
-  it("uses first-class nightly display identity for nightly release versions and namespaces", () => {
+  it("uses first-class prerelease display identity for prerelease release versions and namespaces", () => {
     expect(resolveWinInstallIdentity({
-      appVersion: "0.8.0.nightly.2",
+      appVersion: "0.8.0-prerelease.2",
       namespace: "release-stable-win",
     })).toMatchObject({
-      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design Nightly.exe",
-      displayName: "Open Design Nightly",
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design Prerelease.exe",
+      displayName: "Open Design Prerelease",
       registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-release-stable-win",
-      shortcutName: "Open Design Nightly.lnk",
-      uninstallerName: "Uninstall Open Design Nightly.exe",
+      shortcutName: "Open Design Prerelease.lnk",
+      uninstallerName: "Uninstall Open Design Prerelease.exe",
     });
-    expect(resolveWinInstallIdentity({ namespace: "release-nightly-win" })).toMatchObject({
-      displayName: "Open Design Nightly",
-      shortcutName: "Open Design Nightly.lnk",
+    expect(resolveWinInstallIdentity({ namespace: "release-prerelease-win" })).toMatchObject({
+      displayName: "Open Design Prerelease",
+      shortcutName: "Open Design Prerelease.lnk",
     });
   });
 

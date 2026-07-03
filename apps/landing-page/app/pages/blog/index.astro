@@ -13,7 +13,7 @@
 import { getCollection } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import GoogleAnalytics from '../../_components/google-analytics.astro';
+import SiteAnalytics from '../../_components/site-analytics.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
 import LazyImg from '../../_components/lazy-img.astro';
@@ -82,6 +82,62 @@ const categoryValue = (category: string) => category.toLowerCase().replace(/\s+/
 // ground, ink-black line-art, a single acid-green selection frame, and a soft 3D
 // design-tool object. Generated via the `od-site-illustration` skill.
 const postImages: Record<string, { src: string; alt: string }> = {
+  'how-to-use-claude-code-for-frontend-design': {
+    src: '/blog/how-to-use-claude-code-for-frontend-design-cover.webp',
+    alt: 'A warm editorial illustration of a terminal prompt becoming a polished UI screen on a tablet, with a design-system file card (DESIGN.md) held in a green selection frame connecting the two, beside soft plants and a coffee mug',
+  },
+  'ai-design-agents': {
+    src: '/blog/ai-design-agents-cover.webp',
+    alt: 'A warm editorial illustration of three groups of AI design-agent cards on a desk — creative assets, task helpers, and an agent-native pipeline — with the design-to-code agent card lifted out and held in a green selection frame, beside soft plants and a coffee mug',
+  },
+  'ai-prototyping-tools': {
+    src: '/blog/ai-prototyping-tools-cover.webp',
+    alt: 'A warm editorial illustration of a clickable mockup prototype and a running code prototype side by side on a desk, with the code prototype that becomes the shipped product held in a green selection frame, beside soft plants and a coffee mug',
+  },
+  'figma-alternatives': {
+    src: '/blog/figma-alternatives-cover.webp',
+    alt: 'A warm editorial illustration of several design-tool windows grouped into camps — an open-source canvas, a native app, an AI generator — with one option, a plain-text design-to-code pipeline, lifted out and held in a green selection frame, on a near-white paper desk with soft plants and a coffee mug',
+  },
+  'v0-alternatives': {
+    src: '/blog/v0-alternatives-cover.webp',
+    alt: 'A warm editorial illustration of a row of AI UI-generator cards on a desk, with one card — a UI component lifted into a code repo with no usage meter — held in a green selection frame, beside soft plants and a coffee mug',
+  },
+  'best-ai-design-tools': {
+    src: '/blog/best-ai-design-tools-cover.webp',
+    alt: 'A warm editorial illustration of a row of AI design-tool cards on a scorecard, with one card — a plain-text design file you can keep — lifted out and held in a green selection frame, on a near-white paper ground with soft plants and a coffee mug',
+  },
+  'bolt-new-alternatives': {
+    src: '/blog/bolt-new-alternatives-cover.webp',
+    alt: 'A warm editorial illustration of a row of AI app-builder cards on a desk, with one card — an open folder of portable files you own — lifted out and held in a green selection frame, beside soft plants and a coffee mug',
+  },
+  'design-to-code-tools': {
+    src: '/blog/design-to-code-tools-cover.webp',
+    alt: 'A warm editorial illustration of a design mockup flowing through an arrow into clean code, with the connecting design-system file card held in a green selection frame, on a near-white paper desk with soft plants and a coffee mug',
+  },
+  'lovable-alternatives': {
+    src: '/blog/lovable-alternatives-cover.webp',
+    alt: 'A warm editorial illustration of a row of prompt-to-app tool cards on a desk, with one card — plain files with no usage meter — lifted out and held in a green selection frame, beside soft plants and a coffee mug',
+  },
+  'open-design-0-13-0-stay-in-flow': {
+    src: '/blog/open-design-0-13-0-stay-in-flow-cover.webp',
+    alt: 'A clean editorial illustration of a design session that stays in flow — a row of wireframe workspace panels connected by one continuous unbroken thread, one panel held in a green selection frame with corner handles, on a near-white ground with a dot grid and a soft matte cursor',
+  },
+  'open-design-0-12-0-brand-backed-design-system': {
+    src: '/blog/open-design-0-12-0-brand-backed-design-system-cover.webp',
+    alt: 'A warm editorial illustration of a website becoming a design system — a browser window, a design-system kit card with color swatch dots and type samples, and a finished document — on a cream paper ground with soft plants and a coffee mug',
+  },
+  'open-design-0-11-0-the-bazaar': {
+    src: '/blog/open-design-0-11-0-the-bazaar-cover.webp',
+    alt: 'A warm editorial illustration of an open gallery of design template cards, each a small thumbnail with a play triangle, with a hand reaching to pick one, on a cream paper ground with soft plants and a coffee mug',
+  },
+  'open-design-osaka-kyoto-meetup': {
+    src: '/blog/open-design-osaka-kyoto-meetup-cover.webp',
+    alt: 'Open Design Osaka / Kyoto meetup cover showing Osaka and Kyoto landmarks built from code-like line art',
+  },
+  'open-design-shanghai-ai-workshop': {
+    src: '/blog/open-design-shanghai-ai-workshop-cover.webp',
+    alt: 'Open Design Shanghai AI Workshop cover showing Shanghai landmarks built from code-like line art',
+  },
   'what-is-vibe-design': {
     src: '/blog/what-is-vibe-design-cover.webp',
     alt: 'A hand-drawn pencil sketch of a planner app wishing for a calm space transforming, via an arrow, into a polished rendered planner UI, on a warm paper editorial ground',
@@ -144,6 +200,15 @@ const postImages: Record<string, { src: string; alt: string }> = {
   },
 };
 const getPostImage = (id: string) => postImages[id];
+// Prefer a per-locale readingTime when a localized bodyHtml differs in length
+// from the English body (mirrors the detail page in `[slug].astro`), so cards
+// on non-English blog indexes show an accurate estimate.
+const localizedReadingTime = (post: (typeof posts)[number]) =>
+  (
+    post.data as typeof post.data & {
+      i18n?: Record<string, { readingTime?: number }>;
+    }
+  ).i18n?.[locale]?.readingTime ?? post.data.readingTime;
 const localizedPostField = (
   post: (typeof posts)[number],
   field: 'title' | 'summary' | 'category',
@@ -182,7 +247,7 @@ const localizedPostField = (
       description={seoDescription}
       pathname={Astro.url.pathname}
     />
-    <GoogleAnalytics />
+    <SiteAnalytics />
   </head>
   <body>
     <div class='shell'>
@@ -235,7 +300,7 @@ const localizedPostField = (
                   <span class='blog-feature-meta'>
                     <span>{fmtDate(featuredPost.data.date)}</span>
                     <span>·</span>
-                    <span>{featuredPost.data.readingTime} {ui.blog.minRead}</span>
+                    <span>{localizedReadingTime(featuredPost)} {ui.blog.minRead}</span>
                     <span class='blog-feature-cta'>{ui.blog.readMore}</span>
                   </span>
                 </span>
@@ -301,7 +366,7 @@ const localizedPostField = (
                         <p class='blog-card-summary'>{localizedPostField(post, 'summary')}</p>
                         <span class='blog-card-foot'>
                           <span class='blog-card-date'>{fmtDate(post.data.date)}</span>
-                          <span class='blog-card-rt'>{post.data.readingTime} {ui.blog.minRead}</span>
+                          <span class='blog-card-rt'>{localizedReadingTime(post)} {ui.blog.minRead}</span>
                           <span class='blog-card-cta'>{ui.blog.read}</span>
                         </span>
                       </span>

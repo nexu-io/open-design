@@ -51,7 +51,6 @@ const AGENT_BIN_ENV_KEYS: Record<FakeAgentId, string> = {
 
 export const FAKE_AGENT_RUNTIME_IDS: FakeAgentId[] = [
   'claude',
-  'gemini',
   'opencode',
   'cursor-agent',
   'qwen',
@@ -172,6 +171,10 @@ async function emitRun(promptText) {
     await emitPluginAuthoringRun();
     return;
   }
+  if (promptText.includes('Create a deterministic plan document')) {
+    await emitPlanDocumentRun();
+    return;
+  }
   const isSlowReload = promptText.includes('Create a slow reload deterministic smoke artifact');
   const isDelayed = promptText.includes('Create a delayed deterministic smoke artifact');
   const isChunked = promptText.includes('Create a chunked deterministic smoke artifact');
@@ -238,6 +241,27 @@ async function emitPluginAuthoringRun() {
     'od plugin install --source: passed',
   ].join('\\n');
   emitSuccess(summary, false, false);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+async function emitPlanDocumentRun() {
+  await writeFileFs(
+    join(process.cwd(), 'plan.md'),
+    [
+      '# Deterministic Plan',
+      '',
+      '## Scope',
+      '- Confirm the target workflow.',
+      '- Draft the project milestones.',
+      '',
+      '## Risks',
+      '- Keep the plan editable before design handoff.',
+      '',
+    ].join('\\n'),
+    'utf8',
+  );
+  emitSuccess('Created plan.md with a deterministic planning outline.', false, false);
   process.exitCode = 0;
   exitSoon(0);
 }

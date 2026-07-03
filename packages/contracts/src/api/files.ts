@@ -32,6 +32,7 @@ export interface ProjectFileStubGuardWarning {
 export interface ProjectFile {
   name: string;
   path?: string;
+  localPath?: string;
   type?: 'file' | 'dir';
   size: number;
   mtime: number;
@@ -40,6 +41,7 @@ export interface ProjectFile {
   artifactKind?: ArtifactKind;
   artifactManifest?: ArtifactManifest;
   stubGuardWarning?: ProjectFileStubGuardWarning;
+  traceObjectReason?: 'new' | 'modified' | 'recovered';
 }
 
 export interface ProjectFolder {
@@ -52,6 +54,60 @@ export interface ProjectFolder {
 
 export interface ProjectFilesResponse {
   files: ProjectFile[];
+}
+
+export type ProjectFileVersionSource = 'ai' | 'manual' | 'restore';
+export type ProjectFileVersionPromptSource = 'message' | 'project' | 'manual' | 'restore';
+
+export interface ProjectFileVersion {
+  id: string;
+  fileName: string;
+  version: number;
+  label: string;
+  createdAt: number;
+  source: ProjectFileVersionSource;
+  prompt: string | null;
+  promptSource?: ProjectFileVersionPromptSource;
+  restoreFromVersionId?: string;
+  size: number;
+  mime: string;
+  kind: ProjectFileKind;
+  current: boolean;
+}
+
+export interface ProjectFileVersionsResponse {
+  file: ProjectFile;
+  versions: ProjectFileVersion[];
+}
+
+export interface ProjectFileVersionResponse {
+  version: ProjectFileVersion;
+  content: string;
+}
+
+export interface CreateProjectFileVersionRequest {
+  prompt?: string | null;
+  label?: string | null;
+  source?: ProjectFileVersionSource;
+}
+
+export interface CreateProjectFileVersionResponse {
+  version: ProjectFileVersion;
+}
+
+export interface RestoreProjectFileVersionRequest {
+  prompt?: string | null;
+}
+
+export interface ProjectFileVersionWarning {
+  code: 'PROJECT_FILE_VERSION_CAPTURE_FAILED';
+  message: string;
+}
+
+export interface RestoreProjectFileVersionResponse {
+  file: ProjectFile;
+  version: ProjectFileVersion | null;
+  versionWarning?: ProjectFileVersionWarning;
 }
 
 export interface ProjectFoldersResponse {
@@ -105,6 +161,7 @@ export interface ProjectPreviewUrlResponse {
 
 export interface ProjectFileResponse {
   file: ProjectFile;
+  versionWarning?: ProjectFileVersionWarning;
 }
 
 export interface ProjectFolderResponse {

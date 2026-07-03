@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "agent-skill-principal-ui-ux-architect-motion-choreographer-awwwards-tier-mqu4mbbj",
+  "title": "Agent Skill: Principal UI/UX Architect & Motion Choreographer (Awwwards-Tier)",
+  "version": "0.1.0",
+  "description": "--- name: high-end-visual-design description: Teaches the AI to design like a high-end agency. Defines the exact fonts, spacing, shadows, card structures, and animations that make a website feel expensive. Blocks all the",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

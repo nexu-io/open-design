@@ -10,12 +10,12 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import { releaseAppVersionArgs } from '@/vitest/packaged-release-version';
-import { startPackagedPayloadUpdateFixture, type PackagedPayloadUpdateFixture } from '@/vitest/packaged-payload-update-fixture';
 import {
   applyPackagedUpdateEnv,
   resolvePackagedUpdateScenario,
 } from '@/vitest/packaged-update-scenario';
 import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
+import { startToolsServeUpdaterFixture, type ToolsServeUpdaterFixture } from '@/vitest/tools-serve-updater-fixture';
 import { createDesktopHarness, STORAGE_KEY, waitFor } from '../lib/desktop/desktop-test-helpers.ts';
 
 const execFileAsync = promisify(execFile);
@@ -34,6 +34,7 @@ const verifyCoreOnly = smokeProfile === 'core';
 const updateMetadataUrl = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL);
 const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_VERSION);
 const updateBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH);
+const updateFixture = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE);
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'mac', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'mac', 'namespaces', namespace);
@@ -268,7 +269,7 @@ macDescribe('packaged mac runtime smoke', () => {
   test('installs, starts, inspects, stops, and uninstalls the built mac artifact', async () => {
     const report = await createPackagedSmokeReport('mac');
     const updateEnv = captureUpdateEnv();
-    let payloadFixture: PackagedPayloadUpdateFixture | null = null;
+    let payloadFixture: ToolsServeUpdaterFixture | null = null;
     let logs: LogsResult | { skipped: true } = { skipped: true };
     let popup: UpdaterPopupEvalValue | { skipped: true } = { skipped: true };
     let updateInstall: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
@@ -288,15 +289,18 @@ macDescribe('packaged mac runtime smoke', () => {
       let expectedPayloadUpdateVersion: string | null = updateVersion;
       if (!verifyCoreOnly) {
         if (updateMetadataUrl != null && updateMetadataUrl !== '') {
+          assertUpdateVersionPresent('mac', updateVersion);
           applyPackagedUpdateEnv(process.env, updateScenario, updateMetadataUrl, { openDryRun: false });
         } else {
+          assertToolsServeFixtureEnabled('mac', updateFixture);
           const localPayload = await resolveLocalPayloadUpdateFixture();
           expectedPayloadUpdateVersion = localPayload.targetVersion;
-          payloadFixture = await startPackagedPayloadUpdateFixture({
+          payloadFixture = await startToolsServeUpdaterFixture({
             channel: updateScenario.channel,
             payloadPath: localPayload.payloadPath,
             platform: 'mac',
             version: localPayload.targetVersion,
+            workspaceRoot,
           });
           applyPackagedUpdateEnv(process.env, updateScenario, payloadFixture.info.metadataUrl, { openDryRun: false });
         }
@@ -1452,6 +1456,18 @@ function resolveFallbackUpdateBuildJsonPath(): string | null {
   const mainBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_BUILD_JSON_PATH);
   if (mainBuildJsonPath == null || mainBuildJsonPath === '') return null;
   return join(dirname(resolveFromWorkspace(mainBuildJsonPath)), 'mac-tools-pack-update-build.json');
+}
+
+function assertToolsServeFixtureEnabled(platformName: string, value: string | null): void {
+  if (value === 'tools-serve') return;
+  throw new Error(
+    `full packaged ${platformName} payload smoke requires explicit tools-serve fixture; set OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE=tools-serve or provide OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL`,
+  );
+}
+
+function assertUpdateVersionPresent(platformName: string, value: string | null): asserts value is string {
+  if (value != null && value.length > 0) return;
+  throw new Error(`full packaged ${platformName} payload smoke requires an explicit update target version with external update metadata`);
 }
 
 async function readLatestMacYmlVersion(latestMacYmlPath: string): Promise<string | null> {

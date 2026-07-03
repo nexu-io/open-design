@@ -92,7 +92,13 @@ test('[P0] @critical entry chrome exposes the primary home creation surface and 
   await expect(page.locator('.entry-brand')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
   await expect(page.getByTestId('home-hero-plus-trigger')).toBeVisible();
-  await expect(page.getByTestId('home-hero-submit')).toBeDisabled();
+  // Empty input can still run the active placeholder-carousel suggestion.
+  await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
+  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-design-system-picker')).toBeVisible();
+  await expect(page.getByTestId('working-dir-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-section')).toBeVisible();
+  await expect(page.getByTestId('home-hero-blank-project')).toBeVisible();
   const createTabs = page.getByTestId('home-hero-type-tabs');
   await expect(createTabs).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-prototype')).toBeVisible();
@@ -174,13 +180,14 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-nav-integrations')).toBeVisible();
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-plugins')).toHaveCount(0);
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-integrations')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-section')).toBeVisible();
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
   await expect(page.getByTestId('home-hero-active-type-chip')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-rail-prototype')).toHaveAttribute('aria-selected', 'false');
   await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
-  await expect(page.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('plugins-home-pill-category-prototype')).toHaveAttribute('aria-selected', 'false');
+  await expect(page.getByTestId('home-templates-hint')).toBeVisible();
   await expect(page.getByTestId('plugins-home-row-subcategory-prototype')).toHaveCount(0);
 });
 
@@ -196,7 +203,9 @@ test('[P1] home view exposes the redesigned hero, recent projects, and starters'
   await expect(page.getByTestId('recent-projects-view-all')).toBeVisible();
   await expect(home.getByTestId('plugins-home-section')).toBeVisible();
   await expect(home.getByTestId('plugins-home-browse-registry')).toBeVisible();
+  await expect(home.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-templates-hint')).toHaveCount(0);
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
 
   await ensureRailOpen(page);
@@ -274,6 +283,9 @@ test('[P1] design systems page is reachable from entry nav and supports search, 
   await expect(page.getByTestId('design-system-card-agentic')).toHaveCount(0);
   await page.getByTestId('design-systems-surface-all').click();
 
+  // Master-detail: selecting a list row renders that system in the right
+  // preview pane, where the full-preview and "set as default" actions live.
+  await page.getByTestId('design-system-card-airbnb').click();
   await page.getByTestId('design-system-preview-airbnb').click();
   const preview = page.getByRole('dialog', { name: /Airbnb preview/i });
   await expect(preview).toBeVisible();
@@ -288,6 +300,58 @@ test('[P1] design systems page is reachable from entry nav and supports search, 
   await expect
     .poll(() => persistedConfigs.at(-1)?.designSystemId)
     .toBe('airbnb');
+});
+
+test('[P1] disabled design systems are filtered from entry creation surfaces', async ({ page }) => {
+  await routeDesignSystems(page);
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({ json: { ok: true } });
+      return;
+    }
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        json: {
+          config: {
+            onboardingCompleted: true,
+            agentId: 'mock',
+            skillId: null,
+            designSystemId: 'agentic',
+            disabledDesignSystems: ['airbnb'],
+            agentModels: {},
+            privacyDecisionAt: 1,
+            telemetry: { metrics: false, content: false, artifactManifest: false },
+          },
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await gotoEntryHome(page);
+  await page.getByTestId('home-hero-design-system-trigger').click();
+  const homePicker = page.getByTestId('project-ds-picker-popover');
+  await expect(homePicker.getByTestId('project-ds-picker-option-agentic')).toBeVisible();
+  await expect(homePicker.getByTestId('project-ds-picker-option-airbnb')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  const modal = page.getByTestId('new-project-modal');
+  await expect(modal).toBeVisible();
+  await modal.getByTestId('design-system-trigger').click();
+  await expect(modal.getByRole('option', { name: /Agentic/i })).toBeVisible();
+  await expect(modal.getByRole('option', { name: /Airbnb/i })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(modal).toHaveCount(0);
+
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-design-systems').click();
+  await page.getByRole('tab', { name: 'Official presets' }).click();
+  await expect(page.getByTestId('design-system-card-agentic')).toBeVisible();
+  await expect(page.getByTestId('design-system-card-airbnb')).toHaveCount(0);
 });
 
 test('[P2] entry chrome avoids horizontal overflow on compact desktop width', async ({ page }) => {
@@ -436,7 +500,7 @@ test('[P2] entry help menu exposes community links and topbar routes Use everywh
   );
   await expect(menu.getByRole('menuitem', { name: /Join Discord/i })).toHaveAttribute(
     'href',
-    'https://discord.gg/9ptkbbqRu',
+    'https://discord.gg/mHAjSMV6gz',
   );
 
   await page.getByTestId('entry-use-everywhere-button').click();
@@ -546,7 +610,7 @@ test('[P1] home starters can browse registry and use a starter from Home', async
   await expect(page.getByTestId('home-hero')).toBeVisible();
   // Community is a gallery now (no inline Use button): open the starter's
   // detail modal and use it. This starter ships an example query, so the
-  // primary Use button replicates (seeds the prompt) while binding it as the
+  // primary Use button loads the prompt while binding it as the
   // active driver; this case only asserts the active-plugin chip, which
   // appears on either Use variant.
   await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
@@ -717,6 +781,129 @@ test('[P1] home starters gallery card click opens the large preview detail modal
   await expect(page.getByTestId('plugin-details-use-community-gallery-plugin')).toBeVisible();
 });
 
+test('[P1] home starters gallery duplicate creates a project and exposes the returned file', async ({ page }) => {
+  const htmlPlugin = makeStarterPlugin({
+    id: 'duplicate-gallery-plugin',
+    title: 'Duplicate Gallery Plugin',
+    description: 'A gallery tile fixture that can be duplicated into a project.',
+    mode: 'prototype',
+    featured: true,
+    query: 'Build a {{topic}} prototype.',
+    inputs: [{ name: 'topic', type: 'string', default: 'duplicate gallery' }],
+    previewEntry: './example.html',
+  });
+  const duplicatedProject = {
+    id: 'duplicated-gallery-project',
+    name: 'Duplicate Gallery Plugin',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    metadata: {
+      kind: 'prototype',
+      templateId: 'plugin:duplicate-gallery-plugin',
+      templateLabel: 'Duplicate Gallery Plugin',
+      duplicatedFromPluginId: 'duplicate-gallery-plugin',
+      skipDiscoveryBrief: true,
+    },
+  };
+  const duplicateRequests: Array<{ name?: string }> = [];
+
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [htmlPlugin] } });
+  });
+  await page.route('**/api/plugins/duplicate-gallery-plugin/preview', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+      body: '<!doctype html><html><body><main><h1>Duplicate Gallery Preview</h1></main></body></html>',
+    });
+  });
+  await page.route('**/api/plugins/duplicate-gallery-plugin/duplicate-project', async (route) => {
+    duplicateRequests.push(route.request().postDataJSON() as { name?: string });
+    await route.fulfill({
+      json: {
+        ok: true,
+        sourcePluginId: 'duplicate-gallery-plugin',
+        projectId: duplicatedProject.id,
+        conversationId: 'duplicated-gallery-conversation',
+        relPath: 'example.html',
+        warnings: [],
+      },
+    });
+  });
+  await routeSingleProject(page, duplicatedProject, [
+    {
+      name: 'example.html',
+      path: 'example.html',
+      kind: 'html',
+      size: 92,
+      updatedAt: duplicatedProject.updatedAt,
+    },
+  ]);
+
+  await gotoEntryHome(page);
+  const home = await revealHomeTemplates(page);
+  const card = home.locator('article.plugins-home__card[data-plugin-id="duplicate-gallery-plugin"]');
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute('data-preview-kind', 'html');
+
+  await card
+    .getByTestId('plugins-home-duplicate-duplicate-gallery-plugin')
+    .first()
+    .dispatchEvent('click');
+
+  await expect
+    .poll(() => duplicateRequests.at(-1)?.name)
+    .toBe('Duplicate Gallery Plugin');
+  await expect(page).toHaveURL(/\/projects\/duplicated-gallery-project/);
+  await expect(page.getByText('example.html', { exact: true })).toBeVisible();
+});
+
+test('[P1] home starters gallery duplicate failure recovers without leaving Home', async ({ page }) => {
+  const htmlPlugin = makeStarterPlugin({
+    id: 'duplicate-failure-plugin',
+    title: 'Duplicate Failure Plugin',
+    description: 'A gallery tile fixture that fails duplicate.',
+    mode: 'prototype',
+    featured: true,
+    previewEntry: './example.html',
+  });
+  const duplicateRequests: Array<{ name?: string }> = [];
+
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [htmlPlugin] } });
+  });
+  await page.route('**/api/plugins/duplicate-failure-plugin/preview', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+      body: '<!doctype html><html><body><main><h1>Duplicate Failure Preview</h1></main></body></html>',
+    });
+  });
+  await page.route('**/api/plugins/duplicate-failure-plugin/duplicate-project', async (route) => {
+    duplicateRequests.push(route.request().postDataJSON() as { name?: string });
+    await route.fulfill({
+      status: 500,
+      json: { error: { code: 'duplicate-failed', message: 'fixture duplicate failure' } },
+    });
+  });
+
+  await gotoEntryHome(page);
+  const home = await revealHomeTemplates(page);
+  const card = home.locator('article.plugins-home__card[data-plugin-id="duplicate-failure-plugin"]');
+  await expect(card).toBeVisible();
+
+  const duplicateButton = card.getByTestId('plugins-home-duplicate-duplicate-failure-plugin').first();
+  await duplicateButton.dispatchEvent('click');
+
+  await expect
+    .poll(() => duplicateRequests.at(-1)?.name)
+    .toBe('Duplicate Failure Plugin');
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator('.home-hero__error')).toContainText('Could not duplicate this template.');
+  await expect(duplicateButton).not.toHaveAttribute('aria-busy', 'true');
+  await expect(duplicateButton).toBeEnabled();
+});
+
 test('[P2] home starters html details modal exposes header actions and closes from the close button', async ({ page }) => {
   const htmlPlugin = makeStarterPlugin({
     id: 'html-details-plugin',
@@ -883,12 +1070,12 @@ test('[P1] home starters Use plugin from the details modal applies the plugin to
   const dialog = page.getByRole('dialog', { name: /Detail Use Plugin preview/i });
   await expect(dialog).toBeVisible();
   // This fixture ships an example query, so the primary Use button now
-  // replicates (seeds the prompt). The structure-only path that keeps the
-  // composer freeform lives in the caret menu's "Use plugin only" option.
+  // loads the prompt. The structure-only path that keeps the
+  // composer freeform lives in the caret menu's "Use without prompt" option.
   await page.getByTestId('plugin-details-use-detail-use-plugin-menu').click();
   await page.getByTestId('plugin-details-use-option-detail-use-plugin').click();
   await expect(dialog).toHaveCount(0);
-  // "Use plugin only" routes the plugin as the active driver (its own pipeline
+  // "Use without prompt" routes the plugin as the active driver (its own pipeline
   // applies on submit) and surfaces the active-plugin chip, but does not
   // inject prompt text, so the editor stays empty.
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
@@ -915,12 +1102,12 @@ test('[P0] @critical home starters Use-plugin-only routes the plugin as the acti
   const applyResponsePromise = page.waitForResponse('**/api/plugins/localized-plugin/apply');
   // Community is a gallery (no inline Use button): open the starter's detail
   // modal and use it from there. This starter ships an example query, so the
-  // primary Use button now replicates (seeds the prompt) — the structure-only
-  // freeform path lives in the caret menu's "Use plugin only" option.
+  // primary Use button now loads the prompt — the structure-only
+  // freeform path lives in the caret menu's "Use without prompt" option.
   await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
   await page.getByTestId('plugin-details-use-localized-plugin-menu').click();
   await page.getByTestId('plugin-details-use-option-localized-plugin').click();
-  // "Use plugin only" routes the starter as the active driver (active-plugin
+  // "Use without prompt" routes the starter as the active driver (active-plugin
   // chip) without seeding the prompt; the user can still type their own brief.
   await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
   await expect(input).toHaveText('');
@@ -972,8 +1159,8 @@ test('[P1] home starters route the picked plugin as the active driver from its d
   const starterCard = page.locator('[data-plugin-id="localized-plugin"]').first();
   await starterCard.scrollIntoViewIfNeeded();
   // Community is a gallery: open the starter's detail modal and use it. This
-  // starter ships an example query, so the primary Use button replicates and
-  // binds the plugin as the active driver (active-plugin chip); this case only
+  // starter ships an example query, so the primary Use button loads the prompt
+  // and binds the plugin as the active driver (active-plugin chip); this case only
   // asserts that chip, which appears on either Use variant.
   await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i);
   await page.getByTestId('plugin-details-use-localized-plugin').click();
@@ -997,8 +1184,8 @@ test('[P0] @critical home starters Use with query carries the hydrated starter p
   const input = page.getByTestId('home-hero-input');
   const home = await revealHomeTemplates(page);
   // Use the starter from its detail modal (gallery has no inline Use). This
-  // starter ships an example query, so the primary Use button replicates: it
-  // routes the plugin as the active run driver AND seeds the hydrated prompt.
+  // starter ships an example query, so the primary Use button loads the prompt:
+  // it routes the plugin as the active run driver AND seeds the hydrated prompt.
   // We still fill the same brief explicitly to keep the assertion robust to the
   // async apply→seed roundtrip (the value is identical either way).
   await openHomePluginDetails(page, 'localized-plugin', /Localized Plugin/i, home);
@@ -1162,12 +1349,10 @@ test('[P0] @critical required home plugin prompt parameters gate submit and bind
   expect(applyBodies.at(-1)?.inputs).toMatchObject(body.pluginInputs ?? {});
 });
 
-test('[P0] @critical home Ask mode creates a chat conversation without the default design router plugin', async ({ page }) => {
+test('[P0] @critical home composer routes free-form prompts through the design router by default', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await page.getByTestId('session-mode-trigger').click();
-  await page.getByRole('menuitemradio', { name: 'Ask mode' }).click();
-  await expect(page.getByTestId('session-mode-trigger')).toContainText('Ask');
+  await expect(page.getByTestId('session-mode-trigger')).toHaveAttribute('aria-label', 'Design mode');
 
   const input = page.getByTestId('home-hero-input');
   const prompt =
@@ -1187,8 +1372,8 @@ test('[P0] @critical home Ask mode creates a chat conversation without the defau
   };
   expect(body.name).toBe('Infographic 5 Habits Effective Code Reviewers');
   expect(body.pendingPrompt).toBe(prompt);
-  expect(body.conversationMode).toBe('chat');
-  expect(body.pluginId).toBeUndefined();
+  expect(body.conversationMode).toBe('design');
+  expect(body.pluginId).toBe('od-default');
   expect(body.metadata?.kind).toBe('other');
 });
 
@@ -1293,7 +1478,7 @@ test('[P0] @critical home hero input keeps Shift+Enter as a newline and submits 
   const input = page.getByTestId('home-hero-input');
   const submit = page.getByTestId('home-hero-submit');
 
-  await expect(submit).toBeDisabled();
+  await expect(submit).toBeEnabled();
   await input.click();
   await input.fill('Line one');
   await input.press('Shift+Enter');
@@ -1346,12 +1531,56 @@ test('[P1] home hero @ mention picker opens and Enter applies the highlighted pl
   await expect(input).toHaveText('@Localized Plugin');
 });
 
+test('[P1] disabled skills are filtered from the home hero mention picker', async ({ page }) => {
+  await page.route('**/api/skills', async (route) => {
+    await route.fulfill({
+      json: {
+        skills: [
+          skillSummary('enabled-home-skill', 'Enabled Home Skill', 'prototype', 'web', []),
+          skillSummary('disabled-home-skill', 'Disabled Home Skill', 'prototype', 'web', []),
+        ],
+      },
+    });
+  });
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          agentId: 'mock',
+          skillId: null,
+          disabledSkills: ['disabled-home-skill'],
+          agentModels: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+        },
+      },
+    });
+  });
+
+  await gotoEntryHome(page);
+
+  const input = page.getByTestId('home-hero-input');
+  await input.click();
+  await input.fill('@skill');
+
+  const picker = page.getByTestId('home-hero-plugin-picker');
+  await expect(picker).toBeVisible();
+  await picker.getByRole('tab', { name: /Skills/i }).click();
+  await expect(picker.getByRole('option', { name: /Enabled Home Skill/i })).toBeVisible();
+  await expect(picker.getByRole('option', { name: /Disabled Home Skill/i })).toHaveCount(0);
+});
+
 test('[P0] @critical home hero attachment input stages files, enables submit, and supports removal', async ({ page }) => {
   await gotoEntryHome(page);
 
   const input = page.getByTestId('home-hero-file-input');
   const submit = page.getByTestId('home-hero-submit');
-  await expect(submit).toBeDisabled();
+  await expect(submit).toBeEnabled();
 
   await input.setInputFiles({
     name: 'brief.txt',
@@ -1366,7 +1595,7 @@ test('[P0] @critical home hero attachment input stages files, enables submit, an
 
   await page.getByRole('button', { name: /Remove brief\.txt/i }).click();
   await expect(staged).toHaveCount(0);
-  await expect(submit).toBeDisabled();
+  await expect(submit).toBeEnabled();
 });
 
 test('[P0] @critical home hero attachment-only submit uploads the file and sends it with the first message', async ({ page }) => {
@@ -1545,6 +1774,80 @@ async function createProject(page: Page, name: string) {
   return response.json() as Promise<{ project: { id: string; name: string } }>;
 }
 
+async function routeSingleProject(
+  page: Page,
+  project: {
+    id: string;
+    name: string;
+    createdAt: number;
+    updatedAt: number;
+    metadata?: Record<string, unknown>;
+  },
+  files: Array<{ name: string; path: string; kind: string; size: number; updatedAt: number }>,
+) {
+  await page.route(`**/api/projects/${project.id}`, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({ json: { project } });
+  });
+  await page.route(`**/api/projects/${project.id}/files`, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({ json: { files } });
+  });
+  await page.route(`**/api/projects/${project.id}/conversations`, async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { conversations: [] } });
+      return;
+    }
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        json: {
+          conversation: {
+            id: `${project.id}-conversation`,
+            projectId: project.id,
+            title: null,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+  for (const file of files) {
+    await page.route(`**/api/projects/${project.id}/files/${file.path}`, async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        json: {
+          file: {
+            ...file,
+            content: '<!doctype html><html><body><h1>Duplicated project</h1></body></html>',
+          },
+        },
+      });
+    });
+    await page.route(`**/api/projects/${project.id}/raw/${file.path}`, async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><html><body><h1>Duplicated project</h1></body></html>',
+      });
+    });
+  }
+}
+
 async function routeDesignSystems(page: Page) {
   await page.route('**/api/design-systems', async (route) => {
     if (route.request().method() === 'GET') {
@@ -1631,6 +1934,35 @@ function makeApplyResult(
       status: 'fresh',
     },
     projectMetadata: {},
+  };
+}
+
+function skillSummary(
+  id: string,
+  name: string,
+  mode: 'prototype' | 'deck' | 'image',
+  surface: 'web' | 'image',
+  defaultFor: string[],
+) {
+  return {
+    id,
+    name,
+    description: `${name} fixture for entry coverage.`,
+    triggers: [],
+    mode,
+    surface,
+    platform: 'desktop',
+    scenario: 'qa',
+    previewType: 'html',
+    designSystemRequired: mode !== 'image',
+    defaultFor,
+    upstream: null,
+    featured: null,
+    fidelity: null,
+    speakerNotes: null,
+    animations: null,
+    hasBody: true,
+    examplePrompt: '',
   };
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@open-design/host",
-  "version": "0.11.1",
+  "version": "0.12.1",
   "private": true,
   "type": "module",
   "description": "Open Design renderer host bridge protocol.",
@@ -27,6 +27,9 @@
     "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/release": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

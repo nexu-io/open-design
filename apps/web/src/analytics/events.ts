@@ -13,6 +13,8 @@ import type {
   PluginReplacementModalSurfaceViewProps,
   PluginDetailModalSurfaceViewProps,
   PluginImportModalSurfaceViewProps,
+  ProjectReferenceModalSurfaceViewProps,
+  FigmaHelpModalSurfaceViewProps,
   DesignSystemsTemplatesModalSurfaceViewProps,
   AssistantFeedbackReasonPanelSurfaceViewProps,
   QuestionsFormSurfaceViewProps,
@@ -51,6 +53,11 @@ import type {
   DesignSystemsTemplatesModalClickProps,
   DesignSystemsTemplatesModalSharePopoverClickProps,
   DesignSystemsCreateClickProps,
+  DesignSystemsPresetBrandPickerClickProps,
+  DesignSystemsPresetBrandPickerSurfaceViewProps,
+  DesignSystemEnrichClickProps,
+  DesignSystemEnrichResultProps,
+  DesignSystemEditClickProps,
   IntegrationsTabClickProps,
   IntegrationsMcpTabClickProps,
   IntegrationsConnectorsTabClickProps,
@@ -80,6 +87,9 @@ import type {
   HandoffClickProps,
   PresentPopoverClickProps,
   ShareOptionPopoverClickProps,
+  FileVersionModalClickProps,
+  FileVersionModalSurfaceViewProps,
+  FileVersionRestoreResultProps,
   AssistantFeedbackButtonClickProps,
   AssistantFeedbackClickProps,
   AssistantFeedbackReasonClickProps,
@@ -107,6 +117,7 @@ import type {
   RunCreatedProps,
   RunFinishedProps,
   FileUploadResultProps,
+  ContextLinkResultProps,
   ArtifactExportResultProps,
   ArtifactDeployResultProps,
   FeedbackSubmitResultProps,
@@ -199,6 +210,20 @@ export function trackPluginDetailModalSurfaceView(
 export function trackPluginImportModalSurfaceView(
   track: Track,
   props: PluginImportModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackProjectReferenceModalSurfaceView(
+  track: Track,
+  props: ProjectReferenceModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackFigmaHelpModalSurfaceView(
+  track: Track,
+  props: FigmaHelpModalSurfaceViewProps,
 ): void {
   send(track, 'surface_view', props);
 }
@@ -494,6 +519,41 @@ export function trackDesignSystemsCreateClick(
   send(track, 'ui_click', props);
 }
 
+export function trackDesignSystemsPresetBrandPickerClick(
+  track: Track,
+  props: DesignSystemsPresetBrandPickerClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDesignSystemsPresetBrandPickerSurfaceView(
+  track: Track,
+  props: DesignSystemsPresetBrandPickerSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackDesignSystemEnrichClick(
+  track: Track,
+  props: DesignSystemEnrichClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDesignSystemEnrichResult(
+  track: Track,
+  props: DesignSystemEnrichResultProps,
+): void {
+  send(track, 'design_system_enrich_result', props);
+}
+
+export function trackDesignSystemEditClick(
+  track: Track,
+  props: DesignSystemEditClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
 export function trackIntegrationsTabClick(
   track: Track,
   props: IntegrationsTabClickProps,
@@ -674,6 +734,20 @@ export function trackShareOptionPopoverClick(
   send(track, 'ui_click', props, options);
 }
 
+export function trackFileVersionModalClick(
+  track: Track,
+  props: FileVersionModalClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackFileVersionModalSurfaceView(
+  track: Track,
+  props: FileVersionModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
 // ---- ui_click (feedback) -------------------------------------------------
 
 export function trackAssistantFeedbackButtonClick(
@@ -841,6 +915,13 @@ export function trackFileUploadResult(
   send(track, 'file_upload_result', props, options);
 }
 
+export function trackContextLinkResult(
+  track: Track,
+  props: ContextLinkResultProps,
+): void {
+  send(track, 'context_link_result', props);
+}
+
 export function trackArtifactExportResult(
   track: Track,
   props: ArtifactExportResultProps,
@@ -855,6 +936,13 @@ export function trackArtifactDeployResult(
   options?: { requestId?: string },
 ): void {
   send(track, 'artifact_deploy_result', props, options);
+}
+
+export function trackFileVersionRestoreResult(
+  track: Track,
+  props: FileVersionRestoreResultProps,
+): void {
+  send(track, 'file_version_restore_result', props);
 }
 
 export function trackFeedbackSubmitResult(

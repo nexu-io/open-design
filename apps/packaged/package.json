@@ -1,6 +1,6 @@
 {
   "name": "@open-design/packaged",
-  "version": "0.11.1",
+  "version": "0.12.1",
   "private": true,
   "type": "module",
   "main": "./dist/index.mjs",
@@ -28,6 +28,7 @@
     "@open-design/desktop": "workspace:*",
     "@open-design/launcher-proto": "workspace:*",
     "@open-design/platform": "workspace:*",
+    "@open-design/release": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
     "@open-design/web": "workspace:*"

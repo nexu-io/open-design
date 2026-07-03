@@ -23,6 +23,8 @@ import type {
   ChatSseStartPayload,
   DaemonAgentPayload,
   AmrModelsResponse,
+  AmrWalletSnapshot,
+  ByokChatProviderConfig,
   MediaExecutionPolicy,
   ResearchOptions,
   RunContextSelection,
@@ -56,6 +58,17 @@ import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observabil
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
 const HIGH_INPUT_TOKEN_WARNING_THRESHOLD = 200_000;
+const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
+const API_MODE_AGENT_IDS = new Set([
+  'anthropic-api',
+  'openai-api',
+  'azure-openai-api',
+  'google-gemini-api',
+  'ollama-cloud-api',
+  'senseaudio-api',
+  'aihubmix-api',
+  'bedrock-api',
+]);
 
 export function latestUserPromptFromHistory(history: ChatMessage[]): string {
   for (let i = history.length - 1; i >= 0; i -= 1) {
@@ -136,11 +149,21 @@ function scopeHistoryToAgent(history: ChatMessage[], targetAgentId?: string): Ch
   if (!targetAgentId) return history;
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const message = history[i];
-    if (message?.role === 'assistant' && message.agentId && message.agentId !== targetAgentId) {
+    if (
+      message?.role === 'assistant' &&
+      message.agentId &&
+      !isSameTranscriptAgentFamily(message.agentId, targetAgentId)
+    ) {
       return history.slice(i + 1);
     }
   }
   return history;
+}
+
+function isSameTranscriptAgentFamily(agentId: string, targetAgentId: string): boolean {
+  if (agentId === targetAgentId) return true;
+  if (targetAgentId !== BYOK_OPENCODE_AGENT_ID) return false;
+  return API_MODE_AGENT_IDS.has(agentId);
 }
 
 // Strip OD-specific markup that the agent emitted on a prior turn but
@@ -281,6 +304,8 @@ export interface DaemonStreamOptions {
   // options and falls back to the CLI default when missing.
   model?: string | null;
   reasoning?: string | null;
+  byokProvider?: ByokChatProviderConfig;
+  byokMediaDefaults?: ChatRequest['byokMediaDefaults'];
   research?: ResearchOptions;
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
@@ -369,7 +394,7 @@ function shouldSuppressLifecycleExitFallback(
 }
 
 const AMR_OPENCODE_INCOMPLETE_MESSAGE =
-  'AMR/OpenCode started, but the run did not complete. Please retry or check the run details for the session stream error.';
+  'Open Design started, but the run did not complete. Please retry or check the run details for the session stream error.';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -453,10 +478,10 @@ function formatOpenCodeSessionError(value: unknown): string | null {
     return message;
   }
   if (statusCode === 404) {
-    return 'The model service returned 404 Not Found for the configured runtime endpoint. Check the AMR Link URL or model route.';
+    return 'The model service returned 404 Not Found for the configured runtime endpoint. Check the Open Design link URL or model route.';
   }
   if (statusCode === 401 || statusCode === 403) {
-    return 'AMR authentication failed. Please sign in again or refresh the runtime key.';
+    return 'Open Design authentication failed. Please sign in again or refresh the runtime key.';
   }
   if (statusCode === 429) {
     return 'The model service rejected the request due to quota or rate limits. Retry later or check quota and rate limits.';
@@ -584,6 +609,8 @@ export async function streamViaDaemon({
   commentAttachments,
   model,
   reasoning,
+  byokProvider,
+  byokMediaDefaults,
   research,
   context,
   appliedPluginSnapshotId,
@@ -620,6 +647,8 @@ export async function streamViaDaemon({
     commentAttachments: commentAttachments ?? [],
     model: model ?? null,
     reasoning: reasoning ?? null,
+    ...(byokProvider ? { byokProvider } : {}),
+    ...(byokMediaDefaults ? { byokMediaDefaults } : {}),
     locale,
     ...(appliedPluginSnapshotId ? { appliedPluginSnapshotId } : {}),
     ...(context ? { context } : {}),
@@ -748,6 +777,47 @@ export interface VelaUser {
   name?: string;
   image?: string | null;
   plan?: string;
+  /** Wallet balance (USD, string) from the live `/api/v1/me` projection; `null` when unknown. */
+  balanceUsd?: string | null;
+}
+
+/**
+ * Format a raw wallet `balanceUsd` string (e.g. "12.3") into a display string
+ * (e.g. "$12.30"). Returns `null` when the balance is unknown/unparseable so
+ * callers can simply hide the balance area.
+ */
+export function formatVelaBalanceUsd(raw?: string | null): string | null {
+  if (raw == null || raw === '') return null;
+  const amount = Number(raw);
+  if (!Number.isFinite(amount)) return null;
+  return `$${amount.toFixed(2)}`;
+}
+
+/** Top subscription tier — no upgrade affordance is shown at/above this. */
+export const VELA_TOP_PLAN_TIER = 'max';
+
+/**
+ * Whether to surface an "Upgrade" affordance for the given plan tier. True for
+ * a KNOWN tier below the top (free/plus/pro); false at the top tier AND when
+ * the plan is unknown. The unknown case matters: a signed-in session whose live
+ * billing summary has not resolved yet has no plan, and treating that as
+ * upgradeable would flash an Upgrade CTA at top-tier users until billing loads.
+ */
+export function canUpgradeVelaPlan(plan?: string | null): boolean {
+  const normalized = plan?.trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized !== VELA_TOP_PLAN_TIER;
+}
+
+/**
+ * Live billing projection (plan tier + wallet balance) for the signed-in
+ * account, surfaced on its OWN field rather than on {@link VelaUser} so
+ * env-backed sessions (where `user` is null) can show plan/balance without a
+ * fabricated identity. Absent means unknown → hide the fields.
+ */
+export interface VelaLiveAccount {
+  plan?: string;
+  balanceUsd?: string | null;
 }
 
 export interface VelaLoginStatus {
@@ -755,6 +825,7 @@ export interface VelaLoginStatus {
   loginInFlight?: boolean;
   profile: string;
   user: VelaUser | null;
+  account?: VelaLiveAccount;
   configPath: string;
   // Device-authorization details parsed from `vela login` output while a login
   // is in flight, so the UI can offer a manual sign-in link when the browser
@@ -775,6 +846,17 @@ export async function fetchVelaLoginStatus(): Promise<VelaLoginStatus | null> {
     const resp = await fetch('/api/integrations/vela/status');
     if (!resp.ok) return null;
     return (await resp.json()) as VelaLoginStatus;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchAmrWalletSnapshot(options: { refresh?: boolean } = {}): Promise<AmrWalletSnapshot | null> {
+  try {
+    const query = options.refresh ? '?refresh=1' : '';
+    const resp = await fetch(`/api/integrations/vela/wallet${query}`, { cache: 'no-store' });
+    if (!resp.ok) return null;
+    return (await resp.json()) as AmrWalletSnapshot;
   } catch {
     return null;
   }
@@ -968,7 +1050,19 @@ async function consumeDaemonRun({
       let sawStreamProgress = false;
 
       while (true) {
-        const { value, done } = await reader.read();
+        let readResult: ReadableStreamReadResult<Uint8Array>;
+        try {
+          readResult = await reader.read();
+        } catch (err) {
+          // Only catch reader.read() failures — a broken SSE connection
+          // (tab backgrounded, proxy idle timeout, network drop). Parsing
+          // and handler invocations stay OUTSIDE this catch so local
+          // processing bugs surface through the existing outer error path.
+          if ((err as Error).name === 'AbortError') throw err;
+          try { reader.cancel(); } catch {}
+          break;
+        }
+        const { value, done } = readResult;
         if (done) break;
         buf += decoder.decode(value, { stream: true });
         let idx: number;

@@ -13,7 +13,7 @@ import {
   it,
 } from 'vitest';
 
-import { readAppConfig, writeAppConfig } from '../src/app-config.js';
+import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { isLocalSameOrigin } from '../src/origin-validation.js';
 
 // Default telemetry preference applied when an existing config has no
@@ -304,6 +304,27 @@ describe('app-config', () => {
       expect(cfg.agentModels).toBeUndefined();
     });
 
+    it('clears retired Gemini agent preferences from stored config', async () => {
+      await writeFile(path.join(dataDir, 'app-config.json'), JSON.stringify({
+        agentId: 'gemini',
+        agentModels: {
+          gemini: { model: 'gemini-2.5-pro' },
+          codex: { model: 'gpt-5-codex' },
+        },
+        agentCliEnv: {
+          gemini: { GEMINI_BIN: '~/bin/gemini' },
+        },
+      }));
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.agentId).toBeUndefined();
+      expect(cfg.agentModels).toEqual({
+        codex: { model: 'gpt-5-codex' },
+      });
+      expect(cfg.agentCliEnv).toBeUndefined();
+    });
+
     it('persists supported per-agent CLI env keys and drops everything else', async () => {
       await writeAppConfig(dataDir, {
         agentCliEnv: {
@@ -327,11 +348,14 @@ describe('app-config', () => {
             OPENCODE_TEST_HOME: '  ~/.open-design-amr-opencode  ',
             HOME: 'should-not-persist',
           },
+          opencode: {
+            OPENCODE_BIN: '  ~/bin/opencode  ',
+          },
+          'byok-opencode': {
+            OPENCODE_BIN: '  ~/bin/byok-opencode  ',
+          },
           'trae-cli': {
             TRAE_CLI_BIN: '  ~/bin/traecli-public  ',
-          },
-          gemini: {
-            GEMINI_API_KEY: 'should-not-persist',
           },
           __proto__: {
             CLAUDE_CONFIG_DIR: 'bad',
@@ -350,7 +374,11 @@ describe('app-config', () => {
           OPEN_DESIGN_AMR_PROFILE: 'local',
           OPENCODE_TEST_HOME: '~/.open-design-amr-opencode',
         },
+        opencode: { OPENCODE_BIN: '~/bin/opencode' },
         'trae-cli': { TRAE_CLI_BIN: '~/bin/traecli-public' },
+      });
+      expect(agentCliEnvForAgent(cfg.agentCliEnv, 'byok-opencode')).toEqual({
+        OPENCODE_BIN: '~/bin/opencode',
       });
     });
 

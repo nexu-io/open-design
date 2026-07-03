@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
-import { access, cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
+import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -283,4 +284,56 @@ export async function buildWinLauncherPayloadArchive(
     await rm(overlayRoot, { force: true, recursive: true });
   });
   return timings;
+}
+
+function requirePayloadManifestValue(value: unknown, name: string, expected: unknown): void {
+  if (value !== expected) {
+    throw new Error(`launcher payload manifest ${name} expected ${JSON.stringify(expected)} but got ${JSON.stringify(value)}`);
+  }
+}
+
+function archiveRelativePath(value: string): string {
+  if (value.length === 0 || isAbsolute(value) || value.includes("..")) {
+    throw new Error(`unsafe launcher payload relative path: ${value}`);
+  }
+  return value.replaceAll("/", "\\").replaceAll("\\", "\\");
+}
+
+export async function validateWinLauncherPayloadArchive(input: {
+  expectedVersion: string;
+  namespace: string;
+  payloadPath: string;
+  workspaceRoot: string;
+}): Promise<{ manifest: WinLauncherPayloadManifest; payloadPath: string; valid: true }> {
+  if (process.platform !== "win32") throw new Error("Windows launcher payload validation must run on Windows");
+  const payloadPath = isAbsolute(input.payloadPath) ? input.payloadPath : resolve(input.workspaceRoot, input.payloadPath);
+  if (!(await stat(payloadPath).then((entry) => entry.isFile()).catch(() => false))) {
+    throw new Error(`Windows launcher payload archive not found: ${payloadPath}`);
+  }
+
+  const extractRoot = await mkdtemp(join(tmpdir(), "od-win-payload-"));
+  try {
+    await execFileAsync(winResources.sevenZipExe, ["x", payloadPath, `-o${extractRoot}`, "-y"], {
+      windowsHide: true,
+    });
+    const manifest = JSON.parse(await readFile(join(extractRoot, "manifest.json"), "utf8")) as WinLauncherPayloadManifest;
+    const expectedChannel = resolveToolPackLauncherChannel({
+      appVersion: input.expectedVersion,
+      namespace: input.namespace,
+    });
+    requirePayloadManifestValue(manifest.schemaVersion, "schemaVersion", LAUNCHER_SCHEMA_VERSION);
+    requirePayloadManifestValue(manifest.channel, "channel", expectedChannel);
+    requirePayloadManifestValue(manifest.namespace, "namespace", input.namespace);
+    requirePayloadManifestValue(manifest.version, "version", input.expectedVersion);
+    requirePayloadManifestValue(manifest.platform, "platform", "win32");
+    requirePayloadManifestValue(manifest.payloadRoot, "payloadRoot", "payload");
+    requirePayloadManifestValue(manifest.entry?.cwd, "entry.cwd", "payload");
+    requirePayloadManifestValue(manifest.entry?.executable, "entry.executable", "payload/Open Design.exe");
+
+    await stat(join(extractRoot, archiveRelativePath("payload/Open Design.exe")));
+    await stat(join(extractRoot, archiveRelativePath("payload/resources/open-design-config.json")));
+    return { manifest, payloadPath, valid: true };
+  } finally {
+    await rm(extractRoot, { force: true, recursive: true });
+  }
 }

@@ -12,6 +12,7 @@ interface FakeMessage {
   content: string;
   attachments?: Array<Record<string, unknown>>;
   producedFiles?: Array<Record<string, unknown>>;
+  traceObjectFiles?: Array<Record<string, unknown>>;
 }
 
 function makeDb(messagesByConvo: Record<string, FakeMessage[]> = {}) {
@@ -385,6 +386,82 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       { slug: 'style.css', type: 'code', sizeBytes: 800 },
     ]);
     expect(trace.metadata.success).toBe(true);
+  });
+
+  it('collects runtime diagnostic agent events into Langfuse observations', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: false },
+    });
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response('{}', { status: 207 }));
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [
+            {
+              id: 'msg-1',
+              role: 'assistant',
+              content: '',
+              producedFiles: [],
+            },
+          ],
+        }),
+        dataDir,
+        run: makeRun({
+          agentId: 'amr',
+          events: [
+            {
+              id: 1,
+              event: 'agent',
+              timestamp: Date.now() - 100,
+              data: {
+                type: 'diagnostic',
+                name: 'acp_artifact_text_suppression',
+                source: 'acp-json-rpc',
+                reason: 'artifact_echo',
+                suppressedChars: 4096,
+                openedBlocks: 1,
+                closedBlocks: 1,
+                fileCount: 1,
+                files: ['index.html'],
+              },
+            },
+          ] as any,
+        }) as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    const init = fetchSpy.mock.calls[0]![1] as RequestInit;
+    const batch = JSON.parse(init.body as string).batch as any[];
+    expect(
+      bodyOf(batch, 'event-create', 'agent-diagnostic:acp_artifact_text_suppression'),
+    ).toMatchObject({
+      input: {
+        source: 'amr',
+        event_type: 'diagnostic',
+      },
+      output: {
+        name: 'acp_artifact_text_suppression',
+        source: 'acp-json-rpc',
+        reason: 'artifact_echo',
+        suppressed_chars: 4096,
+        opened_blocks: 1,
+        closed_blocks: 1,
+        file_count: 1,
+        files: ['index.html'],
+      },
+      metadata: {
+        diagnostic_name: 'acp_artifact_text_suppression',
+      },
+    });
   });
 
   it('marks trace-safe object manifests partial when object accounting is incomplete', async () => {
@@ -776,6 +853,89 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
       status: 'ok',
       stored_in_open_design: true,
     });
+  });
+
+  it('uploads modified existing files from traceObjectFiles and records object summary metadata', async () => {
+    await writeAppCfg({
+      installationId: 'install-uuid-1',
+      telemetry: { metrics: true, content: true, artifactManifest: true },
+    });
+    const projectDir = path.join(dataDir, 'projects', 'proj-1');
+    await mkdir(projectDir, { recursive: true });
+    await writeFile(path.join(projectDir, 'existing.html'), '<!doctype html><h1>modified</h1>');
+    const uploadedFilenames: string[] = [];
+    const fetchSpy = vi.fn(async (url: string, init: RequestInit) => {
+      if (url.includes('/api/objects/authorize')) {
+        return new Response(JSON.stringify({ upload_token: 'upload-token' }), { status: 200 });
+      }
+      if (url.includes('/api/objects/batch')) {
+        const parsed = JSON.parse(init.body as string) as {
+          objects: Array<{ storage_ref: string; filename: string; content_base64: string }>;
+        };
+        uploadedFilenames.push(...parsed.objects.map((object) => object.filename));
+        return new Response(
+          JSON.stringify({
+            objects: parsed.objects.map((object) => ({
+              storage_ref: object.storage_ref,
+              status: 'available',
+              size_bytes: Buffer.from(object.content_base64, 'base64').byteLength,
+              sha256: 'sha256:uploaded-artifact',
+            })),
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response('{}', { status: 207 });
+    });
+
+    process.env.OPEN_DESIGN_OBJECT_RELAY_URL = 'https://telemetry.open-design.ai/api/objects/batch';
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk';
+    process.env.LANGFUSE_SECRET_KEY = 'sk';
+    try {
+      await reportRunCompletedFromDaemon({
+        db: makeDbWithListMessages({
+          'conv-1': [
+            { id: 'user-1', role: 'user', content: 'Update the existing page.' },
+            {
+              id: 'msg-1',
+              role: 'assistant',
+              content: 'done',
+              producedFiles: [],
+              traceObjectFiles: [
+                {
+                  name: 'existing.html',
+                  kind: 'html',
+                  size: 34,
+                  traceObjectReason: 'modified',
+                },
+              ],
+            },
+          ],
+        }),
+        dataDir,
+        run: makeRun() as any,
+        fetchImpl: fetchSpy as any,
+      });
+    } finally {
+      delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
+      delete process.env.LANGFUSE_PUBLIC_KEY;
+      delete process.env.LANGFUSE_SECRET_KEY;
+    }
+
+    expect(uploadedFilenames).toEqual(['existing.html']);
+    const finalBatch = JSON.parse(fetchSpy.mock.calls.at(-1)![1]!.body as string).batch as any[];
+    expect(finalBatch[0].body.metadata.trace_object_summary).toEqual({
+      new_file_count: 0,
+      modified_file_count: 1,
+      recovered_file_count: 0,
+      candidate_file_count: 1,
+      uploaded_file_count: 1,
+      skipped_file_count: 0,
+      skip_reasons: {},
+    });
+    expect(finalBatch[0].body.metadata.artifacts).toEqual([
+      { slug: 'existing.html', type: 'html', sizeBytes: 34 },
+    ]);
   });
 
   it('derives manifest completeness from merged uploaded and fallback manifests', async () => {
@@ -1731,6 +1891,9 @@ function makeDbWithListMessages(messagesByConvo: Record<string, FakeMessage[]>) 
             commentAttachmentsJson: null,
             producedFilesJson: m.producedFiles
               ? JSON.stringify(m.producedFiles)
+              : null,
+            traceObjectFilesJson: m.traceObjectFiles
+              ? JSON.stringify(m.traceObjectFiles)
               : null,
             createdAt: 0,
             startedAt: null,

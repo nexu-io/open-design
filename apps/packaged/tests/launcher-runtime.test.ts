@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
 import { LAUNCHER_SCHEMA_VERSION, resolveLauncherVersionPaths } from "@open-design/launcher-proto";
 import { describe, expect, it } from "vitest";
@@ -40,6 +40,7 @@ describe("resolvePackagedLauncherRuntime", () => {
 
       expect(runtime.source).toBe("current-package");
       expect(runtime.config).toBe(config);
+      expect(runtime.electronNodeCommand).toBeNull();
       expect(runtime.installedLaunchPath).toEqual(expect.any(String));
       expect(runtime.launcherPaths.runtimePath).toBe(
         join(root, "launcher", "channels", "beta", "namespaces", "release-beta", "runtime.json"),
@@ -129,6 +130,7 @@ describe("resolvePackagedLauncherRuntime", () => {
       const runtime = await resolvePackagedLauncherRuntime(config, paths);
 
       expect(runtime.source).toBe("payload");
+      expect(runtime.electronNodeCommand).toBeNull();
       expect(runtime.installedLaunchPath).toBe("/Applications/Open Design Beta.app");
       expect(runtime.targetVersion).toBe("1.2.3-beta.5");
       expect(runtime.config.appVersion).toBe("1.2.3-beta.5");
@@ -151,6 +153,84 @@ describe("resolvePackagedLauncherRuntime", () => {
         active: { generation: 1, version: "1.2.3-beta.5" },
         lastSuccessful: { generation: 1, version: "1.2.3-beta.5" },
       });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("uses the Windows payload executable as the Electron-as-Node command when payload Node is absent", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-packaged-launcher-win-payload-"));
+    try {
+      const config = fakeConfig(root, "1.2.3-beta.4");
+      const paths = resolvePackagedNamespacePaths(config);
+      const versionPaths = resolveLauncherVersionPaths({
+        channel: "beta",
+        namespace: config.namespace,
+        root,
+        version: "1.2.3-beta.5",
+      });
+      const resourcesPath = join(versionPaths.versionRoot, "payload", "resources");
+      const payloadExePath = join(versionPaths.versionRoot, "payload", "Open Design.exe");
+      const webStandaloneRoot = join(resourcesPath, "open-design-web-standalone");
+      await mkdir(join(resourcesPath, "prebundled", "daemon"), { recursive: true });
+      await mkdir(join(resourcesPath, "prebundled", "web"), { recursive: true });
+      await mkdir(webStandaloneRoot, { recursive: true });
+      await mkdir(join(versionPaths.versionRoot, "payload"), { recursive: true });
+      await writeFile(payloadExePath, "");
+      await writeFile(join(resourcesPath, "prebundled", "daemon", "daemon-sidecar.mjs"), "");
+      await writeFile(join(resourcesPath, "prebundled", "web", "web-sidecar.mjs"), "");
+      await writeFile(
+        join(resourcesPath, "open-design-config.json"),
+        `${JSON.stringify({
+          appVersion: "1.2.3-beta.5",
+          daemonSidecarEntryRelative: "prebundled/daemon/daemon-sidecar.mjs",
+          webOutputMode: "standalone",
+          webSidecarEntryRelative: "prebundled/web/web-sidecar.mjs",
+        })}\n`,
+      );
+      await writeFile(
+        versionPaths.manifestPath,
+        `${JSON.stringify({
+          channel: "beta",
+          entry: {
+            cwd: "payload",
+            executable: "payload/Open Design.exe",
+          },
+          namespace: config.namespace,
+          payloadRoot: "payload",
+          platform: "win32",
+          schemaVersion: LAUNCHER_SCHEMA_VERSION,
+          version: "1.2.3-beta.5",
+        })}\n`,
+      );
+      await mkdir(join(paths.installationRoot, "launcher", "channels", "beta", "namespaces", config.namespace), { recursive: true });
+      await writeFile(
+        join(paths.installationRoot, "launcher", "channels", "beta", "namespaces", config.namespace, "runtime.json"),
+        `${JSON.stringify({
+          active: { generation: 1, version: "1.2.3-beta.5" },
+          channel: "beta",
+          lastSuccessful: { generation: 0, version: "1.2.3-beta.4" },
+          namespace: config.namespace,
+          schemaVersion: LAUNCHER_SCHEMA_VERSION,
+        })}\n`,
+      );
+
+      const runtime = await resolvePackagedLauncherRuntime(config, paths);
+
+      expect(runtime.source).toBe("payload");
+      expect(runtime.config.nodeCommand).toBeNull();
+      if (process.platform === "win32") {
+        expect(runtime.electronNodeCommand).not.toBe(payloadExePath);
+        expect(runtime.electronNodeCommand).toContain(`${sep}en${sep}`);
+        await expect(readFile(runtime.electronNodeCommand ?? "", "utf8")).resolves.toBe("");
+        expect(runtime.config.webStandaloneRoot).not.toBe(webStandaloneRoot);
+        expect(runtime.config.webStandaloneRoot).toContain(`${sep}ws${sep}`);
+      } else {
+        expect(runtime.electronNodeCommand).toBe(payloadExePath);
+        expect(runtime.config.webStandaloneRoot).toBe(webStandaloneRoot);
+      }
+      expect(runtime.config.daemonSidecarEntry).toBe(join(resourcesPath, "prebundled", "daemon", "daemon-sidecar.mjs"));
+      expect(runtime.config.webSidecarEntry).toBe(join(resourcesPath, "prebundled", "web", "web-sidecar.mjs"));
     } finally {
       await rm(root, { force: true, recursive: true });
     }

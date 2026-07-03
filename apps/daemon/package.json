@@ -1,6 +1,6 @@
 {
   "name": "@open-design/daemon",
-  "version": "0.11.1",
+  "version": "0.12.1",
   "private": true,
   "type": "module",
   "main": "./dist/cli.js",
@@ -39,6 +39,7 @@
     "@open-design/diagnostics": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/plugin-runtime": "workspace:*",
+    "@open-design/release": "workspace:*",
     "@open-design/registry-protocol": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
@@ -49,9 +50,12 @@
     "chokidar": "5.0.0",
     "express": "5.2.1",
     "jszip": "3.10.1",
+    "kiwi-schema": "0.5.0",
     "multer": "2.1.1",
     "node-pty": "1.1.0",
+    "pdf-lib": "1.17.1",
     "posthog-node": "5.34.6",
+    "pptxgenjs": "4.0.1",
     "prom-client": "15.1.3",
     "tar": "7.5.15",
     "undici": "7.25.0"

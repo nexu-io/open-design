@@ -179,4 +179,46 @@ describe('encodeOdEventForAgui', () => {
     );
     expect(out).toBeNull();
   });
+
+  it('falls back to Date.now() when ctx.now is not supplied', () => {
+    const before = Date.now();
+    const out = encodeOdEventForAgui(
+      { kind: 'message_chunk', text: 'hi' },
+      { runId: RUN_ID },
+    );
+    const after = Date.now();
+    expect(out).not.toBeNull();
+    expect(out!.ts).toBeGreaterThanOrEqual(before);
+    expect(out!.ts).toBeLessThanOrEqual(after);
+  });
+
+  it('substitutes defaults for tool_call when toolName/args/callId are absent', () => {
+    const out = encodeOdEventForAgui(
+      { kind: 'tool_call' },
+      { runId: RUN_ID, now: NOW },
+    );
+    expect(out).toMatchObject({
+      kind: 'tool_call',
+      runId: RUN_ID,
+      ts: NOW,
+      toolName: 'unknown',
+      args: null,
+    });
+    const record = out as unknown as Record<string, unknown>;
+    expect(record.callId).toBeUndefined();
+    expect(record.status).toBeUndefined();
+    expect(record.result).toBeUndefined();
+  });
+
+  it('keeps the value key on state_update when the value is explicitly null', () => {
+    const out = encodeOdEventForAgui(
+      { kind: 'state_update', path: 'genui.x', value: null },
+      { runId: RUN_ID, now: NOW },
+    );
+    expect(out).not.toBeNull();
+    const record = out as unknown as Record<string, unknown>;
+    expect('value' in record).toBe(true);
+    expect(record.value).toBeNull();
+    expect(record.path).toBe('genui.x');
+  });
 });
