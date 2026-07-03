@@ -1205,6 +1205,26 @@ export function switchApiProtocolConfig(
   );
 }
 
+export function byokProviderSelectionPatch(
+  provider: { custom?: boolean; baseUrl: string; model: string },
+  providerChanged: boolean,
+): Partial<ApiProtocolConfig> {
+  if (provider.custom) {
+    return {
+      apiCredentialSource: 'user',
+      apiProviderBaseUrl: null,
+      ...(providerChanged ? { model: '' } : {}),
+    };
+  }
+  return {
+    apiCredentialSource: 'user',
+    ...(providerChanged ? { apiKey: '' } : {}),
+    baseUrl: provider.baseUrl,
+    model: provider.model,
+    apiProviderBaseUrl: provider.baseUrl,
+  };
+}
+
 export function SettingsDialog({
   initial,
   agents,
@@ -1849,18 +1869,16 @@ export function SettingsDialog({
       );
       if (provider.custom) {
         applyDraftUiState(undefined);
-        return updateCurrentApiProtocolConfig(switchedWithCurrentDraft, {
-          apiProviderBaseUrl: null,
-          ...(providerChanged ? { model: '' } : {}),
-        });
+        return updateCurrentApiProtocolConfig(
+          switchedWithCurrentDraft,
+          byokProviderSelectionPatch(provider, providerChanged),
+        );
       }
       applyDraftUiState(undefined);
-      return updateCurrentApiProtocolConfig(switchedWithCurrentDraft, {
-        ...(providerChanged ? { apiKey: '' } : {}),
-        baseUrl: provider.baseUrl,
-        model: provider.model,
-        apiProviderBaseUrl: provider.baseUrl,
-      });
+      return updateCurrentApiProtocolConfig(
+        switchedWithCurrentDraft,
+        byokProviderSelectionPatch(provider, providerChanged),
+      );
     });
   };
   const updateApiConfig = (patch: Partial<ApiProtocolConfig>) =>

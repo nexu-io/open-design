@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   agentRefreshOptionsForConfig,
   amrWalletValueLabel,
+  byokProviderSelectionPatch,
   canCacheProviderModels,
   canFetchProviderModels,
   canRunProviderConnectionTest,
@@ -232,6 +233,41 @@ describe('SettingsDialog API protocol switching', () => {
       apiKey: 'openai-key',
       baseUrl: 'https://openai-proxy.example.com',
       model: 'openai-model',
+    });
+  });
+
+  it('forces user credential mode when selecting a BYOK provider from deployment-only OpenAI', () => {
+    const deploymentOnlyConfig: AppConfig = {
+      ...baseConfig,
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'deployment-model',
+      apiProviderBaseUrl: null,
+      apiProtocolConfigs: {},
+    };
+
+    const next = updateCurrentApiProtocolConfig(
+      deploymentOnlyConfig,
+      byokProviderSelectionPatch({
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o',
+      }, true),
+    );
+
+    expect(next).toMatchObject({
+      apiProtocol: 'openai',
+      apiCredentialSource: 'user',
+      apiKey: '',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+    expect(next.apiProtocolConfigs?.openai).toMatchObject({
+      apiCredentialSource: 'user',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
     });
   });
 

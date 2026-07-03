@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Express } from 'express';
 import type { RouteDeps } from '../server-context.js';
 import { seedProviderIfMissing } from '../media/config.js';
@@ -83,9 +82,6 @@ function deploymentProxyRunMetadataBody(proxyBody: Partial<ProxyStreamRequest>):
   const body = proxyBody as Record<string, unknown>;
   return {
     ...body,
-    projectId: body.projectId ?? 'proxy',
-    providerRunId: body.providerRunId ?? `proxy:${randomUUID()}`,
-    providerOperationId: body.providerOperationId ?? `chat:${randomUUID()}`,
     providerRunPurpose: body.providerRunPurpose ?? 'chat-completion',
   };
 }
@@ -386,14 +382,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         });
         if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
         if (deploymentProfile) {
-          const fallbackRunId = `connection-test:${protocol}:${randomUUID()}`;
           const runMetadata = await deploymentProviderRunMetadata(
             deploymentProfile,
             {
               ...(body as Record<string, unknown>),
-              projectId: body.projectId ?? 'connection-test',
-              providerRunId: body.providerRunId ?? fallbackRunId,
-              providerOperationId: body.providerOperationId ?? fallbackRunId,
               providerRunPurpose: body.providerRunPurpose ?? 'connection-test',
             },
             controller.signal,
