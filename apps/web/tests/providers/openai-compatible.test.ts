@@ -17,8 +17,8 @@ describe('isOpenAICompatible', () => {
   });
 
   it('routes MiniMax Anthropic endpoint paths away from OpenAI-compatible chat completions', () => {
-    expect(isOpenAICompatible('MiniMax-M2.7-highspeed', 'https://api.minimaxi.com/v1/anthropic')).toBe(false);
-    expect(isOpenAICompatible('MiniMax-M2.7-highspeed', 'https://api.minimaxi.com/anthropic/v1')).toBe(false);
+    expect(isOpenAICompatible('MiniMax-M2.7-highspeed', 'https://api.minimax.io/v1/anthropic')).toBe(false);
+    expect(isOpenAICompatible('MiniMax-M2.7-highspeed', 'https://api.minimax.io/anthropic/v1')).toBe(false);
   });
 
   it('lets explicit OpenAI models win when only the host name contains anthropic', () => {

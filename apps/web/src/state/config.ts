@@ -145,7 +145,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
   {
     label: 'MiniMax — Anthropic',
     protocol: 'anthropic',
-    baseUrl: 'https://api.minimaxi.com/anthropic',
+    baseUrl: 'https://api.minimax.io/anthropic',
     model: 'MiniMax-M2.7-highspeed',
     models: [
       'MiniMax-M2.7-highspeed',
@@ -318,7 +318,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
   {
     label: 'MiniMax — OpenAI',
     protocol: 'openai',
-    baseUrl: 'https://api.minimaxi.com/v1',
+    baseUrl: 'https://api.minimax.io/v1',
     model: 'MiniMax-M2.7-highspeed',
     models: [
       'MiniMax-M2.7-highspeed',

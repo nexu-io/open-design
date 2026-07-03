@@ -40,7 +40,7 @@ export function isOpenAICompatible(model: string, baseUrl: string): boolean {
   // Explicit OpenAI-compatible providers/models should win even when a host or
   // unrelated path segment happens to contain the word "anthropic".
   if (u.includes('xiaomimimo.com/v1')) return true;
-  if (u.includes('api.minimaxi.com/v1')) return true;
+  if (u.includes('api.minimax.io/v1')) return true;
   if (u.includes('api.deepseek')) return true;
   if (u.includes('api.groq')) return true;
   if (u.includes('api.together')) return true;

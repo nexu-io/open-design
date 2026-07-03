@@ -387,8 +387,8 @@ describe('API proxy routes', () => {
       'https://api.deepseek.com/anthropic/v1/messages',
     ],
     [
-      'https://api.minimaxi.com/anthropic',
-      'https://api.minimaxi.com/anthropic/v1/messages',
+      'https://api.minimax.io/anthropic',
+      'https://api.minimax.io/anthropic/v1/messages',
     ],
     [
       'https://token-plan-cn.xiaomimimo.com/anthropic',
