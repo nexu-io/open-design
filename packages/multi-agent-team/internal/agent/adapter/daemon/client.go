@@ -88,14 +88,20 @@ func (c *Client) ListDesignSystems(ctx context.Context) ([]DesignSystem, error) 
 }
 
 // ChatRequest daemon /api/chat 请求体
-// 对齐 daemon 协议字段：agentId、skillIds、designSystemId
+// 对齐 daemon 协议字段：agentId、skillIds、designSystemId、projectId 等
 type ChatRequest struct {
-	Message string   `json:"message"`
-	AgentId string   `json:"agentId"`                  // 指定使用的 Agent 运行时 ID
-	Skills  []string `json:"skillIds,omitempty"`       // daemon 接受的技能 ID 列表
-	Designs string   `json:"designSystemId,omitempty"` // daemon 契约: string | null，发送第一个选中项
-	Model   string   `json:"model,omitempty"`
-	Stream  bool     `json:"stream"`
+	Message          string   `json:"message"`
+	AgentId          string   `json:"agentId"`                    // 指定使用的 Agent 运行时 ID
+	Skills           []string `json:"skillIds,omitempty"`         // daemon 接受的技能 ID 列表
+	Designs          string   `json:"designSystemId,omitempty"`   // daemon 契约: string | null，发送第一个选中项
+	Model            string   `json:"model,omitempty"`
+	Stream           bool     `json:"stream"`
+	ProjectId        string   `json:"projectId,omitempty"`        // 项目 ID（/api/chat 需要）
+	ConversationId   string   `json:"conversationId,omitempty"`   // 会话 ID
+	AssistantMsgId   string   `json:"assistantMessageId,omitempty"`
+	ClientRequestId  string   `json:"clientRequestId,omitempty"`
+	Attachments      []string `json:"attachments,omitempty"`
+	Locale           string   `json:"locale,omitempty"`
 }
 
 // ChatEvent daemon SSE chat 流中的事件

@@ -5415,6 +5415,7 @@ export async function startServer({
       research,
       context,
       titleGeneration,
+      team,
     } = chatBody;
     lifecycle.mark('prompt_build_start');
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
@@ -5453,6 +5454,16 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    // Multi-agent team: when a team selection is present, record it on the
+    // run so downstream consumers (run history, analytics) can distinguish
+    // team-orchestrated runs from single-agent runs. The actual multi-agent
+    // orchestration is handled by the multi-agent team module which calls
+    // back to /api/chat for individual agent execution.
+    if (team && typeof team === 'object' && team.id) {
+      run.teamMode = team.mode;
+      run.teamName = team.name;
+      run.teamAssignments = team.assignments;
+    }
     // Validate the checked-in `inactivityTimeoutMs` hint immediately
     // after the runtime def is selected and before any side-effectful
     // setup (auto-memory extract, `.mcp.json` write/unlink,
