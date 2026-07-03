@@ -1,5 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { sanitizeRepoName, GITHUB_URL_RE, SAFE_NAME_RE } from '../src/library-install.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+import {
+  containsSymlink,
+  sanitizeRepoName,
+  GITHUB_URL_RE,
+  SAFE_NAME_RE,
+} from '../src/library-install.js';
 
 describe('sanitizeRepoName', () => {
   it('extracts repo name from a github URL', () => {
@@ -79,5 +88,56 @@ describe('SAFE_NAME_RE', () => {
     expect(SAFE_NAME_RE.test('foo bar')).toBe(false);
     expect(SAFE_NAME_RE.test('测试')).toBe(false);
     expect(SAFE_NAME_RE.test('repo!')).toBe(false);
+  });
+});
+
+describe('containsSymlink', () => {
+  // A freshly cloned third-party extension must not carry symlinks: the daemon's
+  // design-system / skill readers follow them, so a committed `DESIGN.md ->
+  // /etc/passwd` would exfiltrate arbitrary files. installFromGithub rejects a
+  // clone when this returns true.
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'od-contains-symlink-'));
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('returns false for a plain tree with files and nested directories', async () => {
+    await writeFile(path.join(root, 'DESIGN.md'), '# ok');
+    await mkdir(path.join(root, 'assets'), { recursive: true });
+    await writeFile(path.join(root, 'assets', 'logo.svg'), '<svg/>');
+    expect(await containsSymlink(root)).toBe(false);
+  });
+
+  it('detects a top-level symlink', async () => {
+    await writeFile(path.join(root, 'secret-target'), 'x');
+    await symlink(path.join(root, 'secret-target'), path.join(root, 'evil.md'));
+    expect(await containsSymlink(root)).toBe(true);
+  });
+
+  it('detects a symlink nested in a subdirectory', async () => {
+    await mkdir(path.join(root, 'a', 'b'), { recursive: true });
+    await symlink('/etc/hostname', path.join(root, 'a', 'b', 'link.txt'));
+    expect(await containsSymlink(root)).toBe(true);
+  });
+
+  it('detects a symlink that points at a directory without following it', async () => {
+    // A symlinked dir must be flagged, not descended into (following it could
+    // recurse outside the tree).
+    const outside = await mkdtemp(path.join(tmpdir(), 'od-symlink-outside-'));
+    try {
+      await symlink(outside, path.join(root, 'linked-dir'));
+      expect(await containsSymlink(root)).toBe(true);
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('returns false for a missing directory', async () => {
+    expect(await containsSymlink(path.join(root, 'does-not-exist'))).toBe(false);
   });
 });
