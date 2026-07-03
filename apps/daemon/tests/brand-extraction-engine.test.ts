@@ -25,7 +25,6 @@ import {
   renderBrandPreviewIntoProject,
   startBrandExtraction,
 } from '../src/brands/index.js';
-import { findChrome } from '../src/brands/chrome.js';
 import { patchMeta } from '../src/brands/store.js';
 import { ensureLogoFallback } from '../src/brands/logo-fallback.js';
 import { brandFromMaterial } from '../src/brands/provisional.js';
@@ -254,21 +253,6 @@ describe('agent-driven brand extraction engine', () => {
   afterEach(() => {
     closeDatabase();
     rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it('keeps the system Chrome fallback disabled unless explicitly opted in', () => {
-    const previousAllow = process.env.OD_BRAND_ALLOW_SYSTEM_CHROME;
-    const previousChrome = process.env.BRANDING_AGENT_CHROME;
-    delete process.env.OD_BRAND_ALLOW_SYSTEM_CHROME;
-    delete process.env.BRANDING_AGENT_CHROME;
-    try {
-      expect(findChrome()).toBeNull();
-    } finally {
-      if (previousAllow === undefined) delete process.env.OD_BRAND_ALLOW_SYSTEM_CHROME;
-      else process.env.OD_BRAND_ALLOW_SYSTEM_CHROME = previousAllow;
-      if (previousChrome === undefined) delete process.env.BRANDING_AGENT_CHROME;
-      else process.env.BRANDING_AGENT_CHROME = previousChrome;
-    }
   });
 
   it('prefers source-backed human brand tokens over script/debug color noise', () => {

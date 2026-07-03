@@ -22,7 +22,6 @@ import path from 'node:path';
 
 import type { BrandImagerySample } from '@open-design/contracts';
 
-import { chromeDumpDom, findChrome } from './chrome.js';
 import { fetchExternalBrandAsset } from './safe-fetch.js';
 
 const UA =
@@ -361,21 +360,8 @@ export async function harvestSiteImagery(
     return [];
   }
 
-  let html = await fetchText(siteUrl);
-  let refs = html ? findImageRefs(html, siteUrl) : [];
-  // JS-rendered sites often inject hero <img>/srcset at runtime. When the
-  // static HTML is thin and a headless Chrome is available, re-harvest from the
-  // rendered DOM (mirrors the prefetch path). Best-effort and skipped offline.
-  if (refs.length < MIN_SAMPLES && findChrome()) {
-    const dom = await chromeDumpDom(siteUrl);
-    if (dom) {
-      html = dom;
-      const merged = findImageRefs(dom, siteUrl);
-      const seen = new Set(refs.map((r) => r.url));
-      for (const r of merged) if (!seen.has(r.url)) refs.push(r);
-      refs.sort((a, b) => a.rank - b.rank);
-    }
-  }
+  const html = await fetchText(siteUrl);
+  const refs = html ? findImageRefs(html, siteUrl) : [];
   if (refs.length === 0) return [];
 
   const saved: FallbackImage[] = [];

@@ -1,6 +1,6 @@
 // SSRF guard for brand-extraction outbound requests. The seed/logo/imagery
-// fallbacks, the primary prefetch, the font harvester, and the optional headless
-// Chrome navigation all take a user-supplied site URL and then follow
+// fallbacks, the primary prefetch, and the font harvester all take a
+// user-supplied site URL and then follow
 // sub-resource URLs (`<link rel=stylesheet>`, `@font-face src`, favicon,
 // og:image, `<img>`) discovered inside the fetched HTML. Those hrefs are
 // attacker-influenced, so without a guard a page can point the daemon at
