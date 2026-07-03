@@ -21,7 +21,7 @@ interface Props {
 }
 
 export function PluginDetailView(props: Props) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const analytics = useAnalytics();
   const [plugin, setPlugin] = useState<InstalledPluginRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -251,7 +251,7 @@ export function PluginDetailView(props: Props) {
           disabled={applying}
           data-testid="plugin-detail-use"
         >
-          {applying ? 'Applying…' : 'Use this plugin'}
+          {applying ? t('pluginCard.applying') : t('preview.usePlugin')}
         </button>
         {applied ? (
           <div className="plugin-detail__applied">

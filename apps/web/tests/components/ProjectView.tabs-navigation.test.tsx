@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
@@ -101,23 +101,35 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
-  FileWorkspace: ({ tabsState, onTabsStateChange, designSystemProject }: {
+  DESIGN_SYSTEM_TAB: '__design_system__',
+  FileWorkspace: ({ tabsState, onTabsStateChange, designSystemProject, openRequest }: {
     tabsState: { tabs: string[]; active: string | null };
     onTabsStateChange: (state: { tabs: string[]; active: string | null }) => void;
     designSystemProject?: DesignSystemSummary | null;
-  }) => (
-    <div data-testid="file-workspace">
-      <output data-testid="workspace-active-tab">{tabsState.active ?? ''}</output>
-      <output data-testid="workspace-design-system-id">{designSystemProject?.id ?? ''}</output>
-      <button
-        type="button"
-        data-testid="close-all-tabs"
-        onClick={() => onTabsStateChange({ tabs: [], active: null })}
-      >
-        close all tabs
-      </button>
-    </div>
-  ),
+    openRequest?: { name: string; nonce: number } | null;
+  }) => {
+    useEffect(() => {
+      if (!openRequest?.name) return;
+      if (tabsState.active === openRequest.name && tabsState.tabs.includes(openRequest.name)) return;
+      const tabs = tabsState.tabs.includes(openRequest.name)
+        ? tabsState.tabs
+        : [...tabsState.tabs, openRequest.name];
+      onTabsStateChange({ tabs, active: openRequest.name });
+    }, [onTabsStateChange, openRequest?.name, openRequest?.nonce, tabsState.tabs]);
+    return (
+      <div data-testid="file-workspace">
+        <output data-testid="workspace-active-tab">{tabsState.active ?? ''}</output>
+        <output data-testid="workspace-design-system-id">{designSystemProject?.id ?? ''}</output>
+        <button
+          type="button"
+          data-testid="close-all-tabs"
+          onClick={() => onTabsStateChange({ tabs: [], active: null })}
+        >
+          close all tabs
+        </button>
+      </div>
+    );
+  },
 }));
 
 vi.mock('../../src/components/Loading', () => ({
@@ -167,11 +179,12 @@ const conversation: Conversation = {
 function renderProjectView(props?: {
   project?: Project;
   designSystems?: DesignSystemSummary[];
+  routeFileName?: string | null;
 }) {
   return render(
     <ProjectView
       project={props?.project ?? project}
-      routeFileName={null}
+      routeFileName={props?.routeFileName ?? null}
       config={config}
       agents={[] as AgentInfo[]}
       skills={[] as SkillSummary[]}
@@ -256,6 +269,73 @@ describe('ProjectView tab URL hydration', () => {
     await waitFor(() => {
       expect(screen.getByTestId('workspace-design-system-id').textContent).toBe('user:baidu');
     });
+  });
+
+  it('does not auto-open the brand design system over a routed file', async () => {
+    mockedLoadTabs.mockResolvedValue({ tabs: [], active: null });
+    const extractedSystem: DesignSystemSummary = {
+      id: 'user:baidu',
+      title: '百度一下，你就知道',
+      category: 'Custom',
+      summary: 'Programmatic extraction from DESIGN.md.',
+      swatches: [],
+      surface: 'web',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+    };
+    renderProjectView({
+      project: {
+        ...project,
+        name: '百度一下，你就知道',
+        metadata: {
+          kind: 'brand',
+          importedFrom: 'brand-extraction',
+          brandDesignSystemId: 'user:baidu',
+        },
+      },
+      designSystems: [extractedSystem],
+      routeFileName: 'brand.html',
+    });
+
+    await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent).toBe('brand.html'));
+    expect(mockedCacheTabsLocally.mock.calls.at(-1)).toEqual([
+      project.id,
+      { tabs: ['brand.html'], active: 'brand.html' },
+    ]);
+  });
+
+  it('does not auto-open the brand design system over a persisted active tab', async () => {
+    mockedLoadTabs.mockResolvedValue({ tabs: ['brand.html'], active: 'brand.html', hasSavedState: true });
+    const extractedSystem: DesignSystemSummary = {
+      id: 'user:baidu',
+      title: '百度一下，你就知道',
+      category: 'Custom',
+      summary: 'Programmatic extraction from DESIGN.md.',
+      swatches: [],
+      surface: 'web',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+    };
+    renderProjectView({
+      project: {
+        ...project,
+        name: '百度一下，你就知道',
+        metadata: {
+          kind: 'brand',
+          importedFrom: 'brand-extraction',
+          brandDesignSystemId: 'user:baidu',
+        },
+      },
+      designSystems: [extractedSystem],
+    });
+
+    await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent).toBe('brand.html'));
+    expect(mockedCacheTabsLocally).not.toHaveBeenCalledWith(
+      project.id,
+      expect.objectContaining({ active: '__design_system__' }),
+    );
   });
 
   it('re-pushes /conversations/:cid when activeConversationId hydrates after the active tab has already synced (lefarcen P1 on PR #1508)', async () => {

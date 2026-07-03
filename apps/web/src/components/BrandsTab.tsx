@@ -25,9 +25,10 @@ export interface BrandsTabProps {
    */
   onApplyDesignSystem?: (designSystemId: string) => void;
   onOpenProject?: (projectId: string) => Promise<boolean> | boolean | void;
+  onDesignSystemsRefresh?: () => Promise<void> | void;
 }
 
-export function BrandsTab({ onApplyDesignSystem, onOpenProject }: BrandsTabProps = {}) {
+export function BrandsTab({ onApplyDesignSystem, onOpenProject, onDesignSystemsRefresh }: BrandsTabProps = {}) {
   const t = useT();
   const route = useRoute();
   // A `/brands/:id` deep-link (from the rail, a chat link, or a shared URL)
@@ -136,9 +137,10 @@ export function BrandsTab({ onApplyDesignSystem, onOpenProject }: BrandsTabProps
     (_brandId: string, projectId: string, conversationId: string) => {
       setModalOpen(false);
       void refresh();
+      void onDesignSystemsRefresh?.();
       navigate({ kind: 'project', projectId, fileName: null, conversationId });
     },
-    [refresh],
+    [onDesignSystemsRefresh, refresh],
   );
 
   // Picking a reference brand kicks off extraction directly, then converges on

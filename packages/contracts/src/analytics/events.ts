@@ -42,6 +42,10 @@ export type AnalyticsEventName =
   | 'packaged_runtime_failed'
   // File manager
   | 'file_upload_result'
+  // Composer context sources — a reference-project / local-code linking
+  // flow settled (success / cancelled / failed). The entry clicks are
+  // `ui_click` `plus_pick` with `resource_kind: 'workspace'`.
+  | 'context_link_result'
   // Artifact
   | 'artifact_export_result'
   | 'artifact_deploy_result'
@@ -166,7 +170,11 @@ export type TrackingAmrEntrySource =
   | 'chat_error_switch_retry_card'
   | 'generation_preview_authorize_retry'
   | 'generation_preview_recharge'
-  | 'generation_preview_switch_retry_card';
+  | 'generation_preview_switch_retry_card'
+  | 'settings_amr_upgrade'
+  | 'inline_amr_upgrade'
+  | 'avatar_amr_upgrade'
+  | 'avatar_amr_agent_card';
 
 export interface AmrEntryAttribution {
   entryId: string;
@@ -395,6 +403,9 @@ export type TrackingRunRetrySuppressedReason =
   | 'not_failed'
   | 'not_retryable'
   | 'unsupported_category'
+  | 'non_retryable_category'
+  | 'unsafe_failure_stage'
+  | 'missing_failure_signal'
   | 'hard_quota'
   | 'attempt_limit_reached'
   | 'cancel_requested'
@@ -1244,6 +1255,9 @@ export interface SettingsPopoverClickProps {
     | 'follow_x'
     | 'follow_threads'
     | 'open_youtube'
+    | 'follow_instagram'
+    | 'follow_linkedin'
+    | 'follow_xiaohongshu'
     | 'open_settings';
   // element=language_select → snake_cased locale (e.g. en, zh_cn, pt_br);
   // element=appearance → system | light | dark.
@@ -1308,13 +1322,36 @@ export interface HomeChatComposerClickProps {
     | 'example_open_project'
     // The "+" menu on the home composer (same control as the in-project
     // composer's `plus_*` events): opening it, inserting a
-    // connector/plugin/mcp mention (`resource_kind` + `resource_id`), or
+    // connector/plugin/skill/mcp mention (`resource_kind` + `resource_id`), or
     // jumping to the add-resource surface (`resource_kind`).
     | 'plus_menu_open'
     | 'plus_pick'
-    | 'plus_add';
-  // For `plus_pick` / `plus_add`: which kind of resource (and its id on pick).
-  resource_kind?: 'connector' | 'plugin' | 'mcp';
+    | 'plus_add'
+    // A "+"-menu submenu flyout opened (hover or click) — the funnel head
+    // for "opened the list but picked nothing". `resource_kind` carries
+    // which list (connector / plugin / skill / mcp). The Design-toolbox row
+    // has its own `design_toolbox_open` and is excluded.
+    | 'plus_submenu_open'
+    // First keystroke in a submenu flyout's search box, once per open
+    // (`resource_kind`: plugin / skill / mcp). The query text is never sent.
+    | 'plus_search'
+    // The "how to download a .fig" help row beside the "+" menu's Figma
+    // import entry. Mirrors the chat_panel composer's `figma_help`.
+    | 'figma_help'
+    // Opening the design-system picker from the "+" menu's Designs group
+    // (programmatically clicks the hero DS trigger). The actual apply stays
+    // `design_system_apply_result` on the picker itself.
+    | 'design_system_open'
+    // Removing a staged context chip above the composer (plugin / MCP /
+    // connector / workspace chips). Mirrors the chat_panel composer's
+    // `context_remove` so one dashboard counts removals across surfaces.
+    | 'context_remove';
+  // For `plus_pick` / `plus_add` / `context_remove`: which kind of resource
+  // (and its id on pick/remove). `workspace` covers the reference-project /
+  // local-code context sources (`resource_id`: 'reference-project' or
+  // 'local-code' on pick; the staged chip id on remove — mirrors the
+  // chat_panel composer so cross-surface funnels line up).
+  resource_kind?: 'connector' | 'plugin' | 'skill' | 'mcp' | 'workspace';
   resource_id?: string;
   // For plugin / action / task chips, the specific id (e.g. `prototype`,
   // `from_figma`, `hyperframes`).
@@ -1436,7 +1473,7 @@ export interface ProjectsListClickProps {
 export interface ProjectsMorePopoverClickProps {
   page_name: 'projects';
   area: 'projects_more_popover';
-  element: 'rename' | 'delete';
+  element: 'rename' | 'duplicate' | 'delete';
   project_id?: string;
   project_kind?: TrackingProjectKind;
 }
@@ -1833,6 +1870,9 @@ export interface ChatPanelClickProps {
     // Opening the "Import from Figma" modal from the chat composer's "+" menu
     // (offline .fig decode). Sits beside `library` as a sibling import source.
     | 'figma_import'
+    // The "how to download a .fig" help row beside `figma_import` in the
+    // "+" menu's Designs group. Mirrors the home composer's `figma_help`.
+    | 'figma_help'
     | 'send'
     | 'mention_popover_trigger'
     | 'resources_popover_trigger';
@@ -1842,7 +1882,7 @@ export interface ChatPanelClickProps {
 // (the wire / DB value is `chat`; the UI labels it "Ask"); `design` is the
 // full design-agent run. Map the wire `chat` → `ask` at every emit site via
 // `sessionModeToTracking` so analytics speaks the product's language.
-export type TrackingSessionMode = 'ask' | 'design';
+export type TrackingSessionMode = 'ask' | 'design' | 'plan';
 
 // Toggling the ask/design switch in the chat composer.
 export interface ComposerSessionModeClickProps {
@@ -1904,6 +1944,14 @@ export interface ComposerBarClickProps {
     | 'plus_menu_open'
     | 'plus_pick'
     | 'plus_add'
+    // A "+"-menu submenu flyout opened / first search keystroke in a flyout.
+    // Same semantics as the home composer's elements of the same names.
+    | 'plus_submenu_open'
+    | 'plus_search'
+    // Opening the design-system picker from the "+" menu's Designs group
+    // (programmatically clicks the composer DS trigger); the actual switch
+    // stays `design_system_switch` below.
+    | 'design_system_open'
     | 'design_system_switch'
     | 'working_dir'
     | 'working_dir_recent'
@@ -2052,6 +2100,8 @@ export interface FileManagerClickProps {
     | 'new_sketch'
     | 'new_browser'
     | 'create_design_system'
+    | 'create_design_system_from_project'
+    | 'duplicate_project'
     | 'paste'
     | 'upload'
     | 'library'
@@ -2636,6 +2686,24 @@ export interface PluginImportModalSurfaceViewProps {
   area: 'import_modal';
 }
 
+// The "Reference project" picker modal opened from the composer "+" menu
+// (Files group) on the home hero or the in-project chat composer. Exposure
+// baseline for the reference-project funnel: surface_view → ui_click
+// `plus_pick` (workspace/reference-project) → `context_link_result`.
+export interface ProjectReferenceModalSurfaceViewProps {
+  page_name: 'home' | 'chat_panel';
+  area: 'project_reference_modal';
+  project_id?: string;
+}
+
+// The "how to download a .fig" guide modal opened from the composer "+"
+// menu's Designs group (the `figma_help` row) on either composer surface.
+export interface FigmaHelpModalSurfaceViewProps {
+  page_name: 'home' | 'chat_panel';
+  area: 'figma_help_modal';
+  project_id?: string;
+}
+
 export interface DesignSystemsTemplatesModalSurfaceViewProps {
   page_name: 'design_systems';
   area: 'templates_modal';
@@ -2715,6 +2783,8 @@ export type SurfaceViewProps =
   | PluginReplacementModalSurfaceViewProps
   | PluginDetailModalSurfaceViewProps
   | PluginImportModalSurfaceViewProps
+  | ProjectReferenceModalSurfaceViewProps
+  | FigmaHelpModalSurfaceViewProps
   | DesignSystemsTemplatesModalSurfaceViewProps
   | DesignSystemsPresetBrandPickerSurfaceViewProps
   | AssistantFeedbackReasonPanelSurfaceViewProps
@@ -3113,6 +3183,27 @@ export type TrackingFileUploadSurface =
       project_id?: string;
     };
 
+// A composer context-source linking flow settled. Fired once per attempt
+// from the composer "+" menu's Files/Code entries:
+//   - `context_kind: 'project'` — the Reference-project modal: `success`
+//     when the picked projects were staged as context chips (`count` =
+//     projects linked in this confirm), `cancelled` when the modal closed
+//     without confirming, `failed` when resolving/linking a project dir
+//     errored.
+//   - `context_kind: 'local_code'` — the native folder picker: `success`
+//     when the folder was staged (`count` = 1), `cancelled` when the picker
+//     was dismissed, `failed` when linking the dir errored (chat_panel).
+// Entry clicks are `ui_click` `plus_pick` (workspace/reference-project or
+// workspace/local-code); this event closes that funnel.
+export interface ContextLinkResultProps {
+  page_name: 'home' | 'chat_panel';
+  area: 'chat_composer';
+  context_kind: 'project' | 'local_code';
+  result: 'success' | 'cancelled' | 'failed';
+  count?: number;
+  project_id?: string;
+}
+
 export type FileUploadResultProps = TrackingFileUploadSurface & {
   file_count: number;
   file_type: TrackingFileType;
@@ -3357,6 +3448,7 @@ export type AnalyticsEventPayload =
   | { event: 'update_install_result'; props: UpdateInstallResultProps }
   | { event: 'update_apply_observed'; props: UpdateApplyObservedProps }
   | { event: 'file_upload_result'; props: FileUploadResultProps }
+  | { event: 'context_link_result'; props: ContextLinkResultProps }
   | { event: 'artifact_export_result'; props: ArtifactExportResultProps }
   | { event: 'artifact_deploy_result'; props: ArtifactDeployResultProps }
   | { event: 'feedback_submit_result'; props: FeedbackSubmitResultProps }
@@ -3396,14 +3488,16 @@ export type AnalyticsEventPayload =
 
 // ---- Enum mapping helpers (code ↔ CSV wire format) -----------------------
 
-// Map the wire `ChatSessionMode` ('design' | 'chat') to the analytics enum.
+// Map the wire `ChatSessionMode` ('design' | 'chat' | 'plan') to the analytics enum.
 // The composer's "Ask" mode is `chat` on the wire; analytics uses `ask` so
-// the dashboards read in the product's own language. Anything that isn't a
-// recognized design mode buckets into `ask` (the lighter default).
+// the dashboards read in the product's own language. Anything unrecognized
+// buckets into `ask` (the lighter default).
 export function sessionModeToTracking(
   mode: string | null | undefined,
 ): TrackingSessionMode {
-  return mode === 'design' ? 'design' : 'ask';
+  if (mode === 'design') return 'design';
+  if (mode === 'plan') return 'plan';
+  return 'ask';
 }
 
 // Code `ProjectKind` from packages/contracts/src/api/projects.ts:
@@ -3626,6 +3720,8 @@ export function byokProtocolToTracking(
       return 'ollama_cloud';
     case 'senseaudio':
       return 'senseaudio';
+    case 'bedrock':
+      return null;
     default:
       return null;
   }

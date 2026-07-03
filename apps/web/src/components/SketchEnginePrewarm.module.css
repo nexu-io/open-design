@@ -1,0 +1,20 @@
+/**
+ * Off-screen container for the idle Excalidraw warm-up instance. The element
+ * must keep a non-zero size and stay in the layout/paint tree so Excalidraw
+ * actually initializes its canvas and loads fonts — `display: none` would defer
+ * that work and defeat the prewarm. It is parked far off-screen, made inert to
+ * pointer/assistive interaction, and lifted out of the normal flow so it can
+ * never affect the visible workspace.
+ */
+.prewarm {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 320px;
+  height: 240px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+  contain: strict;
+}

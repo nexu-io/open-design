@@ -18,6 +18,9 @@
   background: color-mix(in srgb, var(--bg) 70%, transparent);
   backdrop-filter: blur(1px);
 }
+.paste-text-dialog-backdrop.modal-backdrop {
+  z-index: 2000;
+}
 .df-main {
   position: relative;
   display: flex;
@@ -146,6 +149,54 @@
   background: var(--red-bg);
   color: var(--red);
 }
+.df-project-menu-anchor {
+  position: relative;
+  display: inline-flex;
+}
+.df-actions .df-project-menu-trigger {
+  width: 30px;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+}
+.df-project-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  width: max-content;
+  min-width: 220px;
+  max-width: min(300px, calc(100vw - 32px));
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+.df-actions .df-project-menu button {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  white-space: normal;
+}
+.df-actions .df-project-menu button:hover:not(:disabled),
+.df-actions .df-project-menu button:focus-visible {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.df-actions .df-project-menu button:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
 /* When the list column is too narrow to fit labelled actions beside the
    breadcrumb (~180px breadcrumb basis + ~243px of action text), drop the
    button text to icons-only so the toolbar stays on a single row instead
@@ -154,6 +205,8 @@
 @container (max-width: 470px) {
   .df-actions button > span { display: none; }
   .df-actions button { padding: 6px; }
+  .df-actions .df-project-menu button > span { display: inline; }
+  .df-actions .df-project-menu button { padding: 0 10px; }
 }
 /* Upload error banner. */
 .df-upload-banner {
@@ -182,6 +235,9 @@
 
 /* Batch-selection action bar. Shown above the list when any row is selected. */
 .df-batch-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   margin: 0 20px 8px;
   padding: 7px 12px;
   display: flex;
@@ -191,6 +247,7 @@
   border: 1px solid var(--accent-soft);
   border-radius: var(--radius-sm);
   background: var(--accent-tint);
+  box-shadow: 0 8px 18px -16px color-mix(in srgb, var(--text) 36%, transparent);
   animation: df-batch-enter 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 @keyframes df-batch-enter {
@@ -303,7 +360,7 @@
 
 .df-row {
   display: grid;
-  grid-template-columns: 20px 30px 1fr auto auto;
+  grid-template-columns: 20px 30px minmax(0, 1fr) minmax(56px, auto) auto 28px;
   align-items: center;
   gap: 8px;
   margin: 0;
@@ -389,11 +446,17 @@
 .df-row:hover { background: var(--blue-bg); }
 .df-row.active:not(.selected) { background: var(--blue-bg); color: var(--text); }
 .df-row.active:not(.selected) .df-row-name { color: var(--text-strong); }
-.df-row.selected { background: var(--blue); }
+.df-row.selected {
+  margin: 2px 8px;
+  border-bottom-color: transparent;
+  border-radius: 8px;
+  background: var(--blue);
+}
 .df-row.selected .df-row-name { color: #fff; }
 .df-row.selected .df-row-sub,
+.df-row.selected .df-row-size,
 .df-row.selected .df-row-time { color: rgba(255, 255, 255, 0.82); }
-.df-row.selected .df-row-check { color: #fff; }
+.df-row.selected .df-row-check { color: var(--blue); }
 
 .df-row-check {
   display: inline-flex;
@@ -405,16 +468,49 @@
   user-select: none;
   width: 20px;
   height: 20px;
-  border-radius: var(--radius-xs);
+  border-radius: 7px;
   opacity: 0;
-  transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms var(--ease-out), color 120ms var(--ease-out);
+  transition:
+    opacity 120ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 120ms var(--ease-out),
+    box-shadow 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 .df-row:hover .df-row-check,
 .df-row-check:focus-visible,
 .df-row-check[aria-checked="true"],
 .df-panel.has-selection .df-row-check { opacity: 1; }
 .df-row-check:hover { background: var(--border); color: var(--text); }
-.df-row-check[aria-checked="true"] { color: var(--accent-strong); }
+.df-row-check:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+.df-row-check-box {
+  width: 15px;
+  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 62%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  color: var(--accent-strong);
+  box-sizing: border-box;
+}
+.df-row-check[aria-checked="true"] .df-row-check-box {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: #fff;
+}
+.df-row.selected .df-row-check .df-row-check-box {
+  border-color: rgba(255, 255, 255, 0.62);
+  background: transparent;
+}
+.df-row.selected .df-row-check[aria-checked="true"] .df-row-check-box {
+  border-color: rgba(255, 255, 255, 0.95);
+  background: #fff;
+  color: var(--blue);
+}
 .df-dir-row .df-row-check { cursor: default; }
 
 .df-row-icon {
@@ -495,6 +591,13 @@
 .df-row-sub-kind,
 .df-row-sub-time {
   display: none;
+}
+.df-row-size {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
 }
 .df-row-time {
   font-size: 11.5px;

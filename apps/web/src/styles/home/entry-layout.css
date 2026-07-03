@@ -652,6 +652,15 @@
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
 }
+.entry-nav-rail__btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.entry-nav-rail__btn:disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: transparent;
+}
 .entry-nav-rail__btn.is-active {
   background: var(--accent-tint);
   color: var(--accent);
@@ -1345,6 +1354,9 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+  /* Open Design renders as `.inline-switcher__account`; keep the third-party
+     CLI grid after that account row even though their source order differs. */
+  order: 1;
 }
 .inline-switcher__agent-row {
   display: flex;
@@ -1460,6 +1472,190 @@
   .inline-switcher__agent-action-hover {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* Account row: Open Design login/plan, lifted out of the agent card so the
+   agent name is never truncated. */
+.inline-switcher__account {
+  order: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  transition: background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out);
+}
+/* The Open Design entry is also the agent selector now: hovering the clickable
+   area previews selectability, and the active agent gets the same accent
+   highlight the grid rows use. */
+.inline-switcher__account:has(.inline-switcher__account-select:hover):not(.is-active) {
+  background: var(--bg-panel);
+  border-color: var(--border);
+}
+.inline-switcher__account.is-active {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--bg-subtle) 82%, var(--accent-tint));
+}
+.inline-switcher__account.is-active:has(.inline-switcher__account-select:hover) {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--bg-panel) 74%, var(--accent-tint));
+}
+.inline-switcher__account-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+/* The icon+name+plan+balance block is the radio control that selects Open
+   Design; the upgrade / sign-in buttons stay siblings so they never nest in
+   this button. */
+.inline-switcher__account-select {
+  flex: 1 1 auto;
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.inline-switcher__account-id-icon {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+.inline-switcher__amr-reminder-dot--account {
+  top: -1px;
+  right: -1px;
+}
+.inline-switcher__account-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inline-switcher__account-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.inline-switcher__account-name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+/* Balance shown as a muted subtitle line under the Open Design name. Each
+   stat is "label value"; the gap (not a literal separator) keeps them apart. */
+.inline-switcher__account-subtitle {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  min-width: 0;
+}
+.inline-switcher__account-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.inline-switcher__account-stat-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.inline-switcher__account-stat-value {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  text-transform: capitalize;
+}
+.inline-switcher__account-upgrade {
+  flex: 0 0 auto;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--accent) 45%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent);
+  transition:
+    transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .inline-switcher__account-upgrade:hover:not(:disabled) {
+    background: var(--accent-hover);
+    color: #fff;
+    box-shadow:
+      0 2px 8px color-mix(in srgb, var(--accent) 42%, transparent),
+      inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent);
+  }
+}
+.inline-switcher__account-upgrade:active {
+  transform: scale(0.96);
+}
+.inline-switcher__account-upgrade:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .inline-switcher__account-upgrade {
+    transition: background-color 150ms ease;
+  }
+  .inline-switcher__account-upgrade:active {
+    transform: none;
+  }
+}
+.inline-switcher__account-status.is-error {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--danger);
+}
+.inline-switcher__account-action {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent-strong);
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.inline-switcher__account-action:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.inline-switcher__account-action svg {
+  animation: spin 0.8s linear infinite;
 }
 
 /* Provider chips (BYOK mode) */

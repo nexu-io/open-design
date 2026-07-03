@@ -170,6 +170,81 @@ describe('scanRunEventsForUsageAnalytics', () => {
     expect(result.cache_hit_ratio).toBeCloseTo(2_560 / 31_711);
   });
 
+  it('normalizes additive Responses-API / ACP usage where cache_read exceeds input_tokens', () => {
+    // Real AMR/vela follow-up shape: the stream reports input_tokens as the
+    // UNCACHED remainder with cached_input_tokens reported separately ON TOP, so
+    // cache_read > input. Treating it as inclusive (cache_read ⊆ input) made the
+    // denominator far too small and produced cache_hit_ratio ≫ 1 (the corrupt
+    // ~78% of AMR follow-up runs). It must resolve to a sane <=1 ratio with the
+    // cache-read folded into the effective input.
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 140_187,
+              output_tokens: 64,
+              cached_input_tokens: 659_456,
+            },
+          },
+        },
+      ],
+      '',
+      0,
+    );
+
+    expect(result).toMatchObject({
+      input_tokens_provider: 140_187,
+      input_tokens_effective: 799_643,
+      cache_read_input_tokens: 659_456,
+      uncached_input_tokens: 140_187,
+      cache_token_source: 'openai',
+    });
+    expect(result.cache_hit_ratio).toBeCloseTo(659_456 / 799_643);
+    expect(result.cache_hit_ratio).toBeLessThanOrEqual(1);
+    // The first model call of the turn shares the same denominator definition,
+    // so first_call_cache_hit_ratio must be repaired in lockstep.
+    expect(result.first_call_input_tokens).toBe(140_187);
+    expect(result.first_call_cache_read_input_tokens).toBe(659_456);
+    expect(result.first_call_cache_hit_ratio).toBeCloseTo(659_456 / 799_643);
+    expect(result.first_call_cache_hit_ratio).toBeLessThanOrEqual(1);
+  });
+
+  it('keeps inclusive OpenAI usage (cache_read <= input) byte-identical after the additive fix', () => {
+    // Guards the discriminator: an inclusive payload (cached ⊆ input) must stay
+    // on the input-as-total path — effective = input, uncached = input - read —
+    // exactly as before, so the additive repair cannot regress codex/openai.
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 1_000,
+              output_tokens: 20,
+              cached_input_tokens: 250,
+            },
+          },
+        },
+      ],
+      '',
+      0,
+    );
+
+    expect(result).toMatchObject({
+      input_tokens_provider: 1_000,
+      input_tokens_effective: 1_000,
+      cache_read_input_tokens: 250,
+      uncached_input_tokens: 750,
+      cache_token_source: 'openai',
+    });
+    expect(result.cache_hit_ratio).toBeCloseTo(250 / 1_000);
+    expect(result.first_call_cache_hit_ratio).toBeCloseTo(250 / 1_000);
+  });
+
   it.each([
     {
       name: 'claude anthropic usage',

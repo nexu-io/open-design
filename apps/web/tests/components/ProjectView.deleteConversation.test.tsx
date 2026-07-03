@@ -117,6 +117,7 @@ vi.mock('../../src/components/ChatPane', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
+  DESIGN_SYSTEM_TAB: '__design_system__',
   FileWorkspace: (props: {
     questionFormInteractive?: boolean;
     questionFormSubmittedAnswers?: Record<string, string | string[]>;

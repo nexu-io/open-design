@@ -74,6 +74,7 @@ interface Props {
 	onOpen: (id: string) => void;
 	onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
 	onDelete: (id: string) => Promise<boolean | void> | boolean | void;
+	onDuplicate?: (id: string) => Promise<void> | void;
 	onRename?: (id: string, name: string) => void;
 	onNewProject?: () => void;
 	onRefresh?: () => Promise<void> | void;
@@ -87,6 +88,7 @@ export function DesignsTab({
 	onOpen,
 	onOpenLiveArtifact,
 	onDelete,
+	onDuplicate,
 	onRename,
 	onNewProject,
 	onRefresh,
@@ -435,6 +437,17 @@ export function DesignsTab({
 			onConfirm: () => onDelete(project.id),
 		});
 	};
+	const handleDuplicateProject = (project: Project) => {
+		if (!onDuplicate) return;
+		void Promise.resolve(onDuplicate(project.id)).catch((err) => {
+			setDesignsToast({
+				id: (toastIdRef.current += 1),
+				message: err instanceof Error ? err.message : String(err),
+				role: "alert",
+				tone: "error",
+			});
+		});
+	};
 	const handleBatchDelete = () => {
 		const ids = Array.from(selected);
 		if (ids.length === 0) return;
@@ -531,6 +544,24 @@ export function DesignsTab({
 					</div>
 				</div>
 				<div className="toolbar-right">
+					{onNewProject && projects.length > 0 ? (
+						<button
+							type="button"
+							className="designs-new-project-button"
+							data-testid="designs-new-project"
+							onClick={() => {
+								trackProjectsListControlsClick(analytics.track, {
+									page_name: "projects",
+									area: "list_controls",
+									element: "create_project",
+								});
+								onNewProject();
+							}}
+						>
+							<Icon name="plus" size={13} />
+							<span>{t("entry.navNewProject")}</span>
+						</button>
+					) : null}
 					<div className="toolbar-search">
 						<span className="search-icon" aria-hidden>
 							<Icon name="search" size={13} />
@@ -671,6 +702,7 @@ export function DesignsTab({
 								<button
 									type="button"
 									className="primary designs-empty-cta"
+									data-testid="designs-empty-new-project"
 									onClick={() => {
 										trackProjectsListControlsClick(analytics.track, {
 											page_name: "projects",
@@ -862,6 +894,27 @@ export function DesignsTab({
 												<Icon name="pencil" size={12} />
 												<span>{t("designs.menuRename")}</span>
 											</button>
+											{onDuplicate ? (
+												<button
+													type="button"
+													role="menuitem"
+													onClick={() => {
+														const projectKind = projectKindFromMetadataToTracking(p.metadata);
+														trackProjectsMorePopoverClick(analytics.track, {
+															page_name: "projects",
+															area: "projects_more_popover",
+															element: "duplicate",
+															project_id: p.id,
+															...(projectKind ? { project_kind: projectKind } : {}),
+														});
+														setMenuOpenId(null);
+														handleDuplicateProject(p);
+													}}
+												>
+													<Icon name="copy" size={12} />
+													<span>{t("designs.menuDuplicate")}</span>
+												</button>
+											) : null}
 											<button
 												type="button"
 												role="menuitem"

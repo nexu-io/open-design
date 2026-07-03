@@ -1,0 +1,418 @@
+---
+/*
+ * /community/contributors/ — maintainers, leaderboards, good-first-issues,
+ * onboarding, and the zero-code contribute path.
+ *
+ * Localized Astro route (see `../index.astro` for the migration note). The
+ * weekly / all-time leaderboards are rendered server-side from the curated
+ * snapshot in `community-i18n.ts` (no client skeleton flash). Good-first-issue
+ * listing, maintainer display-name refresh, and the copy button stay
+ * client-side (live GitHub data) via one inline script with localized strings.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import '../../../community.css';
+import { localeFromPath } from '../../../i18n';
+import {
+  getCommunityCopy,
+  COMMUNITY_LINKS,
+  MAINTAINERS,
+  WEEKLY_RANKING,
+  ALLTIME_RANKING,
+  GLYPH,
+  type RankedContributor,
+} from '../../../community-i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const copy = getCommunityCopy(locale).contributors;
+
+const pad2 = (n: number) => (n < 10 ? '0' : '') + n;
+const fmt = (n: number | undefined) =>
+  n == null ? '—' : n >= 10000 ? (n / 1000).toFixed(1) + 'k' : n.toLocaleString();
+
+const weeklyLead = WEEKLY_RANKING[0];
+const alltimeLead = ALLTIME_RANKING[0];
+const weeklyBlurb = weeklyLead
+  ? copy.weekly.blurbTemplate
+      .replace('{name}', weeklyLead.login)
+      .replace('{prs}', String(weeklyLead.prs ?? 0))
+  : '';
+
+/** Rows 2..N for a leaderboard, with display fields precomputed. */
+const rows = (list: readonly RankedContributor[], metric: 'prs' | 'commits') =>
+  list.slice(1).map((c, i) => ({
+    ...c,
+    rank: pad2(i + 2),
+    value: fmt(metric === 'prs' ? c.prs : c.commits),
+  }));
+
+const weeklyRows = rows(WEEKLY_RANKING, 'prs');
+const alltimeRows = rows(ALLTIME_RANKING, 'commits');
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: copy.title,
+  description: copy.desc,
+  url: new URL(Astro.url.pathname, Astro.site).toString(),
+};
+
+// Localized strings the client script needs for the live good-first-issues list.
+const clientCfg = {
+  repo: 'nexu-io/open-design',
+  maintainers: MAINTAINERS.map((m) => m.login),
+  loading: copy.issues.loading,
+  empty: copy.issues.empty,
+  rateLimited: copy.issues.rateLimited,
+};
+---
+
+<Layout title={copy.title} description={copy.desc} active="community" jsonLd={jsonLd} mainClassName="sub-main">
+  <div class="od-community">
+    <section class="hero">
+      <div class="hero-decor"></div>
+      <div class="wrap">
+        <div class="hero-copy">
+          <h1 class="h-display" set:html={copy.heroTitle} />
+          <p class="lead">{copy.heroLead}</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Showcase — plugin everything -->
+    <section class="section showcase" id="showcase">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <span class="kicker"><span class="dot"></span>{copy.showcase.kicker}</span>
+            <h2 class="h-display" set:html={copy.showcase.h2} />
+          </div>
+          <p class="right">{copy.showcase.intro}</p>
+        </div>
+
+        <div class="showcase-grid">
+          <div class="showcase-tenets">
+            {copy.showcase.tenets.map((tenet, i) => (
+              <div class="showcase-tenet">
+                <div class="ord">{['I', 'II', 'III', 'IV'][i]}</div>
+                <div>
+                  <h3 set:html={tenet.h3} />
+                  <p set:html={tenet.body} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <aside class="contrib-card" id="contribute">
+            <div>
+              <div class="pane-kicker"><span class="dot"></span>{copy.showcase.pane.kicker}</div>
+              <h3 set:html={copy.showcase.pane.h3} />
+              <p class="pane-lede">{copy.showcase.pane.lede}</p>
+            </div>
+            <div class="contrib-install" data-install={COMMUNITY_LINKS.installCommand}>
+              <span class="cmd">{COMMUNITY_LINKS.installCommand}</span>
+              <button type="button" data-copy data-copy-label={copy.showcase.pane.copy} data-copied-label={copy.showcase.pane.copied}>{copy.showcase.pane.copy}</button>
+            </div>
+            <div class="contrib-steps">
+              {copy.showcase.pane.steps.map((step, i) => (
+                <div class="contrib-step">
+                  <span class="n">{pad2(i + 1)}</span>
+                  <div>
+                    <h4>{step.h4}</h4>
+                    <p set:html={step.body} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- Maintainers -->
+    <section class="section" id="maintainers">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <span class="kicker"><span class="dot"></span>{copy.maintainers.kicker}</span>
+            <h2 class="h-display" set:html={copy.maintainers.h2} />
+          </div>
+          <p class="right">{copy.maintainers.intro}</p>
+        </div>
+
+        <div class="maintainers-grid">
+          {MAINTAINERS.map((m, i) => (
+            <article class="m-card">
+              <div class="av"><img src={m.avatar} alt={m.login} loading="lazy" /></div>
+              <div>
+                <div class="n" id={`m-${i + 1}-name`}>{m.login}</div>
+                <div class="role">{copy.maintainers.role}</div>
+              </div>
+              <p class="bio">{copy.maintainers.bios[m.login]}</p>
+              <div class="links">
+                <a href={m.github} target="_blank" rel="noopener"><span class="ri" aria-hidden="true">{GLYPH.github}</span>github</a>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- All-time signal -->
+    <section class="section signal alltime" id="alltime">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <span class="kicker"><span class="dot"></span>{copy.allTime.kicker}</span>
+            <h2 class="h-display" set:html={copy.allTime.h2} />
+          </div>
+          <p class="right">{copy.allTime.intro}</p>
+        </div>
+
+        <div class="signal-grid">
+          <article class="signal-feature alltime">
+            <div class="top">
+              <div class="rank"><span class="badge">01</span> {copy.allTime.rankLabel}</div>
+              <div class="week">{copy.allTime.week}</div>
+            </div>
+            <div class="body">
+              <div class="avatar"><img src={alltimeLead?.avatar} alt={alltimeLead?.login} /></div>
+              <div class="name">{alltimeLead?.login}</div>
+              <div class="handle">@{alltimeLead?.login} {copy.allTime.handleSuffix}</div>
+              <p class="quote">{copy.allTime.quote}</p>
+            </div>
+            <div class="feature-stats">
+              <div class="item"><div class="v coral">{fmt(alltimeLead?.commits)}</div><div class="l">{copy.allTime.statCommits}</div></div>
+              <div class="item"><div class="v">#01</div><div class="l">{copy.allTime.statExternalRank}</div></div>
+            </div>
+          </article>
+
+          <div class="leaderboard">
+            <div class="leaderboard-head">
+              <span>#</span>
+              <span>{copy.allTime.headContributor}</span>
+              <span>{copy.allTime.headCommits}</span>
+              <span>{copy.allTime.headRank}</span>
+              <span></span>
+            </div>
+            <div>
+              {alltimeRows.map((c) => (
+                <a class="row" href={`https://github.com/${c.login}`} target="_blank" rel="noopener">
+                  <span class="rk">{c.rank}</span>
+                  <span class="who">
+                    <img src={c.avatar} alt={c.login} loading="lazy" />
+                    <span><span class="n">{c.login}</span><span class="h">@{c.login}</span></span>
+                  </span>
+                  <span class="v">{c.value}</span>
+                  <span class="v coral">#{c.rank}</span>
+                  <span class="arr ri" aria-hidden="true">{GLYPH.arrow}</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Recent signal -->
+    <section class="section signal weekly" id="signal">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <span class="kicker"><span class="dot"></span>{copy.weekly.kicker}</span>
+            <h2 class="h-display" set:html={copy.weekly.h2} />
+          </div>
+          <p class="right">{copy.weekly.intro}</p>
+        </div>
+
+        <div class="signal-grid">
+          <article class="signal-feature">
+            <div class="top">
+              <div class="rank"><span class="badge">01</span> {copy.weekly.rankLabel}</div>
+              <div class="week">{copy.weekly.week}</div>
+            </div>
+            <div class="body">
+              <div class="avatar"><img src={weeklyLead?.avatar} alt={weeklyLead?.login} /></div>
+              <div class="name">{weeklyLead?.login}</div>
+              <div class="handle">@{weeklyLead?.login} {copy.weekly.handleSuffix}</div>
+              <p class="quote">{weeklyBlurb}</p>
+            </div>
+            <div class="feature-stats">
+              <div class="item"><div class="v coral">#01</div><div class="l">{copy.weekly.statRank}</div></div>
+              <div class="item"><div class="v">{weeklyLead?.prs}</div><div class="l">{copy.weekly.statPrs}</div></div>
+            </div>
+          </article>
+
+          <div class="leaderboard">
+            <div class="leaderboard-head">
+              <span>#</span>
+              <span>{copy.weekly.headContributor}</span>
+              <span>{copy.weekly.headPrs}</span>
+              <span>{copy.weekly.headRank}</span>
+              <span></span>
+            </div>
+            <div>
+              {weeklyRows.map((c) => (
+                <a class="row" href={`https://github.com/${c.login}`} target="_blank" rel="noopener">
+                  <span class="rk">{c.rank}</span>
+                  <span class="who">
+                    <img src={c.avatar} alt={c.login} loading="lazy" />
+                    <span><span class="n">{c.login}</span><span class="h">@{c.login}</span></span>
+                  </span>
+                  <span class="v">{c.value}</span>
+                  <span class="v coral">#{c.rank}</span>
+                  <span class="arr ri" aria-hidden="true">{GLYPH.arrow}</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Good first issues -->
+    <section class="section issues" id="issues">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <span class="kicker"><span class="dot"></span>{copy.issues.kicker}</span>
+            <h2 class="h-display" set:html={copy.issues.h2} />
+          </div>
+          <p class="right" set:html={copy.issues.intro} />
+        </div>
+
+        <div class="issue-list" id="issue-list">
+          {[0, 1, 2].map(() => (
+            <div class="issue">
+              <span class="num">—</span>
+              <div class="body"><div class="title skel" style="height:24px;width:60%"></div><div class="meta"><span class="label good">{copy.issues.loading}</span></div></div>
+              <span class="lang">—</span>
+              <span class="arr ri" aria-hidden="true">{GLYPH.arrow}</span>
+            </div>
+          ))}
+        </div>
+
+        <div class="issues-foot">
+          <span set:html={copy.issues.foot} />
+          <a href={COMMUNITY_LINKS.goodFirstIssues} target="_blank" rel="noopener" style="color:var(--link)">{copy.issues.seeAll} <span class="ri" aria-hidden="true">{GLYPH.arrow}</span></a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Onboarding -->
+    <section class="section onboard" id="how">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <span class="kicker"><span class="dot"></span>{copy.onboard.kicker}</span>
+            <h2 class="h-display" set:html={copy.onboard.h2} />
+          </div>
+          <p class="right">{copy.onboard.intro}</p>
+        </div>
+
+        <div class="steps">
+          {copy.onboard.steps.map((step, i) => (
+            <div class="step">
+              <div class="ic"><span class="ri" aria-hidden="true">{[GLYPH.stepSpark, GLYPH.stepDraft, GLYPH.stepReview, GLYPH.stepMerge][i]}</span></div>
+              <div class="n">{step.n}</div>
+              <h3 set:html={step.h3} />
+              <p>{step.body}</p>
+            </div>
+          ))}
+        </div>
+
+        <div class="onboard-foot">
+          <a class="btn btn-coral" href={COMMUNITY_LINKS.contributing} target="_blank" rel="noopener">
+            {copy.onboard.cta}
+            <span class="ri" aria-hidden="true">{GLYPH.arrow}</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script is:inline define:vars={{ cfg: clientCfg }}>
+    (function () {
+      const API = window.OPEN_DESIGN_API || 'https://api.github.com';
+      const HEADERS = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+      if (window.GITHUB_TOKEN) HEADERS.Authorization = 'Bearer ' + window.GITHUB_TOKEN;
+
+      function setText(id, v) { const el = document.getElementById(id); if (el && v != null) el.textContent = v; }
+      function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+      async function gh(path) {
+        const res = await fetch(`${API}${path}`, { headers: HEADERS });
+        if (!res.ok) throw new Error(`GitHub ${path} -> ${res.status}`);
+        return res.json();
+      }
+      function pad2(n) { return (n < 10 ? '0' : '') + n; }
+      function inferLabelClass(name) {
+        const n = (name || '').toLowerCase();
+        if (n.includes('doc')) return 'docs';
+        if (n.includes('bug')) return 'bug';
+        if (n.includes('design') || n.includes('ui')) return 'design';
+        return 'lang';
+      }
+      function inferLang(title) {
+        const t = (title || '').toLowerCase();
+        if (t.includes('typescript') || t.includes('.ts')) return 'TS';
+        if (t.includes('python')) return 'PY';
+        if (t.includes('css') || t.includes('html') || t.includes('design')) return 'CSS';
+        if (t.includes('docs') || t.includes('readme')) return 'MD';
+        return 'JS/TS';
+      }
+
+      async function loadGoodFirstIssues() {
+        try {
+          const r = await gh(`/search/issues?q=repo:${cfg.repo}+is:issue+is:open+label:%22good+first+issue%22&sort=created&order=desc&per_page=8`);
+          const items = r.items || [];
+          setText('issue-count', items.length);
+          const list = document.getElementById('issue-list');
+          if (!list) return;
+          if (!items.length) {
+            list.innerHTML = `<div class="issue" style="color:var(--text-faint);padding:36px 0">${escapeHtml(cfg.empty)}</div>`;
+            return;
+          }
+          list.innerHTML = items.map((it, i) => {
+            const lang = inferLang(it.title);
+            const extra = (it.labels || [])
+              .filter((l) => l.name !== 'good first issue')
+              .slice(0, 3)
+              .map((l) => `<span class="label ${inferLabelClass(l.name)}">${escapeHtml(l.name)}</span>`)
+              .join('');
+            return `<a class="issue" href="${it.html_url}" target="_blank" rel="noopener"><span class="num">${pad2(i + 1)}</span><div class="body"><div class="title">${escapeHtml(it.title)}</div><div class="meta"><span class="label good">${escapeHtml(cfg.loading)}</span>${extra}</div></div><span class="lang">${lang}</span><span class="arr ri" aria-hidden="true"></span></a>`;
+          }).join('');
+        } catch (e) {
+          setText('issue-count', '—');
+          const list = document.getElementById('issue-list');
+          if (list) list.innerHTML = `<a class="issue" href="${cfg.repo ? 'https://github.com/' + cfg.repo + '/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22' : '#'}" target="_blank" rel="noopener"><div class="body"><div class="title">${escapeHtml(cfg.rateLimited)}</div></div></a>`;
+        }
+      }
+
+      async function loadMaintainers() {
+        await Promise.all(cfg.maintainers.map(async (login, i) => {
+          try {
+            const u = await gh(`/users/${login}`);
+            if (u.name) setText(`m-${i + 1}-name`, u.name);
+          } catch (e) { /* keep the static login */ }
+        }));
+      }
+
+      function wireCopyButtons() {
+        document.querySelectorAll('[data-install] [data-copy]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const cmd = btn.parentElement.getAttribute('data-install') || '';
+            try { await navigator.clipboard.writeText(cmd); } catch { return; }
+            const copied = btn.getAttribute('data-copied-label') || 'Copied';
+            const original = btn.getAttribute('data-copy-label') || btn.textContent;
+            btn.textContent = copied;
+            btn.classList.add('is-copied');
+            setTimeout(() => { btn.textContent = original; btn.classList.remove('is-copied'); }, 1600);
+          });
+        });
+      }
+
+      wireCopyButtons();
+      loadGoodFirstIssues();
+      loadMaintainers();
+    })();
+  </script>
+</Layout>

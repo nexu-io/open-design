@@ -48,6 +48,7 @@ describe('composeSystemPrompt — audio voice options', () => {
 
     expect(prompt).toContain('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
     expect(prompt).toContain('"type": "select"');
+    expect(prompt).toContain('"allowCustom": false');
     expect(prompt).toContain('"label": "Rachel — american · female"');
     expect(prompt).toContain('"value": "21m00Tcm4TlvDq8ikWAM"');
     expect(prompt).toContain('"label": "Voice 50 — mandarin"');

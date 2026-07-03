@@ -127,6 +127,7 @@ vi.mock('../../src/components/ChatPane', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
+  DESIGN_SYSTEM_TAB: '__design_system__',
   FileWorkspace: () => null,
 }));
 
@@ -1125,11 +1126,12 @@ describe('ProjectView daemon reattach restore', () => {
         .map((call) => call[2] as ChatMessage)
         .filter((m) => m?.id === 'msg-amr-balance' && m.runStatus === 'failed')
         .at(-1);
-      expect(finalSave?.events?.some(
-        (event) => event.kind === 'status'
-          && event.label === 'error'
-          && (event as { code?: string }).code === 'AMR_INSUFFICIENT_BALANCE',
-      )).toBe(true);
+      const errorEvent = finalSave?.events?.find(
+        (event) => event.kind === 'status' && event.label === 'error',
+      ) as { code?: string } | undefined;
+      expect(errorEvent).toMatchObject({
+        code: 'AMR_INSUFFICIENT_BALANCE',
+      });
     });
   });
 

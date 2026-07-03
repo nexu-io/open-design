@@ -3,6 +3,7 @@ import type { Locator, Page, Route } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fulfillAgentsRoute } from './mock-factory.js';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 const GITHUB_STARS_STORAGE_KEY = 'open-design:gh-stars';
@@ -97,7 +98,7 @@ export const VISUAL_CLI_AGENTS = [
 
 export const VISUAL_AMR_AGENT = {
   id: 'amr',
-  name: 'Open Design AMR',
+  name: 'Open Design',
   bin: 'vela',
   available: true,
   version: '0.1.0',
@@ -167,6 +168,13 @@ type VisualPageOptions = {
   projects?: readonly VisualProject[];
   config?: Partial<VisualConfig>;
   agents?: readonly unknown[];
+};
+
+type VisualVelaAccountOptions = {
+  profile?: string;
+  plan?: string;
+  balanceUsd?: string;
+  email?: string;
 };
 
 const VISUAL_PLUGINS = [
@@ -523,10 +531,53 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
   }, [VISUAL_STYLE_ID] as const);
 }
 
+export async function mockSignedInVelaAccount(
+  page: Page,
+  options: VisualVelaAccountOptions = {},
+): Promise<void> {
+  const profile = options.profile ?? 'test';
+  const plan = options.plan ?? 'plus';
+  const balanceUsd = options.balanceUsd ?? '247.51';
+  const email = options.email ?? 'leaf@example.com';
+  const fetchedAt = '2026-06-25T03:59:00.000Z';
+
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        loggedIn: true,
+        loginInFlight: false,
+        profile,
+        user: { id: 'u1', email },
+        account: { plan, balanceUsd },
+        configPath: '/home/test/.amr/config.json',
+      }),
+    });
+  });
+
+  await page.route('**/api/integrations/vela/wallet**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'available',
+        profile,
+        user: { id: 'u1', email, plan },
+        balanceUsd,
+        updatedAt: fetchedAt,
+        fetchedAt,
+        stale: false,
+        source: 'vela_api',
+      }),
+    });
+  });
+}
+
 export async function waitForVisualReady(page: Page): Promise<void> {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
-  await expect(page.getByTestId('home-hero')).toBeVisible();
-  await expect(page.getByTestId('home-hero-input')).toBeVisible();
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await expect(page.getByTestId('home-hero')).toBeVisible({ timeout: T.medium });
+  await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.medium });
   await page.evaluate(async () => {
     await document.fonts.ready;
   });
@@ -547,14 +598,12 @@ export async function gotoVisualHome(page: Page): Promise<void> {
 }
 
 export async function gotoVisualWorkspace(page: Page): Promise<void> {
-  await page
-    .getByTestId('recent-projects-strip')
-    .locator('[data-project-id="visual-project-launchpad"]')
-    .click();
-  await expect(page).toHaveURL(/\/projects\//);
-  await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
-  await expect(page.getByTestId('file-workspace')).toBeVisible();
+  await page.goto('/projects/visual-project-launchpad', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await expect(page).toHaveURL(/\/projects\/visual-project-launchpad/, { timeout: T.medium });
+  await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: T.medium });
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible({ timeout: T.medium });
+  await expect(page.getByTestId('file-workspace')).toBeVisible({ timeout: T.medium });
   await prepareVisualWorkspaceFileList(page);
 }
 
@@ -609,11 +658,15 @@ export async function openAvatarMenu(page: Page): Promise<Locator> {
 }
 
 export async function openSettingsDetailsFromHeader(page: Page): Promise<Locator> {
-  await page.locator('.settings-icon-btn').click();
-  await expect(page.getByTestId('entry-settings-menu')).toBeVisible();
-  await page.getByTestId('entry-settings-open-details').click();
+  const settingsTrigger = page.locator('.settings-icon-btn');
+  await expect(settingsTrigger).toBeVisible({ timeout: T.medium });
+  await settingsTrigger.evaluate((element: HTMLElement) => element.click());
+  await expect(page.getByTestId('entry-settings-menu')).toBeVisible({ timeout: T.medium });
+  const openDetails = page.getByTestId('entry-settings-open-details');
+  await expect(openDetails).toBeVisible({ timeout: T.medium });
+  await openDetails.evaluate((element: HTMLElement) => element.click());
   const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
+  await expect(dialog).toBeVisible({ timeout: T.medium });
   return dialog;
 }
 

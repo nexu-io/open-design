@@ -191,7 +191,7 @@ test('spawnEnvForAgent resolves relative OD_DATA_DIR before applying sandbox roo
 
 test('spawnEnvForAgent applies system proxy env to all agent runtimes before base env overrides', () => {
   const env = spawnEnvForAgent(
-    'gemini',
+    'opencode',
     {
       HTTPS_PROXY: 'http://user-env:9000',
       PATH: '/usr/bin',
@@ -221,7 +221,7 @@ test('spawnEnvForAgent resolves system proxy env for each default agent launch',
   });
 
   try {
-    const env = spawnEnvForAgent('gemini', { PATH: '/usr/bin' });
+    const env = spawnEnvForAgent('opencode', { PATH: '/usr/bin' });
 
     assert.deepEqual(proxySpy.mock.calls, [[]]);
     assert.equal(env.HTTPS_PROXY, 'http://system-https:7891');
@@ -233,7 +233,7 @@ test('spawnEnvForAgent resolves system proxy env for each default agent launch',
 
 test('spawnEnvForAgent lets explicit lowercase proxy env override system uppercase proxy env', () => {
   const env = spawnEnvForAgent(
-    'gemini',
+    'opencode',
     {
       https_proxy: 'http://user-lowercase:9000',
       PATH: '/usr/bin',
@@ -253,7 +253,7 @@ test('spawnEnvForAgent lets explicit lowercase proxy env override system upperca
 
 test('spawnEnvForAgent enables Node env proxy support for inherited lowercase proxy env', () => {
   const env = spawnEnvForAgent(
-    'gemini',
+    'opencode',
     {
       http_proxy: 'http://user-lowercase:9000',
       PATH: '/usr/bin',
@@ -412,7 +412,6 @@ test('inspectAgentExecutableResolution reports configured and PATH Codex binarie
 test('resolveAgentExecutable supports configured binary overrides for non-Codex adapters', () => {
   const cases: Array<[string, string, string]> = [
     ['claude', 'claude', 'CLAUDE_BIN'],
-    ['gemini', 'gemini', 'GEMINI_BIN'],
     ['opencode', 'opencode', 'OPENCODE_BIN'],
     ['cursor-agent', 'cursor-agent', 'CURSOR_AGENT_BIN'],
     ['qwen', 'qwen', 'QWEN_BIN'],
@@ -505,7 +504,7 @@ test('detectAgents includes sanitized install and docs metadata from split runti
   }
 });
 
-fsTest('detectAgents keeps Kimi available when the installed CLI rejects the legacy acp positional arg', async () => {
+fsTest('detectAgents keeps Kimi available when ACP model discovery fails', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-detect-kimi-modern-'));
   try {
     return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
@@ -1170,7 +1169,7 @@ test('spawnEnvForAgent preserves Anthropic credentials when claude resolves to O
 });
 
 test('spawnEnvForAgent preserves Anthropic credentials for non-claude adapters', () => {
-  for (const agentId of ['codex', 'gemini', 'opencode', 'devin']) {
+  for (const agentId of ['codex', 'opencode', 'devin']) {
     const env = spawnEnvForAgent(agentId, {
       ANTHROPIC_API_KEY: 'sk-keep',
       ANTHROPIC_AUTH_TOKEN: 'sk-token-keep',
@@ -1279,7 +1278,7 @@ test('spawnEnvForAgent preserves configured Codex API keys', () => {
 });
 
 test('spawnEnvForAgent preserves Codex API keys for non-codex adapters', () => {
-  for (const agentId of ['claude', 'gemini', 'opencode', 'devin']) {
+  for (const agentId of ['claude', 'opencode', 'devin']) {
     const env = spawnEnvForAgent(agentId, {
       OPENAI_API_KEY: 'sk-keep',
       CODEX_API_KEY: 'sk-keep',

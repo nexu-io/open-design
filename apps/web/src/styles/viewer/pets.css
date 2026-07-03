@@ -704,20 +704,6 @@
 .composer-toolbox-trigger {
   position: relative;
 }
-.composer-tools-at {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 17px;
-  height: 17px;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 16px;
-  font-weight: 650;
-  line-height: 1;
-  letter-spacing: 0;
-  color: currentColor;
-  transform: translateY(-0.5px);
-}
 .composer-tools-trigger.active {
   background: var(--bg-subtle);
   color: var(--text);

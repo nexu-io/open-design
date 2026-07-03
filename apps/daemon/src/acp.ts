@@ -7,6 +7,10 @@ import {
   createToolCallTextSuppressor,
   type ArtifactTextSuppressor,
 } from './artifacts/text-suppression.js';
+import {
+  amrAccountFailureDetails,
+  classifyAmrAccountFailure,
+} from './integrations/vela-errors.js';
 
 const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -31,6 +35,7 @@ const ACP_ARTIFACT_ECHO_START_RE = new RegExp(
   'i',
 );
 const ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT = 8;
+const AMR_STDERR_RETRY_TAIL_LIMIT = 16_000;
 
 type JsonRpcId = string | number;
 type JsonObject = Record<string, unknown>;
@@ -482,6 +487,79 @@ function isAcpCompletedStatus(update: JsonObject): boolean {
 function isAcpTerminalFailureStatus(update: JsonObject): boolean {
   const status = acpUpdateStatus(update);
   return status === 'failed' || status === 'failure' || status === 'error' || status === 'cancelled' || status === 'canceled';
+}
+
+function isAcpRetryStatus(update: JsonObject): boolean {
+  return acpUpdateStatus(update) === 'retry';
+}
+
+function acpUpdateDiagnosticText(value: unknown, depth = 0): string[] {
+  if (depth > 4) return [];
+  if (typeof value === 'string') return value.trim() ? [value] : [];
+  if (typeof value === 'number' || typeof value === 'boolean') return [String(value)];
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => acpUpdateDiagnosticText(item, depth + 1));
+  }
+  const obj = asObject(value);
+  if (!obj) return [];
+  const parts: string[] = [];
+  for (const key of [
+    'type',
+    'status',
+    'code',
+    'message',
+    'detail',
+    'details',
+    'error',
+    'recovery',
+    'pauseReason',
+    'content',
+    'text',
+    'rawInput',
+  ]) {
+    if (key in obj) {
+      parts.push(...acpUpdateDiagnosticText(obj[key], depth + 1));
+    }
+  }
+  return parts;
+}
+
+function promotedAmrRetryStatusPayload(update: JsonObject) {
+  if (!isAcpRetryStatus(update)) return null;
+  const diagnosticText = acpUpdateDiagnosticText(update).join('\n');
+  const failure = classifyAmrAccountFailure(diagnosticText);
+  if (!failure) return null;
+  return {
+    message: failure.message,
+    error: {
+      code: failure.code,
+      message: failure.message,
+      retryable: false,
+      details: {
+        ...amrAccountFailureDetails(failure),
+        promoted_by: 'open_design_acp_retry_status',
+      },
+    },
+  };
+}
+
+function promotedAmrStderrPayload(chunk: string) {
+  if (!/opencode_event_stream_failure|session\.status/i.test(chunk)) return null;
+  if (!/\bretry\b/i.test(chunk)) return null;
+  const failure = classifyAmrAccountFailure(chunk);
+  if (!failure) return null;
+  return {
+    message: failure.message,
+    error: {
+      code: failure.code,
+      message: failure.message,
+      retryable: false,
+      details: {
+        ...amrAccountFailureDetails(failure),
+        promoted_by: 'open_design_acp_stderr_retry_status',
+      },
+    },
+  };
 }
 
 function acpToolCallId(update: JsonObject): string | null {
@@ -955,6 +1033,7 @@ export function attachAcpSession({
   let emittedTextBuffer = '';
   let rawAcpShapeDiagnosticCount = 0;
   let artifactSuppressionDiagnosticCount = 0;
+  let amrStderrRetryTail = '';
   let finished = false;
   let fatal = false;
   let aborted = false;
@@ -1312,6 +1391,13 @@ export function attachAcpSession({
     }
     const update = asObject(params?.update);
     if (obj.method === 'session/update' && update) {
+      if (modelUnavailableErrorCode) {
+        const promotedPayload = promotedAmrRetryStatusPayload(update);
+        if (promotedPayload) {
+          failWithPayload(promotedPayload);
+          return;
+        }
+      }
       if (update.sessionUpdate !== 'agent_message_chunk' && update.sessionUpdate !== 'agent_thought_chunk') {
         send('agent', {
           type: 'status',
@@ -1584,6 +1670,15 @@ export function attachAcpSession({
   });
 
   stdout.on('data', (chunk: string) => parser.feed(chunk));
+  child.stderr?.setEncoding('utf8');
+  child.stderr?.on('data', (chunk: string) => {
+    if (!modelUnavailableErrorCode || finished) return;
+    amrStderrRetryTail = `${amrStderrRetryTail}${String(chunk)}`.slice(
+      -AMR_STDERR_RETRY_TAIL_LIMIT,
+    );
+    const promotedPayload = promotedAmrStderrPayload(amrStderrRetryTail);
+    if (promotedPayload) failWithPayload(promotedPayload);
+  });
   child.on('close', (code, signal) => {
     clearStageTimer();
     parser.flush();
