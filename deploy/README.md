@@ -21,8 +21,9 @@ Before starting:
    ```
 
 3. Open `.env` in your editor and choose one auth mode:
-   - default: paste the token into `OD_API_TOKEN=`
+   - remote hosting with token: paste the token into `OD_API_TOKEN=` and set `OPEN_DESIGN_DISABLE_API_AUTH=0` (or leave it empty)
    - trusted reverse proxy that already authenticates every request: leave `OD_API_TOKEN=` empty and set `OPEN_DESIGN_DISABLE_API_AUTH=1`
+   - local development only: leave `OD_API_TOKEN=` empty and keep `OPEN_DESIGN_DISABLE_API_AUTH=1`
 
 Then pull and start the service:
 

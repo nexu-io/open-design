@@ -148,7 +148,7 @@ OD_API_TOKEN=
 # when enabled, the daemon skips OD_API_TOKEN enforcement entirely.
 # NOTE: For local Docker development (which binds to 127.0.0.1 on the host but
 # 0.0.0.0 internally), this is set to 1 by default so the container starts
-# without a token. Clear this and set OD_API_TOKEN if exposing remotely.
+# without a token. Clear this (set to empty or 0) when OD_API_TOKEN is used for remote hosting.
 OPEN_DESIGN_DISABLE_API_AUTH=1
 ```
 
