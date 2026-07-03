@@ -159,6 +159,34 @@ test('[P0] real daemon run supports a follow-up turn in the same project', async
   await expectProjectFileToContain(page, projectId, FOLLOW_UP_FILE, 'Generated after an earlier daemon turn.');
 });
 
+test('[P1] Plan mode daemon run creates, opens, and restores an editable markdown plan', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Plan mode markdown smoke');
+  await expectWorkspaceReady(page);
+
+  await selectComposerSessionMode(page, 'Plan mode');
+  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
+  await sendPrompt(page, 'Create a deterministic plan document');
+  const runRequest = await runRequestPromise;
+  expect((runRequest.postDataJSON() as { sessionMode?: string }).sessionMode).toBe('plan');
+
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, ['plan.md']);
+  await expectProjectFileToContain(page, projectId, 'plan.md', '# Deterministic Plan');
+  await expect(page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Deterministic Plan/);
+  await expect(page.getByLabel(/markdown preview/i)).toContainText('Scope');
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await expect(page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Deterministic Plan/);
+  await expect(page.getByLabel(/markdown preview/i)).toContainText('Keep the plan editable');
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
+});
+
 test('[P0] real daemon run restores a delayed artifact turn after reload', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Delayed daemon reload smoke');
@@ -444,6 +472,20 @@ async function expectWorkspaceReady(page: Page) {
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
+}
+
+async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
+  const trigger = page.getByTestId('chat-composer').getByTestId('session-mode-trigger');
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+
+  const menu = page.locator('.session-mode-toggle__menu[role="menu"]');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitemradio', { name: 'Ask mode' })).toBeVisible();
+  await expect(menu.getByRole('menuitemradio', { name: 'Plan mode' })).toBeVisible();
+  await expect(menu.getByRole('menuitemradio', { name: 'Design mode' })).toBeVisible();
+  await menu.getByRole('menuitemradio', { name: modeTitle }).click();
+  await expect(trigger).toHaveAttribute('aria-label', modeTitle);
 }
 
 async function sendPrompt(page: Page, prompt: string) {

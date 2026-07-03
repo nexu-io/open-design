@@ -44,8 +44,12 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, inspectMode: true })).toBe(false);
   });
 
-  it('falls back to srcDoc when draw mode is active (snapshot bridge required)', () => {
+  it('falls back to srcDoc when draw mode is active without a URL snapshot bridge', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true })).toBe(false);
+  });
+
+  it('keeps URL-load when draw mode is active and the raw route injected the snapshot bridge', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true, urlSnapshotBridge: true })).toBe(true);
   });
 
   it('falls back to srcDoc when the artifact ships the class based tweaks template', () => {
@@ -73,6 +77,7 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, forceInline: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, tweaksBridge: true, forceInline: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, urlModeBridge: true, inspectMode: true })).toBe(false);
+    expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true, urlSnapshotBridge: true, inspectMode: true })).toBe(false);
   });
 });
 

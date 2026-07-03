@@ -31,7 +31,7 @@ export function apiProtocolModelLabel(
   protocol: ApiProtocol | undefined,
   model: string,
 ): string {
-  const label = apiProtocolLabel(protocol);
+  const label = `${apiProtocolLabel(protocol)} via OpenCode`;
   const trimmed = model.trim();
   return trimmed ? `${label} · ${trimmed}` : label;
 }

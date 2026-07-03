@@ -1600,11 +1600,11 @@ export async function deleteLiveArtifact(projectId: string, artifactId: string):
 
 async function readApiErrorBody(resp: Response): Promise<{ message: string; code?: string }> {
   try {
-    const json = (await resp.json()) as { error?: { code?: string; message?: string }; message?: string };
-    const message = json.error?.message ?? json.message;
+    const json = (await resp.json()) as { error?: { code?: string; message?: string } | string; message?: string };
+    const message = typeof json.error === 'string' ? json.error : json.error?.message ?? json.message;
     return {
       message: typeof message === 'string' && message.length > 0 ? message : `Request failed (${resp.status}).`,
-      ...(typeof json.error?.code === 'string' ? { code: json.error.code } : {}),
+      ...(typeof json.error === 'object' && typeof json.error?.code === 'string' ? { code: json.error.code } : {}),
     };
   } catch {
     return { message: `Request failed (${resp.status}).` };
@@ -2125,13 +2125,22 @@ export async function renameProjectFile(
   return (await resp.json()) as RenameProjectFileResponse;
 }
 
-export async function openFolderDialog(): Promise<string | null> {
+export async function openFolderDialog(options: { throwOnError?: boolean } = {}): Promise<string | null> {
   try {
     const resp = await fetch('/api/dialog/open-folder', { method: 'POST' });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      if (options.throwOnError) {
+        const errorBody = await readApiErrorBody(resp);
+        throw new Error(errorBody.message);
+      }
+      return null;
+    }
     const data = await resp.json();
     return typeof data.path === 'string' && data.path.length > 0 ? data.path : null;
-  } catch {
+  } catch (err) {
+    if (options.throwOnError) {
+      throw err instanceof Error ? err : new Error('Could not open folder picker');
+    }
     return null;
   }
 }

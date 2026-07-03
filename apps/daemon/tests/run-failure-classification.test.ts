@@ -268,6 +268,27 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('does not let retryable hints override session-limit hard quota text', () => {
+    expect(
+      classify(
+        'RATE_LIMITED',
+        "You've hit your session limit; resets at 3:10am.",
+        [
+          errorEvent(
+            'RATE_LIMITED',
+            "You've hit your session limit; resets at 3:10am.",
+            true,
+          ),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'rate_limit',
+      failure_detail: 'hard_quota',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
   it('maps upstream failures to retry guidance', () => {
     expect(classify('UPSTREAM_UNAVAILABLE', 'HTTP 503 upstream unavailable')).toMatchObject({
       failure_category: 'upstream_unavailable',

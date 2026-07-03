@@ -9,9 +9,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
 OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.override.yml"
+LINUX_OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.linux.yml"
 HEALTH_TIMEOUT=60
 
 COMPOSE_FILES=(-f "$COMPOSE_FILE")
+if [ "$(uname -s)" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
+  COMPOSE_FILES+=(-f "$LINUX_OVERRIDE_FILE")
+fi
 if [ -f "$OVERRIDE_FILE" ]; then
   COMPOSE_FILES+=(-f "$OVERRIDE_FILE")
 fi
@@ -46,6 +50,24 @@ elif command -v docker >/dev/null 2>&1 && command -v docker-compose >/dev/null 2
 else
   error "No container runtime found. Install Docker or Podman."
   exit 1
+fi
+
+# Same guard as install.sh: the Linux override uses !reset (Docker Compose v2.17+).
+if [ "$(uname -s)" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
+  if [ "$COMPOSE_CMD" != "docker compose" ]; then
+    error "The Linux host-network override requires 'docker compose' v2."
+    error "Found: ${COMPOSE_CMD}"
+    step "Install the Docker Compose plugin: https://docs.docker.com/compose/install/"
+    exit 1
+  fi
+  _compose_ver="$($COMPOSE_CMD version --short 2>/dev/null || echo "0.0.0")"
+  _compose_major="$(echo "$_compose_ver" | cut -d. -f1)"
+  _compose_minor="$(echo "$_compose_ver" | cut -d. -f2)"
+  if [ "$_compose_major" -lt 2 ] || { [ "$_compose_major" -eq 2 ] && [ "$_compose_minor" -lt 17 ]; }; then
+    error "Docker Compose v2.17 or later required for the Linux override (found v${_compose_ver})."
+    step "Upgrade: https://docs.docker.com/compose/install/"
+    exit 1
+  fi
 fi
 
 OPT_IMAGE=""

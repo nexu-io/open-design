@@ -412,6 +412,46 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).not.toContain('Open Design-owned media execution is **disabled for this run**');
   });
 
+  it('renders BYOK media defaults in the media contract', () => {
+    const out = composeSystemPrompt({
+      metadata: {
+        kind: 'image',
+        imageModel: 'gpt-image-2',
+        imageAspect: '1:1',
+        promptTemplate: { ...baseSummary },
+      },
+      byokMediaDefaults: {
+        imageModel: 'aihubmix-qwen-image-2.0-pro',
+        videoModel: 'aihubmix-doubao-seedance-2-0-260128',
+        speechModel: 'aihubmix-gpt-4o-mini-tts',
+        speechVoice: 'nova',
+      },
+    });
+
+    expect(out).toContain('### Run-scoped BYOK media defaults');
+    expect(out).toContain('- Image model: `aihubmix-qwen-image-2.0-pro`');
+    expect(out).toContain('- Video model: `aihubmix-doubao-seedance-2-0-260128`');
+    expect(out).toContain('- Speech model: `aihubmix-gpt-4o-mini-tts`');
+    expect(out).toContain('- Speech voice: `nova`');
+    expect(out).toContain('### Allowed model IDs (per surface)');
+  });
+
+  it('renders BYOK media defaults in the non-media dispatch hint', () => {
+    const out = composeSystemPrompt({
+      metadata: {
+        kind: 'prototype',
+        platform: 'responsive',
+      },
+      byokMediaDefaults: {
+        imageModel: 'senseaudio-image-1.0-260319',
+      },
+    });
+
+    expect(out).toContain('## Media generation (if asked)');
+    expect(out).toContain('### Run-scoped BYOK media defaults');
+    expect(out).toContain('- Image model: `senseaudio-image-1.0-260319`');
+  });
+
   it('keeps unrestricted enabled media contract unchanged', () => {
     const out = composeSystemPrompt({
       metadata: {

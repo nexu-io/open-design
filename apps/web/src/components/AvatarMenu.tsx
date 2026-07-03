@@ -23,10 +23,11 @@ import {
   formatVelaBalanceUsd,
   type VelaLoginStatus,
 } from '../providers/daemon';
-import { isMacPlatform } from '../utils/platform';
 import {
   amrPlansUrlForProfile,
 } from '../runtime/amr-guidance';
+import { isMacPlatform } from '../utils/platform';
+import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 
 interface Props {
   config: AppConfig;
@@ -172,7 +173,7 @@ export function AvatarMenu({
   );
 
   const installedAgents = orderAgentsWithOpenDesignFirst(
-    agents.filter((a) => a.available),
+    agents.filter((a) => a.available && isVisibleLocalCliAgent(a)),
   );
   const amrAvailable = installedAgents.some((a) => a.id === 'amr');
   const amrProfile = config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE;
