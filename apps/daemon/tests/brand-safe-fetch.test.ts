@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchExternalBrandAsset } from '../src/brands/safe-fetch.js';
 
@@ -19,6 +19,7 @@ describe('fetchExternalBrandAsset SSRF guard', () => {
     'http://127.0.0.2/', // loopback range (not just .0.1)
     'http://localhost:3000/', // loopback
     'http://[::1]/', // loopback (IPv6)
+    'http://[ff02::1]/', // IPv6 multicast (ff00::/8)
     'http://0.0.0.0/', // unspecified
     'ftp://example.com/', // non-http(s) protocol
   ];
@@ -31,5 +32,43 @@ describe('fetchExternalBrandAsset SSRF guard', () => {
 
   it('refuses a malformed url', async () => {
     await expect(fetchExternalBrandAsset('not a url')).rejects.toThrow();
+  });
+});
+
+// Redirects are followed manually so ordinary public->public hops still work,
+// but a redirect into non-public space is refused before the next request.
+// Public IP literals are used so the guard needs no DNS lookup and `fetch` is
+// stubbed — no network is touched.
+describe('fetchExternalBrandAsset redirect handling', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('follows a public -> public redirect and returns the final response', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const u = typeof input === 'string' ? input : String(input);
+      if (u === 'http://93.184.216.34/') {
+        return new Response(null, { status: 302, headers: { location: 'http://93.184.216.35/final' } });
+      }
+      return new Response('ok', { status: 200 });
+    });
+
+    const res = await fetchExternalBrandAsset('http://93.184.216.34/');
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Redirects are intercepted, not auto-followed by the platform.
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ redirect: 'manual' });
+  });
+
+  it('refuses a redirect that points into non-public space (and never fetches it)', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/latest/meta-data/' } }),
+    );
+
+    await expect(fetchExternalBrandAsset('http://93.184.216.34/')).rejects.toThrow();
+    // Only the first (public) hop is requested; the private target is blocked
+    // by the pre-fetch validation, so it is never contacted.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

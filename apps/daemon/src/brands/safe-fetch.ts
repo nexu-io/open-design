@@ -11,8 +11,10 @@
 // every non-public host. Unlike the shared `assertExternalAssetUrl`, this also
 // blocks loopback (that guard allows it for local API providers, which is wrong
 // here) and resolves the hostname so a public name that A/AAAA-records into
-// private space is caught too. `fetch` is pinned to `redirect: 'error'` so a
-// public host can't 302 into private space.
+// private space is caught too. Redirects are followed manually with a hop limit
+// and every `Location` re-validated before the next request, so ordinary
+// public-to-public redirects (http->https, apex->www, CDN hops) still work while
+// a public host that 3xx's into private space is refused.
 //
 // Residual: DNS rebinding (a name that resolves public here but private when the
 // platform fetch re-resolves) is not defeated without a pinned dispatcher — the
@@ -27,9 +29,13 @@ import {
 
 function isNonPublicHost(host: string): boolean {
   const h = host.toLowerCase();
+  // IPv6 multicast (ff00::/8) — not covered by isBlockedExternalApiHostname,
+  // which only special-cases `::`, ULA and link-local IPv6.
+  if (/^ff[0-9a-f]{2}:/.test(h)) return true;
   // isLoopbackApiHost → 127.0.0.0/8, ::1, localhost.
   // isBlockedExternalApiHostname → 0.0.0.0/0.x, RFC1918, CGNAT (100.64/10),
-  //   link-local (169.254 / fe80::), ULA (fc00::/7), multicast, `::`.
+  //   IPv4 link-local/metadata (169.254), IPv4 multicast (>=224), `::`,
+  //   IPv6 link-local (fe80::/10) and ULA (fc00::/7).
   return isLoopbackApiHost(h) || isBlockedExternalApiHostname(h);
 }
 
@@ -73,10 +79,27 @@ export async function assertPublicBrandUrl(url: string): Promise<void> {
   }
 }
 
+const MAX_BRAND_REDIRECTS = 5;
+
 export async function fetchExternalBrandAsset(
   url: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  await assertPublicBrandUrl(url);
-  return fetch(url, { ...init, redirect: 'error' });
+  let target = url;
+  for (let hop = 0; ; hop += 1) {
+    // Re-validate every hop's host (initial URL and each redirect target) before
+    // the request, so a public site can't 3xx us into private space.
+    await assertPublicBrandUrl(target);
+    const res = await fetch(target, { ...init, redirect: 'manual' });
+    const location =
+      res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+    if (!location) return res;
+    // Drain the redirect response body before following it or bailing out.
+    if (res.body) await res.body.cancel().catch(() => {});
+    if (hop >= MAX_BRAND_REDIRECTS) {
+      throw new Error(`too many brand asset redirects (> ${MAX_BRAND_REDIRECTS})`);
+    }
+    // Resolve a possibly-relative Location; the next loop re-validates it.
+    target = new URL(location, target).toString();
+  }
 }
