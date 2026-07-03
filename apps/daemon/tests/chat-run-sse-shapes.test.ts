@@ -217,7 +217,7 @@ describe('startChatRun SSE event shapes (golden)', () => {
       expect(allText).toContain('golden output');
 
       // Must end with a terminal `end` event whose status is succeeded.
-      const endFrame = frames.findLast((f) => f.event === 'end');
+      const endFrame = [...frames].reverse().find((f) => f.event === 'end');
       expect(endFrame).toBeTruthy();
       expect((endFrame!.data as { status?: string })?.status).toBe('succeeded');
 
@@ -326,7 +326,7 @@ process.exit(0);
       expect(ids.every(Number.isFinite)).toBe(true);
       // Ids must be monotonically non-decreasing.
       for (let i = 1; i < ids.length; i++) {
-        expect(ids[i]).toBeGreaterThanOrEqual(ids[i - 1]);
+        expect(ids[i]!).toBeGreaterThanOrEqual(ids[i - 1]!);
       }
     });
   }, 60_000);
