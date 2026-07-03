@@ -1,17 +1,19 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 
 function usage() {
   console.log(`Usage:
-  node scripts/init-clone.mjs <slug> [--url <url>] [--mode <mode>] [--level <L1-L6>]
+  node scripts/init-clone.mjs <site-name-or-slug> [--url <url>] [--mode <mode>] [--level <L1-L6>]
 
 Creates:
-  ./website-clones/<slug>-clone/
-  ./website-clones/<slug>-clone/NOTES.md
-  ./website-clones/<slug>-clone/RECON/screenshots/
+  ./website-clones/<normalized-slug>-clone/
+  ./website-clones/<normalized-slug>-clone/NOTES.md
+  ./website-clones/<normalized-slug>-clone/RECON/screenshots/
 
 Set WEB_CLONE_ROOT=/absolute/path to write projects somewhere else.
+Non-ASCII names fall back to the --url hostname, then a stable short hash.
 `);
 }
 
@@ -36,6 +38,27 @@ function cleanSlug(input) {
     .replace(/https?:\/\//g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function slugFromUrl(url) {
+  if (!url) return "";
+  try {
+    const parsed = new URL(url);
+    return cleanSlug(parsed.hostname.replace(/^www\./i, ""));
+  } catch {
+    return "";
+  }
+}
+
+function fallbackSlug(input, url) {
+  const direct = cleanSlug(input);
+  if (direct) return direct;
+
+  const fromUrl = slugFromUrl(url);
+  if (fromUrl) return fromUrl;
+
+  const hash = crypto.createHash("sha1").update(`${input}\n${url}`).digest("hex").slice(0, 8);
+  return `site-${hash}`;
 }
 
 function shellQuote(value) {
@@ -112,8 +135,7 @@ try {
     process.exit(args.help ? 0 : 1);
   }
 
-  const slug = cleanSlug(args.slug);
-  if (!slug) throw new Error("Slug is empty after normalization.");
+  const slug = fallbackSlug(args.slug, args.url);
   const name = slug.endsWith("-clone") ? slug : `${slug}-clone`;
   const root = process.env.WEB_CLONE_ROOT
     ? path.resolve(process.env.WEB_CLONE_ROOT)
