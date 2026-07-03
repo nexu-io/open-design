@@ -3932,6 +3932,7 @@ export function ProjectView({
                   endedAt: prev.endedAt ?? Date.now(),
                 }),
                 true,
+                { telemetryFinalized: true },
               );
               if (latestReattachRunStatus === 'canceled') return;
               void (async () => {
