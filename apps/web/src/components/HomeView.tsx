@@ -19,7 +19,6 @@ import type {
   ProjectKind,
   AudioVoiceOption,
 } from '@marketing-ax/contracts';
-import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@marketing-ax/contracts';
 import { projectKindToTracking } from '@marketing-ax/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
@@ -1524,10 +1523,11 @@ export function HomeView({
     // Scenario plugins (chips / preset cards) and explicit skill picks are
     // mutually exclusive routing sources — never send both (#2972).
     const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
-    const routedPluginId =
-      sessionMode === 'design'
-        ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
-        : submittedActive?.record.id ?? null;
+    // 자유입력(플러그인 미선택)은 pluginId를 스탬핑하지 않는다 — 데몬 project-create가
+    // pendingPrompt 트리거 매칭 → 버티컬 직행 / 모호 시 설정된 기본 라우터로 결정한다
+    // (스펙 2026-07-03-prompt-trigger-routing §4.3). od-default 하드코딩은 그 결정을
+    // 명시 선택으로 위장해 데몬 라우팅을 영구히 우회시키므로 제거.
+    const routedPluginId = submittedActive?.record.id ?? null;
     onSubmit({
       prompt: trimmed,
       pluginId: routedPluginId,
