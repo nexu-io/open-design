@@ -388,6 +388,36 @@ describe('TasksView page shell', () => {
     });
   });
 
+  it('routes unblock-project focus action into the project workspace', async () => {
+    const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
+    const creatorProjects: Project[] = [
+      {
+        id: 'project-blocked-1',
+        name: '卡住的剪辑项目',
+        skillId: null,
+        designSystemId: null,
+        createdAt: Date.now() - 30_000,
+        updatedAt: Date.now() - 10_000,
+        metadata: { kind: 'video' },
+        status: { value: 'awaiting_input' },
+      },
+    ];
+    mockTasksViewFetch({ creatorProjects, creatorRuns: [] });
+
+    render(<TasksView projects={creatorProjects} />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Creator workbench/i }));
+    expect(await screen.findByText('Needs intervention')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Unblock project' }));
+
+    expect(navigateSpy).toHaveBeenCalledWith({
+      kind: 'project',
+      projectId: 'project-blocked-1',
+      conversationId: null,
+      fileName: null,
+    });
+  });
+
   it('opens a project from the creator task list', async () => {
     const navigateSpy = vi.spyOn(router, 'navigate').mockImplementation(() => {});
     const creatorProjects: Project[] = [
