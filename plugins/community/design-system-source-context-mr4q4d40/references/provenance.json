@@ -1,11 +1,7 @@
 {
-  "candidateId": "909d7541-5bc7-4473-84c1-18ef2921ddf9",
-  "projectId": "brand-anthropic-a38199",
-  "runId": "8f9a49c2-d973-448e-b92b-38830ea71f59",
-  "conversationId": "05128f01-0c8c-43bb-9672-78ed2973b1fd",
   "provenance": {
-    "summary": "Detected from context/source-context.md, README.md, SKILL.md, plugin-source/design-system-source-context-mr0bb87z/references/source-2-SKILL.md, plugin-source/design-system-source-context-mr0bb87z/references/source-1-source-context.md, plugin-source/design-system-source-context-mr0bb87z/SKILL.md, SECURITY.md, CONTRIBUTING.md after a successful run.",
-    "detectedAt": 1783070461055
+    "summary": "Detected from context/source-context.md, README.md, SKILL.md, plugin-source/design-system-source-context-mr0bb87z/references/source-2-SKILL.md, plugin-source/design-system-source-context-mr0bb87z/references/source-1-source-context.md, plugin-source/design-system-source-context-mr0bb87z/SKILL.md, SECURITY.md, CONTRIBUTING.md after a successful Open Design packaging run.",
+    "privacy": "Public package provenance keeps relative source references only; local project, run, conversation, host paths, and credentials are intentionally omitted."
   },
   "sourceRefs": [
     {
