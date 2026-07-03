@@ -346,6 +346,7 @@
 
 .library-install-form .library-import-source-control {
   grid-template-columns: repeat(3, auto);
+  white-space: nowrap;
 }
 
 .library-install-form .library-import-mode-control {
