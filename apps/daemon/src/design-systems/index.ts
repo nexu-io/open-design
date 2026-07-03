@@ -1252,17 +1252,26 @@ export function workspaceRenameDesignSystemId(project: {
   return importedFrom === 'design-system' ? id : null;
 }
 
+// 'not-applicable': the project is not a design-system workspace (or the
+// name is blank) — the rename does not involve a design system at all.
+// 'propagated': the bound design system's title now matches the new name.
+// 'failed': the project IS bound to a user design system but the title
+// could not be written through (e.g. the entry is missing on disk).
+// Callers must not persist the project-row rename on 'failed' — doing so
+// recreates the silent revert this write-through exists to prevent.
+export type WorkspaceRenamePropagation = 'not-applicable' | 'propagated' | 'failed';
+
 export async function propagateWorkspaceProjectRename(
   root: string,
   project: { designSystemId?: string | null; metadata?: unknown },
   name: unknown,
-): Promise<boolean> {
+): Promise<WorkspaceRenamePropagation> {
   const id = workspaceRenameDesignSystemId(project);
-  if (!id) return false;
+  if (!id) return 'not-applicable';
   const title = typeof name === 'string' ? name.trim() : '';
-  if (!title) return false;
+  if (!title) return 'not-applicable';
   const updated = await updateUserDesignSystem(root, id, { title });
-  return updated != null;
+  return updated != null ? 'propagated' : 'failed';
 }
 
 export async function linkUserDesignSystemProject(

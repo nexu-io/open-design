@@ -2131,7 +2131,21 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         // system so both records agree.
         const existing = getProject(db, req.params.id);
         if (existing) {
-          await propagateWorkspaceProjectRename(USER_DESIGN_SYSTEMS_DIR, existing, patch.name);
+          // Decide from the post-patch shape (updateProject merges the
+          // patch shallowly over the row), so a PATCH that also rebinds
+          // or detaches the design system only ever renames the system
+          // the project remains bound to after this request.
+          const propagation = await propagateWorkspaceProjectRename(
+            USER_DESIGN_SYSTEMS_DIR,
+            { ...existing, ...patch },
+            patch.name,
+          );
+          if (propagation === 'failed') {
+            return sendApiError(
+              res, 409, 'CONFLICT',
+              'rename could not be written through to the bound design system; project left unchanged',
+            );
+          }
         }
       }
       const project = updateProject(db, req.params.id, patch);
