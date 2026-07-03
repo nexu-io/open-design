@@ -6,7 +6,17 @@ import {
   designSystemNeedsRepoConnect,
   repoConnectCopy,
 } from '../../src/components/design-system-github-evidence';
+import { en } from '../../src/i18n/locales/en';
+import type { Dict } from '../../src/i18n/types';
 import type { DesignSystemSummary } from '../../src/types';
+
+const t = (key: keyof Dict, vars?: Record<string, string | number>) => {
+  let value = en[key];
+  for (const [name, replacement] of Object.entries(vars ?? {})) {
+    value = value.replaceAll(`{${name}}`, String(replacement));
+  }
+  return value;
+};
 
 function designSystem(overrides: Partial<DesignSystemSummary> = {}): DesignSystemSummary {
   return {
@@ -104,14 +114,14 @@ describe('designSystemNeedsRepoConnect', () => {
 
 describe('repoConnectCopy', () => {
   it('asks the user to connect when GitHub is not connected', () => {
-    const copy = repoConnectCopy(false);
+    const copy = repoConnectCopy(t, false);
     expect(copy.buttonLabel).toBe('Connect GitHub');
     expect(copy.bannerTitle).toBe('Connect your repo to pull aspects of your design system');
     expect(copy.cardTitle).toBe('Connect your repo');
   });
 
   it('switches to re-import guidance when GitHub is already connected', () => {
-    const copy = repoConnectCopy(true);
+    const copy = repoConnectCopy(t, true);
     expect(copy.buttonLabel).toBe('Import repo');
     expect(copy.bannerTitle).toBe('GitHub is connected');
     expect(copy.cardTitle).toBe('GitHub is connected');
@@ -120,7 +130,7 @@ describe('repoConnectCopy', () => {
   });
 
   it('shows a neutral pending label while the status is still loading', () => {
-    const copy = repoConnectCopy(undefined);
+    const copy = repoConnectCopy(t, undefined);
     expect(copy.buttonLabel).toBe('Checking GitHub...');
     expect(copy.bannerBody).toContain('Checking');
     expect(copy.cardBody).toContain('Checking');

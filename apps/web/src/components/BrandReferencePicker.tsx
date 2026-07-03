@@ -6,7 +6,7 @@
 // extraction kickoff to each entry point (New Brand modal, Brand Kit tab,
 // onboarding). Visuals come from public favicons only — no private storage.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useT } from '../i18n';
 import {
   BRAND_CATEGORIES,
@@ -37,6 +37,16 @@ export interface BrandReferencePickerProps {
   /** Hard-disable interaction (rarely needed on top of `busy`). */
   disabled?: boolean;
   className?: string;
+  /** Per-card hover affordance + quick-pick row context. Defaults to the i18n
+   *  "Extract"/"Popular brands — click to extract". Hosts that merely add the
+   *  brand as a style reference (e.g. the Design System create flow) pass
+   *  "Add" so the affordance matches what the click actually does. */
+  actionLabel?: string;
+  quickPicksLabel?: string;
+  /** When the picker flows inside a host scroll container (fillHeight=false),
+   *  pass that container so the infinite-scroll observer watches the right
+   *  root instead of the viewport. */
+  scrollRootRef?: RefObject<HTMLElement | null>;
 }
 
 const ALL = 'all';
@@ -111,9 +121,14 @@ export function BrandReferencePicker({
   error = null,
   disabled = false,
   className,
+  actionLabel,
+  quickPicksLabel,
+  scrollRootRef,
 }: BrandReferencePickerProps) {
   const t = useT();
   const compact = variant === 'compact';
+  const resolvedActionLabel = actionLabel ?? t('brandPicker.extractAction');
+  const resolvedQuickPicksLabel = quickPicksLabel ?? t('brandPicker.quickPicksLabel');
   const pageSize = compact ? PAGE_COMPACT : PAGE_FULL;
   const [category, setCategory] = useState(ALL);
   const [query, setQuery] = useState('');
@@ -157,11 +172,14 @@ export function BrandReferencePicker({
           setLimit((l) => Math.min(l + pageSize, filtered.length));
         }
       },
-      { root: fillHeight ? scrollAreaRef.current : null, rootMargin: '600px 0px' },
+      {
+        root: scrollRootRef?.current ?? (fillHeight ? scrollAreaRef.current : null),
+        rootMargin: '600px 0px',
+      },
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [filtered.length, pageSize, fillHeight]);
+  }, [filtered.length, pageSize, fillHeight, scrollRootRef]);
 
   const visible = filtered.slice(0, limit);
   const showQuickPicks = category === ALL && query.trim() === '';
@@ -202,9 +220,9 @@ export function BrandReferencePicker({
         <div
           className={styles.quickPicksSection}
           role="group"
-          aria-label={t('brandPicker.quickPicksLabel')}
+          aria-label={resolvedQuickPicksLabel}
         >
-          <span className={styles.quickPicksLabel}>{t('brandPicker.quickPicksLabel')}</span>
+          <span className={styles.quickPicksLabel}>{resolvedQuickPicksLabel}</span>
           <div className={styles.quickPicks}>
             {QUICK_PICK_BRANDS.map((brand) => {
               const loadingThis = busy && brand.domain === pickedDomain;
@@ -295,7 +313,7 @@ export function BrandReferencePicker({
                   <span className={styles.cardCategory}>{categoryLabel(brand.category)}</span>
                 </span>
                 <span className={styles.extractPill} aria-hidden>
-                  {t('brandPicker.extractAction')}
+                  {resolvedActionLabel}
                   <ArrowGlyph />
                 </span>
               </button>

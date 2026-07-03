@@ -1,0 +1,266 @@
+/* ================= v4 landing-style (OD tokens, full-bleed bands) ================= */
+.v4{width:100vw;margin-left:calc(50% - 50vw);background:var(--paper);color:var(--ink)}
+.v4 :is(h1,h2,h3,p,blockquote,cite,div,span,a){font-family:var(--sans)}
+.v4 .grn{color:var(--olive)}
+.v4band{padding:68px 0}
+.v4band.alt{background:var(--bone)}
+.v4band.ink{background:var(--ink);color:#fff}
+.v4in{max-width:1080px;margin:0 auto;padding:0 40px}
+.v4in.narrow{max-width:740px}
+.v4eye{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--olive);font-weight:600;margin:0 0 22px}
+.v4 .ink .v4eye,.v4band.ink .v4eye{color:var(--coral)}
+/* hero */
+.v4hero{padding:116px 0 56px;position:relative;overflow:hidden}
+.v4hero::before{content:"";position:absolute;inset:0;background-image:linear-gradient(180deg,rgba(250,250,250,.62),rgba(250,250,250,.92) 66%,var(--paper)),url(/lab-stage-art.webp);background-size:cover;background-position:center 16%;z-index:0;pointer-events:none}
+.v4hero>.v4in{position:relative;z-index:1}
+.v4h1{font-size:clamp(32px,4.4vw,52px);line-height:1.06;letter-spacing:-.03em;font-weight:780;margin:0 0 16px}
+.v4sub{font-size:18px;line-height:1.55;color:var(--ink-soft);font-weight:500;margin:0 0 24px;max-width:520px}
+.v4dek{font-size:18px;line-height:1.65;color:var(--ink-soft);max-width:660px;margin:0 0 34px}
+.v4cta-row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+/* Both CTA buttons share one box model (equal padding + a 1px border on each,
+   the primary's border matching its fill) so the filled and outlined buttons
+   stay the same height/shape across every locale — long translated labels no
+   longer make the outlined button wrap or drift out of alignment. The outlined
+   border uses --ink-faint (not the faint --line) so it reads as a real button
+   edge on the near-white paper, not a hairline. */
+.v4btn-p{background:var(--ink);color:#fff;border:1px solid var(--ink);font-weight:600;font-size:15px;padding:14px 27px;border-radius:var(--spacing-8);text-decoration:none;display:inline-flex;align-items:center;white-space:nowrap;transition:background .16s ease,border-color .16s ease}
+.v4btn-p:hover{background:#000;border-color:#000}
+.v4btn-g{color:var(--ink);background:transparent;border:1px solid var(--ink-faint);font-weight:600;font-size:15px;padding:14px 27px;border-radius:var(--spacing-8);text-decoration:none;display:inline-flex;align-items:center;white-space:nowrap;transition:background .16s ease,border-color .16s ease}
+.v4btn-g:hover{border-color:var(--ink);background:var(--paper-warm)}
+/* stats band */
+.v4stats{display:grid;grid-template-columns:repeat(4,1fr);gap:40px}
+.v4stats .n{font-size:clamp(34px,4.4vw,52px);line-height:1;font-weight:800;letter-spacing:-.035em;color:var(--ink)}
+.v4stats .n span{font-size:.42em;font-weight:600;color:var(--ink-faint)}
+.v4stats .l{margin-top:14px;font-size:14px;line-height:1.45;color:var(--ink-faint);max-width:210px}
+/* meta row */
+.v4metaband{padding:40px 0}
+.v4dossier{display:flex;gap:64px;flex-wrap:wrap}
+.v4dossier>div{font-size:16px;color:var(--ink);font-weight:600}
+.v4dossier>div span{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);font-weight:500;margin-bottom:8px}
+/* headings + body */
+.v4h2{font-size:clamp(28px,3.6vw,40px);line-height:1.12;letter-spacing:-.025em;font-weight:760;margin:0 0 22px}
+.v4in.narrow p,.v4lede{font-size:18px;line-height:1.72;color:var(--ink-soft);margin:0 0 22px;max-width:680px}
+.v4in p b{font-weight:680;color:var(--ink)} .v4in p em{font-style:italic}
+/* big quote band */
+.v4quoteband{padding:78px 0}
+.v4bigq{font-family:var(--serif);font-size:clamp(26px,3.6vw,40px);line-height:1.3;font-style:italic;color:#fff;margin:0;border:0;padding:0}
+.v4bigq .grn{color:var(--coral-soft)}
+.v4by{margin-top:28px;font-family:var(--mono);font-size:13px;letter-spacing:.03em;color:rgba(255,255,255,.6)}
+/* feature (alternating image/text) */
+.v4feat{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
+.v4feat.reverse .v4feat-txt{order:2}
+.v4feat-img{margin:0;display:flex;justify-content:center}
+.v4feat-img img{width:100%;max-width:420px;border-radius:var(--spacing-8);box-shadow:0 34px 70px -34px rgba(20,20,30,.55)}
+.v4feat-img figcaption{}
+.v4feat figure{position:relative}
+.v4feat-img{flex-direction:column;align-items:flex-start;gap:14px}
+.v4feat-img figcaption{font-size:13px;color:var(--ink-faint);font-family:var(--mono);letter-spacing:.02em}
+/* portal band */
+.v4portal{margin:30px 0 0;max-width:720px}
+.v4frame{border-radius:var(--spacing-8);overflow:hidden;background:var(--bone);box-shadow:0 40px 80px -36px rgba(20,20,30,.5);border:1px solid var(--line)}
+.v4bar{height:38px;background:var(--paper-warm);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:7px;padding:0 15px}
+.v4bar i{width:11px;height:11px;border-radius:50%;background:var(--line-hover)}
+.v4frame img{width:100%;display:block;aspect-ratio:16/9;object-fit:cover;object-position:top center}
+/* 3 feature columns */
+.v4feats3{display:grid;grid-template-columns:repeat(3,1fr);gap:44px;margin-top:12px}
+.v4feats3 h3{font-size:17px;font-weight:700;color:var(--ink);margin:0 0 10px}
+.v4feats3 p{font-size:15px;line-height:1.6;color:var(--ink-soft);margin:0}
+.v4feats3 em{font-style:italic}
+/* in his words */
+.v4quotes{border-left:2px solid var(--coral);padding-left:22px;margin:0}
+.v4quotes p{font-family:var(--serif);font-size:21px;line-height:1.5;font-style:italic;color:var(--ink-soft);margin:0 0 18px}
+.v4quotes cite{font-style:normal;font-size:13px;color:var(--ink-faint);font-family:var(--mono)}
+/* UGC */
+.v4ugc{display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-top:12px}
+.v4ugc figure{margin:0}
+.v4ugc img{width:100%;border-radius:var(--spacing-8);box-shadow:0 30px 60px -34px rgba(20,20,30,.45);display:block}
+.v4ugc figcaption{margin-top:14px;font-size:14px;line-height:1.55;color:var(--ink-soft)}
+.v4ugc em{font-style:italic}
+/* teams */
+.v4teams{display:flex;align-items:center;justify-content:space-between;gap:36px;background:var(--coral-tint);border-radius:var(--spacing-8);padding:32px 36px}
+.v4teams-p{font-size:17px;line-height:1.5;color:var(--ink);margin:0;font-weight:500;max-width:620px}
+/* final */
+.v4final{padding:88px 0;position:relative;overflow:hidden}
+.v4final::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(16,16,18,.82),rgba(16,16,18,.9)),url(/cta-bg.webp);background-size:cover;background-position:center;z-index:0}
+.v4final>.v4in{position:relative;z-index:1}
+.v4final-h{font-size:clamp(30px,4vw,46px);line-height:1.1;letter-spacing:-.025em;font-weight:780;color:#fff;margin:0 0 16px;max-width:760px}
+.v4final-p{font-size:18px;line-height:1.6;color:rgba(255,255,255,.72);margin:0 0 30px;max-width:560px}
+/* Final-CTA pair on the dark band: same equal-box treatment as the hero pair.
+   The outlined button's border is lifted to .55 alpha so it stays legible
+   against the ink background when a translated label makes it wider. */
+.v4btn-coral{background:var(--coral);color:#0a0a0a;border:1px solid var(--coral);font-weight:700;font-size:15px;padding:14px 27px;border-radius:var(--spacing-8);text-decoration:none;display:inline-flex;align-items:center;white-space:nowrap}
+.v4btn-gd{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.55);font-weight:600;font-size:15px;padding:14px 27px;border-radius:var(--spacing-8);text-decoration:none;display:inline-flex;align-items:center;white-space:nowrap;transition:border-color .16s ease,background .16s ease}
+.v4btn-gd:hover{border-color:#fff;background:rgba(255,255,255,.08)}
+/* hero image (promo moved up) */
+.v4heroimg{margin:44px auto 0;max-width:740px}
+.v4heroimg img{width:100%;border-radius:var(--spacing-8);box-shadow:0 30px 64px -36px rgba(20,20,30,.5);display:block}
+.v4heroimg figcaption{margin-top:14px;font-size:13.5px;color:var(--ink-faint);text-align:center}
+/* verdict 2-col */
+.v4vquotes{display:grid;grid-template-columns:1fr 1fr;gap:52px}
+.v4vquotes blockquote{font-family:var(--serif);font-size:23px;line-height:1.4;font-style:italic;color:var(--ink-soft);margin:0;padding-left:22px;border-left:2px solid var(--coral)}
+.v4vcite{display:block;margin-top:30px;font-style:normal;font-size:13px;color:var(--ink-faint);font-family:var(--mono)}
+/* poster P.S. */
+.v4psfig{margin:0;text-align:center}
+.v4psfig img{width:100%;max-width:340px;border-radius:var(--spacing-8);box-shadow:0 30px 60px -34px rgba(20,20,30,.4);display:block;margin:0 auto 18px}
+.v4psfig figcaption{font-size:15px;line-height:1.6;color:var(--ink-soft);max-width:520px;margin:0 auto;text-align:center}
+/* hero two-col + snapshot + stats strip (first screen) */
+.v4herotop{display:grid;grid-template-columns:1.45fr 1fr;gap:56px;align-items:start}
+.v4snap{border:1px solid rgba(255,255,255,.7);border-radius:16px;background:rgba(255,255,255,.66);backdrop-filter:blur(16px) saturate(1.5);-webkit-backdrop-filter:blur(16px) saturate(1.5);padding:24px 26px;box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 28px 56px -30px rgba(38,38,38,.30)}
+.v4snap-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.v4snap-logo{flex:0 0 auto;width:38px;height:38px;border-radius:10px;background:var(--ink);color:var(--coral);font-weight:800;font-size:19px;display:flex;align-items:center;justify-content:center}
+.v4snap-name{font-size:18px;font-weight:700;color:var(--ink);line-height:1.15}
+.v4snap-desc{font-size:13.5px;line-height:1.55;color:var(--ink-soft);margin:0}
+.v4snap-chips{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 0}
+.v4chip{font-size:12.5px;font-weight:600;color:var(--ink-soft);background:rgba(255,255,255,.55);border:1px solid var(--line);border-radius:999px;padding:6px 13px}
+.v4snap-uses{margin-top:16px;padding-top:15px;border-top:1px solid var(--line);font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.4}
+.v4snap-uses span{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint);font-weight:500;margin-bottom:5px}
+.v4statstrip{display:grid;grid-template-columns:repeat(4,1fr);gap:36px;margin-top:4px}
+.v4statline{display:block;width:100%;height:14px;margin:44px 0 22px}
+.v4selbox{position:relative;display:inline-block}
+.v4selbox::before{content:"";position:absolute;inset:-12px -16px;border:1.5px solid var(--coral);border-radius:2px;pointer-events:none}
+.v4selbox .hc{position:absolute;width:9px;height:9px;background:#fff;border:1.5px solid var(--coral);border-radius:1px;z-index:2}
+.v4selbox .hc.tl{top:-12px;left:-16px;transform:translate(-50%,-50%)}
+.v4selbox .hc.tr{top:-12px;right:-16px;transform:translate(50%,-50%)}
+.v4selbox .hc.bl{bottom:-12px;left:-16px;transform:translate(-50%,50%)}
+.v4selbox .hc.br{bottom:-12px;right:-16px;transform:translate(50%,50%)}
+.v4statstrip .n{font-size:clamp(28px,3.2vw,40px);line-height:1;font-weight:800;letter-spacing:-.035em;color:var(--ink)}
+.v4statstrip .n span{font-size:.42em;font-weight:600;color:var(--ink-faint)}
+.v4statstrip .l{margin-top:11px;font-size:13px;line-height:1.4;color:var(--ink-faint)}
+.v4promoband{padding:60px 0}
+.v4promo-c{text-align:center}
+.v4promo-eye{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--olive);font-weight:600}
+.v4promo-arrow{display:inline-block;width:46px;height:56px;margin:6px 0 2px}
+.v4promo{margin:0 auto;max-width:640px}
+.v4promo img{width:100%;border-radius:var(--spacing-8);box-shadow:0 34px 70px -40px rgba(20,20,30,.5);display:block}
+.v4circle{position:relative;display:inline-block;white-space:nowrap}
+.v4circle-svg{position:absolute;left:-9px;top:-6px;width:calc(100% + 18px);height:calc(100% + 13px);color:var(--olive);overflow:visible;z-index:0;pointer-events:none}
+.v4feat-quote{margin:16px 0 0;padding-left:14px;border-left:2px solid var(--coral);font-size:16px;line-height:1.5;color:var(--ink-soft)}
+/* verdict as a single big "moment" (区别于三栏) */
+.v4verdictband{background:var(--paper-warm)}
+.v4bigverdict{font-family:var(--serif);font-size:clamp(26px,3.6vw,40px);line-height:1.3;font-style:italic;color:var(--ink);margin:12px 0 0;border:0;padding:0}
+.v4bigverdict .grn{font-style:italic;color:var(--olive)}
+.v4verdict-by{margin-top:26px;font-family:var(--mono);font-size:13px;color:var(--ink-faint);line-height:1.6}
+.v4verdict-by span{display:block;margin-top:4px;font-family:var(--serif);font-style:italic;font-size:15px;color:var(--ink-soft)}
+/* promo band heading spacing */
+.v4promoband .v4h2{margin:0 0 22px}
+/* P.S. compact (彩蛋别占满屏) */
+.v4psband{padding:46px 0}
+.v4psband .v4psfig img{max-width:230px;margin:0 auto 14px}
+.v4psband .v4psfig figcaption{font-size:14px}
+/* 极淡油画背景 — 给中间纯文字屏,和 hero/CTA 呼应(不与产物图打架) */
+.v4artband{position:relative;overflow:hidden}
+.v4artband::before{content:"";position:absolute;inset:0;background-size:cover;background-position:center;z-index:0;pointer-events:none}
+.v4artband>.v4in{position:relative;z-index:1}
+
+
+
+/* 手绘涂鸦下划线 */
+.v4scribble{display:block;color:var(--olive);width:210px;max-width:62%;height:13px;margin:8px 0 0}
+/* 涂鸦画笔(替代三条直线)+ 暗底涂鸦 */
+.v4brush{display:block;width:180px;max-width:80%;height:14px;margin:0 0 14px}
+.v4scribble-dark{color:var(--coral)}
+/* scroll motion */
+.v4.anim .v4band{opacity:0;transform:translateY(18px);transition:opacity .65s cubic-bezier(.22,.61,.36,1),transform .65s cubic-bezier(.22,.61,.36,1)}
+.v4.anim .v4band.inview{opacity:1;transform:none}
+@media(max-width:820px){
+ .v4herotop{grid-template-columns:1fr;gap:32px}
+ .v4statstrip{grid-template-columns:1fr 1fr;gap:28px}
+ .v4vquotes{grid-template-columns:1fr;gap:28px}
+ .v4stats{grid-template-columns:1fr 1fr;gap:32px}
+ .v4feat{grid-template-columns:1fr;gap:28px}.v4feat.reverse .v4feat-txt{order:0}
+ .v4feats3{grid-template-columns:1fr}.v4ugc{grid-template-columns:1fr}
+ .v4teams{flex-direction:column;align-items:flex-start}.v4dossier{gap:32px}
+}
+
+/* ===== comparison-page adaptations of the v4 story design system ===== */
+.v4toc{display:flex;flex-wrap:wrap;gap:8px 18px;margin:28px 0 0;font-family:var(--mono);font-size:12.5px;letter-spacing:.04em}
+.v4toc a{color:var(--ink-soft);text-decoration:none;border-bottom:1px solid var(--line);padding-bottom:1px}
+.v4toc a:hover{color:var(--ink);border-color:var(--coral)}
+/* keep prose readable inside the wide 1080 band; tables/splits stay full width */
+.v4band .v4in>p,.v4band .v4in>ul,.v4band .v4in>ol,.v4band .v4in>.v4steps{max-width:720px}
+.v4in.narrow>p,.v4in.narrow>ul,.v4in.narrow>ol{max-width:680px}
+.v4band .v4in>ul,.v4band .v4in>ol{font-size:16px;line-height:1.72;color:var(--ink-soft);padding-left:20px}
+.v4band .v4in>ul li,.v4band .v4in>ol li{margin:0 0 8px}
+.v4steps{list-style:none;margin:0 0 22px;padding:0;display:grid;gap:14px}
+.v4steps li{font-size:16px;line-height:1.6;color:var(--ink-soft)}
+.v4steps strong{color:var(--ink);font-weight:680}
+.v4feat-txt p{font-size:16px;line-height:1.66;color:var(--ink-soft);margin:0 0 14px}
+.v4feat-txt p:last-child{margin-bottom:0}
+.v4feat-img img{max-width:100%;aspect-ratio:16/9;object-fit:cover}
+/* compare tables sit in the band */
+.v4band .compare-table-wrap{margin:10px 0 0;max-width:100%}
+.v4band .faq-list{max-width:100%;margin-top:8px}
+/* dark final band meta line */
+.v4final-meta{margin-top:28px;font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;color:rgba(255,255,255,.6)}
+.v4final-meta a{color:#fff;text-decoration:underline;text-underline-offset:3px}
+
+/* ===== UNIFIED content column — fix inconsistent widths / left edges ===== */
+/* every direct block in a band aligns to the SAME left edge (no auto-centering) */
+.v4 .v4band .v4in > * { margin-left: 0; margin-right: 0; }
+/* prose keeps one readable width, left-aligned */
+.v4 .v4band .v4in > p,
+.v4 .v4band .v4in > ul,
+.v4 .v4band .v4in > ol,
+.v4 .v4band .v4in > .v4steps { max-width: 720px; }
+/* tables, splits, faq span the full band width, left-aligned, never centered */
+.v4 .v4band .faq-list,
+.v4 .v4band .compare-table-wrap { max-width: 100%; margin-left: 0; margin-right: 0; }
+.v4 .v4band .compare-table-wrap--compact { max-width: 680px; margin-left: 0; margin-right: 0; }
+.v4 .v4band .v4feat { margin-left: 0; margin-right: 0; }
+/* consistent vertical rhythm: reset defaults, then even gaps */
+.v4 .v4band .v4in > * { margin-top: 0; margin-bottom: 0; }
+.v4 .v4band .v4in > * + * { margin-top: 24px; }
+.v4 .v4band .v4in > h2 + * { margin-top: 28px; }
+/* tables / image-text splits / hero images breathe more on both sides */
+.v4 .v4band .v4in > .compare-table-wrap,
+.v4 .v4band .v4in > .v4feat,
+.v4 .v4band .v4in > .v4heroimg { margin-top: 40px; }
+.v4 .v4band .v4in > .compare-table-wrap + *,
+.v4 .v4band .v4in > .v4feat + *,
+.v4 .v4band .v4in > .v4heroimg + * { margin-top: 34px; }
+.v4 .v4band .v4toc { margin-top: 30px; }
+
+/* tighten over-wide gaps + top-align splits so short copy doesn't float */
+.v4 .v4band .v4in > .compare-table-wrap,
+.v4 .v4band .v4in > .v4feat,
+.v4 .v4band .v4in > .v4heroimg { margin-top: 30px; }
+.v4 .v4band .v4in > .compare-table-wrap + *,
+.v4 .v4band .v4in > .v4feat + *,
+.v4 .v4band .v4in > .v4heroimg + * { margin-top: 26px; }
+.v4 .v4band .v4feat { align-items: start; gap: 48px; }
+
+/* ============================================================
+ * ONE fixed content width — EVERY block (text, table, list, image)
+ * fills the same column, same left/right edges. No per-block widths.
+ * ============================================================ */
+.v4 .v4band .v4in { max-width: 880px; }
+.v4 .v4band .v4in > * { max-width: 100%; margin-left: 0; margin-right: 0; }
+.v4 .v4band .compare-table-wrap,
+.v4 .v4band .compare-table-wrap--compact,
+.v4 .v4band .faq-list,
+.v4 .v4band .v4figure { max-width: 100%; margin-left: 0; margin-right: 0; }
+.v4 .v4band .compare-table { min-width: 0; width: 100%; }
+/* stacked image figure (replaces side-by-side split) — full column width */
+.v4 .v4band .v4figure { margin: 30px 0 0; }
+.v4 .v4band .v4figure img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--spacing-8); box-shadow: 0 30px 64px -36px rgba(20,20,30,.45); display: block; }
+.v4 .v4band .v4figure figcaption { margin-top: 12px; font-size: 13px; line-height: 1.5; color: var(--ink-faint); font-family: var(--mono); }
+/* hero matches the same column width for a tidy masthead */
+.v4 .v4hero .v4in { max-width: 880px; }
+.v4 .v4hero .v4heroimg { max-width: 100%; margin: 40px 0 0; }
+
+/* === review #4853 (Looper) fixes === */
+/* 1. The .v4 full-bleed shell is 100vw; when a vertical scrollbar is present
+ *    100vw includes the gutter and the shell overflows by the scrollbar width,
+ *    causing horizontal scroll/jitter. Clip page-level horizontal overflow on
+ *    pages that use the .v4 layout. (overflow:clip keeps sticky/fixed working.) */
+html:has(.v4) body { overflow-x: clip; }
+
+/* 2. The rich wrapper moved from .solution-page to .v4, so the .solution-page
+ *    FAQ refinements no longer matched. Port them under .v4 so the styled
+ *    accordion (border, padding, type scale) is preserved. */
+.v4 .faq-list { display: grid; gap: var(--spacing-10); }
+.v4 .faq-item { border: 1px solid var(--line); border-radius: var(--spacing-8); background: var(--bone); }
+.v4 .faq-item summary { grid-template-columns: 40px 1fr 32px; gap: var(--spacing-16); padding: var(--spacing-16); }
+.v4 .faq-q { color: var(--ink); font-family: var(--sans); font-size: var(--font-size-18, 18px); font-weight: 600; line-height: 125%; }
+.v4 .faq-toggle { border-radius: var(--spacing-8); border-color: var(--line); }
+.v4 .faq-a { margin: 0; padding: 0 var(--spacing-16) var(--spacing-16) 72px; max-width: none; color: var(--ink-soft); font-family: var(--sans); font-size: var(--font-size-14, 14px); line-height: 125%; }

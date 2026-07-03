@@ -1,6 +1,7 @@
 export type UiPlaywrightGroup = {
   files: readonly string[];
   grep: string;
+  workers?: number;
 };
 
 export type UiP0CiMatrixEntry = {
@@ -36,6 +37,7 @@ export const uiP0Groups = {
   },
   "project-workspace": {
     grep: String.raw`\[P0\]`,
+    workers: 1,
     files: [
       "ui/app.test.ts",
       "ui/app-design-files.test.ts",
@@ -46,6 +48,7 @@ export const uiP0Groups = {
   },
   "project-runtime": {
     grep: String.raw`\[P0\]`,
+    workers: 1,
     files: [
       "ui/real-daemon-run.test.ts",
       "ui/amr-run-failure-recovery.test.ts",

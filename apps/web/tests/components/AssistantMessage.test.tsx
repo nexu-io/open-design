@@ -505,6 +505,90 @@ describe('AssistantMessage question forms', () => {
 });
 
 describe('AssistantMessage recovered produced files', () => {
+  it('shows linked project files from the assistant summary as files this turn', () => {
+    const content = '已创建计划文档：[browser-war-deck-outline.md](browser-war-deck-outline.md)。';
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content,
+          events: [{ kind: 'text', text: content } as ChatMessage['events'][number]],
+          producedFiles: [],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectFiles={[
+          {
+            name: 'browser-war-deck-outline.md',
+            path: 'browser-war-deck-outline.md',
+            size: 4096,
+            mtime: 1700000005,
+            kind: 'text',
+            mime: 'text/markdown',
+          } as ProjectFile,
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
+    expect(screen.getByTestId('file-ops-row-browser-war-deck-outline.md')).toBeTruthy();
+    expect(screen.getByText(/Write 1/)).toBeTruthy();
+  });
+
+  it('shows project files mentioned as plain filenames in the assistant summary', () => {
+    const content = '文件列表：\n- browser-war-deck-outline.md';
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content,
+          events: [{ kind: 'text', text: content } as ChatMessage['events'][number]],
+          producedFiles: [],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectFiles={[
+          {
+            name: 'browser-war-deck-outline.md',
+            path: 'browser-war-deck-outline.md',
+            size: 4096,
+            mtime: 1700000004,
+            kind: 'text',
+            mime: 'text/markdown',
+          } as ProjectFile,
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId('file-ops-summary')).toBeTruthy();
+    expect(screen.getByTestId('file-ops-row-browser-war-deck-outline.md')).toBeTruthy();
+  });
+
+  it('does not recover old reference files as produced files', () => {
+    const content = '参考 `README.md` 的内容。';
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content,
+          events: [{ kind: 'text', text: content } as ChatMessage['events'][number]],
+          producedFiles: [],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectFiles={[
+          {
+            name: 'README.md',
+            path: 'README.md',
+            size: 2048,
+            mtime: 1699990000,
+            kind: 'text',
+            mime: 'text/markdown',
+          } as ProjectFile,
+        ]}
+      />,
+    );
+
+    expect(screen.queryByTestId('file-ops-summary')).toBeNull();
+  });
+
   it('shows files modified during a sparse completed assistant turn', () => {
     render(
       <AssistantMessage

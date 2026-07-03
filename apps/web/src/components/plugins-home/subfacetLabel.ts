@@ -7,12 +7,17 @@
 // lands) fall back to the table's English label.
 
 import type { useT } from '../../i18n';
+import { commercialCategoryLabel, isCommercialCategoryId } from './categoryLabel';
 
 export function pluginSubfacetLabel(
   slug: string,
   fallback: string,
   t: ReturnType<typeof useT>,
 ): string {
+  // Deck sub-facets are the 15 commercial "品类" scenes (see `./facets.ts`),
+  // so their slugs are commercial category ids — resolve them through the same
+  // dict the card chip uses so the filter row and the tag read identically.
+  if (isCommercialCategoryId(slug)) return commercialCategoryLabel(slug, t);
   switch (slug) {
     case 'business-dashboards': return t('pluginsHome.subfacet.business-dashboards');
     case 'app-prototypes': return t('pluginsHome.subfacet.app-prototypes');

@@ -1,0 +1,204 @@
+name: finalize-release
+# Post-publish bookend to cut-release.yml. When a STABLE release ships, this:
+#   1. Deletes the now-obsolete "backport release/vX.Y.Z" label — a shipped
+#      release takes no more backports, so the label only invites mistakes.
+#   2. Opens a PR bumping main's synchronized workspace versions to X.Y.(Z+1),
+#      keeping main strictly ahead of the just-shipped stable tag (the build
+#      guard requires apps/packaged version > the latest open-design-v* tag),
+#      arms it for the merge queue (gh pr merge --auto enqueues on green), and
+#      requests a @nexu-io/core-maintainers review.
+#
+# Trigger: workflow_run on release-stable completing — NOT `release: published`.
+# release-stable.yml promotes its own draft to published with `gh release edit
+# --draft=false` using GITHUB_TOKEN, and a release event minted by GITHUB_TOKEN
+# does not trigger other workflows (GitHub's loop guard). So we react to the
+# build finishing instead, exactly like backport-automerge / bake-plugin-
+# previews-automerge react to ci. The version is read from the LATEST published
+# release — release-stable promotes its release with `--latest`, so after a real
+# publish that IS the just-shipped stable. We deliberately do NOT parse
+# workflow_run.head_branch: release-stable can be dispatched from one ref while
+# building another via its `ref` input, so head_branch may be the dispatch ref,
+# not the built release branch. A dry-run (metadata/prepublish) publishes nothing,
+# so `--latest` stays the previous (already-finalized) stable and every step
+# no-ops by idempotency. The draft/prerelease/X.Y.Z guards add belt-and-braces.
+#
+# Why the bump PR still needs ONE human approval (unlike the other automerge
+# bots, which merge hands-free): main enforces require_code_owner_review, and the
+# bump touches CODEOWNERS-owned release manifests (apps/packaged, apps/desktop,
+# packages/platform, packages/sidecar*, tools/pack, tools/dev). A bot approval
+# can't satisfy the code-owner gate, so a core-maintainer must approve. Once they
+# do, the armed merge queue squashes it in automatically — no manual file editing,
+# label cleanup, or enqueue. (release/v* has require_code_owner_review=false,
+# which is why backports CAN auto-approve.)
+
+on:
+  workflow_run:
+    workflows: ["release-stable"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Stable release tag to finalize, e.g. open-design-v0.12.0'
+        required: true
+        default: ''
+
+permissions:
+  contents: read               # actual writes go through the App token below
+
+jobs:
+  finalize:
+    if: >-
+      github.repository == 'nexu-io/open-design' &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Resolve the shipped version (latest published stable, or the dispatch tag)
+        id: ver
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          # workflow_dispatch backfill -> finalize the exact tag asked for.
+          # workflow_run -> the latest published release, which release-stable marked --latest;
+          # NEVER parse workflow_run.head_branch (it can be the dispatch ref, not the built
+          # release branch, when release-stable runs with a `ref` input).
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            req="$INPUT_TAG"
+            case "$req" in open-design-v*) : ;; *) req="open-design-v$req" ;; esac   # allow a bare X.Y.Z
+            state=$(gh release view "$req" --repo nexu-io/open-design --json tagName,isDraft,isPrerelease 2>/dev/null || echo '')
+          else
+            state=$(gh release view --repo nexu-io/open-design --json tagName,isDraft,isPrerelease 2>/dev/null || echo '')
+          fi
+          if [ -z "$state" ]; then
+            echo "No release to finalize (no published stable / dry-run / not shipped)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          tag=$(printf '%s' "$state" | jq -r '.tagName')
+          draft=$(printf '%s' "$state" | jq -r '.isDraft')
+          pre=$(printf '%s' "$state" | jq -r '.isPrerelease')
+          ver="${tag#open-design-v}"
+          # Only a published (draft=false), non-prerelease, open-design-vX.Y.Z release finalizes.
+          # On a dry-run the latest published release is the previous (already-finalized) stable,
+          # which the bump idempotency + tolerant label delete below turn into a clean no-op.
+          if [ "$draft" != "false" ] || [ "$pre" != "false" ] || ! printf '%s' "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Latest release '$tag' is draft=$draft prerelease=$pre — not a stable X.Y.Z; skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}; patch=${rest##*.}
+          next="${major}.${minor}.$((patch+1))"
+          {
+            echo "skip=false"
+            echo "version=$ver"
+            echo "next=$next"
+            echo "branch=release-bot/bump-main-v$next"
+          } >> "$GITHUB_OUTPUT"
+          echo "Shipped stable v$ver -> bump main to v$next"
+
+      - name: Checkout main
+        if: steps.ver.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: main            # we bump main, regardless of which ref the release tag points at
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+
+      - uses: actions/setup-node@v4
+        if: steps.ver.outputs.skip != 'true'
+        with:
+          node-version: 24
+
+      - name: Delete the shipped release's backport label
+        if: steps.ver.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          label="backport release/v$VERSION"
+          if gh label list --repo nexu-io/open-design --json name --jq '.[].name' | grep -qxF "$label"; then
+            gh label delete "$label" --repo nexu-io/open-design --yes
+            echo "Deleted label: $label"
+          else
+            echo "Label '$label' not present; nothing to delete."
+          fi
+
+      - name: Bump main's synchronized workspace versions
+        id: bump
+        if: steps.ver.outputs.skip != 'true'
+        env:
+          NEXT: ${{ steps.ver.outputs.next }}
+        run: |
+          set -euo pipefail
+          current=$(node -p "require('./package.json').version")
+          # Idempotency: only ever move main forward. If main is already at or ahead
+          # of NEXT (re-run, or a later cut already moved it), do nothing.
+          lower=$(printf '%s\n%s\n' "$current" "$NEXT" | sort -V | head -1)
+          if [ "$current" = "$NEXT" ] || [ "$lower" = "$NEXT" ]; then
+            echo "main is at $current (>= $NEXT); no bump needed."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Bump only the synchronized set: every workspace package.json whose version
+          # equals the current monorepo version. Independently-versioned packages
+          # (components, agui-adapter, tools/serve, …) keep their own
+          # version. `npm pkg set version` touches only the top-level "version" field,
+          # never a pinned dependency that happens to share the number (e.g. @xterm/addon-fit).
+          changed=0
+          for f in package.json apps/*/package.json packages/*/package.json tools/*/package.json e2e/package.json; do
+            [ -f "$f" ] || continue
+            v=$(node -p "require('./$f').version" 2>/dev/null || echo '')
+            if [ "$v" = "$current" ]; then
+              ( cd "$(dirname "$f")" && npm pkg set version="$NEXT" )
+              changed=$((changed+1))
+            fi
+          done
+          echo "Bumped $changed manifests from $current to $NEXT."
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Open the bump PR, arm the merge queue, request review
+        if: steps.ver.outputs.skip != 'true' && steps.bump.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          NEXT: ${{ steps.ver.outputs.next }}
+          BRANCH: ${{ steps.ver.outputs.branch }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "::warning::$BRANCH already exists; a bump PR is likely already open. Skipping."
+            exit 0
+          fi
+          git config user.name  'open-design-release-bot[bot]'
+          git config user.email 'open-design-release-bot[bot]@users.noreply.github.com'
+          git switch -c "$BRANCH"
+          git commit -am "chore(release): bump main to $NEXT ahead of stable $VERSION"
+          git push origin "$BRANCH"
+          head_sha=$(git rev-parse HEAD)
+          body=$(printf '%s\n' \
+            "Automated by \`finalize-release\` after publishing \`open-design-v$VERSION\`." \
+            "" \
+            "Keeps \`main\` strictly ahead of the shipped stable tag — the build guard requires \`apps/packaged\` version to be greater than the latest \`open-design-v*\` tag. Bumps only the synchronized workspace manifests (those already sharing the monorepo version); independently-versioned packages are left untouched." \
+            "" \
+            "The \`backport release/v$VERSION\` label was already deleted by this same run." \
+            "" \
+            "**Needs one core-maintainer approval:** this touches CODEOWNERS-owned release manifests, so \`main\`'s code-owner rule requires a human review (a bot approval can't satisfy it). The merge queue is already armed — approve and it squashes in automatically.")
+          pr=$(gh pr create --repo nexu-io/open-design --base main --head "$BRANCH" \
+            --title "chore(release): bump main to $NEXT ahead of stable $VERSION" \
+            --body "$body")
+          echo "Opened $pr"
+          # Request the code owners who must approve (best-effort; never fail finalize on a hiccup).
+          gh pr edit "$pr" --repo nexu-io/open-design --add-reviewer nexu-io/core-maintainers || \
+            echo "::warning::could not request nexu-io/core-maintainers review on $pr"
+          # main is a squash merge queue; --auto arms enqueue-on-green (proven by
+          # bake-plugin-previews-automerge — allow_auto_merge=false does not block the queue).
+          # --match-head-commit pins the armed SHA so a later push isn't merged untested.
+          gh pr merge "$pr" --repo nexu-io/open-design --squash --auto --match-head-commit "$head_sha"

@@ -269,8 +269,14 @@ function setOutput(name: string, value: string): void {
   appendFileSync(outputPath, `${name}=${value}\n`);
 }
 
+function readBooleanEnv(name: string): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
 const packagedVersion = await readPackagedVersion();
 const packagedParsed = parseReleaseBaseVersion(packagedVersion) ?? fail(`invalid packaged version: ${packagedVersion}`);
+const force = readBooleanEnv("OPEN_DESIGN_RELEASE_FORCE") || readBooleanEnv("RELEASE_FORCE");
 
 let latestStable: ParsedStableVersion | null = null;
 const stableMetadataUrl = process.env.OPEN_DESIGN_STABLE_METADATA_URL;
@@ -295,7 +301,12 @@ if (stableMetadataUrl != null && stableMetadataUrl.length > 0) {
 }
 
 if (latestStable != null && compareReleaseBaseVersions(packagedParsed, latestStable.parsed) <= 0) {
-  fail(`packaged base version ${packagedVersion} must be strictly greater than latest stable ${latestStable.value}`);
+  if (!force) {
+    fail(`packaged base version ${packagedVersion} must be strictly greater than latest stable ${latestStable.value}`);
+  }
+  console.warn(
+    `[release-beta] force enabled: allowing packaged base version ${packagedVersion} against latest stable ${latestStable.value}`,
+  );
 }
 
 const metadataUrl = process.env.OPEN_DESIGN_BETA_METADATA_URL;
@@ -333,7 +344,12 @@ if (latestBeta != null) {
 
   const ordering = compareReleaseBaseVersions(packagedParsed, existingBase);
   if (ordering < 0) {
-    fail(`packaged base version ${packagedVersion} regressed below current beta base version ${beta.baseVersion}`);
+    if (!force) {
+      fail(`packaged base version ${packagedVersion} regressed below current beta base version ${beta.baseVersion}`);
+    }
+    console.warn(
+      `[release-beta] force enabled: ignoring current beta base version ${beta.baseVersion} for packaged base version ${packagedVersion}`,
+    );
   }
 
   if (ordering === 0) {
@@ -349,6 +365,7 @@ const releaseName = `Open Design Beta ${betaVersion}`;
 console.log(`[release-beta] channel: beta`);
 console.log(`[release-beta] base version: ${packagedVersion}`);
 console.log(`[release-beta] beta version: ${betaVersion}`);
+console.log(`[release-beta] force: ${force ? "true" : "false"}`);
 console.log(`[release-beta] beta state source: ${stateSource}`);
 if (latestStable != null) console.log(`[release-beta] latest stable: ${latestStable.value}`);
 if (latestBeta != null) console.log(`[release-beta] latest beta: ${latestBeta.betaVersion}`);
@@ -359,6 +376,7 @@ setOutput("beta_number", String(betaNumber));
 setOutput("beta_version", betaVersion);
 setOutput("branch", branch);
 setOutput("commit", commit);
+setOutput("force", force ? "true" : "false");
 setOutput("latest_stable", latestStable?.value ?? "");
 setOutput("release_number", String(betaNumber));
 setOutput("release_name", releaseName);

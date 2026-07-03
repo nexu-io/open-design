@@ -3,7 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { deflateRawSync } from 'node:zlib';
 import { describe, expect, it, vi } from 'vitest';
-import { importClaudeDesignZip } from '../src/claude-design-import.js';
+import { importClaudeDesignZip } from '../src/design/index.js';
 
 function buildZip(
   entries: { name: string; body: Buffer; method?: 0 | 8; falsifyCentralUncompressed?: boolean }[],

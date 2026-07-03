@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Graphify Dark Graph</title>
+<title>Write a Feature Business Case like a Principal PM - Product management</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Inter:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
@@ -201,10 +201,10 @@ img,svg{max-width:100%;display:block}
     </svg>
     <div class="snum">01 / 08</div>
     <div class="cover-inner">
-      <p class="eyebrow in">Open Source · Apache-2.0</p>
-      <h1 class="h1 in">Open Design<br><span class="ac">Open · Local · Agent-driven</span></h1>
-      <p class="lede in" style="margin-top:24px">From idea to prototypes, websites, slides, and HTML video — <span style="color:var(--text)">the entire product design workflow, on your own machine.</span></p>
-      <p class="eyebrow quiet in" style="margin:30px 0 0">Apache-2.0 · Runs locally · BYOK · No sign-up</p>
+      <p class="eyebrow in">Product Management · Business Case</p>
+      <h1 class="h1 in">Feature Business Case<br><span class="ac">Plugin Marketplace</span></h1>
+      <p class="lede in" style="margin-top:24px">Should Open Design open a first-party plugin marketplace in Q3? <span style="color:var(--text)">The case for PM, Eng, Design, and Leadership to land on one option.</span></p>
+      <p class="eyebrow quiet in" style="margin:30px 0 0">Decision owner: PM · Reviewers: Eng, Design, Leadership</p>
     </div>
   </section>
 
@@ -212,137 +212,137 @@ img,svg{max-width:100%;display:block}
   <section class="slide">
     <div class="snum">02 / 08</div>
     <div style="margin:auto 0">
-      <p class="eyebrow quiet in">Part 01</p>
-      <h1 class="h1 in" style="font-size:clamp(88px,10vw,128px)">Why <span class="ac">Open</span>?</h1>
-      <p class="lede in" style="margin-top:24px">In April 2026, Claude Design proved for the first time that LLMs can genuinely design — but it's closed source, paid, and cloud-only. Open Design sets that capability free.</p>
+      <p class="eyebrow quiet in">Decision needed</p>
+      <h1 class="h1 in" style="font-size:clamp(88px,10vw,128px)">Ship a <span class="ac">marketplace</span>, or hold the line?</h1>
+      <p class="lede in" style="margin-top:24px">217+ plugins already exist, built for free by the community. Today they're only discoverable through a static home rail — no ratings, no revenue share, no owner of record. We need one call before Q3 planning locks.</p>
     </div>
   </section>
 
   <!-- 3. CONTENT — plugin grid -->
   <section class="slide">
     <div class="snum">03 / 08</div>
-    <p class="eyebrow in">Core Capabilities</p>
-    <h2 class="h2 in">One platform, <span class="ac">four things</span></h2>
+    <p class="eyebrow in">The Pain</p>
+    <h2 class="h2 in">Four ways the current model <span class="ac">breaks down</span></h2>
     <div class="cap-grid in">
       <div class="cap">
         <span class="idx"><span class="node-dot hollow"></span>n.01</span>
-        <h4>Desktop-native</h4>
-        <p>Reads local files, Figma exports, and code repos directly</p>
+        <h4>Discovery dead-ends</h4>
+        <p>68% of installs come from the top 6 home-rail plugins; the other 211 get near-zero traffic</p>
       </div>
       <div class="cap">
         <span class="idx"><span class="node-dot hollow"></span>n.02</span>
-        <h4>21 coding agents</h4>
-        <p>Auto-detects CLIs on your PATH — zero config</p>
+        <h4>No trust signal</h4>
+        <p>No ratings, no verification badge — support tickets show users afraid to install unfamiliar plugin code</p>
       </div>
       <div class="cap">
         <span class="idx"><span class="node-dot hollow"></span>n.03</span>
-        <h4>129 design systems</h4>
-        <p>Import from GitHub / Figma / local files</p>
+        <h4>Zero creator incentive</h4>
+        <p>38 external contributors shipped a plugin this year; only 4 shipped a second one</p>
       </div>
       <div class="cap">
         <span class="idx"><span class="node-dot"></span>n.04</span>
-        <h4>BYOK end to end</h4>
-        <p>Anthropic / OpenAI / Azure / Google + 14 media providers</p>
+        <h4>Unowned support load</h4>
+        <p>112 GitHub issues this quarter trace back to plugins with no listed maintainer of record</p>
       </div>
     </div>
     <div class="callout in">
       <span class="node-dot"></span>
-      <p>It doesn't build an agent — it <span class="ac">wires the Claude Code / Codex / Cursor on your machine into a complete design workflow</span>.</p>
+      <p>Every pain point traces to the same root cause: <span class="ac">plugins have no marketplace, so they have no owner, no signal, and no incentive</span>.</p>
     </div>
   </section>
 
   <!-- 4. CODE -->
   <section class="slide">
     <div class="snum">04 / 08</div>
-    <p class="eyebrow in">Local-first</p>
-    <h2 class="h2 in">Data stays local, <span class="ac">keys never leave</span></h2>
-    <p class="cmd in">$ git clone github.com/nexu-io/open-design</p>
-    <pre class="codebox in"><span class="cm"># .od/ — all runtime data lives on your machine</span>
-<span class="kw">.od/</span>
-  <span class="st">app.sqlite</span>          <span class="cm"># local SQLite, no cloud dependency</span>
-  <span class="st">projects/</span>           <span class="cm"># agent working directories</span>
-  <span class="st">artifacts/</span>          <span class="cm"># saved render artifacts</span>
-  <span class="st">media-config.json</span>   <span class="cm"># BYOK credentials, never uploaded</span>
+    <p class="eyebrow in">Options Considered</p>
+    <h2 class="h2 in">Three shapes, <span class="ac">one recommendation</span></h2>
+    <p class="cmd in">$ od plugin marketplace --compare-options</p>
+    <pre class="codebox in"><span class="cm"># three options weighed for Q3</span>
+<span class="kw">option_a</span>: <span class="st">status_quo</span>       <span class="cm"># home rail only, curated by us</span>
+  trust_signal: <span class="fn">none</span>   creator_incentive: <span class="fn">none</span>   effort: <span class="fn">low</span>
 
-<span class="kw">byok</span>:
-  providers: [<span class="st">anthropic</span>, <span class="st">openai</span>, <span class="st">azure</span>, <span class="st">google</span>]
-  self_host: <span class="fn">true</span>     <span class="cm"># Apache-2.0, self-host freely</span></pre>
+<span class="kw">option_b</span>: <span class="st">reviewed_marketplace</span>  <span class="cm"># submission queue + revenue share</span>
+  trust_signal: <span class="fn">verified_badge</span>   creator_incentive: <span class="fn">70/30_split</span>   effort: <span class="fn">medium</span>
+
+<span class="kw">option_c</span>: <span class="st">open_federation</span>   <span class="cm"># npm-style, no review, self-serve</span>
+  trust_signal: <span class="fn">none</span>   creator_incentive: <span class="fn">tips_only</span>   effort: <span class="fn">low</span>
+
+<span class="kw">recommended</span>: option_b     <span class="cm"># only option that fixes trust AND incentive</span></pre>
   </section>
 
   <!-- 5. CHART — race diagram -->
   <section class="slide">
     <div class="snum">05 / 08</div>
-    <p class="eyebrow in">Cost Race</p>
-    <h2 class="h2 in">Closed cloud vs <span class="ac">open local</span></h2>
+    <p class="eyebrow in">Tradeoffs</p>
+    <h2 class="h2 in">Option B wins trust, <span class="ac">costs speed</span></h2>
     <div class="race in">
       <div class="track closed">
-        <div class="who">Closed<br>cloud</div>
+        <div class="who">Options<br>A / C</div>
         <div class="lane">
           <span class="marker"></span>
-          <span class="lbl">Locked model · $500/mo · data in the cloud</span>
+          <span class="lbl">Ship in 2 weeks · no review gate · no trust signal</span>
         </div>
       </div>
       <div class="track open">
-        <div class="who">Open<br>local</div>
+        <div class="who">Option<br>B</div>
         <div class="lane">
           <span class="marker"></span>
-          <span class="lbl">Any agent · BYOK ~$73/mo · data stays local</span>
+          <span class="lbl">Ship in 6 weeks · review gate · verified badge + revenue share</span>
         </div>
       </div>
     </div>
     <div class="stat-board in">
-      <div class="stat"><div class="v">-80%</div><p class="l">monthly cost ($500 → ~$73)</p></div>
-      <div class="stat"><div class="v">21</div><p class="l">coding agents connected</p></div>
-      <div class="stat"><div class="v">217+</div><p class="l">plugins in the ecosystem</p></div>
+      <div class="stat"><div class="v">+4wk</div><p class="l">added time-to-ship for review tooling</p></div>
+      <div class="stat"><div class="v">70/30</div><p class="l">creator revenue split, our favor 30%</p></div>
+      <div class="stat"><div class="v">20</div><p class="l">creators committed for private beta</p></div>
     </div>
   </section>
 
   <!-- 6. PIPELINE -->
   <section class="slide">
     <div class="snum">06 / 08</div>
-    <p class="eyebrow in">Workflow</p>
-    <h2 class="h2 in">Idea to delivery in <span class="ac">4 steps</span></h2>
+    <p class="eyebrow in">Recommendation</p>
+    <h2 class="h2 in">Ship Option B in <span class="ac">4 phases</span></h2>
     <div class="pipe in">
       <div class="step">
         <span class="sn">STEP 01</span>
-        <h4>Start</h4>
-        <p>One sentence / template / plugin</p>
+        <h4>Freeze scope</h4>
+        <p>Review rubric &amp; revenue-share terms locked with legal by Jul 21</p>
       </div>
       <div class="step">
         <span class="sn">STEP 02</span>
-        <h4>Style</h4>
-        <p>Palette &amp; fonts auto-applied</p>
+        <h4>Build the queue</h4>
+        <p>Submission form, review dashboard, verified badge shipped by Aug 11</p>
       </div>
       <div class="step">
         <span class="sn">STEP 03</span>
-        <h4>Generate</h4>
-        <p>Artifacts in a live sandbox</p>
+        <h4>Private beta</h4>
+        <p>20 committed creators list one plugin each; review SLA measured live</p>
       </div>
       <div class="step last">
         <span class="sn">STEP 04</span>
-        <h4>Ship</h4>
-        <p>Hand off to engineering or render video</p>
+        <h4>GA rollout</h4>
+        <p>Open submissions to all 217+ creators; revenue share turns on</p>
       </div>
     </div>
     <div class="callout in">
       <span class="node-dot"></span>
-      <p>Every choice settles into design systems, preferences, and memory — each generation lands closer to what you want.</p>
+      <p>This is the irreversible step: once revenue share is live, pulling the marketplace back costs trust we won't get back. <span class="ac">Sign off here, not after Aug.</span></p>
     </div>
   </section>
 
   <!-- 7. CTA -->
   <section class="slide">
     <div class="snum">07 / 08</div>
-    <p class="eyebrow in">Try it tonight</p>
-    <h2 class="h1 in" style="font-size:clamp(56px,6.4vw,80px)">Bring AI design <span class="ac">back to your desk</span></h2>
-    <p class="cmd in" style="margin-top:30px">$ git clone github.com/nexu-io/open-design</p>
-    <p class="cta-dl in">→ Download Open Design · macOS / Windows</p>
+    <p class="eyebrow in">Measure of Success</p>
+    <h2 class="h1 in" style="font-size:clamp(56px,6.4vw,80px)">North star: <span class="ac">long-tail install share</span></h2>
+    <p class="cmd in" style="margin-top:30px">$ od plugin marketplace --track long-tail-install-share</p>
+    <p class="cta-dl in">→ Target: long-tail install share 24% → 45% by Q4</p>
     <div class="tags in">
-      <span class="tag">#open-source</span>
-      <span class="tag">#local-first</span>
-      <span class="tag">#agent-native</span>
-      <span class="tag">#byok</span>
-      <span class="tag">#apache-2.0</span>
+      <span class="tag">#review-sla-under-72h</span>
+      <span class="tag">#creator-payout-on-time</span>
+      <span class="tag">#support-tickets-flat</span>
+      <span class="tag">#nps-unchanged</span>
     </div>
   </section>
 
@@ -350,8 +350,8 @@ img,svg{max-width:100%;display:block}
   <section class="slide thanks">
     <div class="snum">08 / 08</div>
     <div style="margin:auto 0">
-      <h1 class="big in">Thanks<span class="ac">.</span></h1>
-      <p class="lede in">github.com/nexu-io/open-design · stars, issues, and PRs welcome</p>
+      <h1 class="big in">Approve<span class="ac">.</span></h1>
+      <p class="lede in">Option B — reviewed marketplace with revenue share. Sign-off requested from PM, Eng, Design, and Leadership by Jul 21.</p>
     </div>
   </section>
 

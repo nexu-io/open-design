@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "g2-design-system-ui-kit-mqgbmh2w",
+  "title": "G2 Design System UI Kit",
+  "version": "0.1.0",
+  "description": "A packaged Open Design UI kit for HiCatcat G2 AR glasses HUD prototypes. Includes index.html, local token CSS, and modular React components for regular 640 and compact 320 display modes.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

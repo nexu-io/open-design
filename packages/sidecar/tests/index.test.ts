@@ -157,6 +157,38 @@ describe("generic sidecar JSON IPC", () => {
     expect(events).toContain("client.response_success");
     expect(JSON.stringify(logs)).not.toContain("secret()");
   });
+
+  it("preserves multibyte UTF-8 (CJK) across socket chunk boundaries", async () => {
+    // Regression for exported CJK artifacts showing `???` / `◆?` (U+FFFD):
+    // a multibyte character (e.g. 挤 = 0xE6 0x8C 0xA4) split across two `data`
+    // events was decoded per-chunk, turning each half into U+FFFD. The payload
+    // is large enough that the OS delivers it over multiple chunks, so a
+    // character is virtually guaranteed to straddle a boundary; with the old
+    // per-chunk `chunk.toString()` the round-trip corrupts, with StringDecoder
+    // it is byte-exact.
+    const root = await mkdtemp(join(tmpdir(), "open-design-sidecar-utf8-"));
+    const socketPath = testIpcPath(root);
+    // Mix of CJK glyphs incl. the exact ones seen corrupted in QA exports.
+    const unit = "拥挤让人焦虑，留白让人信任。敢留白，是因为知道什么最重要——交付边界。";
+    const big = unit.repeat(4000); // ~1.3 MB of UTF-8, far past one socket chunk
+    const server = await createJsonIpcServer({
+      socketPath,
+      handler: async (message: any) => ({ echo: message.html }),
+    });
+    try {
+      const result = await requestJsonIpc<{ echo: string }>(
+        socketPath,
+        { type: "RENDER", html: big },
+        { timeoutMs: 10_000 },
+      );
+      expect(result.echo).toBe(big);
+      expect(result.echo).not.toContain("�");
+      expect(result.echo.includes("拥挤让人焦虑")).toBe(true);
+    } finally {
+      await server.close();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
 
 describe("generic sidecar bootstrap", () => {

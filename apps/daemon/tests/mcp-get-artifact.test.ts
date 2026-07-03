@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import express from 'express';
 import type { Express } from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { getArtifact, fetchProjectFile } from '../src/mcp.js';
+import { getArtifact, fetchProjectFile, handleMcpToolCall } from '../src/mcp.js';
 
 // A minimal mock of the daemon's project file endpoints. Tests control
 // the file list and per-file response via the opts object.
@@ -176,5 +176,121 @@ describe('getArtifact truncated: true when per-file content-length pre-check fir
     const body = parseArtifactBody(firstText(result.content));
     expect(body.truncated).toBe(true);
     expect(body.files.length).toBe(1);
+  });
+});
+
+describe('public MCP get_artifact active context defaults', () => {
+  let server: http.Server;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    const app = express();
+    app.get('/api/active', (_req, res) =>
+      res.json({
+        active: true,
+        projectId: 'active-project',
+        projectName: 'Active Project',
+        fileName: 'landing.html',
+        ageMs: 50,
+      }),
+    );
+    app.get('/api/projects/:id', (_req, res) =>
+      res.json({
+        project: {
+          id: 'active-project',
+          name: 'Active Project',
+          metadata: { entryFile: 'index.html' },
+        },
+      }),
+    );
+    app.get('/api/projects/:id/raw/*splat', (req, res) => {
+      expect(req.params.id).toBe('active-project');
+      expect(req.params.splat).toEqual(['landing.html']);
+      res.set({ 'content-type': 'text/html' }).send('<!doctype html><h1>Active artifact</h1>');
+    });
+    const r = await startServer(app);
+    server = r.server;
+    baseUrl = r.baseUrl;
+  });
+
+  afterAll(() => new Promise((resolve) => server.close(resolve)));
+
+  it('uses the active file ahead of metadata.entryFile when project and entry are omitted', async () => {
+    const result = await handleMcpToolCall(baseUrl, 'get_artifact', { include: 'shallow' });
+    const body = parseArtifactBody(firstText(result.content)) as ArtifactBody & {
+      entryFile?: string;
+      usedActiveContext?: { projectId?: string; fileName?: string };
+    };
+    expect(body.entryFile).toBe('landing.html');
+    expect(body.files).toHaveLength(1);
+    expect(body.usedActiveContext).toMatchObject({
+      projectId: 'active-project',
+      fileName: 'landing.html',
+    });
+  });
+});
+
+describe('public MCP get_artifact active context fallbacks', () => {
+  let server: http.Server;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    const app = express();
+    app.get('/api/active', (_req, res) =>
+      res.json({
+        active: true,
+        projectId: 'active-project',
+        projectName: 'Active Project',
+        ageMs: 50,
+      }),
+    );
+    app.get('/api/projects/:id', (req, res) =>
+      res.json({
+        project: {
+          id: req.params.id,
+          name: req.params.id === 'active-project' ? 'Active Project' : 'Explicit Project',
+          metadata: { entryFile: 'index.html' },
+        },
+      }),
+    );
+    app.get('/api/projects/:id/raw/*splat', (req, res) => {
+      res.set({ 'content-type': 'text/html' }).send(`<!doctype html><h1>${req.params.splat.join('/')}</h1>`);
+    });
+    const r = await startServer(app);
+    server = r.server;
+    baseUrl = r.baseUrl;
+  });
+
+  afterAll(() => new Promise((resolve) => server.close(resolve)));
+
+  it('falls back to metadata.entryFile when the active project has no active file', async () => {
+    const result = await handleMcpToolCall(baseUrl, 'get_artifact', { include: 'shallow' });
+    const body = parseArtifactBody(firstText(result.content)) as ArtifactBody & {
+      entryFile?: string;
+      usedActiveContext?: { projectId?: string; fileName?: string | null };
+      files?: Array<{ content?: string | null }>;
+    };
+    expect(body.entryFile).toBe('index.html');
+    expect(body.usedActiveContext).toMatchObject({
+      projectId: 'active-project',
+      fileName: null,
+    });
+    expect(body.files?.[0]?.content).toContain('<h1>index.html</h1>');
+  });
+
+  it('does not stamp active context when project and entry are explicit', async () => {
+    const result = await handleMcpToolCall(baseUrl, 'get_artifact', {
+      project: PROJECT_ID,
+      entry: 'explicit.html',
+      include: 'shallow',
+    });
+    const body = parseArtifactBody(firstText(result.content)) as ArtifactBody & {
+      entryFile?: string;
+      usedActiveContext?: unknown;
+      files?: Array<{ content?: string | null }>;
+    };
+    expect(body.entryFile).toBe('explicit.html');
+    expect(body.usedActiveContext).toBeUndefined();
+    expect(body.files?.[0]?.content).toContain('<h1>explicit.html</h1>');
   });
 });

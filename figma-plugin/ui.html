@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 16px;
+        font-family: Inter, system-ui, -apple-system, sans-serif;
+        color: #111827;
+        background: #fff;
+        font-size: 13px;
+      }
+      h1 { font-size: 14px; margin: 0 0 4px; }
+      p.lead { margin: 0 0 14px; color: #6b7280; line-height: 1.45; }
+      .drop {
+        border: 1.5px dashed #d1d5db;
+        border-radius: 10px;
+        padding: 18px 12px;
+        text-align: center;
+        color: #6b7280;
+        cursor: pointer;
+        transition: border-color 160ms, background 160ms;
+      }
+      .drop:hover, .drop.over { border-color: #2563eb; background: #f8faff; color: #2563eb; }
+      .drop strong { color: #111827; }
+      .or { text-align: center; color: #9ca3af; font-size: 11px; margin: 10px 0; }
+      textarea {
+        width: 100%;
+        height: 96px;
+        resize: vertical;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+      }
+      .row { display: flex; gap: 8px; margin-top: 12px; }
+      button {
+        flex: 1;
+        height: 34px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .primary { background: #2563eb; color: #fff; }
+      .primary:hover { background: #1d4ed8; }
+      .primary:disabled { background: #93b4f5; cursor: default; }
+      .ghost { background: #fff; border-color: #e5e7eb; color: #111827; }
+      .ghost:hover { background: #f9fafb; }
+      .msg { margin-top: 10px; min-height: 16px; font-size: 12px; }
+      .msg[data-kind='ok'] { color: #16a34a; }
+      .msg[data-kind='err'] { color: #dc2626; }
+      input[type='file'] { display: none; }
+    </style>
+  </head>
+  <body>
+    <h1>OD Figma Import</h1>
+    <p class="lead">
+      Load an <strong>.od-figma.json</strong> capture from the OD Clipper or the OD Library
+      (“Download Figma”) to rebuild it as editable layers.
+    </p>
+
+    <label class="drop" id="drop">
+      Drop or <strong>choose a .od-figma.json file</strong>
+      <input id="file" type="file" accept=".json,application/json" />
+    </label>
+
+    <div class="or">— or paste the JSON —</div>
+    <textarea id="json" placeholder='{ "version": 1, "root": { … } }'></textarea>
+
+    <div class="row">
+      <button class="ghost" id="cancel" type="button">Close</button>
+      <button class="primary" id="import" type="button" disabled>Import</button>
+    </div>
+    <div class="msg" id="msg" role="status"></div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let pending = null; // parsed IR awaiting import
+
+      function setMsg(text, kind) {
+        const el = $('msg');
+        el.textContent = text || '';
+        el.dataset.kind = kind || '';
+      }
+
+      // --- image-fill normalization --------------------------------------
+      //
+      // figma.createImage() (used by code.js) only decodes PNG and JPEG, but a
+      // web capture's image fills can be SVG, WebP, GIF, AVIF or BMP — Figma
+      // rejects those, so on the main thread they would silently drop and the
+      // imported layout would be missing logos, icons and hero images.
+      //
+      // This UI runs in a real browser iframe (Figma desktop is Chromium), so
+      // it CAN decode every format an <img> understands and re-encode it to a
+      // PNG data URI here, before the IR is posted to the main thread. SVG (a
+      // vector) is rasterized at 2x its box for crispness; raster formats are
+      // re-encoded at their own pixel size. Anything that fails to decode is
+      // dropped so a single bad image can't abort the import.
+      const FIGMA_SAFE_IMAGE = /^image\/(png|jpe?g)$/i;
+      const MAX_RASTER_DIM = 4096; // Figma image ceiling
+
+      function dataUriMime(uri) {
+        const m = /^data:([^;,]+)/.exec(uri || '');
+        return m ? m[1] : '';
+      }
+
+      // Decode any <img>-renderable data URI and re-encode it as PNG. `boxW/boxH`
+      // are the fill's layout box, used to size vectors / dimensionless images.
+      function rasterizeToPng(dataUri, boxW, boxH, isVector) {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            try {
+              let w = img.naturalWidth || 0;
+              let h = img.naturalHeight || 0;
+              if (!w || !h) {
+                w = Math.max(1, Math.round(boxW) || 300);
+                h = Math.max(1, Math.round(boxH) || 150);
+              }
+              const scale = isVector ? 2 : 1; // upscale vectors so they stay crisp
+              w = Math.max(1, Math.round(w * scale));
+              h = Math.max(1, Math.round(h * scale));
+              const longest = Math.max(w, h);
+              if (longest > MAX_RASTER_DIM) {
+                const r = MAX_RASTER_DIM / longest;
+                w = Math.max(1, Math.round(w * r));
+                h = Math.max(1, Math.round(h * r));
+              }
+              const canvas = document.createElement('canvas');
+              canvas.width = w;
+              canvas.height = h;
+              canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+              resolve(canvas.toDataURL('image/png'));
+            } catch {
+              resolve(null);
+            }
+          };
+          img.onerror = () => resolve(null);
+          img.src = dataUri;
+        });
+      }
+
+      // Walk the IR and convert every non-PNG/JPEG image fill to PNG in place.
+      // Returns { converted, dropped } for the status line.
+      async function normalizeImageFills(ir) {
+        const tasks = [];
+        const walk = (node) => {
+          if (!node) return;
+          if (Array.isArray(node.fills)) {
+            for (const f of node.fills) {
+              if (!f || f.type !== 'IMAGE' || typeof f.dataUri !== 'string') continue;
+              if (FIGMA_SAFE_IMAGE.test(dataUriMime(f.dataUri))) continue;
+              const isVector = /svg/i.test(dataUriMime(f.dataUri));
+              tasks.push(
+                rasterizeToPng(f.dataUri, node.width, node.height, isVector).then((png) => {
+                  if (png) { f.dataUri = png; f.__ok = true; }
+                  else { f.__drop = true; }
+                }),
+              );
+            }
+          }
+          if (Array.isArray(node.children)) node.children.forEach(walk);
+        };
+        if (ir && ir.root) walk(ir.root);
+        await Promise.all(tasks);
+        let converted = 0;
+        let dropped = 0;
+        const prune = (node) => {
+          if (!node) return;
+          if (Array.isArray(node.fills)) {
+            node.fills = node.fills.filter((f) => {
+              if (f && f.__ok) { delete f.__ok; converted += 1; return true; }
+              if (f && f.__drop) { dropped += 1; return false; }
+              return true;
+            });
+          }
+          if (Array.isArray(node.children)) node.children.forEach(prune);
+        };
+        if (ir && ir.root) prune(ir.root);
+        return { converted, dropped };
+      }
+
+      function accept(text, label) {
+        try {
+          const ir = JSON.parse(text);
+          if (!ir || !ir.root) throw new Error('missing root');
+          pending = ir;
+          $('import').disabled = false;
+          setMsg(`Ready: ${label || (ir.source && ir.source.title) || 'capture'}`, 'ok');
+        } catch (e) {
+          pending = null;
+          $('import').disabled = true;
+          setMsg('That doesn’t look like an OD Figma capture.', 'err');
+        }
+      }
+
+      $('file').addEventListener('change', (e) => {
+        const f = e.target.files && e.target.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => accept(String(reader.result), f.name);
+        reader.onerror = () => setMsg('Could not read that file.', 'err');
+        reader.readAsText(f);
+      });
+
+      const drop = $('drop');
+      ['dragenter', 'dragover'].forEach((ev) =>
+        drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }),
+      );
+      ['dragleave', 'drop'].forEach((ev) =>
+        drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }),
+      );
+      drop.addEventListener('drop', (e) => {
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => accept(String(reader.result), f.name);
+        reader.readAsText(f);
+      });
+
+      $('json').addEventListener('input', (e) => {
+        const v = e.target.value.trim();
+        if (v) accept(v, 'pasted JSON');
+        else { pending = null; $('import').disabled = true; setMsg(''); }
+      });
+
+      let lastImageStats = null; // { converted, dropped } from the most recent import
+
+      $('import').addEventListener('click', async () => {
+        if (!pending) return;
+        $('import').disabled = true;
+        try {
+          setMsg('Preparing images…');
+          lastImageStats = await normalizeImageFills(pending);
+          setMsg('Importing…');
+          parent.postMessage({ pluginMessage: { type: 'import', ir: pending } }, '*');
+        } catch (e) {
+          setMsg(`Could not prepare images: ${(e && e.message) || e}`, 'err');
+          $('import').disabled = false;
+        }
+      });
+
+      $('cancel').addEventListener('click', () => {
+        parent.postMessage({ pluginMessage: { type: 'cancel' } }, '*');
+      });
+
+      window.onmessage = (e) => {
+        const m = e.data && e.data.pluginMessage;
+        if (!m) return;
+        if (m.type === 'done') {
+          let note = `Imported “${m.name}”.`;
+          if (lastImageStats && lastImageStats.converted) {
+            note += ` Converted ${lastImageStats.converted} image${lastImageStats.converted === 1 ? '' : 's'} (SVG/WebP/GIF → PNG).`;
+          }
+          if (lastImageStats && lastImageStats.dropped) {
+            note += ` ${lastImageStats.dropped} image${lastImageStats.dropped === 1 ? '' : 's'} could not be decoded.`;
+          }
+          setMsg(note, 'ok');
+          $('import').disabled = false;
+        } else if (m.type === 'error') {
+          setMsg(`Failed: ${m.message}`, 'err');
+          $('import').disabled = false;
+        }
+      };
+    </script>
+  </body>
+</html>

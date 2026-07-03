@@ -1,0 +1,82 @@
+---
+/*
+ * /community/moderators/ — Discord stewards + join CTA.
+ * Localized Astro route; see `../index.astro` for the migration note.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import '../../../community.css';
+import { localeFromPath } from '../../../i18n';
+import {
+  getCommunityCopy,
+  COMMUNITY_LINKS,
+  MODERATORS,
+  DISCORD_CHANNELS,
+  GLYPH,
+} from '../../../community-i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const copy = getCommunityCopy(locale).moderators;
+const t = copy.discord;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: copy.title,
+  description: copy.desc,
+  url: new URL(Astro.url.pathname, Astro.site).toString(),
+};
+---
+
+<Layout title={copy.title} description={copy.desc} active="community" jsonLd={jsonLd} mainClassName="sub-main">
+  <div class="od-community">
+    <section class="hero">
+      <div class="hero-decor"></div>
+      <div class="wrap">
+        <div class="hero-copy">
+          <h1 class="h-display" set:html={copy.heroTitle} />
+          <p class="lead">{copy.heroLead}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="discord" id="discord">
+      <div class="wrap">
+        <div class="discord-card">
+          <div>
+            <span class="kicker"><span class="dot"></span>{t.kicker}</span>
+            <h2 set:html={t.h2} />
+            <p>{t.body}</p>
+            <div style="display:flex;gap:14px;flex-wrap:wrap">
+              <a class="btn btn-primary" href={COMMUNITY_LINKS.discord} target="_blank" rel="noopener">
+                <span class="ri" aria-hidden="true">{GLYPH.discord}</span>
+                {t.joinCta}
+              </a>
+              <a class="btn btn-ghost" href={COMMUNITY_LINKS.discussions} target="_blank" rel="noopener">{t.discussionsCta}</a>
+            </div>
+          </div>
+          <div class="discord-side">
+            <div class="mod-row">
+              {MODERATORS.map((mod, i) => (
+                <article class="moderator-card">
+                  <div class="mod-avatar">
+                    <img src={mod.avatar} alt={`${mod.name} — Open Design`} loading="lazy" />
+                  </div>
+                  <span class="mod-role">{t.cards[i]?.role}</span>
+                  <h3 class="mod-name">{mod.name}</h3>
+                  <p class="mod-bio">{t.cards[i]?.bio}</p>
+                </article>
+              ))}
+            </div>
+            <div class="stack">
+              {DISCORD_CHANNELS.map((channel, i) => (
+                <div class="row-d">
+                  <span class="dot-g"></span>{channel}<span class="h">{t.channelNotes[i]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</Layout>

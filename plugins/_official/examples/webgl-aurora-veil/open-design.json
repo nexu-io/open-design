@@ -1,0 +1,93 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-webgl-aurora-veil",
+  "title": "Aurora Veil",
+  "title_i18n": {
+    "zh-CN": "极光帘幕",
+    "zh-TW": "極光簾幕",
+    "ja": "オーロラ・ヴェール",
+    "ko": "오로라 베일",
+    "de": "Aurora-Schleier",
+    "fr": "Voile aurore",
+    "ru": "Завеса полярного сияния",
+    "es": "Velo de aurora",
+    "pt-BR": "Véu de aurora",
+    "en": "Aurora Veil"
+  },
+  "version": "0.1.0",
+  "description": "A self-contained WebGL2 hero: layered aurora light curtains warped over a night sky scattered with stars; move the cursor to sway the veil.",
+  "description_i18n": {
+    "zh-CN": "自包含 WebGL2 主视觉：夜空之上扭曲的分层极光帘幕，点缀星光；移动光标摆动帘幕。",
+    "zh-TW": "自包含 WebGL2 主視覺：夜空之上扭曲的分層極光簾幕，點綴星光；移動游標擺動簾幕。",
+    "en": "A self-contained WebGL2 hero: layered aurora light curtains warped over a night sky scattered with stars; move the cursor to sway the veil."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/webgl-aurora-veil",
+  "tags": [
+    "example",
+    "first-party",
+    "hero",
+    "webgl",
+    "webgl2",
+    "shader",
+    "aurora",
+    "night",
+    "generative",
+    "powered-preview",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a self-contained WebGL2 hero of layered aurora curtains over a starry night sky, cursor-swayed.",
+        "zh-CN": "构建自包含 WebGL2 主视觉：夜空之上分层极光帘幕加星光，光标可摆动。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      }
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

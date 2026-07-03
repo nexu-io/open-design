@@ -32,6 +32,17 @@ type RunStatus = {
   errorCode: string | null;
   eventsLogPath: string;
   resumable?: boolean;
+  nativeSessionRecovery?: {
+    agentId: string | null;
+    state: string;
+    handle: {
+      present: boolean;
+      kind: string;
+      display: string | null;
+      sha256: string | null;
+      redacted: boolean;
+    };
+  };
 };
 
 describe('resume-on-failure runtime', () => {
@@ -79,6 +90,17 @@ describe('resume-on-failure runtime', () => {
     const failed = await sendRunAndWait(started.url, conversationId);
     expect(failed.status).toBe('failed');
     expect(failed.resumable).toBe(true);
+    expect(failed.nativeSessionRecovery).toMatchObject({
+      agentId: 'claude',
+      state: 'captured_not_resumed',
+      handle: {
+        present: true,
+        kind: 'opaque-id',
+        display: null,
+        redacted: true,
+      },
+    });
+    expect(failed.nativeSessionRecovery?.handle.sha256).toMatch(/^[a-f0-9]{64}$/);
 
     // Turn 2: a follow-up in the SAME conversation must resume the persisted
     // session rather than starting fresh.
@@ -93,6 +115,7 @@ describe('resume-on-failure runtime', () => {
     const firstSessionId = flagValue(attempts[0] ?? [], '--session-id');
     expect(firstSessionId).toBeTruthy();
     expect(attempts[0]).not.toContain('--resume');
+    expect(JSON.stringify(failed.nativeSessionRecovery)).not.toContain(firstSessionId);
 
     const resumedSessionId = flagValue(attempts[1] ?? [], '--resume');
     expect(resumedSessionId).toBe(firstSessionId);

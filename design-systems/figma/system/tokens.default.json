@@ -1,0 +1,8 @@
+{
+  "colorPrimary": "#000000",
+  "colorPrimaryBg": "var(--surface)",
+  "colorPrimaryHover": "rgba(0, 0, 0, 0.85)",
+  "colorPrimaryActive": "rgba(0, 0, 0, 0.08)",
+  "fontSize": 16,
+  "borderRadius": 8
+}

@@ -75,12 +75,12 @@ describe('artifact runtime compatibility normalizer', () => {
     }
   });
 
-  // Port-path regression coverage for the reported luxury-botanical plugin. Its React port leans on
+  // Port-path regression coverage for orbit-style React prototypes. This pattern leans on
   // the full Motion hook set (useScroll/useTransform/useAnimationFrame/useMotionValue), which only the
   // framer-motion React UMD build exposes. A single-file prototype that reaches for the vanilla
   // motion.js DOM bundle throws `useScroll is not a function` and renders blank — this is the artifact
   // the normalizer must repair at the write boundary.
-  const luxuryBotanicalOrbitHtml = `<!doctype html>
+  const orbitPrototypeHtml = `<!doctype html>
 <html>
   <head>
     <script src="https://unpkg.com/motion@11.11.13/dist/motion.js"></script>
@@ -100,8 +100,8 @@ describe('artifact runtime compatibility normalizer', () => {
   </body>
 </html>`;
 
-  it('repairs the luxury-botanical orbit prototype that uses the full Motion hook set', () => {
-    const normalized = normalizeArtifactRuntimeImports('beyond-the-collection.html', luxuryBotanicalOrbitHtml) as string;
+  it('repairs an orbit prototype that uses the full Motion hook set', () => {
+    const normalized = normalizeArtifactRuntimeImports('orbit-prototype.html', orbitPrototypeHtml) as string;
 
     expect(normalized).toContain('https://unpkg.com/framer-motion@11.11.13/dist/framer-motion.js');
     expect(normalized).not.toContain('/dist/motion.js');

@@ -76,6 +76,20 @@ function alphaOver(fg: RGB, bg: RGB, alpha: number): string {
   });
 }
 
+function luminance(rgb: RGB): number {
+  return (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+}
+
+function lightThemeBgBase(input: string | undefined): string {
+  const hex = input || "#ffffff";
+  return luminance(parseHex(hex)) >= 0.72 ? hex : "#ffffff";
+}
+
+function lightThemeTextBase(input: string | undefined): string {
+  const hex = input || "#000000";
+  return luminance(parseHex(hex)) <= 0.45 ? hex : "#000000";
+}
+
 // ─────────────────────────── color ladder mapping ───────────────────────────
 
 /** A semantic color's full interaction-state set, mapped off a 10-step ramp. */
@@ -211,10 +225,13 @@ export function deriveTokens(seed: SeedToken, algorithm: ThemeAlgorithm = "defau
   const isCompact = algorithm === "compact";
 
   // --- resolve the light/dark base canvas ------------------------------------
-  // In dark mode we flip the seed's text/bg base: white text on near-black so
-  // the neutral alpha ladder produces a legible dark theme from the same seed.
-  const textBaseHex = isDark ? "#ffffff" : seed.colorTextBase || "#000000";
-  const bgBaseHex = isDark ? "#141414" : seed.colorBgBase || "#ffffff";
+  // Light and compact themes must stay visually light even when the source site
+  // is dark-native and the extractor records black as the observed background.
+  // Dark mode owns the near-black canvas; default/compact keep a light base and
+  // only preserve brand-provided neutral bases when they are already light/dark
+  // enough for readable light-mode contrast.
+  const textBaseHex = isDark ? "#ffffff" : lightThemeTextBase(seed.colorTextBase);
+  const bgBaseHex = isDark ? "#141414" : lightThemeBgBase(seed.colorBgBase);
   const textBase = parseHex(textBaseHex);
   const bgBase = parseHex(bgBaseHex);
 

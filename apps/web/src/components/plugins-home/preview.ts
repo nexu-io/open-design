@@ -114,6 +114,10 @@ function readBakedPreview(
   return { poster, video, holdMs: typeof holdMs === 'number' ? holdMs : null };
 }
 
+function shouldPreferLivePreview(record: InstalledPluginRecord): boolean {
+  return (record.manifest?.tags ?? []).some((tag) => tag === 'commercial-slide-agent');
+}
+
 function readExamples(record: InstalledPluginRecord): ExampleOutputEntry[] {
   const od = record.manifest?.od as
     | { useCase?: { exampleOutputs?: unknown } }
@@ -188,7 +192,7 @@ export function inferPluginPreview(
   // the daemon has attached one. Everything else — crucially the detail modal —
   // falls through to the real `od.preview`, so opening a plugin still shows the
   // live, interactive page rather than the baked video.
-  if (opts?.preferBaked) {
+  if (opts?.preferBaked && !shouldPreferLivePreview(record)) {
     const baked = readBakedPreview(record);
     if (baked) {
       return {

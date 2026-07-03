@@ -1,0 +1,893 @@
+---
+/*
+ * Shared Workspace-for-Teams lead form.
+ *
+ * One form, two surfaces: the /enterprise page renders it inside its form
+ * card, and the /pricing "Request team access" modal renders the exact same
+ * component so both funnels stay in lockstep — same fields, same required
+ * rules, same options, same validation, same /contact-sales contract.
+ *
+ * Copy comes from app/_lib/enterprise-lead-copy.ts (all authored locales).
+ * `source` distinguishes the lead origin on the backend ('enterprise' |
+ * 'pricing_team'); `pageName` stamps the PostHog events so funnels stay
+ * separable per entry point. On a successful submit the form dispatches a
+ * bubbling `od:lead-success` CustomEvent (detail = segmentation props) so a
+ * host page can layer its own legacy analytics on top.
+ */
+import {
+  getEnterpriseLeadCopy,
+  buildCountryOptions,
+} from '../_lib/enterprise-lead-copy';
+
+interface Props {
+  locale: string;
+  source: 'enterprise' | 'pricing_team';
+  pageName: string;
+}
+
+const { locale, source, pageName } = Astro.props;
+const c = getEnterpriseLeadCopy(locale);
+const countryOptions = buildCountryOptions(locale);
+---
+
+<div class="ent-incentive">
+  <span class="ent-incentive__badge" aria-hidden="true">
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M8 1.5l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.3 4.3 13.3l.7-4.3-3.1-3 4.3-.6z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" /></svg>
+  </span>
+  <div class="ent-incentive__text">
+    <span class="ent-incentive__title">{c.incentiveTitle}</span>
+    <span class="ent-incentive__body">{c.incentiveBody}</span>
+  </div>
+</div>
+<h2 class="ent-form-heading" id="ent-form-heading">{c.formHeading}</h2>
+<form class="ent-form" id="ent-form" data-source={source} data-page-name={pageName} novalidate>
+  <div class="ent-field">
+    <label class="ent-label" for="ent-email">{c.emailLabel} <span class="ent-req">*</span></label>
+    <input class="ent-input" id="ent-email" name="email" type="email" required autocomplete="email" placeholder={c.emailPlaceholder} />
+    <p class="ent-field-error" id="ent-email-error" role="alert" hidden>{c.emailError}</p>
+  </div>
+
+  <div class="ent-row">
+    <div class="ent-field">
+      <label class="ent-label" for="ent-company">{c.companyLabel} <span class="ent-optional">({c.optional})</span></label>
+      <input class="ent-input" id="ent-company" name="company" type="text" autocomplete="organization" placeholder={c.companyPlaceholder} />
+    </div>
+    <div class="ent-field">
+      <span class="ent-label" id="ent-team-size-label">{c.teamSizeLabel} <span class="ent-req">*</span></span>
+      <div class="ent-cselect" data-cselect>
+        <select class="ent-cselect__native" id="ent-team-size" name="teamSize" required tabindex="-1" aria-hidden="true">
+          <option value="" disabled selected>{c.teamSizePlaceholder}</option>
+          {c.teamSizeOptions.map((opt) => (
+            <option value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          class="ent-cselect__trigger"
+          role="combobox"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+          aria-controls="ent-team-size-menu"
+          aria-labelledby="ent-team-size-label ent-team-size-value"
+          aria-describedby="ent-team-size-error"
+          aria-errormessage="ent-team-size-error"
+          aria-required="true"
+          aria-invalid="false"
+        >
+          <span class="ent-cselect__value is-placeholder" id="ent-team-size-value" data-placeholder>{c.teamSizePlaceholder}</span>
+          <span class="ent-select-chevron" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+        </button>
+        <ul class="ent-cselect__menu" id="ent-team-size-menu" role="listbox" aria-label={c.teamSizeLabel} hidden>
+          {c.teamSizeOptions.map((opt) => (
+            <li class="ent-cselect__opt" role="option" data-value={opt.value} aria-selected="false" tabindex="-1">{opt.label}</li>
+          ))}
+        </ul>
+      </div>
+      <p class="ent-field-error" id="ent-team-size-error" role="alert" hidden>{c.requiredError}</p>
+    </div>
+  </div>
+
+  <div class="ent-row">
+    <div class="ent-field">
+      <span class="ent-label" id="ent-seats-label">{c.seatsLabel} <span class="ent-req">*</span></span>
+      <div class="ent-cselect" data-cselect>
+        <select class="ent-cselect__native" id="ent-seats" name="seats" required tabindex="-1" aria-hidden="true">
+          <option value="" disabled selected>{c.seatsPlaceholder}</option>
+          {c.seatsOptions.map((opt) => (
+            <option value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          class="ent-cselect__trigger"
+          role="combobox"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+          aria-controls="ent-seats-menu"
+          aria-labelledby="ent-seats-label ent-seats-value"
+          aria-describedby="ent-seats-error"
+          aria-errormessage="ent-seats-error"
+          aria-required="true"
+          aria-invalid="false"
+        >
+          <span class="ent-cselect__value is-placeholder" id="ent-seats-value" data-placeholder>{c.seatsPlaceholder}</span>
+          <span class="ent-select-chevron" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+        </button>
+        <ul class="ent-cselect__menu" id="ent-seats-menu" role="listbox" aria-label={c.seatsLabel} hidden>
+          {c.seatsOptions.map((opt) => (
+            <li class="ent-cselect__opt" role="option" data-value={opt.value} aria-selected="false" tabindex="-1">{opt.label}</li>
+          ))}
+        </ul>
+      </div>
+      <p class="ent-field-error" id="ent-seats-error" role="alert" hidden>{c.requiredError}</p>
+    </div>
+    <div class="ent-field">
+      <span class="ent-label" id="ent-country-label">{c.countryLabel} <span class="ent-req">*</span></span>
+      <div class="ent-cselect" data-cselect>
+        <select class="ent-cselect__native" id="ent-country" name="country" required tabindex="-1" aria-hidden="true">
+          <option value="" disabled selected>{c.countryPlaceholder}</option>
+          {countryOptions.map((opt) => (
+            <option value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          class="ent-cselect__trigger"
+          role="combobox"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+          aria-controls="ent-country-menu"
+          aria-labelledby="ent-country-label ent-country-value"
+          aria-describedby="ent-country-error"
+          aria-errormessage="ent-country-error"
+          aria-required="true"
+          aria-invalid="false"
+        >
+          <span class="ent-cselect__value is-placeholder" id="ent-country-value" data-placeholder>{c.countryPlaceholder}</span>
+          <span class="ent-select-chevron" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+        </button>
+        <ul class="ent-cselect__menu" id="ent-country-menu" role="listbox" aria-label={c.countryLabel} hidden>
+          {countryOptions.map((opt) => (
+            <li class="ent-cselect__opt" role="option" data-value={opt.value} aria-selected="false" tabindex="-1">{opt.label}</li>
+          ))}
+        </ul>
+      </div>
+      <p class="ent-field-error" id="ent-country-error" role="alert" hidden>{c.requiredError}</p>
+    </div>
+  </div>
+
+  <div class="ent-row">
+    <div class="ent-field">
+      <span class="ent-label" id="ent-budget-label">{c.budgetLabel} <span class="ent-req">*</span>{c.budgetHint && <span class="ent-optional"> ({c.budgetHint})</span>}</span>
+      <div class="ent-cselect" data-cselect>
+        <select class="ent-cselect__native" id="ent-budget" name="budget" required tabindex="-1" aria-hidden="true">
+          <option value="" disabled selected>{c.budgetPlaceholder}</option>
+          {c.budgetOptions.map((opt) => (
+            <option value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          class="ent-cselect__trigger"
+          role="combobox"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+          aria-controls="ent-budget-menu"
+          aria-labelledby="ent-budget-label ent-budget-value"
+          aria-describedby="ent-budget-error"
+          aria-errormessage="ent-budget-error"
+          aria-required="true"
+          aria-invalid="false"
+        >
+          <span class="ent-cselect__value is-placeholder" id="ent-budget-value" data-placeholder>{c.budgetPlaceholder}</span>
+          <span class="ent-select-chevron" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+        </button>
+        <ul class="ent-cselect__menu" id="ent-budget-menu" role="listbox" aria-label={c.budgetLabel} hidden>
+          {c.budgetOptions.map((opt) => (
+            <li class="ent-cselect__opt" role="option" data-value={opt.value} aria-selected="false" tabindex="-1">{opt.label}</li>
+          ))}
+        </ul>
+      </div>
+      <p class="ent-field-error" id="ent-budget-error" role="alert" hidden>{c.requiredError}</p>
+    </div>
+    <div class="ent-field">
+      <span class="ent-label" id="ent-use-case-label">{c.useCaseLabel} <span class="ent-req">*</span></span>
+      <div class="ent-cselect" data-cselect>
+        <select class="ent-cselect__native" id="ent-use-case" name="useCase" required tabindex="-1" aria-hidden="true">
+          <option value="" disabled selected>{c.useCasePlaceholder}</option>
+          {c.useCaseOptions.map((opt) => (
+            <option value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          class="ent-cselect__trigger"
+          role="combobox"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+          aria-controls="ent-use-case-menu"
+          aria-labelledby="ent-use-case-label ent-use-case-value"
+          aria-describedby="ent-use-case-error"
+          aria-errormessage="ent-use-case-error"
+          aria-required="true"
+          aria-invalid="false"
+        >
+          <span class="ent-cselect__value is-placeholder" id="ent-use-case-value" data-placeholder>{c.useCasePlaceholder}</span>
+          <span class="ent-select-chevron" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+        </button>
+        <ul class="ent-cselect__menu" id="ent-use-case-menu" role="listbox" aria-label={c.useCaseLabel} hidden>
+          {c.useCaseOptions.map((opt) => (
+            <li class="ent-cselect__opt" role="option" data-value={opt.value} aria-selected="false" tabindex="-1">{opt.label}</li>
+          ))}
+        </ul>
+      </div>
+      <p class="ent-field-error" id="ent-use-case-error" role="alert" hidden>{c.useCaseError}</p>
+    </div>
+  </div>
+
+  <div class="ent-row">
+    <div class="ent-field">
+      <span class="ent-label" id="ent-industry-label">{c.industryLabel} <span class="ent-req">*</span></span>
+      <div class="ent-cselect" data-cselect>
+        <select class="ent-cselect__native" id="ent-industry" name="industry" required tabindex="-1" aria-hidden="true">
+          <option value="" disabled selected>{c.industryPlaceholder}</option>
+          {c.industryOptions.map((opt) => (
+            <option value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          class="ent-cselect__trigger"
+          role="combobox"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+          aria-controls="ent-industry-menu"
+          aria-labelledby="ent-industry-label ent-industry-value"
+          aria-describedby="ent-industry-error"
+          aria-errormessage="ent-industry-error"
+          aria-required="true"
+          aria-invalid="false"
+        >
+          <span class="ent-cselect__value is-placeholder" id="ent-industry-value" data-placeholder>{c.industryPlaceholder}</span>
+          <span class="ent-select-chevron" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </span>
+        </button>
+        <ul class="ent-cselect__menu" id="ent-industry-menu" role="listbox" aria-label={c.industryLabel} hidden>
+          {c.industryOptions.map((opt) => (
+            <li class="ent-cselect__opt" role="option" data-value={opt.value} aria-selected="false" tabindex="-1">{opt.label}</li>
+          ))}
+        </ul>
+      </div>
+      <p class="ent-field-error" id="ent-industry-error" role="alert" hidden>{c.requiredError}</p>
+    </div>
+    <div class="ent-field">
+      <label class="ent-label" for="ent-role">{c.roleLabel} <span class="ent-optional">({c.optional})</span></label>
+      <input class="ent-input" id="ent-role" name="role" type="text" autocomplete="organization-title" placeholder={c.rolePlaceholder} />
+    </div>
+  </div>
+
+  <div class="ent-field">
+    <label class="ent-label" for="ent-message">{c.messageLabel} <span class="ent-optional">({c.optional})</span></label>
+    <textarea class="ent-input ent-textarea" id="ent-message" name="message" rows="4" placeholder={c.messagePlaceholder}></textarea>
+  </div>
+
+  <button class="btn btn-primary ent-submit" type="submit" data-default-label={c.submitLabel} data-submitting-label={c.submittingLabel}>
+    {c.submitLabel}
+  </button>
+
+  <p class="ent-privacy">{c.privacyNote}</p>
+  <p class="ent-error" id="ent-error" role="alert" hidden>{c.errorMessage}</p>
+</form>
+
+<div class="ent-success" id="ent-success" hidden>
+  <span class="ent-success__tick" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+  </span>
+  <h2 class="ent-success__title" id="ent-success-heading">{c.successTitle}</h2>
+  <p class="ent-success__body">{c.successBody}</p>
+</div>
+
+<script is:inline>
+  (() => {
+    const form = document.getElementById('ent-form');
+    if (!form) return;
+    const errorEl = document.getElementById('ent-error');
+    const successEl = document.getElementById('ent-success');
+    const submitBtn = form.querySelector('.ent-submit');
+    const defaultLabel = submitBtn?.getAttribute('data-default-label') || 'Submit';
+    const submittingLabel = submitBtn?.getAttribute('data-submitting-label') || defaultLabel;
+    const leadSource = form.getAttribute('data-source') || 'enterprise';
+    const pageName = form.getAttribute('data-page-name') || 'enterprise';
+
+    // Custom selects — a fully styled dropdown so we don't render the OS-native
+    // popup. The real <select> stays in the DOM (hidden) as the form value and
+    // validation source of truth; the listbox below just drives it and fires a
+    // `change` so the existing per-field validation clears on pick.
+    form.querySelectorAll('[data-cselect]').forEach((root) => {
+      const native = root.querySelector('.ent-cselect__native');
+      const trigger = root.querySelector('.ent-cselect__trigger');
+      const valueEl = root.querySelector('.ent-cselect__value');
+      const menu = root.querySelector('.ent-cselect__menu');
+      const opts = Array.from(menu.querySelectorAll('.ent-cselect__opt'));
+      if (!native || !trigger || !valueEl || !menu) return;
+
+      const close = () => {
+        menu.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+      };
+      const open = () => {
+        menu.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+        const current = opts.find((o) => o.getAttribute('aria-selected') === 'true');
+        (current || opts[0])?.focus();
+      };
+      const pick = (opt) => {
+        native.value = opt.getAttribute('data-value');
+        valueEl.textContent = opt.textContent;
+        valueEl.classList.remove('is-placeholder');
+        opts.forEach((o) => o.setAttribute('aria-selected', o === opt ? 'true' : 'false'));
+        native.dispatchEvent(new Event('change', { bubbles: true }));
+        close();
+        trigger.focus();
+      };
+
+      trigger.addEventListener('click', () => (menu.hidden ? open() : close()));
+      trigger.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          open();
+        }
+      });
+      opts.forEach((opt, i) => {
+        opt.addEventListener('click', () => pick(opt));
+        opt.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            pick(opt);
+          } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            (opts[i + 1] || opts[0]).focus();
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            (opts[i - 1] || opts[opts.length - 1]).focus();
+          } else if (e.key === 'Escape' || e.key === 'Tab') {
+            close();
+            if (e.key === 'Escape') trigger.focus();
+          }
+        });
+      });
+      document.addEventListener('click', (e) => {
+        if (!root.contains(e.target)) close();
+      });
+    });
+
+    // Preselect the visitor's country from the browser locale (zh-CN → CN;
+    // maximize() infers a region even for bare languages, e.g. "ja" → JP).
+    // Silent no-op when nothing matches — the field stays on its placeholder
+    // and the user picks manually.
+    (() => {
+      const native = document.getElementById('ent-country');
+      const root = native && native.closest('[data-cselect]');
+      if (!native || !root || native.value) return;
+      const langs = (navigator.languages && navigator.languages.length
+        ? Array.from(navigator.languages)
+        : [navigator.language]
+      ).filter(Boolean);
+      let region = '';
+      for (const lang of langs) {
+        try {
+          const r = new Intl.Locale(lang).maximize().region;
+          if (r && /^[A-Z]{2}$/.test(r)) {
+            region = r;
+            break;
+          }
+        } catch (e) {}
+      }
+      if (!region) return;
+      const opt = root.querySelector('.ent-cselect__opt[data-value="' + region + '"]');
+      if (!opt) return;
+      native.value = region;
+      const valueEl = root.querySelector('.ent-cselect__value');
+      if (valueEl) {
+        valueEl.textContent = opt.textContent;
+        valueEl.classList.remove('is-placeholder');
+      }
+      root.querySelectorAll('.ent-cselect__opt').forEach((o) => {
+        o.setAttribute('aria-selected', o === opt ? 'true' : 'false');
+      });
+    })();
+
+    // Inline validation — the form is `novalidate`, so we never trigger the
+    // browser's native validation bubble; we show our own styled messages.
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const fieldInput = (id) => document.getElementById('ent-' + id);
+    const fieldErr = (id) => document.getElementById('ent-' + id + '-error');
+    const setInvalid = (id, bad) => {
+      const input = fieldInput(id);
+      const err = fieldErr(id);
+      if (input) {
+        input.classList.toggle('is-invalid', bad);
+        input.setAttribute('aria-invalid', bad ? 'true' : 'false');
+        const trigger = input.closest('[data-cselect]')?.querySelector('.ent-cselect__trigger');
+        if (trigger) trigger.setAttribute('aria-invalid', bad ? 'true' : 'false');
+      }
+      if (err) err.hidden = !bad;
+    };
+    const validateField = (id) => {
+      const input = fieldInput(id);
+      if (!input) return true;
+      const bad = id === 'email'
+        ? !EMAIL_RE.test(input.value.trim())
+        : input.value.trim() === '';
+      setInvalid(id, bad);
+      return !bad;
+    };
+    ['email'].forEach((id) => {
+      const input = fieldInput(id);
+      if (input) input.addEventListener('input', () => setInvalid(id, false));
+    });
+    ['team-size', 'seats', 'country', 'budget', 'use-case', 'industry'].forEach((id) => {
+      const sel = fieldInput(id);
+      if (sel) sel.addEventListener('change', () => setInvalid(id, false));
+    });
+
+    // Host shells (the pricing modal) re-present the form when reopening;
+    // this hook lets them drop transient error UI first — the submit-failure
+    // banner and per-field messages — without touching entered field values
+    // or the sticky success panel.
+    form.addEventListener('od:lead-reset', () => {
+      if (errorEl) errorEl.hidden = true;
+      ['email', 'team-size', 'seats', 'country', 'budget', 'use-case', 'industry'].forEach((id) => setInvalid(id, false));
+    });
+
+    // Lightweight analytics wrapper around the shared PostHog delegate
+    // (window.__odTrack, installed by sub-page-layout). page_name matches the
+    // host page (enterprise / pricing) so the two funnels stay separable.
+    const track = (name, props) => {
+      try {
+        if (typeof window.__odTrack === 'function') {
+          window.__odTrack(name, Object.assign(
+            { page_name: pageName, locale: (document.documentElement.lang || 'en').toLowerCase() },
+            props || {},
+          ));
+        }
+      } catch (e) {}
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (errorEl) errorEl.hidden = true;
+
+      let firstInvalid = null;
+      const invalidFields = [];
+      ['email', 'team-size', 'seats', 'country', 'budget', 'use-case', 'industry'].forEach((id) => {
+        if (!validateField(id)) {
+          invalidFields.push(id);
+          if (!firstInvalid) firstInvalid = fieldInput(id);
+        }
+      });
+
+      if (firstInvalid) {
+        // Validation blocked the submit — record which fields so we can see
+        // where the funnel leaks.
+        track('lead_submit_invalid', { missing: invalidFields.join(',') });
+        // A custom-select's real <select> is hidden, so focus its trigger.
+        const focusTarget = firstInvalid.classList?.contains('ent-cselect__native')
+          ? firstInvalid.parentElement.querySelector('.ent-cselect__trigger')
+          : firstInvalid;
+        if (focusTarget && typeof focusTarget.focus === 'function') focusTarget.focus();
+        return;
+      }
+
+      const data = new FormData(form);
+      // The country select's value is the ISO code; submit the localized
+      // label plus the code (e.g. "中国 (CN)") so the Feishu lead card stays
+      // readable while analytics keep the canonical code.
+      const countrySel = fieldInput('country');
+      const countryCode = countrySel ? countrySel.value : '';
+      const countryName = countrySel && countrySel.selectedIndex > 0
+        ? countrySel.options[countrySel.selectedIndex].textContent.trim()
+        : '';
+      // The backend contract takes a use-case array (the field used to be
+      // multi-select chips); the single-select dropdown submits one entry.
+      const useCases = [String(data.get('useCase') || '').trim()].filter(Boolean);
+      const payload = {
+        source: leadSource,
+        email: String(data.get('email') || '').trim(),
+        company: String(data.get('company') || '').trim(),
+        teamSize: String(data.get('teamSize') || '').trim(),
+        seats: String(data.get('seats') || '').trim(),
+        budget: String(data.get('budget') || '').trim(),
+        useCases,
+        industry: String(data.get('industry') || '').trim(),
+        location: countryCode ? countryName + ' (' + countryCode + ')' : '',
+        role: String(data.get('role') || '').trim(),
+        message: String(data.get('message') || '').trim(),
+        locale: document.documentElement.lang || 'en',
+        pageUrl: location.href,
+      };
+
+      const leadProps = {
+        team_size: payload.teamSize,
+        seats: payload.seats,
+        budget: payload.budget,
+        country: countryCode,
+        industry: payload.industry,
+        use_case: useCases[0] || '',
+        use_case_count: useCases.length,
+      };
+      track('lead_submit_attempt', leadProps);
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = submittingLabel;
+      }
+
+      try {
+        const res = await fetch('/contact-sales', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('request_failed');
+        track('lead_submit_success', leadProps);
+        // Host pages (the pricing modal) layer legacy analytics on this. The
+        // detail carries the segmentation props PLUS the presence booleans the
+        // pre-shared-form `team_lead_submit` contract exposed, so the bridge
+        // can keep that event's original schema intact.
+        form.dispatchEvent(new CustomEvent('od:lead-success', {
+          bubbles: true,
+          detail: Object.assign({}, leadProps, {
+            has_company: !!payload.company,
+            has_role: !!payload.role,
+            has_message: !!payload.message,
+          }),
+        }));
+        form.hidden = true;
+        if (successEl) {
+          successEl.hidden = false;
+          successEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      } catch (err) {
+        track('lead_submit_failed', Object.assign({ reason: 'request_failed' }, leadProps));
+        if (errorEl) errorEl.hidden = false;
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = defaultLabel;
+        }
+      }
+    });
+  })();
+</script>
+
+<style>
+  .ent-form-heading {
+    margin: 0 0 22px;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--ink, #262626);
+  }
+
+  /* ---------- early-access incentive ---------- */
+  .ent-incentive {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 22px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid color-mix(in oklab, var(--line), var(--olive) 32%);
+    background: color-mix(in oklab, var(--bone), var(--coral) 12%);
+  }
+  .ent-incentive__badge {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin-top: 1px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--bone), var(--coral) 26%);
+    color: var(--olive, #218c00);
+  }
+  .ent-incentive__text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .ent-incentive__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink, #262626);
+  }
+  .ent-incentive__body {
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--ink-soft, #434343);
+  }
+
+  .ent-form {
+    flex-direction: column;
+    gap: 18px;
+  }
+  /* `:not([hidden])` so toggling the `hidden` attr in JS actually hides the
+     node — a bare `display: flex` would override the UA `[hidden]` rule. */
+  .ent-form:not([hidden]) {
+    display: flex;
+  }
+  .ent-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 18px;
+    row-gap: 8px;
+  }
+  /* Paired fields share the row's label / control / error tracks via
+     subgrid, so a label that wraps to two lines (long locale copy) never
+     pushes its own control out of line with its neighbour's. */
+  .ent-row .ent-field {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 3;
+    align-content: start;
+    gap: 8px;
+  }
+  .ent-row .ent-label {
+    align-self: end;
+  }
+  .ent-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .ent-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink, #262626);
+  }
+  .ent-req {
+    color: var(--olive, #218c00);
+  }
+  .ent-optional {
+    font-weight: 400;
+    color: var(--ink-faint, #8c8c8c);
+  }
+  .ent-field-error {
+    margin: 2px 0 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #c0392b;
+  }
+  .ent-input {
+    width: 100%;
+    font-family: var(--body);
+    font-size: 15px;
+    color: var(--ink, #262626);
+    background: var(--paper, #fafafa);
+    border: 1px solid var(--line, #d9d9d9);
+    border-radius: 10px;
+    padding: 11px 14px;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+    appearance: none;
+  }
+  .ent-input::placeholder {
+    color: var(--ink-faint, #8c8c8c);
+  }
+  .ent-input:hover {
+    border-color: var(--line-hover, #bfbfbf);
+  }
+  .ent-input:focus {
+    outline: none;
+    background: var(--bone, #fff);
+    border-color: var(--olive, #218c00);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--bone), var(--coral) 26%);
+  }
+  .ent-input.is-invalid {
+    border-color: #c0392b;
+    background: var(--bone, #fff);
+  }
+  .ent-input.is-invalid:focus {
+    border-color: #c0392b;
+    box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.14);
+  }
+  .ent-textarea {
+    resize: vertical;
+    min-height: 96px;
+    line-height: 1.5;
+  }
+  /* ---------- custom select (no native popup) ---------- */
+  .ent-cselect {
+    position: relative;
+  }
+  /* The real <select> stays in the DOM as form value + validation source, but
+     is fully hidden so the OS-native dropdown never appears. */
+  .ent-cselect__native {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .ent-cselect__trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-family: var(--body);
+    font-size: 15px;
+    color: var(--ink, #262626);
+    text-align: left;
+    background: var(--paper, #fafafa);
+    border: 1px solid var(--line, #d9d9d9);
+    border-radius: 10px;
+    padding: 11px 14px;
+    cursor: pointer;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+  }
+  .ent-cselect__trigger:hover {
+    border-color: var(--line-hover, #bfbfbf);
+  }
+  .ent-cselect__trigger:focus-visible,
+  .ent-cselect__trigger[aria-expanded='true'] {
+    outline: none;
+    background: var(--bone, #fff);
+    border-color: var(--olive, #218c00);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--bone), var(--coral) 26%);
+  }
+  .ent-cselect__native.is-invalid ~ .ent-cselect__trigger {
+    border-color: #c0392b;
+    background: var(--bone, #fff);
+  }
+  .ent-cselect__native.is-invalid ~ .ent-cselect__trigger:focus-visible,
+  .ent-cselect__native.is-invalid ~ .ent-cselect__trigger[aria-expanded='true'] {
+    border-color: #c0392b;
+    box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.14);
+  }
+  .ent-cselect__value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ent-cselect__value.is-placeholder {
+    color: var(--ink-faint, #8c8c8c);
+  }
+  .ent-cselect .ent-select-chevron {
+    flex: 0 0 auto;
+    display: inline-flex;
+    pointer-events: none;
+    color: var(--ink-mute, #595959);
+    transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .ent-cselect__trigger[aria-expanded='true'] .ent-select-chevron {
+    transform: rotate(180deg);
+  }
+  .ent-cselect__menu {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 6px;
+    list-style: none;
+    background: var(--bone, #fff);
+    border: 1px solid var(--line, #d9d9d9);
+    border-radius: 12px;
+    box-shadow: 0 20px 40px -20px rgba(38, 38, 38, 0.28);
+    max-height: 264px;
+    overflow-y: auto;
+  }
+  .ent-cselect__menu[hidden] {
+    display: none;
+  }
+  .ent-cselect__opt {
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--ink-soft, #434343);
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .ent-cselect__opt:hover,
+  .ent-cselect__opt:focus-visible {
+    outline: none;
+    background: var(--paper, #fafafa);
+    color: var(--ink, #262626);
+  }
+  .ent-cselect__opt[aria-selected='true'] {
+    color: var(--olive, #218c00);
+    font-weight: 600;
+    background: color-mix(in oklab, var(--bone), var(--coral) 14%);
+  }
+  .ent-submit {
+    margin-top: 4px;
+    width: 100%;
+    justify-content: center;
+  }
+  .ent-submit:disabled {
+    opacity: 0.6;
+    cursor: progress;
+  }
+  .ent-privacy {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ink-faint, #8c8c8c);
+    text-align: center;
+  }
+  .ent-error {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #c0392b;
+    text-align: center;
+  }
+
+  /* ---------- success ---------- */
+  .ent-success {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 12px;
+    padding: 28px 8px;
+  }
+  .ent-success:not([hidden]) {
+    display: flex;
+  }
+  .ent-success__tick {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--bone), var(--coral) 22%);
+    color: var(--olive, #218c00);
+  }
+  .ent-success__title {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--ink, #262626);
+  }
+  .ent-success__body {
+    margin: 0;
+    max-width: 320px;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--ink-soft, #434343);
+  }
+
+  @media (max-width: 480px) {
+    /* Single column: back to plain stacked flex fields (the subgrid pairing
+       only makes sense side by side). */
+    .ent-row {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .ent-row .ent-field {
+      display: flex;
+      gap: 8px;
+    }
+  }
+</style>

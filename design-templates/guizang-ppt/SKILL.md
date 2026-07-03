@@ -1,24 +1,35 @@
 ---
 name: magazine-web-ppt
-description: Generates an "editorial magazine × electronic ink" style horizontal-swipe web deck (a single HTML file), with a WebGL fluid background, serif headlines + sans-serif body, act dividers, big-number data pages, image grids, and more templates. Use when the user wants to make a talk / share / launch-style web deck, or mentions "magazine-style PPT", "horizontal swipe deck", "editorial magazine", or "e-ink presentation".
+en_name: "Write a Brand-to-Revenue Story like a Growth Strategy Lead"
+zh_name: "像增长策略负责人一样写品牌到收入故事"
+description: |
+  For marketing and gtm work: bind launches, campaigns, events, and brand plans to growth and pipeline outcomes. Built around the core query "annual-marketing-plan", with GTM strategy lead judgment, buyer-ready proof, and this outcome: approve launch plan, campaign budget, or GTM motion.
+en_description: |
+  For marketing and gtm work: bind launches, campaigns, events, and brand plans to growth and pipeline outcomes. Built around the core query "annual-marketing-plan", with GTM strategy lead judgment, buyer-ready proof, and this outcome: approve launch plan, campaign budget, or GTM motion.
+zh_description: |
+  市场/增长/GTM场景：围绕 core query「annual-marketing-plan」把粗糙材料整理成“像增长策略负责人一样写品牌到收入故事”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。
+tags:
+  - "marketing-gtm"
+  - "annual-marketing-plan"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "marketing"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "guizang-ppt"
 triggers:
-  - "ppt"
-  - "deck"
-  - "slides"
-  - "presentation"
-  - "magazine"
-  - "magazine style"
-  - "magazine-style PPT"
-  - "horizontal swipe"
-  - "horizontal swipe deck"
-  - "editorial magazine"
-  - "e-ink presentation"
-  - "web deck"
-  - "launch event"
-  - "talk deck"
+  - "annual-marketing-plan"
+  - "marketing-gtm"
+  - "Write a Brand-to-Revenue Story like a Growth Strategy Lead"
+  - "像增长策略负责人一样写品牌到收入故事"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: marketing
   default_for: deck
   upstream: "https://github.com/op7418/guizang-ppt-skill"
   preview:
@@ -26,7 +37,8 @@ od:
     entry: index.html
   design_system:
     requires: false
-  example_prompt: "Make me a magazine-style deck about 'One-person company · the organization folded by AI', a 25-minute talk for an audience of designers and founders. First recommend one direction (Monocle / WIRED / Kinfolk / Domus / Lab) for me to choose from."
+  scenario: "marketing"
+  example_prompt: "Create \"Write a Brand-to-Revenue Story like a Growth Strategy Lead\" as a Marketing and GTM deck in the Guizang Ppt visual system. Scene: annual-marketing-plan. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce a commercial-grade slide plan, written slides, visual direction, speaker-ready structure, and critic pass against this rubric: can the plan connect creative choices to measurable growth."
 ---
 
 # Magazine Web Ppt

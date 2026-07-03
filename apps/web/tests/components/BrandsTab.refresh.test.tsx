@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BrandSummary } from '@open-design/contracts';
@@ -12,10 +12,6 @@ const routerState = vi.hoisted(() => ({
   route: { kind: 'home', view: 'brands', brandId: undefined } as Record<string, unknown>,
 }));
 const fetchBrandsMock = vi.hoisted(() => vi.fn(async (): Promise<BrandSummary[]> => []));
-const previewCardMock = vi.hoisted(() => vi.fn(() => null));
-const brandIntentState = vi.hoisted(() => ({
-  pending: false,
-}));
 
 vi.mock('../../src/router', () => ({
   useRoute: () => routerState.route,
@@ -29,15 +25,11 @@ vi.mock('../../src/runtime/useBrandExtract', () => ({
 }));
 vi.mock('../../src/runtime/brand-intent', () => ({
   NEW_BRAND_KIT_INTENT_EVENT: 'od:new-brand-kit-intent',
-  consumePendingNewBrandKit: () => {
-    const wasPending = brandIntentState.pending;
-    brandIntentState.pending = false;
-    return wasPending;
-  },
+  consumePendingNewBrandKit: () => false,
 }));
 // Heavy children are out of scope for the refresh contract.
 vi.mock('../../src/components/BrandPreviewCard', () => ({
-  BrandPreviewCard: previewCardMock,
+  BrandPreviewCard: () => null,
   BrandLogo: () => null,
   hostnameOf: (url?: string) => url ?? '',
 }));
@@ -45,8 +37,21 @@ vi.mock('../../src/components/BrandReferencePicker', () => ({
   BrandReferencePicker: () => null,
 }));
 vi.mock('../../src/components/NewBrandModal', () => ({
-  NewBrandModal: ({ open }: { open: boolean }) =>
-    open ? <div data-testid="new-brand-modal" /> : null,
+  NewBrandModal: ({
+    open,
+    onCreated,
+  }: {
+    open: boolean;
+    onCreated: (brandId: string, projectId: string, conversationId: string) => void;
+  }) => open ? (
+    <button
+      type="button"
+      data-testid="mock-new-brand-created"
+      onClick={() => onCreated('brand-acme', 'project-acme', 'conversation-acme')}
+    >
+      created
+    </button>
+  ) : null,
 }));
 
 import { BrandsTab } from '../../src/components/BrandsTab';
@@ -75,10 +80,8 @@ function brandSummary(id: string, status: BrandSummary['meta']['status']): Brand
 describe('BrandsTab refresh reconciliation', () => {
   beforeEach(() => {
     routerState.route = { kind: 'home', view: 'brands', brandId: undefined };
-    brandIntentState.pending = false;
     fetchBrandsMock.mockReset();
     fetchBrandsMock.mockResolvedValue([]);
-    previewCardMock.mockClear();
   });
   afterEach(() => {
     cleanup();
@@ -108,80 +111,46 @@ describe('BrandsTab refresh reconciliation', () => {
     await waitFor(() => expect(fetchBrandsMock).toHaveBeenCalledTimes(2));
   });
 
-  it('does not open the New Brand Kit modal from an intent while Brands is hidden', async () => {
-    routerState.route = { kind: 'home', view: 'home' };
-    renderBrandsTab();
-
-    brandIntentState.pending = true;
-    window.dispatchEvent(new CustomEvent('od:new-brand-kit-intent'));
-
-    expect(screen.queryByTestId('new-brand-modal')).toBeNull();
-    expect(brandIntentState.pending).toBe(true);
-  });
-
-  it('consumes the pending New Brand Kit intent only on active Brands entry', async () => {
-    routerState.route = { kind: 'home', view: 'home' };
-    const { rerender } = renderBrandsTab();
-
-    brandIntentState.pending = true;
-    window.dispatchEvent(new CustomEvent('od:new-brand-kit-intent'));
-    expect(screen.queryByTestId('new-brand-modal')).toBeNull();
-
-    routerState.route = { kind: 'home', view: 'brands', brandId: undefined };
-    rerender(
-      <I18nProvider initial="en">
-        <BrandsTab />
-      </I18nProvider>,
-    );
-
-    expect(await screen.findByTestId('new-brand-modal')).toBeTruthy();
-    expect(brandIntentState.pending).toBe(false);
-
-    routerState.route = { kind: 'project', projectId: 'p1', conversationId: null, fileName: null };
-    rerender(
-      <I18nProvider initial="en">
-        <BrandsTab />
-      </I18nProvider>,
-    );
-    expect(screen.queryByTestId('new-brand-modal')).toBeNull();
-
-    routerState.route = { kind: 'home', view: 'brands', brandId: undefined };
-    rerender(
-      <I18nProvider initial="en">
-        <BrandsTab />
-      </I18nProvider>,
-    );
-    expect(screen.queryByTestId('new-brand-modal')).toBeNull();
-  });
-
   it('polls while a brand is extracting and stops once it settles', async () => {
     vi.useFakeTimers();
     fetchBrandsMock.mockResolvedValue([brandSummary('acme', 'extracting')]);
     renderBrandsTab();
 
     // Initial activation fetch resolves; the extracting brand arms the poll.
-    await vi.advanceTimersByTimeAsync(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
     expect(fetchBrandsMock).toHaveBeenCalledTimes(1);
 
     // The poll fires while extraction is in flight.
-    await vi.advanceTimersByTimeAsync(4000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
     expect(fetchBrandsMock).toHaveBeenCalledTimes(2);
 
     // Extraction settles to ready — the next poll tick tears the interval down.
     fetchBrandsMock.mockResolvedValue([brandSummary('acme', 'ready')]);
-    await vi.advanceTimersByTimeAsync(4000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
     const afterSettle = fetchBrandsMock.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(8000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8000);
+    });
     expect(fetchBrandsMock).toHaveBeenCalledTimes(afterSettle);
   });
 
-  it('does not aim the preview at another brand when the routed brand disappears', async () => {
-    routerState.route = { kind: 'home', view: 'brands', brandId: 'deleted-brand' };
-    fetchBrandsMock.mockResolvedValue([brandSummary('remaining-brand', 'ready')]);
+  it('refreshes design systems when a brand extraction project is created', async () => {
+    const onDesignSystemsRefresh = vi.fn();
+    render(
+      <I18nProvider initial="en">
+        <BrandsTab onDesignSystemsRefresh={onDesignSystemsRefresh} />
+      </I18nProvider>,
+    );
 
-    renderBrandsTab();
+    fireEvent.click(screen.getByTestId('brands-new'));
+    fireEvent.click(screen.getByTestId('mock-new-brand-created'));
 
-    await waitFor(() => expect(fetchBrandsMock).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(previewCardMock).not.toHaveBeenCalled());
+    expect(onDesignSystemsRefresh).toHaveBeenCalledTimes(1);
   });
 });

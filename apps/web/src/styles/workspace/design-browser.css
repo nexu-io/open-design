@@ -129,12 +129,6 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.db-icon-btn.is-spinning svg {
-  animation: db-spin 900ms linear infinite;
-}
-@keyframes db-spin {
-  to { transform: rotate(360deg); }
-}
 .db-viewport-switcher {
   position: relative;
   display: inline-flex;
@@ -415,6 +409,17 @@
 .db-menu button:hover:not(:disabled) svg {
   color: var(--text);
 }
+.db-menu button.is-attention {
+  background: color-mix(in srgb, var(--accent) 13%, var(--bg-panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--text-strong);
+}
+.db-menu button.is-attention svg {
+  color: var(--accent);
+}
+.db-menu button.is-attention:not(:disabled) {
+  animation: db-menu-attention 1.6s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
 .db-menu button:disabled {
   color: var(--text-faint);
   cursor: default;
@@ -572,6 +577,7 @@
   z-index: 240;
   display: inline-flex;
   align-items: center;
+  gap: 10px;
   max-width: calc(100% - 32px);
   padding: 9px 17px;
   border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
@@ -583,13 +589,35 @@
   font-weight: 500;
   letter-spacing: -0.01em;
   white-space: nowrap;
-  pointer-events: none;
+  pointer-events: auto;
   transform: translateX(-50%);
   animation: db-toast-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.db-status-action {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--bg-panel) 32%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-panel) 14%, transparent);
+  color: var(--bg-panel);
+  padding: 4px 9px;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.db-status-action:hover {
+  background: color-mix(in srgb, var(--bg-panel) 24%, transparent);
 }
 @keyframes db-toast-in {
   from { opacity: 0; transform: translate(-50%, 10px); }
   to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes db-menu-attention {
+  0%, 100% {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  50% {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 72%, transparent), 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
 }
 
 /* ---- Content surface ----------------------------------------------------- */

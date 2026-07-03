@@ -14,6 +14,15 @@ export interface UseInViewOptions {
   rootMargin?: string;
   /** Stop observing after the first time the node becomes visible. */
   once?: boolean;
+  /**
+   * Observe against this scroll container instead of the viewport. Needed
+   * when the target lives in an overflow container: clipping empties the
+   * intersection rect regardless of a viewport rootMargin, so pre-mounting
+   * "just off-screen" targets only works with the container as root. Pass a
+   * ref (read at observe time) because the container mounts in the same
+   * commit as the targets.
+   */
+  root?: React.RefObject<Element | null>;
 }
 
 export function useInView<T extends Element = HTMLElement>(
@@ -44,11 +53,14 @@ export function useInView<T extends Element = HTMLElement>(
           }
         }
       },
-      { rootMargin: options.rootMargin ?? '240px' },
+      {
+        rootMargin: options.rootMargin ?? '240px',
+        root: options.root?.current ?? null,
+      },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [options.once, options.rootMargin]);
+  }, [options.once, options.rootMargin, options.root]);
 
   return { ref, inView };
 }

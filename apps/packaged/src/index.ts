@@ -55,6 +55,7 @@ let startupTelemetryContext:
       namespace: string;
       source: string;
       installationRoot: string;
+      nativeModulePath: string | null;
     }
   | null = null;
 
@@ -129,6 +130,18 @@ async function main(): Promise<void> {
     // Pass installationRoot explicitly: OD_INSTALLATION_DIR is only set in the
     // daemon child env, not this parent process (see startup-telemetry.ts).
     installationRoot: paths.installationRoot,
+    // Absolute path where the daemon's better-sqlite3 binding ships in the
+    // packaged bundle (`Contents/Resources/app/node_modules/...` — layout
+    // verified against the shipped 0.13.0 DMG). The fatal-exit report probes
+    // this to record whether the .node actually exists on the crashing machine.
+    nativeModulePath: join(
+      app.getAppPath(),
+      "node_modules",
+      "better-sqlite3",
+      "build",
+      "Release",
+      "better_sqlite3.node",
+    ),
   };
 
   await ensurePackagedNamespacePaths(paths);
@@ -284,6 +297,7 @@ void main().catch(async (error: unknown) => {
       appVersion: startupTelemetryContext.appVersion,
       namespace: startupTelemetryContext.namespace,
       source: startupTelemetryContext.source,
+      nativeModulePath: startupTelemetryContext.nativeModulePath,
     });
   }
   process.exit(1);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { ChatAnalyticsHints } from '../src/api/chat.js';
 import {
   designSystemFolderCountBucket,
   designSystemLengthBucket,
@@ -123,6 +124,28 @@ describe('designSystemModuleType', () => {
     expect(designSystemModuleType('motion')).toBe('other');
     expect(designSystemModuleType('')).toBe('other');
     expect(designSystemModuleType(null)).toBe('other');
+  });
+});
+
+describe('ChatAnalyticsHints.dsEnrichment (AI-optimize request shape)', () => {
+  it('declares the analytics-only enrichment marker the daemon gates on', () => {
+    // The web AI-optimize path stamps `dsEnrichment: true`; the daemon reads it
+    // with a strict `=== true` gate (routes/runs.ts) to emit
+    // design_system_enrich_result and stamp the `ai_refined` DS metadata. The
+    // shared contract MUST declare the field so typed ChatRequest callers can
+    // discover/type-check it — this test compile-fails if the field is dropped,
+    // guarding against the web/daemon-ahead-of-contract drift.
+    const enrichHint: ChatAnalyticsHints = { dsEnrichment: true };
+    expect(enrichHint.dsEnrichment === true).toBe(true);
+
+    // A run with no enrichment marker reads as a normal (non-enrich) run.
+    const plainHint: ChatAnalyticsHints = {};
+    expect(plainHint.dsEnrichment === true).toBe(false);
+
+    // The field is optional and analytics-only: an explicit false is still
+    // "not an enrichment pass" under the daemon's strict gate.
+    const falseHint: ChatAnalyticsHints = { dsEnrichment: false };
+    expect(falseHint.dsEnrichment === true).toBe(false);
   });
 });
 

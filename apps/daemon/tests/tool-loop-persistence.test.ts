@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { daemonAgentPayloadToPersistedAgentEvent } from '../src/runtimes/chat-run-messages.js';
 import {
   __forTestFilesystemEmptyAnswerFallbackText,
   __forTestFilesystemWriteFileNamesFromRunEvents,
-  daemonAgentPayloadToPersistedAgentEvent,
 } from '../src/server.js';
 
 // Regression for PR #3375 review: the `tool_loop` event was handled by the live

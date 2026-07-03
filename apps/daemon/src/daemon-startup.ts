@@ -138,7 +138,7 @@ export async function startDaemonRuntime(options: DaemonRuntimeOptions = {}): Pr
     console.log(`[od] listening on ${started.url}`);
   }
   if (shouldOpenBrowser) {
-    const { openBrowser } = await import('./browser-open.js');
+    const { openBrowser } = await import('./browser/index.js');
     openBrowser(started.url);
   }
 

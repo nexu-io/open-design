@@ -34,15 +34,18 @@ import {
   mergeProxyAwareEnv,
   resolveSystemProxyEnv,
 } from '@open-design/platform';
-import { attachAcpSession } from './acp.js';
-import { attachPiRpcSession } from './pi-rpc.js';
+import { attachAcpSession } from './agent-protocol/index.js';
+import { attachPiRpcSession } from './agent-protocol/index.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
 import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
 import {
+  antigravityAuthGuidance,
+  antigravityQuotaGuidance,
   classifyAgentAuthFailure,
+  classifyAgentServiceFailure,
   cursorAuthGuidance,
   probeAgentAuthStatus,
 } from './runtimes/auth.js';
@@ -56,14 +59,16 @@ import {
 import { aihubmixHeaders } from './integrations/aihubmix.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
-import { resolveModelForAgent } from './runtimes/models.js';
 import { preparePromptFileForAgent, type PreparedPromptFile } from './runtimes/prompt-file.js';
+import { configuredAllowedInternalHosts } from './origin-validation.js';
 import {
+  isAllowlistedInternalHost,
   isBlockedExternalApiHostname,
   isLoopbackApiHost,
   validateBaseUrl,
   type AgentTestRequest,
   type BaseUrlValidationResult,
+  type ValidateBaseUrlOptions,
   type ConnectionTestDiagnostics,
   type ConnectionTestKind,
   type ConnectionTestPhase,
@@ -73,7 +78,19 @@ import {
   type ProviderTestRequest,
 } from '@open-design/contracts/api/connectionTest';
 import { googleGenerateContentUrl } from './integrations/google-models.js';
-import { resolveAmrProfile } from './integrations/vela.js';
+import { readVelaCredentialRevision, resolveAmrProfile } from './integrations/vela.js';
+import { amrModelLoadingCache } from './runtimes/amr-model-cache.js';
+import { buildAmrModelCacheKey } from './runtimes/amr-model-probe.js';
+import {
+  fetchVelaPresetModels,
+  fetchVelaRemoteModelsWithRetry,
+} from './runtimes/defs/amr.js';
+import {
+  getRememberedLiveModels,
+  preferFreshLiveModels,
+  resolveDefaultModelFromOptions,
+  resolveModelForAgent,
+} from './runtimes/models.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -113,12 +130,18 @@ function looksLikeIpLiteral(hostname: string): boolean {
 export async function validateBaseUrlResolved(
   baseUrl: string,
   lookup: DnsLookupFn = defaultDnsLookup,
+  options: ValidateBaseUrlOptions = {},
 ): Promise<BaseUrlValidationResult> {
-  const sync = validateBaseUrl(baseUrl);
+  const sync = validateBaseUrl(baseUrl, options);
   if (sync.error || !sync.parsed) return sync;
 
   const hostname = sync.parsed.hostname.toLowerCase();
   if (isLoopbackApiHost(hostname)) return sync;
+  // Issue #3225 — an operator who trusts this hostname has opted it out of the
+  // guard entirely, so skip the resolved-IP block even though it points into
+  // private space. The sync check above already honored a literal-IP allowlist
+  // entry; this covers the hostname-that-resolves-private case.
+  if (isAllowlistedInternalHost(hostname, options.allowedInternalHosts)) return sync;
   if (looksLikeIpLiteral(hostname)) return sync;
 
   let addresses: DnsLookupAddress[];
@@ -131,12 +154,38 @@ export async function validateBaseUrlResolved(
   for (const addr of addresses) {
     const ip = String(addr.address).toLowerCase();
     if (isLoopbackApiHost(ip)) continue;
+    // A resolved address the operator explicitly allowlisted (they listed the
+    // IP rather than the hostname) is permitted; everything else in private
+    // space is still blocked.
+    if (isAllowlistedInternalHost(ip, options.allowedInternalHosts)) continue;
     if (isBlockedExternalApiHostname(ip)) {
       return { error: 'Internal IPs blocked', forbidden: true };
     }
   }
 
   return sync;
+}
+
+/**
+ * Validate a base URL that the USER deliberately configured as a provider
+ * endpoint (connection test, model discovery, BYOK chat dispatch). Identical
+ * to {@link validateBaseUrlResolved} except it honors the operator's
+ * `OD_ALLOWED_INTERNAL_HOSTS` allowlist (issue #3225), so an internally hosted
+ * gateway on an RFC1918 address can be reached when — and only when — the
+ * operator opted in.
+ *
+ * INVARIANT: use this ONLY for user-configured endpoints. URLs that arrive
+ * inside an upstream response (image/video download links) are
+ * attacker-controllable and MUST stay on the strict {@link assertExternalAssetUrl}
+ * / {@link validateBaseUrlResolved} path, which never consults the allowlist.
+ */
+export function validateUserProviderBaseUrl(
+  baseUrl: string,
+  lookup: DnsLookupFn = defaultDnsLookup,
+): Promise<BaseUrlValidationResult> {
+  return validateBaseUrlResolved(baseUrl, lookup, {
+    allowedInternalHosts: configuredAllowedInternalHosts(),
+  });
 }
 
 /**
@@ -803,6 +852,14 @@ function inspectProviderCompletion(
     };
   }
 
+  if (protocol === 'bedrock') {
+    return {
+      valid: false,
+      kind: 'unknown',
+      detail: 'AWS Bedrock BYOK connection tests need AWS credential signing, which is not supported by the current API-key smoke test.',
+    };
+  }
+
   return { valid: false };
 }
 
@@ -821,6 +878,55 @@ function statusToKind(status: number, detailText = ''): ConnectionTestKind {
   if (status === 429) return 'rate_limited';
   if (status >= 500) return 'upstream_unavailable';
   return 'unknown';
+}
+
+function isNvidiaDegradedProviderError(detailText: string): boolean {
+  return /\bDEGRADED\b/i.test(detailText) && /\bfunction\s+id\b/i.test(detailText);
+}
+
+function providerHttpErrorOverride(
+  protocol: ConnectionTestProtocol,
+  hostname: string,
+  status: number,
+  detailText: string,
+): { kind: ConnectionTestKind; detail: string } | null {
+  if (
+    protocol === 'openai' &&
+    status === 400 &&
+    hostname.toLowerCase() === 'integrate.api.nvidia.com' &&
+    isNvidiaDegradedProviderError(detailText)
+  ) {
+    return {
+      kind: 'upstream_unavailable',
+      detail:
+        'The selected NVIDIA model instance is currently unavailable at the provider. Try a different model or retry later.',
+    };
+  }
+  return null;
+}
+
+function classifyProviderHttpFailure(
+  protocol: ConnectionTestProtocol,
+  hostname: string,
+  status: number,
+  detailText: string,
+  secrets: string[],
+): { kind: ConnectionTestKind; detail: string } {
+  const redactedDetail = redactSecrets(detailText.slice(0, 240), secrets);
+  const override = providerHttpErrorOverride(
+    protocol,
+    hostname,
+    status,
+    redactedDetail,
+  );
+  if (override) return override;
+  const kind = statusToKind(status, redactedDetail);
+  const detail =
+    redactedDetail ||
+    (status === 404
+      ? 'HTTP 404 from provider; check the Base URL path.'
+      : '');
+  return { kind, detail };
 }
 
 function extractOpenAiModelIds(data: unknown): string[] {
@@ -1204,6 +1310,10 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
       };
     }
+    case 'bedrock':
+      throw new Error(
+        'AWS Bedrock BYOK requires AWS credential signing; the current provider smoke test only supports API-key based providers.',
+      );
     default:
       throw new Error(`Unknown protocol: ${(input as { protocol?: string }).protocol}`);
   }
@@ -1229,7 +1339,7 @@ export async function testProviderConnection(
   const start = Date.now();
   const model = String(input.model ?? '');
   const normalizedInput = normalizeProviderTestInput(input);
-  const validated = await validateBaseUrlResolved(normalizedInput.baseUrl);
+  const validated = await validateUserProviderBaseUrl(normalizedInput.baseUrl);
   if (validated.error || !validated.parsed) {
     const kind: ConnectionTestKind = validated.forbidden ? 'forbidden' : 'invalid_base_url';
     return {
@@ -1332,15 +1442,13 @@ export async function testProviderConnection(
         });
         latencyMs = Date.now() - start;
       } else {
-        const redactedDetail = redactSecrets(detailText.slice(0, 240), [
-          input.apiKey,
-        ]);
-        const kind = statusToKind(response.status, redactedDetail);
-        const detail =
-          redactedDetail ||
-          (response.status === 404
-            ? 'HTTP 404 from provider; check the Base URL path.'
-            : '');
+        const { kind, detail } = classifyProviderHttpFailure(
+          input.protocol,
+          validated.parsed.hostname,
+          response.status,
+          detailText,
+          [input.apiKey],
+        );
         console.warn(
           `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${kind})${detail ? ` ${detail}` : ''}`,
         );
@@ -1466,15 +1574,13 @@ export async function testProviderConnection(
     } catch {
       // Ignore — we still report the status code.
     }
-    const redactedDetail = redactSecrets(detailText.slice(0, 240), [
-      input.apiKey,
-    ]);
-    const kind = statusToKind(response.status, redactedDetail);
-    const detail =
-      redactedDetail ||
-      (response.status === 404
-        ? 'HTTP 404 from provider; check the Base URL path.'
-        : '');
+    const { kind, detail } = classifyProviderHttpFailure(
+      input.protocol,
+      validated.parsed.hostname,
+      response.status,
+      detailText,
+      [input.apiKey],
+    );
     console.warn(
       `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${kind})${detail ? ` ${detail}` : ''}`,
     );
@@ -1764,7 +1870,15 @@ function attachAgentStreamHandlers(
   child.stdout?.setEncoding('utf8');
   child.stderr?.setEncoding('utf8');
   if (def.streamFormat === 'claude-stream-json') {
-    const claude = createClaudeStreamHandler((ev: unknown) => send('agent', ev));
+    const claude = createClaudeStreamHandler((ev: unknown) => {
+      const data = (ev ?? {}) as { type?: unknown; terminal?: unknown };
+      // Terminal result-frame errors are already classified by this sink's own
+      // result-frame parse (#4501) with the accurate `output_parse` phase;
+      // forwarding the parser's error event would race it into the generic
+      // spawn-phase stream-error path first.
+      if (data.type === 'error' && data.terminal === true) return;
+      send('agent', ev);
+    });
     child.stdout?.on('data', (chunk: string) => {
       appendRawStdout?.(chunk);
       claude.feed(chunk);
@@ -1788,12 +1902,9 @@ function attachAgentStreamHandlers(
       child,
       prompt,
       cwd,
-      // Same substitution as the chat-run path in server.ts — adapters whose
-      // CLI rejects the synthetic 'default' (e.g. AMR / vela, which forces
-      // session/set_model before session/prompt) need the def's first
-      // concrete fallback id here too, otherwise Test connection deadlocks
-      // on the same `session/set_model must be called before session/prompt`
-      // error the chat-run path already handles.
+      // Same substitution as the chat-run path in server.ts: omitted models can
+      // resolve to a concrete fallback, while an explicit 'default' is preserved
+      // so ACP runtimes can use their upstream configured default.
       model: resolveModelForAgent(def as never, model ?? null, modelEnv, liveModelScope),
       mcpServers: [],
       send,
@@ -1871,11 +1982,41 @@ async function prepareOpenCodeConnectionTestCwd(tempDir: string): Promise<void> 
   }
 }
 
+async function resolveConnectionTestModelForAgent(
+  def: RuntimeAgentDef,
+  requestedModel: string | null,
+  env: NodeJS.ProcessEnv,
+  liveModelScope: string | null,
+  launchPath?: string | null,
+): Promise<string | null> {
+  const resolved = resolveModelForAgent(def, requestedModel, env, liveModelScope);
+  if (def.id !== 'amr' || resolved !== 'default' || !launchPath) return resolved;
+
+  try {
+    const cacheKey = buildAmrModelCacheKey({
+      launchPath,
+      env,
+      credentialRevision: readVelaCredentialRevision(env),
+    });
+    const catalog = await amrModelLoadingCache.get(cacheKey, {
+      fetchPreset: () => fetchVelaPresetModels(launchPath, env),
+      fetchRemote: () => fetchVelaRemoteModelsWithRetry(launchPath, env),
+    });
+    const liveModels = preferFreshLiveModels(
+      catalog.models ?? [],
+      getRememberedLiveModels(def.id, liveModelScope),
+    );
+    return resolveDefaultModelFromOptions(liveModels) ?? resolved;
+  } catch {
+    return resolved;
+  }
+}
+
 async function testAgentConnectionInternal(
   input: AgentConnectionInput,
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
-  const model =
+  let model =
     typeof input.model === 'string' && input.model.trim()
       ? input.model.trim()
       : 'default';
@@ -1909,6 +2050,17 @@ async function testAgentConnectionInternal(
   }
 
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-'));
+  // Antigravity's print mode is silent on stdout/stderr for both
+  // missing-auth and quota-exhausted failures — it exits 0 without
+  // echoing the upstream error. The only place that failure shape
+  // surfaces is agy's `--log-file`, so hand the smoke test a temp log
+  // path under `tempDir` (cleaned up with the rest of the dir) and let
+  // the exit handler grep it for auth / quota signals (#4281). Non-agy
+  // adapters ignore `agentLogFilePath`.
+  const antigravityLogFilePath =
+    def.id === 'antigravity'
+      ? path.join(tempDir, 'agy-connection-test.log')
+      : null;
   let child: AgentChild | null = null;
   let childExit: Promise<AgentChildExit> | null = null;
   let childClosed = false;
@@ -2074,6 +2226,9 @@ async function testAgentConnectionInternal(
         {
           cwd: tempDir,
           ...(promptFile ? { promptFilePath: promptFile.path } : {}),
+          ...(antigravityLogFilePath
+            ? { agentLogFilePath: antigravityLogFilePath }
+            : {}),
         },
       );
       // Connection tests should validate the adapter's core CLI path, not
@@ -2129,6 +2284,13 @@ async function testAgentConnectionInternal(
       ...baseEnv,
       ...(mmdRouteLaunchEnv || {}),
     }, executableResolution);
+    model = await resolveConnectionTestModelForAgent(
+      def,
+      model,
+      env,
+      liveModelScope,
+      executableResolution.launchPath,
+    ) ?? model;
     const auth = await probeAgentAuthStatus(def, executableResolution.launchPath, env);
     if (auth?.status === 'missing') {
       // Preflight auth probe runs after binary resolution but before the
@@ -2186,7 +2348,7 @@ async function testAgentConnectionInternal(
       child,
       SMOKE_PROMPT,
       tempDir,
-      input.model,
+      model,
       env,
       liveModelScope,
       sink.send,
@@ -2294,6 +2456,79 @@ async function testAgentConnectionInternal(
             signal: winner.signal,
           });
         }
+      }
+      // Antigravity print-mode empty-output guard. agy exits cleanly
+      // (code 0) with no assistant text for BOTH missing-auth and
+      // quota-exhausted failures, so without this the connection test
+      // collapses every such failure into a useless `unknown` / "Test
+      // failed: exit 0" (#4281). Mirror the chat-run guard in
+      // server.ts: fold agy's `--log-file` tail into the classifier
+      // input and route to the specific auth / quota result so Settings
+      // can show actionable re-authentication or quota guidance. Only
+      // runs when agy produced no visible text — a healthy `ok` reply
+      // returns above before reaching here.
+      if (input.agentId === 'antigravity' && !visibleText) {
+        let combinedDetail = `${stderrTail}\n${rawStdoutTail}`;
+        if (antigravityLogFilePath) {
+          try {
+            const logContent = await fsp.readFile(antigravityLogFilePath, 'utf8');
+            // Keep the last 8 KB — quota / auth lines land near the tail,
+            // after the spawn / model-config preamble.
+            combinedDetail = `${combinedDetail}\n${logContent.slice(-8192)}`;
+          } catch {
+            // Missing log file (agy never wrote it, read-only tmp, etc.)
+            // is fine — fall through to the clean-exit auth fallback below.
+          }
+        }
+        const antigravityAuth = classifyAgentAuthFailure('antigravity', combinedDetail);
+        const serviceFailure = classifyAgentServiceFailure(combinedDetail);
+        // Empirically a silent agy print-mode exit almost always means
+        // missing OAuth; quota is the only other silent path and it is
+        // caught by the log-file grep above. Apply the auth fallback only
+        // on a clean exit so a genuine crash still reports as a spawn
+        // failure with its exit code.
+        const isAuth =
+          antigravityAuth?.status === 'missing' ||
+          serviceFailure === 'AGENT_AUTH_REQUIRED' ||
+          (!antigravityAuth && !serviceFailure && exitedCleanly);
+        if (isAuth) {
+          console.warn(
+            `[test:agent] ${def.name} → auth_required (silent exit ${winner.code ?? 'null'})`,
+          );
+          return {
+            ok: false,
+            kind: 'agent_auth_required',
+            latencyMs,
+            model,
+            agentName: def.name,
+            detail: antigravityAuth?.message ?? antigravityAuthGuidance(),
+            diagnostics: buildDiagnostics({
+              phase: 'connection_smoke_test',
+              exitCode: winner.code,
+              signal: winner.signal,
+            }),
+          };
+        }
+        if (serviceFailure === 'RATE_LIMITED') {
+          console.warn(
+            `[test:agent] ${def.name} → rate_limited (silent exit ${winner.code ?? 'null'})`,
+          );
+          return {
+            ok: false,
+            kind: 'rate_limited',
+            latencyMs,
+            model,
+            agentName: def.name,
+            detail: antigravityQuotaGuidance(),
+            diagnostics: buildDiagnostics({
+              phase: 'connection_smoke_test',
+              exitCode: winner.code,
+              signal: winner.signal,
+            }),
+          };
+        }
+        // UPSTREAM_UNAVAILABLE or a non-clean exit with no recognizable
+        // signal falls through to the generic exit-detail path below.
       }
       const acpFatal = Boolean(acpSession?.hasFatalError?.());
       const rawDetail = [

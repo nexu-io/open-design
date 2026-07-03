@@ -51,7 +51,6 @@ const AGENT_BIN_ENV_KEYS: Record<FakeAgentId, string> = {
 
 export const FAKE_AGENT_RUNTIME_IDS: FakeAgentId[] = [
   'claude',
-  'gemini',
   'opencode',
   'cursor-agent',
   'qwen',
@@ -165,11 +164,53 @@ async function emitRun(promptText) {
     emitEmptySuccess();
     return;
   }
+  if (promptText.includes('Return a stderr-only daemon smoke failure')) {
+    process.stderr.write('stderr-only daemon smoke failure from fake ' + agentId + '\\n');
+    process.exitCode = 1;
+    exitSoon(1);
+    return;
+  }
   if (
     promptText.includes('Create an Open Design plugin for:') &&
     promptText.includes('produce a folder named generated-plugin')
   ) {
     await emitPluginAuthoringRun();
+    return;
+  }
+  if (promptText.includes('Create a deterministic plan document')) {
+    await emitPlanDocumentRun();
+    return;
+  }
+  // Work-completeness fixtures (#1247 / #1060): drive a Claude run that ends its
+  // turn while its TodoWrite plan still has unfinished tasks (or is truncated by
+  // max_tokens), so tests can assert the run reports endedWithUnfinishedWork.
+  if (promptText.includes('Emit an unfinished-todo run')) {
+    emitClaudeTodoRun([
+      { content: 'Draft layout', status: 'completed' },
+      { content: 'Build components', status: 'in_progress' },
+      { content: 'Run QA', status: 'pending' },
+    ], 'end_turn');
+    return;
+  }
+  if (promptText.includes('Emit a stopped-todo run')) {
+    emitClaudeTodoRun([{ content: 'Build components', status: 'stopped' }], 'end_turn');
+    return;
+  }
+  if (promptText.includes('Emit a max-tokens truncated run')) {
+    // All todos look done, but the turn was cut off — truncation alone must flag
+    // the run incomplete.
+    emitClaudeTodoRun([{ content: 'Draft layout', status: 'completed' }], 'max_tokens');
+    return;
+  }
+  if (promptText.includes('Emit an all-completed-todo run')) {
+    emitClaudeTodoRun([
+      { content: 'Draft layout', status: 'completed' },
+      { content: 'Build components', status: 'completed' },
+    ], 'end_turn');
+    return;
+  }
+  if (promptText.includes('Edit the existing deterministic smoke artifact')) {
+    await emitExistingArtifactEditRun(promptText);
     return;
   }
   const isSlowReload = promptText.includes('Create a slow reload deterministic smoke artifact');
@@ -206,7 +247,7 @@ async function emitRun(promptText) {
 }
 
 async function emitPluginAuthoringRun() {
-  const folder = join(process.cwd(), 'generated-plugin');
+  const folder = join(projectDir(), 'generated-plugin');
   await mkdir(join(folder, 'examples'), { recursive: true });
   await writeFileFs(
     join(folder, 'open-design.json'),
@@ -242,12 +283,107 @@ async function emitPluginAuthoringRun() {
   exitSoon(0);
 }
 
+async function emitPlanDocumentRun() {
+  await writeFileFs(
+    join(projectDir(), 'plan.md'),
+    [
+      '# Deterministic Plan',
+      '',
+      '## Scope',
+      '- Confirm the target workflow.',
+      '- Draft the project milestones.',
+      '',
+      '## Risks',
+      '- Keep the plan editable before design handoff.',
+      '',
+    ].join('\\n'),
+    'utf8',
+  );
+  emitSuccess('Created plan.md with a deterministic planning outline.', false, false);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+async function emitExistingArtifactEditRun(promptText) {
+  const projectId = process.env.OD_PROJECT_ID || projectIdFromPrompt(promptText);
+  const daemonUrl = process.env.OD_DAEMON_URL;
+  if (!projectId || !daemonUrl) {
+    throw new Error('fake artifact edit requires OD_PROJECT_ID and OD_DAEMON_URL');
+  }
+  const response = await fetch(new URL('/api/projects/' + encodeURIComponent(projectId) + '/files', daemonUrl), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'real-daemon-smoke.html',
+      content: '<!doctype html><html><body><main><h1>Real Daemon Smoke Edited</h1><p>Edited in place by a follow-up daemon run.</p></main></body></html>',
+    }),
+  });
+  if (!response.ok) {
+    throw new Error('fake artifact edit write failed: HTTP ' + response.status + ' ' + (await response.text()).slice(0, 500));
+  }
+  emitSuccess('Updated real-daemon-smoke.html in place with a deterministic follow-up edit.', false, false);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+function projectIdFromPrompt(promptText = '') {
+  const marker = '.od/projects/';
+  const idx = promptText.indexOf(marker);
+  if (idx === -1) return '';
+  return promptText
+    .slice(idx + marker.length)
+    .split(/[\\s/]/)[0]
+    .replace(/[^a-zA-Z0-9_-].*$/, '');
+}
+
+function projectDir(promptText = '') {
+  const marker = 'current working directory: \`';
+  const idx = promptText.toLowerCase().indexOf(marker);
+  const fromPrompt = idx === -1
+    ? ''
+    : promptText.slice(idx + marker.length).split('\`')[0] || '';
+  const fromEnv = process.env.OD_DATA_DIR && process.env.OD_PROJECT_ID
+    ? join(process.env.OD_DATA_DIR, 'projects', process.env.OD_PROJECT_ID)
+    : '';
+  const cwdFlagIndex = args.indexOf('-C');
+  const fromArgs = cwdFlagIndex >= 0 && typeof args[cwdFlagIndex + 1] === 'string'
+    ? args[cwdFlagIndex + 1]
+    : '';
+  return process.env.OD_PROJECT_DIR || fromEnv || fromArgs || fromPrompt || process.cwd();
+}
+
 function writeJson(value) {
   process.stdout.write(JSON.stringify(value) + '\\n');
 }
 
 function exitSoon(code) {
   setTimeout(() => process.exit(code), 10);
+}
+
+// Emit a Claude stream-json turn that carries a TodoWrite tool_use snapshot and
+// a chosen terminal stop_reason. The turn ends cleanly (exit 0 -> succeeded), but
+// its declared work is left in whatever state the todos describe — the fixture the
+// #1247 / #1060 completeness tests drive. Only the claude runtime models a
+// content-level tool_use + per-turn stop_reason, so these fixtures use it.
+function emitClaudeTodoRun(todos, stopReason) {
+  if (agentId !== 'claude') {
+    throw new Error('emitClaudeTodoRun fixtures require the claude fake runtime, got ' + agentId);
+  }
+  writeJson({ type: 'system', subtype: 'init', model: 'fake-claude', session_id: 'fake-session' });
+  writeJson({
+    type: 'assistant',
+    message: {
+      id: 'msg-1',
+      stop_reason: stopReason,
+      content: [
+        { type: 'tool_use', id: 'tw-1', name: 'TodoWrite', input: { todos } },
+        { type: 'text', text: 'Here is the plan.' },
+      ],
+    },
+  });
+  writeJson({ type: 'result', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0, duration_ms: 1, stop_reason: stopReason });
+  process.exitCode = 0;
+  exitSoon(0);
 }
 
 function emitSuccess(artifact, isChunked, includeThinking) {

@@ -9,6 +9,8 @@ self-hosted-runner:
     - nexu-spark
     - nexu-mac
     - nexu-win
+    - od-ci-hot-poc
+    - od-persistent-ci
     - open-design-ci
     - release-beta
     - blacksmith-2vcpu-ubuntu-2404-arm

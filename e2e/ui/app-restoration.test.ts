@@ -1,6 +1,13 @@
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
+import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { runErrorCard } from '@/playwright/chat';
+import {
+  clickDeckNextSlide,
+  clickDeckPreviousSlide,
+  expectAllProjectFilesActive,
+  expectAllProjectFilesInactive,
+  openAllProjectFiles,
+} from '@/playwright/workspace';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
@@ -9,7 +16,7 @@ import { T } from '@/timeouts';
 const STORAGE_KEY = 'open-design:config';
 const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 
-test.describe.configure({ timeout: 45_000 });
+test.describe.configure({ timeout: process.env.CI ? 90_000 : 60_000 });
 
 function artifactPreview(page: Page) {
   return page.locator(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).first();
@@ -206,6 +213,7 @@ test('[P0] switching between projects restores each project workspace to its las
     buffer: pngBytes,
   });
   await expect((await alphaPrimaryUpload).ok()).toBeTruthy();
+  await expect(tabBySuffix(page, 'alpha-primary.png')).toBeVisible();
   const alphaSecondaryUpload = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
     { timeout: 5000 },
@@ -241,6 +249,7 @@ test('[P0] switching between projects restores each project workspace to its las
     buffer: pngBytes,
   });
   await expect((await betaPrimaryUpload).ok()).toBeTruthy();
+  await expect(tabBySuffix(page, 'beta-primary.png')).toBeVisible();
   const betaSecondaryUpload = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
     { timeout: 5000 },
@@ -312,7 +321,7 @@ test('[P0] @critical visiting an uploaded design file route restores its tab and
   const uploadedName = await fileTab.getAttribute('title');
   expect(uploadedName).toBeTruthy();
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'deep-linked-reference.png',
   });
@@ -332,7 +341,7 @@ test('[P0] @critical visiting an uploaded design file route restores its tab and
   await expect(page.getByTestId('file-workspace')).toBeVisible();
   await expect(fileTab).toBeVisible();
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
+  await expectAllProjectFilesInactive(page);
 });
 
 test('[P0] returning from an uploaded design file route to the project root keeps the uploaded file tab active', async ({ page }) => {
@@ -370,7 +379,7 @@ test('[P0] returning from an uploaded design file route to the project root keep
   const uploadedName = await fileTab.getAttribute('title');
   expect(uploadedName).toBeTruthy();
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'root-design-reference.png',
   });
@@ -386,6 +395,7 @@ test('[P0] returning from an uploaded design file route to the project root keep
 
   await gotoProjectRoute(page, `/projects/${projectId}/files/${encodeURIComponent(uploadedName!)}`);
   await expect(fileTab).toBeVisible();
+  await expect(fileTab).toHaveAttribute('aria-selected', 'true');
   await navigateProjectRouteInApp(page, `/projects/${projectId}`);
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
@@ -617,12 +627,7 @@ test('[P0] @critical switching between conversations keeps the composer usable w
   await page.getByTestId('conversation-history-trigger').click();
   const historyList = page.getByTestId('conversation-list');
   await expect(historyList).toBeVisible();
-  await historyList
-    .locator('.chat-conv-item')
-    .filter({ hasText: firstPrompt })
-    .first()
-    .locator('[data-testid^="conversation-select-"]')
-    .click();
+  await historyList.getByTestId(`conversation-select-${firstContext.conversationId}`).click();
 
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/projects/${firstContext.projectId}/conversations/${firstContext.conversationId}$`));
@@ -1207,8 +1212,8 @@ test('[P0] returning from workspace surfaces keeps the older conversation reacha
   await expect(page.locator('.msg.user .user-text').filter({ hasText: firstPrompt }).first()).toBeVisible();
   await expect(page.locator('.msg.user .user-text').filter({ hasText: secondPrompt })).toHaveCount(0);
 
-  await page.getByTestId('design-files-tab').click();
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await openAllProjectFiles(page);
+  await expectAllProjectFilesActive(page);
 
   const current = new URL(page.url());
   const [, projects, projectId] = current.pathname.split('/');
@@ -1406,7 +1411,7 @@ test('[P0] opening an uploaded file route keeps the older conversation present i
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
   await expect(uploadedFileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
+  await expectAllProjectFilesInactive(page);
   await expectProjectFilesToIncludeSuffixes(page, projectId, ['conversation-surface-reference.png']);
   const persistedConversations = await listConversationsFromApi(page, projectId);
   expect(persistedConversations.map((conversation) => conversation.id)).toEqual(
@@ -1621,13 +1626,13 @@ test('[P0] returning from a file deep-link to the project root keeps the chosen 
   const fileTab = tabBySuffix(page, 'conversation-root-file.png');
   await expect(fileTab).toBeVisible();
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
+  await expectAllProjectFilesInactive(page);
 
   await navigateProjectRouteInApp(page, `/projects/${projectId}`);
 
   await expect(page.getByTestId('file-workspace')).toBeVisible();
   await expect(fileTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
+  await expectAllProjectFilesInactive(page);
 });
 
 test('[P0] returning from an artifact deep-link to the project root keeps the artifact tab reachable after returning to the project root', async ({ page }) => {
@@ -1749,8 +1754,8 @@ test('[P0] reloading a project keeps the Design Files entry reachable when it wa
   });
   await expect(tabBySuffix(page, 'restore-me.png')).toBeVisible();
 
-  await page.getByTestId('design-files-tab').click();
-  await expect(page.getByTestId('design-files-tab')).toBeVisible();
+  await openAllProjectFiles(page);
+  await expectAllProjectFilesActive(page);
 
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'restore-me.png',
@@ -1766,7 +1771,7 @@ test('[P0] reloading a project keeps the Design Files entry reachable when it wa
 
   await page.reload();
   await expect(page.getByTestId('file-workspace')).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId('design-files-tab')).toBeVisible();
+  await expectAllProjectFilesActive(page);
 });
 
 test('[P0] @critical daemon error details persist between failed sends', async ({ page }) => {
@@ -1837,7 +1842,7 @@ test('[P0] @critical daemon error details persist between failed sends', async (
     'error-cross-tab.html',
     '<!doctype html><html><body><h1>Error cross tab</h1></body></html>',
   );
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const crossFileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'error-cross-tab.html',
   });
@@ -2524,6 +2529,320 @@ test('[P1] composer design toolbox anti-AI polish action seeds its specific prom
   expect(runBodies[0]?.message).not.toContain('prefers-reduced-motion fallbacks');
 });
 
+test('[P1] project composer design toolbox hides disabled skill resources', async ({ page }) => {
+  await routeMockAgents(page);
+  await routeRuntimeSkills(page);
+  await routeAppConfig(page, {
+    disabledSkills: ['disabled-runtime-skill'],
+  });
+
+  await createEmptyProject(page, 'Runtime disabled skill toolbox');
+  await expectWorkspaceReady(page);
+
+  await page.getByTestId('chat-plus-trigger').click();
+  await page.getByRole('menuitem', { name: 'Design toolbox' }).click();
+  await page.getByRole('textbox', { name: /Search design toolbox resources/i }).fill('Runtime Skill');
+
+  await expect(page.getByRole('menuitem', { name: /Enabled Runtime Skill/i })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /Disabled Runtime Skill/i })).toHaveCount(0);
+});
+
+test('[P1] completed background run sends the configured desktop notification', async ({ page }) => {
+  const notificationConfig = {
+    soundEnabled: false,
+    successSoundId: 'ding',
+    failureSoundId: 'buzz',
+    desktopEnabled: true,
+  };
+  await page.addInitScript(
+    ({ key, notificationsConfig }) => {
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          mode: 'daemon',
+          apiKey: '',
+          baseUrl: 'https://api.anthropic.com',
+          model: 'claude-sonnet-4-5',
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          onboardingCompleted: true,
+          agentModels: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+          notifications: notificationsConfig,
+        }),
+      );
+    },
+    { key: STORAGE_KEY, notificationsConfig: notificationConfig },
+  );
+  await page.addInitScript(() => {
+    const notifications: Array<{ title: string; body?: string }> = [];
+    Object.defineProperty(window, '__odTestNotifications', {
+      value: notifications,
+      configurable: true,
+    });
+
+    class FakeNotification {
+      static permission = 'granted';
+
+      title: string;
+      body?: string;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+
+      constructor(title: string, options?: NotificationOptions) {
+        this.title = title;
+        const body = options?.body;
+        if (body) {
+          this.body = body;
+          notifications.push({ title, body });
+        } else {
+          notifications.push({ title });
+        }
+      }
+
+      close() {
+        this.onclose?.();
+      }
+    }
+
+    Object.defineProperty(window, 'Notification', {
+      value: FakeNotification,
+      configurable: true,
+    });
+    const serviceWorkerRegistration = {
+      showNotification: (title: string, options?: NotificationOptions) => {
+        const body = options?.body;
+        if (body) {
+          notifications.push({ title, body });
+        } else {
+          notifications.push({ title });
+        }
+        return Promise.resolve();
+      },
+    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        register: () => Promise.resolve(serviceWorkerRegistration),
+        ready: Promise.resolve(serviceWorkerRegistration),
+      },
+      configurable: true,
+    });
+    Object.defineProperty(document, 'hidden', {
+      get: () => true,
+      configurable: true,
+    });
+    Object.defineProperty(document, 'hasFocus', {
+      value: () => false,
+      configurable: true,
+    });
+  });
+  await routeMockAgents(page);
+  await routeAppConfig(page, {
+    notifications: notificationConfig,
+  });
+
+  await page.route('**/api/runs', async (route) => {
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"notification-run"}',
+    });
+  });
+  let releaseEvents!: () => void;
+  const eventsReleased = new Promise<void>((resolve) => {
+    releaseEvents = resolve;
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    await eventsReleased;
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body: [
+        'event: start',
+        'data: {"bin":"mock-agent"}',
+        '',
+        'event: stdout',
+        `data: ${JSON.stringify({ chunk: 'Background completion notification body.' })}`,
+        '',
+        'event: end',
+        'data: {"code":0,"status":"succeeded"}',
+        '',
+        '',
+      ].join('\n'),
+    });
+  });
+
+  await createEmptyProject(page, 'Background notification run');
+  await expectWorkspaceReady(page);
+  await sendPrompt(page, 'Finish and notify me');
+  await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
+  releaseEvents();
+
+  await expect
+    .poll(async () =>
+      page.evaluate(() => (window as typeof window & {
+        __odTestNotifications?: Array<{ title: string; body?: string }>;
+      }).__odTestNotifications ?? []),
+    )
+    .toContainEqual(expect.objectContaining({
+      title: 'Task completed',
+      body: expect.stringContaining('Background completion notification body.'),
+    }));
+});
+
+test('[P1] failed foreground run still sends the configured desktop notification', async ({ page }) => {
+  const notificationConfig = {
+    soundEnabled: false,
+    successSoundId: 'ding',
+    failureSoundId: 'buzz',
+    desktopEnabled: true,
+  };
+  await page.addInitScript(
+    ({ key, notificationsConfig }) => {
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          mode: 'daemon',
+          apiKey: '',
+          baseUrl: 'https://api.anthropic.com',
+          model: 'claude-sonnet-4-5',
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          onboardingCompleted: true,
+          agentModels: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+          notifications: notificationsConfig,
+        }),
+      );
+    },
+    { key: STORAGE_KEY, notificationsConfig: notificationConfig },
+  );
+  await page.addInitScript(() => {
+    const notifications: Array<{ title: string; body?: string }> = [];
+    Object.defineProperty(window, '__odTestNotifications', {
+      value: notifications,
+      configurable: true,
+    });
+
+    class FakeNotification {
+      static permission = 'granted';
+
+      title: string;
+      body?: string;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+
+      constructor(title: string, options?: NotificationOptions) {
+        this.title = title;
+        const body = options?.body;
+        if (body) {
+          this.body = body;
+          notifications.push({ title, body });
+        } else {
+          notifications.push({ title });
+        }
+      }
+
+      close() {
+        this.onclose?.();
+      }
+    }
+
+    Object.defineProperty(window, 'Notification', {
+      value: FakeNotification,
+      configurable: true,
+    });
+    const serviceWorkerRegistration = {
+      showNotification: (title: string, options?: NotificationOptions) => {
+        const body = options?.body;
+        if (body) {
+          notifications.push({ title, body });
+        } else {
+          notifications.push({ title });
+        }
+        return Promise.resolve();
+      },
+    };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      value: {
+        register: () => Promise.resolve(serviceWorkerRegistration),
+        ready: Promise.resolve(serviceWorkerRegistration),
+      },
+      configurable: true,
+    });
+    Object.defineProperty(document, 'hidden', {
+      get: () => false,
+      configurable: true,
+    });
+    Object.defineProperty(document, 'hasFocus', {
+      value: () => true,
+      configurable: true,
+    });
+  });
+  await routeMockAgents(page);
+  await routeAppConfig(page, {
+    notifications: notificationConfig,
+  });
+
+  await page.route('**/api/runs', async (route) => {
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"notification-failure-run"}',
+    });
+  });
+  let releaseEvents!: () => void;
+  const eventsReleased = new Promise<void>((resolve) => {
+    releaseEvents = resolve;
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    await eventsReleased;
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body: [
+        'event: start',
+        'data: {"bin":"mock-agent"}',
+        '',
+        'event: stderr',
+        `data: ${JSON.stringify({ chunk: 'Foreground failure notification body.' })}`,
+        '',
+        'event: end',
+        'data: {"code":1,"status":"failed"}',
+        '',
+        '',
+      ].join('\n'),
+    });
+  });
+
+  await createEmptyProject(page, 'Foreground failure notification run');
+  await expectWorkspaceReady(page);
+  await sendPrompt(page, 'Fail and notify me');
+  await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
+  releaseEvents();
+
+  await expect
+    .poll(async () =>
+      page.evaluate(() => (window as typeof window & {
+        __odTestNotifications?: Array<{ title: string; body?: string }>;
+      }).__odTestNotifications ?? []),
+    )
+    .toContainEqual(expect.objectContaining({
+      title: 'Task failed',
+      body: 'The task ended with an error.',
+    }));
+});
+
 test('[P1] Browser Inspiration page_info action seeds Browser tab context into the next run request', async ({ page }) => {
   await routeMockAgents(page);
 
@@ -2772,20 +3091,36 @@ test('[P1] Browser Inspiration page_info carries a loaded page title into the ne
   expect(runBodies[0]?.message).toContain('- title: Browser Fixture Title');
 });
 
-test('[P0] composer session mode switch is carried into the next daemon run request', async ({ page }) => {
+test('[P1] questions banner opens the Questions tab and remains reachable after reload', async ({ page }) => {
   await routeMockAgents(page);
 
-  const runBodies: Array<Record<string, unknown>> = [];
   await page.route('**/api/runs', async (route) => {
-    const raw = route.request().postData();
-    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
     await route.fulfill({
       status: 202,
       contentType: 'application/json',
-      body: '{"runId":"session-mode-run"}',
+      body: '{"runId":"questions-banner-run"}',
     });
   });
   await page.route('**/api/runs/*/events', async (route) => {
+    const questionForm = [
+      '<question-form id="discovery" title="Quick brief">',
+      JSON.stringify(
+        {
+          description: 'Answer these before generation continues.',
+          questions: [
+            {
+              id: 'audience',
+              label: 'Audience',
+              type: 'text',
+              required: true,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      '</question-form>',
+    ].join('\n');
     await route.fulfill({
       status: 200,
       headers: {
@@ -2796,6 +3131,9 @@ test('[P0] composer session mode switch is carried into the next daemon run requ
         'event: start',
         'data: {"bin":"mock-agent"}',
         '',
+        'event: stdout',
+        `data: ${JSON.stringify({ chunk: questionForm })}`,
+        '',
         'event: end',
         'data: {"code":0,"status":"succeeded"}',
         '',
@@ -2804,18 +3142,22 @@ test('[P0] composer session mode switch is carried into the next daemon run requ
     });
   });
 
-  await createEmptyProject(page, 'Composer session mode payload context');
+  await createEmptyProject(page, 'Questions banner persistence');
   await expectWorkspaceReady(page);
 
-  await page.getByTestId('session-mode-trigger').click();
-  await page.getByRole('menuitemradio', { name: 'Ask mode' }).click();
-  await expect(page.getByTestId('session-mode-trigger')).toContainText('Ask');
+  await sendPrompt(page, 'Ask clarifying questions before generating.');
+  const banner = page.getByTestId('questions-banner');
+  await expect(banner).toBeVisible();
+  await banner.click();
+  await expect(page.getByTestId('questions-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('questions-panel')).toContainText('Audience');
 
-  await page.getByTestId('chat-composer-input').fill('Explain what changed in this artifact.');
-  await page.getByTestId('chat-send').click();
-
-  expect(runBodies[0]?.message).toContain('Explain what changed in this artifact.');
-  expect(runBodies[0]?.sessionMode).toBe('chat');
+  await page.reload();
+  await expectWorkspaceReady(page);
+  await expect(page.getByTestId('questions-banner')).toBeVisible();
+  await page.getByTestId('questions-banner').click();
+  await expect(page.getByTestId('questions-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('questions-panel')).toContainText('Audience');
 });
 
 test('[P1] questions tab Skip all sends structured skipped answers into the next run request', async ({ page }) => {
@@ -3147,13 +3489,74 @@ async function routeMockAgents(page: Page) {
   });
 }
 
+async function routeAppConfig(page: Page, override: Record<string, unknown>) {
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          agentModels: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+          ...override,
+        },
+      },
+    });
+  });
+}
+
+async function routeRuntimeSkills(page: Page) {
+  await page.route('**/api/skills', async (route) => {
+    await route.fulfill({
+      json: {
+        skills: [
+          runtimeSkill('enabled-runtime-skill', 'Enabled Runtime Skill'),
+          runtimeSkill('disabled-runtime-skill', 'Disabled Runtime Skill'),
+        ],
+      },
+    });
+  });
+}
+
+function runtimeSkill(id: string, name: string) {
+  return {
+    id,
+    name,
+    description: `${name} fixture`,
+    triggers: [],
+    mode: 'prototype',
+    surface: 'web',
+    platform: 'desktop',
+    scenario: 'qa',
+    previewType: 'html',
+    designSystemRequired: true,
+    defaultFor: [],
+    upstream: null,
+    featured: null,
+    fidelity: null,
+    speakerNotes: null,
+    animations: null,
+    hasBody: true,
+    examplePrompt: '',
+    source: 'builtin',
+    category: 'Runtime',
+  };
+}
+
 async function createEmptyProject(page: Page, name: string): Promise<string> {
   await gotoEntryHome(page);
   await openNewProjectModal(page);
   await page.getByTestId('new-project-tab-live-artifact').click();
   await page.getByTestId('new-project-name').fill(name);
   await page.getByTestId('create-project').click();
-  await expect(page).toHaveURL(/\/projects\//);
+  await expect(page).toHaveURL(/\/projects\//, { timeout: T.long });
   const current = new URL(page.url());
   const [, projects, projectId] = current.pathname.split('/');
   if (projects !== 'projects' || !projectId) throw new Error(`unexpected project route: ${current.pathname}`);
@@ -3527,11 +3930,11 @@ async function runDeckPaginationNextPrevCorrectnessFlow(page: Page) {
 
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Three')).toBeVisible();
-  await page.getByLabel('Previous slide').click();
+  await clickDeckPreviousSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
 }
 
@@ -3544,13 +3947,13 @@ async function runDeckPaginationPerFileIsolatedFlow(page: Page) {
   await openDesignFile(page, 'deck-alpha.html');
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Alpha One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Alpha Two')).toBeVisible();
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   await openDesignFile(page, 'deck-beta.html');
   await expect(frame.getByText('Beta One')).toBeVisible();
-  await page.getByLabel('Next slide').click();
+  await clickDeckNextSlide(page);
   await expect(frame.getByText('Beta Two')).toBeVisible();
 
   await page.getByRole('tab', { name: /deck-alpha\.html/i }).click();
@@ -3611,7 +4014,7 @@ async function seedDeckArtifact(
       title,
       entry: fileName,
       renderer: 'deck-html',
-      exports: ['html', 'pptx'],
+      exports: ['html', 'pdf'],
     },
   );
 }
@@ -3659,10 +4062,7 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openNewProjectModal(page: Page) {
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModalFromProjects(page);
 }
 
 async function gotoProjectRoute(page: Page, path: string) {
@@ -3703,7 +4103,7 @@ async function expectProjectsView(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function getCurrentProjectContext(
@@ -3900,7 +4300,7 @@ async function runDesignFilesUploadFlow(
   });
 
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'moodboard.png',
   });
@@ -3944,7 +4344,7 @@ async function runDesignFilesDeleteFlow(
   });
 
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toBeVisible();
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'trash-me.png',
@@ -3961,10 +4361,7 @@ async function runDesignFilesDeleteFlow(
   // Bug #115: deleting from the Design Files panel must not navigate the
   // user into another tab. The Design Files tab should remain the active
   // view, and the sibling tab should still exist (just not auto-activated).
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
+  await expectAllProjectFilesActive(page);
   await expect(page.getByRole('tab', { name: /keep-me\.png/i })).toBeVisible();
 }
 

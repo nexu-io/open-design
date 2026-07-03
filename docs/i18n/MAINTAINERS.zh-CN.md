@@ -1,6 +1,6 @@
 # Maintainers
 
-<p align="center"><a href="../../MAINTAINERS.md">English</a> · <a href="MAINTAINERS.pt-BR.md">Português (Brasil)</a> · <a href="MAINTAINERS.de.md">Deutsch</a> · <a href="MAINTAINERS.fr.md">Français</a> · <b>简体中文</b> · <a href="MAINTAINERS.ja-JP.md">日本語</a></p>
+<p align="center"><a href="../../MAINTAINERS.md">English</a> · <a href="MAINTAINERS.pt-BR.md">Português (Brasil)</a> · <a href="MAINTAINERS.de.md">Deutsch</a> · <a href="MAINTAINERS.fr.md">Français</a> · <b>简体中文</b> · <a href="MAINTAINERS.ja-JP.md">日本語</a> · <a href="MAINTAINERS.ko.md">한국어</a> · <a href="MAINTAINERS.th.md">ภาษาไทย</a></p>
 
 本文档定义了 `nexu-io/open-design` 项目中**成为、担任、退出 Maintainer** 的规则。Core Team 个人名册由内部维护，本文档不公开列出——对外公开的是大家共同遵守的规则。
 

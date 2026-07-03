@@ -10,7 +10,7 @@ import {
   normalizeUpdateObservationChannel,
   observePendingInstallerApplyAttempts,
   type InstallerObservationSummary,
-} from '../src/update-apply-observations.js';
+} from '../src/migration/index.js';
 
 function pendingSummary(overrides: Partial<InstallerObservationSummary> = {}): InstallerObservationSummary {
   return {

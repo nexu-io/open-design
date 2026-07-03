@@ -43,6 +43,7 @@ export function isMeaningfulManualEditElement(el: Element, rect: Pick<DOMRect, '
 }
 
 export function isSourceMappableManualEditElement(el: Element): boolean {
+  if (isManualEditHostNode(el)) return false;
   return el.hasAttribute('data-od-id') || el.hasAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR);
 }
 
@@ -193,7 +194,74 @@ export function buildManualEditBridge(enabled: boolean): string {
     return generated || 'unknown';
   }
   function isSourceMappable(el){
-    return !!(el && el.hasAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute(sourcePathAttr)));
+    if (!el || !el.hasAttribute || isHostNode(el)) return false;
+    return !!(el.hasAttribute('data-od-id') || el.hasAttribute(sourcePathAttr));
+  }
+  function markBrandKitTarget(el, id, kind, label){
+    if (!el || !el.setAttribute || isHostNode(el)) return;
+    if (!el.hasAttribute('data-od-id')) el.setAttribute('data-od-id', id);
+    if (kind && !el.hasAttribute('data-od-edit')) el.setAttribute('data-od-edit', kind);
+    if (label && !el.hasAttribute('data-od-label')) el.setAttribute('data-od-label', label);
+  }
+  function markBrandKitOne(selector, id, kind, label){
+    markBrandKitTarget(document.querySelector(selector), id, kind, label);
+  }
+  function annotateBrandKitRuntimeTargets(){
+    if (!document.getElementById('od-brand-payload')) return;
+    markBrandKitOne('.kit-head', 'brand-header', 'container', 'Brand header');
+    markBrandKitOne('.kit-title', 'brand-name', 'text');
+    markBrandKitOne('.kit-tagline', 'brand-tagline', 'text');
+    markBrandKitOne('.kit-source', 'brand-source', 'link');
+    markBrandKitOne('.head-actions', 'brand-header-actions', 'container');
+    markBrandKitOne('.logo-empty', 'brand-logo-empty', 'container', 'Logo empty state');
+    markBrandKitOne('.logo-stage', 'brand-logo-stage', 'container', 'Logo stage');
+    markBrandKitOne('#logo-img', 'brand-logo-img', 'image');
+    markBrandKitOne('.logo-notes', 'brand-logo-notes', 'text');
+    Array.prototype.forEach.call(document.querySelectorAll('.logo-thumb'), function(el, i){ markBrandKitTarget(el, 'brand-logo-thumb-' + i, 'image'); });
+    markBrandKitOne('.fonts', 'brand-fonts', 'container');
+    Array.prototype.forEach.call(document.querySelectorAll('.font-tile'), function(el, i){
+      markBrandKitTarget(el, 'brand-font-tile-' + i, 'container');
+      markBrandKitTarget(el.querySelector('.ag'), 'brand-font-sample-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.ft-name'), 'brand-font-name-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.ft-role'), 'brand-font-role-' + i, 'text');
+    });
+    markBrandKitOne('.kit-hero', 'brand-hero-image', 'container');
+    markBrandKitOne('.kit-hero img', 'brand-hero-img', 'image');
+    Array.prototype.forEach.call(document.querySelectorAll('.type-row'), function(el, i){
+      markBrandKitTarget(el, 'brand-type-' + i, 'container');
+      markBrandKitTarget(el.querySelector('.type-label'), 'brand-type-label-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.type-font'), 'brand-type-font-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.type-sample'), 'brand-type-sample-' + i, 'text');
+    });
+    markBrandKitOne('.palette', 'brand-palette', 'container');
+    Array.prototype.forEach.call(document.querySelectorAll('.swatch'), function(el, i){
+      markBrandKitTarget(el, 'brand-color-' + i, 'container');
+      markBrandKitTarget(el.querySelector('.hex'), 'brand-color-hex-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.swatch-name'), 'brand-color-name-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.swatch-role'), 'brand-color-role-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.swatch-usage'), 'brand-color-usage-' + i, 'text');
+    });
+    markBrandKitOne('.voice-tone', 'brand-voice-tone', 'text');
+    markBrandKitOne('.vocab .use .v', 'brand-voice-vocab-use', 'text');
+    markBrandKitOne('.vocab .avoid .v', 'brand-voice-vocab-avoid', 'text');
+    Array.prototype.forEach.call(document.querySelectorAll('.chips .chip'), function(el, i){ markBrandKitTarget(el, 'brand-voice-adjective-' + i, 'text'); });
+    Array.prototype.forEach.call(document.querySelectorAll('.pillars li span:last-child'), function(el, i){ markBrandKitTarget(el, 'brand-voice-pillar-' + i, 'text'); });
+    markBrandKitOne('.imagery', 'brand-imagery-card', 'container');
+    markBrandKitOne('.imagery p:first-child', 'brand-imagery-style', 'text');
+    markBrandKitOne('.gallery', 'brand-images-section', 'container');
+    Array.prototype.forEach.call(document.querySelectorAll('.shot'), function(el, i){
+      markBrandKitTarget(el, 'brand-image-' + i, 'container');
+      markBrandKitTarget(el.querySelector('img'), 'brand-image-img-' + i, 'image');
+      markBrandKitTarget(el.querySelector('.shot-cap'), 'brand-image-caption-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.shot-kind'), 'brand-image-kind-' + i, 'text');
+    });
+    markBrandKitOne('.ds-frame-wrap', 'brand-system-section', 'container');
+    markBrandKitOne('.assets', 'brand-assets-section', 'container');
+    Array.prototype.forEach.call(document.querySelectorAll('.asset'), function(el, i){
+      markBrandKitTarget(el, 'brand-asset-' + i, 'container');
+      markBrandKitTarget(el.querySelector('.asset-name'), 'brand-asset-name-' + i, 'text');
+      markBrandKitTarget(el.querySelector('.asset-desc'), 'brand-asset-desc-' + i, 'text');
+    });
   }
   function isDiscoveryTarget(el){
     return !!(el && el.matches && el.matches(discoverySelector));
@@ -286,10 +354,11 @@ export function buildManualEditBridge(enabled: boolean): string {
       styles: stylesFor(el),
       isLayoutContainer: isLayoutContainer(el),
       isHidden: hidden,
-      outerHtml: includeOuterHtml ? (el.outerHTML || '').replace(/\\sdata-od-runtime-id="[^"]*"/g, '').replace(/\\sdata-od-source-path="[^"]*"/g, '').replace(/\\sdata-od-edit-selected="[^"]*"/g, '') : ''
+      outerHtml: includeOuterHtml ? (el.outerHTML || '').replace(/\\sdata-od-runtime-id="[^"]*"/g, '').replace(/\\sdata-od-source-path="[^"]*"/g, '').replace(/\\sdata-od-id="path-[^"]*"/g, '').replace(/\\sdata-od-edit-selected="[^"]*"/g, '') : ''
     };
   }
   function allTargets(){
+    annotateBrandKitRuntimeTargets();
     var nodes = document.body ? document.body.querySelectorAll(discoverySelector) : [];
     var targets = [];
     for (var i = 0; i < nodes.length; i++) {
@@ -323,6 +392,7 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (el) el.setAttribute('data-od-edit-selected', 'true');
   }
   function closestTarget(event){
+    annotateBrandKitRuntimeTargets();
     var el = event.target;
     while (el && el !== document.documentElement) {
       if (el !== document.body && el !== document.documentElement && isSourceMappable(el) && isDiscoveryTarget(el)) {
@@ -542,8 +612,17 @@ export function buildManualEditBridge(enabled: boolean): string {
     postHoverTarget(el);
   }, true);
   window.addEventListener('resize', postTargets);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postTargets);
-  else setTimeout(postTargets, 0);
+  function bootEditBridge(){
+    annotateBrandKitRuntimeTargets();
+    postTargets();
+    var brandRoot = document.getElementById('root') || document.body;
+    if (window.MutationObserver && brandRoot && document.getElementById('od-brand-payload')) {
+      new MutationObserver(function(){ annotateBrandKitRuntimeTargets(); postTargets(); })
+        .observe(brandRoot, { childList: true, subtree: true });
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootEditBridge);
+  else setTimeout(bootEditBridge, 0);
   document.documentElement.toggleAttribute('data-od-edit-mode', enabled);
 })();</script>`;
 }
@@ -553,10 +632,10 @@ export function buildManualEditBridgeStyle(): string {
 html[data-od-edit-mode] body * { cursor: pointer !important; }
 html[data-od-edit-mode] [data-od-id],
 html[data-od-edit-mode] [data-od-runtime-id],
-html[data-od-edit-mode] [data-od-source-path] { outline: 1px dashed rgba(37, 99, 235, 0.35); outline-offset: 3px; }
+html[data-od-edit-mode] [data-od-source-path] { outline: 1px dashed rgba(37, 99, 235, 0.35) !important; outline-offset: 3px !important; }
 html[data-od-edit-mode] [data-od-id]:hover,
 html[data-od-edit-mode] [data-od-runtime-id]:hover,
-html[data-od-edit-mode] [data-od-source-path]:hover { outline: 2px solid #2563eb; }
+html[data-od-edit-mode] [data-od-source-path]:hover { outline: 2px solid #2563eb !important; outline-offset: 3px !important; }
 html[data-od-edit-mode] [data-od-edit-selected] {
   outline: 2px solid #2563eb !important;
   outline-offset: 4px;

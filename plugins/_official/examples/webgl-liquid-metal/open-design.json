@@ -1,0 +1,118 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-webgl-liquid-metal",
+  "title": "Liquid Metal",
+  "title_i18n": {
+    "zh-CN": "液态金属",
+    "zh-TW": "液態金屬",
+    "ja": "リキッドメタル",
+    "ko": "리퀴드 메탈",
+    "de": "Flüssigmetall",
+    "fr": "Métal liquide",
+    "ru": "Жидкий металл",
+    "es": "Metal líquido",
+    "pt-BR": "Metal líquido",
+    "it": "Metallo liquido",
+    "vi": "Kim loại lỏng",
+    "pl": "Płynny metal",
+    "id": "Logam Cair",
+    "nl": "Vloeibaar metaal",
+    "ar": "معدن سائل",
+    "tr": "Sıvı Metal",
+    "uk": "Рідкий метал",
+    "en": "Liquid Metal"
+  },
+  "version": "0.1.0",
+  "description": "Build a full-screen liquid-metal shader — molten chrome ripples with a sweeping specular highlight over an iridescent thin-film palette — rendered at 60fps as a single self-contained index.html.",
+  "description_i18n": {
+    "zh-CN": "构建一个全屏液态金属 shader——熔融铬面泛起涟漪，扫过的镜面高光叠加在虹彩薄膜色板之上——以 60fps 渲染，作为单个自包含的 index.html。",
+    "zh-TW": "建立一個全螢幕液態金屬 shader——熔融鉻面泛起漣漪，掃過的鏡面高光疊加在虹彩薄膜色板之上——以 60fps 渲染，作為單個自包含的 index.html。",
+    "ja": "フルスクリーンのリキッドメタル shader を構築します。溶けたクロームが波打ち、スイープするスペキュラハイライトが玉虫色の薄膜パレットの上を走ります。60fps で描画し、単一の自己完結型 index.html として出力します。",
+    "ko": "전체 화면 리퀴드 메탈 shader를 구축합니다. 녹아내리는 크롬이 물결치고, 휩쓸리는 스페큘러 하이라이트가 무지갯빛 박막 팔레트 위를 지나갑니다. 60fps로 렌더링되어 단일 자체 완결형 index.html로 제공됩니다.",
+    "de": "Erstellen Sie einen bildschirmfüllenden Flüssigmetall-Shader — geschmolzene Chrom-Wellen mit einem streifenden Glanzlicht über einer schillernden Dünnschicht-Palette — mit 60fps gerendert als eine einzige eigenständige index.html.",
+    "fr": "Créez un shader de métal liquide plein écran — des ondulations de chrome en fusion avec un reflet spéculaire balayant une palette de couches minces iridescentes — rendu à 60fps sous forme d'un unique index.html autonome.",
+    "ru": "Создайте полноэкранный shader жидкого металла — рябь расплавленного хрома с скользящим зеркальным бликом поверх переливчатой тонкоплёночной палитры — рендеринг на 60fps в виде единого самодостаточного index.html.",
+    "es": "Crea un shader de metal líquido a pantalla completa — ondas de cromo fundido con un reflejo especular que barre una paleta iridiscente de película fina — renderizado a 60fps como un único index.html autónomo.",
+    "pt-BR": "Crie um shader de metal líquido em tela cheia — ondulações de cromo fundido com um brilho especular deslizante sobre uma paleta iridescente de película fina — renderizado a 60fps como um único index.html autossuficiente.",
+    "it": "Crea uno shader di metallo liquido a schermo intero — increspature di cromo fuso con un riflesso speculare che scorre su una palette iridescente a film sottile — renderizzato a 60fps come un unico index.html autonomo.",
+    "vi": "Xây dựng một shader kim loại lỏng toàn màn hình — những gợn sóng crôm nóng chảy với điểm sáng specular quét ngang trên bảng màu phim mỏng óng ánh — kết xuất ở 60fps dưới dạng một tệp index.html tự chứa duy nhất.",
+    "pl": "Zbuduj pełnoekranowy shader płynnego metalu — falujące, roztopione chromowe zmarszczki z przesuwającym się refleksem lustrzanym na opalizującej palecie cienkowarstwowej — renderowany w 60fps jako pojedynczy, samodzielny plik index.html.",
+    "id": "Bangun shader logam cair layar penuh — riak krom leleh dengan sorotan specular yang menyapu di atas palet lapisan tipis warna-warni — dirender pada 60fps sebagai satu index.html mandiri.",
+    "nl": "Bouw een schermvullende vloeibaar-metaal-shader — rimpelend gesmolten chroom met een zwevende speculaire highlight over een iriserend dunnefilm-palet — gerenderd op 60fps als één op zichzelf staande index.html.",
+    "ar": "أنشئ shader معدن سائل بملء الشاشة — تموّجات كروم منصهر مع بريق انعكاسي منسحب فوق لوح ألوان غشائي رقيق قزحي — يُعرَض بمعدل 60fps ضمن ملف index.html واحد مكتفٍ بذاته.",
+    "tr": "Tam ekran bir sıvı metal shader'ı oluşturun — erimiş krom dalgalanmaları, yanardöner ince film paleti üzerinde süzülen bir speküler parlama ile — 60fps'de tek ve kendi kendine yeten bir index.html olarak render edilir.",
+    "uk": "Створіть повноекранний shader рідкого металу — брижі розплавленого хрому зі ковзним дзеркальним відблиском поверх райдужної тонкоплівкової палітри — рендериться на 60fps як єдиний самодостатній index.html.",
+    "en": "Build a full-screen liquid-metal shader — molten chrome ripples with a sweeping specular highlight over an iridescent thin-film palette — rendered at 60fps as a single self-contained index.html."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/webgl-liquid-metal",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "web",
+    "webgl",
+    "webgl2",
+    "shader",
+    "gpu",
+    "generative",
+    "iridescent",
+    "metallic",
+    "powered-preview",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a full-screen liquid-metal shader as a single self-contained index.html: a domain-warped fbm height field shaded as molten chrome — a sharp sweeping specular highlight over an iridescent thin-film cosine palette — at 60fps.",
+        "zh-CN": "构建一个全屏液态金属着色器，作为单个自包含的 index.html：将域扭曲的 fbm 高度场着色为熔融铬——锐利扫动的高光叠加在虹彩薄膜余弦调色板之上——60fps 实时运行。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      }
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

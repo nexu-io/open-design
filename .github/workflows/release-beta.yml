@@ -28,6 +28,11 @@ on:
         required: true
         type: boolean
         default: true
+      force:
+        description: "Allow a beta build whose base version is not greater than the current stable/beta feed."
+        required: true
+        type: boolean
+        default: false
       release_version:
         description: "Optional beta version override. Empty resolves the next beta version from metadata."
         required: false
@@ -180,6 +185,10 @@ on:
         required: false
         type: boolean
         default: true
+      force:
+        required: false
+        type: boolean
+        default: false
       release_version:
         required: false
         type: string
@@ -294,10 +303,10 @@ concurrency:
 
 env:
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
-  POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
-  POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
-  POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
-  POSTHOG_CLI_PROJECT_ID: ${{ vars.POSTHOG_CLI_PROJECT_ID }}
+  POSTHOG_KEY: ${{ inputs.publish && secrets.POSTHOG_KEY || '' }}
+  POSTHOG_HOST: ${{ inputs.publish && vars.POSTHOG_HOST || '' }}
+  POSTHOG_CLI_API_KEY: ${{ inputs.publish && secrets.POSTHOG_CLI_API_KEY || '' }}
+  POSTHOG_CLI_PROJECT_ID: ${{ inputs.publish && vars.POSTHOG_CLI_PROJECT_ID || '' }}
   RELEASE_BRANCH: ${{ github.ref_name }}
   RELEASE_REPOSITORY: ${{ github.repository }}
   RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
@@ -387,6 +396,7 @@ jobs:
         env:
           GITHUB_SHA: ${{ env.BUILT_SHA }}
           GITHUB_REF_NAME: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
+          OPEN_DESIGN_RELEASE_FORCE: ${{ inputs.force && '1' || '' }}
         run: pnpm exec tools-release prepare beta
 
   build_mac_arm64:
@@ -1397,6 +1407,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Prepare and publish beta release notes
+        env:
+          RELEASE_CHANNEL: beta
+          RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
+          RELEASE_NOTE_PLAN_PATH: ${{ runner.temp }}/release-metadata/release-note-plan.json
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+        run: |
+          pnpm exec tools-release prepare-release-note
+          pnpm exec tools-release publish-release-note
+          pnpm exec tools-release verify-release-note
+
       - name: Publish beta metadata
         env:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
@@ -1411,6 +1438,7 @@ jobs:
           RELEASE_CHANNEL: beta
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
+          RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-metadata/outputs.json
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_SIGNED: "true"
@@ -1444,6 +1472,7 @@ jobs:
           MAC_X64_RESULT: ${{ needs.build_mac_x64.result }}
           RELEASE_CHANNEL: beta
           RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
+          RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
           WIN_X64_RESULT: ${{ needs.build_win_x64.result }}
         run: pnpm exec tools-release verify-metadata

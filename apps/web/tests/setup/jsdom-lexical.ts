@@ -1,3 +1,20 @@
+import { afterEach } from 'vitest';
+
+// Extend vitest's expect with @testing-library/jest-dom matchers (e.g.
+// toBeInTheDocument, toHaveTextContent) so jsdom-environment tests can use
+// them without importing jest-dom in every test file.
+import '@testing-library/jest-dom/vitest';
+
+import { resetPluginsCache } from '../../src/state/projects';
+
+// The visible-plugins cache is module-level so it survives Home remounts in the
+// app (a deliberate perf choice). In tests that persistence would leak a case's
+// mocked `/api/plugins` payload into the next case via `listPluginsFresh`, so
+// clear it after every case — each test then observes only its own mock.
+afterEach(() => {
+  resetPluginsCache();
+});
+
 // jsdom does not implement geometry for Range/Element, but Lexical's
 // `updateDOMSelection` calls `getBoundingClientRect()` on the collapsed
 // selection target whenever the editor is the active element (to scroll it

@@ -1,24 +1,44 @@
 ---
 name: frontend-slides
-description: "Create animation-rich, zero-dependency HTML presentations on a fixed 1920×1080 stage that scales to any viewport. Distinctive typography, committed palettes, choreographed reveals — no generic AI-slop aesthetics."
+en_name: "Write an AI-Workflow 101 like a Top Technology Explainer"
+zh_name: "像顶级技术解释者一样写 AI 工作流 101"
+description: |
+  Open Design as a worked AI-workflow example: how local agents read your files and design on your desktop — concretely. Built as a decision-grade AI literacy deck for teams new to AI, leadership.
+en_description: |
+  Open Design as a worked AI-workflow example: how local agents read your files and design on your desktop — concretely. Built as a decision-grade AI literacy deck for teams new to AI, leadership.
+zh_description: |
+  像顶级技术解释者一样写 AI 工作流 101——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "ai-literacy"
+  - "enterprise-ai-copilot-rollout-brief"
+  - "ai"
+  - "copilot"
+  - "workflow"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "frontend-slides"
 triggers:
+  - "enterprise-ai-copilot-rollout-brief"
+  - "ai-literacy"
+  - "Write an AI-Workflow 101 like a Top Technology Explainer"
+  - "像顶级技术解释者一样写 AI 工作流 101"
+  - "ai"
+  - "copilot"
+  - "workflow"
+  - "html deck"
   - "html slides"
-  - "animation slides"
-  - "interactive deck"
-  - "web ppt"
-  - "frontend slides"
-  - "presentation"
 od:
   mode: deck
   surface: web
-  category: slides
   upstream: "https://github.com/zarazhangrui/frontend-slides"
   preview:
     type: html
     entry: example.html
-  example_prompt: "Use Frontend Slides to turn my content into an animation-rich single-file HTML deck on a fixed 1920×1080 stage: distinctive typography, a committed palette, staggered reveals, keyboard navigation, and hash routing. Start from example.html and replace the content — keep the design system."
   example_prompt_i18n:
     zh-CN: "用 Frontend Slides 把我的内容做成一套动画丰富的单文件 HTML 幻灯片：固定 1920×1080 舞台等比缩放、个性化字体排印、克制而坚定的配色、错峰入场动画、键盘导航和 hash 路由。从 example.html 出发只替换内容，保留设计系统。"
+  category: "ai-literacy"
+  scenario: "ai"
+  example_prompt: "Create \"Write an AI-Workflow 101 like a Top Technology Explainer\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design as a worked AI-workflow example: how local agents read your files and design on your desktop — concretely. Audience: teams new to AI, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund."
 ---
 
 # Frontend Slides

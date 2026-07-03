@@ -1,0 +1,24 @@
+{
+  "id": "profile-avatar-seedream-high-fashion-dreamy-portrait",
+  "surface": "image",
+  "title": "Profile / Avatar - Seedream High-Fashion Dreamy Portrait",
+  "summary": "A Seedream 5.0 Pro portrait prompt for a dark, dreamy high-fashion editorial image with refined lighting, detailed makeup, and a vertical full-body composition.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "fashion",
+    "photorealistic",
+    "editorial",
+    "seedream"
+  ],
+  "model": "seedream-5-pro",
+  "aspect": "9:16",
+  "prompt": "This is a highly photorealistic, high-fashion full-body portrait with an overall dark-toned, dreamy, and hazy atmosphere, filled with the flowing beauty of light and shadow. The scene uses refined artificial lighting that is soft yet richly layered, with sparkling highlights, crystal-clear reflections, and a subtle lomo film texture in certain areas, creating a surreal and luxurious fashion mood that feels both realistic and dreamlike.\n\nThe subject is a young adult Taiwanese woman with short pink-and-white blended hair and side-swept bangs. She has delicate, beautiful features, a well-defined bone structure, and facial lines that are both soft and sculptural. She has a naturally curvy, elegant, and well-proportioned figure, with an overall presence that feels mature, confident, and relaxed. Her skin has a cool fair matte quality, looking smooth and translucent while still preserving realistic skin texture. Her makeup is refined and soft, with rosy cheeks, moist dreamy eyes, and an expression that carries a hint of laziness, aloofness, and world-weary indifference, giving her an aura that feels both sophisticated and mysterious.\n\nHer face features intricate decorative makeup details, including a huadian ornament on the forehead, floral ornaments at the outer corners of the eyes, heart-shaped facial decorations, and small artistic pig-pattern facial elements. These embellishments are naturally integrated into the overall high-end makeup look, with delicate shimmer and pearlescent textures. They should feel refined, luxurious, and elegant, never cheap or cartoonish.\n\nThe composition is shot from a low angle, with the subject's full body visible and facing the camera directly. She extends one hand toward the lens, with long slender fingers and delicately manicured long nails, creating a strong foreground blur and a clear sense of perspective, making the image more visually dynamic. Her pose is elegant and confident, with the visual language of a high-end fashion editorial.\n\nThe overall color palette is dominated by rich, dark tones, accented with nude pink, skin-tone hues, pearlescent highlights, silvery-white reflections, and sparkling details. The image has a low-contrast tonal range, with soft focus, haze, luminosity, and a luxurious finish, resembling a meticulously retouched fashion editorial. The photo should feel highly realistic, rich in detail, with natural skin texture, in 8K ultra-high definition, with a trendy high-end internet aesthetic, vertical 9:16.",
+  "previewImageUrl": "https://raw.githubusercontent.com/nexu-io/open-design/main/assets/prompt-templates/image/profile-avatar-seedream-high-fashion-dreamy-portrait.jpg",
+  "source": {
+    "repo": "x.com",
+    "license": "Original X post",
+    "author": "BubbleBrain",
+    "url": "https://x.com/BubbleBrain/status/2074856963591290979"
+  }
+}

@@ -26,6 +26,10 @@ const INSTALL_HANDOFF_WATCHDOG_MS = 10_000;
 
 type InstallState = 'idle' | 'opening' | 'handoff' | 'recoverable';
 type Translator = (key: keyof Dict, vars?: Record<string, string | number>) => string;
+type UpdaterPopupProps = {
+  allowSilentUpdates?: boolean;
+  onAllowSilentUpdatesChange?: (allowSilentUpdates: boolean) => Promise<void> | void;
+};
 
 function versionText(t: Translator, model: UpdaterModel): string {
   const version = model.availableVersion;
@@ -68,7 +72,10 @@ function updaterErrorCode(model: UpdaterModel): string | undefined {
   return model.status?.error?.code;
 }
 
-export function UpdaterPopup() {
+export function UpdaterPopup({
+  allowSilentUpdates,
+  onAllowSilentUpdatesChange,
+}: UpdaterPopupProps) {
   const t = useT();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const actionInFlightRef = useRef(false);
@@ -76,6 +83,7 @@ export function UpdaterPopup() {
   const [model, setModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
   const [panelOpen, setPanelOpen] = useState(false);
   const [installState, setInstallState] = useState<InstallState>('idle');
+  const [allowSilentUpdatesChecked, setAllowSilentUpdatesChecked] = useState(() => allowSilentUpdates ?? true);
 
   const clearHandoffWatchdog = useCallback(() => {
     if (handoffWatchdogRef.current == null) return;
@@ -98,6 +106,11 @@ export function UpdaterPopup() {
   }, [clearHandoffWatchdog, recoverFromInstallerHandoff]);
 
   useEffect(() => clearHandoffWatchdog, [clearHandoffWatchdog]);
+
+  useEffect(() => {
+    if (installState !== 'idle') return;
+    setAllowSilentUpdatesChecked(allowSilentUpdates ?? true);
+  }, [allowSilentUpdates, installState]);
 
   useEffect(() => {
     let mounted = true;
@@ -209,6 +222,13 @@ export function UpdaterPopup() {
       ...versionProps,
     });
     try {
+      if (onAllowSilentUpdatesChange != null) {
+        try {
+          await onAllowSilentUpdatesChange(allowSilentUpdatesChecked);
+        } catch {
+          // Installing the update is more important than persisting this preference.
+        }
+      }
       const result = await openUpdaterInstaller({ payload: { source: 'updater-prompt' } });
       if (!result.ok) {
         actionInFlightRef.current = false;
@@ -299,43 +319,89 @@ export function UpdaterPopup() {
       </button>
       <AnimatePresence>
         {panelOpen ? (
-          <motion.section
-            aria-labelledby="updater-popup-title"
-            className="updater-popup is-ready"
-            data-testid="updater-popup"
-            role="dialog"
-            variants={popoverIn}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-          >
-            <div className="updater-popup__icon">
-              <Icon name="arrow-up" size={20} strokeWidth={2.2} />
-            </div>
-            <div className="updater-popup__body">
-              <h2 id="updater-popup-title">{t('updater.ready')}</h2>
-              <p>{versionText(t, model)}</p>
-              {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
-            </div>
-            <div className="updater-popup__actions">
-              <button className="updater-popup__button" disabled={installBusy} type="button" onClick={close}>
-                {t('updater.later')}
-              </button>
-              <button
-                className="updater-popup__button updater-popup__button--primary"
-                data-testid="updater-install-button"
-                disabled={installBusy}
-                type="button"
-                onClick={() => {
-                  void installAndQuit();
-                }}
-              >
-                {installActionText(t, model, installBusy)}
-              </button>
-            </div>
-          </motion.section>
+          <UpdaterPopupPanel
+            allowSilentUpdatesChecked={allowSilentUpdatesChecked}
+            channelLabel={channelLabel}
+            installBusy={installBusy}
+            model={model}
+            t={t}
+            onClose={close}
+            onInstall={() => {
+              void installAndQuit();
+            }}
+            onSilentUpdatesChange={setAllowSilentUpdatesChecked}
+          />
         ) : null}
       </AnimatePresence>
     </div>
+  );
+}
+
+function UpdaterPopupPanel({
+  allowSilentUpdatesChecked,
+  channelLabel,
+  installBusy,
+  model,
+  t,
+  onClose,
+  onInstall,
+  onSilentUpdatesChange,
+}: {
+  allowSilentUpdatesChecked: boolean;
+  channelLabel: string | null;
+  installBusy: boolean;
+  model: UpdaterModel;
+  t: Translator;
+  onClose: () => void;
+  onInstall: () => void;
+  onSilentUpdatesChange: (allowSilentUpdates: boolean) => void;
+}) {
+  return (
+    <motion.section
+      aria-labelledby="updater-popup-title"
+      className="updater-popup is-ready"
+      data-testid="updater-popup"
+      role="dialog"
+      variants={popoverIn}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <div className="updater-popup__icon">
+        <Icon name="arrow-up" size={20} strokeWidth={2.2} />
+      </div>
+      <div className="updater-popup__body">
+        <h2 id="updater-popup-title">{t('updater.ready')}</h2>
+        <p>{versionText(t, model)}</p>
+        {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
+      </div>
+      <div className="updater-popup__footer">
+        <label className="updater-popup__checkbox">
+          <input
+            checked={allowSilentUpdatesChecked}
+            data-testid="updater-silent-update-checkbox"
+            disabled={installBusy}
+            type="checkbox"
+            onChange={(event) => onSilentUpdatesChange(event.currentTarget.checked)}
+          />
+          <span>{t('updater.allowSilentUpdates')}</span>
+        </label>
+        <div className="updater-popup__actions">
+          <button className="updater-popup__button" disabled={installBusy} type="button" onClick={onClose}>
+            {t('updater.later')}
+          </button>
+          <button
+            className="updater-popup__button updater-popup__button--primary"
+            data-testid="updater-install-button"
+            disabled={installBusy}
+            type="button"
+            onClick={onInstall}
+          >
+            {installActionText(t, model, installBusy)}
+          </button>
+        </div>
+      </div>
+    </motion.section>
   );
 }

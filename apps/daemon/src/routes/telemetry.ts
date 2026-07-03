@@ -8,7 +8,7 @@ import {
 import type { readAppConfig } from '../app-config.js';
 import { readCurrentAppVersionInfo } from '../app-version.js';
 import { reportRunFeedbackFromDaemon } from '../langfuse-bridge.js';
-import { observePendingInstallerApplyAttempts } from '../update-apply-observations.js';
+import { observePendingInstallerApplyAttempts } from '../migration/index.js';
 
 export interface DaemonTelemetry {
   analyticsService: ReturnType<typeof createAnalyticsService>;

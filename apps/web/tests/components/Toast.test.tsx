@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Toast } from '../../src/components/Toast';
@@ -57,6 +57,15 @@ describe('Toast', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
+  it('lets users dismiss non-code toasts manually', () => {
+    const onDismiss = vi.fn();
+    render(<Toast message="Browser opened" details="Use Download Page." onDismiss={onDismiss} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Dismiss/i }));
+
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
   it('shows a leading status glyph for the success tone', () => {
     const { container } = render(<Toast message="Screenshot copied to clipboard" tone="success" />);
     expect(container.querySelector('.od-toast.tone-success .od-toast-icon')).not.toBeNull();
@@ -65,5 +74,12 @@ describe('Toast', () => {
   it('renders a Dismiss button when both code and onDismiss are present', () => {
     render(<Toast message="manual copy" code="x" onDismiss={() => {}} />);
     expect(screen.getByRole('button', { name: /Dismiss/i })).not.toBeNull();
+  });
+
+  it('renders an optional action button', () => {
+    const onAction = vi.fn();
+    render(<Toast message="Image saved" actionLabel="Open file" onAction={onAction} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open file' }));
+    expect(onAction).toHaveBeenCalledTimes(1);
   });
 });

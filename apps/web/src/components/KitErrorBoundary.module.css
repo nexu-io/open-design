@@ -1,0 +1,37 @@
+/* Recoverable fallback shown when the design-kit subtree throws during render,
+   so a bad brand.json or a just-deleted asset degrades to a message instead of
+   white-screening the whole app. */
+.kitError {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 180px;
+  padding: 32px 24px;
+  text-align: center;
+  border: 1px dashed var(--line, #e2e2e2);
+  border-radius: 12px;
+  color: var(--ink-faint, #8a8a8a);
+}
+
+.kitErrorText {
+  margin: 0;
+  font-size: 14px;
+}
+
+.kitErrorRetry {
+  appearance: none;
+  border: 1px solid var(--line, #e2e2e2);
+  background: var(--surface, #fff);
+  color: var(--ink, #1a1a1a);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.kitErrorRetry:hover {
+  background: var(--surface-hover, #f5f5f5);
+}

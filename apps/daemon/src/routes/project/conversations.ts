@@ -1,17 +1,24 @@
 import type { Express } from 'express';
 import { type ChatSessionMode } from '@open-design/contracts';
 import { readAnalyticsContext } from '../../analytics.js';
+import { backfillBrandExtractionTranscriptForProject } from '../../brands/index.js';
 import type { RouteDeps } from '../../server-context.js';
 import { registerProjectCommentRoutes } from './comments.js';
+import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
 
-export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 'projectStore' | 'conversations' | 'ids' | 'telemetry'> {}
+export interface RegisterProjectConversationRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'conversations' | 'ids' | 'telemetry' | 'appConfig' | 'agents'> {}
 
 function normalizeChatSessionMode(value: unknown): ChatSessionMode {
-  return value === 'chat' ? 'chat' : 'design';
+  return value === 'chat' || value === 'plan' ? value : 'design';
+}
+
+function isChatSessionMode(value: unknown): value is ChatSessionMode {
+  return value === 'chat' || value === 'design' || value === 'plan';
 }
 
 export function registerProjectConversationRoutes(app: Express, ctx: RegisterProjectConversationRoutesDeps): void {
-  const { db } = ctx;
+  const { db, design } = ctx;
+  const { sendApiError } = ctx.http;
   const { getProject, updateProject } = ctx.projectStore;
   const {
     insertConversation,
@@ -23,6 +30,9 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     upsertMessage,
   } = ctx.conversations;
   const { randomId } = ctx.ids;
+  const { BRANDS_DIR, PROJECTS_DIR } = ctx.paths;
+  const { readAppConfig } = ctx.appConfig;
+  const { getAgentDef } = ctx.agents;
 
   // ---- Conversations --------------------------------------------------------
 
@@ -42,6 +52,9 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     const hasExplicitSessionMode = Boolean(
       req.body && Object.prototype.hasOwnProperty.call(req.body, 'sessionMode'),
     );
+    if (hasExplicitSessionMode && !isChatSessionMode(req.body.sessionMode)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'sessionMode must be one of design, chat, or plan');
+    }
     const requestedForkMessageId =
       typeof forkAfterMessageId === 'string' && forkAfterMessageId
         ? forkAfterMessageId
@@ -86,7 +99,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     }
     const sessionMode =
       hasExplicitSessionMode
-        ? normalizeChatSessionMode(req.body.sessionMode)
+        ? req.body.sessionMode
         : sourceConversation && sourceConversation.projectId === req.params.id
           ? normalizeChatSessionMode(sourceConversation.sessionMode)
           : 'design';
@@ -125,25 +138,56 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'not found' });
     }
+    if (
+      req.body &&
+      Object.prototype.hasOwnProperty.call(req.body, 'sessionMode') &&
+      !isChatSessionMode(req.body.sessionMode)
+    ) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'sessionMode must be one of design, chat, or plan');
+    }
     const updated = updateConversation(db, req.params.cid, req.body || {});
     res.json({ conversation: updated });
   });
 
-  app.delete('/api/projects/:id/conversations/:cid', (req, res) => {
+  app.delete('/api/projects/:id/conversations/:cid', async (req, res) => {
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'not found' });
     }
+    // Stop any live agent run for this conversation before the row is gone,
+    // otherwise the CLI subprocess is orphaned and keeps billing (#5468).
+    await cancelRunsOwnedBy(design.runs, { conversationId: req.params.cid });
     deleteConversation(db, req.params.cid);
     res.json({ ok: true });
   });
 
   // ---- Messages -------------------------------------------------------------
 
-  app.get('/api/projects/:id/conversations/:cid/messages', (req, res) => {
+  app.get('/api/projects/:id/conversations/:cid/messages', async (req, res) => {
     const conv = getConversation(db, req.params.cid);
     if (!conv || conv.projectId !== req.params.id) {
       return res.status(404).json({ error: 'conversation not found' });
+    }
+    const project = getProject(db, req.params.id);
+    if (project && listMessages(db, req.params.cid).length === 0) {
+      const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR).catch(() => ({}));
+      const agentId = typeof config.agentId === 'string' && config.agentId ? config.agentId : null;
+      await backfillBrandExtractionTranscriptForProject({
+        db,
+        conversationId: req.params.cid,
+        randomId,
+        brandsRoot: BRANDS_DIR,
+        projectsRoot: PROJECTS_DIR,
+        project,
+        ...(agentId ? {
+          transcriptAgent: {
+            agentId,
+            agentName: getAgentDef(agentId)?.name ?? agentId,
+          },
+        } : {}),
+      }).catch((err) => {
+        console.warn(`[brand] failed to backfill programmatic extraction transcript for ${req.params.id}`, err);
+      });
     }
     res.json({ messages: listMessages(db, req.params.cid) });
   });

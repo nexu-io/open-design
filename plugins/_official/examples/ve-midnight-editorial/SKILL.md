@@ -1,27 +1,35 @@
 ---
 name: ve-midnight-editorial
-description: Midnight Editorial deck — cinematic editorial dark theme: deep navy #0f1729 pages with a warm gold #d4a73a accent, Instrument Serif 120px dramatic display dropping straight to 14px JetBrains Mono labels, gold radial accent glow per slide, gold SVG corner marks, ghost section numerals, staggered cinematic reveal transitions, and a locked cream/gold light mode toggled by the SlideEngine (T key). The "midnight-editorial" slide-deck preset from nicobailon/visual-explainer, locked as a single-aesthetic deck plugin. Use when the user wants a dramatic, magazine-grade dark presentation — engineering reviews, product keynotes, editorial launches, anything that should feel like a midnight issue of a serious journal.
+en_name: "Present a Financial Review like a Startup CFO"
+zh_name: "像创业公司 CFO 一样做财务复盘"
+description: |
+  Open Design's financial review: runway, burn, and the sustainability plan that keeps the project independent. Built as a decision-grade data & finance deck for board, leadership.
+en_description: |
+  Open Design's financial review: runway, burn, and the sustainability plan that keeps the project independent. Built as a decision-grade data & finance deck for board, leadership.
+zh_description: |
+  像创业公司 CFO 一样做财务复盘——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "data-finance"
+  - "product-analytics-deck"
+  - "finance"
+  - "kpi"
+  - "metrics"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "ve-midnight-editorial"
 triggers:
-  - "midnight"
-  - "editorial"
-  - "cinematic"
-  - "serif deck"
-  - "navy gold"
-  - "dark deck"
-  - "presentation"
-  - "ppt"
-  - "slides"
-  - "deck"
-  - "keynote"
-  - "午夜"
-  - "金辉"
-  - "编辑刊"
-  - "幻灯片"
-  - "演讲稿"
+  - "product-analytics-deck"
+  - "data-finance"
+  - "Present a Financial Review like a Startup CFO"
+  - "像创业公司 CFO 一样做财务复盘"
+  - "kpi"
+  - "finance"
+  - "metrics"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
-  scenario: product
   upstream: "https://github.com/nicobailon/visual-explainer"
   preview:
     type: html
@@ -30,9 +38,11 @@ od:
     requires: false
   speaker_notes: false
   animations: true
-  example_prompt: "Use Midnight Editorial to turn my content into a cinematic dark serif single-file HTML deck. Confirm topic, audience and page count first, then start from the seed example.html — keep its navy+gold dual-theme token sheet, Instrument Serif display scale, gold glow and corner-mark decor, staggered reveal transitions and SlideEngine runtime exactly as-is, replace slide content only, and use real content with no lorem ipsum."
   example_prompt_i18n:
     zh-CN: "用「午夜金辉」把我的内容做成一套电影级编辑刊风格的深色单文件 HTML 幻灯片。先确认主题、观众和页数，然后从种子 example.html 出发——完整保留 navy+金的明暗双主题 token 表、Instrument Serif 戏剧 display 字阶、金色光晕与角标装饰、交错转场和 SlideEngine 运行时，只替换幻灯片内容，使用真实内容，不要 lorem ipsum。"
+  category: "data-finance"
+  scenario: "finance"
+  example_prompt: "Create \"Present a Financial Review like a Startup CFO\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's financial review: runway, burn, and the sustainability plan that keeps the project independent. Audience: board, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it."
 ---
 
 # Midnight Editorial（午夜金辉）

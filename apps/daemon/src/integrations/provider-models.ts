@@ -7,8 +7,9 @@ import type {
   ProviderModelsRequest,
   ProviderModelsResponse,
 } from '@open-design/contracts/api/providerModels';
+import type { ModelCapability, ModelCost, ModelMetadata } from '@open-design/contracts';
 import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
-import { redactSecrets, validateBaseUrlResolved } from '../connectionTest.js';
+import { redactSecrets, validateUserProviderBaseUrl } from '../connectionTest.js';
 import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
 import { aihubmixHeaders, aihubmixCatalogUrl, parseAIHubMixCatalog } from './aihubmix.js';
 
@@ -18,6 +19,14 @@ type ProviderModelsInput = ProviderModelsRequest & {
 };
 
 const PROVIDER_MODELS_TIMEOUT_MS = 12_000;
+const BEDROCK_MODEL_OPTIONS: ProviderModelOption[] = [
+  { id: 'anthropic.claude-3-5-sonnet-20241022-v2:0', label: 'Claude 3.5 Sonnet v2' },
+  { id: 'anthropic.claude-3-5-haiku-20241022-v1:0', label: 'Claude 3.5 Haiku' },
+  { id: 'anthropic.claude-3-haiku-20240307-v1:0', label: 'Claude 3 Haiku' },
+  { id: 'amazon.nova-pro-v1:0', label: 'Amazon Nova Pro' },
+  { id: 'amazon.nova-lite-v1:0', label: 'Amazon Nova Lite' },
+  { id: 'amazon.nova-micro-v1:0', label: 'Amazon Nova Micro' },
+];
 
 function appendVersionedApiPath(baseUrl: string, suffix: string): string {
   const url = new URL(baseUrl);
@@ -79,9 +88,42 @@ function uniqueModels(models: ProviderModelOption[]): ProviderModelOption[] {
     const id = model.id.trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    out.push({ id, label: model.label.trim() || id });
+    const label = model.label.trim() || id;
+    out.push({ ...model, id, label });
   }
   return out.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function isOpenAiChatModelId(id: string): boolean {
+  const normalized = id.trim().toLowerCase();
+  if (!normalized) return false;
+  if (
+    normalized.includes('embedding') ||
+    normalized.includes('moderation') ||
+    normalized.includes('rerank') ||
+    normalized.includes('whisper') ||
+    normalized.includes('tts') ||
+    normalized.includes('transcribe') ||
+    normalized.includes('speech') ||
+    normalized.includes('image') ||
+    normalized.includes('video') ||
+    normalized.includes('dall-e') ||
+    normalized.includes('stable-diffusion') ||
+    normalized.includes('flux') ||
+    // BAAI's BGE embedding family (e.g. `BAAI/bge-large-en-v1.5`, served by
+    // gateways like SiliconFlow) doesn't match any of the substrings above —
+    // `bge-reranker-*` variants are already caught by the `rerank` check, but
+    // the plain embedding models slip through and 404 when a chat-completion
+    // test is run against them (issue #5367).
+    /(?:^|[/_-])bge(?:[-_]|$)/u.test(normalized) ||
+    (
+      normalized.includes('wan') &&
+      /(?:^|[-_.:])(?:t2v|i2v|v2v)(?:[-_.:]|$)/u.test(normalized)
+    )
+  ) {
+    return false;
+  }
+  return !/(?:^|[-_.:])(?:t2i|i2i|t2v|i2v|v2v|tts|asr|ocr)(?:[-_.:]|$)/u.test(normalized);
 }
 
 function extractOpenAiModels(data: unknown): ProviderModelOption[] {
@@ -89,10 +131,51 @@ function extractOpenAiModels(data: unknown): ProviderModelOption[] {
   if (!Array.isArray(items)) return [];
   return uniqueModels(
     items
-      .map((item) => (item as { id?: unknown })?.id)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0)
-      .map((id) => ({ id, label: id })),
+      .map(openAiModelOption)
+      .filter((model): model is ProviderModelOption => model != null),
   );
+}
+
+function openAiModelOption(item: unknown): ProviderModelOption | null {
+  if (!item || typeof item !== 'object') return null;
+  const obj = item as { id?: unknown; metadata?: unknown };
+  const id = typeof obj?.id === 'string' ? obj.id : '';
+  if (!id || !isOpenAiChatModelId(id)) return null;
+  const metadata = extractModelMetadata(obj.metadata);
+  return {
+    id,
+    label: id,
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
+function extractModelMetadata(value: unknown): ModelMetadata | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const metadata = value as { cost?: unknown; capability?: unknown };
+  const cost = parseModelCost(metadata.cost);
+  const capability = parseModelCapability(metadata.capability);
+  if (!cost && !capability) return null;
+  return {
+    ...(cost ? { cost } : {}),
+    ...(capability ? { capability } : {}),
+  };
+}
+
+function parseModelCost(value: unknown): ModelCost | null {
+  return value === 'low' ||
+    value === 'medium' ||
+    value === 'high' ||
+    value === 'very_high'
+    ? value
+    : null;
+}
+
+function parseModelCapability(value: unknown): ModelCapability | null {
+  return value === 'standard' ||
+    value === 'advanced' ||
+    value === 'best_quality'
+    ? value
+    : null;
 }
 
 function extractAnthropicModels(data: unknown): ProviderModelOption[] {
@@ -221,13 +304,22 @@ export async function listProviderModels(
     };
   }
 
-  const validated = await validateBaseUrlResolved(input.baseUrl);
+  const validated = await validateUserProviderBaseUrl(input.baseUrl);
   if (validated.error || !validated.parsed) {
     return {
       ok: false,
       kind: validated.forbidden ? 'forbidden' : 'invalid_base_url',
       latencyMs: Date.now() - start,
       detail: validated.error ?? '',
+    };
+  }
+  if (input.protocol === 'bedrock') {
+    return {
+      ok: true,
+      kind: 'success',
+      latencyMs: Date.now() - start,
+      models: BEDROCK_MODEL_OPTIONS,
+      detail: 'AWS Bedrock uses a static seed until AWS credential-backed discovery is available.',
     };
   }
 

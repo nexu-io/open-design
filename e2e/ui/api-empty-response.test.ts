@@ -1,5 +1,6 @@
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
+import { fulfillAgentsRoute } from '@/playwright/mock-factory';
+import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import type { Page } from '@playwright/test';
 import { T } from '@/timeouts';
 
@@ -47,17 +48,40 @@ test.beforeEach(async ({ page }) => {
       },
     });
   });
+  await page.route('**/api/agents**', async (route) => {
+    await fulfillAgentsRoute(route, [
+      {
+        id: 'byok-opencode',
+        name: 'BYOK OpenCode',
+        bin: 'opencode',
+        available: true,
+        version: 'test',
+        models: [{ id: 'default', label: 'Default' }],
+      },
+    ]);
+  });
 });
 
 test('[P0] @critical API empty stream shows No output instead of Done', async ({ page }) => {
-  await page.route('**/api/proxy/openai/stream', async (route) => {
+  await page.route('**/api/runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: 'api-empty-response-run' }),
+    });
+  });
+  await page.route('**/api/runs/api-empty-response-run/events', async (route) => {
     await route.fulfill({
       status: 200,
       headers: {
         'content-type': 'text/event-stream',
         'cache-control': 'no-cache',
       },
-      body: ['event: end', 'data: {}', '', ''].join('\n'),
+      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
     });
   });
 
@@ -91,10 +115,7 @@ async function gotoEntryHome(page: Page) {
 }
 
 async function openNewProjectModal(page: Page) {
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModalFromProjects(page);
 }
 
 async function expectWorkspaceReady(page: Page) {
@@ -115,7 +136,7 @@ async function sendPrompt(page: Page, prompt: string) {
     page.waitForResponse(
       (response) => {
         const url = new URL(response.url());
-        return url.pathname === '/api/proxy/openai/stream' && response.request().method() === 'POST';
+        return url.pathname === '/api/runs' && response.request().method() === 'POST';
       },
       { timeout: 10_000 },
     ),

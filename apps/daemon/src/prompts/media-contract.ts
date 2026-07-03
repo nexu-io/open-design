@@ -23,7 +23,7 @@ import {
   IMAGE_MODELS,
   VIDEO_MODELS,
 } from '../media/models.js';
-import type { MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
+import type { ByokMediaDefaults, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
 
 function fmtList(ids: string[]): string {
   return ids.map((id) => `\`${id}\``).join(', ');
@@ -37,10 +37,11 @@ const AUDIO_SFX_IDS = fmtList(AUDIO_MODELS_BY_KIND.sfx.map((m) => m.id));
 
 export function renderMediaGenerationContract(
   mediaExecution?: MediaExecutionPolicy | undefined,
+  byokMediaDefaults?: ByokMediaDefaults | undefined,
 ): string {
   const mode = mediaExecution?.mode ?? 'enabled';
   if (mode === 'enabled') {
-    return renderEnabledMediaGenerationContract(mediaExecution);
+    return renderEnabledMediaGenerationContract(mediaExecution, byokMediaDefaults);
   }
   const scope = renderMediaPolicyScope(mediaExecution);
   if (mode === 'disabled') {
@@ -61,26 +62,52 @@ preference, references, and output filename in chat, then stop. Do not claim a
 file was generated and do not emit an \`<artifact>\` block for media.
 ${scope}`;
   }
-  return renderEnabledMediaGenerationContract(mediaExecution);
+  return renderEnabledMediaGenerationContract(mediaExecution, byokMediaDefaults);
 }
 
 function renderEnabledMediaGenerationContract(
   mediaExecution?: MediaExecutionPolicy | undefined,
+  byokMediaDefaults?: ByokMediaDefaults | undefined,
 ): string {
   const scope = renderMediaPolicyScope(mediaExecution);
-  if (!scope) return MEDIA_GENERATION_CONTRACT;
+  const defaults = renderByokMediaDefaults(byokMediaDefaults);
+  if (!scope && !defaults) return MEDIA_GENERATION_CONTRACT;
   return MEDIA_GENERATION_CONTRACT.replace(
     '\n### Allowed model IDs (per surface)',
     `
-### Active media policy scope
+${defaults}
+${scope ? `### Active media policy scope
 
 The dispatcher will reject surfaces or models outside this run's active
 allowlist. Treat this allowlist as narrower than the full catalogue below;
 select only from it.
 ${scope}
 
-### Allowed model IDs (per surface)`,
+` : ''}### Allowed model IDs (per surface)`,
   );
+}
+
+function renderByokMediaDefaults(
+  defaults?: ByokMediaDefaults | undefined,
+): string {
+  const lines: string[] = [];
+  const imageModel = defaults?.imageModel?.trim();
+  const videoModel = defaults?.videoModel?.trim();
+  const speechModel = defaults?.speechModel?.trim();
+  const speechVoice = defaults?.speechVoice?.trim();
+  if (imageModel) lines.push(`- Image model: \`${imageModel}\``);
+  if (videoModel) lines.push(`- Video model: \`${videoModel}\``);
+  if (speechModel) lines.push(`- Speech model: \`${speechModel}\``);
+  if (speechVoice) lines.push(`- Speech voice: \`${speechVoice}\``);
+  if (lines.length === 0) return '';
+  return `### Run-scoped BYOK media defaults
+
+The user selected these BYOK media defaults in the chat UI for this run. Use
+them when dispatching media unless the current user message explicitly asks for
+a different model or voice.
+${lines.join('\n')}
+
+`;
 }
 
 function renderMediaPolicyScope(

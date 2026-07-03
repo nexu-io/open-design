@@ -15,9 +15,9 @@ describe('api protocol labels', () => {
 
   it('includes the selected model when labeling API assistant messages', () => {
     expect(apiProtocolModelLabel('openai', 'google/gemma-4-e4b')).toBe(
-      'OpenAI API · google/gemma-4-e4b',
+      'OpenAI API via OpenCode · google/gemma-4-e4b',
     );
-    expect(apiProtocolModelLabel('azure', '  ')).toBe('Azure OpenAI');
+    expect(apiProtocolModelLabel('azure', '  ')).toBe('Azure OpenAI via OpenCode');
   });
 
   it('includes explicit local CLI models when labeling agent messages', () => {
@@ -25,6 +25,10 @@ describe('api protocol labels', () => {
       'Claude · claude-sonnet-4-6',
     );
     expect(agentModelDisplayName('claude', 'Claude Code', 'default')).toBe('Claude');
+  });
+
+  it('labels OpenCode-backed BYOK protocol agent ids', () => {
+    expect(agentDisplayName('senseaudio-api')).toBe('SenseAudio API via OpenCode');
   });
 
   it('normalizes Qoder local CLI ids, aliases, and executable paths', () => {

@@ -33,6 +33,7 @@ test('a second-round edit of an existing artifact counts as touched, not zero', 
     touched: 1,
     designSystemCreated: false,
     previewModuleCount: 0,
+    touchedPaths: [page],
   });
 });
 
@@ -51,6 +52,7 @@ test('created vs modified are reported separately and sum into touched', () => {
     touched: 2,
     designSystemCreated: false,
     previewModuleCount: 0,
+    touchedPaths: [path.join(root, 'a.html'), path.join(root, 'b.png')],
   });
 });
 
@@ -66,6 +68,7 @@ test('a touched DESIGN.md sets designSystemCreated but not artifact_count', () =
     touched: 0,
     designSystemCreated: true,
     previewModuleCount: 0,
+    touchedPaths: [],
   });
 
   // Editing it on a later round still flags the design-system signal.
@@ -105,6 +108,7 @@ test('non-artifact files and ignored dirs do not count', () => {
     touched: 0,
     designSystemCreated: false,
     previewModuleCount: 0,
+    touchedPaths: [],
   });
 });
 
@@ -180,5 +184,6 @@ test('a no-op turn (no file writes) reports zero', () => {
     touched: 0,
     designSystemCreated: false,
     previewModuleCount: 0,
+    touchedPaths: [],
   });
 });

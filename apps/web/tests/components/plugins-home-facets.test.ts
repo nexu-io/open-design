@@ -112,13 +112,19 @@ describe('extractSubcategories', () => {
     expect(extractSubcategories(fixture({ id: 'brand', tags: ['wireframe'], od: { mode: 'prototype' } }))).toEqual(['brand-design']);
   });
 
-  it('maps deck templates to pitch, course, report, product, engineering, and creative scenes', () => {
-    expect(extractSubcategories(fixture({ id: 'pitch', tags: ['pitch-deck'], od: { mode: 'deck' } }))).toEqual(['pitch-business']);
-    expect(extractSubcategories(fixture({ id: 'course', tags: ['course-module'], od: { mode: 'deck' } }))).toEqual(['course-training']);
-    expect(extractSubcategories(fixture({ id: 'report', tags: ['weekly-report'], od: { mode: 'deck' } }))).toEqual(['reports-briefings']);
-    expect(extractSubcategories(fixture({ id: 'launch', tags: ['product-launch'], od: { mode: 'deck' } }))).toEqual(['product-sales']);
-    expect(extractSubcategories(fixture({ id: 'tech', tags: ['tech-sharing'], od: { mode: 'deck' } }))).toEqual(['engineering-talks']);
-    expect(extractSubcategories(fixture({ id: 'creative', tags: ['zhangzara'], od: { mode: 'deck' } }))).toEqual(['creative-decks']);
+  // Deck scenes are the 15 commercial "品类" buckets, resolved from the plugin's
+  // commercial category id (od.category / a category tag / od.scenario) rather
+  // than tag-slug heuristics, so the filter row shares one taxonomy with the
+  // per-card category chip.
+  it('maps deck templates to their commercial scene by resolved category id', () => {
+    expect(extractSubcategories(fixture({ id: 'pitch', od: { mode: 'deck', category: 'fundraising-pitch' } }))).toEqual(['fundraising-pitch']);
+    expect(extractSubcategories(fixture({ id: 'board', od: { mode: 'deck', category: 'corporate-strategy' } }))).toEqual(['corporate-strategy']);
+    expect(extractSubcategories(fixture({ id: 'sales', od: { mode: 'deck', category: 'b2b-sales' } }))).toEqual(['b2b-sales']);
+    expect(extractSubcategories(fixture({ id: 'craft', od: { mode: 'deck', category: 'design-craft' } }))).toEqual(['design-craft']);
+    // A category tag resolves the scene when od.category is absent.
+    expect(extractSubcategories(fixture({ id: 'tagged', tags: ['ai-literacy'], od: { mode: 'deck' } }))).toEqual(['ai-literacy']);
+    // A deck with no resolvable commercial category lands in no scene bucket.
+    expect(extractSubcategories(fixture({ id: 'bare', tags: ['pitch-deck'], od: { mode: 'deck' } }))).toEqual([]);
   });
 
   it('maps image templates to visual-scene buckets', () => {
@@ -138,10 +144,11 @@ describe('extractSubcategories', () => {
     expect(extractSubcategories(fixture({ id: 'cinema', tags: ['cinematic'], od: { mode: 'video' } }))).toEqual(['cinematic-story']);
   });
 
-  // Regression: the rail/catalog display order (SUBCATEGORY_DISPLAY_ORDER) must
-  // NOT change which bucket an overlapping-tag plugin lands in. Bucketing is
-  // decided by SUBCATEGORIES matching precedence, which stays stable even
-  // though Brand / design and Creative decks render first in the rails.
+  // Regression: the prototype/image/video rail display order
+  // (SUBCATEGORY_DISPLAY_ORDER) must NOT change which bucket an overlapping-tag
+  // plugin lands in. Bucketing is decided by SUBCATEGORIES matching precedence,
+  // which stays stable even though Brand / design renders first in the rails.
+  // (Decks are exempt: their bucket is the single resolved commercial category.)
   it('keeps bucket membership stable for overlapping-tag plugins regardless of display order', () => {
     // `dashboard` + `design`: stays in Dashboards (not Brand / design).
     expect(
@@ -155,14 +162,6 @@ describe('extractSubcategories', () => {
     expect(
       extractSubcategories(fixture({ id: 'landing-brand', tags: ['saas-landing', 'brand'], od: { mode: 'prototype' } })),
     ).toEqual(['landing-marketing']);
-    // launch deck + `marketing`: stays in Product / sales (not Creative decks).
-    expect(
-      extractSubcategories(fixture({ id: 'launch', tags: ['product-launch', 'marketing'], od: { mode: 'deck' } })),
-    ).toEqual(['product-sales']);
-    // pitch deck + `marketing`: stays in Pitch / business (not Creative decks).
-    expect(
-      extractSubcategories(fixture({ id: 'pitch-mkt', tags: ['pitch-deck', 'marketing'], od: { mode: 'deck' } })),
-    ).toEqual(['pitch-business']);
   });
 
   it('keeps Live Artifact, HyperFrames, and Audio flat with no second-level buckets', () => {
@@ -194,9 +193,9 @@ describe('buildFacetCatalog', () => {
     ]);
 
     expect(catalog.category.map((o) => [o.slug, o.count])).toEqual([
+      ['deck', 1],
       ['prototype', 1],
       ['live-artifact', 1],
-      ['deck', 1],
       ['image', 1],
       ['video', 1],
       ['hyperframes', 1],
@@ -212,13 +211,23 @@ describe('buildFacetCatalog', () => {
       'developer-tools',
       'docs-reports',
     ]);
+    // Deck scenes: the 15 commercial "品类" buckets in commercial-priority order.
     expect((catalog.subcategory.deck ?? []).map((o) => o.slug)).toEqual([
-      'creative-decks',
-      'engineering-talks',
-      'pitch-business',
-      'course-training',
-      'reports-briefings',
-      'product-sales',
+      'fundraising-pitch',
+      'corporate-strategy',
+      'b2b-sales',
+      'product-management',
+      'design-craft',
+      'marketing-gtm',
+      'data-finance',
+      'consulting',
+      'government-policy',
+      'professional-training',
+      'academic-research',
+      'ai-literacy',
+      'career',
+      'student-coursework',
+      'life',
     ]);
     expect((catalog.subcategory.image ?? []).map((o) => o.slug)).toEqual([
       'ui-product-mockups',
@@ -246,7 +255,7 @@ describe('applyFacetSelection', () => {
     fixture({ id: 'prototype-dashboard', tags: ['dashboard'], od: { mode: 'prototype' } }),
     fixture({ id: 'prototype-app', tags: ['mobile-app'], od: { mode: 'prototype' } }),
     fixture({ id: 'example-live-artifact', tags: ['live-artifact'], od: { mode: 'prototype' } }),
-    fixture({ id: 'deck', tags: ['pitch-deck'], od: { mode: 'deck' } }),
+    fixture({ id: 'deck', od: { mode: 'deck', category: 'fundraising-pitch' } }),
     fixture({ id: 'image', tags: ['profile-avatar'], od: { mode: 'image' } }),
     fixture({ id: 'video', tags: ['cinematic'], od: { mode: 'video' } }),
     fixture({ id: 'hf', tags: ['hyperframes'], od: { mode: 'video' } }),
@@ -290,6 +299,10 @@ describe('applyFacetSelection', () => {
     expect(
       applyFacetSelection(plugins, { category: 'prototype', subcategory: 'app-prototypes' }).map((p) => p.id),
     ).toEqual(['prototype-app']);
+    // Deck scene bucket = the plugin's resolved commercial category.
+    expect(
+      applyFacetSelection(plugins, { category: 'deck', subcategory: 'fundraising-pitch' }).map((p) => p.id),
+    ).toEqual(['deck']);
   });
 });
 
@@ -303,25 +316,25 @@ describe('isFeaturedPlugin', () => {
 });
 
 describe('resolveDefaultSelection', () => {
-  it('defaults the home catalog to Prototype when that bucket exists', () => {
+  it('defaults the home catalog to Slides when that bucket exists', () => {
     const catalog = buildFacetCatalog([
       fixture({ id: 'slides', od: { mode: 'deck' } }),
       fixture({ id: 'prototype', od: { mode: 'prototype' } }),
     ]);
 
     expect(resolveDefaultSelection(catalog)).toEqual({
-      category: 'prototype',
+      category: 'deck',
       subcategory: null,
     });
   });
 
-  it('falls back to the first populated artifact kind when Prototype is unavailable', () => {
+  it('falls back to the first populated artifact kind when Slides is unavailable', () => {
     const catalog = buildFacetCatalog([
-      fixture({ id: 'slides', od: { mode: 'deck' } }),
+      fixture({ id: 'prototype', od: { mode: 'prototype' } }),
     ]);
 
     expect(resolveDefaultSelection(catalog)).toEqual({
-      category: 'deck',
+      category: 'prototype',
       subcategory: null,
     });
   });

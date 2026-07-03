@@ -1,0 +1,125 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-wireframe-annotated",
+  "title": "Wireframe Annotated",
+  "title_i18n": {
+    "zh-CN": "标注线框图",
+    "zh-TW": "標註線框圖",
+    "ja": "注釈付きワイヤーフレーム",
+    "ko": "주석 와이어프레임",
+    "de": "Annotiertes Wireframe",
+    "fr": "Wireframe Annoté",
+    "ru": "Аннотированный вайрфрейм",
+    "es": "Wireframe Anotado",
+    "pt-BR": "Wireframe Anotado",
+    "it": "Wireframe Annotato",
+    "vi": "Wireframe Chú Thích",
+    "pl": "Wireframe z Adnotacjami",
+    "id": "Wireframe Beranotasi",
+    "nl": "Geannoteerde Wireframe",
+    "ar": "إطار سلكي مشروح",
+    "tr": "Açıklamalı Wireframe",
+    "uk": "Анотований вайрфрейм",
+    "en": "Wireframe Annotated"
+  },
+  "version": "0.1.0",
+  "description": "An annotated / redline lo-fi wireframe of a desktop landing page — greybox blocks inside a browser frame, numbered annotation pins (①–⑤), and a right-hand spec panel mapping each pin to a short engineering / UX note. Use when the brief asks for \"annotated wireframe\", \"redline\", \"wireframe spec\", \"lo-fi landing\", \"low fidelity\", \"线框图\", or \"标注线框\".",
+  "description_i18n": {
+    "zh-CN": "桌面落地页的标注/红线低保真线框图——浏览器框架内的灰盒区块、带编号的标注图钉（①–⑤），以及将每个图钉映射到简短工程/UX 说明的右侧规格面板。适用于「标注线框图」「红线」「线框规格」「低保真落地页」「低保真」「线框图」「标注线框」等需求。",
+    "zh-TW": "桌面著陸頁的標註/紅線低保真線框圖——瀏覽器框架內的灰盒區塊、帶編號的標註圖釘（①–⑤），以及將每個圖釘對應到簡短工程/UX 說明的右側規格面板。適用於「標註線框圖」「紅線」「線框規格」「低保真著陸頁」「低保真」「線框圖」「標註線框」等需求。",
+    "ja": "デスクトップのランディングページの注釈付き/レッドライン・ローファイ・ワイヤーフレーム。ブラウザフレーム内のグレーボックス、番号付きの注釈ピン（①–⑤）、各ピンを短いエンジニアリング/UX 注記に対応させる右側のスペックパネルを収録。「注釈付きワイヤーフレーム」「レッドライン」「ワイヤーフレーム仕様」「ローファイ・ランディング」「ローファイ」などの要件に最適。",
+    "ko": "데스크톱 랜딩 페이지의 주석/레드라인 로우파이 와이어프레임. 브라우저 프레임 안의 그레이박스 블록, 번호가 매겨진 주석 핀(①–⑤), 각 핀을 짧은 엔지니어링/UX 노트에 매핑하는 우측 스펙 패널을 포함. '주석 와이어프레임', '레드라인', '와이어프레임 스펙', '로우파이 랜딩', '로우파이' 등의 요구사항에 적합.",
+    "de": "Ein annotiertes/Redline-Lo-Fi-Wireframe einer Desktop-Landingpage — Greybox-Blöcke in einem Browser-Rahmen, nummerierte Anmerkungs-Pins (①–⑤) und ein rechtes Spec-Panel, das jeden Pin einer kurzen Engineering-/UX-Notiz zuordnet. Ideal für Anfragen nach annotiertem Wireframe, Redline, Wireframe-Spec, Lo-Fi-Landing oder Low-Fidelity.",
+    "fr": "Un wireframe lo-fi annoté/redline d'une page de destination desktop — blocs greybox dans un cadre de navigateur, pins d'annotation numérotés (①–⑤) et un panneau de spécifications à droite reliant chaque pin à une courte note ingénierie/UX. Idéal pour les demandes de wireframe annoté, redline, spec de wireframe, landing lo-fi ou basse fidélité.",
+    "ru": "Аннотированный/redline lo-fi вайрфрейм десктопной лендинг-страницы — серые блоки в рамке браузера, пронумерованные пины-аннотации (①–⑤) и правая панель спецификаций, связывающая каждый пин с короткой инженерной/UX-заметкой. Подходит для запросов «аннотированный вайрфрейм», «redline», «спецификация вайрфрейма», «lo-fi лендинг», «низкая детализация».",
+    "es": "Un wireframe lo-fi anotado/redline de una página de aterrizaje de escritorio — bloques greybox dentro de un marco de navegador, pines de anotación numerados (①–⑤) y un panel de especificaciones a la derecha que asocia cada pin con una breve nota de ingeniería/UX. Ideal para solicitudes de wireframe anotado, redline, especificación de wireframe, landing lo-fi o baja fidelidad.",
+    "pt-BR": "Um wireframe lo-fi anotado/redline de uma página de destino desktop — blocos greybox dentro de um quadro de navegador, pins de anotação numerados (①–⑤) e um painel de especificações à direita que associa cada pin a uma breve nota de engenharia/UX. Ideal para solicitações de wireframe anotado, redline, especificação de wireframe, landing lo-fi ou baixa fidelidade.",
+    "it": "Un wireframe lo-fi annotato/redline di una landing page desktop — blocchi greybox dentro una cornice browser, pin di annotazione numerati (①–⑤) e un pannello specifiche a destra che mappa ogni pin a una breve nota di ingegneria/UX. Ideale per richieste di wireframe annotato, redline, specifica di wireframe, landing lo-fi o bassa fedeltà.",
+    "vi": "Một wireframe lo-fi có chú thích/redline cho trang đích desktop — các khối greybox trong khung trình duyệt, các pin chú thích đánh số (①–⑤) và bảng đặc tả bên phải ánh xạ mỗi pin tới một ghi chú kỹ thuật/UX ngắn. Phù hợp cho yêu cầu wireframe chú thích, redline, đặc tả wireframe, landing lo-fi hoặc độ chi tiết thấp.",
+    "pl": "Adnotowany/redline wireframe lo-fi desktopowej strony docelowej — bloki greybox w ramce przeglądarki, numerowane pinezki adnotacji (①–⑤) oraz prawy panel specyfikacji mapujący każdą pinezkę na krótką notatkę inżynieryjną/UX. Idealny do zapytań o adnotowany wireframe, redline, specyfikację wireframe, landing lo-fi lub niską wierność.",
+    "id": "Wireframe lo-fi beranotasi/redline untuk halaman arahan desktop — blok greybox di dalam bingkai browser, pin anotasi bernomor (①–⑤), dan panel spesifikasi di kanan yang memetakan setiap pin ke catatan teknik/UX singkat. Cocok untuk permintaan wireframe beranotasi, redline, spesifikasi wireframe, landing lo-fi, atau fidelitas rendah.",
+    "nl": "Een geannoteerde/redline lo-fi wireframe van een desktop-landingspagina — greybox-blokken in een browserframe, genummerde annotatiepins (①–⑤) en een spec-paneel rechts dat elke pin koppelt aan een korte engineering-/UX-notitie. Ideaal voor verzoeken naar geannoteerde wireframe, redline, wireframe-spec, lo-fi landing of lage detaillering.",
+    "ar": "إطار سلكي منخفض الدقة مشروح/خط أحمر لصفحة هبوط على سطح المكتب — كتل رمادية داخل إطار متصفح، ودبابيس تعليق مرقمة (①–⑤)، ولوحة مواصفات على اليمين تربط كل دبوس بملاحظة هندسية/تجربة مستخدم قصيرة. مثالي لطلبات الإطار السلكي المشروح أو الخط الأحمر أو مواصفات الإطار السلكي أو صفحة الهبوط منخفضة الدقة.",
+    "tr": "Bir masaüstü açılış sayfasının açıklamalı/redline lo-fi wireframe'i — tarayıcı çerçevesi içinde greybox bloklar, numaralı açıklama pinleri (①–⑤) ve her pini kısa bir mühendislik/UX notuna eşleyen sağ taraftaki spec paneli. Açıklamalı wireframe, redline, wireframe spec, lo-fi landing veya düşük sadakat talepleri için ideal.",
+    "uk": "Анотований/redline lo-fi вайрфрейм десктопної лендинг-сторінки — сірі блоки в рамці браузера, пронумеровані пін-анотації (①–⑤) та права панель специфікацій, що зіставляє кожен пін із короткою інженерною/UX-нотаткою. Підходить для запитів «анотований вайрфрейм», «redline», «специфікація вайрфрейму», «lo-fi лендинг», «низька деталізація».",
+    "en": "An annotated / redline lo-fi wireframe of a desktop landing page — greybox blocks inside a browser frame, numbered annotation pins (①–⑤), and a right-hand spec panel mapping each pin to a short engineering / UX note. Use when the brief asks for \"annotated wireframe\", \"redline\", \"wireframe spec\", \"lo-fi landing\", \"low fidelity\", \"线框图\", or \"标注线框\"."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/wireframe-annotated",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "wireframe",
+    "annotated-wireframe",
+    "redline",
+    "wireframe-spec",
+    "lo-fi-landing",
+    "low-fidelity",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Lay out an annotated redline wireframe of a landing page — greybox nav, hero, logo strip, feature grid, and footer with numbered annotation pins and a right-hand spec panel of engineering notes.",
+        "zh-CN": "使用这个插件完成以下任务：排布一个落地页的标注红线线框图——灰盒导航、主视觉、Logo 横条、功能网格和页脚，配上带编号的标注图钉，以及右侧的工程说明规格面板。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Wireframe Annotated"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

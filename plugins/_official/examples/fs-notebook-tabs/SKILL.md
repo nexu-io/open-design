@@ -1,23 +1,45 @@
 ---
 name: fs-notebook-tabs
-description: "Create editorial 'physical notebook' HTML decks: a cream paper card floating on a dark ground, mint/lavender/pink/sky index tabs on the right edge, binder holes on the left, Bodoni Moda display + DM Sans body. Fixed 1920×1080 stage scaled to any viewport. Locked theme — only the content changes."
+en_name: "Defend a CS Capstone like a Top Thesis Advisor"
+zh_name: "像顶级导师一样答辩计算机毕业项目"
+description: |
+  A computer-science capstone: an on-device ML keyboard that predicts next words privately — problem, method, evaluation, and defense answers. Built as a decision-grade coursework defense deck for professor, defense committee.
+en_description: |
+  A computer-science capstone: an on-device ML keyboard that predicts next words privately — problem, method, evaluation, and defense answers. Built as a decision-grade coursework defense deck for professor, defense committee.
+zh_description: |
+  像顶级导师一样答辩计算机毕业项目——一份可商业交付的课业答辩 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "student-coursework"
+  - "senior-capstone-defense-deck"
+  - "education"
+  - "coursework"
+  - "defense"
+  - "academic"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "fs-notebook-tabs"
 triggers:
-  - "notebook tabs slides"
-  - "索引笔记本"
-  - "notebook deck"
-  - "paper tabs presentation"
-  - "editorial notebook ppt"
+  - "senior-capstone-defense-deck"
+  - "student-coursework"
+  - "Defend a CS Capstone like a Top Thesis Advisor"
+  - "像顶级导师一样答辩计算机毕业项目"
+  - "coursework"
+  - "defense"
+  - "academic"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
-  category: slides
   upstream: "https://github.com/zarazhangrui/frontend-slides"
   preview:
     type: html
     entry: example.html
-  example_prompt: "Use Notebook Tabs to turn my content into a single-file HTML deck styled as a physical editorial notebook: cream paper card on a dark desk, colorful vertical index tabs on the right edge, binder holes on the left, Bodoni Moda headlines with DM Sans body. Start from example.html and replace only the content — keep every design token."
   example_prompt_i18n:
     zh-CN: "用「索引笔记本」把我的内容做成单文件 HTML 幻灯片：深底之上的奶油纸卡、右缘薄荷/薰衣草/粉/天蓝竖向索引标签、左侧活页装订孔，Bodoni Moda 标题 + DM Sans 正文。从 example.html 出发只替换内容，所有设计 token 保持不变。"
+  category: "student-coursework"
+  scenario: "education"
+  example_prompt: "Create \"Defend a CS Capstone like a Top Thesis Advisor\" as a decision-grade Student coursework deck in this template's own visual system. Subject: A computer-science capstone: an on-device ML keyboard that predicts next words privately — problem, method, evaluation, and defense answers. Audience: professor, defense committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a reviewer find the contribution, evidence, and limitation in under 90 seconds."
 ---
 
 # Notebook Tabs (索引笔记本)

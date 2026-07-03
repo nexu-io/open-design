@@ -1,0 +1,125 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-wireframe-mobile-flow",
+  "title": "Wireframe Mobile Flow",
+  "title_i18n": {
+    "zh-CN": "移动端线框流程",
+    "zh-TW": "行動端線框流程",
+    "ja": "モバイルフロー・ワイヤーフレーム",
+    "ko": "모바일 플로우 와이어프레임",
+    "de": "Mobile-Flow-Wireframe",
+    "fr": "Wireframe de Flux Mobile",
+    "ru": "Вайрфрейм мобильного флоу",
+    "es": "Wireframe de Flujo Móvil",
+    "pt-BR": "Wireframe de Fluxo Mobile",
+    "it": "Wireframe Flusso Mobile",
+    "vi": "Wireframe Luồng Mobile",
+    "pl": "Wireframe Przepływu Mobilnego",
+    "id": "Wireframe Alur Mobile",
+    "nl": "Mobiele Flow-Wireframe",
+    "ar": "إطار سلكي لتدفق الموبايل",
+    "tr": "Mobil Akış Wireframe",
+    "uk": "Вайрфрейм мобільного флоу",
+    "en": "Wireframe Mobile Flow"
+  },
+  "version": "0.1.0",
+  "description": "A lo-fi mobile app flow wireframe — three to four phone frames in a row (onboarding → home feed → item detail → confirm), greybox content inside each device, dashed connector arrows with numbered step labels, and sticky-note annotations. Use when the brief asks for \"mobile wireframe\", \"app flow\", \"user flow\", \"lo-fi mobile\", \"low fidelity\", \"移动端线框\", or \"App 流程图\".",
+  "description_i18n": {
+    "zh-CN": "低保真移动端应用流程线框图，将三到四个手机屏幕排成一行（引导 → 首页信息流 → 商品详情 → 确认），每个设备内为灰盒占位内容，屏幕间用带编号步骤标签的虚线箭头连接，并配有便签注释。适用于「移动端线框」「App 流程」「用户流程」「低保真移动端」「低保真」「移动端线框」「App 流程图」等需求。",
+    "zh-TW": "低保真行動端應用流程線框圖，將三到四個手機螢幕排成一行（引導 → 首頁資訊流 → 商品詳情 → 確認），每個裝置內為灰盒佔位內容，螢幕間以帶編號步驟標籤的虛線箭頭連接，並附便利貼註解。適用於「行動端線框」「App 流程」「使用者流程」「低保真行動端」「低保真」等需求。",
+    "ja": "ローファイなモバイルアプリのフローワイヤーフレーム。3〜4枚のスマホ画面を横一列に並べ（オンボーディング → ホームフィード → 詳細 → 確認）、各端末内はグレーボックスのプレースホルダー、画面間は番号付きステップラベルの破線矢印でつなぎ、付箋メモを添える。「モバイルワイヤーフレーム」「アプリフロー」「ユーザーフロー」「ローファイモバイル」などの要件に最適。",
+    "ko": "로우파이 모바일 앱 플로우 와이어프레임. 3~4개의 폰 화면을 가로로 한 줄로 배치하고(온보딩 → 홈 피드 → 상세 → 확인), 각 기기 안은 그레이박스 플레이스홀더, 화면 사이는 번호가 매겨진 단계 레이블의 점선 화살표로 연결하며 포스트잇 주석을 더한다. '모바일 와이어프레임', '앱 플로우', '사용자 흐름', '로우파이 모바일' 등의 요구사항에 적합.",
+    "de": "Lo-Fi-Wireframe eines mobilen App-Flows — drei bis vier Telefonrahmen in einer Reihe (Onboarding → Home-Feed → Detail → Bestätigung), Graybox-Inhalte in jedem Gerät, gestrichelte Verbindungspfeile mit nummerierten Schritt-Labels und Haftnotiz-Anmerkungen. Ideal für Anfragen nach Mobile-Wireframe, App-Flow, User-Flow oder Lo-Fi-Mobile.",
+    "fr": "Wireframe lo-fi d'un flux d'application mobile — trois à quatre cadres de téléphone alignés (onboarding → fil d'accueil → détail → confirmation), contenu en greybox dans chaque appareil, flèches de connexion en pointillés avec étiquettes d'étape numérotées et annotations en post-it. Idéal pour les demandes de wireframe mobile, app flow, user flow ou lo-fi mobile.",
+    "ru": "Лоу-фай вайрфрейм флоу мобильного приложения — три-четыре рамки телефона в ряд (онбординг → лента → детали → подтверждение), серый плейсхолдер-контент в каждом устройстве, пунктирные стрелки-связи с нумерованными метками шагов и стикеры с заметками. Подходит для запросов «мобильный вайрфрейм», «app flow», «user flow», «lo-fi mobile».",
+    "es": "Wireframe lo-fi del flujo de una app móvil — de tres a cuatro marcos de teléfono en fila (onboarding → feed de inicio → detalle → confirmación), contenido greybox dentro de cada dispositivo, flechas conectoras punteadas con etiquetas de paso numeradas y notas adhesivas. Ideal para solicitudes de wireframe móvil, app flow, user flow o lo-fi mobile.",
+    "pt-BR": "Wireframe lo-fi do fluxo de um app mobile — três a quatro molduras de telefone em fila (onboarding → feed inicial → detalhe → confirmação), conteúdo greybox dentro de cada dispositivo, setas conectoras pontilhadas com rótulos de passo numerados e notas adesivas. Ideal para solicitações de wireframe mobile, app flow, user flow ou lo-fi mobile.",
+    "it": "Wireframe lo-fi del flusso di un'app mobile — da tre a quattro cornici di telefono in fila (onboarding → feed home → dettaglio → conferma), contenuto greybox in ogni dispositivo, frecce di connessione tratteggiate con etichette di passo numerate e annotazioni su post-it. Ideale per richieste di wireframe mobile, app flow, user flow o lo-fi mobile.",
+    "vi": "Wireframe lo-fi cho luồng ứng dụng di động — ba đến bốn khung điện thoại xếp hàng ngang (onboarding → bảng tin → chi tiết → xác nhận), nội dung greybox trong mỗi thiết bị, mũi tên nối nét đứt kèm nhãn bước được đánh số và ghi chú giấy nhớ. Phù hợp cho yêu cầu wireframe mobile, app flow, user flow hoặc lo-fi mobile.",
+    "pl": "Lo-fi wireframe przepływu aplikacji mobilnej — trzy do czterech ramek telefonów w rzędzie (onboarding → feed główny → szczegóły → potwierdzenie), zawartość greybox w każdym urządzeniu, przerywane strzałki łączące z numerowanymi etykietami kroków i notatki na karteczkach. Idealny do zapytań o wireframe mobilny, app flow, user flow lub lo-fi mobile.",
+    "id": "Wireframe lo-fi alur aplikasi mobile — tiga sampai empat bingkai ponsel dalam satu baris (onboarding → feed beranda → detail → konfirmasi), konten greybox di dalam setiap perangkat, panah penghubung putus-putus dengan label langkah bernomor, dan catatan tempel. Cocok untuk permintaan wireframe mobile, app flow, user flow, atau lo-fi mobile.",
+    "nl": "Lo-fi wireframe van een mobiele app-flow — drie tot vier telefoonframes op een rij (onboarding → home-feed → detail → bevestiging), greybox-inhoud in elk apparaat, gestippelde verbindingspijlen met genummerde stap-labels en plaknotities. Ideaal voor verzoeken naar mobiele wireframe, app flow, user flow of lo-fi mobile.",
+    "ar": "إطار سلكي منخفض الدقة لتدفق تطبيق موبايل — من ثلاثة إلى أربعة إطارات هواتف في صف واحد (الإعداد → الخلاصة الرئيسية → التفاصيل → التأكيد)، محتوى رمادي نائب داخل كل جهاز، أسهم ربط متقطعة مع تسميات خطوات مرقمة وملاحظات لاصقة. مثالي لطلبات wireframe الموبايل أو app flow أو user flow أو lo-fi mobile.",
+    "tr": "Lo-fi mobil uygulama akış wireframe'i — bir sırada üç ila dört telefon çerçevesi (onboarding → ana akış → detay → onay), her cihazın içinde greybox içerik, numaralı adım etiketli kesik çizgili bağlantı okları ve yapışkan not açıklamaları. Mobil wireframe, app flow, user flow veya lo-fi mobile talepleri için ideal.",
+    "uk": "Лоу-фай вайрфрейм флоу мобільного застосунку — три-чотири рамки телефонів у ряд (онбординг → стрічка → деталі → підтвердження), сірий плейсхолдер-контент у кожному пристрої, пунктирні стрілки-зв'язки з нумерованими мітками кроків та стікери із замітками. Підходить для запитів «мобільний вайрфрейм», «app flow», «user flow», «lo-fi mobile».",
+    "en": "A lo-fi mobile app flow wireframe — three to four phone frames in a row (onboarding → home feed → item detail → confirm), greybox content inside each device, dashed connector arrows with numbered step labels, and sticky-note annotations. Use when the brief asks for \"mobile wireframe\", \"app flow\", \"user flow\", \"lo-fi mobile\", \"low fidelity\", \"移动端线框\", or \"App 流程图\"."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/wireframe-mobile-flow",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "mobile",
+    "app",
+    "wireframe",
+    "mobile-wireframe",
+    "app-flow",
+    "user-flow",
+    "lo-fi-mobile",
+    "low-fidelity",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "auto",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Sketch a lo-fi mobile app flow wireframe — four phone frames (onboarding, home feed, item detail, confirm) with greybox content, dashed connector arrows, and numbered step labels.",
+        "zh-CN": "使用这个插件完成以下任务：绘制一个低保真移动端应用流程线框图 —— 四个手机屏幕（引导、首页信息流、商品详情、确认），灰盒占位内容、虚线连接箭头和带编号的步骤标签。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Wireframe Mobile Flow"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

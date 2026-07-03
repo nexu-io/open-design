@@ -209,6 +209,9 @@ export interface PluginsCopy {
    * Q&A pairs as paired arrays so the visible accordion + the
    * FAQPage JSON-LD share a single source of truth.
    */
+  /** Keyword-led <title> for /plugins/templates/ (targets the "free design templates" cluster). EN baseline; other locales localized, rest fall back. */
+  templatesMetaTitle: string;
+  templatesMetaDescription: string;
   templatesHeroEyebrow: string;
   templatesHeroLead: string;
   templatesCounterLabel: string;
@@ -499,6 +502,9 @@ carry the hierarchy and color is used sparingly for intent.
 → ${url}`,
 
   // Templates grid (PR #3185)
+  templatesMetaTitle: 'Free Design Templates — Fork & Ship (Apache-2.0) — Open Design',
+  templatesMetaDescription:
+    'Agent-built design templates you can fork and ship — prototypes, slides, image and video artifacts. Free, open-source (Apache-2.0), BYOK, run on your own keys.',
   templatesHeroEyebrow: 'Open Source Claude Design',
   templatesHeroLead:
     'Agent-built artifacts you can fork and ship — prototypes, slides, image and video templates. Run them on your own keys with the local agent; the prompts, posters, and example HTML are all under Apache-2.0.',
@@ -644,6 +650,9 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     previewSummaryAria: (title) => `打开 ${title} 的互动预览`,
     previewIframeTitle: (title) => `${title} 互动预览`,
     // PR #3185 follow-up: localize templates-page chrome + FAQ
+    templatesMetaTitle: '免费设计模板 — 复刻即用（Apache-2.0）— Open Design',
+    templatesMetaDescription:
+      'Agent 生成的设计模板，可复刻即用 — 原型、幻灯片、图像与视频产物。免费开源（Apache-2.0）、BYOK，用你自己的密钥运行。',
     templatesHeroEyebrow: '开源 Claude Design',
     templatesHeroLead:
       'Agent 生成的可复刻交付物 — 原型、幻灯片、图像和视频模板。使用本地 agent 在你自己的密钥上运行；所有提示词、海报和示例 HTML 都基于 Apache-2.0 许可证开源。',
@@ -907,6 +916,9 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     previewSummaryAria: (title) => `${title} のインタラクティブプレビューを開く`,
     previewIframeTitle: (title) => `${title} のインタラクティブプレビュー`,
     // PR #3185 follow-up: localize templates-page chrome + FAQ
+    templatesMetaTitle: '無料デザインテンプレート — フォークしてそのまま公開（Apache-2.0）— Open Design',
+    templatesMetaDescription:
+      'エージェントが作るデザインテンプレートをフォークしてそのまま公開 — プロトタイプ、スライド、画像・動画アーティファクト。無料・オープンソース（Apache-2.0）、BYOK、あなた自身のキーで実行。',
     templatesHeroEyebrow: 'Open Source Claude Design',
     templatesHeroLead:
       'エージェントが生成したアーティファクト — プロトタイプ、スライド、画像・動画テンプレート — をフォークしてそのままデプロイできます。ローカルエージェントで独自のキーを使って実行できます。プロンプト、ポスター、サンプルHTMLすべてApache-2.0ライセンスです。',
@@ -1060,6 +1072,9 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     previewSummaryAria: (title) => `${title} 인터랙티브 프리뷰 열기`,
     previewIframeTitle: (title) => `${title} 인터랙티브 프리뷰`,
     // PR #3185 follow-up: localize templates-page chrome + FAQ
+    templatesMetaTitle: '무료 디자인 템플릿 — 포크 후 바로 배포 (Apache-2.0) — Open Design',
+    templatesMetaDescription:
+      '에이전트가 만든 디자인 템플릿을 포크해 바로 배포하세요 — 프로토타입, 슬라이드, 이미지·비디오 아티팩트. 무료 오픈소스(Apache-2.0), BYOK, 내 키로 실행.',
     templatesHeroEyebrow: 'Open Source Claude Design',
     templatesHeroLead:
       '에이전트가 만든 아티팩트를 포크해서 배포하세요 — 프로토타입, 슬라이드, 이미지, 비디오 템플릿. 로컬 에이전트에서 자신의 키로 실행하면 됩니다. 프롬프트, 포스터, 예제 HTML은 모두 Apache-2.0 라이선스입니다.',
@@ -1213,6 +1228,9 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     previewSummaryAria: (title) => `Interaktive Vorschau für ${title} öffnen`,
     previewIframeTitle: (title) => `${title} Interaktive Vorschau`,
     // PR #3185 follow-up: localize templates-page chrome + FAQ
+    templatesMetaTitle: 'Kostenlose Design-Vorlagen — Forken & Ausliefern (Apache-2.0) — Open Design',
+    templatesMetaDescription:
+      'Vom Agent erstellte Design-Vorlagen zum Forken und Ausliefern — Prototypen, Folien, Bild- und Video-Artefakte. Kostenlos, Open Source (Apache-2.0), BYOK, mit deinen eigenen Keys.',
     templatesHeroEyebrow: 'Open Source Claude Design',
     templatesHeroLead:
       'Agent-erstellte Artefakte, die du forken und deployen kannst — Prototypen, Slides, Bild- und Video-Templates. Führe sie auf deinen eigenen Keys mit dem lokalen Agent aus; die Prompts, Poster und Beispiel-HTML stehen alle unter Apache-2.0.',
@@ -1366,6 +1384,9 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     previewSummaryAria: (title) => `Ouvrir l’aperçu interactif de ${title}`,
     previewIframeTitle: (title) => `Aperçu interactif de ${title}`,
     // PR #3185 follow-up: localize templates-page chrome + FAQ
+    templatesMetaTitle: 'Modèles de design gratuits — Forkez & publiez (Apache-2.0) — Open Design',
+    templatesMetaDescription:
+      'Des modèles de design créés par l’agent, à forker et publier — prototypes, slides, artefacts image et vidéo. Gratuit, open-source (Apache-2.0), BYOK, exécutés avec vos propres clés.',
     templatesHeroEyebrow: 'Open Source Claude Design',
     templatesHeroLead:
       "Des artefacts construits par agent que vous pouvez forker et déployer — prototypes, diaporamas, modèles d'images et vidéos. Exécutez-les sur vos propres clés avec l'agent local ; les prompts, affiches et HTML d'exemple sont tous sous Apache-2.0.",
@@ -1519,6 +1540,9 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     previewSummaryAria: (title) => `Открыть интерактивное превью ${title}`,
     previewIframeTitle: (title) => `Интерактивное превью ${title}`,
     // PR #3185 follow-up: localize templates-page chrome + FAQ
+    templatesMetaTitle: 'Бесплатные дизайн-шаблоны — форк и публикация (Apache-2.0) — Open Design',
+    templatesMetaDescription:
+      'Дизайн-шаблоны, созданные агентом, — форкайте и публикуйте: прототипы, слайды, изображения и видео. Бесплатно, open-source (Apache-2.0), BYOK, запуск на своих ключах.',
     templatesHeroEyebrow: 'Open Source Claude Design',
     templatesHeroLead:
       'Артефакты, созданные агентом, которые можно форкировать и развёртывать — прототипы, слайды, шаблоны изображений и видео. Запускайте их на собственных ключах с локальным агентом; промпты, постеры и пример HTML распространяются под Apache-2.0.',
@@ -1672,6 +1696,9 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     previewSummaryAria: (title) => `Abrir vista previa interactiva de ${title}`,
     previewIframeTitle: (title) => `Vista previa interactiva de ${title}`,
     // PR #3185 follow-up: localize templates-page chrome + FAQ
+    templatesMetaTitle: 'Plantillas de diseño gratis — Bifurca y publica (Apache-2.0) — Open Design',
+    templatesMetaDescription:
+      'Plantillas de diseño creadas por el agente para bifurcar y publicar — prototipos, diapositivas, artefactos de imagen y vídeo. Gratis, open-source (Apache-2.0), BYOK, ejecuta con tus propias claves.',
     templatesHeroEyebrow: 'Open Source Claude Design',
     templatesHeroLead:
       'Artefactos construidos por agentes que puedes bifurcar e implementar — prototipos, diapositivas y plantillas de imagen y vídeo. Ejecútalos con tus propias claves usando el agente local; los prompts, posters y HTML de ejemplo están todos bajo Apache-2.0.',
@@ -1825,6 +1852,9 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     previewSummaryAria: (title) => `Abrir pré-visualização interativa de ${title}`,
     previewIframeTitle: (title) => `Pré-visualização interativa de ${title}`,
     // PR #3185 follow-up: localize templates-page chrome + FAQ
+    templatesMetaTitle: 'Modelos de design grátis — Faça fork e publique (Apache-2.0) — Open Design',
+    templatesMetaDescription:
+      'Modelos de design criados pelo agente para fazer fork e publicar — protótipos, slides, artefatos de imagem e vídeo. Grátis, open-source (Apache-2.0), BYOK, rode com suas próprias chaves.',
     templatesHeroEyebrow: 'Open Source Claude Design',
     templatesHeroLead:
       'Artefatos construídos por agentes que você pode fazer fork e deployar — protótipos, apresentações, templates de imagem e vídeo. Execute-os com suas próprias chaves usando o agente local; os prompts, cartazes e HTML de exemplo estão todos sob Apache-2.0.',
@@ -1978,6 +2008,9 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     previewSummaryAria: (title) => `Apri anteprima interattiva di ${title}`,
     previewIframeTitle: (title) => `Anteprima interattiva di ${title}`,
     // PR #3185 follow-up: localize templates-page chrome + FAQ
+    templatesMetaTitle: 'Template di design gratuiti — Fai fork e pubblica (Apache-2.0) — Open Design',
+    templatesMetaDescription:
+      'Template di design creati dall’agente da forkare e pubblicare — prototipi, slide, artefatti di immagini e video. Gratis, open-source (Apache-2.0), BYOK, esegui con le tue chiavi.',
     templatesHeroEyebrow: 'Open Source Claude Design',
     templatesHeroLead:
       "Artefatti costruiti da agenti che puoi forkare e deployare — prototipi, slide, template per immagini e video. Eseguili con le tue chiavi usando l'agente locale; i prompt, i poster e l'HTML di esempio sono tutti sotto Apache-2.0.",
@@ -2590,6 +2623,9 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     previewSummaryAria: (title) => `${title} için etkileşimli önizlemeyi aç`,
     previewIframeTitle: (title) => `${title} etkileşimli önizleme`,
     // PR #3185 follow-up: localize templates-page chrome + FAQ
+    templatesMetaTitle: 'Ücretsiz Tasarım Şablonları — Fork’la ve Yayınla (Apache-2.0) — Open Design',
+    templatesMetaDescription:
+      'Ajan tarafından üretilen, fork’layıp yayınlayabileceğin tasarım şablonları — prototipler, slaytlar, görsel ve video çıktıları. Ücretsiz, açık kaynak (Apache-2.0), BYOK, kendi anahtarlarınla çalıştır.',
     templatesHeroEyebrow: 'Open Source Claude Design',
     templatesHeroLead:
       'Aracı tarafından oluşturulan ve fork edebileceğiniz artifacts — prototipler, slaytlar, resim ve video şablonları. Bunları yerel aracı kullanarak kendi anahtarlarınızda çalıştırın; tüm promptlar, posterler ve örnek HTML dosyaları Apache-2.0 lisansı altındadır.',

@@ -11,6 +11,11 @@ import type {
   SkillSummary,
   TrustTier,
 } from '@open-design/contracts';
+
+vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
+  PlaceholderCarousel: () => null,
+}));
+
 import { HomeHero } from '../../src/components/HomeHero';
 import { I18nProvider } from '../../src/i18n';
 import {
@@ -743,13 +748,13 @@ describe('HomeHero plugin picker', () => {
     // chip shows the plugin's own title and must own its clear (×) button, just
     // like a Community pick — not hide it behind the footer task chip.
     const onClearActivePlugin = vi.fn();
-    const active = makePlugin('mythic-reverie', 'Mythic Naturecore — Reverie');
+    const active = makePlugin('cinematic-portal', 'Cinematic Portal');
     render(
       <HomeHero
-        prompt="A cinematic landing page"
+        prompt="A motion-heavy landing page"
         onPromptChange={() => undefined}
         onSubmit={() => undefined}
-        activePluginTitle="Mythic Naturecore — Reverie"
+        activePluginTitle="Cinematic Portal"
         activePluginRecord={active}
         activeChipId="prototype"
         activePluginIsExplicit

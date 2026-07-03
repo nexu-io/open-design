@@ -22,9 +22,15 @@
 // in apps/daemon/src/analytics.ts — stability data is retained even for
 // opted-out users (and the main process cannot read daemon consent anyway,
 // since the daemon isn't up). The Settings → Privacy copy MUST call this out.
+//
+// Payload PII: the free-form crash fields (error_message, error_stack) and every
+// path we send (log_path, native_module_path) run through `scrubUserPaths` to
+// strip the user's home dir, and the free-form text is length-capped. Startup
+// errors are module-resolution / daemon-exit messages, not user content, so this
+// bounds the exposure to build/OS strings rather than anything the user typed.
 
 import { readFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { release } from "node:os";
 
@@ -80,6 +86,7 @@ export type StartupFailureKind =
   | "daemon-start"
   | "web-start"
   | "path-access"
+  | "status-timeout"
   | "unknown";
 
 export interface StartupFailureClassification {
@@ -96,6 +103,12 @@ export interface StartupFailureClassification {
 const EXIT_RE =
   /exited before reporting status \(code=(.*?), signal=(.*?)\); see (.*?) for details/;
 
+// `waitForStatus` (apps/packaged/src/sidecars.ts) throws this when the wait
+// budget expires with the child still ALIVE — the daemon/web pipe never bound in
+// time (the win32 first-launch AV-scan case), as opposed to EXIT_RE's dead
+// child. There is no daemon log path in this message, so no log tail is read.
+const STATUS_TIMEOUT_RE = /^timed out waiting for sidecar status at /;
+
 export function classifyStartupFailure(
   error: unknown,
   isPathAccess: boolean,
@@ -106,6 +119,12 @@ export function classifyStartupFailure(
   const message = error instanceof Error ? error.message : String(error ?? "");
   const match = EXIT_RE.exec(message);
   if (!match) {
+    // Distinguish a slow-but-alive sidecar (budget exhausted) from a truly
+    // opaque failure so the status-timeout bucket is measurable on its own —
+    // it is the signal for whether the win32 budget raise drained these.
+    if (STATUS_TIMEOUT_RE.test(message)) {
+      return { failureKind: "status-timeout", exitCode: null, signal: null, logPath: null };
+    }
     return { failureKind: "unknown", exitCode: null, signal: null, logPath: null };
   }
   const rawCode = match[1];
@@ -146,8 +165,19 @@ export function parseDaemonLogTail(logText: string): {
 // can't import the web module anyway, so we ship a focused scrubber here.
 export function scrubUserPaths(value: string): string {
   return value
-    .replace(/\/(Users|home)\/[^/\s]+/g, "/$1/<redacted>")
-    .replace(/([A-Za-z]:\\Users\\)[^\\\s]+/g, "$1<redacted>");
+    // Windows profile dirs FIRST, either separator style (`C:\Users\…` or the
+    // slash-normalized `C:/Users/…` that JS/Electron/Node diagnostics commonly
+    // emit). Consume the WHOLE segment up to the next slash/backslash — a
+    // profile dir can contain spaces ("John Doe"), and a whitespace boundary
+    // would leak the tail ("<redacted> Doe/…"). Anchored on `<drive>:` so it
+    // only fires on a real Windows home path; `\r\n` in the class stops it from
+    // running across lines in a multi-line stack. Runs before the POSIX rule
+    // because that rule also matches the "/Users/" inside a `C:/Users/` path.
+    .replace(/([A-Za-z]:[\\/]Users[\\/])[^\\/\r\n]+/g, "$1<redacted>")
+    // POSIX home dirs. Real macOS/Linux home segments cannot contain spaces, so
+    // the whitespace boundary is correct here and avoids over-redacting a
+    // following word in free-form crash text.
+    .replace(/\/(Users|home)\/[^/\s]+/g, "/$1/<redacted>");
 }
 
 function osName(platform: NodeJS.Platform = process.platform): string {
@@ -191,6 +221,28 @@ async function defaultReadLogTail(path: string): Promise<string | null> {
     return buf.length > LOG_TAIL_MAX_BYTES
       ? buf.subarray(buf.length - LOG_TAIL_MAX_BYTES).toString("utf8")
       : buf.toString("utf8");
+  } catch {
+    return null;
+  }
+}
+
+// Keep the message/stack payload bounded (a stack can be arbitrarily long).
+const ERROR_MESSAGE_MAX = 1000;
+const ERROR_STACK_MAX = 2000;
+
+function truncateForTelemetry(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max)}…[+${value.length - max} chars]` : value;
+}
+
+// Best-effort probe: does the native module actually exist on THIS machine, and
+// how big is it? The field crash is a subset of machines rather than a build
+// defect (the shipped .node is present + signed + resolvable), so per-machine
+// existence/size is the signal that separates "file missing" from "file present
+// but unloadable (arch/quarantine/AV)".
+function defaultStatNativeModule(path: string): { size: number } | null {
+  try {
+    const s = statSync(path);
+    return s.isFile() ? { size: s.size } : null;
   } catch {
     return null;
   }
@@ -277,10 +329,15 @@ export interface ReportStartupFailureArgs {
   appVersion: string | null;
   namespace: string;
   source: string;
+  // Absolute path to the daemon's better-sqlite3 native binding, so the report
+  // can probe whether that .node exists on this machine. Optional: null skips
+  // the probe (fields report null).
+  nativeModulePath?: string | null;
 }
 
 export interface ReportDeps extends CaptureDeps {
   readLogTail?: (path: string) => Promise<string | null>;
+  statNativeModule?: (path: string) => { size: number } | null;
 }
 
 // The single entry point index.ts's fatal-exit catch calls. Orchestrates
@@ -302,6 +359,28 @@ export async function reportStartupFailure(
         missingModule = parsed.missingModule;
       }
     }
+    const rawMessage =
+      args.error instanceof Error
+        ? args.error.message
+        : args.error == null
+          ? ""
+          : String(args.error);
+    const rawStack =
+      args.error instanceof Error && typeof args.error.stack === "string"
+        ? args.error.stack
+        : null;
+    // Probe the native module on THIS machine (existence + size). This is the
+    // signal the `unknown` bucket (no daemon log to parse) otherwise lacks, and
+    // it distinguishes "file missing" from "file present but unloadable".
+    let nativeModulePresent: boolean | null = null;
+    let nativeModuleSize: number | null = null;
+    let nativeModulePath: string | null = null;
+    if (args.nativeModulePath) {
+      const stat = (deps.statNativeModule ?? defaultStatNativeModule)(args.nativeModulePath);
+      nativeModulePresent = stat != null;
+      nativeModuleSize = stat?.size ?? null;
+      nativeModulePath = scrubUserPaths(args.nativeModulePath);
+    }
     const properties: Record<string, unknown> = {
       failure_kind: classification.failureKind,
       exit_code: classification.exitCode,
@@ -309,8 +388,19 @@ export async function reportStartupFailure(
       error_name: args.error instanceof Error ? args.error.name : "unknown",
       error_code: errorCode ?? null,
       missing_module: missingModule ?? null,
-      // Structured fields only — no raw message/stack. Scrub the one path we do
-      // send so a user's home dir never reaches PostHog.
+      // Scrub every path we send (message/stack/log/native path) so a user's
+      // home dir never reaches PostHog; truncate free-form text to bound the
+      // payload. These crash-scene fields are why the mac subset can't resolve
+      // the module and what the Windows `unknown` bucket actually threw.
+      error_message: rawMessage
+        ? truncateForTelemetry(scrubUserPaths(rawMessage), ERROR_MESSAGE_MAX)
+        : null,
+      error_stack: rawStack
+        ? truncateForTelemetry(scrubUserPaths(rawStack), ERROR_STACK_MAX)
+        : null,
+      native_module_present: nativeModulePresent,
+      native_module_size: nativeModuleSize,
+      native_module_path: nativeModulePath,
       log_path: classification.logPath ? scrubUserPaths(classification.logPath) : null,
       app_version: args.appVersion,
       namespace: args.namespace,

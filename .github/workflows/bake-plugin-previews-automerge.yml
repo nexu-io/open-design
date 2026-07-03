@@ -1,0 +1,210 @@
+name: bake-plugin-previews-automerge
+# Auto-merge the rolling plugin-preview manifest PR once its CI is green — and
+# ping Feishu if its CI fails.
+#
+# bake-plugin-previews.yml opens ONE rolling PR (branch chore/plugin-previews,
+# authored by the release-bot App) whenever a baked preview changes. The diff is
+# pure generated data (data/plugin-previews/manifest.json; the clips already live
+# on R2) validated by the bake + CI, so a human merging it by hand is the last
+# manual step the pipeline rework left behind — and exactly the kind of bot PR
+# that piled up before. React to ci.yml finishing for that branch:
+#   - CI success + same-repo App PR + pristine (only bot commits) -> approve as a
+#     DIFFERENT bot, then enqueue it (main has a merge queue + 1 required review).
+#   - CI failure -> Feishu ping for manual follow-up.
+#
+# main (unlike release/v*) has a merge queue, so the merge is GitHub-native
+# `--auto`: it enqueues once `Validate workspace` is green. The App authors the
+# PR (so its commit triggers CI); github-actions[bot] approves it (an author
+# cannot approve its own PR).
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write # github-actions[bot] approves the bot's own clean manifest PR
+
+jobs:
+  followup:
+    # Only react to CI that ran for a *pull request* on the rolling manifest branch —
+    # never a push or manual dispatch — so a non-PR run can't reach the App-token /
+    # merge steps below.
+    if: ${{ github.repository == 'nexu-io/open-design' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.head_branch == 'chore/plugin-previews' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Resolve the manifest PR for this run
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          # Authoritative run -> PR association from GitHub (populated for same-repo
+          # PRs; empty for forks, which the bot never authors anyway).
+          RUN_PRS: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+        run: |
+          set -euo pipefail
+          # Pick the run's own PR that targets main at exactly the SHA CI ran on —
+          # bound to workflow_run.pull_requests, not a branch-name guess.
+          num="$(printf '%s' "$RUN_PRS" | jq -r --arg sha "$HEAD_SHA" \
+                  '[.[] | select(.base.ref == "main") | select(.head.sha == $sha)][0].number // empty')"
+          if [ -z "$num" ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "Run has no associated main PR at $HEAD_SHA — skipping"
+            exit 0
+          fi
+          row="$(gh pr view "$num" --repo "$REPO" \
+                  --json number,baseRefName,isDraft,title,author,isCrossRepository,headRefOid)"
+          # "Pristine" = the PR is a pure manifest-data change: its changed files are EXACTLY
+          # data/plugin-previews/manifest.json and nothing else. This is the integrity gate that
+          # makes auto-merge safe. A human with write access can push a commit onto
+          # chore/plugin-previews, and a commit's author/committer identity is just a git header
+          # they can forge (even to a bot's noreply email), so identity cannot prove the bot
+          # authored it — and the Git Data API does NOT sign commits, so a signature gate would
+          # never pass either. Instead bound what auto-merge can land: any commit that touches a
+          # code file (or anything other than the manifest) makes the PR file set != the single
+          # manifest path, so pristine=false and the PR falls back to human review. The worst a
+          # forged manifest-only change can do is point a gallery preview at a bad video URL —
+          # generated data the next bake overwrites — never unreviewed code on main.
+          # Paginate across ALL files — a >100-file PR must not pass on its first page; one
+          # non-manifest file anywhere fails it. Fail closed on a partial/failed lookup: capture
+          # gh's exit via `if !` and blank the list, so pristine needs a complete, successful
+          # enumeration of every changed file.
+          if ! files="$(gh api "repos/$REPO/pulls/$num/files?per_page=100" --paginate \
+                        --jq '.[].filename' 2>/dev/null)"; then
+            files=""
+          fi
+          nonmanifest="$(printf '%s\n' "$files" | grep -Fvxc 'data/plugin-previews/manifest.json' || true)"
+          if [ -n "$files" ] && [ "${nonmanifest:-1}" = "0" ]; then
+            pristine=true
+          else
+            pristine=false
+          fi
+          # Base-freshness: the rolling commit is `rendered_base + one manifest commit`, so its
+          # first parent IS the revision the manifest was rendered against (bake-plugin-previews.yml
+          # parents on `git rev-parse HEAD`). main's merge queue does NOT require an up-to-date
+          # branch, so if main advanced past that base a newer manifest may already be on main and a
+          # squash would overwrite it with stale data. Require the rendered base to equal current
+          # main HEAD; otherwise skip — the next bake (including the nightly) re-renders on the newer
+          # tip and refreshes the rolling PR. Fail closed (base_fresh=false) on any lookup error.
+          RENDERED_BASE="$(gh api "repos/$REPO/commits/$HEAD_SHA" --jq '.parents[0].sha // ""' 2>/dev/null || true)"
+          MAIN_HEAD="$(gh api "repos/$REPO/commits/heads/main" --jq '.sha // ""' 2>/dev/null || true)"
+          if [ -n "$RENDERED_BASE" ] && [ "$RENDERED_BASE" = "$MAIN_HEAD" ]; then
+            base_fresh=true
+          else
+            base_fresh=false
+            echo "rendered base $RENDERED_BASE != main $MAIN_HEAD — PR is behind, skipping auto-merge until the next bake refreshes it"
+          fi
+          {
+            echo "found=true"
+            echo "number=$(printf '%s' "$row" | jq -r .number)"
+            echo "base=$(printf '%s' "$row" | jq -r .baseRefName)"
+            echo "draft=$(printf '%s' "$row" | jq -r .isDraft)"
+            echo "title=$(printf '%s' "$row" | jq -r .title)"
+            echo "author=$(printf '%s' "$row" | jq -r '.author.login')"
+            echo "cross=$(printf '%s' "$row" | jq -r '.isCrossRepository')"
+            echo "head_oid=$(printf '%s' "$row" | jq -r '.headRefOid')"
+            echo "pristine=$pristine"
+            echo "base_fresh=$base_fresh"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Approve the clean manifest PR (github-actions bot, CI green)
+        # main requires 1 approving review. The diff is pure generated manifest data
+        # the bake produced and CI validated; approve as github-actions[bot] — a
+        # DIFFERENT identity than the App that authored the PR (an author cannot
+        # approve its own PR) — under the same identity + SHA + CI + pristine gates as
+        # the merge below. pristine == 'true' guarantees no human commit slipped in.
+        if: >-
+          ${{ steps.pr.outputs.found == 'true'
+              && steps.pr.outputs.draft == 'false'
+              && steps.pr.outputs.pristine == 'true'
+              && steps.pr.outputs.author == 'app/open-design-release-bot'
+              && steps.pr.outputs.cross == 'false'
+              && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha
+              && steps.pr.outputs.base_fresh == 'true'
+              && github.event.workflow_run.conclusion == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUM: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          gh pr review "$NUM" --repo "$REPO" --approve \
+            --body "Auto-approved: rolling plugin-preview manifest refreshed by the bake bot, CI green. (main requires one approval.)"
+
+      - name: Enqueue the clean manifest PR on green CI
+        # Guards (main IS protected by a merge queue + 1 review, so --auto enqueues):
+        #  - author == the release bot and same-repo (not a fork) — so a stranger
+        #    can't get a chore/plugin-previews PR auto-merged with the App token.
+        #  - PR head == the exact SHA CI passed on (head_oid == workflow_run.head_sha),
+        #    and --match-head-commit re-checks at enqueue time — so a commit pushed
+        #    after CI went green is never merged untested.
+        #  - pristine == 'true' — every commit was committed by the bake bot; once a
+        #    human touches the branch the diff is no longer bot-generated data, so we
+        #    fall back to human review.
+        #  - base_fresh == 'true' — the rendered base equals current main HEAD. The merge
+        #    queue does not require an up-to-date branch, so without this a bake rendered
+        #    against an older main could be re-tested and squashed in, overwriting a newer
+        #    manifest. A behind PR is left for the next bake to refresh.
+        if: >-
+          ${{ steps.pr.outputs.found == 'true'
+              && steps.pr.outputs.draft == 'false'
+              && steps.pr.outputs.pristine == 'true'
+              && steps.pr.outputs.author == 'app/open-design-release-bot'
+              && steps.pr.outputs.cross == 'false'
+              && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha
+              && steps.pr.outputs.base_fresh == 'true'
+              && github.event.workflow_run.conclusion == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+          NUM: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          echo "CI green on $HEAD_SHA — enqueuing manifest PR #$NUM into main's merge queue"
+          gh pr merge "$NUM" --repo "$REPO" --squash --auto --match-head-commit "$HEAD_SHA"
+
+      - name: Notify Feishu on failed manifest CI
+        # Same identity gates as the merge step: only ping for a genuine bot manifest
+        # PR from the same repo, so a fork / non-bot PR can't spam the release group.
+        # The head_oid == workflow_run.head_sha gate matches the approve/enqueue steps:
+        # the rolling branch is force-pushed, so an older failed run can finish after
+        # the PR head already advanced to a newer (green) commit. Without this guard a
+        # stale failure would page Feishu about a SHA that is no longer the PR head.
+        # Page on every terminal RED state that leaves the PR stuck — failure AND
+        # timed_out (ci.yml has timeout-minutes jobs) — but NOT cancelled: a force-push
+        # of the rolling branch routinely cancels the prior in-flight run, so alerting on
+        # cancelled would page on every normal refresh.
+        if: ${{ steps.pr.outputs.found == 'true' && steps.pr.outputs.author == 'app/open-design-release-bot' && steps.pr.outputs.cross == 'false' && steps.pr.outputs.head_oid == github.event.workflow_run.head_sha && (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out') }}
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
+          NUM: ${{ steps.pr.outputs.number }}
+          TITLE: ${{ steps.pr.outputs.title }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          python3 - <<'PY'
+          import os, time, hmac, hashlib, base64, json, urllib.request
+          wh = os.environ.get("FEISHU_WEBHOOK", "")
+          if not wh:
+              raise SystemExit(0)
+          secret = os.environ.get("FEISHU_SIGN_SECRET", "")
+          text = (f"⚠️ 插件预览 manifest PR #{os.environ['NUM']} CI {os.environ.get('CONCLUSION','failed')}（目标 main）\n"
+                  f"{os.environ.get('TITLE','')}\n需要人工跟进：{os.environ.get('RUN_URL','')}")
+          body = {"msg_type": "text", "content": {"text": text}}
+          if secret:
+              ts = str(int(time.time()))
+              sign = base64.b64encode(hmac.new(f"{ts}\n{secret}".encode(), b"", hashlib.sha256).digest()).decode()
+              body = {"timestamp": ts, "sign": sign, **body}
+          req = urllib.request.Request(wh, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+          print(urllib.request.urlopen(req).read().decode())
+          PY

@@ -170,6 +170,81 @@ describe('scanRunEventsForUsageAnalytics', () => {
     expect(result.cache_hit_ratio).toBeCloseTo(2_560 / 31_711);
   });
 
+  it('normalizes additive Responses-API / ACP usage where cache_read exceeds input_tokens', () => {
+    // Real AMR/vela follow-up shape: the stream reports input_tokens as the
+    // UNCACHED remainder with cached_input_tokens reported separately ON TOP, so
+    // cache_read > input. Treating it as inclusive (cache_read ⊆ input) made the
+    // denominator far too small and produced cache_hit_ratio ≫ 1 (the corrupt
+    // ~78% of AMR follow-up runs). It must resolve to a sane <=1 ratio with the
+    // cache-read folded into the effective input.
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 140_187,
+              output_tokens: 64,
+              cached_input_tokens: 659_456,
+            },
+          },
+        },
+      ],
+      '',
+      0,
+    );
+
+    expect(result).toMatchObject({
+      input_tokens_provider: 140_187,
+      input_tokens_effective: 799_643,
+      cache_read_input_tokens: 659_456,
+      uncached_input_tokens: 140_187,
+      cache_token_source: 'openai',
+    });
+    expect(result.cache_hit_ratio).toBeCloseTo(659_456 / 799_643);
+    expect(result.cache_hit_ratio).toBeLessThanOrEqual(1);
+    // The first model call of the turn shares the same denominator definition,
+    // so first_call_cache_hit_ratio must be repaired in lockstep.
+    expect(result.first_call_input_tokens).toBe(140_187);
+    expect(result.first_call_cache_read_input_tokens).toBe(659_456);
+    expect(result.first_call_cache_hit_ratio).toBeCloseTo(659_456 / 799_643);
+    expect(result.first_call_cache_hit_ratio).toBeLessThanOrEqual(1);
+  });
+
+  it('keeps inclusive OpenAI usage (cache_read <= input) byte-identical after the additive fix', () => {
+    // Guards the discriminator: an inclusive payload (cached ⊆ input) must stay
+    // on the input-as-total path — effective = input, uncached = input - read —
+    // exactly as before, so the additive repair cannot regress codex/openai.
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            usage: {
+              input_tokens: 1_000,
+              output_tokens: 20,
+              cached_input_tokens: 250,
+            },
+          },
+        },
+      ],
+      '',
+      0,
+    );
+
+    expect(result).toMatchObject({
+      input_tokens_provider: 1_000,
+      input_tokens_effective: 1_000,
+      cache_read_input_tokens: 250,
+      uncached_input_tokens: 750,
+      cache_token_source: 'openai',
+    });
+    expect(result.cache_hit_ratio).toBeCloseTo(250 / 1_000);
+    expect(result.first_call_cache_hit_ratio).toBeCloseTo(250 / 1_000);
+  });
+
   it.each([
     {
       name: 'claude anthropic usage',
@@ -744,9 +819,22 @@ describe('summarizeRunTimingAnalytics', () => {
       telemetry: {
         startRequestedAt: 1_100,
         startChatRunStartedAt: 1_200,
+        promptBuildStartAt: 1_220,
+        promptBuildEndAt: 1_300,
+        launchPreflightStartAt: 1_300,
+        launchPreflightEndAt: 1_650,
         processSpawnStartedAt: 1_700,
         processSpawnedAt: 1_760,
+        modelCallStartAt: 1_800,
+        stdinWriteStartAt: 1_810,
+        stdinWriteEndAt: 1_850,
+        firstModelEventAt: 2_000,
+        firstModelEventType: 'text_delta',
         firstTokenAt: 2_500,
+        firstVisibleOutputAt: 2_500,
+        firstArtifactWriteAt: 4_250,
+        attemptIndex: 1,
+        attemptStartedAt: 1_200,
       },
       events: [
         {
@@ -779,17 +867,35 @@ describe('summarizeRunTimingAnalytics', () => {
     expect(result).toEqual({
       queue_duration_ms: 200,
       pre_spawn_duration_ms: 500,
+      prompt_build_duration_ms: 80,
+      launch_preflight_duration_ms: 350,
       process_spawn_duration_ms: 60,
+      stdin_write_duration_ms: 40,
+      time_to_first_model_event_ms: 800,
+      first_model_event_type: 'text_delta',
       time_to_first_token_ms: 1300,
+      time_to_first_visible_output_ms: 1300,
+      runtime_init_to_first_token_ms: 650,
       spawn_to_first_token_ms: 740,
+      time_to_first_artifact_ms: 3050,
       // No subsegment markers were observed, so the whole spawn->first-token
       // span is unattributed and falls into the remainder.
       spawn_to_first_token_remainder_ms: 740,
       generation_duration_ms: 5500,
       tool_call_count: 2,
       tool_duration_ms: 650,
+      artifact_write_duration_ms: 250,
+      artifact_write_status: 'completed',
+      artifact_write_source: 'write_tool',
       finalize_duration_ms: 20,
       total_duration_ms: 7020,
+      bottleneck_phase: 'stream_output',
+      last_observed_phase: 'artifact_write',
+      phase_timing_status: 'complete',
+      attempt_index: 1,
+      attempt_duration_ms: 6800,
+      attempt_time_to_first_token_ms: 1300,
+      attempt_terminal_phase: 'artifact_write',
     });
   });
 
@@ -880,7 +986,14 @@ describe('summarizeRunTimingAnalytics', () => {
       queue_duration_ms: 100,
       generation_duration_ms: 2440,
       tool_call_count: 0,
+      artifact_write_status: 'none',
       total_duration_ms: 2450,
+      first_model_event_type: 'text_delta',
+      bottleneck_phase: 'stream_output',
+      last_observed_phase: 'stream_output',
+      phase_timing_status: 'partial',
+      attempt_duration_ms: 2400,
+      attempt_terminal_phase: 'stream_output',
     });
     expect(result.pre_spawn_duration_ms).toBeUndefined();
     expect(result.process_spawn_duration_ms).toBeUndefined();
@@ -888,5 +1001,33 @@ describe('summarizeRunTimingAnalytics', () => {
     expect(result.spawn_to_first_token_ms).toBeUndefined();
     expect(result.tool_duration_ms).toBeUndefined();
     expect(result.finalize_duration_ms).toBeUndefined();
+  });
+
+  it('records first model event for tool-first runs without inventing first-token timing', () => {
+    const result = summarizeRunTimingAnalytics({
+      runCreatedAt: 1_000,
+      runUpdatedAt: 3_000,
+      analyticsCapturedAt: 3_010,
+      telemetry: {
+        startChatRunStartedAt: 1_100,
+        processSpawnStartedAt: 1_200,
+        processSpawnedAt: 1_250,
+        stdinWriteEndAt: 1_300,
+      },
+      events: [
+        {
+          id: 1,
+          event: 'agent',
+          timestamp: 1_700,
+          data: { type: 'tool_use', id: 'tool-1', name: 'Read' },
+        },
+      ],
+    });
+
+    expect(result.time_to_first_model_event_ms).toBe(600);
+    expect(result.first_model_event_type).toBe('tool_use');
+    expect(result.time_to_first_token_ms).toBeUndefined();
+    expect(result.last_observed_phase).toBe('tool_execution');
+    expect(result.attempt_terminal_phase).toBe('tool_execution');
   });
 });

@@ -79,6 +79,9 @@ async function runUiGroup(): Promise<void> {
   }
 
   const args = ['test', '-c', 'playwright.config.ts', ...group.files, '--grep', group.grep];
+  if (group.workers != null) {
+    args.push(`--workers=${group.workers}`);
+  }
   const child = spawn('playwright', args, {
     stdio: 'inherit',
     shell: false,

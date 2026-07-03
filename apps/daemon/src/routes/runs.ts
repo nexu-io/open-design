@@ -13,10 +13,12 @@ import {
   type RunResultPackageResponse,
 } from '@open-design/contracts';
 import {
-  agentIdToTracking,
   deriveConfigureGlobals,
   modelIdForTracking,
   sessionModeToTracking,
+  type TrackingDesignSystemSource,
+  type TrackingDesignSystemKind,
+  type TrackingDesignSystemEditSurface,
 } from '@open-design/contracts/analytics';
 import type { OdNativeEvent } from '@open-design/agui-adapter';
 import { newInsertId, readAnalyticsContext } from '../analytics.js';
@@ -28,7 +30,14 @@ import {
   readCodexRolloutFirstCall,
 } from '../codex-rollout-usage.js';
 import type { ConnectorService } from '../connectors/service.js';
-import { getProject, listConversations, upsertMessage } from '../db.js';
+import {
+  getConversation,
+  getProject,
+  listConversations,
+  normalizeConversationSessionMode,
+  updateProject,
+  upsertMessage,
+} from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
 import {
   deriveLangfuseDeliveryState,
@@ -50,6 +59,7 @@ import {
 } from '../projects.js';
 import {
   amrUserIdForRunAnalytics,
+  agentProviderIdForRunAnalytics,
   hasExplicitRequestedModelForAnalytics,
   runtimeTypeForRunAnalytics,
   scanRunEventsForUsageAnalytics,
@@ -74,12 +84,14 @@ import {
 } from '../run-tool-bundle.js';
 import type { DetectedAgent, RuntimeAgentDef } from '../runtimes/types.js';
 import {
-  countDesignSystemPreviewModules,
-  countNewArtifacts,
   deriveActivationMilestones,
-  didRunCreateDesignSystemFile,
   runAskedUserQuestion,
 } from '../runtimes/run-artifacts.js';
+import {
+  runArtifactCountForRun,
+  runDesignSystemCreatedForRun,
+  runPreviewModuleCountForRun,
+} from '../runtimes/run-lifecycle-analytics.js';
 
 type SqliteDb = Database.Database;
 type JsonRecord = Record<string, unknown>;
@@ -137,6 +149,8 @@ interface ChatRun {
   appliedPluginSnapshotId?: string | null;
   pluginId?: string | null;
   clientType?: 'desktop' | 'web';
+  sessionMode?: string | null;
+  context?: Record<string, unknown> | null;
   events: RunEventRecord[];
   clients: Set<SseClient>;
   analyticsContext?: AnalyticsContext;
@@ -280,7 +294,7 @@ export interface RegisterRunRoutesDeps {
   };
   telemetry: {
     reportRunCompletionTelemetryFallback: (input: RunCreatedFallbackInput) => void;
-    resolveRunProjectKindForAnalytics: (input: RunProjectKindInput) => string;
+    resolveRunProjectKindForAnalytics: (input: RunProjectKindInput) => string | null;
     runArtifactBaselines: RunArtifactBaselines;
     runRetryEventsForAnalytics: (events: RunEventRecord[]) => RunRetryAnalyticsEvent[];
   };
@@ -330,6 +344,14 @@ function toProjectRecord(value: unknown): ProjectRecord | null {
     : null;
 }
 
+function isProjectEnrichableDesignSystem(project: ProjectRecord): boolean {
+  if (typeof project.designSystemId === 'string' && project.designSystemId.length > 0) {
+    return true;
+  }
+  const metadata = project.metadata;
+  return metadata?.importedFrom === 'brand-extraction' || metadata?.importedFrom === 'design-system';
+}
+
 function toConversationRecords(value: unknown): ConversationRecord[] {
   return Array.isArray(value)
     ? value.filter((item): item is ConversationRecord =>
@@ -346,13 +368,27 @@ function toProjectFiles(value: unknown): ProjectFileEntry[] {
     : [];
 }
 
+// Intents the scenario-plugin fallback resolver is allowed to see. Mirrors the
+// `ProjectMetadata['intent']` contract union so an unknown/legacy string in a
+// stored project row never gets cast into the union.
+const SCENARIO_PROJECT_INTENTS: readonly NonNullable<ContractProjectMetadata['intent']>[] = [
+  'live-artifact',
+  'web-clone',
+  'document',
+];
+
+function toScenarioProjectIntent(value: unknown): ContractProjectMetadata['intent'] | undefined {
+  return SCENARIO_PROJECT_INTENTS.find((intent) => intent === value);
+}
+
 function toScenarioProjectMetadata(
   metadata: ProjectMetadata,
 ): Pick<ContractProjectMetadata, 'kind' | 'intent'> | null {
   if (!metadata || typeof metadata.kind !== 'string') return null;
+  const intent = toScenarioProjectIntent(metadata.intent);
   return {
     kind: metadata.kind as ContractProjectMetadata['kind'],
-    ...(metadata.intent === 'live-artifact' ? { intent: metadata.intent } : {}),
+    ...(intent ? { intent } : {}),
   };
 }
 
@@ -624,6 +660,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         console.warn('[runs] mcp conversation fallback failed', err);
       }
     }
+    const conversationSession =
+      typeof meta.conversationId === 'string' && meta.conversationId
+        ? getConversation(db, meta.conversationId)
+        : null;
+    meta.sessionMode =
+      meta.sessionMode === 'chat' || meta.sessionMode === 'design' || meta.sessionMode === 'plan'
+        ? normalizeConversationSessionMode(meta.sessionMode)
+        : normalizeConversationSessionMode(conversationSession?.sessionMode);
     const run = design.runs.create(meta);
     try {
       pinAssistantMessageOnRunCreate(db, run);
@@ -677,6 +721,36 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
     design.runs.start(run, () => startChatRun(meta, run));
 
+    const reqBody = requestBody;
+    const analyticsHints =
+      (reqBody as { analyticsHints?: Record<string, unknown> | null }).analyticsHints
+        && typeof (reqBody as { analyticsHints?: unknown }).analyticsHints === 'object'
+        ? ((reqBody as { analyticsHints?: Record<string, unknown> }).analyticsHints ?? {})
+        : {};
+    // Marks the AI-optimize (deep enrichment) run so completion can flag the DS
+    // ai_refined even when analytics is unavailable or disabled.
+    const hintDsEnrichment = analyticsHints.dsEnrichment === true;
+    const requestProjectId = typeof reqBody.projectId === 'string' ? reqBody.projectId : null;
+    if (hintDsEnrichment && requestProjectId) {
+      design.runs.wait(run).then((status: TerminalRunStatus) => {
+        if (runResultFromStatus(status.status) !== 'success') return;
+        try {
+          const enrichedProject = toProjectRecord(getProject(db, requestProjectId));
+          if (enrichedProject && isProjectEnrichableDesignSystem(enrichedProject)) {
+            updateProject(db, requestProjectId, {
+              metadata: {
+                ...(enrichedProject.metadata ?? {}),
+                enrichmentStatus: 'ai_refined',
+                enrichmentCompletedAt: Date.now(),
+              },
+            });
+          }
+        } catch {
+          // Best-effort flag; do not fail run completion if metadata refresh fails.
+        }
+      }).catch(() => {});
+    }
+
     const analyticsContext = readAnalyticsContext(req);
     if (analyticsContext) {
       run.analyticsContext = analyticsContext;
@@ -689,7 +763,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       });
     }).catch(() => {});
     if (analyticsContext) {
-      const reqBody = requestBody;
       const runInsertId = newInsertId();
       const appCfgForAnalytics = await readAppConfig(RUNTIME_DATA_DIR).catch(
         () => ({} as Record<string, unknown>),
@@ -723,11 +796,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const userQueryTokens = promptText.length > 0
         ? Math.ceil(promptText.length / 4)
         : 0;
-      const analyticsHints =
-        (reqBody as { analyticsHints?: Record<string, unknown> | null }).analyticsHints
-          && typeof (reqBody as { analyticsHints?: unknown }).analyticsHints === 'object'
-          ? ((reqBody as { analyticsHints?: Record<string, unknown> }).analyticsHints ?? {})
-          : {};
       const hintEntryFrom = typeof analyticsHints.entryFrom === 'string'
         ? analyticsHints.entryFrom
         : undefined;
@@ -743,14 +811,19 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const hintHasExistingArtifact = typeof analyticsHints.hasExistingArtifact === 'boolean'
         ? analyticsHints.hasExistingArtifact
         : undefined;
+      const hintProjectTurnIndex = typeof analyticsHints.projectTurnIndex === 'number'
+        ? analyticsHints.projectTurnIndex
+        : undefined;
       const sessionDimensionProps = {
         ...(hintTurnIndex !== undefined ? { turn_index: hintTurnIndex } : {}),
         ...(hintIsFirstRun !== undefined ? { is_first_run: hintIsFirstRun } : {}),
+        ...(hintProjectTurnIndex !== undefined
+          ? { project_turn_index: hintProjectTurnIndex }
+          : {}),
         ...(hintHasExistingArtifact !== undefined
           ? { has_existing_artifact: hintHasExistingArtifact }
           : {}),
       };
-      const requestProjectId = typeof reqBody.projectId === 'string' ? reqBody.projectId : null;
       const runProjectForAnalytics = requestProjectId
         ? toProjectRecord(getProject(db, requestProjectId))
         : null;
@@ -798,6 +871,45 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           ),
         ),
       ];
+      // Map the internal DS selection source -> the wire `design_system_source`
+      // enum (previously hard-wired to unknown/not_applicable). And derive
+      // official-vs-custom from the id shape (`user:<id>` => custom). See the
+      // design-system tracking spec §3.5 (U3/U4).
+      const dsSelectedId = analyticsDesignSystemSelection.id;
+      const designSystemSourceForRun: TrackingDesignSystemSource = (() => {
+        switch (analyticsDesignSystemSelection.source) {
+          case 'request':
+            return 'user_selected';
+          case 'plugin':
+            return 'template_inherited';
+          case 'project':
+            return 'project_saved';
+          case 'app-default':
+            return 'default';
+          case 'none':
+          default:
+            return dsSelectedId ? 'unknown' : 'not_applicable';
+        }
+      })();
+      const designSystemKindForRun: TrackingDesignSystemKind | undefined = dsSelectedId
+        ? dsSelectedId.startsWith('user:')
+          ? 'custom'
+          : 'official'
+        : undefined;
+      const designSystemSlugForRun =
+        dsSelectedId && !dsSelectedId.startsWith('user:') ? dsSelectedId : undefined;
+      // E1 (tracking spec §3.4): a DS-project run that edits an EXISTING design
+      // system carries which surface drove it. comment/mark ride their own
+      // entry_from; everything else editing an existing DS is the chat surface.
+      // First-generation runs (no existing artifact) get no edit_surface.
+      const editSurfaceForRun: TrackingDesignSystemEditSurface | undefined =
+        runProjectKind === 'design_system' && hintHasExistingArtifact === true
+          ? hintEntryFrom === 'comment'
+            ? 'comment'
+            : hintEntryFrom === 'mark'
+              ? 'mark'
+              : 'chat'
+          : undefined;
       const baseProps: Record<string, unknown> = {
         page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
         area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
@@ -814,12 +926,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         project_kind: runProjectKind,
         ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
         ...sessionDimensionProps,
-        design_system_id: analyticsDesignSystemSelection.id ?? undefined,
+        design_system_id: dsSelectedId ?? undefined,
         design_system_selection_source: analyticsDesignSystemSelection.source,
-        design_system_source:
-          analyticsDesignSystemSelection.id
-            ? 'unknown'
-            : 'not_applicable',
+        design_system_source: designSystemSourceForRun,
+        ...(designSystemKindForRun ? { design_system_kind: designSystemKindForRun } : {}),
+        ...(designSystemSlugForRun ? { design_system_slug: designSystemSlugForRun } : {}),
+        ...(editSurfaceForRun ? { edit_surface: editSurfaceForRun } : {}),
         ...(isDesignSystemRun ? {
           ds_source_origin: typeof dsRunContext.origin === 'string'
             ? dsRunContext.origin
@@ -854,9 +966,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         model_id: modelIdForTracking(
           typeof reqBody.model === 'string' ? reqBody.model : null,
         ),
-        agent_provider_id: agentIdToTracking(
-          typeof reqBody.agentId === 'string' ? reqBody.agentId : null,
-        ),
+        agent_provider_id: agentProviderIdForRunAnalytics({
+          agentId: reqBody.agentId,
+          byokProvider: reqBody.byokProvider,
+        }),
         skill_id: typeof reqBody.skillId === 'string' ? reqBody.skillId : null,
         ...(!isDesignSystemRun && typeof reqBody.sessionMode === 'string'
           ? { session_mode: sessionModeToTracking(reqBody.sessionMode) }
@@ -888,6 +1001,26 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         );
         const result = runResultFromStatus(status.status);
         const errorCode = deriveRunErrorCode(status);
+        // C14/C15: AI-optimize (enrichment) run settled. Emit the dedicated
+        // result event; the success metadata flag runs outside this analytics gate.
+        if (hintDsEnrichment && analyticsContext) {
+          design.analytics.capture({
+            eventName: 'design_system_enrich_result',
+            context: analyticsContext,
+            appVersion: design.getAppVersion(),
+            properties: {
+              page_name: 'design_system_project',
+              area: 'design_system_enrich',
+              result,
+              design_system_id: dsSelectedId ?? undefined,
+              project_id: requestProjectId,
+              run_id: run.id,
+              ...(errorCode ? { error_code: errorCode } : {}),
+              duration_ms: Math.max(0, Date.now() - run.createdAt),
+            },
+            insertId: newInsertId(),
+          });
+        }
         const failure = classifyRunFailure({
           result,
           status,
@@ -972,11 +1105,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ...(run.analyticsTelemetry ? { telemetry: run.analyticsTelemetry } : {}),
           events: run.events,
         });
-        const toolStreamArtifactCount = (): number => countNewArtifacts(run.events);
+        const toolStreamArtifactCount = (): number => runArtifactCountForRun(run);
         const toolStreamDesignSystemCreated = (): boolean =>
-          didRunCreateDesignSystemFile(run.events);
+          runDesignSystemCreatedForRun(run);
         const toolStreamPreviewModuleCount = (): number =>
-          countDesignSystemPreviewModules(run.events);
+          runPreviewModuleCountForRun(run);
         const artifactBaseline = runArtifactBaselines.take(run.id);
         let artifactCount: number;
         let artifactsCreated: number | undefined;
@@ -1334,6 +1467,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     };
     const run = design.runs.create(meta);
     design.runs.stream(run, req, res);
+    reconcileAssistantMessageOnRunEnd(db, design.runs, run);
     design.runs.start(run, () => startChatRun(meta, run));
   });
 }

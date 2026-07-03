@@ -1,22 +1,34 @@
 ---
 name: html-ppt-zhangzara-sakura-chroma
+en_name: "Turn a Cherry-Blossom Trip into a Photo Essay like a Travel Editorial Director"
+zh_name: "像旅行内容总监一样把樱花之旅做成影像散文"
 description: |
-  Sakura Chroma — Vintage Japanese cassette-package aesthetic: cream paper, diagonal rainbow ribbons, condensed bold type, JIS-style spec checkboxes. Anything that should feel like a vintage Japanese cassette package or a TDK / Sony / Sakura Color product catalogue: indie hardware brand decks, music-label release schedules, analog studio retrospectives, zine and magazine pitches, kawaii-tech product launches, creative-studio annual reports.
+  A cherry-blossom-season travel photo essay through Kyoto — the arrival, the peak bloom, and the moment that made the trip. Built as a decision-grade story deck for friends, travel readers.
+en_description: |
+  A cherry-blossom-season travel photo essay through Kyoto — the arrival, the peak bloom, and the moment that made the trip. Built as a decision-grade story deck for friends, travel readers.
+zh_description: |
+  像旅行内容总监一样把樱花之旅做成影像散文——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "life"
+  - "travel-photo-essay-deck"
+  - "personal"
+  - "story"
+  - "photo-essay"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-sakura-chroma"
 triggers:
-  - "sakura-chroma"
-  - "zhangzara-sakura-chroma"
-  - "Sakura Chroma"
-  - "retro"
-  - "playful"
-  - "confident"
-  - "product launch or catalogue"
-  - "indie hardware or analog studio brand"
+  - "travel-photo-essay-deck"
+  - "life"
+  - "Turn a Cherry-Blossom Trip into a Photo Essay like a Travel Editorial Director"
+  - "像旅行内容总监一样把樱花之旅做成影像散文"
+  - "story"
+  - "personal"
+  - "photo-essay"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/sakura-chroma"
   upstream_license: MIT
   preview:
@@ -26,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "life"
+  scenario: "personal"
+  example_prompt: "Create \"Turn a Cherry-Blossom Trip into a Photo Essay like a Travel Editorial Director\" as a decision-grade Life & story deck in this template's own visual system. Subject: A cherry-blossom-season travel photo essay through Kyoto — the arrival, the peak bloom, and the moment that made the trip. Audience: friends, travel readers. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once."
 ---
 
 # Sakura Chroma
