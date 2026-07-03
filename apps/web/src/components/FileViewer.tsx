@@ -12,6 +12,7 @@ import {
 import {
   anonymizeArtifactId,
   artifactKindToTracking,
+  type TrackingFileVersionSource,
   type TrackingProjectKind,
   type TrackingDeployProvider,
 } from '@open-design/contracts/analytics';
@@ -24,6 +25,9 @@ import {
   trackArtifactToolbarClick,
   trackCommentPopoverClick,
   trackDrawToolbarClick,
+  trackFileVersionModalClick,
+  trackFileVersionModalSurfaceView,
+  trackFileVersionRestoreResult,
   trackPageView,
   trackPresentPopoverClick,
   trackShareOptionPopoverClick,
@@ -2535,6 +2539,14 @@ function fileVersionSourceClassName(version: ProjectFileVersion): string {
   return 'ai';
 }
 
+// Any unknown/legacy source value counts as 'ai', matching the label and
+// class-name fallbacks above.
+function fileVersionSourceToTracking(version: ProjectFileVersion): TrackingFileVersionSource {
+  if (version.source === 'manual') return 'manual';
+  if (version.source === 'restore') return 'restore';
+  return 'ai';
+}
+
 export function fileVersionPreviewOptions(
   projectId: string,
   fileName: string,
@@ -2548,18 +2560,23 @@ export function fileVersionPreviewOptions(
 
 function FileVersionManagerModal({
   projectId,
+  projectKind,
   file,
   currentSource,
+  entryFrom,
   onClose,
   onRestored,
 }: {
   projectId: string;
+  projectKind: TrackingProjectKind | null;
   file: ProjectFile;
   currentSource: string | null;
+  entryFrom: 'toolbar' | 'more_menu';
   onClose: () => void;
   onRestored: (content: string, version: ProjectFileVersion) => Promise<void> | void;
 }) {
   const { locale, t } = useI18n();
+  const analytics = useAnalytics();
   const tRef = useRef(t);
   const [versions, setVersions] = useState<ProjectFileVersion[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -2589,6 +2606,51 @@ function FileVersionManagerModal({
   // zero-reparse). `inFlightRef` dedupes concurrent hover-prefetch + click.
   const contentCacheRef = useRef<Map<string, string>>(new Map());
   const inFlightRef = useRef<Map<string, Promise<void>>>(new Map());
+  const trackingArtifactId = useMemo(
+    () => anonymizeArtifactId({ projectId, fileName: file.name }),
+    [projectId, file.name],
+  );
+  const trackingArtifactKind = artifactKindToTracking({ fileKind: file.kind ?? null });
+  const fireModalClick = (
+    element:
+      | 'version_item'
+      | 'viewport_toggle'
+      | 'prompt_toggle'
+      | 'copy_prompt'
+      | 'open_in_new_tab'
+      | 'restore'
+      | 'restore_confirm'
+      | 'restore_cancel',
+    extra?: {
+      version_source?: TrackingFileVersionSource;
+      version_is_current?: boolean;
+      viewport?: PreviewViewportId;
+    },
+  ) => {
+    trackFileVersionModalClick(analytics.track, {
+      page_name: 'artifact',
+      area: 'file_version_modal',
+      element,
+      artifact_id: trackingArtifactId,
+      artifact_kind: trackingArtifactKind,
+      version_count: versions.length,
+      ...extra,
+    });
+  };
+  // One impression per modal open. The component unmounts on close, so a
+  // fire-once ref is enough — no dependency bookkeeping needed.
+  const surfaceViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (surfaceViewFiredRef.current) return;
+    surfaceViewFiredRef.current = true;
+    trackFileVersionModalSurfaceView(analytics.track, {
+      page_name: 'artifact',
+      area: 'file_version_modal',
+      entry_from: entryFrom,
+      artifact_id: trackingArtifactId,
+      artifact_kind: trackingArtifactKind,
+    });
+  }, [analytics.track, entryFrom, trackingArtifactId, trackingArtifactKind]);
   const versionById = useMemo(() => {
     const map = new Map<string, ProjectFileVersion>();
     for (const version of versions) map.set(version.id, version);
@@ -2796,6 +2858,9 @@ function FileVersionManagerModal({
 
   async function copyPrompt() {
     if (!selectedPrompt) return;
+    fireModalClick('copy_prompt', {
+      ...(selectedVersion ? { version_source: fileVersionSourceToTracking(selectedVersion) } : {}),
+    });
     const ok = await copyToClipboard(selectedPrompt);
     if (!ok) return;
     setCopied(true);
@@ -2804,6 +2869,9 @@ function FileVersionManagerModal({
 
   function openVersionInNewTab() {
     if (loadingContent || !selectedContentMatchesVersion || !selectedContent || !selectedVersion) return;
+    fireModalClick('open_in_new_tab', {
+      version_source: fileVersionSourceToTracking(selectedVersion),
+    });
     openSandboxedPreviewInNewTab(
       selectedContent,
       `${file.name} · v${selectedVersion.version}`,
@@ -2816,12 +2884,33 @@ function FileVersionManagerModal({
     setRestoring(true);
     setError(null);
     let closingAfterRestore = false;
+    const restoreStarted = performance.now();
+    // `versions` is sorted newest-first, so the index is "how many versions
+    // back from the newest" the restore target sits.
+    const fireRestoreResult = (result: 'success' | 'failed', errorCode?: string) => {
+      trackFileVersionRestoreResult(analytics.track, {
+        page_name: 'artifact',
+        area: 'file_version_modal',
+        artifact_id: trackingArtifactId,
+        artifact_kind: trackingArtifactKind,
+        project_id: projectId,
+        project_kind: projectKind,
+        version_source: fileVersionSourceToTracking(selectedVersion),
+        version_gap: Math.max(0, versions.findIndex((version) => version.id === selectedVersion.id)),
+        version_count: versions.length,
+        result,
+        ...(errorCode ? { error_code: errorCode } : {}),
+        restore_duration_ms: Math.round(performance.now() - restoreStarted),
+      });
+    };
     try {
       const result = await restoreProjectFileVersion(projectId, file.name, selectedVersion);
       if (!result) {
+        fireRestoreResult('failed', 'restore_request_failed');
         setError(t('fileViewer.versions.restoreFailed'));
         return;
       }
+      fireRestoreResult('success', result.versionWarning?.code);
       const restoredVersion = result.version ?? selectedVersion;
       await onRestored(selectedContent, restoredVersion);
       if (result.versionWarning) {
@@ -2914,7 +3003,15 @@ function FileVersionManagerModal({
                     className={`file-version-item${selected ? ' active' : ''}`}
                     role="option"
                     aria-selected={selected}
-                    onClick={() => setSelectedId(version.id)}
+                    onClick={() => {
+                      if (!selected) {
+                        fireModalClick('version_item', {
+                          version_source: fileVersionSourceToTracking(version),
+                          version_is_current: Boolean(version.current),
+                        });
+                      }
+                      setSelectedId(version.id);
+                    }}
                     onMouseEnter={prefetch}
                     onFocus={prefetch}
                   >
@@ -2974,7 +3071,16 @@ function FileVersionManagerModal({
                     aria-expanded={promptOpen}
                     aria-controls={promptOpen ? promptPopoverId : undefined}
                     disabled={!selectedVersion}
-                    onClick={() => setPromptOpen((value) => !value)}
+                    onClick={() => {
+                      if (!promptOpen) {
+                        fireModalClick('prompt_toggle', {
+                          ...(selectedVersion
+                            ? { version_source: fileVersionSourceToTracking(selectedVersion) }
+                            : {}),
+                        });
+                      }
+                      setPromptOpen((value) => !value);
+                    }}
                   >
                     <RemixIcon name="chat-3-line" size={15} />
                     <span>{t('fileViewer.versions.promptTitle')}</span>
@@ -3015,7 +3121,14 @@ function FileVersionManagerModal({
                     aria-haspopup="dialog"
                     aria-expanded={confirmRestore}
                     aria-controls={confirmRestore ? restorePopoverId : undefined}
-                    onClick={() => setConfirmRestore((value) => !value)}
+                    onClick={() => {
+                      if (!confirmRestore) {
+                        fireModalClick('restore', {
+                          version_source: fileVersionSourceToTracking(selectedVersion),
+                        });
+                      }
+                      setConfirmRestore((value) => !value);
+                    }}
                   >
                     <RemixIcon name={restoring ? 'loader-4-line' : 'git-branch-line'} size={14} />
                     <span>
@@ -3037,7 +3150,12 @@ function FileVersionManagerModal({
                         <button
                           type="button"
                           className="viewer-action"
-                          onClick={() => setConfirmRestore(false)}
+                          onClick={() => {
+                            fireModalClick('restore_cancel', {
+                              version_source: fileVersionSourceToTracking(selectedVersion),
+                            });
+                            setConfirmRestore(false);
+                          }}
                         >
                           {t('common.cancel')}
                         </button>
@@ -3046,6 +3164,9 @@ function FileVersionManagerModal({
                           className="viewer-action primary"
                           disabled={restoreDisabled}
                           onClick={() => {
+                            fireModalClick('restore_confirm', {
+                              version_source: fileVersionSourceToTracking(selectedVersion),
+                            });
                             setConfirmRestore(false);
                             void restoreVersion();
                           }}
@@ -3059,7 +3180,12 @@ function FileVersionManagerModal({
               ) : null}
               <FileVersionViewportControls
                 viewport={previewViewport}
-                onViewport={setPreviewViewport}
+                onViewport={(viewport) => {
+                  if (viewport !== previewViewport) {
+                    fireModalClick('viewport_toggle', { viewport });
+                  }
+                  setPreviewViewport(viewport);
+                }}
                 t={t}
               />
               <button
@@ -5448,7 +5574,9 @@ function HtmlViewer({
       | 'edit'
       | 'zoom_out'
       | 'zoom_level_dropdown'
-      | 'zoom_in',
+      | 'zoom_in'
+      | 'versions',
+    entryFrom?: 'toolbar' | 'more_menu',
   ) => {
     trackArtifactToolbarClick(analytics.track, {
       page_name: 'artifact',
@@ -5456,6 +5584,7 @@ function HtmlViewer({
       element,
       artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
       artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+      ...(entryFrom ? { entry_from: entryFrom } : {}),
     });
   };
   const fireDrawToolbarClick = (
@@ -5527,7 +5656,9 @@ function HtmlViewer({
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
   const [deployMenuOpen, setDeployMenuOpen] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
-  const [versionModalOpen, setVersionModalOpen] = useState(false);
+  // False when closed; otherwise records which entry opened the modal so the
+  // surface_view impression can carry entry_from.
+  const [versionModalOpen, setVersionModalOpen] = useState<false | 'toolbar' | 'more_menu'>(false);
   const [toolbarMoreOpen, setToolbarMoreOpen] = useState(false);
   const toolbarMoreRef = useRef<HTMLDivElement | null>(null);
   const [exportReadyNudge, setExportReadyNudge] = useState(false);
@@ -9618,7 +9749,10 @@ function HtmlViewer({
               aria-label={t('fileViewer.versions.title')}
               data-tooltip={t('fileViewer.versions.title')}
               data-tooltip-placement="bottom"
-              onClick={() => setVersionModalOpen(true)}
+              onClick={() => {
+                fireArtifactToolbarClick('versions', 'toolbar');
+                setVersionModalOpen('toolbar');
+              }}
             >
               <RemixIcon name="history-line" size={14} />
               <span>{t('fileViewer.versions.entry')}</span>
@@ -9834,7 +9968,8 @@ function HtmlViewer({
                     role="menuitem"
                     disabled={source === null}
                     onClick={() => {
-                      setVersionModalOpen(true);
+                      fireArtifactToolbarClick('versions', 'more_menu');
+                      setVersionModalOpen('more_menu');
                       setToolbarMoreOpen(false);
                     }}
                   >
@@ -10722,8 +10857,10 @@ function HtmlViewer({
       {versionModalOpen && versioningAvailable && typeof document !== 'undefined' ? (
         <FileVersionManagerModal
           projectId={projectId}
+          projectKind={projectKind}
           file={file}
           currentSource={source}
+          entryFrom={versionModalOpen}
           onClose={() => setVersionModalOpen(false)}
           onRestored={handleVersionRestored}
         />

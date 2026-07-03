@@ -87,6 +87,9 @@ import type {
   HandoffClickProps,
   PresentPopoverClickProps,
   ShareOptionPopoverClickProps,
+  FileVersionModalClickProps,
+  FileVersionModalSurfaceViewProps,
+  FileVersionRestoreResultProps,
   AssistantFeedbackButtonClickProps,
   AssistantFeedbackClickProps,
   AssistantFeedbackReasonClickProps,
@@ -731,6 +734,20 @@ export function trackShareOptionPopoverClick(
   send(track, 'ui_click', props, options);
 }
 
+export function trackFileVersionModalClick(
+  track: Track,
+  props: FileVersionModalClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackFileVersionModalSurfaceView(
+  track: Track,
+  props: FileVersionModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
 // ---- ui_click (feedback) -------------------------------------------------
 
 export function trackAssistantFeedbackButtonClick(
@@ -919,6 +936,13 @@ export function trackArtifactDeployResult(
   options?: { requestId?: string },
 ): void {
   send(track, 'artifact_deploy_result', props, options);
+}
+
+export function trackFileVersionRestoreResult(
+  track: Track,
+  props: FileVersionRestoreResultProps,
+): void {
+  send(track, 'file_version_restore_result', props);
 }
 
 export function trackFeedbackSubmitResult(

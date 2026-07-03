@@ -2188,9 +2188,16 @@ export interface ArtifactToolbarClickProps {
     | 'edit'
     | 'zoom_out'
     | 'zoom_level_dropdown'
-    | 'zoom_in';
+    | 'zoom_in'
+    // Opens the HTML file version history modal (HTML files only). Fires from
+    // both the inline toolbar button and the narrow-toolbar overflow menu —
+    // `entry_from` splits the two so each entry's conversion is queryable.
+    | 'versions';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
+  // Which surface hosted the click. Reported for element=versions (the only
+  // toolbar action that also lives in the overflow menu).
+  entry_from?: 'toolbar' | 'more_menu';
 }
 
 // The Draw (mark-pen) annotation overlay's floating toolbar inside the
@@ -2344,6 +2351,46 @@ export interface ShareOptionPopoverClickProps {
   artifact_kind: TrackingArtifactKind;
   project_id: string;
   project_kind: TrackingProjectKind | null;
+}
+
+// Provenance of an HTML file version, mirroring the daemon's
+// ProjectFileVersion.source: 'ai' = written by a run, 'manual' = manual
+// edit/undo/redo, 'restore' = created by restoring an older version.
+export type TrackingFileVersionSource = 'ai' | 'manual' | 'restore';
+
+// Clicks inside the HTML file version history modal (opened via the artifact
+// toolbar `versions` element). `restore` opens the confirm popover;
+// `restore_confirm` / `restore_cancel` are the popover's two outcomes — the
+// restore call itself reports via file_version_restore_result.
+export interface FileVersionModalClickProps {
+  page_name: 'artifact';
+  area: 'file_version_modal';
+  element:
+    // Switching to a different version in the sidebar list (clicks on the
+    // already-selected version are not reported).
+    | 'version_item'
+    // Desktop/tablet/mobile preview switch inside the modal; the chosen
+    // preset is carried in `viewport`.
+    | 'viewport_toggle'
+    // Opening the prompt popover (close is not reported).
+    | 'prompt_toggle'
+    | 'copy_prompt'
+    | 'open_in_new_tab'
+    | 'restore'
+    | 'restore_confirm'
+    | 'restore_cancel';
+  artifact_id: string;
+  artifact_kind: TrackingArtifactKind;
+  // Provenance of the version the click targets (version_item: the clicked
+  // version; restore*: the version being restored).
+  version_source?: TrackingFileVersionSource;
+  // version_item only: whether the clicked version is the current one.
+  version_is_current?: boolean;
+  // viewport_toggle only.
+  viewport?: 'desktop' | 'tablet' | 'mobile';
+  // List size when the click happened, so browsing depth is queryable
+  // against how much history there was to browse.
+  version_count?: number;
 }
 
 // FEEDBACK clicks (CSV rows 56 / 58)
@@ -2624,6 +2671,7 @@ export type UiClickProps =
   | HandoffClickProps
   | PresentPopoverClickProps
   | ShareOptionPopoverClickProps
+  | FileVersionModalClickProps
   | AssistantFeedbackButtonClickProps
   | AssistantFeedbackReasonSubmitClickProps
   | SettingsSidebarClickProps
@@ -2775,6 +2823,18 @@ export interface UpdatePromptSurfaceViewProps {
   app_version_after?: string;
 }
 
+// Impression of the HTML file version history modal. Fires once per open so
+// the versions funnel has a denominator (toolbar clicks → exposures →
+// version_item browsing → restore result). `entry_from` mirrors the opening
+// toolbar click's dimension.
+export interface FileVersionModalSurfaceViewProps {
+  page_name: 'artifact';
+  area: 'file_version_modal';
+  entry_from: 'toolbar' | 'more_menu';
+  artifact_id: string;
+  artifact_kind: TrackingArtifactKind;
+}
+
 export type SurfaceViewProps =
   | RunFailedToastSurfaceViewProps
   | HelpPopoverSurfaceViewProps
@@ -2791,7 +2851,8 @@ export type SurfaceViewProps =
   | QuestionsFormSurfaceViewProps
   | UpdateIndicatorSurfaceViewProps
   | ReferenceBoardSurfaceViewProps
-  | UpdatePromptSurfaceViewProps;
+  | UpdatePromptSurfaceViewProps
+  | FileVersionModalSurfaceViewProps;
 
 // ---- Result events -------------------------------------------------------
 
@@ -3252,6 +3313,32 @@ export interface ArtifactDeployResultProps {
   project_kind: TrackingProjectKind | null;
 }
 
+// Outcome of an HTML file version restore from the version history modal.
+// Fires once per confirmed restore attempt (after the restore API settles) —
+// opening the confirm popover or cancelling it only reports ui_click.
+// `result` is 'success' whenever the file content was written back, including
+// the degraded case where version bookkeeping raised a warning (the warning
+// code is then carried in `error_code`).
+export interface FileVersionRestoreResultProps {
+  page_name: 'artifact';
+  area: 'file_version_modal';
+  artifact_id: string;
+  artifact_kind: TrackingArtifactKind;
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+  // Provenance of the version being restored (what kind of state users
+  // reach back for: ai output, a manual edit, or an earlier restore).
+  version_source: TrackingFileVersionSource;
+  // How many versions back from the newest the restored version sits
+  // (newest = 0), i.e. how far users roll back.
+  version_gap: number;
+  // List size at restore time.
+  version_count: number;
+  result: TrackingResult;
+  error_code?: string;
+  restore_duration_ms: number;
+}
+
 export interface FeedbackSubmitResultProps {
   page_name: 'chat_panel';
   area: 'chat_panel';
@@ -3451,6 +3538,7 @@ export type AnalyticsEventPayload =
   | { event: 'context_link_result'; props: ContextLinkResultProps }
   | { event: 'artifact_export_result'; props: ArtifactExportResultProps }
   | { event: 'artifact_deploy_result'; props: ArtifactDeployResultProps }
+  | { event: 'file_version_restore_result'; props: FileVersionRestoreResultProps }
   | { event: 'feedback_submit_result'; props: FeedbackSubmitResultProps }
   | { event: 'assistant_feedback_click'; props: AssistantFeedbackClickProps }
   | {
