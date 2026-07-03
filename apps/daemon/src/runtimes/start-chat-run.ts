@@ -229,7 +229,6 @@ import {
   listProjectFolders,
   resolveProjectDir,
   SandboxImportedProjectError,
-  resolveProjectDir,
   reconcileHtmlArtifactManifest,
 } from '../projects.js';
 import {
@@ -1743,7 +1742,7 @@ export function createStartChatRun(deps: any) {
     // — a missing or read-only config.toml is fine, and the Codex CLI still
     // surfaces the original error if the write fails. See issue #4276 / #3408.
     if (def.id === 'codex') {
-      const { normalizeCodexConfigFile } = await import('./codex-config-normalize.js');
+      const { normalizeCodexConfigFile } = await import('../codex-config-normalize.js');
       // Route through spawnEnvForAgent so resolveCodexConfigPath sees the same
       // fully-expanded CODEX_HOME the Codex child process will see. In
       // particular, spawnEnvForAgent calls expandConfiguredEnv which expands
@@ -1774,7 +1773,7 @@ export function createStartChatRun(deps: any) {
         : null;
     if (antigravityConcreteModel) {
       const { acquireAntigravityModelLock } = await import(
-        './runtimes/defs/antigravity.js'
+        './defs/antigravity.js'
       );
       antigravityModelLockRelease = await acquireAntigravityModelLock();
     }
@@ -2286,7 +2285,7 @@ export function createStartChatRun(deps: any) {
         })();
         const watcherAbort = new AbortController();
         const { waitForAgyToReadModel } = await import(
-          './runtimes/defs/antigravity.js'
+          './defs/antigravity.js'
         );
         void waitForAgyToReadModel(
           agentLogFilePath,
@@ -2382,7 +2381,7 @@ export function createStartChatRun(deps: any) {
         chatAgentId: typeof agentId === 'string' ? agentId : null,
         chatModel: typeof safeModel === 'string' ? safeModel : null,
       };
-      void import('./memory-llm.js')
+      void import('../memory-llm.js')
         .then(({ extractWithLLM, distillAnnotationsToMemory }) => {
           const generalPass = extractWithLLM(
             RUNTIME_DATA_DIR,
