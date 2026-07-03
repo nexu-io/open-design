@@ -1,6 +1,6 @@
 # Maintainers
 
-<p align="center"><a href="MAINTAINERS.md">English</a> · <a href="MAINTAINERS.pt-BR.md">Português (Brasil)</a> · <a href="MAINTAINERS.de.md">Deutsch</a> · <a href="MAINTAINERS.fr.md">Français</a> · <a href="MAINTAINERS.zh-CN.md">简体中文</a> · <a href="MAINTAINERS.ja-JP.md">日本語</a> · <b>한국어</b></p>
+<p align="center"><a href="../../MAINTAINERS.md">English</a> · <a href="MAINTAINERS.pt-BR.md">Português (Brasil)</a> · <a href="MAINTAINERS.de.md">Deutsch</a> · <a href="MAINTAINERS.fr.md">Français</a> · <a href="MAINTAINERS.zh-CN.md">简体中文</a> · <a href="MAINTAINERS.ja-JP.md">日本語</a> · <b>한국어</b> · <a href="MAINTAINERS.th.md">ภาษาไทย</a></p>
 
 이 문서는 `nexu-io/open-design`의 Maintainer가 되고, 그 역할을 맡고, 물러나는 규칙을 정합니다. Core Team의 개별 명단은 내부에서 관리하므로 여기에 적지 않습니다. 공개적으로 중요한 건 모두가 따르는 규칙 그 자체입니다.
 
