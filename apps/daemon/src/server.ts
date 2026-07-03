@@ -207,6 +207,7 @@ import {
   marketplaceManifestUrlForRegistry,
   marketplaceRegistryIdFromUrl,
 } from './plugins/marketplaces.js';
+import { resolveRouterRematchPluginId } from './plugins/prompt-routing.js';
 import { composeMemoryBody, extractFromMessage } from './memory.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
@@ -11293,7 +11294,22 @@ export async function startServer({
         const hasPin =
           typeof projectRow?.appliedPluginSnapshotId === 'string'
           && projectRow.appliedPluginSnapshotId.length > 0;
-        if (!hasPin) {
+        if (hasPin) {
+          // 라우터 재매칭 핸드오프 (스펙 §4.2): pin이 router:true 플러그인이면 최신 user
+          // 메시지(currentPrompt — 전체 트랜스크립트인 message는 과거 키워드를 재인식하므로
+          // 금지)로 트리거 재매칭. 매치 시 pluginId 주입 → 기존 resolve 경로가 새 스냅샷을
+          // 생성해 project/conversation pin을 덮어쓴다.
+          const pinnedSnapshot = getSnapshot(db, projectRow.appliedPluginSnapshotId);
+          const rematchedPluginId = resolveRouterRematchPluginId({
+            currentPrompt:
+              typeof requestBody.currentPrompt === 'string' ? requestBody.currentPrompt : null,
+            pinnedPluginId: pinnedSnapshot?.pluginId ?? null,
+            installed: listInstalledPlugins(db),
+          });
+          if (rematchedPluginId && getInstalledPlugin(db, rematchedPluginId)) {
+            runResolveBody = { ...requestBody, pluginId: rematchedPluginId };
+          }
+        } else {
           const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectRow?.metadata);
           if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
             runResolveBody = { ...requestBody, pluginId: fallbackPluginId };

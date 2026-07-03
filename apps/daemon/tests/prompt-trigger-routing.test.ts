@@ -132,3 +132,69 @@ describe('free-form prompt trigger routing at project create (스펙 §4.1)', ()
     expect(project.metadata?.badge?.label).toBe('In-App Message');
   });
 });
+
+describe('router re-match handoff at run-start (스펙 §4.2)', () => {
+  it('(RED→GREEN) form answer re-pins the conversation to the chosen vertical', async () => {
+    await putAppConfig({ defaultRouterPluginId: 'example-bodoc-router' });
+    const projectId = `proj-rematch-${Date.now()}`;
+    const created = await createProject({
+      id: projectId,
+      name: 'rematch',
+      pendingPrompt: '뭔가 콘텐츠 하나 만들어보자',
+      metadata: { kind: 'other' },
+      conversationMode: 'design',
+    });
+    const routerSnapshotId = created.project.appliedPluginSnapshotId;
+    expect(routerSnapshotId).toBeTruthy();
+
+    // 존재하지 않는 agentId를 지정 — 스냅샷 resolve(+re-pin, :11303)는 agent 해석(:11355)
+    // 전에 실행되므로 run 자체가 실패해도 pin 전환은 관측된다 (토큰/모의 CLI 불필요).
+    // 주의: 필드명은 agentId (meta = {...requestBody}, server.ts:11325 — `agent`는 무시되어
+    // firstAvailable 폴백으로 실제 agent가 스폰될 수 있음. 독립리뷰 A2 caveat 정정).
+    await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId,
+        agentId: 'definitely-not-installed-agent',
+        currentPrompt:
+          '[form answers — bodoc-route]\n- 무엇을 만들까요?: 네이버 블로그 글 [value: naver-blog]',
+        message:
+          '[form answers — bodoc-route]\n- 무엇을 만들까요?: 네이버 블로그 글 [value: naver-blog]',
+      }),
+    }).catch(() => {});
+
+    const detail = await fetch(`${baseUrl}/api/projects/${projectId}`);
+    expect(detail.ok).toBe(true);
+    const { project } = (await detail.json()) as {
+      project: { appliedPluginSnapshotId?: string };
+    };
+    expect(project.appliedPluginSnapshotId).toBeTruthy();
+    expect(project.appliedPluginSnapshotId).not.toBe(routerSnapshotId);
+  });
+
+  it('non-router pin is left untouched by vertical keywords mid-conversation', async () => {
+    const projectId = `proj-norematch-${Date.now()}`;
+    const created = await createProject({
+      id: projectId,
+      name: 'no rematch',
+      pendingPrompt: '네이버 블로그 게시물 작성하자',
+      metadata: { kind: 'other' },
+      conversationMode: 'design',
+    });
+    const pinned = created.project.appliedPluginSnapshotId;
+    await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId,
+        agentId: 'definitely-not-installed-agent',
+        currentPrompt: 'braze 인앱 메시지 얘기도 참고로 넣어줘',
+        message: 'braze 인앱 메시지 얘기도 참고로 넣어줘',
+      }),
+    }).catch(() => {});
+    const detail = await fetch(`${baseUrl}/api/projects/${projectId}`);
+    const { project } = (await detail.json()) as { project: { appliedPluginSnapshotId?: string } };
+    expect(project.appliedPluginSnapshotId).toBe(pinned);
+  });
+});
