@@ -56,6 +56,44 @@ describe('splitOnQuestionForms', () => {
     ]);
   });
 
+  it('parses richer web input controls and custom-choice metadata', () => {
+    const input = [
+      '<question-form id="advanced" title="Advanced brief">',
+      '{',
+      '  "questions": [',
+      '    { "id": "accent", "label": "Accent", "type": "color", "defaultValue": "#ff5500" },',
+      '    { "id": "intensity", "label": "Intensity", "type": "range", "min": 1, "max": 10, "step": 1 },',
+      '    { "id": "deadline", "label": "Deadline", "type": "date" },',
+      '    { "id": "source", "label": "Reference URL", "type": "url" },',
+      '    { "id": "brief", "label": "Upload brief", "type": "file", "multiple": true },',
+      '    { "id": "exact", "label": "Exact id", "type": "select", "allowCustom": false, "options": [{ "label": "A", "value": "a" }] },',
+      '    { "id": "tone", "label": "Tone", "type": "radio", "customLabel": "Something else", "customPlaceholder": "Describe it", "options": ["Sharp"] }',
+      '  ]',
+      '}',
+      '</question-form>',
+    ].join('\n');
+
+    const segment = splitOnQuestionForms(input).find((s) => s.kind === 'form');
+    if (!segment || segment.kind !== 'form') throw new Error('expected parsed form');
+
+    expect(segment.form.questions.map((q) => q.type)).toEqual([
+      'color',
+      'range',
+      'date',
+      'url',
+      'file',
+      'select',
+      'radio',
+    ]);
+    expect(segment.form.questions[1]).toMatchObject({ min: 1, max: 10, step: 1 });
+    expect(segment.form.questions[4]).toMatchObject({ multiple: true });
+    expect(segment.form.questions[5]).toMatchObject({ allowCustom: false });
+    expect(segment.form.questions[6]).toMatchObject({
+      customLabel: 'Something else',
+      customPlaceholder: 'Describe it',
+    });
+  });
+
   it('preserves stable option values when formatting object-option answers', () => {
     const text = formatFormAnswers(
       {

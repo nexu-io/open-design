@@ -50,6 +50,7 @@ export function normalizeVelaModelId(rawId: string): string | null {
   if (/^deepseek_v3_2$/i.test(withoutPrefix)) return 'deepseek-v3.2';
   if (/^deepseek-v3-2$/i.test(withoutPrefix)) return 'deepseek-v3.2';
   if (/^kimi_k2_6$/i.test(withoutPrefix)) return 'kimi-k2.6';
+  if (/^kimi_k2_7_code$/i.test(withoutPrefix)) return 'kimi-k2.7-code';
   if (/^glm_5_1$/i.test(withoutPrefix)) return 'glm-5.1';
   if (/^glm_5$/i.test(withoutPrefix)) return 'glm-5';
   const versioned = normalizeKnownVelaVersionId(withoutPrefix);
@@ -145,7 +146,7 @@ export function parseVelaModelJson(
     const rawId = item && typeof item === 'object'
       ? (item as { id?: unknown }).id
       : null;
-    const id = typeof rawId === 'string' ? rawId.trim() : '';
+    const id = typeof rawId === 'string' ? (normalizeVelaModelId(rawId) ?? '') : '';
     if (!id || seen.has(id) || !isVelaChatModelId(id)) continue;
     seen.add(id);
     models.push({ id, label: id });
@@ -258,6 +259,55 @@ export async function fetchVelaRemoteModelsWithRetry(
     }
   }
   throw lastError instanceof Error ? lastError : new Error(velaModelsErrorMessage(lastError));
+}
+
+/** Live account fields parsed from `vela billing summary --format json`. */
+export interface VelaBillingSummary {
+  /** Real subscription tier (e.g. "max"); absent for free accounts. */
+  plan?: string;
+  /** Total available balance in USD (string), or null when unavailable. */
+  balanceUsd?: string | null;
+}
+
+/**
+ * Read the signed-in account's billing summary via the vela CLI — the same
+ * data source used for models, so balance/tier come through the versioned CLI
+ * contract rather than a separate HTTP call. Returns total available balance
+ * and the real membership tier.
+ */
+export async function fetchVelaBillingSummary(
+  resolvedBin: string,
+  env: NodeJS.ProcessEnv,
+): Promise<VelaBillingSummary> {
+  const { stdout } = await execAgentFile(
+    resolvedBin,
+    ['billing', 'summary', '--format', 'json'],
+    { env, timeout: AMR_MODELS_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+  );
+  const data = JSON.parse(String(stdout)) as {
+    balanceUsd?: unknown;
+    totalAvailableCreditsUsd?: unknown;
+    membershipTier?: unknown;
+  };
+  // Use `balanceUsd` — the same field the console wallet page renders as the
+  // headline "余额" — so the two surfaces always agree. Fall back to the total
+  // available only if `balanceUsd` is missing.
+  const balanceUsd =
+    typeof data.balanceUsd === 'string'
+      ? data.balanceUsd
+      : typeof data.totalAvailableCreditsUsd === 'string'
+        ? data.totalAvailableCreditsUsd
+        : null;
+  // `membershipTier` is omitted for free accounts. A SUCCESSFUL summary with no
+  // tier therefore means "free" — normalize to the explicit sentinel so the UI
+  // shows the plan and the Upgrade CTA for free users. "Unknown" (billing
+  // unavailable) is signalled separately by the fetch rejecting → null account,
+  // never by an absent tier on a successful read.
+  const tier =
+    typeof data.membershipTier === 'string' && data.membershipTier.trim()
+      ? data.membershipTier.trim()
+      : 'free';
+  return { plan: tier, balanceUsd };
 }
 
 export const amrAgentDef = {

@@ -51,6 +51,38 @@ async function seedSettingsBase(page: Page) {
       models: [{ id: 'default', label: 'Default' }],
     },
   ]);
+
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ config: baseConfig() }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
+  await page.route('**/api/editors', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"editors":[]}' });
+  });
+  await page.route('**/api/media/config', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"providers":{}}' });
+  });
+  await page.route('**/api/connectors/composio/config', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"configured":false,"apiKeyTail":""}' });
+  });
+  await page.route('**/api/skills', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"skills":[]}' });
+  });
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"designSystems":[]}' });
+  });
+  await page.route('**/api/projects', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"projects":[]}' });
+  });
+  await page.route('**/api/templates', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"templates":[]}' });
+  });
+  await page.route('**/api/prompt-templates', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"promptTemplates":[]}' });
+  });
 }
 
 async function waitForLoadingToClear(page: Page) {
@@ -75,7 +107,8 @@ async function openSettings(page: Page) {
 async function openMemorySettings(page: Page) {
   const dialog = await openSettings(page);
   await dialog.getByRole('button', { name: /^Memory\b/ }).click();
-  await expect(dialog.getByRole('button', { name: 'New memory' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Add or import memories' })).toBeVisible();
+  await expect(dialog.getByText('Saved memory')).toBeVisible();
   return dialog;
 }
 
@@ -240,6 +273,175 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(memoryTree.getByText('/PROJECT', { exact: true })).toBeVisible();
     await expect(memoryTree.getByText('Open Design plugin authoring flow')).toBeVisible();
     await expect(memoryTree.getByText('Weekly launch brief')).toBeVisible();
+  });
+
+  test('[P1] edits and deletes saved memory while keeping type filters and counts in sync', async ({ page }) => {
+    await seedSettingsBase(page);
+
+    let entries = [
+      {
+        id: 'user_ui_preferences',
+        name: 'UI preferences',
+        description: 'Persistent UI rendering preferences',
+        type: 'user',
+        body: '- Prefer dark mode',
+        updatedAt: Date.now(),
+      },
+      {
+        id: 'feedback_density',
+        name: 'Density feedback',
+        description: 'Keep operational screens compact.',
+        type: 'feedback',
+        body: '- Prefer dense tables for operations',
+        updatedAt: Date.now(),
+      },
+    ];
+    const memoryTree = () => ({
+      tree: [
+        {
+          id: 'folder-user',
+          parentId: null,
+          path: '/USER',
+          name: 'User',
+          kind: 'folder',
+          scope: 'global',
+          childrenCount: entries.filter((entry) => entry.type === 'user').length,
+          sourcePacketIds: [],
+          proposalIds: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        ...entries
+          .filter((entry) => entry.type === 'user')
+          .map((entry) => ({
+            id: entry.id,
+            parentId: 'folder-user',
+            path: `/USER/${entry.id}`,
+            name: entry.name,
+            description: entry.description,
+            kind: 'entry',
+            type: entry.type,
+            scope: 'global',
+            sourcePacketIds: [],
+            proposalIds: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date(entry.updatedAt).toISOString(),
+          })),
+        {
+          id: 'folder-feedback',
+          parentId: null,
+          path: '/FEEDBACK',
+          name: 'Feedback',
+          kind: 'folder',
+          scope: 'global',
+          childrenCount: entries.filter((entry) => entry.type === 'feedback').length,
+          sourcePacketIds: [],
+          proposalIds: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        ...entries
+          .filter((entry) => entry.type === 'feedback')
+          .map((entry) => ({
+            id: entry.id,
+            parentId: 'folder-feedback',
+            path: `/FEEDBACK/${entry.id}`,
+            name: entry.name,
+            description: entry.description,
+            kind: 'entry',
+            type: entry.type,
+            scope: 'global',
+            sourcePacketIds: [],
+            proposalIds: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date(entry.updatedAt).toISOString(),
+          })),
+      ],
+    });
+
+    await page.route('**/api/memory', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          chatExtractionEnabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries,
+          extraction: null,
+        }),
+      });
+    });
+    await page.route('**/api/memory/tree', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(memoryTree()) });
+    });
+    await page.route('**/api/memory/extractions', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{"extractions":[]}' });
+    });
+    await page.route('**/api/memory/events', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' });
+    });
+    await page.route('**/api/memory/user_ui_preferences', async (route) => {
+      const method = route.request().method();
+      if (method === 'GET') {
+        const entry = entries.find((item) => item.id === 'user_ui_preferences')!;
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ entry }) });
+        return;
+      }
+      if (method === 'PUT') {
+        const body = route.request().postDataJSON() as {
+          name: string;
+          description: string;
+          type: string;
+          body: string;
+        };
+        entries = entries.map((entry) =>
+          entry.id === 'user_ui_preferences'
+            ? { ...entry, ...body, type: body.type as 'user' | 'feedback', updatedAt: Date.now() }
+            : entry,
+        );
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ entry: entries.find((item) => item.id === 'user_ui_preferences') }),
+        });
+        return;
+      }
+      if (method === 'DELETE') {
+        entries = entries.filter((entry) => entry.id !== 'user_ui_preferences');
+        await route.fulfill({ status: 204, body: '' });
+        return;
+      }
+      await route.fulfill({ status: 405, body: '' });
+    });
+
+    const dialog = await openMemorySettings(page);
+    await expect(dialog.getByText('2 saved')).toBeVisible();
+    await dialog.getByRole('button', { name: 'User 1' }).click();
+    await expect(dialog.getByText('UI preferences')).toBeVisible();
+    await expect(dialog.getByText('Density feedback')).toHaveCount(0);
+
+    const card = dialog.locator('.library-card', { hasText: 'UI preferences' }).first();
+    await card.getByTitle('Edit').click();
+    const editor = dialog.locator('.memory-manual-panel');
+    await editor.locator('input').nth(0).fill('Updated UI preferences');
+    await editor.locator('input').nth(1).fill('Updated rendering preferences');
+    await editor.locator('textarea').fill('- Prefer compact, high-contrast controls');
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+
+    await expect(dialog.getByText('Updated UI preferences')).toBeVisible();
+    await expect(dialog.getByText('UI preferences', { exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'User 1' })).toBeVisible();
+
+    await dialog.locator('.library-card', { hasText: 'Updated UI preferences' }).first().getByTitle('Delete').click();
+    await expect(dialog.getByText('Updated UI preferences')).toHaveCount(0);
+    await expect(dialog.getByText('1 saved')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'User 0' })).toBeVisible();
+
+    await dialog.getByRole('button', { name: 'All 1' }).click();
+    await expect(dialog.getByText('Density feedback')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Feedback 1' })).toBeVisible();
   });
 
   test('[P1] creates a memory entry and keeps it visible after reopening settings', async ({ page }) => {

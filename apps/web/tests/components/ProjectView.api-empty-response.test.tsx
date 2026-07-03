@@ -119,6 +119,7 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
+  DESIGN_SYSTEM_TAB: '__design_system__',
   FileWorkspace: ({ openRequest }: { openRequest?: { name: string; nonce: number } | null }) => (
     <div data-testid="file-workspace" data-open-request-name={openRequest?.name ?? ''} />
   ),

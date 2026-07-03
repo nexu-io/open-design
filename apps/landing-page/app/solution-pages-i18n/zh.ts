@@ -1,6 +1,678 @@
 import type { SolutionLocaleCopy } from './types';
 
 export const ZH: SolutionLocaleCopy = {
+  aiWireframeGenerator: {
+    title: 'AI 线框图生成器 —— 用 Open Design 从提示词到线框图',
+    description:
+      '一个免费开源的 AI 线框图生成器：把一句提示词变成可编辑的多屏线框图，并一路带到可上线的代码。Open Design 跑在你已经在用的编程 agent 里，所以线框图和真实产品共用同一份源。',
+    breadcrumb: 'AI 线框图生成器',
+    label: '工具 · AI 线框图生成器',
+    heading: '一句提示词，生成线框图',
+    lead: '描述这个屏幕或流程，让你的 agent 生成干净、可编辑的线框图——一致的布局、真实的组件、多个屏幕。然后继续往前：同一份产物会变成带样式的原型、再变成可上线的代码，全在你已经在用的 agent 里完成。',
+    heroImageAlt: '编辑插画：一句提示词变成可编辑线框图、再变成成品 UI，被一个绿色选框框住',
+    tldrTitle: '一句话',
+    tldrBody:
+      '多数 AI 线框图生成器只给你一张之后还要重做的图。Open Design 在你的编程 agent 里生成线框图，并把它从提示词一路带到可上线代码——没有导出步骤、没有交接断层、没有按席位计费。',
+    stepsTitle: 'AI 线框图生成器怎么用',
+    steps: [
+      {
+        title: '描述屏幕',
+        body: '用大白话告诉 agent 要做什么线框——"一个带侧边栏、统计行和近期动态表格的 dashboard"。Open Design 加载线框 skill，让 agent 排布结构和层级，而不只是出一张静态图。',
+        imageAlt: '插画：把大白话的屏幕描述敲进终端',
+      },
+      {
+        title: '生成可编辑线框',
+        body: 'agent 套用一套可复用设计系统里的布局模式和组件，让每个屏幕共享间距、栅格和结构。你得到可编辑、连贯的线框——一组屏幕，而不是一堆脱节的方框。',
+        imageAlt: '插画：多个线框屏幕以一致的布局栅格出现',
+      },
+      {
+        title: '提升保真度',
+        body: '让 agent 把线框带到带样式、可点击的原型——字体、配色、真实交互。同一份产物逐步提升保真，而不是重画，所以低保真到高保真之间什么都不丢。',
+        imageAlt: '插画：低保真线框变成精致的高保真屏幕',
+      },
+      {
+        title: '交付你拥有的代码',
+        body: '因为产物就在你的项目里，线框和最终代码共用同一份源。对着 agent 迭代；产出是你拥有、可上线的 HTML/代码——不被厂商锁定。',
+        imageAlt: '插画：线框流入被绿色选框框住的可上线代码',
+      },
+    ],
+    tableTitle: 'Open Design vs. 一般 AI 线框图生成器',
+    tableColCapability: '你需要的',
+    tableColWithOd: '用 Open Design',
+    tableColWithout: '一般 AI 线框图生成器',
+    tableRows: [
+      { capability: '从提示词生成', withOd: '在你已开着的 agent 里一句提示', without: '另注册一个网页工具、在它云端生成' },
+      { capability: '多个关联屏幕', withOd: '作为一组生成，共享布局与组件', without: '常常一次只出一个屏幕' },
+      { capability: '低保真到高保真', withOd: '同一产物提升保真——线框→原型→代码', without: '线框是死路，高保真和代码都要重做' },
+      { capability: '拥有产出', withOd: '你 repo 里的纯文件与代码，完全归你', without: '只能在它 app 里编辑、导出受限' },
+      { capability: '成本与锁定', withOd: '开源、自带密钥、本地运行', without: '按席位/按额度订阅、厂商托管' },
+    ],
+    featuresTitle: '你能线框化什么',
+    features: [
+      { title: 'Web 应用屏幕', body: 'Dashboard、设置、多屏流程——作为一组连贯线框，再带到代码。', thumb: 'example-web-prototype' },
+      { title: '移动端流程', body: '逐屏的移动端旅程，结构与状态一致。', thumb: 'example-mobile-app' },
+      { title: 'SaaS 落地页', body: '营销与 SaaS 落地布局，可线框、可上样式、可上线。', thumb: 'example-saas-landing' },
+      { title: '引导与表单', body: '多步引导、注册、表单流程，层级清晰。', thumb: 'example-hr-onboarding' },
+      { title: '任意视觉风格', body: '先低保真，再把连贯风格贯穿到底——编辑感、柔和或张扬。', thumb: 'example-gamified-app' },
+      { title: '落地与转化', body: 'Hero、定价、waitlist 布局，第一版就接线且贴品牌。', thumb: 'example-kami-landing' },
+    ],
+    galleryTitle: '用 Open Design 做出来的线框',
+    galleryLead:
+      '每一个都始于一句提示、渲染成可编辑可点击的产物。挑一个接近你想法的模板，描述你的变体，agent 帮你改——从线框到可上线代码。',
+    gallery: [
+      { thumb: 'example-dating-web', caption: '约会 web 应用 —— 多屏线框' },
+      { thumb: 'example-hr-onboarding', caption: 'HR 引导流程' },
+      { thumb: 'example-kami-landing', caption: '产品落地布局' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '柔和风格 web 线框' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '浏览模板',
+    faqTitle: 'AI 线框图生成器常见问题',
+    faq: [
+      {
+        q: 'AI 线框图生成器免费吗？',
+        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——线框生成本身没有按席位或按额度计费。',
+      },
+      {
+        q: '线框是可编辑的还是只是图片？',
+        a: '可编辑。产出是真实的 HTML 和代码，所以你能对着 agent 改布局、组件和内容——不是烤死在图片里、之后还要重做。',
+      },
+      {
+        q: '线框能变成高保真原型和真实代码吗？',
+        a: '这正是重点。同一份产物逐步提升保真——线框→带样式原型→可上线代码——因为它就在你项目里，而不是每个阶段重画一遍。',
+      },
+      {
+        q: '支持哪些 agent？',
+        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
+      },
+    ],
+    ctaTitle: '今晚就生成第一张线框',
+    ctaBody:
+      'Star 仓库、装上 Open Design，把你下一个屏幕想法变成可编辑线框——再变成可上线代码——全在你已经在用的 agent 里。',
+    relatedTitle: '相关工具与指南',
+    related: [
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 生成器' },
+      { href: '/solutions/design-to-code/', label: '用 Open Design 设计转代码' },
+      { href: '/blog/design-to-code-tools/', label: '最佳设计转代码工具' },
+      { href: '/solutions/prototype/', label: '用 Open Design 做原型' },
+    ],
+  },
+  aiUiGenerator: {
+    title: 'AI UI 生成器 —— 用 Open Design 从提示词到可上线 UI',
+    description:
+      '一个免费开源的 AI UI 生成器：把一句提示词变成真实的、组件化的界面，并一路带到可上线代码。Open Design 跑在你已经在用的编程 agent 里，所以生成的 UI 和生产代码就是同一份产物。',
+    breadcrumb: 'AI UI 生成器',
+    label: '工具 · AI UI 生成器',
+    heading: '生成真正能上线的 UI',
+    lead: '描述这个界面，让你的 agent 生成真实的、组件化的 UI——一致的设计系统、响应式布局、可用的状态。然后继续往前：同一份产物会变成可上线代码，全在你已经在用的 agent 里完成。',
+    heroImageAlt: '编辑插画：一句提示词变成组件化 UI、再变成生产代码，被一个绿色选框框住',
+    tldrTitle: '一句话',
+    tldrBody:
+      '多数 AI UI 生成器只给你一张 mockup 或一段用完即弃的 React 片段。Open Design 在你的编程 agent 里生成 UI，并把它从提示词一路带到可上线代码——真实组件、你的设计系统、没有导出步骤、没有按席位计费。',
+    stepsTitle: 'AI UI 生成器怎么用',
+    steps: [
+      {
+        title: '描述界面',
+        body: '用大白话告诉 agent 要做什么——"一个带侧边栏、分页区块和保存栏的设置页"。Open Design 加载 UI skill，让 agent 去取真实组件和设计系统，而不是拼一个一次性屏幕。',
+        imageAlt: '插画：把大白话的 UI 描述敲进终端',
+      },
+      {
+        title: '生成组件化 UI',
+        body: 'agent 用可复用组件和设计 token 拼出界面，让间距、字号梯度、配色在每个屏幕都一致。你得到一份连贯的 UI——而不是一堆要你去理清的内联样式。',
+        imageAlt: '插画：UI 由可复用组件块在栅格上拼装而成',
+      },
+      {
+        title: '对话式打磨',
+        body: '在对话里调布局、状态和主题——"把间距收紧""加个空状态""默认改深色"。产物原地更新，而不是从头重新生成。',
+        imageAlt: '插画：通过对话打磨 UI，带有细微的前后对比状态',
+      },
+      {
+        title: '交付你拥有的代码',
+        body: '因为 UI 就在你的项目里，设计和生产代码共用同一份源。产出是你拥有、可上线的 HTML/代码——不被厂商锁定，设计到构建之间不用重画。',
+        imageAlt: '插画：生成的 UI 流入被绿色选框框住的可上线代码',
+      },
+    ],
+    tableTitle: 'Open Design vs. 一般 AI UI 生成器',
+    tableColCapability: '你需要的',
+    tableColWithOd: '用 Open Design',
+    tableColWithout: '一般 AI UI 生成器',
+    tableRows: [
+      { capability: '从提示词生成', withOd: '在你已开着的 agent 里一句提示', without: '另注册一个网页工具、在它云端生成' },
+      { capability: '真实组件', withOd: '由可复用设计系统构建，跨屏一致', without: '一次性标记或内联样式，之后再重构' },
+      { capability: '设计转代码', withOd: '同一产物变成可上线代码——不用重画', without: 'UI mockup 是死路，要为生产重做' },
+      { capability: '拥有产出', withOd: '你 repo 里的纯文件与代码，完全归你', without: '只能在它 app 里编辑、导出受限' },
+      { capability: '成本与锁定', withOd: '开源、自带密钥、本地运行', without: '按席位/按额度订阅、厂商托管' },
+    ],
+    featuresTitle: '你能生成什么',
+    features: [
+      { title: 'Web 应用界面', body: 'Dashboard、设置、数据表——作为一组连贯组件生成，再带到代码。', thumb: 'example-web-prototype' },
+      { title: '移动端 UI', body: '逐屏的移动端界面，组件与状态一致。', thumb: 'example-mobile-app' },
+      { title: 'SaaS 与营销页', body: '落地、定价、营销 UI，可生成、可换主题、可上线。', thumb: 'example-saas-landing' },
+      { title: '表单与流程', body: '多步表单、引导、登录流程，层级清晰、状态完整。', thumb: 'example-hr-onboarding' },
+      { title: '设计系统', body: '生成尊重共享设计系统的 UI——token、组件、间距。', thumb: 'example-gamified-app' },
+      { title: '任意视觉风格', body: '编辑感、柔和或张扬——把一种连贯风格贯穿到底。', thumb: 'example-kami-landing' },
+    ],
+    galleryTitle: '用 Open Design 做出来的 UI',
+    galleryLead:
+      '每一个都始于一句提示、渲染成真实的、组件化的产物。挑一个接近你想法的模板，描述你的变体，agent 帮你改——从 UI 到可上线代码。',
+    gallery: [
+      { thumb: 'example-dating-web', caption: '约会 web 应用 —— 组件化 UI' },
+      { thumb: 'example-hr-onboarding', caption: 'HR 引导流程' },
+      { thumb: 'example-kami-landing', caption: '产品落地 UI' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '柔和风格 web UI' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '浏览模板',
+    faqTitle: 'AI UI 生成器常见问题',
+    faq: [
+      {
+        q: 'AI UI 生成器免费吗？',
+        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——UI 生成本身没有按席位或按额度计费。',
+      },
+      {
+        q: '它生成的是真实组件还是只是 mockup？',
+        a: '真实组件。产出是由可复用设计系统构建的 HTML 和代码，所以你能对着 agent 改布局、状态和主题，而不是重做一张扁平 mockup。',
+      },
+      {
+        q: '生成的 UI 能变成生产代码吗？',
+        a: '这正是重点。同一份产物就变成可上线代码，因为它就在你项目里——生成的 UI 和你部署的东西之间没有重画或交接断层。',
+      },
+      {
+        q: '支持哪些 agent？',
+        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
+      },
+    ],
+    ctaTitle: '今晚就生成第一个 UI',
+    ctaBody:
+      'Star 仓库、装上 Open Design，把你下一个界面想法变成真实的、组件化的 UI——再变成可上线代码——全在你已经在用的 agent 里。',
+    relatedTitle: '相关工具与指南',
+    related: [
+      { href: '/solutions/ai-wireframe-generator/', label: 'AI 线框图生成器' },
+      { href: '/solutions/design-to-code/', label: '用 Open Design 设计转代码' },
+      { href: '/blog/best-ai-design-tools/', label: '最佳 AI 设计工具' },
+      { href: '/solutions/designer/', label: 'Open Design 给设计师' },
+    ],
+  },
+  designToCode: {
+    title: '设计转代码 —— 用 Open Design 把设计变成可上线代码',
+    description:
+      '一个免费开源的设计转代码工作流：把一句提示词或一份设计变成真实、可编辑的代码——就在你已经在用的编程 agent 里。没有导出、没有交接：设计和生产代码是同一份你拥有、可上线的产物。',
+    breadcrumb: '设计转代码',
+    label: '工具 · 设计转代码',
+    heading: '设计转代码，没有交接',
+    lead: '描述这个屏幕，或者带上一份设计，让你的 agent 把它变成干净、组件化的代码——响应式布局、真实状态、你的技术栈。设计和代码是同一份产物，所以转换中什么都不丢。',
+    heroImageAlt: '编辑插画：一份设计变成干净的生产代码，被一个绿色选框框住',
+    tldrTitle: '一句话',
+    tldrBody:
+      '多数设计转代码工具导出一份一次性快照，之后还要你伺候。Open Design 把设计和代码当成一份活产物放在你的 agent 里——对话式迭代、交付你拥有的代码、没有按席位计费。',
+    stepsTitle: '设计转代码怎么用',
+    steps: [
+      {
+        title: '从提示词或设计开始',
+        body: '用大白话描述屏幕，或给 agent 指一个设计方向。Open Design 加载对应的 skill，让 agent 搭出结构和组件，而不是一次性的脆弱转换。',
+        imageAlt: '插画：一份设计和一句提示词一起喂进终端',
+      },
+      {
+        title: '生成组件化代码',
+        body: 'agent 产出干净、可读、由可复用组件和设计 token 构建的代码——间距、字体、配色一致——而不是一墙之后要重构掉的生成标记。',
+        imageAlt: '插画：一份设计转换成结构化、组件化的代码',
+      },
+      {
+        title: '对话式迭代',
+        body: '在对话里改布局、状态和行为——"做成响应式""把表单接上""对齐我们的 token"。代码原地更新；设计始终同步，因为它们是同一份产物。',
+        imageAlt: '插画：代码通过对话被打磨，设计保持同步',
+      },
+      {
+        title: '交付你拥有的代码',
+        body: '产出是你 repo 里的 HTML/代码，完全归你——没有导出步骤、没有被厂商锁定的编辑器、设计到构建之间不用重画。上线它，再在 agent 里继续演进。',
+        imageAlt: '插画：完成的代码被绿色选框框住，准备上线',
+      },
+    ],
+    tableTitle: 'Open Design vs. 一般设计转代码工具',
+    tableColCapability: '你需要的',
+    tableColWithOd: '用 Open Design',
+    tableColWithout: '一般设计转代码工具',
+    tableRows: [
+      { capability: '开始转换', withOd: '在你已开着的 agent 里一句提示', without: '装个插件或上传到另一个网页工具' },
+      { capability: '代码质量', withOd: '由设计系统产出干净、组件化的代码', without: '绝对定位或一次性标记，要你重写' },
+      { capability: '设计↔代码同步', withOd: '同一份产物——设计和代码永不漂移', without: '一次性导出，第一次编辑后就过时' },
+      { capability: '拥有产出', withOd: '你 repo 里的纯文件与代码，完全归你', without: '锁死在它的编辑器或组件库里' },
+      { capability: '成本与锁定', withOd: '开源、自带密钥、本地运行', without: '按席位/按额度订阅、厂商托管' },
+    ],
+    featuresTitle: '你能转换什么',
+    features: [
+      { title: '提示词转代码', body: '描述一个屏幕，得到你技术栈里干净、组件化的代码。', thumb: 'example-web-prototype' },
+      { title: '线框转代码', body: '把生成的线框一路带到可上线代码——同一份产物。', thumb: 'example-mobile-app' },
+      { title: 'UI 转生产', body: '把生成的 UI 变成响应式、真实状态的生产代码。', thumb: 'example-saas-landing' },
+      { title: '落地页', body: 'Hero、定价、waitlist 区块转成干净、贴品牌的代码。', thumb: 'example-kami-landing' },
+      { title: '表单与流程', body: '多步表单和引导接上真实校验与状态。', thumb: 'example-hr-onboarding' },
+      { title: '任意视觉风格', body: '编辑感、柔和或张扬——代码把一种连贯风格贯穿到底。', thumb: 'example-gamified-app' },
+    ],
+    galleryTitle: '用 Open Design 从设计交付',
+    galleryLead:
+      '每一个都始于一句提示或一份设计、变成你能上线的代码。挑一个接近你想法的模板，描述你的变体，agent 帮你转换——设计转代码，没有交接。',
+    gallery: [
+      { thumb: 'example-dating-web', caption: '约会 web 应用 —— 设计转代码' },
+      { thumb: 'example-hr-onboarding', caption: 'HR 引导流程' },
+      { thumb: 'example-kami-landing', caption: '代码里的产品落地' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '柔和风格 web 构建' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '浏览模板',
+    faqTitle: '设计转代码常见问题',
+    faq: [
+      {
+        q: '设计转代码工作流免费吗？',
+        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——设计转代码工作流本身没有按席位或按额度计费。',
+      },
+      {
+        q: '它产出什么样的代码？',
+        a: '干净、组件化、由可复用设计系统构建的 HTML 和代码，所以你能读、能改、能上线——不是要你重写的绝对定位标记。',
+      },
+      {
+        q: '设计和代码会保持同步吗？',
+        a: '会——它们是同一份产物。因为设计和代码一起住在你项目里，没有那种第一次编辑后就过时的一次性导出。',
+      },
+      {
+        q: '支持哪些 agent？',
+        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
+      },
+    ],
+    ctaTitle: '今晚就把你下一份设计变成代码',
+    ctaBody:
+      'Star 仓库、装上 Open Design，把你下一个屏幕——提示词、线框或设计——在你已经在用的 agent 里变成干净、可上线的代码。',
+    relatedTitle: '相关工具与指南',
+    related: [
+      { href: '/solutions/ai-wireframe-generator/', label: 'AI 线框图生成器' },
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 生成器' },
+      { href: '/blog/design-to-code-tools/', label: '最佳设计转代码工具' },
+      { href: '/solutions/engineering/', label: 'Open Design 给工程师' },
+    ],
+  },
+  aiLandingPageGenerator: {
+    title: 'AI 落地页生成器 —— 用 Open Design 从提示词到可上线落地页',
+    description:
+      '一个免费开源的 AI 落地页生成器：把一句提示词变成真实、响应式的落地页，并一路带到可上线代码。Open Design 跑在你已经在用的编程 agent 里，所以生成的页面和部署上线的页面就是同一份你拥有的产物。',
+    breadcrumb: 'AI 落地页生成器',
+    label: '工具 · AI 落地页生成器',
+    heading: '生成一个能上线的落地页',
+    lead: '描述你的卖点，让你的 agent 生成真实、响应式的落地页——hero、功能、定价、waitlist，贴合品牌。然后继续往前：同一份产物会变成你部署的可上线代码，全在你已经在用的 agent 里完成。',
+    heroImageAlt: '编辑插画：一句提示词变成响应式落地页、再变成生产代码，被一个绿色选框框住',
+    tldrTitle: '一句话',
+    tldrBody:
+      '多数 AI 落地页搭建工具把你的页面锁在它的编辑器里、按席位计费。Open Design 在你的编程 agent 里生成落地页，并把它从提示词一路带到可上线代码——真实区块、你的品牌、没有导出步骤、没有按席位计费。',
+    stepsTitle: 'AI 落地页生成器怎么用',
+    steps: [
+      {
+        title: '描述页面',
+        body: '用大白话告诉 agent 要做什么——"一个笔记应用的发布页：hero、三个功能、定价、一个 waitlist 表单"。Open Design 加载落地页 skill，让 agent 排布真实区块、层级清晰。',
+        imageAlt: '插画：把大白话的落地页需求敲进终端',
+      },
+      {
+        title: '生成响应式页面',
+        body: 'agent 用可复用区块和设计 token 拼出页面，让间距、字体、配色一致，在每个屏幕上都好看。你得到连贯、贴品牌的落地页——而不是一个你费劲去改的模板。',
+        imageAlt: '插画：落地页由 hero、功能、定价区块在栅格上拼装而成',
+      },
+      {
+        title: '打磨并加转化',
+        body: '在对话里调文案、区块和 CTA——"把 hero 收紧""加个社会证明""把 waitlist 表单接上"。产物原地更新，而不是从头重新生成。',
+        imageAlt: '插画：通过对话打磨落地页，加上一条证言和一个表单',
+      },
+      {
+        title: '交付你拥有的代码',
+        body: '因为页面就在你的项目里，设计和部署上线的页面共用同一份源。产出是你拥有、可托管在任何地方的 HTML/代码——不被厂商锁定，设计到上线之间不用重画。',
+        imageAlt: '插画：落地页流入被绿色选框框住的可上线代码',
+      },
+    ],
+    tableTitle: 'Open Design vs. 一般 AI 落地页搭建工具',
+    tableColCapability: '你需要的',
+    tableColWithOd: '用 Open Design',
+    tableColWithout: '一般 AI 落地页搭建工具',
+    tableRows: [
+      { capability: '从提示词生成', withOd: '在你已开着的 agent 里一句提示', without: '另注册一个建站工具、在它云端生成' },
+      { capability: '真实响应式区块', withOd: '由可复用设计系统构建，跨断点一致', without: '一个你在它编辑器里改的锁定模板' },
+      { capability: '设计转代码', withOd: '同一产物变成可上线代码——托管在任何地方', without: '页面住在它平台上，导出受限或要付费' },
+      { capability: '拥有产出', withOd: '你 repo 里的纯文件与代码，完全归你', without: '托管在它那儿，你租页面、不拥有' },
+      { capability: '成本与锁定', withOd: '开源、自带密钥、本地运行', without: '按席位/按页面订阅、厂商托管' },
+    ],
+    featuresTitle: '你能生成什么',
+    features: [
+      { title: '产品发布页', body: 'hero、功能、定价、waitlist——作为一个连贯页面生成，再带到代码。', thumb: 'example-kami-landing' },
+      { title: 'SaaS 营销页', body: '功能与定价布局，可生成、可换主题、可上线到你自己的域名。', thumb: 'example-saas-landing' },
+      { title: 'Waitlist 与预告页', body: '单一目的的收集页，带可用表单和清晰 CTA。', thumb: 'example-hr-onboarding' },
+      { title: '活动与campaign页', body: '限时 campaign 布局，第一版就接线且贴品牌。', thumb: 'example-web-prototype' },
+      { title: '应用下载页', body: '移动优先的页面，展示产品、驱动安装。', thumb: 'example-mobile-app' },
+      { title: '任意视觉风格', body: '编辑感、柔和或张扬——把一种连贯风格贯穿到底。', thumb: 'example-gamified-app' },
+    ],
+    galleryTitle: '用 Open Design 做出来的落地页',
+    galleryLead:
+      '每一个都始于一句提示、渲染成真实、响应式的产物。挑一个接近你想法的模板，描述你的变体，agent 帮你改——从落地页到可上线代码。',
+    gallery: [
+      { thumb: 'example-kami-landing', caption: '产品发布页' },
+      { thumb: 'example-saas-landing', caption: 'SaaS 营销页' },
+      { thumb: 'example-hr-onboarding', caption: 'Waitlist 收集流程' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '柔和风格落地布局' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '浏览模板',
+    faqTitle: 'AI 落地页生成器常见问题',
+    faq: [
+      {
+        q: 'AI 落地页生成器免费吗？',
+        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——落地页生成本身没有按席位或按页面计费。',
+      },
+      {
+        q: '页面能托管在任何地方吗？',
+        a: '能。产出是你项目里真实的 HTML 和代码，所以你能部署到任何主机——没有平台锁定，也没有那种你停付费就消失的租用页面。',
+      },
+      {
+        q: '页面是响应式且贴品牌的吗？',
+        a: '是。agent 由可复用设计系统构建，所以页面跨断点一致、贴合你的品牌——而且你对着它说话就能改，不用跟模板较劲。',
+      },
+      {
+        q: '支持哪些 agent？',
+        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
+      },
+    ],
+    ctaTitle: '今晚就生成第一个落地页',
+    ctaBody:
+      'Star 仓库、装上 Open Design，把你下一个发布想法变成真实、响应式的落地页——再变成可上线代码——全在你已经在用的 agent 里。',
+    relatedTitle: '相关工具与指南',
+    related: [
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 生成器' },
+      { href: '/solutions/design-to-code/', label: '用 Open Design 设计转代码' },
+      { href: '/solutions/marketing/', label: 'Open Design 给市场' },
+      { href: '/blog/best-ai-design-tools/', label: '最佳 AI 设计工具' },
+    ],
+  },
+  figmaToCode: {
+    title: 'Figma 转代码 —— 用 Open Design 把 Figma 设计变成可上线代码',
+    description:
+      '一个免费开源的 Figma 转代码工作流：把一份 Figma 设计变成干净、组件化的代码——就在你已经在用的编程 agent 里，从 Claude Code 到 Codex。通过 Figma MCP 把设计拉进来，让 agent 构建你拥有、可上线的真实代码，没有被锁定的一次性导出。',
+    breadcrumb: 'Figma 转代码',
+    label: '工具 · Figma 转代码',
+    heading: 'Figma 转代码，就在你的 agent 里',
+    lead: '把你的编程 agent 指向一份 Figma 设计，让它把 frame 变成干净、组件化的代码——响应式布局、真实状态、你的技术栈。通过 Figma MCP，Claude Code 等 agent 直接读设计，所以不会在一次性导出里丢东西。',
+    heroImageAlt: '编辑插画：一份 Figma 设计在编程 agent 里变成干净的生产代码，被一个绿色选框框住',
+    tldrTitle: '一句话',
+    tldrBody:
+      '多数 Figma 转代码插件导出一份绝对定位标记的一次性快照，之后还要你重写。Open Design 把设计和代码当成一份活产物放在你的 agent 里——通过 Figma MCP 拉 frame、对话式迭代、交付你拥有的代码。',
+    stepsTitle: 'Figma 转代码怎么用',
+    steps: [
+      {
+        title: '把 Figma 接上你的 agent',
+        body: '配好 Figma MCP 后，你的编程 agent——Claude Code、Codex、Cursor Agent——就能直接读一个 Figma 文件或选中的 frame。Open Design 加载对应的 skill，让 agent 把设计意图变成结构，而不是脆弱的像素照搬。',
+        imageAlt: '插画：一个 Figma frame 通过 MCP 连线连到终端',
+      },
+      {
+        title: '生成组件化代码',
+        body: 'agent 把 frame 映射到可复用组件和设计 token——间距、字体、配色一致——产出干净、可读的代码，而不是一墙之后要重构掉的绝对定位 div。',
+        imageAlt: '插画：一个 Figma frame 转换成结构化、组件化的代码',
+      },
+      {
+        title: '对话式迭代',
+        body: '在对话里改布局、状态和行为——"做成响应式""把表单接上""对齐我们的 token"。代码原地更新；因为 agent 实时读 Figma，你可以重新拉最新设计，而不是重新导出。',
+        imageAlt: '插画：代码通过对话被打磨，一个 Figma frame 保持同步',
+      },
+      {
+        title: '交付你拥有的代码',
+        body: '产出是你 repo 里的 HTML/代码，完全归你——没有被厂商锁定的编辑器、没有会过时的导出、设计到构建之间不用重画。上线它，再在 agent 里继续演进。',
+        imageAlt: '插画：完成的代码被绿色选框框住，准备上线',
+      },
+    ],
+    tableTitle: 'Open Design vs. 一般 Figma 转代码工具',
+    tableColCapability: '你需要的',
+    tableColWithOd: '用 Open Design',
+    tableColWithout: '一般 Figma 转代码工具',
+    tableRows: [
+      { capability: '读取 Figma 设计', withOd: '你的 agent 通过 MCP 实时读 Figma', without: '插件导出一次性快照' },
+      { capability: '代码质量', withOd: '由设计系统产出干净、组件化的代码', without: '绝对定位标记，要你手动重写' },
+      { capability: '设计↔代码同步', withOd: '重新拉最新 frame；对话式迭代', without: 'Figma 一改，导出就过时' },
+      { capability: '拥有产出', withOd: '你 repo 里的纯文件与代码，完全归你', without: '锁死在它的编辑器或组件库里' },
+      { capability: '成本与锁定', withOd: '开源、自带密钥、本地运行', without: '按席位/按导出订阅、厂商托管' },
+    ],
+    featuresTitle: '你能转换什么',
+    features: [
+      { title: 'Figma 转 Claude Code', body: '通过 MCP 把一个 Figma frame 拉进 Claude Code，得到干净、组件化的代码。', thumb: 'example-web-prototype' },
+      { title: 'Figma 转 React / HTML', body: '把 frame 变成你已经在用的技术栈里响应式、真实状态的代码。', thumb: 'example-saas-landing' },
+      { title: '整屏与流程', body: '把多屏流程作为一组转换，共享组件、结构一致。', thumb: 'example-mobile-app' },
+      { title: '落地页', body: 'hero、定价、waitlist frame 转成干净、贴品牌的代码。', thumb: 'example-kami-landing' },
+      { title: '表单与流程', body: '多步表单和引导接上真实校验与状态。', thumb: 'example-hr-onboarding' },
+      { title: '任意视觉风格', body: '编辑感、柔和或张扬——代码把设计的风格贯穿到底。', thumb: 'example-gamified-app' },
+    ],
+    galleryTitle: '用 Open Design 从 Figma 交付',
+    galleryLead:
+      '每一个都始于一个 Figma frame、变成你能上线的代码。挑一个接近你设计的模板，描述你的变体，agent 帮你转换——Figma 转代码，没有被锁定的导出。',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: 'Web 应用 frame —— Figma 转代码' },
+      { thumb: 'example-mobile-app', caption: '移动端流程转代码' },
+      { thumb: 'example-kami-landing', caption: '代码里的落地 frame' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '柔和风格 web 构建' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '浏览模板',
+    faqTitle: 'Figma 转代码常见问题',
+    faq: [
+      {
+        q: 'Open Design 怎么把 Figma 变成代码？',
+        a: '通过 Figma MCP，你的编程 agent——Claude Code、Codex、Cursor Agent——直接读 Figma 文件或选中的 frame 并生成干净、组件化的代码，而不是从插件导出一次性快照。',
+      },
+      {
+        q: '它产出什么样的代码？',
+        a: '干净、组件化、由可复用设计系统构建的 HTML 和代码，所以你能读、能改、能上线——不是多数 Figma 转代码导出器产出的绝对定位标记。',
+      },
+      {
+        q: '免费吗？',
+        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——Figma 转代码工作流本身没有按席位或按导出计费。',
+      },
+      {
+        q: '支持哪些 agent？',
+        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥和自己的 Figma MCP 配置，没有任何东西托管在我们这边。',
+      },
+    ],
+    ctaTitle: '今晚就把你下一个 Figma frame 变成代码',
+    ctaBody:
+      'Star 仓库、装上 Open Design、接上 Figma MCP，把你下一份 Figma 设计在你已经在用的 agent 里变成干净、可上线的代码。',
+    relatedTitle: '相关工具与指南',
+    related: [
+      { href: '/solutions/design-to-code/', label: '用 Open Design 设计转代码' },
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 生成器' },
+      { href: '/agents/claude-code-design/', label: 'Open Design 给 Claude Code' },
+      { href: '/solutions/engineering/', label: 'Open Design 给工程师' },
+    ],
+  },
+  screenshotToCode: {
+    title: '截图转代码 —— 用 Open Design 把截图变成代码',
+    description:
+      '一个免费开源的截图转代码工作流：把任意 UI 的截图变成干净、组件化的代码——就在你已经在用的编程 agent 里。丢进一张图、描述你要什么，agent 就把它重建成你拥有、可上线的真实代码，没有被锁定的导出。',
+    breadcrumb: '截图转代码',
+    label: '工具 · 截图转代码',
+    heading: '截图转代码，就在你的 agent 里',
+    lead: '有一张你喜欢的 UI 截图？把它交给你的编程 agent，让它把这个屏幕重建成干净、组件化的代码——响应式布局、真实状态、你的技术栈。截图就是需求说明；产出是你拥有的代码，不是用完即弃的快照。',
+    heroImageAlt: '编辑插画：一张 UI 截图在编程 agent 里变成干净的生产代码，被一个绿色选框框住',
+    tldrTitle: '一句话',
+    tldrBody:
+      '多数截图转代码工具吐出一次性的绝对定位标记，之后还要你重写。Open Design 在你的编程 agent 里把截图重建成干净、组件化的代码——真实结构、你的设计系统、没有导出步骤、没有按席位计费。',
+    stepsTitle: '截图转代码怎么用',
+    steps: [
+      {
+        title: '丢进截图',
+        body: '给你的 agent 一张你想要的屏幕的图——一张 app、网站或设计的截图。Open Design 加载对应的 skill，让 agent 读懂布局和意图，而不只是像素。',
+        imageAlt: '插画：一张 UI 截图被丢进终端',
+      },
+      {
+        title: '重建成组件化代码',
+        body: 'agent 把截图映射到可复用组件和设计 token——间距、字体、配色一致——产出干净、可读的代码，而不是一墙绝对定位的 div。',
+        imageAlt: '插画：一张截图转换成结构化、组件化的代码',
+      },
+      {
+        title: '对话式打磨',
+        body: '在对话里改布局、状态和行为——"做成响应式""把表单接上""对齐我们的 token"。代码原地更新；你不会被卡在一个冻结的一次性转换里。',
+        imageAlt: '插画：代码在源截图旁通过对话被打磨',
+      },
+      {
+        title: '交付你拥有的代码',
+        body: '产出是你 repo 里的 HTML/代码，完全归你——没有被厂商锁定的编辑器、没有用完即弃的导出、截图到构建之间不用重画。上线它，再在 agent 里继续演进。',
+        imageAlt: '插画：完成的代码被绿色选框框住，准备上线',
+      },
+    ],
+    tableTitle: 'Open Design vs. 一般截图转代码工具',
+    tableColCapability: '你需要的',
+    tableColWithOd: '用 Open Design',
+    tableColWithout: '一般截图转代码工具',
+    tableRows: [
+      { capability: '从一张图开始', withOd: '把截图丢进你已开着的 agent', without: '上传到另一个网页工具、在它云端转换' },
+      { capability: '代码质量', withOd: '由设计系统产出干净、组件化的代码', without: '绝对定位标记，要你手动重写' },
+      { capability: '转换后迭代', withOd: '对话式打磨；代码始终活在你项目里', without: '一个你手动改的冻结一次性快照' },
+      { capability: '拥有产出', withOd: '你 repo 里的纯文件与代码，完全归你', without: '锁死在它的编辑器或导出格式里' },
+      { capability: '成本与锁定', withOd: '开源、自带密钥、本地运行', without: '按席位/按额度订阅、厂商托管' },
+    ],
+    featuresTitle: '你能转换什么',
+    features: [
+      { title: '截图转代码', body: '把任意屏幕的图变成你技术栈里干净、组件化的代码。', thumb: 'example-web-prototype' },
+      { title: 'App 截图', body: '从截图重建一个移动或 web app 屏幕，带真实状态。', thumb: 'example-mobile-app' },
+      { title: '网站截图', body: '把你截下的落地或营销页重建成响应式代码。', thumb: 'example-saas-landing' },
+      { title: '设计截图', body: '交一张设计或 mockup 的截图，拿回可上线代码。', thumb: 'example-kami-landing' },
+      { title: '表单与流程', body: '从截图重建一个表单或多步流程，带真实校验。', thumb: 'example-hr-onboarding' },
+      { title: '任意视觉风格', body: '编辑感、柔和或张扬——代码把截图的风格贯穿到底。', thumb: 'example-gamified-app' },
+    ],
+    galleryTitle: '用 Open Design 从截图重建',
+    galleryLead:
+      '每一个都始于一张图、变成你能上线的代码。挑一个接近你截图的模板，描述你的变体，agent 帮你重建——截图转代码，没有被锁定的导出。',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: 'Web 应用屏幕 —— 截图转代码' },
+      { thumb: 'example-mobile-app', caption: '移动屏幕转代码' },
+      { thumb: 'example-kami-landing', caption: '代码里的落地截图' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '柔和风格 web 构建' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '浏览模板',
+    faqTitle: '截图转代码常见问题',
+    faq: [
+      {
+        q: 'Open Design 怎么把截图变成代码？',
+        a: '你给编程 agent 一张屏幕的图，Open Design 加载对应的 skill，让 agent 把它重建成干净、组件化的代码——读懂布局和意图，而不只是描摹像素。',
+      },
+      {
+        q: '它产出什么样的代码？',
+        a: '干净、组件化、由可复用设计系统构建的 HTML 和代码，所以你能读、能改、能上线——不是多数截图转代码工具产出的绝对定位标记。',
+      },
+      {
+        q: '免费吗？',
+        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——截图转代码工作流本身没有按席位或按额度计费。',
+      },
+      {
+        q: '支持哪些 agent？',
+        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
+      },
+    ],
+    ctaTitle: '今晚就把你下一张截图变成代码',
+    ctaBody:
+      'Star 仓库、装上 Open Design，把你想要的屏幕的截图在你已经在用的 agent 里变成干净、可上线的代码。',
+    relatedTitle: '相关工具与指南',
+    related: [
+      { href: '/solutions/figma-to-code/', label: '用 Open Design 把 Figma 转代码' },
+      { href: '/solutions/design-to-code/', label: '用 Open Design 设计转代码' },
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 生成器' },
+      { href: '/solutions/engineering/', label: 'Open Design 给工程师' },
+    ],
+  },
+  aiPrototypeGenerator: {
+    title: 'AI 原型生成器 —— 从提示词到可点击原型、再到代码',
+    description:
+      '一个免费开源的 AI 原型生成器：把一句提示词变成真实、可点击的原型——多个屏幕、共享样式、真实交互——并一路带到可上线代码。Figma、Cursor、Penpot 原型生成器的开源替代，跑在你已经在用的编程 agent 里。',
+    breadcrumb: 'AI 原型生成器',
+    label: '工具 · AI 原型生成器',
+    heading: '能交付代码的 AI 原型生成器',
+    lead: '描述这个流程，让你的 agent 生成真实、可点击的原型——关联的屏幕、一致的样式、可用的交互。不像那些止步于 mockup 的原型生成器，Open Design 把同一份产物带到可上线代码，全在你已经在用的 agent 里。',
+    heroImageAlt: '编辑插画：一句提示词变成可点击的多屏原型、再变成生产代码，被一个绿色选框框住',
+    tldrTitle: '一句话',
+    tldrBody:
+      '多数 AI 原型生成器（Figma、Cursor、Penpot）止步于一个之后还要重做的可点击 mockup。Open Design 在你的编程 agent 里生成原型，并把它从提示词一路带到可上线代码——没有导出步骤、没有交接断层、没有按席位计费。',
+    stepsTitle: 'AI 原型生成器怎么用',
+    steps: [
+      {
+        title: '描述流程',
+        body: '用大白话告诉 agent 这段旅程——"一个引导流程：注册、选套餐、一个 dashboard"。Open Design 加载原型 skill，让 agent 排布关联的屏幕，而不是单个静态 frame。',
+        imageAlt: '插画：把大白话的流程描述敲进终端',
+      },
+      {
+        title: '生成可点击原型',
+        body: 'agent 用可复用组件和设计 token 拼出关联的屏幕，带真实交互——导航、状态、转场。你得到连贯、可点击的原型，作为一组，而不是脱节的 frame。',
+        imageAlt: '插画：关联的原型屏幕带导航箭头在栅格上',
+      },
+      {
+        title: '对话式打磨',
+        body: '在对话里调流程、状态和样式——"加个空状态""把这个按钮链到 dashboard""让它更利落"。原型原地更新，而不是重画。',
+        imageAlt: '插画：通过对话打磨原型，加一个屏幕和一个转场',
+      },
+      {
+        title: '交付你拥有的代码',
+        body: '因为原型就在你的项目里，它和最终代码共用同一份源。产出是你拥有、可上线的 HTML/代码——不被厂商锁定，原型到构建之间不用重画。',
+        imageAlt: '插画：原型流入被绿色选框框住的可上线代码',
+      },
+    ],
+    tableTitle: 'Open Design vs. 一般 AI 原型生成器',
+    tableColCapability: '你需要的',
+    tableColWithOd: '用 Open Design',
+    tableColWithout: 'Figma / Cursor / Penpot 原型生成器',
+    tableRows: [
+      { capability: '从提示词生成', withOd: '在你已开着的 agent 里一句提示', without: '在它 app 里或另一个网页工具生成' },
+      { capability: '可点击、多屏', withOd: '关联的屏幕带真实交互，作为一组', without: '可点击，但常被困在它编辑器里' },
+      { capability: '原型转代码', withOd: '同一产物变成可上线代码——不用重画', without: '原型是死路，要为生产重做' },
+      { capability: '拥有产出', withOd: '你 repo 里的纯文件与代码，完全归你', without: '只能在它 app 里编辑、导出受限' },
+      { capability: '成本与锁定', withOd: '开源、自带密钥、本地运行', without: '按席位/按额度订阅、厂商托管' },
+    ],
+    featuresTitle: '你能做什么原型',
+    features: [
+      { title: 'App 流程', body: '引导、设置、多屏旅程，作为可点击的一组生成。', thumb: 'example-mobile-app' },
+      { title: 'Web 应用原型', body: 'Dashboard 和工具带真实导航与状态，再带到代码。', thumb: 'example-web-prototype' },
+      { title: 'SaaS 与落地流程', body: '营销到注册的流程，可原型、可上样式、可上线。', thumb: 'example-saas-landing' },
+      { title: '引导与表单', body: '多步引导和表单流程，层级清晰、状态完整。', thumb: 'example-hr-onboarding' },
+      { title: '可交互概念', body: '快速拿出一个可点击概念，再把同一份产物带到生产。', thumb: 'example-gamified-app' },
+      { title: '任意视觉风格', body: '编辑感、柔和或张扬——把一种连贯风格贯穿每个屏幕。', thumb: 'example-kami-landing' },
+    ],
+    galleryTitle: '用 Open Design 做出来的原型',
+    galleryLead:
+      '每一个都始于一句提示、渲染成可点击、可编辑的产物。挑一个接近你想法的模板，描述你的变体，agent 帮你改——从原型到可上线代码。',
+    gallery: [
+      { thumb: 'example-dating-web', caption: '约会 web 应用 —— 可点击原型' },
+      { thumb: 'example-hr-onboarding', caption: 'HR 引导流程' },
+      { thumb: 'example-mobile-app', caption: '移动 app 原型' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '柔和风格 web 原型' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '浏览模板',
+    faqTitle: 'AI 原型生成器常见问题',
+    faq: [
+      {
+        q: 'AI 原型生成器免费吗？',
+        a: '免费。Open Design 开源，跑在你已经在用的编程 agent 里、用你自己的模型密钥——原型生成本身没有按席位或按额度计费。',
+      },
+      {
+        q: '它跟 Figma、Cursor、Penpot 的原型生成器有什么不同？',
+        a: '那些止步于它们 app 里的一个可点击 mockup。Open Design 在你的编程 agent 里生成原型，并把同一份产物一路带到你拥有的可上线代码——没有导出、不用为生产重做。',
+      },
+      {
+        q: '原型是可点击、多屏的吗？',
+        a: '是。agent 生成关联的屏幕、带真实交互——导航、状态、转场——作为连贯的一组，然后你对着它说话就能改。',
+      },
+      {
+        q: '支持哪些 agent？',
+        a: 'Open Design 支持 Claude Code、Codex、Cursor Agent、Gemini CLI 等十多个一方适配器。你自带模型密钥，没有任何东西托管在我们这边。',
+      },
+    ],
+    ctaTitle: '今晚就生成第一个原型',
+    ctaBody:
+      'Star 仓库、装上 Open Design，把你下一个流程变成可点击原型——再变成可上线代码——全在你已经在用的 agent 里。',
+    relatedTitle: '相关工具与指南',
+    related: [
+      { href: '/solutions/prototype/', label: '用 Open Design 做原型' },
+      { href: '/solutions/ai-wireframe-generator/', label: 'AI 线框图生成器' },
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 生成器' },
+      { href: '/solutions/design-to-code/', label: '用 Open Design 设计转代码' },
+    ],
+  },
   prototype: {
     title: '用 Open Design + Claude Code 做可交互原型',
     description:

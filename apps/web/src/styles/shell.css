@@ -1114,6 +1114,152 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Selected agent / active mode highlight (mirrors the inline-switcher grid). */
+.avatar-item.active {
+  background: var(--accent-tint);
+  color: var(--text-strong);
+}
+.avatar-item.active:hover {
+  background: color-mix(in srgb, var(--accent-tint) 82%, var(--bg-subtle));
+}
+/* Mode rows (本机 CLI / API·BYOK) mark the current choice with a trailing check
+   + bold text instead of a filled block, so they don't compete with the agent
+   row's filled selection highlight directly below. */
+.avatar-item--mode.active {
+  background: transparent;
+  font-weight: 600;
+}
+.avatar-item--mode.active:hover {
+  background: var(--bg-subtle);
+}
+.avatar-item__check {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  color: var(--accent-strong);
+}
+
+/* Open Design agent row carries account info + actions inline. */
+.avatar-amr-row {
+  gap: 8px;
+}
+.avatar-amr-row.active {
+  background: color-mix(in srgb, var(--bg-subtle) 82%, var(--accent-tint));
+  color: var(--text-strong);
+}
+.avatar-amr-row.active:hover {
+  background: color-mix(in srgb, var(--bg-panel) 74%, var(--accent-tint));
+}
+.avatar-amr-row__select {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* The select button fills the row; let the row's own background (highlight when
+   selected) show through instead of the global `button:hover` grey reset —
+   which otherwise paints a meaningless grey box over the selected row. */
+.avatar-amr-row__select:hover:not(:disabled) {
+  background: transparent;
+}
+.avatar-amr-row__name {
+  flex: 0 0 auto;
+}
+.avatar-amr-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.avatar-amr-row__name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.avatar-amr-row__subtitle {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  min-width: 0;
+}
+.avatar-amr-row__stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.avatar-amr-row__stat-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.avatar-amr-row__stat-value {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  text-transform: capitalize;
+}
+.avatar-amr-row__upgrade,
+.avatar-amr-row__upgrade:visited {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--accent) 45%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent);
+  transition:
+    transform 150ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .avatar-amr-row__upgrade:hover {
+    background: var(--accent-hover);
+    box-shadow:
+      0 2px 8px color-mix(in srgb, var(--accent) 42%, transparent),
+      inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent);
+  }
+}
+.avatar-amr-row__upgrade:active {
+  transform: scale(0.96);
+}
+.avatar-amr-row__upgrade:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .avatar-amr-row__upgrade {
+    transition: background-color 150ms ease;
+  }
+  .avatar-amr-row__upgrade:active {
+    transform: none;
+  }
+}
 .avatar-item {
   display: flex;
   align-items: center;

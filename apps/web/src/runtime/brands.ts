@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import type {
+  BrandExtractStartResponse,
   BrandExtractFromHtmlRequest,
   BrandFinalizeResponse,
   BrandSummary,
@@ -118,6 +119,39 @@ export async function extractBrandFromHtml(
 export type CancelBrandExtractionOutcome =
   | { ok: true; status?: string }
   | { ok: false; error: string };
+
+export type ContinueBrandExtractionOutcome =
+  | { ok: true; result: BrandExtractStartResponse }
+  | { ok: false; error: string };
+
+export async function continueBrandExtraction(
+  brandId: string,
+): Promise<ContinueBrandExtractionOutcome> {
+  try {
+    const resp = await fetch(`/api/brands/${encodeURIComponent(brandId)}/continue-extraction`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+    if (!resp.ok) {
+      let error = `Extraction retry failed (${resp.status})`;
+      try {
+        const data = (await resp.json()) as { error?: string };
+        if (data?.error) error = data.error;
+      } catch {
+        // Non-JSON error body — keep the status-based message.
+      }
+      return { ok: false, error };
+    }
+    const result = (await resp.json()) as BrandExtractStartResponse;
+    return { ok: true, result };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Could not reach the daemon',
+    };
+  }
+}
 
 export async function cancelBrandExtraction(
   brandId: string,

@@ -26,6 +26,7 @@ import {
   type ChatSessionMode,
   type ConnectorDetail,
   type InstalledPluginRecord,
+  type RunContextSelection,
   type UpsertMemoryRequest,
 } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
@@ -122,6 +123,7 @@ import { PluginsView } from './PluginsView';
 import type { CreateInput, CreateTab, ImportClaudeDesignOutcome } from './NewProjectPanel';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import {
+  createProject,
   type PluginShareAction,
   type PluginShareProjectOutcome,
 } from '../state/projects';
@@ -219,6 +221,22 @@ type OnboardingProfileState = {
   useCase: string[];
   source: string;
   email: string;
+};
+
+type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
+  metadata?: CreateInput['metadata'];
+  pendingPrompt?: string;
+  pluginId?: string;
+  pluginType?: string;
+  appliedPluginSnapshotId?: string;
+  pluginInputs?: Record<string, unknown>;
+  initialRunContext?: RunContextSelection | null;
+  conversationMode?: ChatSessionMode;
+  autoSendFirstMessage?: boolean;
+  requestId?: string;
+  pendingFiles?: File[];
+  userWorkingDirToken?: string;
+  linkedDirs?: string[] | null;
 };
 
 function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
@@ -337,22 +355,14 @@ interface Props {
   onApiProtocolChange: (protocol: ApiProtocol) => void;
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
+  onSkillsRefresh?: () => Promise<void> | void;
+  onSkillsChanged?: (affectedSkillId?: string) => void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
   // Quick theme switch from the avatar-popover dropdown. Lets the user
   // flip between system / light / dark without opening the full Settings
   // dialog. App owns persistence; this component just calls the callback.
   onThemeChange: (theme: AppTheme) => void;
-  onCreateProject: (
-    input: CreateInput & {
-      pendingPrompt?: string;
-      pluginId?: string;
-      appliedPluginSnapshotId?: string;
-      pluginInputs?: Record<string, unknown>;
-      conversationMode?: ChatSessionMode;
-      autoSendFirstMessage?: boolean;
-      pendingFiles?: File[];
-    },
-  ) => Promise<boolean> | boolean | void;
+  onCreateProject: (input: EntryCreateProjectInput) => Promise<boolean> | boolean | void;
   onCreatePluginShareProject: (
     pluginId: string,
     action: PluginShareAction,
@@ -366,6 +376,7 @@ interface Props {
   onOpenProject: (id: string, fileName?: string) => Promise<boolean> | boolean | void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => Promise<boolean | void> | boolean | void;
+  onDuplicateProject?: (id: string) => Promise<void> | void;
   onRenameProject: (id: string, name: string) => void;
   onProjectsRefresh?: () => Promise<void> | void;
   onChangeDefaultDesignSystem: (id: string) => void;
@@ -459,6 +470,8 @@ export function EntryShell({
   onApiProtocolChange,
   onApiModelChange,
   onConfigPersist,
+  onSkillsRefresh,
+  onSkillsChanged,
   onRefreshAgents,
   onThemeChange,
   onCreateProject,
@@ -469,6 +482,7 @@ export function EntryShell({
   onOpenProject,
   onOpenLiveArtifact,
   onDeleteProject,
+  onDuplicateProject,
   onRenameProject,
   onProjectsRefresh,
   onChangeDefaultDesignSystem,
@@ -489,6 +503,10 @@ export function EntryShell({
   const route = useRoute();
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  useEffect(() => {
+    if (view !== 'design-systems') return;
+    void onDesignSystemsRefresh?.();
+  }, [onDesignSystemsRefresh, view]);
   // The entry nav rail is collapsed by default (Manus-style) so the entry
   // view opens clean and full-width; the panel toggle in the topbar opens it
   // as an overlay that dismisses on selection / backdrop click / Escape.
@@ -578,6 +596,18 @@ export function EntryShell({
     setNewProjectOpen(true);
   }
 
+  function startBlankProjectFromRail() {
+    void Promise.resolve(
+      onCreateProject({
+        name: t('common.untitled'),
+        skillId: null,
+        designSystemId: null,
+      }),
+    ).catch((err) => {
+      console.warn('Failed to create blank project from entry rail', err);
+    });
+  }
+
   function handleCreate(input: CreateInput) {
     // The NewProjectModal no longer asks the user to pick a plugin.
     // Each project kind is silently bound to its default scenario
@@ -619,6 +649,14 @@ export function EntryShell({
       payload.pluginTitle && payload.pluginTitle.trim().length > 0
         ? payload.pluginTitle.trim()
         : fallbackName;
+    const linkedDirs = Array.from(
+      new Set(
+        [
+          ...(payload.workingDir ? [payload.workingDir] : []),
+          ...(payload.linkedDirs ?? []),
+        ].map((dir) => dir.trim()).filter(Boolean),
+      ),
+    );
     const metadata: ProjectMetadata = {
       ...(payload.projectMetadata ?? {}),
       kind: payload.projectKind ?? payload.projectMetadata?.kind ?? 'prototype',
@@ -638,14 +676,14 @@ export function EntryShell({
       // project's `linkedDirs` rather than its `baseDir`/`userWorkingDir`:
       // Design Files stays the managed `.od/projects/<id>` artifact store,
       // independent of the user's local files.
-      ...(payload.workingDir ? { linkedDirs: [payload.workingDir] } : {}),
+      ...(linkedDirs.length > 0 ? { linkedDirs } : {}),
       ...(payload.examplePromptContext ? {
         examplePrompt: true,
         examplePromptTitle: payload.examplePromptContext.title,
         examplePromptBrief: payload.examplePromptContext.brief,
       } : {}),
     };
-    onCreateProject({
+    return onCreateProject({
       name,
       skillId: payload.skillId ?? null,
       designSystemId: payload.designSystemId ?? null,
@@ -657,6 +695,7 @@ export function EntryShell({
         ? { appliedPluginSnapshotId: payload.appliedPluginSnapshotId }
         : {}),
       ...(payload.pluginInputs ? { pluginInputs: payload.pluginInputs } : {}),
+      ...(payload.initialRunContext ? { initialRunContext: payload.initialRunContext } : {}),
       ...(payload.conversationMode ? { conversationMode: payload.conversationMode } : {}),
       ...(payload.attachments && payload.attachments.length > 0
         ? { pendingFiles: payload.attachments }
@@ -759,7 +798,14 @@ export function EntryShell({
         <EntryNavRail
           view={view}
           onViewChange={changeView}
-          onNewProject={() => openNewProject()}
+          onNewProject={() => {
+            trackHomeNavClick(analytics.track, {
+              page_name: 'home',
+              area: 'nav',
+              element: 'new_project_plus',
+            });
+            openNewProject();
+          }}
           open={railOpen}
           onClose={() => setRailOpen(false)}
         />
@@ -868,6 +914,7 @@ export function EntryShell({
                 onOpenProject={onOpenProject}
                 onViewAllProjects={() => changeView('projects')}
                 onDeleteProject={onDeleteProject}
+                onDuplicateProject={onDuplicateProject}
                 onRenameProject={onRenameProject}
                 onBrowseRegistry={() => changeView('plugins')}
                 onOpenIntegrations={() => openIntegrationTab('connectors')}
@@ -875,6 +922,7 @@ export function EntryShell({
                 onOpenNewProject={(tab) => {
                   openNewProject(tab);
                 }}
+                onStartBlankProject={startBlankProjectFromRail}
                 promptHandoff={homePromptHandoff}
                 skills={skills}
                 skillsLoading={skillsLoading}
@@ -898,10 +946,13 @@ export function EntryShell({
                     onOpen={onOpenProject}
                     onOpenLiveArtifact={onOpenLiveArtifact}
                     onDelete={onDeleteProject}
+                    onDuplicate={onDuplicateProject}
                     onRename={onRenameProject}
                     onRefresh={onProjectsRefresh}
                     isActive={view === 'projects'}
-                    onNewProject={() => openNewProject()}
+                    onNewProject={() => {
+                      openNewProject();
+                    }}
                   />
                 </div>
               )}
@@ -969,6 +1020,7 @@ export function EntryShell({
               <BrandsTab
                 onApplyDesignSystem={onChangeDefaultDesignSystem}
                 onOpenProject={onOpenProject}
+                onDesignSystemsRefresh={onDesignSystemsRefresh}
               />
             </div>
             {view === 'integrations' ? (
@@ -976,7 +1028,10 @@ export function EntryShell({
                 config={config}
                 initialTab={integrationTab}
                 composioConfigLoading={composioConfigLoading}
+                onConfigPersist={onConfigPersist}
                 onPersistComposioKey={onPersistComposioKey}
+                onSkillsRefresh={onSkillsRefresh}
+                onSkillsChanged={onSkillsChanged}
               />
             ) : null}
           </div>
@@ -2207,7 +2262,7 @@ function OnboardingView({
         aria-label={t('settings.welcomeTitle')}
       >
         <div className="onboarding-cloud__topbar">
-          <LanguageMenu compact />
+          <LanguageMenu compact placement="down" align="end" />
           <button
             type="button"
             className="onboarding-cloud__theme"
@@ -3108,8 +3163,12 @@ function renderOnboardingProviderTestMessage(
       return t('settings.testInvalidBaseUrl');
     case 'rate_limited':
       return t('settings.testRateLimited');
-    case 'upstream_unavailable':
-      return t('settings.testUpstream', { status: result.status ?? 0 });
+    case 'upstream_unavailable': {
+      const baseMessage = t('settings.testUpstream', {
+        status: result.status ?? 0,
+      });
+      return result.detail ? `${baseMessage} ${result.detail}` : baseMessage;
+    }
     case 'timeout':
       return t('settings.testTimeout', { ms });
     default:
@@ -3135,8 +3194,12 @@ function renderOnboardingProviderModelsMessage(
       return t('settings.testInvalidBaseUrl');
     case 'rate_limited':
       return t('settings.testRateLimited');
-    case 'upstream_unavailable':
-      return t('settings.testUpstream', { status: result.status ?? 0 });
+    case 'upstream_unavailable': {
+      const baseMessage = t('settings.testUpstream', {
+        status: result.status ?? 0,
+      });
+      return result.detail ? `${baseMessage} ${result.detail}` : baseMessage;
+    }
     case 'timeout':
       return t('settings.testTimeout', {
         ms: Math.max(0, Math.round(result.latencyMs)),

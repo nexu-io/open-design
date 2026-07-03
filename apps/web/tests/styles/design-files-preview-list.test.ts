@@ -81,6 +81,23 @@ describe('Design Files preview list styles', () => {
     );
   });
 
+  it('keeps selection actions sticky and renders rounded row checkboxes', () => {
+    const batchBar = cssDeclarations(designFilesCss, '.df-batch-bar');
+    const row = cssDeclarations(designFilesCss, '.df-row');
+    const selectedRow = cssDeclarations(designFilesCss, '.df-row.selected');
+    const rowCheck = cssDeclarations(designFilesCss, '.df-row-check');
+    const rowCheckBox = cssDeclarations(designFilesCss, '.df-row-check-box');
+    const rowSize = cssDeclarations(designFilesCss, '.df-row-size');
+
+    expect(ruleValue(batchBar, 'position')).toBe('sticky');
+    expect(ruleValue(batchBar, 'top')).toBe('0');
+    expect(ruleValue(row, 'grid-template-columns')).toContain('minmax(56px, auto)');
+    expect(ruleValue(selectedRow, 'border-radius')).toBe('8px');
+    expect(ruleValue(rowCheck, 'border-radius')).toBe('7px');
+    expect(ruleValue(rowCheckBox, 'border-radius')).toBe('5px');
+    expect(ruleValue(rowSize, 'text-align')).toBe('right');
+  });
+
   it('opens the working directory menu below the top chrome instead of behind it', () => {
     const menu = cssDeclarations(routinesCss, '.app .working-dir-pill-menu');
 

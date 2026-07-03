@@ -26,6 +26,13 @@ export function amrRechargeUrlForProfile(profile: string | null | undefined): st
   return amrConsoleUrlForProfile(profile);
 }
 
+// Console wallet deep-linked to open the subscription/plans modal
+// (`view=plans`), used by the "Upgrade" affordances next to the plan tier.
+export function amrPlansUrlForProfile(profile: string | null | undefined): string {
+  const base = amrConsoleUrlForProfile(profile);
+  return base.includes('?') ? `${base}&view=plans` : `${base}?view=plans`;
+}
+
 export function amrProfileBadgeLabel(profile: string | null | undefined): string | null {
   if (profile === 'test') return 'TEST';
   if (profile === 'local') return 'LOCAL';

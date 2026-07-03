@@ -181,6 +181,58 @@ describe('FileWorkspace design-system project surface', () => {
     expect(container.textContent).not.toContain('Reset');
   });
 
+  it('shows the design-system tab while brand extraction is running but keeps kit edits locked', async () => {
+    registryMocks.fetchProjectFileText.mockImplementation((_projectId: string, name: string) => {
+      if (name === 'DESIGN.md') {
+        return Promise.resolve(
+          [
+            '# Acme',
+            '',
+            '## Color Palette',
+            '',
+            '| Role | Name | Hex | Usage |',
+            '| --- | --- | --- | --- |',
+            '| accent | Emerald | `#10B981` | links and CTAs |',
+          ].join('\n'),
+        );
+      }
+      return Promise.resolve(null);
+    });
+
+    const container = renderWorkspace(
+      <FileWorkspace
+        projectId="brand-acme"
+        projectKind="prototype"
+        files={[workspaceFile('DESIGN.md'), workspaceFile('brand.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        designSystemProject={designSystem()}
+        designSystemBrandId="brand-acme"
+        designSystemEditable={false}
+      />,
+    );
+
+    await flushKit();
+
+    expect(container.querySelector('[data-testid="design-system-project-tab"]')).toBeTruthy();
+    expect(container.textContent).toContain('Extracting design system');
+    expect(container.querySelector<HTMLButtonElement>('[data-testid="design-system-publish"]')?.disabled).toBe(true);
+    expect(container.querySelector('button[aria-label="Edit Emerald"]')).toBeNull();
+
+    const moreTrigger = container.querySelector<HTMLButtonElement>(
+      '[data-testid="design-kit-more-actions"]',
+    );
+    expect(moreTrigger).toBeTruthy();
+    await act(async () => {
+      moreTrigger?.click();
+      await Promise.resolve();
+    });
+    expect(container.textContent).not.toContain('Edit DESIGN.md');
+  });
+
   it('edits and resets palette colors through the color editor dialog', async () => {
     let designMdBody = [
       '# Acme',

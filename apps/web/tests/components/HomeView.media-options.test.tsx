@@ -55,24 +55,27 @@ const PROMPT_TEMPLATES: PromptTemplateSummary[] = [
 afterEach(() => {
   vi.unstubAllGlobals();
   cleanup();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 
 describe('HomeView media composer options', () => {
-  it('hides the Home composer session-mode switcher and still defaults to Design mode', async () => {
+  it('shows the Home composer session-mode switcher and still defaults to Design mode', async () => {
     stubFetch();
     const onSubmit = vi.fn();
     renderHome({ onSubmit });
 
     await screen.findByTestId('home-hero-input');
 
-    expect(screen.queryByTestId('session-mode-trigger')).toBeNull();
+    expect(screen.getByTestId('session-mode-trigger').getAttribute('aria-label')).toBe('Design mode');
 
-    await setHomePrompt('Create a dashboard.');
+    await setHomePrompt('Create a clean loading animation');
     await submitHome();
-    await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
-        conversationMode: 'design',
-      }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
+      prompt: 'Create a clean loading animation',
+      conversationMode: 'design',
     });
   });
 

@@ -8,6 +8,7 @@ import { EntryShell } from '../../src/components/EntryShell';
 import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
 import { I18nProvider } from '../../src/i18n';
 import type { AgentInfo, AppConfig } from '../../src/types';
+import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 
 const analyticsMocks = vi.hoisted(() => ({
   track: vi.fn(),
@@ -145,8 +146,9 @@ function renderOnboarding(
 
 function renderHome(
   overrides: Partial<React.ComponentProps<typeof EntryShell>> = {},
+  path = '/',
 ) {
-  window.history.replaceState(null, '', '/');
+  window.history.replaceState(null, '', path);
   const props: React.ComponentProps<typeof EntryShell> = {
     skills: [],
     designTemplates: [],
@@ -265,7 +267,7 @@ async function clickCloudSignIn() {
 }
 
 async function findCloudSignInButton() {
-  return screen.findByRole('button', { name: /Sign in to Open Design Cloud/i });
+  return screen.findByRole('button', { name: /Sign in to Open Design/i });
 }
 
 function openLocalRuntimeSetup() {
@@ -343,12 +345,32 @@ describe('EntryShell settings menu', () => {
   });
 });
 
+describe('EntryShell design systems view', () => {
+  it('refreshes the design-system catalog when the view is active', async () => {
+    const onDesignSystemsRefresh = vi.fn();
+    renderHome({ onDesignSystemsRefresh }, '/design-systems');
+
+    await waitFor(() => expect(onDesignSystemsRefresh).toHaveBeenCalledTimes(1));
+  });
+});
+
 describe('EntryShell new project rail', () => {
-  it('opens the new project modal from the rail plus', async () => {
+  it('creates a blank project directly from the rail plus', async () => {
     window.localStorage.setItem('od.entry.railOpen', 'false');
     const fetchMock = vi.fn(
-      async (input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
+      async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
         const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url.endsWith('/api/projects') && init?.method === 'POST') {
+          return jsonResponse({
+            project: {
+              id: 'blank-project-1',
+              name: 'Untitled',
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+            conversationId: 'conversation-1',
+          });
+        }
         if (url.endsWith('/api/community/discord')) {
           return jsonResponse({
             inviteCode: 'mHAjSMV6gz',
@@ -379,13 +401,133 @@ describe('EntryShell new project rail', () => {
       expect(screen.getByTestId('new-project-modal')).toBeTruthy();
     });
     expect(screen.getByTestId('new-project-panel')).toBeTruthy();
-    expect(props.onCreateProject).not.toHaveBeenCalled();
     expect(props.onOpenProject).not.toHaveBeenCalled();
-    expect(
-      fetchMock.mock.calls.find(
-        ([input, init]) => input === '/api/projects' && init?.method === 'POST',
-      ),
-    ).toBeUndefined();
+    expect(props.onCreateProject).not.toHaveBeenCalled();
+    const createCall = fetchMock.mock.calls.find(
+      ([input, init]) => input === '/api/projects' && init?.method === 'POST',
+    );
+    expect(createCall).toBeUndefined();
+    expect(analyticsMocks.track).toHaveBeenCalledWith(
+      'ui_click',
+      expect.objectContaining({
+        page_name: 'home',
+        area: 'nav',
+        element: 'new_project_plus',
+      }),
+      undefined,
+    );
+  });
+
+  it('opens the new project modal from the Projects tab button', async () => {
+    window.localStorage.setItem('od.entry.railOpen', 'false');
+    const fetchMock = vi.fn(
+      async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url === '/api/projects' && init?.method === 'POST') {
+          return jsonResponse({
+            project: {
+              id: 'blank-project-from-projects',
+              name: 'Untitled',
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+            conversationId: 'conversation-2',
+          });
+        }
+        if (url.endsWith('/api/projects/project-existing/files')) {
+          return jsonResponse({ files: [] });
+        }
+        if (url.endsWith('/api/live-artifacts?projectId=project-existing')) {
+          return jsonResponse({ liveArtifacts: [] });
+        }
+        if (url.endsWith('/api/community/discord')) {
+          return jsonResponse({
+            inviteCode: 'mHAjSMV6gz',
+            inviteUrl: 'https://discord.gg/mHAjSMV6gz',
+            onlineCount: 0,
+            memberCount: 0,
+            fetchedAt: Date.now(),
+            stale: false,
+          });
+        }
+        if (url.endsWith('/api/github/open-design')) {
+          return jsonResponse({
+            repo: 'nexu-io/open-design',
+            stargazers_count: 0,
+            fetchedAt: Date.now(),
+            stale: false,
+          });
+        }
+        return jsonResponse({});
+      });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderHome({
+      projects: [
+        {
+          id: 'project-existing',
+          name: 'Existing project',
+          skillId: null,
+          designSystemId: null,
+          createdAt: 1,
+          updatedAt: 2,
+          status: { value: 'not_started' },
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByTestId('entry-rail-toggle'));
+    fireEvent.click(screen.getByTestId('entry-nav-projects'));
+    fireEvent.click(screen.getByTestId('designs-new-project'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('new-project-modal')).toBeTruthy();
+    });
+    expect(screen.getByTestId('new-project-panel')).toBeTruthy();
+    expect(props.onOpenProject).not.toHaveBeenCalled();
+    expect(props.onCreateProject).not.toHaveBeenCalled();
+    const createCall = fetchMock.mock.calls.find(
+      ([input, init]) => input === '/api/projects' && init?.method === 'POST',
+    );
+    expect(createCall).toBeUndefined();
+    expect(analyticsMocks.track).toHaveBeenCalledWith(
+      'ui_click',
+      expect.objectContaining({
+        page_name: 'projects',
+        area: 'list_controls',
+        element: 'create_project',
+      }),
+      undefined,
+    );
+  });
+});
+
+describe('EntryShell Home submit handoff', () => {
+  it('keeps the Home run button in sending state until project creation resolves', async () => {
+    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.endsWith('/api/plugins')) return jsonResponse({ plugins: [] });
+      if (url.endsWith('/api/mcp/servers')) return jsonResponse({ servers: [] });
+      if (url.endsWith('/api/community/discord')) return jsonResponse({ stale: true });
+      if (url.endsWith('/api/github/open-design')) return jsonResponse({ stale: true });
+      return jsonResponse({});
+    }) as typeof fetch;
+    let resolveCreate: (accepted: boolean) => void = () => undefined;
+    const onCreateProject = vi.fn(
+      () => new Promise<boolean>((resolve) => { resolveCreate = resolve; }),
+    );
+    renderHome({ onCreateProject });
+
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('Build a landing page');
+    const submit = await screen.findByTestId('home-hero-submit') as HTMLButtonElement;
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toContain('Sending…');
+
+    resolveCreate(true);
+    await waitFor(() => expect(submit.disabled).toBe(false));
   });
 });
 
@@ -402,6 +544,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in to Open Design' })).toBeTruthy();
     expect(await findCloudSignInButton()).toBeTruthy();
     openLocalRuntimeSetup();
+    expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
 
     await waitFor(() => {
       expect(props.onAgentChange).not.toHaveBeenCalledWith('amr');
@@ -417,8 +560,13 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     renderOnboarding();
 
     expect(screen.getByRole('heading', { name: 'Sign in to Open Design' })).toBeTruthy();
-    expect(screen.getByText(/Sign in to start designing with cloud AI right away/i)).toBeTruthy();
     expect(await findCloudSignInButton()).toBeTruthy();
+    // No runtime card, no AMR version text, no "Sign in to continue" CTA.
+    expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
+    expect(screen.queryByText('AMR v0.1.0')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Sign in to continue/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Authorize AMR/i })).toBeNull();
+    // The secondary runtime links remain available on the landing.
     expect(screen.getByRole('button', { name: /Local coding agent/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Bring your own key/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
@@ -510,7 +658,7 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toBe(startupError);
     });
-    expect(screen.queryByText('AMR sign-in failed.')).toBeNull();
+    expect(screen.queryByText('Sign-in failed.')).toBeNull();
     expect(screen.queryByText('Signing in…')).toBeNull();
   });
 
@@ -529,7 +677,6 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     renderOnboarding();
 
     const signIn = await findCloudSignInButton();
-    vi.useFakeTimers();
     fireEvent.click(signIn);
     await act(async () => {});
     expect(screen.getByText('Signing in…')).toBeTruthy();
@@ -539,7 +686,12 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await act(async () => {});
 
     expect(screen.queryByText('Signing in…')).toBeNull();
-    expect(screen.getByRole('button', { name: /Sign in to Open Design Cloud/i }).hasAttribute('disabled')).toBe(false);
+    // The landing CTA returns to its signed-out copy and is enabled again,
+    // and the secondary runtime links are available once more.
+    const cloudButton = await screen.findByRole('button', {
+      name: /Sign in to Open Design/i,
+    });
+    expect(cloudButton.hasAttribute('disabled')).toBe(false);
     expect(screen.getByRole('button', { name: /Local coding agent/i })).toBeTruthy();
   });
 
@@ -592,9 +744,13 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS);
     });
     expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login/cancel', { method: 'POST' });
-    expect(screen.getByText('AMR sign-in failed.')).toBeTruthy();
+    expect(screen.getByText('Sign-in failed.')).toBeTruthy();
     expect(screen.queryByText('Signing in…')).toBeNull();
-    expect(screen.getByRole('button', { name: /Sign in to Open Design Cloud/i }).hasAttribute('disabled')).toBe(false);
+    expect(
+      screen
+        .getByRole('button', { name: /Sign in to Open Design/i })
+        .hasAttribute('disabled'),
+    ).toBe(false);
     expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
   });
 
@@ -1167,7 +1323,9 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
       onRefreshAgents: vi.fn(() => [cliAgent()]),
     });
 
-    expect(await screen.findByRole('button', { name: /Sign in to Open Design Cloud/i })).toBeTruthy();
+    expect(
+      await screen.findByRole('button', { name: /Sign in to Open Design/i }),
+    ).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Open Design AMR/i })).toBeNull();
     expect(document.querySelector('.onboarding-view__card--skeleton')).toBeNull();
   });
