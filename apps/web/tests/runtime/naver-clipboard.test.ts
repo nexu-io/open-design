@@ -139,3 +139,54 @@ describe('buildNaverClipboardHtml on the REAL fragment (font-less, inline border
     expect(html).not.toMatch(/<div[^>]*font-family/);
   });
 });
+
+// 셸 산출물(D7): 프리뷰 전용 래퍼(.meta / h1.doc-title / .doc-sub) + 붙여넣기 대상 .article.
+// 네이버 에디터는 제목 필드가 본문과 분리 — 리치 복사에 제목이 섞이면 안 된다.
+const SHELL_SOURCE = `<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><title>셸 문서 제목</title>
+<style>
+  body { font-family: 'Nanum Gothic', sans-serif; background: #f5f6f7; }
+  .doc-title { font-size: 26px; font-weight: 800; }
+  .paper { background: #fff; }
+</style></head>
+<body>
+  <div class="wrap">
+    <div class="meta">네이버 블로그 · 질병코드 · 초안</div>
+    <h1 class="doc-title">셸에만 있는 문서 제목입니다</h1>
+    <p class="doc-sub">아래 흰 영역이 붙여넣기용 본문입니다.</p>
+    <div class="paper">
+      <div class="article">
+        <p>본문 도입 문단이에요.</p>
+        <blockquote style="border-left:5px solid #000;padding:8px 0 8px 14px;margin:24px 0 16px 0;"><strong>섹션 제목 📋</strong></blockquote>
+        <p>본문 해설 문장입니다.</p>
+        <p class="small">※ 본 콘텐츠는 일반적인 정보 제공을 목적으로 합니다.</p>
+      </div>
+    </div>
+  </div>
+</body></html>`;
+
+describe('buildNaverClipboardHtml scopes shell artifacts to .article (D7)', () => {
+  const { html, text } = buildNaverClipboardHtml(SHELL_SOURCE);
+
+  it('excludes the preview shell — doc-title/meta/doc-sub never reach the clipboard', () => {
+    expect(html).not.toContain('셸에만 있는 문서 제목입니다');
+    expect(html).not.toContain('네이버 블로그 · 질병코드 · 초안');
+    expect(html).not.toContain('붙여넣기용 본문입니다');
+    expect(html).not.toMatch(/doc-title|class="meta"|doc-sub/);
+  });
+
+  it('keeps the .article body with per-block 나눔고딕 13px inlined', () => {
+    expect(html).toContain('본문 도입 문단이에요');
+    expect(html).toMatch(/<p[^>]*style="[^"]*나눔고딕[^"]*font-size:\s*13px/);
+    expect(html).toMatch(/<blockquote[^>]*style="[^"]*border-left:\s*5px solid #000/);
+  });
+
+  it('plain-text fallback also excludes the shell', () => {
+    expect(text).toContain('본문 도입 문단이에요');
+    expect(text).not.toContain('셸에만 있는 문서 제목입니다');
+  });
+
+  it('still detects the shell artifact as naver-blog html (marker lives inside .article)', () => {
+    expect(isNaverBlogHtml(SHELL_SOURCE)).toBe(true);
+  });
+});

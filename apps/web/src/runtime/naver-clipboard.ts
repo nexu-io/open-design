@@ -8,6 +8,8 @@
 //     서식(테이블/제목바/면책)을 요소별로 직접 박는다.
 //   - 제목바(인용구2)는 <blockquote><strong> 직계 구조를 보존해야 매핑됨(rule 1). <p> 래퍼 금지.
 //   - 블록 요소(p/li/td/blockquote)에 inline font-weight 금지(rule 3) — 볼드는 <strong> 태그로만.
+//   - 셸 산출물(craft "Preview shell")은 .article 내부만 복사 — 제목(h1.doc-title)은
+//     네이버 제목 필드 별도 입력이라 리치 복사에서 제외한다. .article 없으면 body 전체(하위호환).
 
 const NAVER_FONT_FAMILY = "'나눔고딕', sans-serif";
 const NAVER_FONT_SIZE = '13px';
@@ -122,16 +124,18 @@ function styleNaverElement(el: Element): void {
 
 /**
  * 네이버 산출물 HTML → 붙여넣기용 리치 HTML + 평문 fallback.
- * <body> 내용만 추출(헤드/<style> 제거)하고 블록 요소마다 표준 인라인 서식을 주입한다.
+ * 셸 산출물(craft "Preview shell" — 붙여넣기 대상이 .article 내부뿐)이면 .article만,
+ * 구형 조각 산출물이면 기존대로 <body> 전체를 루트로 삼는다. 네이버 에디터는 제목
+ * 필드가 본문과 분리라 h1.doc-title·meta 라벨이 리치 복사에 섞이면 안 된다.
  */
 export function buildNaverClipboardHtml(source: string): { html: string; text: string } {
   const doc = new DOMParser().parseFromString(source, 'text/html');
-  const body = doc.body;
-  for (const el of Array.from(body.querySelectorAll('*'))) {
+  const root = doc.body.querySelector('.article') ?? doc.body;
+  for (const el of Array.from(root.querySelectorAll('*'))) {
     styleNaverElement(el);
   }
-  const html = body.innerHTML.trim();
-  const text = (body.textContent ?? '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  const html = root.innerHTML.trim();
+  const text = (root.textContent ?? '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   return { html, text };
 }
 
