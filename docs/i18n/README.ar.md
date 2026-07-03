@@ -4,7 +4,7 @@
 
 > 🔥 **‏Open Design 0.10.0 وصل: مساحة عمل التصميم الوكيلة الكل-في-واحد.** الحِرفة كلها تعيش الآن في نافذة واحدة — من فكرة غامضة إلى اكتشاف المراجع، وجمع المواد، والتحرير التفاعلي، ووضع التعليقات في قائمة الانتظار، وصقل الحركة، وتسليم النتيجة إلى محرر أو Code Agent — دون مغادرة التطبيق. ومع الجلسات المتوازية، لم يعد يبدو كمساعد واحد، بل كفريق تصميم محلي كامل يعمل من أجلك. [حمّل 0.10.0](https://github.com/nexu-io/open-design/releases) · [انضم إلى النقاش](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **‏Open Design AMR (Agentic Model Router) — خدمة النماذج الرسمية.** شحنة واحدة لاستخدام GPT وClaude وGemini وDeepSeek داخل Open Design: أكثر من 20 نموذجًا رائدًا، بدون أي إعداد، وفوترة حسب الاستخدام الفعلي للرموز. [جرّب AMR](https://open-design.ai/amr/)
+> ⚡ **‏Open Design Cloud — خدمة النماذج الرسمية.** شحنة واحدة لاستخدام GPT وClaude وGemini وDeepSeek داخل Open Design: أكثر من 20 نموذجًا رائدًا، بدون أي إعداد، وفوترة حسب الاستخدام الفعلي للرموز. [جرّب Open Design Cloud](https://open-design.ai/cloud/)
 >
 > 🏅 **برنامج Open Design Fellow مفتوح الآن.** إن كنت تؤمن أنت أيضًا بأن التصميم يجب أن يكون مفتوحًا — كُن Open Design Fellow، وشارك في تشكيل المنتج جنبًا إلى جنب مع الفريق الأساسي، وساعد المزيد من الناس على المشاركة في تحديد مستقبل التصميم. التفاصيل ← [`MAINTAINERS.md`](../../MAINTAINERS.md) و[Discord](https://discord.gg/mHAjSMV6gz).
 
@@ -15,7 +15,7 @@
 <p align="center">
   <a href="https://open-design.ai/">الموقع</a> ·
   <a href="https://open-design.ai/">التنزيل</a> ·
-  <a href="https://open-design.ai/amr/">Model Router</a> ·
+  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">تابع ‎@OpenDesignHQ</a>
 </p>
@@ -579,7 +579,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] بروتوكول جانبي + سطح مكتب Electron + أتمتة IPC
 - [x] واجهة API لفحص المخرجات + بوابة نقد ذاتي بخمسة أبعاد قبل الإصدار
 - [x] **0.8.0** — بنية تحتية لسوق الإضافات (261 إضافة رسمية، مواصفة البيان، سكربتات تثبيت لكل وكيل)
-- [x] **0.9.0** — Open Design AMR (Model Router الرسمي مدمج في التطبيق: بلا إعداد، تسجيل دخول بنقرة واحدة)
+- [x] **0.9.0** — Open Design Cloud (Model Router الرسمي مدمج في التطبيق: بلا إعداد، تسجيل دخول بنقرة واحدة)
 - [x] إصدارات Electron مجمَّعة — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (مسار اختياري)
 - [ ] تعديلات جراحية في وضع التعليق — مشحونة جزئيًا؛ الترقيع المستهدف الموثوق قيد التنفيذ
 - [ ] تجربة استخدام لوحة تعديلات يصدرها الذكاء الاصطناعي — لم تُنفَّذ بعد

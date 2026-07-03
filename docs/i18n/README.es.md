@@ -2,7 +2,7 @@
 
 > 🔥 **Open Design 0.10.0 ya está aquí: el espacio de trabajo de diseño Agentic todo en uno.** Todo el oficio vive ahora en una sola ventana — pasa de una idea difusa a descubrir referencias, reunir material, editar de forma interactiva, encolar comentarios, pulir las animaciones y entregar el resultado a un editor o a un Code Agent — sin salir de la app. Con sesiones en paralelo, deja de sentirse como un asistente y empieza a sentirse como un equipo de diseño local trabajando para ti. [Descargar 0.10.0](https://github.com/nexu-io/open-design/releases) · [Únete a la conversación](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — el servicio de modelos oficial.** Una sola recarga para usar GPT, Claude, Gemini y DeepSeek dentro de Open Design: más de 20 modelos insignia, cero configuración, facturación por uso real de tokens. [Probar AMR](https://open-design.ai/amr/)
+> ⚡ **Open Design Cloud — el servicio de modelos oficial.** Una sola recarga para usar GPT, Claude, Gemini y DeepSeek dentro de Open Design: más de 20 modelos insignia, cero configuración, facturación por uso real de tokens. [Probar Open Design Cloud](https://open-design.ai/cloud/)
 >
 > 🏅 **El programa Open Design Fellow ya está abierto.** Si tú también crees que el diseño debe ser abierto, conviértete en Open Design Fellow, da forma al producto junto al equipo principal y ayuda a que más personas participen en definir el futuro del diseño. Detalles → [`MAINTAINERS.md`](../../MAINTAINERS.md) y [Discord](https://discord.gg/mHAjSMV6gz).
 
@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">Sitio web</a> ·
   <a href="https://open-design.ai/">Descargar</a> ·
-  <a href="https://open-design.ai/amr/">Model Router</a> ·
+  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">Sigue a @OpenDesignHQ</a>
 </p>
@@ -577,7 +577,7 @@ Arquitectura completa → [`docs/architecture.md`](../../docs/architecture.md). 
 - [x] Protocolo de sidecar + escritorio Electron + automatización IPC
 - [x] API de lint de artefactos + barrera de autocrítica de 5 dimensiones previa a la emisión
 - [x] **0.8.0** — infraestructura del marketplace de plugins (261 plugins oficiales, especificación de manifiesto, scripts de instalación por agente)
-- [x] **0.9.0** — Open Design AMR (Model Router oficial integrado en la app: cero configuración, inicio de sesión de un clic)
+- [x] **0.9.0** — Open Design Cloud (Model Router oficial integrado en la app: cero configuración, inicio de sesión de un clic)
 - [x] Compilaciones empaquetadas de Electron — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (vía opcional)
 - [ ] Ediciones quirúrgicas en modo comentario — parcialmente lanzado; aplicación de parches dirigida y fiable en progreso
 - [ ] UX del panel de ajustes emitido por IA — aún no implementado

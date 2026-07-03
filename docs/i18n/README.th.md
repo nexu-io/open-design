@@ -2,7 +2,7 @@
 
 > 🔥 **Open Design 0.10.0 มาแล้ว: workspace สำหรับ Agentic design แบบครบวงจร.** งานคราฟต์ทั้งหมดมาอยู่ในหน้าต่างเดียว ตั้งแต่ไอเดียคร่าว ๆ ไปจนถึงการค้นหา reference, รวบรวม material, แก้ไขแบบ interactive, จัดคิว comment, ขัดเกลา motion และส่งต่อให้ editor หรือ Code Agent โดยไม่ต้องออกจากแอป. เมื่อใช้ parallel sessions ประสบการณ์จะไม่เหมือนผู้ช่วยคนเดียวอีกต่อไป แต่เหมือนมีทีมออกแบบ local ทำงานอยู่กับคุณ. [ดาวน์โหลด 0.10.0](https://github.com/nexu-io/open-design/releases) · [เข้าร่วม discussion](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — บริการโมเดลอย่างเป็นทางการ.** เติมเงินครั้งเดียวเพื่อใช้ GPT, Claude, Gemini และ DeepSeek ใน Open Design: โมเดลระดับ flagship กว่า 20 ตัว, ไม่ต้องตั้งค่า, คิดเงินตาม token ที่ใช้จริง. [ลองใช้ AMR](https://open-design.ai/amr/)
+> ⚡ **Open Design Cloud — บริการโมเดลอย่างเป็นทางการ.** เติมเงินครั้งเดียวเพื่อใช้ GPT, Claude, Gemini และ DeepSeek ใน Open Design: โมเดลระดับ flagship กว่า 20 ตัว, ไม่ต้องตั้งค่า, คิดเงินตาม token ที่ใช้จริง. [ลองใช้ Open Design Cloud](https://open-design.ai/cloud/)
 >
 > 🏅 **Open Design Fellow program เปิดรับแล้ว.** ถ้าคุณเชื่อเหมือนกันว่า design ควรเปิดกว้าง มาเป็น Open Design Fellow, ร่วม shape ผลิตภัณฑ์กับ core team และช่วยให้คนมากขึ้นมีส่วนร่วมกำหนดอนาคตของ design. รายละเอียด → [`MAINTAINERS.th.md`](MAINTAINERS.th.md) และ [Discord](https://discord.gg/qhbcCH8Am4).
 
@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">เว็บไซต์</a> ·
   <a href="https://open-design.ai/">ดาวน์โหลด</a> ·
-  <a href="https://open-design.ai/amr/">Model Router</a> ·
+  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
   <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
   <a href="https://x.com/nexudotio">ติดตาม @nexudotio</a>
 </p>
@@ -573,7 +573,7 @@ Architecture เต็ม → [`docs/architecture.md`](../../docs/architecture.m
 - [x] Sidecar protocol + Electron desktop + IPC automation
 - [x] Artifact lint API + 5-dim self-critique pre-emit gate
 - [x] **0.8.0** — plugin marketplace infrastructure (official plugins 261 ตัว, manifest spec, per-agent install scripts)
-- [x] **0.9.0** — Open Design AMR (official Model Router ในตัวแอป: zero config, one-click sign-in)
+- [x] **0.9.0** — Open Design Cloud (official Model Router ในตัวแอป: zero config, one-click sign-in)
 - [x] Packaged Electron builds — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (optional lane)
 - [ ] Comment-mode surgical edits — ship บางส่วนแล้ว; reliable targeted patching กำลังทำอยู่
 - [ ] AI-emitted tweaks panel UX — ยังไม่ implement

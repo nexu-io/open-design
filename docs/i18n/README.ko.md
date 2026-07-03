@@ -2,7 +2,7 @@
 
 > 🔥 **Open Design 0.10.0 출시: 올인원 Agentic 디자인 워크스페이스.** 디자인의 모든 과정이 이제 하나의 창 안에서 이루어집니다 — 막연한 아이디어에서 출발해 레퍼런스 발견, 소재 수집, 인터랙티브 편집, 코멘트 큐잉, 모션 다듬기, 그리고 에디터나 Code Agent로의 인계까지, 앱을 떠나지 않고 완성하세요. 여러 세션을 병렬로 실행하면, 더 이상 한 명의 어시스턴트가 아니라 당신을 위해 일하는 로컬 디자인 팀처럼 느껴집니다. [0.10.0 다운로드](https://github.com/nexu-io/open-design/releases) · [토론 참여하기](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — 공식 모델 서비스.** 한 번의 충전으로 Open Design 안에서 GPT, Claude, Gemini, DeepSeek를 바로 사용하세요. 20+ 플래그십 모델, 무설정, 실제 토큰 사용량 기반 과금. [AMR 사용해 보기](https://open-design.ai/amr/)
+> ⚡ **Open Design Cloud — 공식 모델 서비스.** 한 번의 충전으로 Open Design 안에서 GPT, Claude, Gemini, DeepSeek를 바로 사용하세요. 20+ 플래그십 모델, 무설정, 실제 토큰 사용량 기반 과금. [Open Design Cloud 사용해 보기](https://open-design.ai/cloud/)
 >
 > 🏅 **Open Design Fellow 프로그램이 지금 열렸습니다.** 디자인은 열려 있어야 한다고 믿으신다면 — Open Design Fellow가 되어 핵심 팀과 함께 제품을 빚어내고, 더 많은 사람이 디자인의 미래를 정의하는 일에 참여하도록 도와주세요. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/mHAjSMV6gz).
 
@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">웹사이트</a> ·
   <a href="https://open-design.ai/">다운로드</a> ·
-  <a href="https://open-design.ai/amr/">Model Router</a> ·
+  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">@OpenDesignHQ 팔로우</a>
 </p>
@@ -577,7 +577,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] 사이드카 프로토콜 + Electron 데스크톱 + IPC 자동화
 - [x] 아티팩트 린트 API + 5차원 자가 비평 내보내기 전 게이트
 - [x] **0.8.0** — 플러그인 마켓플레이스 인프라(261개 공식 플러그인, 매니페스트 사양, 에이전트별 설치 스크립트)
-- [x] **0.9.0** — Open Design AMR(앱에 내장된 공식 Model Router: 설정 불필요, 원클릭 로그인)
+- [x] **0.9.0** — Open Design Cloud(앱에 내장된 공식 Model Router: 설정 불필요, 원클릭 로그인)
 - [x] 패키징된 Electron 빌드 — macOS(Apple Silicon + Intel) + Windows(x64) + Linux AppImage(선택적 레인)
 - [ ] 코멘트 모드 정밀 편집 — 부분 출시됨; 안정적인 타깃 패칭 진행 중
 - [ ] AI가 내보내는 tweaks 패널 UX — 아직 구현되지 않음

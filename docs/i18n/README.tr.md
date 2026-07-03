@@ -2,7 +2,7 @@
 
 > 🔥 **Open Design 0.10.0 burada: hepsi bir arada Agentic tasarım çalışma alanı.** Zanaatın tamamı artık tek pencerede — belirsiz bir fikirden referans keşfine, malzeme toplamaya, etkileşimli düzenlemeye, yorumları kuyruğa almaya, animasyonları cilalamaya ve sonucu bir editöre ya da Code Agent'a devretmeye kadar — uygulamadan hiç çıkmadan. Paralel oturumlarla artık tek bir asistan gibi değil, sizin için çalışan yerel bir tasarım ekibi gibi hissettiriyor. [0.10.0'ı indir](https://github.com/nexu-io/open-design/releases) · [Tartışmaya katıl](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — resmî model servisi.** Tek bir yüklemeyle GPT, Claude, Gemini ve DeepSeek'i doğrudan Open Design içinde kullanın: 20+ amiral gemisi model, sıfır yapılandırma, gerçek token kullanımına göre faturalandırma. [AMR'yi dene](https://open-design.ai/amr/)
+> ⚡ **Open Design Cloud — resmî model servisi.** Tek bir yüklemeyle GPT, Claude, Gemini ve DeepSeek'i doğrudan Open Design içinde kullanın: 20+ amiral gemisi model, sıfır yapılandırma, gerçek token kullanımına göre faturalandırma. [Open Design Cloud'yi dene](https://open-design.ai/cloud/)
 >
 > 🏅 **Open Design Fellow programı artık açık.** Siz de tasarımın açık olması gerektiğine inanıyorsanız — bir Open Design Fellow olun, ürünü çekirdek ekiple birlikte şekillendirin ve daha fazla insanın tasarımın geleceğini tanımlamaya katılmasına yardımcı olun. Ayrıntılar → [`MAINTAINERS.md`](../../MAINTAINERS.md) ve [Discord](https://discord.gg/mHAjSMV6gz).
 
@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">Web Sitesi</a> ·
   <a href="https://open-design.ai/">İndir</a> ·
-  <a href="https://open-design.ai/amr/">Model Router</a> ·
+  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">@OpenDesignHQ'yu takip et</a>
 </p>
@@ -577,7 +577,7 @@ Tam mimari → [`docs/architecture.md`](../../docs/architecture.md). Beceri prot
 - [x] Sidecar protokolü + Electron masaüstü + IPC otomasyonu
 - [x] Artifact lint API'si + 5 boyutlu öz-eleştiri ön-yayın kapısı
 - [x] **0.8.0** — eklenti pazar yeri altyapısı (261 resmî eklenti, manifest spesifikasyonu, ajan başına kurulum betikleri)
-- [x] **0.9.0** — Open Design AMR (uygulamaya gömülü resmî Model Router: sıfır yapılandırma, tek tıkla oturum açma)
+- [x] **0.9.0** — Open Design Cloud (uygulamaya gömülü resmî Model Router: sıfır yapılandırma, tek tıkla oturum açma)
 - [x] Paketlenmiş Electron derlemeleri — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (isteğe bağlı hat)
 - [ ] Yorum modu cerrahi düzenlemeler — kısmen sunuldu; güvenilir hedefli yamalama devam ediyor
 - [ ] AI tarafından yayılan ayar paneli UX'i — henüz uygulanmadı

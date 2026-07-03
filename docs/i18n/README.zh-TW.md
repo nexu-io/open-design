@@ -2,7 +2,7 @@
 
 > 🔥 **Open Design 0.10.0 正式發布：All-in-one 的 Agentic 設計工作台。** 設計的完整流程從此只需一個視窗——從一個模糊的想法出發，到發現參考、蒐集素材、互動式編輯、留言排入佇列、打磨動效，再交付給編輯器或 Code Agent，全程無須離開應用程式。搭配多會話並行，它不再只是一個助手，而是一支為你工作的本地設計團隊。[下載 0.10.0](https://github.com/nexu-io/open-design/releases) · [參與討論](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR（Agentic Model Router）——官方模型服務。** 一次儲值，即可在 Open Design 中直接使用 GPT、Claude、Gemini 與 DeepSeek：20+ 旗艦模型、零設定、依實際 token 用量計費。[立即體驗](https://open-design.ai/amr/)
+> ⚡ **Open Design Cloud——官方模型服務。** 一次儲值，即可在 Open Design 中直接使用 GPT、Claude、Gemini 與 DeepSeek：20+ 旗艦模型、零設定、依實際 token 用量計費。[立即體驗](https://open-design.ai/cloud/)
 >
 > 🏅 **Open Design Fellow 計畫現已開放。** 如果你也相信設計應該是開放的——歡迎成為 Open Design Fellow，與核心團隊一同形塑這項產品，並協助更多人參與定義設計的未來。詳情請見 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 與 [Discord](https://discord.gg/mHAjSMV6gz)。
 
@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">官方網站</a> ·
   <a href="https://open-design.ai/">下載</a> ·
-  <a href="https://open-design.ai/amr/">Model Router</a> ·
+  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">追蹤 @OpenDesignHQ</a>
 </p>
@@ -577,7 +577,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] Sidecar 協定 + Electron 桌面 + IPC 自動化
 - [x] Artifact lint API + 5 維自我評析的發出前閘門
 - [x] **0.8.0**——外掛市集基礎建設（261 個官方外掛、manifest 規格、各 agent 安裝腳本）
-- [x] **0.9.0**——Open Design AMR（內建於應用程式的官方 Model Router：零設定、一鍵登入）
+- [x] **0.9.0**——Open Design Cloud（內建於應用程式的官方 Model Router：零設定、一鍵登入）
 - [x] 打包的 Electron 建置——macOS（Apple Silicon + Intel）+ Windows（x64）+ Linux AppImage（選用通道）
 - [ ] 註解模式的精準編輯——部分完成；可靠的定點修補開發中
 - [ ] AI 發出的 tweaks 面板 UX——尚未實作

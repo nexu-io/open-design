@@ -2,7 +2,7 @@
 
 > 🔥 **Open Design 0.10.0 вже тут: універсальний Agentic-робочий простір для дизайну.** Усе ремесло тепер живе в одному вікні — від розмитої ідеї до пошуку референсів, збирання матеріалу, інтерактивного редагування, черги коментарів, шліфування анімацій і передачі результату редактору чи Code Agent — не виходячи із застосунку. З паралельними сесіями це вже не один асистент, а ціла локальна команда дизайнерів, що працює на вас. [Завантажити 0.10.0](https://github.com/nexu-io/open-design/releases) · [Долучитися до обговорення](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — офіційний сервіс моделей.** Одне поповнення — і GPT, Claude, Gemini та DeepSeek доступні просто в Open Design: 20+ флагманських моделей, нуль налаштувань, оплата за реальне використання токенів. [Спробувати AMR](https://open-design.ai/amr/)
+> ⚡ **Open Design Cloud — офіційний сервіс моделей.** Одне поповнення — і GPT, Claude, Gemini та DeepSeek доступні просто в Open Design: 20+ флагманських моделей, нуль налаштувань, оплата за реальне використання токенів. [Спробувати Open Design Cloud](https://open-design.ai/cloud/)
 >
 > 🏅 **Програма Open Design Fellow тепер відкрита.** Якщо ви теж вірите, що дизайн має бути відкритим — станьте Open Design Fellow, формуйте продукт разом із основною командою та допомагайте більшій кількості людей брати участь у визначенні майбутнього дизайну. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та [Discord](https://discord.gg/mHAjSMV6gz).
 
@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">Вебсайт</a> ·
   <a href="https://open-design.ai/">Завантажити</a> ·
-  <a href="https://open-design.ai/amr/">Model Router</a> ·
+  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">Стежити за @OpenDesignHQ</a>
 </p>
@@ -577,7 +577,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] Протокол sidecar + десктоп Electron + автоматизація IPC
 - [x] API лінтингу артефактів + 5-вимірний шлюз самокритики перед видачею
 - [x] **0.8.0** — інфраструктура маркетплейсу плагінів (261 офіційний плагін, специфікація маніфесту, скрипти встановлення для кожного агента)
-- [x] **0.9.0** — Open Design AMR (офіційний Model Router, вбудований у застосунок: нуль конфігурації, вхід в один клік)
+- [x] **0.9.0** — Open Design Cloud (офіційний Model Router, вбудований у застосунок: нуль конфігурації, вхід в один клік)
 - [x] Упаковані збірки Electron — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (опціональна лінія)
 - [ ] Хірургічні правки в режимі коментарів — частково випущено; надійне цільове патчування в розробці
 - [ ] UX панелі налаштувань, виданої ШІ — ще не реалізовано

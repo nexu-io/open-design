@@ -2,7 +2,7 @@
 
 > 🔥 **Open Design 0.10.0 が登場——オールインワンの Agentic デザインワークスペース。** デザインの全工程が、ひとつのウィンドウに。曖昧なアイデアから、リファレンス探し、素材集め、インタラクティブな編集、コメントのキュー投入、モーションの仕上げ、そしてエディタや Code Agent への受け渡しまで——アプリを離れることなく完結します。複数セッションの並行実行で、それはもはや一人のアシスタントではなく、あなたのために働くローカルなデザインチームです。[0.10.0 をダウンロード](https://github.com/nexu-io/open-design/releases) · [ディスカッションに参加](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR（Agentic Model Router）——公式モデルサービス。** 一度のチャージで、Open Design の中で GPT、Claude、Gemini、DeepSeek をそのまま利用可能。20+ のフラッグシップモデル、設定ゼロ、実トークン使用量ベースの課金。[AMR を試す](https://open-design.ai/amr/)
+> ⚡ **Open Design Cloud——公式モデルサービス。** 一度のチャージで、Open Design の中で GPT、Claude、Gemini、DeepSeek をそのまま利用可能。20+ のフラッグシップモデル、設定ゼロ、実トークン使用量ベースの課金。[Open Design Cloud を試す](https://open-design.ai/cloud/)
 >
 > 🏅 **Open Design Fellow プログラムの募集を開始しました。** あなたもデザインはオープンであるべきだと信じるなら——Open Design Fellow となり、コアチームとともにプロダクトを形づくり、より多くの人がデザインの未来を定義することに参加できるよう手助けしてください。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/mHAjSMV6gz)。
 
@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">ウェブサイト</a> ·
   <a href="https://open-design.ai/">ダウンロード</a> ·
-  <a href="https://open-design.ai/amr/">Model Router</a> ·
+  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">@OpenDesignHQ をフォロー</a>
 </p>
@@ -577,7 +577,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] サイドカープロトコル + Electron デスクトップ + IPC 自動化
 - [x] アーティファクト lint API + 5 次元の自己批評による発行前ゲート
 - [x] **0.8.0** — プラグインマーケットプレイスのインフラ（261 の公式プラグイン、マニフェスト仕様、エージェントごとのインストールスクリプト）
-- [x] **0.9.0** — Open Design AMR（アプリに組み込まれた公式 Model Router: 設定ゼロ、ワンクリックのサインイン）
+- [x] **0.9.0** — Open Design Cloud（アプリに組み込まれた公式 Model Router: 設定ゼロ、ワンクリックのサインイン）
 - [x] パッケージ化された Electron ビルド — macOS（Apple Silicon + Intel） + Windows（x64） + Linux AppImage（オプションのレーン）
 - [ ] コメントモードの外科的な編集 — 一部提供済み。信頼性の高いターゲット指定のパッチ適用は進行中
 - [ ] AI が発行する tweaks パネルの UX — 未実装

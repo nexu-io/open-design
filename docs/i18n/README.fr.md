@@ -2,7 +2,7 @@
 
 > 🔥 **Open Design 0.10.0 est là : l'espace de travail design Agentic tout-en-un.** Tout le métier tient désormais dans une seule fenêtre — partez d'une idée vague, découvrez des références, rassemblez la matière, éditez de manière interactive, mettez vos commentaires en file d'attente, peaufinez les animations, puis transmettez le résultat à un éditeur ou à un Code Agent — sans quitter l'application. Avec les sessions parallèles, ce n'est plus un assistant, mais une équipe de design locale qui travaille pour vous. [Télécharger 0.10.0](https://github.com/nexu-io/open-design/releases) · [Rejoindre la discussion](https://github.com/nexu-io/open-design/discussions/4153)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — le service de modèles officiel.** Une seule recharge pour utiliser GPT, Claude, Gemini et DeepSeek directement dans Open Design : plus de 20 modèles phares, zéro configuration, facturation à l'usage réel des tokens. [Essayer AMR](https://open-design.ai/amr/)
+> ⚡ **Open Design Cloud — le service de modèles officiel.** Une seule recharge pour utiliser GPT, Claude, Gemini et DeepSeek directement dans Open Design : plus de 20 modèles phares, zéro configuration, facturation à l'usage réel des tokens. [Essayer Open Design Cloud](https://open-design.ai/cloud/)
 >
 > 🏅 **Le programme Open Design Fellow est désormais ouvert.** Si vous croyez vous aussi que le design devrait être ouvert — devenez Open Design Fellow, façonnez le produit aux côtés de l'équipe principale et aidez davantage de personnes à participer à la définition de l'avenir du design. Détails → [`MAINTAINERS.md`](../../MAINTAINERS.md) et [Discord](https://discord.gg/mHAjSMV6gz).
 
@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">Site web</a> ·
   <a href="https://open-design.ai/">Télécharger</a> ·
-  <a href="https://open-design.ai/amr/">Model Router</a> ·
+  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">Suivre @OpenDesignHQ</a>
 </p>
@@ -577,7 +577,7 @@ Architecture complète → [`docs/architecture.md`](../../docs/architecture.md).
 - [x] Protocole sidecar + bureau Electron + automatisation IPC
 - [x] API de lint d'artefacts + portail d'auto-critique en 5 dimensions avant émission
 - [x] **0.8.0** — infrastructure de marketplace de plugins (261 plugins officiels, spec de manifeste, scripts d'installation par agent)
-- [x] **0.9.0** — Open Design AMR (Model Router officiel intégré à l'application : zéro configuration, connexion en un clic)
+- [x] **0.9.0** — Open Design Cloud (Model Router officiel intégré à l'application : zéro configuration, connexion en un clic)
 - [x] Builds Electron packagés — macOS (Apple Silicon + Intel) + Windows (x64) + AppImage Linux (voie optionnelle)
 - [ ] Éditions chirurgicales en mode commentaire — partiellement livré ; patching ciblé fiable en cours
 - [ ] UX du panneau de réglages émis par l'IA — pas encore implémenté
