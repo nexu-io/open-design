@@ -1,5 +1,6 @@
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { createConnection, createServer as createNetServer, type Server } from "node:net";
+import { createHash } from "node:crypto";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
 export type SidecarStampShape = {
@@ -163,6 +164,15 @@ export function normalizeIpcPath(ipc: unknown): string {
   if (isWindowsNamedPipePath(ipc)) return ipc;
   if (!isAbsolute(ipc)) throw new Error(`sidecar ipc path must be absolute: ${ipc}`);
   return ipc;
+}
+
+function resolvePlatformIpcPath(socketPath: string): string {
+  if (process.platform !== "win32") return socketPath;
+  if (isWindowsNamedPipePath(socketPath)) return socketPath;
+
+  const normalized = resolve(socketPath).toLowerCase();
+  const digest = createHash("sha1").update(normalized).digest("hex").slice(0, 20);
+  return `\\\\.\\pipe\\open-design-sidecar-${digest}`;
 }
 
 export function resolveNamespace<TStamp extends SidecarStampShape>(options: NamespaceResolutionOptions<TStamp>): string {
@@ -560,24 +570,25 @@ export async function createJsonIpcServer({
   handler: JsonIpcHandler;
   socketPath: string;
 }): Promise<JsonIpcServerHandle> {
-  await prepareIpcPath(socketPath);
+  const platformSocketPath = resolvePlatformIpcPath(socketPath);
+  await prepareIpcPath(platformSocketPath);
   const server = createNetServer((socket) => {
     let buffer = "";
     const traceId = nextJsonIpcTraceId();
     const startedAt = process.hrtime.bigint();
-    traceJsonIpc("server.connection", { socketPath, traceId });
+    traceJsonIpc("server.connection", { socketPath: platformSocketPath, traceId });
     socket.on("error", (error) => {
       traceJsonIpc("server.socket_error", {
         durationMs: jsonIpcTraceDurationMs(startedAt),
         error: error instanceof Error ? error.message : String(error),
-        socketPath,
+        socketPath: platformSocketPath,
         traceId,
       });
     });
     socket.on("close", () => {
       traceJsonIpc("server.socket_close", {
         durationMs: jsonIpcTraceDurationMs(startedAt),
-        socketPath,
+        socketPath: platformSocketPath,
         traceId,
       });
     });
@@ -585,7 +596,7 @@ export async function createJsonIpcServer({
       traceJsonIpc("server.data", {
         bytes: chunk.byteLength,
         durationMs: jsonIpcTraceDurationMs(startedAt),
-        socketPath,
+        socketPath: platformSocketPath,
         traceId,
       });
       buffer += chunk.toString();
@@ -601,7 +612,7 @@ export async function createJsonIpcServer({
           durationMs: jsonIpcTraceDurationMs(startedAt),
           error: error instanceof Error ? error.message : String(error),
           frameBytes: Buffer.byteLength(frame),
-          socketPath,
+          socketPath: platformSocketPath,
           traceId,
         });
         socket.end(
@@ -617,21 +628,21 @@ export async function createJsonIpcServer({
         durationMs: jsonIpcTraceDurationMs(startedAt),
         frameBytes: Buffer.byteLength(frame),
         message: messageSummary,
-        socketPath,
+        socketPath: platformSocketPath,
         traceId,
       });
       try {
         traceJsonIpc("server.handler_start", {
           durationMs: jsonIpcTraceDurationMs(startedAt),
           message: messageSummary,
-          socketPath,
+          socketPath: platformSocketPath,
           traceId,
         });
         const result = await handler(message);
         traceJsonIpc("server.handler_success", {
           durationMs: jsonIpcTraceDurationMs(startedAt),
           message: messageSummary,
-          socketPath,
+          socketPath: platformSocketPath,
           traceId,
         });
         socket.end(`${JSON.stringify({ ok: true, result })}\n`);
@@ -640,7 +651,7 @@ export async function createJsonIpcServer({
           durationMs: jsonIpcTraceDurationMs(startedAt),
           error: error instanceof Error ? error.message : String(error),
           message: messageSummary,
-          socketPath,
+          socketPath: platformSocketPath,
           traceId,
         });
         socket.end(
@@ -655,7 +666,7 @@ export async function createJsonIpcServer({
 
   await new Promise<void>((resolveListen, rejectListen) => {
     server.once("error", rejectListen);
-    server.listen(socketPath, () => {
+    server.listen(platformSocketPath, () => {
       server.off("error", rejectListen);
       resolveListen();
     });
@@ -664,7 +675,7 @@ export async function createJsonIpcServer({
   return {
     async close() {
       await closeServer(server);
-      if (!isWindowsNamedPipePath(socketPath)) await rm(socketPath, { force: true });
+      if (!isWindowsNamedPipePath(platformSocketPath)) await rm(platformSocketPath, { force: true });
     },
   };
 }
@@ -674,14 +685,15 @@ export async function requestJsonIpc<T = any>(
   payload: unknown,
   { timeoutMs = 1500 }: { timeoutMs?: number } = {},
 ): Promise<T> {
+  const platformSocketPath = resolvePlatformIpcPath(socketPath);
   return await new Promise<T>((resolveRequest, rejectRequest) => {
-    const socket = createConnection(socketPath);
+    const socket = createConnection(platformSocketPath);
     const traceId = nextJsonIpcTraceId();
     const startedAt = process.hrtime.bigint();
     let settled = false;
     let buffer = "";
     const messageSummary = summarizeJsonIpcMessage(payload);
-    traceJsonIpc("client.connect_start", { message: messageSummary, socketPath, timeoutMs, traceId });
+    traceJsonIpc("client.connect_start", { message: messageSummary, socketPath: platformSocketPath, timeoutMs, traceId });
     const settle = (callback: () => void) => {
       if (settled) return;
       settled = true;
@@ -692,19 +704,19 @@ export async function requestJsonIpc<T = any>(
       traceJsonIpc("client.timeout", {
         durationMs: jsonIpcTraceDurationMs(startedAt),
         message: messageSummary,
-        socketPath,
+        socketPath: platformSocketPath,
         timeoutMs,
         traceId,
       });
       socket.destroy();
-      settle(() => rejectRequest(new Error(`IPC request timed out: ${socketPath}`)));
+      settle(() => rejectRequest(new Error(`IPC request timed out: ${platformSocketPath}`)));
     }, timeoutMs);
 
     socket.on("connect", () => {
       traceJsonIpc("client.connected", {
         durationMs: jsonIpcTraceDurationMs(startedAt),
         message: messageSummary,
-        socketPath,
+        socketPath: platformSocketPath,
         traceId,
       });
       const frame = `${JSON.stringify(payload)}\n`;
@@ -712,14 +724,14 @@ export async function requestJsonIpc<T = any>(
         bytes: Buffer.byteLength(frame),
         durationMs: jsonIpcTraceDurationMs(startedAt),
         message: messageSummary,
-        socketPath,
+        socketPath: platformSocketPath,
         traceId,
       });
       const flushed = socket.write(frame, () => {
         traceJsonIpc("client.write_callback", {
           durationMs: jsonIpcTraceDurationMs(startedAt),
           message: messageSummary,
-          socketPath,
+          socketPath: platformSocketPath,
           traceId,
         });
       });
@@ -728,7 +740,7 @@ export async function requestJsonIpc<T = any>(
           traceJsonIpc("client.drain", {
             durationMs: jsonIpcTraceDurationMs(startedAt),
             message: messageSummary,
-            socketPath,
+            socketPath: platformSocketPath,
             traceId,
           });
         });
@@ -739,7 +751,7 @@ export async function requestJsonIpc<T = any>(
         bytes: chunk.byteLength,
         durationMs: jsonIpcTraceDurationMs(startedAt),
         message: messageSummary,
-        socketPath,
+        socketPath: platformSocketPath,
         traceId,
       });
       buffer += chunk.toString();
@@ -753,7 +765,7 @@ export async function requestJsonIpc<T = any>(
             durationMs: jsonIpcTraceDurationMs(startedAt),
             error: response.error?.message ?? "IPC request failed",
             message: messageSummary,
-            socketPath,
+            socketPath: platformSocketPath,
             traceId,
           });
           rejectRequest(new Error(response.error?.message ?? "IPC request failed"));
@@ -762,7 +774,7 @@ export async function requestJsonIpc<T = any>(
         traceJsonIpc("client.response_success", {
           durationMs: jsonIpcTraceDurationMs(startedAt),
           message: messageSummary,
-          socketPath,
+          socketPath: platformSocketPath,
           traceId,
         });
         resolveRequest(response.result as T);
@@ -773,7 +785,7 @@ export async function requestJsonIpc<T = any>(
         durationMs: jsonIpcTraceDurationMs(startedAt),
         error: error instanceof Error ? error.message : String(error),
         message: messageSummary,
-        socketPath,
+        socketPath: platformSocketPath,
         traceId,
       });
       settle(() => rejectRequest(error));
@@ -782,7 +794,7 @@ export async function requestJsonIpc<T = any>(
       traceJsonIpc("client.socket_close", {
         durationMs: jsonIpcTraceDurationMs(startedAt),
         message: messageSummary,
-        socketPath,
+        socketPath: platformSocketPath,
         traceId,
       });
     });

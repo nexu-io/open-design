@@ -157,6 +157,28 @@ describe("generic sidecar JSON IPC", () => {
     expect(events).toContain("client.response_success");
     expect(JSON.stringify(logs)).not.toContain("secret()");
   });
+
+  it("accepts absolute ipc file paths on Windows by normalizing them to named pipes", async () => {
+    if (process.platform !== "win32") return;
+
+    const root = await mkdtemp(join(tmpdir(), "open-design-sidecar-win-ipc-"));
+    const socketPath = join(root, "ipc.sock");
+    const server = await createJsonIpcServer({
+      socketPath,
+      handler: async (message) => ({
+        seen: message?.type,
+      }),
+    });
+
+    try {
+      await expect(requestJsonIpc(socketPath, { type: "PING" })).resolves.toEqual({
+        seen: "PING",
+      });
+    } finally {
+      await server.close();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
 
 describe("generic sidecar bootstrap", () => {

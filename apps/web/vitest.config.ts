@@ -5,6 +5,7 @@ export default defineConfig({
   resolve: {
     alias: {
       'motion/react': resolve(__dirname, 'tests/helpers/motion-mock.tsx'),
+      '@open-design/sidecar': resolve(__dirname, '../../packages/sidecar/src/index.ts'),
     },
   },
   test: {
