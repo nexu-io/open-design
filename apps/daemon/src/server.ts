@@ -688,6 +688,20 @@ function resolveOdTeamBin(): OdTeamSpawn | null {
   }
   return null;
 }
+
+/** Remove a team run workDir tree after the odteam process exits so
+ *  per-run files under RUNTIME_DATA_DIR/team-runs don't accumulate.
+ *  This is a best-effort cleanup — failures are logged but never thrown. */
+function cleanupTeamWorkDir(workDir) {
+  try {
+    if (workDir && fs.existsSync(workDir)) {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  } catch (err) {
+    console.warn('[team] cleanupTeamWorkDir failed', workDir, err);
+  }
+}
+
 const SKILLS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'skills',
@@ -6241,7 +6255,7 @@ export async function startServer({
       if (!odteamSpawn) {
         send('error', createSseErrorPayload(
           'AGENT_UNAVAILABLE',
-          'odteam CLI is not installed. Build it with: cd packages/multi-agent-team && go build -o cmd/odteam/odteam ./cmd/odteam/',
+          'odteam CLI is not available. In dev: cd packages/multi-agent-team && go build -o cmd/odteam/odteam ./cmd/odteam/. In production: set OD_TEAM_BIN to the odteam executable path.',
           { retryable: false },
         ));
         return design.runs.finish(run, 'failed', 1, null);
@@ -6250,10 +6264,17 @@ export async function startServer({
       if (!teamPrompt.trim() && safeCommentAttachments.length === 0) {
         return design.runs.fail(run, 'BAD_REQUEST', 'message required');
       }
+      // Team run workspace lives under RUNTIME_DATA_DIR so generated
+      // artifacts are owned by the same data-directory contract as the
+      // rest of daemon-managed runs. Cleaned up on process exit.
+      const TEAM_RUNS_DIR = path.join(RUNTIME_DATA_DIR, 'team-runs');
+      fs.mkdirSync(TEAM_RUNS_DIR, { recursive: true });
+      const teamWorkDir = path.join(TEAM_RUNS_DIR, run.id);
+      fs.mkdirSync(teamWorkDir, { recursive: true });
       const teamReq = {
         prompt: teamPrompt,
         daemonAddr: daemonUrl,
-        workDir: path.join(os.tmpdir(), `odteam-${run.id}`),
+        workDir: teamWorkDir,
         projectId: typeof projectId === 'string' ? projectId : '',
         conversationId: typeof conversationId === 'string' ? conversationId : '',
         team: {
@@ -6326,6 +6347,7 @@ export async function startServer({
         send('stderr', { chunk: text });
       });
       teamChild.on('error', (err) => {
+        cleanupTeamWorkDir(teamWorkDir);
         send('error', createSseErrorPayload(
           'AGENT_EXECUTION_FAILED',
           `odteam spawn failed: ${err.message}`,
@@ -6342,6 +6364,7 @@ export async function startServer({
             }
           } catch { /* ignore */ }
         }
+        cleanupTeamWorkDir(teamWorkDir);
         const teamStatus = code === 0 ? 'succeeded' : 'failed';
         design.runs.emit(run, 'diagnostic', {
           type: 'runtime_close',
