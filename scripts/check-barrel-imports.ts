@@ -92,6 +92,21 @@ export const CAPABILITY_BARREL_DOMAINS: CapabilityBarrelDomain[] = [
     // of declaring sibling edges.
     allowedEdges: [],
   },
+  {
+    name: 'automation',
+    root: 'apps/daemon/src/automation',
+    subdirs: ['core', 'routines', 'templates', 'proposals', 'ingestion'],
+    foundation: 'core',
+    // The intelligence pipeline flows templates <- proposals <- ingestion; the
+    // routine scheduler (routines/) is an independent leaf that shares only its
+    // types via core/. No cycles: proposals never reaches ingestion, and neither
+    // reaches routines/.
+    allowedEdges: [
+      ['proposals', 'templates'],
+      ['ingestion', 'proposals'],
+      ['ingestion', 'templates'],
+    ],
+  },
 ];
 
 export type BarrelImportViolation = {

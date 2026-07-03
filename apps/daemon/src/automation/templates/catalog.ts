@@ -1,3 +1,9 @@
+/** @module templates/catalog
+ * Automation template catalog: the built-in template set plus read/normalize/persist of
+ * user-defined templates (stored as `automation-templates/templates.json` under the data
+ * dir). Self-contained — contracts types + filesystem only; imports no sibling subdirectory.
+ */
+
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import type {
@@ -10,6 +16,7 @@ import type {
   AutomationTriggerKind,
 } from '@open-design/contracts';
 
+/** The daemon's built-in automation templates, always present regardless of user data. */
 export const BUILT_IN_AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   {
     id: 'ingest-source-memory-tree',
@@ -118,10 +125,12 @@ export const BUILT_IN_AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   },
 ];
 
+/** List the built-in templates only (synchronous; no user data). */
 export function listAutomationTemplates(): AutomationTemplate[] {
   return BUILT_IN_AUTOMATION_TEMPLATES;
 }
 
+/** Look up a built-in template by id, or `null` if none matches. */
 export function getAutomationTemplate(id: string): AutomationTemplate | null {
   return BUILT_IN_AUTOMATION_TEMPLATES.find((template) => template.id === id) ?? null;
 }
@@ -228,6 +237,11 @@ function cleanCompressionMode(value: unknown): AutomationTokenCompressionMode {
     : 'balanced';
 }
 
+/**
+ * Validate and coerce untrusted input into a well-formed {@link AutomationTemplate},
+ * throwing on a missing/invalid id, required string, or empty stage list. Unknown enum
+ * values are dropped (falling back to safe defaults) rather than rejected.
+ */
 export function normalizeAutomationTemplate(input: unknown): AutomationTemplate {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error('automation template must be an object');
@@ -303,6 +317,7 @@ async function writeUserAutomationTemplates(
   await fsp.writeFile(file, JSON.stringify({ templates }, null, 2));
 }
 
+/** Built-in templates plus user templates (user entries that collide with a built-in id are dropped). */
 export async function listAllAutomationTemplates(dataDir: string): Promise<AutomationTemplate[]> {
   const userTemplates = await readUserAutomationTemplates(dataDir);
   const builtInIds = new Set(BUILT_IN_AUTOMATION_TEMPLATES.map((template) => template.id));
@@ -312,6 +327,7 @@ export async function listAllAutomationTemplates(dataDir: string): Promise<Autom
   ];
 }
 
+/** Look up a template by id across built-in and user templates, or `null` if none matches. */
 export async function getAnyAutomationTemplate(
   dataDir: string,
   id: string,
@@ -319,6 +335,10 @@ export async function getAnyAutomationTemplate(
   return (await listAllAutomationTemplates(dataDir)).find((template) => template.id === id) ?? null;
 }
 
+/**
+ * Normalize and persist a user template (create or replace by id), keeping the store
+ * sorted by id. Throws if the id collides with a built-in template. Returns the stored template.
+ */
 export async function upsertUserAutomationTemplate(
   dataDir: string,
   input: unknown,

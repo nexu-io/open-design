@@ -8,7 +8,7 @@ import {
   listAllAutomationTemplates,
   listAutomationTemplates,
   upsertUserAutomationTemplate,
-} from '../src/automation-templates.js';
+} from '../src/automation/index.js';
 
 describe('automation templates catalog', () => {
   it('exposes self-evolution templates for memory, design systems, skills, connectors, and compression', () => {

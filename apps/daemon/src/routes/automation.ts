@@ -5,14 +5,12 @@ import {
   applyAutomationProposal,
   createAutomationProposal,
   getAutomationProposal,
-  listAutomationProposals,
-  rejectAutomationProposal,
-} from '../automation-proposals.js';
-import {
   getAutomationSourcePacket,
   ingestAutomationSource,
+  listAutomationProposals,
   listAutomationSourcePackets,
-} from '../automation-ingestions.js';
+  rejectAutomationProposal,
+} from '../automation/index.js';
 
 export interface RegisterAutomationRoutesDeps {
   paths: {

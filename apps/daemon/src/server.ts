@@ -279,7 +279,6 @@ import {
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
-import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { createAgentTitleMarkerStripper } from './title-marker.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
@@ -422,10 +421,11 @@ import { agentCliEnvForAgent, readAppConfig, readPluginEnvKnobs, writeAppConfig 
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
 import { buildOrbitNoLiveArtifactSummary } from './orbit-agent-summary.js';
 import {
+  ingestRoutineConnectorEvolution,
   RoutineService,
   validateSchedule as validateRoutineSchedule,
   validateTarget as validateRoutineTarget,
-} from './routines.js';
+} from './automation/index.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
 import { createDiagnosticsExportHandler } from './diagnostics-export.js';
 import { DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';

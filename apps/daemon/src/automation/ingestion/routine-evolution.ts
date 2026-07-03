@@ -1,5 +1,12 @@
-import type { RoutineRunStatus, RoutineRunTrigger } from './routines.js';
-import { ingestAutomationSource } from './automation-ingestions.js';
+/** @module ingestion/routine-evolution
+ * Bridge from a completed routine run into the ingestion pipeline: when a scheduled
+ * routine that used connectors succeeds, synthesize a source packet from its run and
+ * feed it to `ingestAutomationSource` (same subdir) so the connector usage can evolve
+ * an automation template. Consumes routine run types from core/.
+ */
+
+import type { RoutineRunStatus, RoutineRunTrigger } from '../core/index.js';
+import { ingestAutomationSource } from './sources.js';
 
 type RoutineLike = {
   id: string;
@@ -12,16 +19,23 @@ type MessageLike = {
   content?: unknown;
 };
 
+/**
+ * Extracts the automation template id a routine prompt was generated from, by matching
+ * the `Use Automation template "<id>"` marker the prompt builder emits. Returns `null`
+ * when the prompt carries no such marker.
+ */
 export function automationTemplateIdFromRoutinePrompt(prompt: string): string | null {
   const match = /Use Automation template "([^"]+)"/.exec(prompt);
   return match?.[1] ?? null;
 }
 
+/** @internal Collapse arbitrary message content to a single trimmed line, capped at 2000 chars. */
 function compactMessageContent(value: unknown): string {
   const text = typeof value === 'string' ? value : JSON.stringify(value ?? '');
   return text.replace(/\s+/g, ' ').trim().slice(0, 2_000);
 }
 
+/** @internal Render a routine run (prompt, summary, last few messages) into source markdown. */
 function routineConnectorSourceMarkdown(input: {
   routine: RoutineLike;
   runId: string;
@@ -67,6 +81,12 @@ function routineConnectorSourceMarkdown(input: {
   ].join('\n');
 }
 
+/**
+ * Turn a finished routine run into an ingested automation source. No-ops (returns
+ * `null`) unless the run `succeeded` and used at least one connector. Resolves the
+ * template id from the routine prompt (falling back to the connector-digest default),
+ * builds source markdown from the run, and delegates to `ingestAutomationSource`.
+ */
 export async function ingestRoutineConnectorEvolution(
   dataDir: string,
   input: {

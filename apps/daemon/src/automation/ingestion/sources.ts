@@ -1,3 +1,10 @@
+/** @module ingestion/sources
+ * Source ingestion: turn a raw source (upload, url, repo, connector, artifact, chat)
+ * into a persisted {@link AutomationContentPacket} — capturing provenance, applying token
+ * compression, and emitting a review proposal. Reaches templates/ (for the template's
+ * sinks/policy defaults) and proposals/ (to create the proposal), both declared edges.
+ */
+
 import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
@@ -16,8 +23,8 @@ import type {
   MemoryType,
 } from '@open-design/contracts';
 
-import { createAutomationProposal } from './automation-proposals.js';
-import { getAnyAutomationTemplate } from './automation-templates.js';
+import { createAutomationProposal } from '../proposals/index.js';
+import { getAnyAutomationTemplate } from '../templates/index.js';
 
 const STORE_DIR = 'automation-source-packets';
 const STORE_FILE = 'packets.json';
@@ -65,6 +72,10 @@ async function writePackets(dataDir: string, packets: AutomationContentPacket[])
   await fsp.writeFile(file, JSON.stringify({ packets }, null, 2));
 }
 
+/**
+ * List stored source packets, newest-captured first, optionally capped to `limit`.
+ * Returns `[]` when the store does not yet exist.
+ */
 export async function listAutomationSourcePackets(
   dataDir: string,
   opts: { limit?: number } = {},
@@ -83,6 +94,7 @@ export async function listAutomationSourcePackets(
   return limit > 0 ? sorted.slice(0, limit) : sorted;
 }
 
+/** Look up a single source packet by id, or `null` if none matches. */
 export async function getAutomationSourcePacket(
   dataDir: string,
   id: string,
@@ -362,6 +374,13 @@ function jsonObjectFrom(value: unknown): Record<string, JsonValue> {
   return value as Record<string, JsonValue>;
 }
 
+/**
+ * Ingest a raw source into the automation pipeline. Resolves the referenced template for
+ * its output sinks / review policy / compression defaults, compacts the body per the
+ * chosen token-compression mode, persists a content packet with provenance and metadata,
+ * and creates the corresponding review proposal. Requires `bodyMarkdown`; returns the
+ * ingestion response (packet + proposal summary).
+ */
 export async function ingestAutomationSource(
   dataDir: string,
   input: CreateAutomationSourceIngestionRequest,

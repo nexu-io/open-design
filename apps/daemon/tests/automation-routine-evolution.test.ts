@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   automationTemplateIdFromRoutinePrompt,
   ingestRoutineConnectorEvolution,
-} from '../src/automation-routine-evolution.js';
-import { listAutomationSourcePackets } from '../src/automation-ingestions.js';
+  listAutomationSourcePackets,
+} from '../src/automation/index.js';
 
 describe('automation routine evolution', () => {
   let tempDir: string;

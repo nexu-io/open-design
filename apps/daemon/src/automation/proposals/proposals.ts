@@ -1,3 +1,11 @@
+/** @module proposals/proposals
+ * Automation evolution proposal lifecycle: persist proposals (as
+ * `automation-proposals/proposals.json`), and apply/reject them. Applying dispatches by
+ * target kind — memory nodes (via the top-level memory module), design-system and skill
+ * files written under the data dir, and automation templates (via the templates/ barrel,
+ * the one declared sibling edge).
+ */
+
 import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
@@ -12,8 +20,8 @@ import {
   deleteMemoryEntry,
   readMemoryEntry,
   upsertMemoryEntry,
-} from './memory.js';
-import { upsertUserAutomationTemplate } from './automation-templates.js';
+} from '../../memory.js';
+import { upsertUserAutomationTemplate } from '../templates/index.js';
 
 const STORE_DIR = 'automation-proposals';
 const STORE_FILE = 'proposals.json';
@@ -38,6 +46,10 @@ async function writeProposals(dataDir: string, proposals: AutomationEvolutionPro
   await fsp.writeFile(file, JSON.stringify({ proposals }, null, 2));
 }
 
+/**
+ * List stored proposals, newest-updated first. Optionally filter by status (`'all'` or
+ * omitted returns every status). Returns `[]` when the store does not yet exist.
+ */
 export async function listAutomationProposals(
   dataDir: string,
   opts: { status?: AutomationProposalStatus | 'all' } = {},
@@ -58,6 +70,7 @@ export async function listAutomationProposals(
   return filtered.slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+/** Look up a single proposal by id across all statuses, or `null` if none matches. */
 export async function getAutomationProposal(
   dataDir: string,
   id: string,
@@ -66,6 +79,11 @@ export async function getAutomationProposal(
   return proposals.find((proposal) => proposal.id === id) ?? null;
 }
 
+/**
+ * Validate and persist a new proposal (or replace one with the same explicit id).
+ * Requires title, summary, and patch; defaults status to `pending-review`. Returns the
+ * stored proposal with generated id/timestamps.
+ */
 export async function createAutomationProposal(
   dataDir: string,
   input: CreateAutomationEvolutionProposalRequest & {
@@ -307,6 +325,11 @@ async function updateProposalStatus(
   return next;
 }
 
+/**
+ * Apply a reviewable proposal by dispatching on its `targetKind` (memory / design-system
+ * / skill / automation-template), then mark it `applied` with the applier result recorded
+ * in metadata. Throws if the proposal is missing, not reviewable, or of an unsupported kind.
+ */
 export async function applyAutomationProposal(dataDir: string, id: string) {
   const proposal = await getAutomationProposal(dataDir, id);
   if (!proposal) throw new Error('automation proposal not found');
@@ -327,6 +350,7 @@ export async function applyAutomationProposal(dataDir: string, id: string) {
   return { proposal: next, result };
 }
 
+/** Mark a reviewable proposal `rejected`, recording an optional reason in metadata. */
 export async function rejectAutomationProposal(
   dataDir: string,
   id: string,
