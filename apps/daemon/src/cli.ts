@@ -10,7 +10,7 @@ import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
 import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './cli-help/index.js';
 import { BRAND_USAGE, isBrandHelpArg } from './cli-help/index.js';
-import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
+import { parseDesignSystemRenameArgs } from './design-systems/index.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';

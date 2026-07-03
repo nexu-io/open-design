@@ -3,6 +3,10 @@
  * All state is persisted under the daemon data root; no in-memory caching.
  */
 export {
+  buildDesignSystemSkillsMarkdown,
+  buildUserDesignSystemArchive,
+  propagateWorkspaceProjectRename,
+  workspaceRenameDesignSystemId,
   createUserDesignSystem,
   createUserDesignSystemRevision,
   deleteUserDesignSystem,

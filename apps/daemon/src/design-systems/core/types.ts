@@ -74,9 +74,20 @@ export type DesignSystemPullFileDetail = {
   content: string;
 };
 
+export type DesignSystemStaticFileDetail = {
+  path: string;
+  name: string;
+  kind: DesignSystemFileKind;
+  size: number;
+  updatedAt: string;
+  contentType: string;
+  bytes: Buffer;
+};
+
 /** Aggregated package metadata returned by `readDesignSystemPackageInfo`. */
 export type DesignSystemPackageInfo = {
   manifest?: DesignSystemProjectManifest;
+  availableFiles?: string[];
   sourceEvidence?: {
     scannedFileCount?: number;
     tokenCount?: number;
@@ -190,6 +201,7 @@ export type DesignSystemProjectManifest = {
 
 /** Source context captured when a user design system was created. */
 export type DesignSystemProvenance = {
+  sourceUrls?: string[];
   companyBlurb?: string;
   githubUrls?: string[];
   localCodeFiles?: string[];

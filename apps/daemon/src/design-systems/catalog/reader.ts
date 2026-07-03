@@ -11,6 +11,7 @@ import type { FrontmatterObject, FrontmatterValue } from '../core/frontmatter.js
 import {
   classifyDesignSystemFile,
   isAbsenceError,
+  isSafeManifestPath,
   isTextDesignSystemPullFile,
   readProjectManifest,
   sanitizeRelativeFilePath,
@@ -37,10 +38,61 @@ import type {
   DesignSystemListOptions,
   DesignSystemPackageInfo,
   DesignSystemPullFileDetail,
+  DesignSystemStaticFileDetail,
   DesignSystemSummary,
   DesignSystemSurface,
   SwatchRow,
 } from '../core/types.js';
+
+const STATIC_SYSTEM_FILES = new Set([
+  'system/index.html', 'system/kit.html', 'system/kit.dark.html',
+  'system/tokens.default.json', 'system/artifacts/landing.html',
+  'system/artifacts/deck.html', 'system/artifacts/poster.html',
+  'system/artifacts/email.html', 'system/artifacts/newsletter.html',
+  'system/artifacts/form.html',
+]);
+
+function staticContentType(relativePath: string): string {
+  const ext = path.extname(relativePath).toLowerCase();
+  return ({ '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
+    '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml',
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp', '.gif': 'image/gif', '.woff': 'font/woff',
+    '.woff2': 'font/woff2', '.ttf': 'font/ttf' } as Record<string, string>)[ext] ?? 'application/octet-stream';
+}
+
+export async function readDesignSystemStaticFile(
+  root: string,
+  id: string,
+  relativePath: string,
+  options: { idPrefix?: string } = {},
+): Promise<DesignSystemStaticFileDetail | null> {
+  const dirId = stripPrefixAndValidateId(id, options.idPrefix);
+  const cleanPath = sanitizeRelativeFilePath(relativePath);
+  if (!dirId || !cleanPath || !isSafeManifestPath(cleanPath)) return null;
+  const brandRoot = path.join(root, dirId);
+  const manifest = await readProjectManifest(brandRoot, dirId);
+  const allowed = new Set([
+    manifest?.files.design ?? 'DESIGN.md', manifest?.files.tokens ?? 'tokens.css',
+    manifest?.files.components ?? 'components.html', manifest?.files.designTokens,
+    manifest?.files.tailwind, manifest?.usage ?? 'USAGE.md',
+    manifest?.componentsManifest ?? 'components.manifest.json',
+    ...(manifest?.preview?.pages ?? []).map((page) => page.path),
+    ...(manifest?.fonts ?? []).map((font) => font.file),
+  ].filter((value): value is string => typeof value === 'string'));
+  if (!STATIC_SYSTEM_FILES.has(cleanPath) && !allowed.has(cleanPath)) return null;
+  const filePath = path.resolve(brandRoot, cleanPath);
+  const resolvedRoot = path.resolve(brandRoot);
+  if (filePath !== resolvedRoot && !filePath.startsWith(`${resolvedRoot}${path.sep}`)) return null;
+  try {
+    const stats = await stat(filePath);
+    if (!stats.isFile()) return null;
+    return { path: cleanPath, name: path.basename(cleanPath), kind: classifyDesignSystemFile(cleanPath, false), size: stats.size, updatedAt: stats.mtime.toISOString(), contentType: staticContentType(cleanPath), bytes: await readFile(filePath) };
+  } catch (error) {
+    if (isAbsenceError(error)) return null;
+    throw error;
+  }
+}
 
 /**
  * @internal
@@ -233,10 +285,47 @@ export async function readDesignSystemPackageInfo(
   if (manifest === null) return null;
 
   const sourceEvidence = await readDesignSystemSourceEvidence(brandRoot, manifest);
+  const availableFiles = await listAvailableDesignSystemPackageFiles(brandRoot, manifest);
   return {
     manifest,
+    ...(availableFiles.length > 0 ? { availableFiles } : {}),
     ...(sourceEvidence ? { sourceEvidence } : {}),
   };
+}
+
+async function listAvailableDesignSystemPackageFiles(
+  brandRoot: string,
+  manifest: NonNullable<Awaited<ReturnType<typeof readProjectManifest>>>,
+): Promise<string[]> {
+  const candidates = new Set<string>(STATIC_SYSTEM_FILES);
+  const add = (filePath: string | undefined): void => {
+    const cleanPath = typeof filePath === 'string' ? sanitizeRelativeFilePath(filePath) : null;
+    if (cleanPath) candidates.add(cleanPath);
+  };
+
+  add(manifest.files.design);
+  add(manifest.files.tokens);
+  add(manifest.files.components);
+  add(manifest.files.designTokens);
+  add(manifest.files.tailwind);
+  add(manifest.usage);
+  add(manifest.componentsManifest);
+  for (const page of manifest.preview?.pages ?? []) add(page.path);
+  for (const font of manifest.fonts ?? []) add(font.file);
+
+  const out: string[] = [];
+  const resolvedRoot = path.resolve(brandRoot);
+  for (const relativePath of Array.from(candidates).sort()) {
+    const filePath = path.resolve(brandRoot, relativePath);
+    if (filePath !== resolvedRoot && !filePath.startsWith(`${resolvedRoot}${path.sep}`)) continue;
+    try {
+      const stats = await stat(filePath);
+      if (stats.isFile()) out.push(relativePath);
+    } catch (err) {
+      if (!isAbsenceError(err)) throw err;
+    }
+  }
+  return out;
 }
 
 /**

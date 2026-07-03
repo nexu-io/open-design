@@ -178,6 +178,7 @@ export async function collectDesignSystemFiles(
   const entries = await readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.name.startsWith('.')) continue;
+    if (entry.isSymbolicLink()) continue;
     if (!relativeDir && (entry.name === 'metadata.json' || entry.name === 'revisions')) continue;
     const relativePath = relativeDir
       ? path.posix.join(relativeDir.replaceAll(path.sep, '/'), entry.name)

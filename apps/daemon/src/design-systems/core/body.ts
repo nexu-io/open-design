@@ -162,6 +162,7 @@ export function hasProvenance(provenance: DesignSystemProvenance): boolean {
     provenance.companyBlurb
       || provenance.notes
       || provenance.sourceNotes
+      || provenance.sourceUrls?.length
       || provenance.githubUrls?.length
       || provenance.localCodeFiles?.length
       || provenance.figFiles?.length
@@ -179,12 +180,14 @@ export function parseProvenance(raw: unknown): DesignSystemProvenance | undefine
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const value = raw as Record<string, unknown>;
   const githubUrls = parseStringList(value.githubUrls);
+  const sourceUrls = parseStringList(value.sourceUrls);
   const localCodeFiles = parseStringList(value.localCodeFiles);
   const figFiles = parseStringList(value.figFiles);
   const assetFiles = parseStringList(value.assetFiles);
   return normalizeProvenance({
     ...(typeof value.companyBlurb === 'string' ? { companyBlurb: value.companyBlurb } : {}),
     ...(githubUrls ? { githubUrls } : {}),
+    ...(sourceUrls ? { sourceUrls } : {}),
     ...(localCodeFiles ? { localCodeFiles } : {}),
     ...(figFiles ? { figFiles } : {}),
     ...(assetFiles ? { assetFiles } : {}),
@@ -207,12 +210,14 @@ export function normalizeProvenance(
 ): DesignSystemProvenance | undefined {
   const companyBlurb = cleanMultiline(raw?.companyBlurb) || cleanMultiline(fallback.companyBlurb);
   const githubUrls = uniqueCleanList(raw?.githubUrls);
+  const sourceUrls = uniqueCleanList(raw?.sourceUrls);
   const localCodeFiles = uniqueCleanList(raw?.localCodeFiles);
   const figFiles = uniqueCleanList(raw?.figFiles);
   const assetFiles = uniqueCleanList(raw?.assetFiles);
   const notes = cleanMultiline(raw?.notes);
   const sourceNotes = cleanMultiline(raw?.sourceNotes) || cleanMultiline(fallback.sourceNotes);
   const provenance: DesignSystemProvenance = {
+    ...(sourceUrls ? { sourceUrls } : {}),
     ...(companyBlurb ? { companyBlurb } : {}),
     ...(githubUrls.length > 0 ? { githubUrls } : {}),
     ...(localCodeFiles.length > 0 ? { localCodeFiles } : {}),
@@ -520,7 +525,7 @@ export function extractSwatches(raw: string): string[] {
     seen.add(key);
     colors.push({ name: cleanName, value: v });
   }
-  const reA = /^[\s>*-]*\**\s*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\s*[:：]?\s*\**\s*[:：]?\s*`?(#[0-9a-fA-F]{3,8})/gm;
+  const reA = /^[\s>*-]*\s*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\s*[:：]?\s*\**\s*[:：]?\s*`?(#[0-9a-fA-F]{3,8})/gm;
   let m;
   while ((m = reA.exec(raw)) !== null) push(m[1] ?? '', m[2] ?? '');
   const reB = /\*\*([A-Za-z][A-Za-z0-9 /&()+_-]{1,40}?)\*\*\s*\(?\s*`?(#[0-9a-fA-F]{3,8})/g;

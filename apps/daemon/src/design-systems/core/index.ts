@@ -20,6 +20,7 @@ export type {
   DesignSystemRevisionFileChange,
   DesignSystemRevisionStatus,
   DesignSystemSource,
+  DesignSystemStaticFileDetail,
   DesignSystemStatus,
   DesignSystemSummary,
   DesignSystemSurface,

@@ -8,7 +8,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-import { containsSymlink } from '../library-install.js';
+import { containsSymlink } from '../../library-install.js';
 import {
   LocalDesignSystemImportError,
   type LocalDesignSystemImportOptions,

@@ -1,12 +1,14 @@
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import JSZip from 'jszip';
 
 import {
   classifyDesignSystemFile,
   collectDesignSystemFiles,
   fileExists,
+  readFileOptional,
   sanitizeRelativeFilePath,
   stripPrefixAndValidateId,
 } from '../core/file-utils.js';
@@ -63,6 +65,7 @@ import type {
   AtomicTextFileWrite,
   DesignSystemFileSummary,
   DesignSystemFileDetail,
+  GeneratedPalette,
   DesignSystemProvenance,
   DesignSystemRevision,
   DesignSystemSource,
@@ -73,6 +76,28 @@ import type {
   UserDesignSystemMetadata,
   UserDesignSystemRevisionInput,
 } from '../core/types.js';
+
+export function workspaceRenameDesignSystemId(project: { designSystemId?: string | null; metadata?: unknown }): string | null {
+  const id = typeof project.designSystemId === 'string' ? project.designSystemId : '';
+  if (!id.startsWith('user:')) return null;
+  const metadata = project.metadata;
+  const importedFrom = metadata && typeof metadata === 'object'
+    ? (metadata as Record<string, unknown>).importedFrom : undefined;
+  return importedFrom === 'design-system' ? id : null;
+}
+
+export type WorkspaceRenamePropagation = 'not-applicable' | 'propagated' | 'failed';
+
+export async function propagateWorkspaceProjectRename(
+  root: string,
+  project: { designSystemId?: string | null; metadata?: unknown },
+  name: unknown,
+): Promise<WorkspaceRenamePropagation> {
+  const id = workspaceRenameDesignSystemId(project);
+  const title = typeof name === 'string' ? name.trim() : '';
+  if (!id || !title) return 'not-applicable';
+  return (await updateUserDesignSystem(root, id, { title })) ? 'propagated' : 'failed';
+}
 
 /**
  * Returns a directory name derived from `base` that does not yet exist under
@@ -258,11 +283,24 @@ async function writeGeneratedDesignSystemFiles(
     mkdir(path.join(dir, 'ui_kits', 'app', 'components'), { recursive: true }),
   ]);
 
-  await Promise.all(
-    generatedDesignSystemFileWrites(dir, input).map((write) =>
-      writeFile(write.targetPath, write.content, 'utf8')
-    ),
-  );
+  const manifestPath = path.join(dir, '.od-generated.json');
+  const previous = await readFileOptional(manifestPath);
+  let manifest: Record<string, string> = {};
+  try { manifest = previous ? JSON.parse(previous) : {}; } catch { manifest = {}; }
+  const next: Record<string, string> = {};
+  const writes = generatedDesignSystemFileWrites(dir, input);
+  for (const write of writes) {
+    const key = path.relative(dir, write.targetPath).split(path.sep).join('/');
+    const current = await readFileOptional(write.targetPath);
+    const hash = createHash('sha256').update(write.content, 'utf8').digest('hex');
+    if (current === undefined || (manifest[key] && createHash('sha256').update(current, 'utf8').digest('hex') === manifest[key])) {
+      await writeFile(write.targetPath, write.content, 'utf8');
+      next[key] = hash;
+    } else if (manifest[key]) {
+      next[key] = manifest[key];
+    }
+  }
+  await writeFile(manifestPath, `${JSON.stringify(next, Object.keys(next).sort(), 2)}\n`, 'utf8');
 }
 
 /**
@@ -481,24 +519,17 @@ async function writeAcceptedUserDesignSystemRevision(
       content: `${JSON.stringify(metadata, null, 2)}\n`,
     },
   ];
-  if (artifactMode !== 'agent-managed') {
-    const sourceNotes = provenanceToNotes(provenance);
-    writes.push(...generatedDesignSystemFileWrites(base, {
-      title,
-      category,
-      surface,
-      summary: summarize(revision.proposedBody),
-      ...(provenance ? { provenance } : {}),
-      ...(sourceNotes ? { sourceNotes } : {}),
-      body: revision.proposedBody,
-    }));
-  }
+  const generatedInput = artifactMode !== 'agent-managed' ? {
+    title, category, surface, summary: summarize(revision.proposedBody),
+    ...(provenance ? { provenance } : {}), body: revision.proposedBody,
+  } : null;
   writes.push(...revisionFileChangeWrites(root, dirId, revision.fileChanges));
   writes.push({
     targetPath: path.join(base, 'revisions', `${acceptedRevision.id}.json`),
     content: `${JSON.stringify(acceptedRevision, null, 2)}\n`,
   });
   await writeTextFilesAtomically(base, writes);
+  if (generatedInput) await writeGeneratedDesignSystemFiles(root, dirId, generatedInput);
   return true;
 }
 
@@ -898,4 +929,65 @@ export async function readUserDesignSystemFile(
   } catch {
     return null;
   }
+}
+
+export async function buildUserDesignSystemArchive(
+  root: string,
+  id: string,
+): Promise<{ buffer: Buffer; baseName: string; title: string } | null> {
+  const dirId = stripPrefixAndValidateId(id, 'user:');
+  if (!dirId) return null;
+  const base = path.join(root, dirId);
+  try {
+    if (!(await stat(base)).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  await ensureGeneratedDesignSystemFiles(root, dirId);
+  const summaries: DesignSystemFileSummary[] = [];
+  await collectDesignSystemFiles(base, '', summaries);
+  const fileEntries = summaries.filter((entry) => entry.kind !== 'folder');
+  const metadata = await readUserMetadata(root, dirId);
+  let body = '';
+  try { body = await readFile(path.join(base, 'DESIGN.md'), 'utf8'); } catch { /* optional */ }
+  const title = normalizeTitle(metadata.title ?? firstHeading(body) ?? dirId);
+  const zip = new JSZip();
+  for (const entry of fileEntries) {
+    zip.file(entry.path, await readFile(path.join(base, ...entry.path.split('/'))), {
+      date: entry.updatedAt ? new Date(entry.updatedAt) : new Date(0), binary: true,
+    });
+  }
+  if (!fileEntries.some((entry) => entry.path.toLowerCase() === 'skills.md')) {
+    zip.file('SKILLS.md', buildDesignSystemSkillsMarkdown({
+      title,
+      summary: summarize(body),
+      category: metadata.category ?? extractCategory(body) ?? 'Custom',
+      surface: metadata.surface ?? extractSurface(body) ?? 'web',
+      palette: normalizeSwatches(body),
+      ...(metadata.provenance ? { provenance: metadata.provenance } : {}),
+    }), { date: new Date(0), binary: false });
+  }
+  const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  return { buffer, baseName: title || dirId, title };
+}
+
+const DESIGN_SYSTEM_SURFACE_GUIDE: Record<DesignSystemSurface, { deliverables: string; goodFor: string[] }> = {
+  web: { deliverables: 'websites, landing pages, dashboards, decks, and product UI', goodFor: ['Landing pages & marketing sites', 'Slide decks & pitch decks', 'Dashboards & product UI', 'Prototypes & component mockups'] },
+  image: { deliverables: 'social posts, ads, posters, and other image creative', goodFor: ['Social posts & ad creative', 'Posters & one-pagers', 'Cover art & thumbnails', 'On-brand illustration prompts'] },
+  video: { deliverables: 'video, motion, and animated creative', goodFor: ['Promo & explainer video', 'Motion graphics & title cards', 'Animated social clips', 'Storyboards & shot lists'] },
+  audio: { deliverables: 'audio, podcast, and sonic-brand work', goodFor: ['Podcast & episode branding', 'Audio ad scripts', 'Sonic-logo & jingle direction', 'Voice & tone guidance'] },
+};
+
+export function buildDesignSystemSkillsMarkdown(input: { title: string; summary: string; category: string; surface: DesignSystemSurface; palette: GeneratedPalette; provenance?: DesignSystemProvenance }): string {
+  const { title, summary, category, surface, palette } = input;
+  const guide = DESIGN_SYSTEM_SURFACE_GUIDE[surface] ?? DESIGN_SYSTEM_SURFACE_GUIDE.web;
+  const sourceUrls = (input.provenance?.sourceUrls ?? []).filter((url): url is string => typeof url === 'string' && url.trim().length > 0);
+  const lines = [`# How to use the ${title} design system`, ''];
+  if (summary) lines.push(summary, '');
+  lines.push(`This package is a portable **${category}** design system for ${guide.deliverables}. Hand the unzipped folder to any AI coding agent alongside \`DESIGN.md\`, and it will produce on-brand work without further art direction.`, '', '## What it is good for', '');
+  for (const item of guide.goodFor) lines.push(`- ${item}`);
+  lines.push('', '## How to apply it', '', '1. Unzip this folder and open it in your AI coding tool.', '2. Tell the agent: "Use `DESIGN.md` as the design system for everything you generate."', '3. Ask for the artifact you want — e.g. "a pricing page" or "a 10-slide deck".', '', '## Palette quick reference', '', '| Role | Hex |', '| --- | --- |', `| Background | \`${palette.background}\` |`, `| Foreground | \`${palette.foreground}\` |`, `| Accent | \`${palette.accent}\` |`, `| Border | \`${palette.border}\` |`, `| Muted | \`${palette.muted}\` |`, '');
+  if (sourceUrls.length > 0) lines.push('## Source', '', `Extracted from: ${sourceUrls.join(', ')}`, '');
+  lines.push('---', '', 'Generated with **Open Design**.', '', 'https://github.com/nexu-io/open-design', '');
+  return lines.join('\n');
 }
