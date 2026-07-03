@@ -158,6 +158,9 @@ fact from DESIGN.md; the style here is brand-neutral):
 Vary the opening per article (사례형 / 오해해소형 / 수치충격형 / 통념 깨기). Do NOT
 clone a fixed template like "결론부터 말씀드릴게요!".
 
+An answer-first opening *structure* (a brand-voice choice in DESIGN.md) is not a
+template violation — vary the hook wording, not the structure.
+
 > Not a lint rule (judgment): self-review flags a templated opener.
 
 ---
@@ -169,6 +172,70 @@ Default channel target: **2,300–2,800 characters** of body text. Hard SEO floo
 the DESIGN.md value wins.
 
 **Checklist item (fails lint):** body < 1,500 chars.
+
+---
+
+## Preview shell (artifact document layout)
+
+The produced artifact is a **self-contained HTML document**: a preview shell
+around the paste target.
+
+- Structure: `.wrap` > `.meta` (label line, e.g. `네이버 블로그 · [카테고리] · 초안`)
+  + `h1.doc-title` (the post title) + `.doc-sub` (copy instructions) + `.paper` >
+  **`.article`** (the paste-target body).
+- **`.article` inner HTML is the only paste target.** Everything outside is
+  preview-only chrome; the viewer's "네이버용 서식 복사" button copies `.article`
+  content only.
+- **The title lives in `h1.doc-title` only** — never duplicate it inside
+  `.article` (Naver's editor has a separate title input field).
+- **Rules 1–13 apply to the `.article` content**, not the shell.
+- The `<style>` block is shell-only (preview readability). Formatting of
+  `.article` elements stays **inline** per the rule 1/7/9/11 snippets — paste
+  drops `<style>`. The shell body font does not violate rule 2: rule 2 bans a
+  font wrapper `<div>` *inside the paste target*.
+
+Shell template (fill `[글 제목]`/`[카테고리]`; `.article` content follows rules 1–13):
+
+```html
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>[글 제목] — 네이버 블로그 초안</title>
+<style>
+  :root { --ink:#1D2024; --sub:#5A5E63; --line:#e5e5e5; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background:#f5f6f7; color:var(--ink); font-family:'Nanum Gothic','Apple SD Gothic Neo',-apple-system,system-ui,sans-serif; -webkit-font-smoothing:antialiased; line-height:1.75; }
+  .wrap { max-width:760px; margin:0 auto; padding:40px 20px 80px; }
+  .meta { font-size:12px; letter-spacing:.04em; color:var(--sub); text-transform:uppercase; margin-bottom:8px; }
+  .doc-title { font-size:26px; line-height:1.3; font-weight:800; letter-spacing:-0.02em; margin:0 0 6px; }
+  .doc-sub { font-size:13px; color:var(--sub); margin:0 0 28px; }
+  .paper { background:#fff; border:1px solid var(--line); border-radius:8px; padding:36px 34px; font-size:15px; }
+  .article p { margin:0 0 14px; }
+  .article table { font-size:14px; }
+  @media (max-width:640px) { .paper { padding:26px 20px; } .doc-title { font-size:22px; } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="meta">네이버 블로그 · [카테고리] · 초안</div>
+    <h1 class="doc-title">[글 제목]</h1>
+    <p class="doc-sub">아래 흰 영역이 붙여넣기용 본문입니다. 뷰어의 <strong>“네이버용 서식 복사”</strong>로 복사 → 스마트에디터에 붙여넣으세요.</p>
+    <div class="paper">
+      <div class="article">
+        <!-- rules 1–13 body -->
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+```
+
+**Checklist item (fails lint):** post title text duplicated inside `.article`;
+missing `.article` wrapper; paste-relevant element formatting hoisted into the
+shell `<style>` instead of inline.
 
 ---
 
@@ -215,6 +282,7 @@ Brand-specific voice (persona, greeting, banned phrases) lives in DESIGN.md.
 | 10 | Emoji budget | >1 emoji/heading; >12/article; >2/section |
 | 11 | Disclaimer last | missing / not last |
 | 13 | Length | body < 1,500 chars |
+| 셸 | Preview shell | title duplicated in `.article`; missing `.article`; paste formatting hoisted to shell `<style>` |
 
 **Compliant HTML (excerpt):**
 
