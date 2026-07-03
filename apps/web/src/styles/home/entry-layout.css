@@ -2027,9 +2027,10 @@
 
 .onboarding-cloud__alts {
   display: grid;
-  justify-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
   gap: 6px;
-  width: min(280px, 100%);
+  width: min(320px, 100%);
   margin-top: 22px;
 }
 
@@ -2037,6 +2038,8 @@
   margin-top: 0;
   width: 100%;
   min-height: 30px;
+  line-height: 1.25;
+  text-align: center;
   white-space: nowrap;
 }
 
