@@ -1,20 +1,28 @@
 // @ts-nocheck
-/**
- * @module cli/system/status
+/** @module cli/system/status
+ * Implements `od status`, `od diagnostics export`, `od version`, and `od doctor` commands.
+ * Provides daemon health checks, diagnostic bundle export, version reporting, and plugin audits.
  */
 import { LIBRARY_BOOLEAN_FLAGS, LIBRARY_STRING_FLAGS, exitWithStructuredError, libraryDaemonUrl, parseFlags, structuredHttpFailure } from '../core/index.js';
 import { CONFIG_BOOLEAN_FLAGS, CONFIG_STRING_FLAGS } from './config.js';
 import { runDaemon } from './daemon.js';
 
+/** Whitelist of string flags for `od diagnostics export`. */
 const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
 
+/** Whitelist of boolean flags for `od diagnostics export`. */
 const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 
+/** Alias of `od daemon status`. */
 export async function runStatus(args) {
   // Alias of `od daemon status`.
   return runDaemon(['status', ...args]);
 }
 
+/**
+ * Exports a diagnostics bundle (logs, machine info, crash reports) to zip.
+ * Matches the Settings → About → Export diagnostics surface.
+ */
 export async function runDiagnostics(args) {
   const sub = args[0];
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -78,6 +86,10 @@ diagnostics produces.
   console.log(`Wrote diagnostics bundle to ${targetPath} (${buf.length} bytes).`);
 }
 
+/**
+ * Prints the daemon version.
+ * Fetches from /api/version and formats for human or JSON output.
+ */
 export async function runVersion(args) {
   const flags = parseFlags(args, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
@@ -99,6 +111,11 @@ export async function runVersion(args) {
   console.log(version);
 }
 
+/**
+ * Audits daemon, plugins, skills, design systems, and atoms for health issues.
+ * Runs per-plugin doctor checks and reports error/warning/info severity.
+ * Exit code 0 when all ok, non-zero when any plugin or daemon check fails.
+ */
 export async function runDoctor(args) {
   const flags = parseFlags(args, { string: CONFIG_STRING_FLAGS, boolean: CONFIG_BOOLEAN_FLAGS });
   if (flags.help || flags.h) {

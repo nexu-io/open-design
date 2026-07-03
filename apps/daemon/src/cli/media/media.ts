@@ -1,19 +1,15 @@
 // @ts-nocheck
-/**
- * @module cli/media/media
+/** @module cli/media/media
+ * Implements `od media generate` and `od media wait` CLI commands.
+ * Thin HTTP client wrapper for the daemon's media task queue; handles polling,
+ * budget enforcement, and status streaming.
  */
 import { cliDaemonUrl, parseFlags, surfaceFetchError } from '../core/index.js';
 
 // Flags accepted by `od media generate`. Whitelisted so a hallucinated
 // `--length 5` from the LLM fails fast instead of silently no-op'ing
 // while we route a bogus body to the daemon.
-//
-// Hoisted to the top of the module *before* the subcommand dispatch
-// below: top-level `await SUBCOMMAND_MAP[first](rest)` runs runMedia
-// synchronously during module evaluation, and runMedia references these
-// `const` Sets — leaving them at the bottom of the file would hit the
-// TDZ ("Cannot access 'MEDIA_GENERATE_STRING_FLAGS' before
-// initialization") and crash every `od media …` invocation.
+/** Whitelist of valid string flags for `od media generate`; hallucinated flags fail fast. */
 const MEDIA_GENERATE_STRING_FLAGS = new Set([
   'project',
   'surface',
@@ -32,12 +28,17 @@ const MEDIA_GENERATE_STRING_FLAGS = new Set([
   'language',
 ]);
 
+/** Whitelist of valid boolean flags for `od media generate`. */
 const MEDIA_GENERATE_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
   'loop',
 ]);
 
+/**
+ * Entry point for `od media generate | wait` subcommands.
+ * Dispatches to generation kickoff or status polling based on subcommand.
+ */
 export async function runMedia(args) {
   const sub = args.find((a) => !a.startsWith('-')) || '';
   if (sub === 'help' || sub === '-h' || sub === '--help' || sub === '') {
@@ -56,6 +57,11 @@ export async function runMedia(args) {
   return runMediaGenerate(subArgs);
 }
 
+/**
+ * Initiates a media generation task (image/video/audio).
+ * Validates surface, model, and project context; posts to daemon and polls until completion or timeout.
+ * @internal
+ */
 async function runMediaGenerate(rawArgs) {
   let flags;
   try {
@@ -140,6 +146,11 @@ async function runMediaGenerate(rawArgs) {
   });
 }
 
+/**
+ * Polls an in-flight media task until completion or budget exhaustion.
+ * Surfaces progress updates to stderr, stdout result envelope to stdout.
+ * @internal
+ */
 async function runMediaWait(rawArgs) {
   const taskId = rawArgs.find((a) => a && !a.startsWith('--'));
   if (!taskId) {
@@ -165,6 +176,11 @@ async function runMediaWait(rawArgs) {
   await pollUntilDoneOrBudget(daemonUrl, taskId, since, { totalBudgetMs: 120_000 });
 }
 
+/**
+ * Polls /api/media/tasks/:id/wait with per-call timeout and total budget.
+ * Streams progress lines and handles done/failed/interrupted terminal states.
+ * @internal
+ */
 async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}) {
   const totalBudgetMs = typeof options.totalBudgetMs === 'number' ? options.totalBudgetMs : 25_000;
   const perCallTimeoutMs = 4_000;
@@ -273,6 +289,10 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
   process.exit(stillRunningExitCode);
 }
 
+/**
+ * Prints usage for `od media` including surface/model options and examples.
+ * @internal
+ */
 function printMediaHelp() {
   console.log(`Usage: od media generate --surface <image|video|audio> --model <id> [opts]
        "$OD_NODE_BIN" "$OD_BIN" media generate --surface <image|video|audio> --model <id> [opts]

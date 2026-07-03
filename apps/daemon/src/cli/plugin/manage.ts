@@ -1,6 +1,8 @@
 // @ts-nocheck
-/**
- * @module cli/plugin/manage
+/** @module cli/plugin/manage
+ * Core `od plugin` subcommand router and list/install/apply/trust workflows.
+ * Collaborators: publish.ts (login/publish), verify.ts (doctor/simulate/canon), dev.ts (scaffold/validate/pack).
+ * Invariant: flag whitelist (PLUGIN_*_FLAGS) is enforced before any daemon call to fail-fast on misspelled flags.
  */
 import { cliDaemonUrl, coerceCliValue, exitWithStructuredError, parseFlags, streamRunEvents, structuredHttpFailure } from '../core/index.js';
 import { runPluginExport, runPluginPack, runPluginScaffold, runPluginValidate } from './dev.js';
@@ -8,6 +10,12 @@ import { resolveMarketplacePluginFromList } from './marketplace.js';
 import { runPluginLogin, runPluginOpenDesignPr, runPluginPublish, runPluginPublishRepo, runPluginWhoami, runPluginYank } from './publish.js';
 import { runPluginCanon, runPluginDiff, runPluginReplay, runPluginSimulate, runPluginSnapshots, runPluginVerify } from './verify.js';
 
+/**
+ * Whitelist of valid string flag names for plugin commands.
+ * Unknown flags cause immediate parse failure (Plan §3.Y1).
+ * Enables CLI agents to catch typos before reaching daemon HTTP layer.
+ * @internal
+ */
 export const PLUGIN_STRING_FLAGS = new Set([
   'daemon-url',
   'source',
@@ -31,6 +39,11 @@ export const PLUGIN_STRING_FLAGS = new Set([
   'name',
 ]);
 
+/**
+ * Whitelist of valid boolean flag names for plugin commands.
+ * Paired with PLUGIN_STRING_FLAGS for strict flag validation.
+ * @internal
+ */
 export const PLUGIN_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
@@ -40,16 +53,32 @@ export const PLUGIN_BOOLEAN_FLAGS = new Set([
   'strict',
 ]);
 
+/**
+ * Whitelist of filters for list/search (extends PLUGIN_STRING_FLAGS with task-kind/mode/tag/trust).
+ * @internal
+ */
 const PLUGIN_LIST_FILTER_FLAGS = new Set([
   ...PLUGIN_STRING_FLAGS,
   'task-kind', 'mode', 'tag', 'trust',
 ]);
 
+/**
+ * Whitelist of boolean filters for list/search (extends PLUGIN_BOOLEAN_FLAGS with bundled/no-bundled).
+ * @internal
+ */
 const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
   ...PLUGIN_BOOLEAN_FLAGS,
   'bundled', 'no-bundled',
 ]);
 
+/**
+ * Main entry point: routes `od plugin <subcommand> [args]` to 30+ handlers.
+ * Subcommands: list, search, stats, sources, info, manifest, install, upgrade,
+ * uninstall, apply, duplicate, canon, diff, doctor, replay, trust, snapshots,
+ * simulate, verify, events, run, scaffold, validate, pack, candidates,
+ * login, whoami, export, publish, publish-repo, open-design-pr, yank.
+ * @param args Raw argv slice after 'plugin'
+ */
 export async function runPlugin(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     printPluginHelp();
@@ -100,6 +129,12 @@ export async function runPlugin(args) {
 // Plan §3.B3: `od plugin run <id>` shorthand. Today this is a thin
 // wrapper around `od plugin apply` + `POST /api/runs` so a code agent
 // can drive the apply→start→follow loop without two hops.
+/**
+ * `od plugin run <id> --project <projectId> [--inputs <json>] [--follow]`
+ * Shorthand: apply → POST /api/runs → [stream events]. Phase 1.5 wrapper (spec §3.B3).
+ * Honors --grant-caps for capability promotion; exits 66 on capabilities-required (spec §9.1).
+ * @internal
+ */
 async function runPluginRun(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('-')
@@ -177,6 +212,12 @@ async function runPluginRun(rest) {
   }
 }
 
+/**
+ * Resolves daemon URL from --daemon-url flag, OD_DAEMON_URL env, OD_SIDECAR_IPC_PATH discovery,
+ * or default http://127.0.0.1:7456. Wrapper around cliDaemonUrl() for plugin-specific context.
+ * @param flags Parsed command flags
+ * @returns HTTP base URL (without trailing /)
+ */
 export async function pluginDaemonUrl(flags) {
   return cliDaemonUrl(flags);
 }
@@ -184,6 +225,10 @@ export async function pluginDaemonUrl(flags) {
 // Plan §3.Y1 — filter knobs on `od plugin list` (and feeds
 // `od plugin search` below). Recognising these as string flags
 // keeps the parseFlags() argv consumer happy.
+/**
+ * List installed plugins with AND-combined filters (--task-kind, --mode, --tag, --trust, --bundled).
+ * Delegates to searchInstalledPlugins() for ranking/matching. Output: compact or --json.
+ */
 async function runPluginList(rest) {
   const flags = parseFlags(rest, {
     string:  PLUGIN_LIST_FILTER_FLAGS,
@@ -213,6 +258,10 @@ Lists installed plugins. Filters AND together: --task-kind=code-migration
 }
 
 // Plan §3.Y1 — `od plugin search <query>`.
+/**
+ * Free-text search: case-insensitive substring match on id/title/description/tags.
+ * Combines with same filters as list (spec §3.Y1).
+ */
 async function runPluginSearch(rest) {
   const flags = parseFlags(rest, {
     string:  PLUGIN_LIST_FILTER_FLAGS,
@@ -245,6 +294,10 @@ flags as 'od plugin list'.`);
 // pluginInventoryStats + snapshotInventoryStats aggregation. The
 // daemon-side route owns the SQLite reads; the CLI is a thin
 // formatter.
+/**
+ * Aggregate inventory report: plugin counts by sourceKind/trust/taskKind, bundled vs third-party,
+ * snapshot totals/status breakdown, oldest/newest applied timestamps (spec §3.DD1).
+ */
 async function runPluginStats(rest) {
   const flags = parseFlags(rest, {
     string:  PLUGIN_STRING_FLAGS,
@@ -301,6 +354,10 @@ Prints an at-a-glance plugin + snapshot inventory:
   console.log(`  newest applied:   ${newestApplied}`);
 }
 
+/**
+ * Formats object of counts as 'k=v, k=v, ...' sorted by key (or '(none)').
+ * @internal
+ */
 function formatCounts(counts) {
   if (!counts || typeof counts !== 'object') return '(none)';
   const entries = Object.entries(counts).sort(([a], [b]) => a.localeCompare(b));
@@ -308,11 +365,19 @@ function formatCounts(counts) {
   return entries.map(([k, v]) => `${k}=${v}`).join(', ');
 }
 
+/**
+ * Converts millisecond Unix timestamp to ISO string or fallback.
+ * @internal
+ */
 function formatTimestamp(ts) {
   if (typeof ts !== 'number' || !Number.isFinite(ts)) return '(none)';
   try { return new Date(ts).toISOString(); } catch { return String(ts); }
 }
 
+/**
+ * GET /api/plugins, handle errors. Returns { plugins: [...] }.
+ * @internal
+ */
 async function fetchPluginList(flags) {
   const url = `${(await pluginDaemonUrl(flags)).replace(/\/$/, '')}/api/plugins`;
   const resp = await fetch(url);
@@ -324,6 +389,10 @@ async function fetchPluginList(flags) {
   return data;
 }
 
+/**
+ * Delegates to searchInstalledPlugins() with trust/taskKind/mode/tag/bundled filter gates.
+ * @internal
+ */
 async function applyPluginFilters(plugins, flags, query) {
   if (!Array.isArray(plugins) || plugins.length === 0) return [];
   const { searchInstalledPlugins } = await import('./plugins/search.js');
@@ -346,6 +415,10 @@ async function applyPluginFilters(plugins, flags, query) {
   return result.entries;
 }
 
+/**
+ * Renders plugin list as human-readable table or --json. Shows rank if showRank=true (search mode).
+ * @internal
+ */
 function emitPluginList({ entries, json, emptyMessage, showRank }) {
   if (json) {
     process.stdout.write(JSON.stringify({
@@ -370,6 +443,10 @@ function emitPluginList({ entries, json, emptyMessage, showRank }) {
   }
 }
 
+/**
+ * Prints plugin record as JSON: id/version/title/description/manifest/trust/sourceKind.
+ * Falls back to marketplace lookup if --version specified and local record is 0.0.0 (Closes #1765).
+ */
 async function runPluginInfo(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('--')
@@ -413,6 +490,10 @@ async function runPluginInfo(rest) {
 // compare the daemon's view to their on-disk open-design.json
 // without scrolling past the registry record fields (sourceKind /
 // fsPath / installedAt etc).
+/**
+ * Prints only manifest JSON (parsed open-design.json), no registry wrapper fields.
+ * Useful for authors comparing daemon view to on-disk (spec §3.MM1).
+ */
 async function runPluginManifest(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('--') && a !== flags['daemon-url'] && a !== flags.source);
@@ -443,6 +524,10 @@ async function runPluginManifest(rest) {
 // count descending then source ascending. Useful for ops audits
 // ('which github repos do my plugins come from') + for plugin
 // authors comparing their fork to its upstream installs.
+/**
+ * Lists every distinct (sourceKind, source) pair + plugin count ordered by count desc.
+ * Useful for ops audits and fork comparisons (spec §3.MM2).
+ */
 async function runPluginSources(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const url = `${(await pluginDaemonUrl(flags)).replace(/\/$/, '')}/api/plugins`;
@@ -483,6 +568,9 @@ async function runPluginSources(rest) {
   }
 }
 
+/**
+ * Install from source (local/github/https/marketplace name). Streams SSE progress/success/error.
+ */
 async function runPluginInstall(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const source = typeof flags.source === 'string' ? flags.source : rest.find((a) => !a.startsWith('-'));
@@ -555,6 +643,10 @@ async function runPluginInstall(rest) {
 // in-memory plugin event ring buffer via SSE. -f keeps the
 // connection open and prints live events; otherwise prints the
 // backlog and exits when the daemon closes the stream.
+/**
+ * Tails plugin event ring buffer (1000-entry cap, resets on daemon restart).
+ * Subcommands: tail [-f], snapshot, stats, purge. Filters: --since id, --kind, --plugin-id.
+ */
 async function runPluginEvents(rest) {
   const sub = rest[0];
   if (!sub || sub === 'help' || rest.includes('--help') || rest.includes('-h')) {
@@ -752,6 +844,10 @@ Lifecycle vocabulary:
   }
 }
 
+/**
+ * Re-installs plugin from recorded source with optional --policy (latest|pinned).
+ * Same SSE event stream as install (spec §3.Z2).
+ */
 async function runPluginUpgrade(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('-') && a !== flags['daemon-url'] && a !== flags.source);
@@ -818,6 +914,9 @@ async function runPluginUpgrade(rest) {
   process.exit(exitCode);
 }
 
+/**
+ * Removes plugin from registry and on-disk staging. Returns removedFolder flag and optional warning.
+ */
 async function runPluginUninstall(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('-') && a !== flags['daemon-url'] && a !== flags.source);
@@ -835,6 +934,10 @@ async function runPluginUninstall(rest) {
   console.log(`[uninstall] ${data?.removedFolder ? 'ok' : 'no-op'}${data?.warning ? ` (warning: ${data.warning})` : ''}`);
 }
 
+/**
+ * Computes ApplyResult snapshot (preview) without starting a run.
+ * Accepts --inputs <json> or repeated --input k=v forms for coercion-free agent automation (spec §3.B2).
+ */
 async function runPluginApply(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('-')
@@ -913,6 +1016,10 @@ async function runPluginApply(rest) {
   }
 }
 
+/**
+ * Copies plugin's HTML example into new project without starting agent run.
+ * Returns projectId + relPath + optional warnings.
+ */
 async function runPluginDuplicate(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('-')
@@ -951,6 +1058,10 @@ async function runPluginDuplicate(rest) {
   }
 }
 
+/**
+ * List/draft/dismiss skill-to-plugin candidates persisted by daemon.
+ * Subcommands: list, draft <id>, dismiss <id>.
+ */
 async function runPluginCandidates(rest) {
   const sub = rest[0];
   const args = rest.slice(1);
@@ -1030,6 +1141,9 @@ Lists and formalizes persisted skill-to-plugin candidates.`);
   process.exit(2);
 }
 
+/**
+ * Lints manifest/atoms/resolved refs. With --strict, warnings become errors (spec §3.HH1).
+ */
 async function runPluginDoctor(rest) {
   // Plan §3.HH1 — --strict promotes warnings to errors so CI can
   // opt into 'no warnings allowed' mode without parsing the issue
@@ -1072,6 +1186,10 @@ async function runPluginDoctor(rest) {
   process.exit(passed ? 0 : (data.ok ? 4 : 1));
 }
 
+/**
+ * Attempt JSON.parse; return null on error (no throw).
+ * @internal
+ */
 function safeParseJson(s) {
   try { return JSON.parse(s); } catch { return null; }
 }
@@ -1081,6 +1199,10 @@ function safeParseJson(s) {
 // canonical write surface (invariant I4). The daemon validates the
 // capability vocabulary; unknown / malformed entries surface as
 // exit-2 usage failures.
+/**
+ * Grants or revokes capability set on a plugin (CLI is canonical write surface per spec §9.1).
+ * Validates capabilities vocabulary; unknown entries exit 2.
+ */
 async function runPluginTrust(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const id = rest.find((a) => !a.startsWith('-')
@@ -1127,6 +1249,10 @@ async function runPluginTrust(rest) {
   console.log(`[trust] now: ${(data.capabilitiesGranted ?? []).join(', ')}`);
 }
 
+/**
+ * Help text for `od plugin` (all subcommands). Shown on zero args or --help.
+ * @internal
+ */
 function printPluginHelp() {
   console.log(`Usage:
   od plugin list [--task-kind <kind>]     List installed plugins (filterable).

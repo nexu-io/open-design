@@ -1,25 +1,25 @@
 // @ts-nocheck
-/**
- * @module cli/mcp/install
+/** @module cli/mcp/install
+ * Wires this daemon's stdio MCP server into a coding agent's own config.
+ * The pure planner (mcp-agent-install.ts) maps a resolved launch spec onto one of three strategies — drive the agent's own mcp add/remove CLI, deep-merge a JSON config file, or (for unverified formats) print a ready-to-paste snippet. This executor performs the IO the planner avoids.
  */
 import { AGENT_SLUGS, applyJsonInstall, isAgentSlug, planAgentInstall, removeJsonInstall } from '../../mcp-agent-install.js';
 import { parseFlags, positionalArgs } from '../core/index.js';
 import { resolveMcpLaunchSpec } from './mcp.js';
 
-// Hoisted next to MCP_*_FLAGS for the same TDZ reason as the MEDIA flags
-// above: `od mcp install <agent>` dispatches through SUBCOMMAND_MAP during
-// top-level module evaluation, and runMcpInstall references these `const`
-// Sets — defining them next to runMcpInstall lower in the file would hit
-// the TDZ.
+/** Whitelist of string flags for `od mcp install`. */
 const MCP_INSTALL_STRING_FLAGS = new Set([
   'daemon-url',
   'name',
 ]);
 
+/** @internal Feature flag for CLI detectability probe used by agent install planners. */
 const MCP_INSTALL_CLI_PROBE_FLAG = 'open-design-cli-probe';
 
+/** @internal Hardcoded probe token returned by --open-design-cli-probe to verify this CLI version. */
 const MCP_INSTALL_CLI_PROBE_TOKEN = 'open-design-cli:mcp-install:v1';
 
+/** Whitelist of boolean flags for `od mcp install`; includes probe and output format flags. */
 const MCP_INSTALL_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
@@ -31,6 +31,10 @@ const MCP_INSTALL_BOOLEAN_FLAGS = new Set([
   'remove',
 ]);
 
+/**
+ * Formats and emits install result (JSON or human-readable) to stdout/stderr.
+ * @internal
+ */
 function emitInstallResult(useJson, result) {
   if (useJson) {
     console.log(JSON.stringify(result));
@@ -43,6 +47,11 @@ function emitInstallResult(useJson, result) {
   }
 }
 
+/**
+ * Installs or removes the daemon's MCP server from a coding agent's config.
+ * Supports three strategies: agent CLI, JSON config deep-merge, or manual snippet.
+ * Includes --dry-run and --json modes for headless flows.
+ */
 export async function runMcpInstall(args) {
   let flags;
   try {
@@ -218,6 +227,11 @@ export async function runMcpInstall(args) {
   });
 }
 
+/**
+ * @internal Prints help text for `od mcp install` including supported agents,
+ * options, and the token probe flag used by agent install planners to detect
+ * this CLI version. Called by runMcpInstall when --help is set or on errors.
+ */
 function printMcpInstallHelp() {
   console.log(`Usage: od mcp install <agent> [options]
 

@@ -1,6 +1,8 @@
 // @ts-nocheck
-/**
- * @module cli/project/shell
+/** @module cli/project/shell
+ * Implements interactive shell bridging for projects (PTY attach over HTTP SSE + POST stdin).
+ * Mirrors web Terminal tab behavior: --follow enables attachment, --json-only creates and exits.
+ * Collaborators: parseFlags, structuredHttpFailure from core.
  */
 import { parseFlags, structuredHttpFailure } from '../core/index.js';
 import { PROJECT_BOOLEAN_FLAGS, PROJECT_STRING_FLAGS, projectDaemonUrl } from './project.js';
@@ -11,6 +13,13 @@ import { PROJECT_BOOLEAN_FLAGS, PROJECT_STRING_FLAGS, projectDaemonUrl } from '.
 // streams down over SSE; local keystrokes are POSTed back up to /stdin. When
 // stdin is a TTY we flip it into raw mode so the remote shell sees per-key
 // bytes (ctrl-c, arrows, tab) instead of line-buffered input.
+/**
+ * Creates an interactive PTY in the project's working directory and optionally attaches.
+ * Sends terminal dimensions if available; returns JSON if --json flag set.
+ * @async
+ * @param {Array<string>} args - Subcommand and arguments (only called from dispatcher with remaining args).
+ * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
+ */
 async function runShell(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
@@ -58,6 +67,15 @@ Common options:
 // Bridge a local TTY to a remote PTY session: SSE `data` events → stdout,
 // local stdin bytes → POST /stdin, terminal resize → POST /resize. Resolves
 // when the remote shell emits its `exit` event.
+/**
+ * @internal Bridges local TTY to remote PTY over SSE stream + POST /stdin + POST /resize.
+ * Puts stdin in raw mode if available; listens for exit event from remote; handles restore on disconnect.
+ * @async
+ * @param {string} base - Daemon base URL.
+ * @param {string} projectId - Project ID.
+ * @param {string} terminalId - Terminal session ID.
+ * @returns {Promise<void>} Exits process on remote exit event.
+ */
 async function attachTerminal(base, projectId, terminalId) {
   const termPath = `${base}/api/projects/${encodeURIComponent(projectId)}/terminals/${encodeURIComponent(terminalId)}`;
   const isRawTty = Boolean(process.stdin.isTTY && process.stdin.setRawMode);

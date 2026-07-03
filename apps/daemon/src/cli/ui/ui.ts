@@ -1,9 +1,11 @@
 // @ts-nocheck
-/**
- * @module cli/ui/ui
+/** @module cli/ui/ui
+ * Implements `od ui` CLI commands for GenUI surface interaction (list/show/respond/revoke/prefill).
+ * Enables headless inspection and answering of UI surfaces created by agent runs or projects.
  */
 import { cliDaemonUrl, parseFlags } from '../core/index.js';
 
+/** Whitelist of string flags for `od ui` commands. */
 const UI_STRING_FLAGS = new Set([
   'daemon-url',
   'run',
@@ -16,6 +18,7 @@ const UI_STRING_FLAGS = new Set([
   'kind',
 ]);
 
+/** Whitelist of boolean flags for `od ui` commands; --schema extracts JSON Schema only. */
 const UI_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
@@ -28,6 +31,10 @@ const UI_BOOLEAN_FLAGS = new Set([
   'schema',
 ]);
 
+/**
+ * Entry point for `od ui` subcommands (list/show/respond/revoke/prefill).
+ * Routes to surface listing, inspection, or response handling.
+ */
 export async function runUi(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     printUiHelp();
@@ -48,10 +55,12 @@ export async function runUi(args) {
   }
 }
 
+/** @internal Resolves daemon URL for ui subcommands. */
 async function uiDaemonUrl(flags) {
   return cliDaemonUrl(flags);
 }
 
+/** @internal Lists GenUI surfaces for a run or project. */
 async function runUiList(rest) {
   const flags = parseFlags(rest, { string: UI_STRING_FLAGS, boolean: UI_BOOLEAN_FLAGS });
   const base = (await uiDaemonUrl(flags)).replace(/\/$/, '');
@@ -82,6 +91,7 @@ async function runUiList(rest) {
   }
 }
 
+/** @internal Reads a single surface (kind/schema/value); --schema prints JSON Schema only. */
 async function runUiShow(rest) {
   const flags = parseFlags(rest, { string: UI_STRING_FLAGS, boolean: UI_BOOLEAN_FLAGS });
   const positional = rest.filter((a) => !a.startsWith('-')
@@ -118,6 +128,7 @@ async function runUiShow(rest) {
   process.stdout.write(JSON.stringify(data, null, 2) + '\n');
 }
 
+/** @internal Answers a pending surface with value, JSON, or skip. */
 async function runUiRespond(rest) {
   const flags = parseFlags(rest, { string: UI_STRING_FLAGS, boolean: UI_BOOLEAN_FLAGS });
   const positional = rest.filter((a) => !a.startsWith('-')
@@ -168,6 +179,7 @@ async function runUiRespond(rest) {
   }
 }
 
+/** @internal Invalidates a cached project-tier answer. */
 async function runUiRevoke(rest) {
   const flags = parseFlags(rest, { string: UI_STRING_FLAGS, boolean: UI_BOOLEAN_FLAGS });
   const positional = rest.filter((a) => !a.startsWith('-')
@@ -200,6 +212,7 @@ async function runUiRevoke(rest) {
   }
 }
 
+/** @internal Pre-answers a surface so the run never broadcasts it. */
 async function runUiPrefill(rest) {
   const flags = parseFlags(rest, { string: UI_STRING_FLAGS, boolean: UI_BOOLEAN_FLAGS });
   const positional = rest.filter((a) => !a.startsWith('-')
@@ -252,6 +265,7 @@ async function runUiPrefill(rest) {
   }
 }
 
+/** @internal Prints usage for `od ui` commands. */
 function printUiHelp() {
   console.log(`Usage:
   od ui list  --run <runId>                          List GenUI surfaces for a run.

@@ -1,13 +1,20 @@
 // @ts-nocheck
-/**
- * @module cli/system/amr
+/** @module cli/system/amr
+ * Implements `od amr status` CLI command for AMR (Agent Model Runtime) wallet/account probing.
+ * Reports login status, plan, and balance (with optional cache bypass via --refresh).
  */
 import { cliDaemonBaseUrl, parseFlags, structuredHttpFailure } from '../core/index.js';
 
+/** Whitelist of string flags for `od amr` commands. */
 const AMR_STRING_FLAGS = new Set(['daemon-url']);
 
+/** Whitelist of boolean flags for `od amr` commands (includes --refresh cache bypass). */
 const AMR_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'refresh']);
 
+/**
+ * Entry point for `od amr` subcommands (currently: status only).
+ * Routes to wallet/account status endpoint with optional cache refresh.
+ */
 export async function runAmr(args) {
   const sub = args[0];
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {

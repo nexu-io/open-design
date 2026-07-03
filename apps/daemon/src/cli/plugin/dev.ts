@@ -1,6 +1,8 @@
 // @ts-nocheck
-/**
- * @module cli/plugin/dev
+/** @module cli/plugin/dev
+ * Plugin authoring: scaffold (starter template), validate (pre-install lint), pack (.tgz build), export (snapshot publishing).
+ * Collaborators: github.ts (git operations in export), ./plugins/* (validation/packing logic).
+ * Invariant: all author-facing CLI validates against live daemon registry (skills/design-systems/atoms) before install.
  */
 import { libraryDaemonUrl, parseFlags } from '../core/index.js';
 import { execFileBuffered } from './github.js';
@@ -12,6 +14,11 @@ import { basename } from 'node:path';
 // Side-effect: writes a SKILL.md + open-design.json starter under
 // `<targetDir>/<id>/`. Default targetDir is process.cwd() so a code
 // agent can drop the scaffold into the current repo root.
+/**
+ * Interactive starter. Writes <out|cwd>/<id>/{SKILL.md,open-design.json,README.md}.
+ * With --with-claude-plugin, also scaffolds Claude Plugin wrapper (Phase 4 / spec §14.1).
+ * @param rest Raw argv after 'scaffold'
+ */
 export async function runPluginScaffold(rest) {
   const flags = parseFlags(rest, {
     string: new Set([
@@ -73,6 +80,12 @@ Writes <out|cwd>/<id>/{SKILL.md,open-design.json,README.md}.`);
 // fetches the daemon's registry view so skill / DS / atom refs in
 // the manifest can be checked too; falls back to an empty registry
 // when --no-daemon is set or the daemon is unreachable.
+/**
+ * Pre-install lint on author's working folder. Validates manifest shape, atom ids, until expressions.
+ * Fetches daemon registry (skills/design-systems/atoms) unless --no-daemon; falls back offline with warnings.
+ * Exit 4 on errors, 0 on pass. Useful for author devloop before install (spec §11.5, plan §3.W1).
+ * @param rest Raw argv after 'validate'
+ */
 export async function runPluginValidate(rest) {
   const flags = parseFlags(rest, {
     string:  new Set(['daemon-url']),
@@ -162,6 +175,13 @@ Exit codes:
 // Produces a gzip-compressed tar archive ready to install via the
 // installer's HTTPS-tarball path. The output path is folder-base +
 // version when the manifest exposes a version, otherwise folder-base.
+/**
+ * Builds gzip-compressed tar archive ready for `od plugin install --source <https://...>`.
+ * Output: <folder>/../<basename>-<manifest.version>.tgz (or --out path).
+ * Skips node_modules/.git/dist/build/coverage/.turbo etc. Rejects symlinks (spec §14).
+ * Exit 4 on pack-time error (plan §3.X1).
+ * @param rest Raw argv after 'pack'
+ */
 export async function runPluginPack(rest) {
   const flags = parseFlags(rest, {
     string:  new Set(['out']),
@@ -239,6 +259,11 @@ Exit codes:
 // Produces a publish-ready folder from the AppliedPluginSnapshot
 // behind a given project (or directly from a snapshot id). Three
 // targets: 'od', 'claude-plugin', 'agent-skill'.
+/**
+ * Exports AppliedPluginSnapshot as publishable folder. Targets: od|claude-plugin|agent-skill.
+ * Resolves through daemon POST /api/applied-plugins/export so daemon registry is source of truth.
+ * @param rest Raw argv after 'export'
+ */
 export async function runPluginExport(rest) {
   const flags = parseFlags(rest, {
     string: new Set(['daemon-url', 'as', 'out', 'snapshot-id', 'project']),
@@ -289,6 +314,11 @@ view is the single source of truth.`);
   for (const f of data.files ?? []) console.log(`  ${f}`);
 }
 
+/**
+ * Helper: invokes `od plugin validate <folder>` via child process. Used by publish-repo after normalizing manifest.
+ * Blocks on validation; exits if validation fails (spec §3.T2).
+ * @internal
+ */
 export async function pluginCliValidateFolder(folder) {
   const result = await execFileBuffered(process.execPath, [process.argv[1], 'plugin', 'validate', folder], {
     timeout: 120_000,

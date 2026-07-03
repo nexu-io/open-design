@@ -1,20 +1,27 @@
 // @ts-nocheck
-/**
- * @module cli/mcp/mcp
+/** @module cli/mcp/mcp
+ * Implements `od mcp` (stdio MCP server) and `od mcp install` dispatcher.
+ * Proxies daemon tool calls into external coding agents; resolves launch specs from daemon config.
  */
 import { AGENT_SLUGS } from '../../mcp-agent-install.js';
 import { cliDaemonBaseUrl, cliDaemonUrl, parseFlags } from '../core/index.js';
 import { runMcpInstall } from './install.js';
 
+/** Whitelist of string flags for `od mcp` (daemon-url only). */
 const MCP_STRING_FLAGS = new Set([
   'daemon-url',
 ]);
 
+/** Whitelist of boolean flags for `od mcp`. */
 const MCP_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
 ]);
 
+/**
+ * Entry point for `od mcp` and `od mcp install` subcommands.
+ * Routes to install flow or starts stdio MCP server proxying daemon tools.
+ */
 export async function runMcp(args) {
   if (args[0] === 'install') {
     return runMcpInstall(args.slice(1));
@@ -41,6 +48,10 @@ export async function runMcp(args) {
   await runMcpStdio({ daemonUrl });
 }
 
+/**
+ * Prints usage and tool inventory for the stdio MCP server.
+ * @internal
+ */
 function printMcpHelp() {
   console.log(`Usage: od mcp [--daemon-url <url>]
 
@@ -92,6 +103,11 @@ To register this server into a coding agent's own config automatically:
 // Codex one-click install use), so every install path configures byte-for-
 // byte the same command. Falls back to a minimal `od mcp --daemon-url`
 // spec when the daemon is unreachable.
+/**
+ * Resolves the canonical launch spec from daemon /api/mcp/install-info.
+ * Falls back to minimal `od mcp --daemon-url` spec when daemon unreachable.
+ * Ensures every install path (Settings, Codex, CLI) configures identical bytes.
+ */
 export async function resolveMcpLaunchSpec(flags) {
   const base = await cliDaemonBaseUrl(flags);
   try {

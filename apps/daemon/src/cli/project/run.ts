@@ -1,10 +1,19 @@
 // @ts-nocheck
-/**
- * @module cli/project/run
+/** @module cli/project/run
+ * Implements the od run command dispatcher for agent runs (start, redesign, watch, cancel, list, info, result-package).
+ * Collaborators: PROJECT_*_FLAGS, postJsonToDaemon, streamRunEvents from project.ts and core respectively.
  */
 import { exitWithStructuredError, parseFlags, readPromptFromFlags, streamRunEvents, structuredHttpFailure } from '../core/index.js';
 import { PROJECT_BOOLEAN_FLAGS, PROJECT_STRING_FLAGS, basenameForCli, collectCliPositionals, postImportFolderToDaemon, postJsonToDaemon, projectDaemonUrl, resolveFolderPathForCli } from './project.js';
 
+/**
+ * @internal Reads run message from --message flag, or --prompt(--prompt-file) fallback, or caller-provided fallback.
+ * Used when starting runs; message is optional if a skill is specified.
+ * @async
+ * @param {object} flags - Parsed flag object.
+ * @param {string} [fallback=null] - Fallback message if flags provide none.
+ * @returns {Promise<string|null>} Message or fallback.
+ */
 async function readRunMessageFromFlags(flags, fallback = null) {
   if (typeof flags.message === 'string' && flags.message.length > 0) {
     return flags.message;
@@ -14,6 +23,13 @@ async function readRunMessageFromFlags(flags, fallback = null) {
   return fallback;
 }
 
+/**
+ * Main dispatcher for `od run` subcommands (start, redesign, watch, cancel, list, info, result-package).
+ * Redesign auto-imports a folder if no --project given; start requires --project.
+ * @async
+ * @param {Array<string>} args - Subcommand and arguments.
+ * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
+ */
 export async function runRun(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:

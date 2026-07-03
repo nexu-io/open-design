@@ -64,6 +64,34 @@ export const CAPABILITY_BARREL_DOMAINS: CapabilityBarrelDomain[] = [
       ['jobs', 'catalog'],
     ],
   },
+  {
+    name: 'cli',
+    root: 'apps/daemon/src/cli',
+    subdirs: [
+      'core',
+      'automation',
+      'brand',
+      'export',
+      'figma',
+      'library',
+      'mcp',
+      'media',
+      'memory',
+      'plugin',
+      'project',
+      'research',
+      'share',
+      'system',
+      'templates',
+      'ui',
+    ],
+    foundation: 'core',
+    // Pure star topology: every subcommand domain depends only on core/.
+    // Cross-domain helpers (streamRunEvents, readMemoryBodyFromFlags,
+    // coerceCliValue, shared flag sets) were moved down into core/ instead
+    // of declaring sibling edges.
+    allowedEdges: [],
+  },
 ];
 
 export type BarrelImportViolation = {

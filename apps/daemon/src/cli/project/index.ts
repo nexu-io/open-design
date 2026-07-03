@@ -1,6 +1,6 @@
 // @ts-nocheck
-/**
- * @module cli/project
+/** @module cli/project
+ * Re-exports all project, run, files, shell, chat, and diff CLI handlers for the dispatcher.
  */
 export * from './chat.js';
 export * from './diff.js';

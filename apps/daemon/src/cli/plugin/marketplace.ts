@@ -1,6 +1,8 @@
 // @ts-nocheck
-/**
- * @module cli/plugin/marketplace
+/** @module cli/plugin/marketplace
+ * `od marketplace` subcommand router: catalog discovery, plugin lookup, metadata doctor.
+ * Collaborators: manage.ts (flag parsing), github.ts (auth/login flows).
+ * Invariant: marketplace list is the source of truth; all plugin resolution routes through resolveMarketplacePluginFromList().
  */
 import { parseFlags, structuredHttpFailure } from '../core/index.js';
 import { execFileBuffered, inferGithubHost, spawnPassthrough } from './github.js';
@@ -9,6 +11,11 @@ import { PLUGIN_BOOLEAN_FLAGS, PLUGIN_STRING_FLAGS, pluginDaemonUrl } from './ma
 // Plan §3.B4 / spec §6: `od marketplace …` minimum verbs. Add / list /
 // refresh / remove / trust. The Phase 3 follow-up wires
 // `od plugin install <name>` resolution through these catalogs.
+/**
+ * Router for marketplace subcommands: list, search, plugins, doctor, login, add, info, refresh, remove, trust.
+ * Mirrors plugin list/search filter ops; adds marketplace CRUD and manifest validation (spec §6, §3.B4).
+ * @param args Raw argv after 'marketplace'
+ */
 export async function runMarketplace(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
@@ -236,6 +243,14 @@ Common options:
   }
 }
 
+/**
+ * Resolves a CLI specifier (name or name@range) against a list of marketplaces.
+ * Returns resolved entry with version/source/ref/integrity/manifestDigest or null if not found / yanked.
+ * Used by info command and plugin install fallback (Phase 3).
+ * @param marketplaces Array of { id, manifest: { plugins: [...] } }
+ * @param specifier Name or name@version|tag|range
+ * @returns Resolved marketplace entry or null
+ */
 export function resolveMarketplacePluginFromList(marketplaces, specifier) {
   const parsed = parseCliPluginSpecifier(specifier);
   const target = parsed.name.toLowerCase();
@@ -260,6 +275,12 @@ export function resolveMarketplacePluginFromList(marketplaces, specifier) {
   return null;
 }
 
+/**
+ * Parses 'vendor/name@range' → { name, range }. Range defaults to undefined (resolved as 'latest').
+ * Handles slash-separated vendor prefix; range is optional.
+ * @param input CLI specifier string
+ * @returns { name, range? }
+ */
 export function parseCliPluginSpecifier(input) {
   const trimmed = String(input ?? '').trim();
   const slash = trimmed.indexOf('/');
@@ -270,6 +291,11 @@ export function parseCliPluginSpecifier(input) {
   return { name: trimmed, range: undefined };
 }
 
+/**
+ * Resolves distTags[range] or range version from entry.versions[], respecting yanked flag.
+ * Returns { version, source, ref, integrity, manifestDigest } or null if not found / yanked.
+ * @internal
+ */
 function resolveCliEntryVersion(entry, range) {
   if (entry?.yanked) return null;
   const versions = Array.isArray(entry?.versions) ? entry.versions : [];

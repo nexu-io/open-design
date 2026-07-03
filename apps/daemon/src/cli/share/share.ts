@@ -1,17 +1,21 @@
 // @ts-nocheck
-/**
- * @module cli/share/share
+/** @module cli/share/share
+ * Implements `od share` CLI commands for social sharing links and copy-text generation.
+ * Supports sharing Open Design repo or project artifacts to multiple platforms.
  */
 import { cliDaemonUrl, parseFlags, positionalArgs, structuredHttpFailure } from '../core/index.js';
 
+/** Whitelist of string flags for `od share` commands. */
 const SHARE_STRING_FLAGS = new Set([
   'daemon-url', 'url', 'title', 'text', 'copy-text', 'locale', 'platform',
 ]);
 
+/** Whitelist of boolean flags for `od share` commands. */
 const SHARE_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
 
+/** @internal Prints usage and supported platforms for `od share`. */
 function printShareUsage() {
   console.log(`Usage:
   od share open-design [--locale <locale>] [--platform <id>] [--json]
@@ -26,6 +30,11 @@ Common options:
   --json               Emit raw JSON.`);
 }
 
+/**
+ * Entry point for `od share open-design | url` subcommands.
+ * Generates social share links and copy-text for Open Design or project artifacts.
+ * Supports platform-specific filtering and output modes.
+ */
 export async function runShare(args) {
   const wantsHelp = args.length === 0
     || args[0] === 'help'

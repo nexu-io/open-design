@@ -1,5 +1,5 @@
 // @ts-nocheck
-/**
- * @module cli/share
+/** @module cli/share
+ * Barrel layer for social sharing CLI commands.
  */
 export * from './share.js';

@@ -1,6 +1,8 @@
 // @ts-nocheck
-/**
- * @module cli/plugin/publish
+/** @module cli/plugin/publish
+ * Plugin publishing: GitHub auth, catalog submission links, public repo creation, Open Design PR opening.
+ * Collaborators: github.ts (gh auth/api), marketplace.ts (specifier parsing), dev.ts (validate).
+ * Invariant: CLI never POSTs to upstream; submission flow stays under author control (spec §14.1).
  */
 import { parseFlags } from '../core/index.js';
 import { pluginCliValidateFolder } from './dev.js';
@@ -8,6 +10,10 @@ import { execFileBuffered, execGhBuffered, isRepoNotFound, normalizeManifestRepo
 import { pluginDaemonUrl } from './manage.js';
 import { parseCliPluginSpecifier } from './marketplace.js';
 
+/**
+ * Wraps `gh auth login --hostname <host>` (default github.com). Token stays in gh, not Open Design.
+ * Exits 1 if gh not installed.
+ */
 export async function runPluginLogin(rest) {
   const flags = parseFlags(rest, {
     string: new Set(['host']),
@@ -30,6 +36,10 @@ Wraps GitHub CLI auth for Open Design registry publishing. The token stays in gh
   process.exit(result.code ?? 0);
 }
 
+/**
+ * Shows authenticated GitHub account via `gh auth status` + `gh api user`. Returns login/name/host.
+ * Exits 1 if not authenticated; exits 0 with --json even if unauthenticated (fields present).
+ */
 export async function runPluginWhoami(rest) {
   const flags = parseFlags(rest, {
     string: new Set(['host']),
@@ -90,6 +100,13 @@ Shows the GitHub account gh will use for Open Design registry publishing.`);
 // against the URL so the author lands on the catalog's submission form
 // in one step. We never POST anywhere — the upstream review flow is
 // always under the author's control.
+/**
+ * Generates catalog submission URL + pre-filled PR body. With --open, auto-launches system browser.
+ * Reads plugin metadata from daemon (or flags.repo), then delegates to buildPublishLink().
+ * Targets: open-design|anthropics-skills|awesome-agent-skills|clawhub|skills-sh|marketplace-json.
+ * Phase 4 / spec §14.1.
+ * @param rest Raw argv after 'publish'
+ */
 export async function runPluginPublish(rest) {
   const flags = parseFlags(rest, {
     string: new Set(['daemon-url', 'to', 'snapshot-id', 'repo', 'catalog']),
@@ -208,6 +225,12 @@ publish from a frozen run snapshot rather than the live installed copy.`);
   }
 }
 
+/**
+ * Creates or updates public GitHub repo for plugin. Resolves owner from --owner, manifest.repo,
+ * gh auth, or GitHub API. Never publishes to placeholder owners (spec §3.T2).
+ * Normalizes manifest.plugin.repo if needed; syncs local folder to remote; tags release.
+ * @param rest Raw argv after 'publish-repo'
+ */
 export async function runPluginPublishRepo(rest) {
   const flags = parseFlags(rest, {
     string: new Set(['host', 'owner']),
@@ -370,6 +393,11 @@ GitHub API as a last resort. It never publishes to placeholder owners.`);
   });
 }
 
+/**
+ * Forks nexu-io/open-design, clones, copies plugin into plugins/community/<name>/,
+ * pushes branch, opens PR form. Resolves owner same as publish-repo.
+ * @param rest Raw argv after 'open-design-pr'
+ */
 export async function runPluginOpenDesignPr(rest) {
   const flags = parseFlags(rest, {
     string: new Set(['host', 'owner']),
@@ -490,6 +518,11 @@ fork of nexu-io/open-design, pushes a branch, and opens the PR form with --web.`
   });
 }
 
+/**
+ * Upserts plugin entry into a marketplace-json catalog file (local or fetched).
+ * Handles missing catalog gracefully (creates new).
+ * @internal
+ */
 async function publishToMarketplaceJson({ catalogPath, meta }) {
   const [{ dirname, resolve }, { mkdir, readFile, writeFile }, { PublishError, upsertMarketplaceJsonEntry }] = await Promise.all([
     import('node:path'),
@@ -529,6 +562,10 @@ async function publishToMarketplaceJson({ catalogPath, meta }) {
   };
 }
 
+/**
+ * Renders success/error result as human text or --json. Shows owner source (--owner|plugin.repo|gh auth|API).
+ * @internal
+ */
 function emitPluginWorkflowResult(flags, payload) {
   if (flags.json) {
     process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
@@ -556,15 +593,28 @@ function emitPluginWorkflowResult(flags, payload) {
   console.log(JSON.stringify(payload, null, 2));
 }
 
+/**
+ * Safely parse JSON or return null.
+ * @internal
+ */
 function safeJson(raw) {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
+/**
+ * Extracts first https?:// URL from text (used to parse gh PR create --web output).
+ * @internal
+ */
 function extractFirstUrl(text) {
   const match = /https?:\/\/\S+/i.exec(String(text ?? ''));
   return match ? match[0].replace(/[)\].,]+$/, '') : null;
 }
 
+/**
+ * Yanking never deletes metadata or bytes. Opens issue form on nexu-io/open-design with
+ * versioning/yanking metadata. Author clicks Create to submit (spec §14.2).
+ * @param rest Raw argv after 'yank'
+ */
 export async function runPluginYank(rest) {
   const flags = parseFlags(rest, {
     string: new Set(['daemon-url', 'reason', 'to']),

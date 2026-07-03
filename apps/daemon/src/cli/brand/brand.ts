@@ -1,6 +1,8 @@
 // @ts-nocheck
-/**
- * @module cli/brand/brand
+/** @module cli/brand/brand
+ * Implements `od brand` CLI commands (extract/create/preview/finalize/delete).
+ * Mirrors the web Brands library and New Brand modal; enables headless brand extraction
+ * and design system registration without the UI.
  */
 import { BRAND_USAGE, isBrandHelpArg } from '../../brands-cli-help.js';
 import { cliDaemonBaseUrl, parseFlags, positionalArgs, readPromptFromFlags, structuredHttpFailure, surfaceFetchError } from '../core/index.js';
@@ -9,19 +11,22 @@ import { cliDaemonBaseUrl, parseFlags, positionalArgs, readPromptFromFlags, stru
 // same /api/brands store. The CLI form is the embeddability contract: an
 // external agent (hermes-agent, openclaw, scripted job) can extract, list,
 // inspect, and remove brands headlessly without rendering the web UI.
-// Hoisted next to the other dispatch-touched flag sets because runBrand is
-// reachable through the top-of-file SUBCOMMAND_MAP dispatch, which runs during
-// module evaluation — a const declared further down would still be in TDZ.
+/** Whitelist of string flags for `od brand` commands. */
 const BRAND_STRING_FLAGS = new Set([
   'daemon-url', 'prompt-file', 'project', 'locale',
   'html-file', 'css-file', 'base-url',
 ]);
 
+/** Whitelist of boolean flags for `od brand` commands. */
 const BRAND_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
 
 // Derive a short domain for list output from a brand's source URL.
+/**
+ * Extracts hostname from a brand's source URL for compact list output.
+ * @internal
+ */
 function brandDomainForCli(sourceUrl) {
   if (typeof sourceUrl !== 'string' || sourceUrl.trim().length === 0) return '-';
   try {
@@ -32,6 +37,10 @@ function brandDomainForCli(sourceUrl) {
   }
 }
 
+/**
+ * Formats a brand summary as tab-separated id/name/domain/status for CLI output.
+ * @internal
+ */
 function formatBrandRow(summary) {
   const meta = summary?.meta ?? {};
   const name = summary?.brand?.name || meta.id || '-';
@@ -43,6 +52,10 @@ function formatBrandRow(summary) {
   ].join('\t');
 }
 
+/**
+ * Entry point for `od brand` subcommands (list/create/preview/finalize/extract-from-html/get/delete).
+ * Each subcommand maps to a daemon /api/brands HTTP route.
+ */
 export async function runBrand(args) {
   if (args.length === 0 || isBrandHelpArg(args[0])
       || args.includes('--help') || args.includes('-h')) {
@@ -70,6 +83,7 @@ export async function runBrand(args) {
   }
 }
 
+/** @internal Lists all brands in the daemon. */
 async function runBrandList(rest) {
   let flags;
   try {
@@ -101,6 +115,7 @@ async function runBrandList(rest) {
   for (const summary of brands) console.log(formatBrandRow(summary));
 }
 
+/** @internal Kicks off brand extraction from a URL or prompt-file; returns extraction project. */
 async function runBrandCreate(rest) {
   let flags;
   try {
@@ -161,6 +176,7 @@ async function runBrandCreate(rest) {
   console.log(`${data?.id ?? ''}\t${data?.projectId ?? ''}`);
 }
 
+/** @internal Completes brand extraction and registers the design system. */
 async function runBrandFinalize(rest) {
   let flags;
   try {
@@ -204,6 +220,7 @@ async function runBrandFinalize(rest) {
   if (data?.designSystemId) process.stderr.write(`[brand] registered design system ${data.designSystemId}\n`);
 }
 
+/** @internal Resumes a paused brand extraction workflow. */
 async function runBrandContinue(rest) {
   let flags;
   try {
@@ -249,6 +266,7 @@ async function runBrandContinue(rest) {
 // Read a flag value as file content (or stdin when the value is "-"). Returns
 // null when the flag is unset. Mirrors readPromptFromFlags' file/stdin handling
 // but for an arbitrary flag name (--html-file / --css-file).
+/** @internal Reads a flag value as file content or stdin when flag is '-'. */
 async function readFileFlagOrStdin(value) {
   if (typeof value !== 'string' || value.length === 0) return null;
   if (value === '-') {
@@ -269,6 +287,7 @@ async function readFileFlagOrStdin(value) {
 // Re-runs extraction against pre-captured rendered HTML (e.g. a page an external
 // agent already loaded past an anti-bot wall), mirroring the UI's browser-assist
 // confirm path so the capability is reachable from the CLI too.
+/** @internal Re-runs extraction against pre-captured HTML (e.g. past an anti-bot wall). */
 async function runBrandExtractFromHtml(rest) {
   let flags;
   try {
@@ -338,6 +357,7 @@ async function runBrandExtractFromHtml(rest) {
   }
 }
 
+/** @internal Generates preview HTML for a brand in progress. */
 async function runBrandPreview(rest) {
   let flags;
   try {
@@ -380,6 +400,7 @@ async function runBrandPreview(rest) {
   console.log(`${data?.id ?? id}\t${data?.file ?? 'brand.html'}`);
 }
 
+/** @internal Fetches full brand details (metadata, colors, fonts). */
 async function runBrandGet(rest) {
   let flags;
   try {
@@ -429,6 +450,7 @@ async function runBrandGet(rest) {
   if (meta.error) console.log(`error\t${meta.error}`);
 }
 
+/** @internal Removes a brand and its backing design system. */
 async function runBrandDelete(rest) {
   let flags;
   try {

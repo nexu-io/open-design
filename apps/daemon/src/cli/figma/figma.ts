@@ -1,22 +1,23 @@
 // @ts-nocheck
-/**
- * @module cli/figma/figma
+/** @module cli/figma/figma
+ * Implements `od figma import` CLI command for offline and URL-based Figma design import.
+ * Decodes .fig files (offline) or runs OAuth migration scenario; optionally starts build run.
  */
 import { cliDaemonUrl, parseFlags, readPromptFromFlags, structuredHttpFailure } from '../core/index.js';
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 
-// Defined near the top because `runFigma` is reachable through the
-// top-of-file SUBCOMMAND_MAP dispatch during module evaluation; a `const`
-// further down would still be in TDZ when the handler reads it.
+/** Whitelist of string flags for `od figma` commands. */
 const FIGMA_STRING_FLAGS = new Set([
   'daemon-url', 'project', 'file', 'figma-url', 'notes', 'prompt', 'prompt-file',
 ]);
 
+/** Whitelist of boolean flags for `od figma` commands. */
 const FIGMA_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'build',
 ]);
 
+/** @internal Prints usage for `od figma import`. */
 function printFigmaUsage() {
   console.log(`Usage:
   od figma import --project <id> --file <path.fig> [--notes "<text>"]
@@ -39,6 +40,11 @@ Flags:
   --json               Emit raw JSON.`);
 }
 
+/**
+ * Entry point for `od figma import` subcommand.
+ * Routes to offline .fig decode or URL-based OAuth migration scenario.
+ * Optionally starts a build run to reshape the snapshot into a webpage.
+ */
 export async function runFigma(args) {
   const sub = args.find((a) => !a.startsWith('-'));
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {

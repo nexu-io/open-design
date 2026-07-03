@@ -1,6 +1,16 @@
 // @ts-nocheck
+/** @module cli/core/errors
+ * Structured error surface shared by every `od` subcommand: the stable
+ * recoverable-exit-code table, the JSON error envelope emitted on stderr, and
+ * the fetch/HTTP failure normalizers that map daemon responses onto both.
+ * Foundation kernel: imports no sibling subdirectory.
+ */
 /**
- * @module cli/core/errors
+ * Stable exit-code contract for failures a headless caller can act on
+ * (re-grant capabilities, start the daemon, retry with different flags).
+ * Codes are part of the CLI's embeddability contract — external agents
+ * branch on them — so existing values must never be renumbered; add new
+ * conditions as new entries instead.
  */
 export const RECOVERABLE_EXIT_CODES = {
   'daemon-not-running':       64,
@@ -18,6 +28,13 @@ export const RECOVERABLE_EXIT_CODES = {
   'desktop-import-token-rejected': 75,
 };
 
+/**
+ * Prints a human-readable diagnosis when `fetch` to the daemon throws (as
+ * opposed to returning an HTTP error). Unwraps the undici `cause` chain so
+ * the user sees `ECONNREFUSED`-style codes, and adds a sandbox hint for
+ * EPERM/ENETUNREACH because the most common cause is a code agent's network
+ * policy, not a broken daemon. Does not exit — callers choose the exit path.
+ */
 export function surfaceFetchError(err, daemonUrl) {
   const cause = err && typeof err === 'object' ? err.cause : null;
   const code =
@@ -47,6 +64,11 @@ export function surfaceFetchError(err, daemonUrl) {
 // code + a JSON envelope on stderr. Code agents read these to decide
 // whether the failure is recoverable (re-grant capabilities, prompt
 // the user, retry with --grant-caps, etc.).
+/**
+ * Emits the machine-readable error envelope `{ error: { code, message, data } }`
+ * on stderr and terminates with the code's entry from
+ * {@link RECOVERABLE_EXIT_CODES} (1 for unknown codes). Never returns.
+ */
 export function exitWithStructuredError({ code, message, data }) {
   const exit = RECOVERABLE_EXIT_CODES[code] ?? 1;
   const envelope = { error: { code, message, data: data ?? {} } };
@@ -66,6 +88,12 @@ export function exitWithStructuredError({ code, message, data }) {
 // structured envelope instead of collapsing to `HTTP <status>: `, which
 // would drop the only diagnostic the daemon actually returned to a
 // headless caller.
+/**
+ * Terminal handler for a non-OK daemon HTTP response: normalizes both daemon
+ * envelope shapes (object `{error:{code,...}}` and legacy flat-string
+ * `{error:'msg'}`) and exits via {@link exitWithStructuredError}, using
+ * `fallbackCode` when the body carries no recognized recoverable code.
+ */
 export async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-running') {
   let raw = '';
   let parsed;
@@ -94,6 +122,12 @@ export async function structuredHttpFailure(resp, fallbackCode = 'daemon-not-run
   });
 }
 
+/**
+ * @internal
+ * Translates daemon-side error codes into their CLI recoverable-code
+ * equivalents (e.g. `DESKTOP_AUTH_PENDING` → `desktop-auth-pending`) so the
+ * exit-code table stays keyed on CLI-owned names.
+ */
 function normalizeRecoverableErrorCode(code, message) {
   if (code === 'DESKTOP_AUTH_PENDING') return 'desktop-auth-pending';
   if (code === 'FORBIDDEN' && /desktop import token rejected/i.test(String(message ?? ''))) {
@@ -102,6 +136,11 @@ function normalizeRecoverableErrorCode(code, message) {
   return code;
 }
 
+/**
+ * @internal
+ * Collects the optional `data`/`details`/`retryable` fields from a daemon
+ * error object into the envelope's `data` payload, or `undefined` when empty.
+ */
 function structuredErrorData(error) {
   if (!error || typeof error !== 'object') return undefined;
   const data = {};

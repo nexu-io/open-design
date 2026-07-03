@@ -1,21 +1,28 @@
 // @ts-nocheck
-/**
- * @module cli/research/research
+/** @module cli/research/research
+ * Implements `od research search` CLI command for Tavily-backed shallow research.
+ * Routes research queries to daemon and outputs structured result envelope (JSON only).
  */
 import { splitResearchSubcommand } from '../../research/cli-args.js';
 import { cliDaemonUrl, parseFlags, surfaceFetchError } from '../core/index.js';
 
+/** Whitelist of string flags for `od research search`. */
 const RESEARCH_SEARCH_STRING_FLAGS = new Set([
   'query',
   'max-sources',
   'daemon-url',
 ]);
 
+/** Whitelist of boolean flags for `od research search`. */
 const RESEARCH_SEARCH_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
 ]);
 
+/**
+ * Entry point for `od research search` subcommand.
+ * Routes to shallow research endpoint and streams JSON result to stdout.
+ */
 export async function runResearch(args) {
   const { sub, subArgs } = splitResearchSubcommand(args);
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -30,6 +37,7 @@ export async function runResearch(args) {
   return runResearchSearch(subArgs);
 }
 
+/** @internal Performs a shallow research query via /api/research/search. */
 async function runResearchSearch(rawArgs) {
   let flags;
   try {
@@ -73,6 +81,7 @@ async function runResearchSearch(rawArgs) {
   process.stdout.write(`${await resp.text()}\n`);
 }
 
+/** @internal Prints usage for `od research search`. */
 function printResearchHelp() {
   console.log(`Usage:
   od research search --query <text> [--max-sources 5] [--daemon-url <url>]

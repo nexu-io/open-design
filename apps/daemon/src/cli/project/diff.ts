@@ -1,6 +1,17 @@
 // @ts-nocheck
+/** @module cli/project/diff
+ * Unified diff generator for text comparison (used by `od files diff`).
+ * Implements LCS-based diff when line counts are reasonable; falls back to simple replace on large inputs.
+ */
 /**
- * @module cli/project/diff
+ * Generates a unified diff between two text inputs.
+ * Returns empty string if texts are identical.
+ * Uses LCS algorithm when feasible; falls back to simple old/new listing for large diffs (>1M line product).
+ * @param {string} leftLabel - Header label for left file (e.g. 'a/path').
+ * @param {string} rightLabel - Header label for right file (e.g. 'b/path').
+ * @param {string} leftText - Original text.
+ * @param {string} rightText - Modified text.
+ * @returns {string} Unified diff or empty string.
  */
 export function createUnifiedDiff(leftLabel, rightLabel, leftText, rightText) {
   if (leftText === rightText) return '';
@@ -40,16 +51,34 @@ export function createUnifiedDiff(leftLabel, rightLabel, leftText, rightText) {
   ].join('\n') + '\n';
 }
 
+/**
+ * @internal Splits text by CR, LF, CRLF, or EOF; filters empty results.
+ * @param {string} text - Input text.
+ * @returns {Array<string>} Lines with line terminators included.
+ */
 function splitDiffLines(text) {
   const value = String(text);
   if (value.length === 0) return [];
   return value.match(/.*?(?:\r\n|\n|\r|$)/gs).filter((line) => line.length > 0);
 }
 
+/**
+ * @internal Formats start line and length as either 'start' (length 1) or 'start,length'.
+ * @param {number} start - Starting line number (1-based).
+ * @param {number} length - Number of lines.
+ * @returns {string} Formatted range.
+ */
 function formatDiffRange(start, length) {
   return length === 1 ? String(start) : `${start},${length}`;
 }
 
+/**
+ * @internal Computes the diff body (list of +/- lines) using LCS when feasible.
+ * Falls back to naive old/new if line product >1M.
+ * @param {Array<string>} oldLines - Old text lines.
+ * @param {Array<string>} newLines - New text lines.
+ * @returns {Array<string>} Diff lines prefixed with +/-/space.
+ */
 function diffLineBody(oldLines, newLines) {
   if (oldLines.length === 0) return newLines.map((line) => diffLine('+', line));
   if (newLines.length === 0) return oldLines.map((line) => diffLine('-', line));
@@ -89,6 +118,12 @@ function diffLineBody(oldLines, newLines) {
   return out;
 }
 
+/**
+ * @internal Formats one line with prefix (+/-/space) and handles missing final newline.
+ * @param {string} prefix - One-char prefix.
+ * @param {string} line - Line content (may include \r, \n, \r\n).
+ * @returns {string} Formatted diff line.
+ */
 function diffLine(prefix, line) {
   const value = String(line);
   if (value.endsWith('\r\n')) return `${prefix}${renderDiffLineContent(value.slice(0, -1))}`;
@@ -97,6 +132,11 @@ function diffLine(prefix, line) {
   return `${prefix}${renderDiffLineContent(value)}\n\\ No newline at end of file`;
 }
 
+/**
+ * @internal Escapes CR characters as \\r for readability in diff output.
+ * @param {string} value - Line content.
+ * @returns {string} Escaped content.
+ */
 function renderDiffLineContent(value) {
   return String(value).replace(/\r/g, '\\r');
 }

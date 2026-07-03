@@ -1,5 +1,5 @@
 // @ts-nocheck
-/**
- * @module cli/figma
+/** @module cli/figma
+ * Barrel layer for Figma import CLI commands.
  */
 export * from './figma.js';

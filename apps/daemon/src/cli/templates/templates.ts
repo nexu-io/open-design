@@ -1,6 +1,7 @@
 // @ts-nocheck
-/**
- * @module cli/templates/templates
+/** @module cli/templates/templates
+ * Implements `od templates` CLI commands (list/save/delete) for project template management.
+ * Mirrors the web NewProjectPanel / ExamplesTab; enables headless template snapshot and lifecycle.
  */
 import { cliDaemonBaseUrl, parseFlags, positionalArgs, structuredHttpFailure, surfaceFetchError } from '../core/index.js';
 
@@ -8,10 +9,12 @@ import { cliDaemonBaseUrl, parseFlags, positionalArgs, structuredHttpFailure, su
 // same /api/templates store. The CLI form is the embeddability contract:
 // external agents (hermes-agent, openclaw, ...) can snapshot, list, or
 // remove user-saved project templates without going through the web UI.
+/** Whitelist of string flags for `od templates` commands. */
 const TEMPLATES_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'description',
 ]);
 
+/** Whitelist of boolean flags for `od templates` commands. */
 const TEMPLATES_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // `od automation …` mirrors the Automations tab. Same surface, same
 // /api/routines store. The CLI form is the embeddability contract:
@@ -24,6 +27,11 @@ const TEMPLATES_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // project as a reusable starting point, list everything the user has
 // saved, or drop one that is no longer needed. The web UI and the CLI
 // share the daemon HTTP layer so neither can drift out of step.
+/**
+ * Entry point for `od templates` subcommands (list/save/delete).
+ * Routes CRUD operations on project templates via /api/templates.
+ * Handles positional argument parsing to support mixed flag/positional ordering.
+ */
 export async function runTemplates(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:

@@ -1,6 +1,8 @@
 // @ts-nocheck
-/**
- * @module cli/automation/automation
+/** @module cli/automation/automation
+ * Implements the od automation command dispatcher for routine/workflow management (list, get, create, update, run, delete, pause, resume, crystallize-run).
+ * Also handles templates, source ingestion/packets, and proposals (self-evolution suggestions).
+ * Collaborators: cliDaemonBaseUrl from core; readPromptFromFlags, readMemoryBodyFromFlags from core; schedule parsing.
  */
 import { cliDaemonBaseUrl, parseFlags, positionalArgs, readMemoryBodyFromFlags, readPromptFromFlags, structuredHttpFailure, surfaceFetchError } from '../core/index.js';
 
@@ -8,6 +10,9 @@ import { cliDaemonBaseUrl, parseFlags, positionalArgs, readMemoryBodyFromFlags, 
 // /api/routines store. The CLI form is the embeddability contract:
 // external agents (hermes-agent, openclaw, etc.) can drive Open Design
 // automations headlessly without going through the web UI.
+/**
+ * @internal Whitelist of string flags for automation subcommands (--name, --prompt, --schedule, --target, --skill, --plugin, etc.).
+ */
 const AUTOMATION_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'prompt', 'prompt-file', 'schedule', 'target',
   'project', 'skill', 'agent', 'limit', 'plugin', 'mcp', 'connector',
@@ -16,20 +21,29 @@ const AUTOMATION_STRING_FLAGS = new Set([
   'candidate-sinks', 'memory-type',
 ]);
 
+/**
+ * @internal Whitelist of boolean flags (--help, --json, --disabled, --enabled).
+ */
 const AUTOMATION_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'disabled', 'enabled',
 ]);
 
-// Hoisted because `runAutomation` is reachable through the top-of-file
-// SUBCOMMAND_MAP dispatch, which runs during module evaluation —
-// any `const` declared further down would still be in TDZ when
-// `parseScheduleFlag` reads this map. Same reason the other dispatch-
-// touched constants live near the top.
+/**
+ * @internal Maps day names (sun/sunday, mon/monday, etc.) to 0-6 weekday numbers.
+ * Used by parseScheduleFlag to normalize weekly schedule specs.
+ */
 const AUTOMATION_WEEKDAY_TOKENS = {
   sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
   sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
 };
 
+/**
+ * @internal Parses --schedule flag into typed schedule object (hourly, daily, weekdays, or weekly).
+ * Forms: hourly:<minute> | daily:HH:MM[:TZ] | weekdays:HH:MM[:TZ] | weekly:DAY:HH:MM[:TZ]
+ * Exits 2 on parse error.
+ * @param {string} raw - Raw schedule string.
+ * @returns {object} {kind, minute?|time, timezone?, weekday?}.
+ */
 function parseScheduleFlag(raw) {
   if (!raw || typeof raw !== 'string') {
     throw new Error(
@@ -81,6 +95,13 @@ function parseScheduleFlag(raw) {
   throw new Error(`--schedule kind must be hourly|daily|weekdays|weekly (got "${kind}")`);
 }
 
+/**
+ * @internal Parses --target flag into {mode, projectId?}.
+ * Forms: 'new-project' | 'reuse=<id>' | 'reuse:<id>' | implicit reuse if --project given.
+ * Exits 2 on parse error.
+ * @param {object} flags - Parsed flags.
+ * @returns {object} {mode, projectId?}.
+ */
 function parseAutomationTarget(flags) {
   const raw = flags.target;
   if (raw == null) {
@@ -113,6 +134,11 @@ function parseAutomationTarget(flags) {
   );
 }
 
+/**
+ * @internal Formats schedule object for display (hourly:00, daily:09:00:UTC, etc.).
+ * @param {object} schedule - Schedule object.
+ * @returns {string} Human-readable schedule.
+ */
 function describeAutomationScheduleForCli(schedule) {
   if (!schedule) return '-';
   if (schedule.kind === 'hourly') {
@@ -125,12 +151,22 @@ function describeAutomationScheduleForCli(schedule) {
   return `${schedule.kind}:${schedule.time}:${schedule.timezone}`;
 }
 
+/**
+ * @internal Formats target object for display ('reuse=<id>' or 'new-project').
+ * @param {object} target - Target object.
+ * @returns {string} Human-readable target.
+ */
 function describeAutomationTargetForCli(target) {
   if (!target) return '-';
   if (target.mode === 'reuse') return `reuse=${target.projectId}`;
   return 'new-project';
 }
 
+/**
+ * @internal Splits comma-separated IDs, trims, filters empty, dedupes.
+ * @param {string} value - Raw comma-separated IDs or empty.
+ * @returns {Array<string>} Unique trimmed IDs.
+ */
 function splitAutomationIds(value) {
   if (typeof value !== 'string' || value.trim().length === 0) return [];
   const seen = new Set();
@@ -144,6 +180,12 @@ function splitAutomationIds(value) {
   return out;
 }
 
+/**
+ * @internal Builds context object from --skill, --plugin, --mcp, --connector flags (comma-separated).
+ * Returns null if no IDs provided.
+ * @param {object} flags - Parsed flags.
+ * @returns {object|null} {skillIds?, pluginIds?, mcpServerIds?, connectorIds?}.
+ */
 function automationContextFromFlags(flags) {
   const skillIds = splitAutomationIds(flags.skill);
   const pluginIds = splitAutomationIds(flags.plugin);
@@ -158,6 +200,11 @@ function automationContextFromFlags(flags) {
   return Object.keys(context).length > 0 ? context : null;
 }
 
+/**
+ * @internal Formats automation routine as tab-separated row (id, name, schedule, target, status, nextRun).
+ * @param {object} r - Routine object.
+ * @returns {string} Tab-separated row.
+ */
 function formatAutomationRow(r) {
   const next = r.nextRunAt
     ? new Date(r.nextRunAt).toISOString()
@@ -172,6 +219,9 @@ function formatAutomationRow(r) {
   ].join('\t');
 }
 
+/**
+ * @internal Prints full help for all od automation subcommands and schedule formats.
+ */
 function printAutomationHelp() {
   console.log(`Usage:
   od automation template list                                List built-in automation templates.
@@ -225,6 +275,13 @@ Common options:
   --daemon-url <url>   Open Design daemon HTTP base.`);
 }
 
+/**
+ * Main dispatcher for `od automation` subcommands (template, source/ingest, proposal, list, get, runs, create, update, run, delete, pause, resume, crystallize-run).
+ * Source/proposal are self-evolution surfaces; template/source/proposal are read-only discovery.
+ * @async
+ * @param {Array<string>} args - Subcommand and arguments.
+ * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
+ */
 export async function runAutomation(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     printAutomationHelp();

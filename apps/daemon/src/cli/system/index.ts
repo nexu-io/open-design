@@ -1,6 +1,6 @@
 // @ts-nocheck
-/**
- * @module cli/system
+/** @module cli/system
+ * Barrel layer for daemon lifecycle, config, diagnostics, and wallet CLI commands.
  */
 export * from './amr.js';
 export * from './config.js';

@@ -1,20 +1,24 @@
 // @ts-nocheck
-/**
- * @module cli/export/export
+/** @module cli/export/export
+ * Implements `od export` CLI command for programmatic artifact export (PDF/PPTX/image).
+ * Rasterizes HTML/deck artifacts through the desktop renderer (Chromium) and writes output files.
  */
 import { buildExportCliRequestBody, buildExportCliResultEnvelope, resolveExportCliDeckMode } from '../../export-cli-request.js';
 import { exportRoutePath } from '../../export-cli-routing.js';
 import { cliDaemonBaseUrl, parseFlags, positionalArgs, structuredHttpFailure, surfaceFetchError } from '../core/index.js';
 import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS } from '@open-design/contracts';
 
+/** Whitelist of string flags for `od export` commands. */
 const EXPORT_STRING_FLAGS = new Set([
   'daemon-url', 'project', 'format', 'out', 'output', 'image-format', 'title', 'file',
 ]);
 
+/** Whitelist of boolean flags for `od export` commands (--deck, --page, --no-deck, etc). */
 const EXPORT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'deck', 'page', 'no-deck']);
 // EXPORT_FORMATS / EXPORT_IMAGE_FORMATS are the shared contract DTO (single
 // source of truth for the web/daemon/CLI export surface), imported above.
 
+/** @internal Prints usage and format examples for `od export`. */
 function printExportHelp() {
   console.log(`Usage:
   od export <file> --project <id> --format <fmt> [options]
@@ -43,6 +47,10 @@ Examples:
   od export deck.html --project p1 --format pptx --out deck.pptx`);
 }
 
+/**
+ * Exports an artifact (HTML file) to PDF, PPTX, or image via the daemon's desktop renderer.
+ * Validates format, resolves output filename from Content-Disposition, writes file to disk.
+ */
 export async function runExport(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     printExportHelp();

@@ -1,6 +1,8 @@
 // @ts-nocheck
-/**
- * @module cli/project/files
+/** @module cli/project/files
+ * Implements the od files command dispatcher for project file operations (list, read, write, upload, delete, diff, versions, version-read, version-create, version-restore).
+ * Exports mintCliImportToken for desktop-authenticated folder imports.
+ * Collaborators: createUnifiedDiff from diff.ts; sidecar IPC for import token minting.
  */
 import { exitWithStructuredError, parseFlags, positionalArgs, readPromptFromFlags, structuredHttpFailure } from '../core/index.js';
 import { createUnifiedDiff } from './diff.js';
@@ -10,6 +12,12 @@ import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 
+/**
+ * @internal Validates --source flag for file versions (ai|manual|restore).
+ * Returns null if value is missing; exits 2 if unrecognized.
+ * @param {any} raw - Raw flag value.
+ * @returns {string|null} Normalized source or null.
+ */
 function parseProjectFileVersionSourceFlag(raw) {
   if (raw == null) return null;
   if (raw === 'ai' || raw === 'manual' || raw === 'restore') return raw;
@@ -17,6 +25,13 @@ function parseProjectFileVersionSourceFlag(raw) {
   process.exit(2);
 }
 
+/**
+ * Main dispatcher for `od files` subcommands (list, read, write, upload, delete, diff, versions, version-read, version-create, version-restore).
+ * Versions support optional --prompt/--prompt-file for captioning and --source provenance.
+ * @async
+ * @param {Array<string>} args - Subcommand and arguments.
+ * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
+ */
 export async function runFiles(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
@@ -268,10 +283,23 @@ Common options:
   }
 }
 
+/**
+ * @internal URL-encodes each path segment independently, then joins them (preserves slashes in the final URL).
+ * @param {string} rel - Relative path with forward slashes.
+ * @returns {string} URL-safe path.
+ */
 function encodeProjectRelpath(rel) {
   return String(rel).split('/').map(encodeURIComponent).join('/');
 }
 
+/**
+ * @internal Fetches file content from /api/projects/:id/files/:relpath and returns as UTF-8 string.
+ * @async
+ * @param {string} base - Daemon base URL.
+ * @param {string} id - Project ID.
+ * @param {string} rel - Relative file path.
+ * @returns {Promise<string>} File content or exit on failure.
+ */
 async function fetchProjectFileText(base, id, rel) {
   const resp = await fetch(
     `${base}/api/projects/${encodeURIComponent(id)}/files/${encodeProjectRelpath(rel)}`,
@@ -281,11 +309,24 @@ async function fetchProjectFileText(base, id, rel) {
   return buf.toString('utf8');
 }
 
+/**
+ * @internal Dynamically imports node:fs and reads stdin (fd 0) as UTF-8.
+ * @async
+ * @returns {Promise<string>} stdin content.
+ */
 async function readStdinUtf8() {
   const fs = await import('node:fs');
   return fs.readFileSync(0, 'utf8');
 }
 
+/**
+ * Requests an import token via sidecar IPC (MINT_IMPORT_TOKEN message).
+ * Returns null if sidecar IPC is unavailable or times out (800ms).
+ * Used by `od project import`, `od project import-folder`, and `od run redesign` to enable desktop auth.
+ * @async
+ * @param {string} baseDir - Folder path for token request context.
+ * @returns {Promise<string|null>} Import token or null.
+ */
 export async function mintCliImportToken(baseDir) {
   const socketPath = process.env[SIDECAR_ENV.IPC_PATH];
   if (typeof socketPath !== 'string' || socketPath.length === 0) return null;

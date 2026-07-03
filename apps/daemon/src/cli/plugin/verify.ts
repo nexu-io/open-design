@@ -1,6 +1,8 @@
 // @ts-nocheck
-/**
- * @module cli/plugin/verify
+/** @module cli/plugin/verify
+ * CI meta-commands: doctor/simulate/canon checks, snapshot diff/show/prune, replay for re-runs.
+ * Collaborators: manage.ts (flag parsing), ../core (exit codes).
+ * Invariant: all snapshot data flows through /api/applied-plugins/; no local snapshot cache.
  */
 import { parseFlags } from '../core/index.js';
 import { PLUGIN_BOOLEAN_FLAGS, PLUGIN_STRING_FLAGS, pluginDaemonUrl } from './manage.js';
@@ -10,6 +12,10 @@ import { PLUGIN_BOOLEAN_FLAGS, PLUGIN_STRING_FLAGS, pluginDaemonUrl } from './ma
 //   - `od plugin snapshots list [--project <id>]` — list snapshots
 //   - `od plugin snapshots prune [--before <ts>]` — force-delete expired
 //     (and optionally older-than-cutoff unreferenced) rows.
+/**
+ * Subcommands: list [--project id], show <id>, diff <a> <b>, prune [--before ms].
+ * Snapshot GC escape hatch (Plan §3.A5, spec Phase 5). list returns JSON; others allow --json flag.
+ */
 export async function runPluginSnapshots(args) {
   const sub = args[0];
   if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
@@ -141,6 +147,12 @@ export async function runPluginSnapshots(args) {
 //
 // Aggregates into a unified pass/fail report. Exit 4 on any failed
 // check; useful as a one-liner CI check for a plugin's repo.
+/**
+ * CI meta-command. Reads optional .od-verify.json from plugin folder (or --config).
+ * Runs enabled subset of doctor/simulate/canon; aggregates into pass/fail.
+ * Exit 4 on failure (useful for CI gates). Phase 5 / spec §16 / plan §3.FF1.
+ * @param rest Raw argv after 'verify'
+ */
 export async function runPluginVerify(rest) {
   const flags = parseFlags(rest, {
     string:  new Set([...PLUGIN_STRING_FLAGS, 'config']),
@@ -311,6 +323,12 @@ Exit codes:
 // closed UntilSignals vocabulary applies (critique.score /
 // iterations / user.confirmed / preview.ok / build.passing /
 // tests.passing); unknown keys surface as warnings.
+/**
+ * Dry-run pipeline without LLM. Walks stages, tests 'until' expressions against supplied signals.
+ * Signals: critique.score, iterations, user.confirmed, preview.ok, build.passing, tests.passing (closed vocabulary).
+ * Exit 4 on cap-hit or unparsable stage (plan §3.EE1).
+ * @param rest Raw argv after 'simulate'
+ */
 export async function runPluginSimulate(rest) {
   const flags = parseFlags(rest, {
     string:  new Set([...PLUGIN_STRING_FLAGS, 's', 'cap']),
@@ -414,6 +432,12 @@ Closed signal vocabulary:
 // on-disk fixture (typically committed under tests/fixtures/) and
 // exits 4 on byte-mismatch. Lets a plugin author lock byte-
 // equality without writing a new test harness.
+/**
+ * Prints canonical system prompt block (## Active plugin / ## Plugin inputs / ## Plugin atoms)
+ * that snapshot splices into prompt. With --check <file>, compares byte-equality (spec §3.CC1, §3.DD2).
+ * Useful for locking fixtures and understanding agent read view.
+ * @param rest Raw argv after 'canon'
+ */
 export async function runPluginCanon(rest) {
   const flags = parseFlags(rest, {
     string:  new Set([...PLUGIN_STRING_FLAGS, 'check']),
@@ -495,6 +519,11 @@ fixtures into a plugin's own tests/.`);
 // Plan §3.AA1 — `od plugin diff <a> <b>`. Compares two installed
 // plugins (by id) and prints a structured report. Useful for
 // debugging replay invariance + reviewing version bumps.
+/**
+ * Compares two plugin records (same id at different versions, or different ids).
+ * Groups output into added/removed/changed fields with summaries or field diffs (plan §3.AA1).
+ * @param rest Raw argv after 'diff'
+ */
 export async function runPluginDiff(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const positional = rest.filter((a) => !a.startsWith('-'));
@@ -557,6 +586,11 @@ into 'added' / 'removed' / 'changed' with one line per field.`);
 // the agent restarts the run via `od plugin apply` followed by a normal
 // `od run start`. Future Phase 2C `od plugin run` will collapse this
 // into a one-shot wrapper.
+/**
+ * Re-emits immutable snapshot a run was launched against (Phase 2A headless).
+ * Returns rerun bundle for agent to call `od plugin apply` + normal run start (plan §3.C1).
+ * @param rest Raw argv after 'replay'
+ */
 export async function runPluginReplay(rest) {
   const flags = parseFlags(rest, { string: PLUGIN_STRING_FLAGS, boolean: PLUGIN_BOOLEAN_FLAGS });
   const runId = rest.find((a) => !a.startsWith('-')

@@ -1,6 +1,11 @@
 // @ts-nocheck
-/**
- * @module cli
+/** @module cli
+ * Public API barrel for the CLI domain. Re-exports subcommand entry handlers
+ * from domain subdirectory barrels via explicit named re-exports, consumed by
+ * the src/cli.ts entry shim. Every handler maps to an `od <subcommand> …`
+ * route registered in SUBCOMMAND_MAP. The core/ foundation kernel (flag
+ * parsing, daemon-url resolution, input intake, run-event streaming) lives
+ * separately and is imported by each domain as needed.
  */
 export { runAutomation } from './automation/index.js';
 export { runBrand } from './brand/index.js';

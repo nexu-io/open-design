@@ -1,13 +1,20 @@
 // @ts-nocheck
-/**
- * @module cli/system/config
+/** @module cli/system/config
+ * Implements `od config` commands (list/get/set/unset) for app configuration.
+ * Provides headless read/write access to the daemon's persistent app config store.
  */
 import { coerceCliValue, libraryDaemonUrl, parseFlags, structuredHttpFailure } from '../core/index.js';
 
+/** Whitelist of string flags for `od config` commands; exported for reuse by runDoctor. */
 export const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
 
+/** Whitelist of boolean flags for `od config` commands; exported for reuse by runDoctor. */
 export const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 
+/**
+ * Entry point for `od config` subcommands (list/get/set/unset).
+ * Routes CRUD operations on app config keys via /api/app-config.
+ */
 export async function runConfig(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:

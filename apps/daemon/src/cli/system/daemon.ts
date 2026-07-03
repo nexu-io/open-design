@@ -1,24 +1,25 @@
 // @ts-nocheck
-/**
- * @module cli/system/daemon
+/** @module cli/system/daemon
+ * Implements `od daemon` (start/status/stop/db) lifecycle and diagnostics commands.
+ * Handles daemon process startup, health checks, and SQLite maintenance.
  */
 import { startDaemonRuntime } from '../../daemon-startup.js';
 import { cliDaemonBaseUrl, exitWithStructuredError, libraryDaemonUrl, parseFlags, structuredHttpFailure } from '../core/index.js';
 
-// Hoist flag set bindings consumed by handlers reachable through
-// the top-of-file dispatcher. The dispatch block runs synchronously
-// during module load; any const declared further down the file is
-// still in TDZ when the handler executes, so `od status` /
-// `od atoms list` / etc. would crash with `Cannot access X before
-// initialization`.
+/** Whitelist of string flags for `od daemon` commands. */
 const DAEMON_STRING_FLAGS = new Set([
   'daemon-url', 'port', 'host',
 ]);
 
+/** Whitelist of boolean flags for `od daemon` commands. */
 const DAEMON_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'headless', 'serve-web', 'no-open',
 ]);
 
+/**
+ * Entry point for `od daemon` subcommands (start/status/stop/db).
+ * Routes daemon lifecycle and database inspection operations.
+ */
 export async function runDaemon(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
@@ -54,6 +55,7 @@ Common options:
 
 // Plan §3.GG1 — `od daemon db status`. Prints a SQLite inventory
 // (file path, size on disk, schema version, per-table row counts).
+/** @internal Handles `od daemon db` subcommands (status/verify/vacuum). */
 async function runDaemonDb(rest, flags) {
   const sub = rest[0];
   if (!sub || sub === 'help' || rest.includes('--help') || rest.includes('-h')) {
@@ -153,6 +155,7 @@ vacuum:
   }
 }
 
+/** @internal Formats byte counts as human-readable sizes (B/KiB/MiB/GiB). */
 function formatBytes(n) {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
@@ -160,6 +163,7 @@ function formatBytes(n) {
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GiB`;
 }
 
+/** @internal Starts the daemon runtime with optional browser/headless mode. */
 async function runDaemonStart(flags) {
   const port = Number(flags.port ?? process.env.OD_PORT ?? 7456);
   const host = String(flags.host ?? process.env.OD_BIND_HOST ?? '127.0.0.1').trim() || '127.0.0.1';
@@ -191,6 +195,7 @@ async function runDaemonStart(flags) {
   });
 }
 
+/** @internal Fetches and displays daemon runtime snapshot. */
 async function runDaemonStatus(flags) {
   const base = await cliDaemonBaseUrl(flags);
   let resp;
@@ -208,6 +213,7 @@ async function runDaemonStatus(flags) {
   console.log(`[daemon] ${data.bindHost}:${data.port} v${data.version} pid=${data.pid} plugins=${data.installedPlugins}`);
 }
 
+/** @internal Sends graceful shutdown signal to the daemon. */
 async function runDaemonStop(flags) {
   const base = await cliDaemonBaseUrl(flags);
   let resp;

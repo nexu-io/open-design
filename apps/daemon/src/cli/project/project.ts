@@ -1,6 +1,8 @@
 // @ts-nocheck
-/**
- * @module cli/project/project
+/** @module cli/project/project
+ * Implements the od project command dispatcher and HTTP client for project operations.
+ * Exports flag whitelists, daemon URL resolution, and helpers for folder import and JSON posting.
+ * Collaborators: parseFlags, positionalArgs from core; mintCliImportToken from files.js; handoff-cli for `od project handoff`.
  */
 import { runProjectHandoff } from '../../handoff-cli.js';
 import { RECOVERABLE_EXIT_CODES, cliDaemonUrl, exitWithStructuredError, parseFlags, positionalArgs, readPromptFromFlags, structuredHttpFailure, surfaceFetchError } from '../core/index.js';
@@ -9,6 +11,10 @@ import { mintCliImportToken } from './files.js';
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 
+/**
+ * @internal Whitelist of string flags accepted by project subcommands (--name, --skill, --project, --conversation, etc.).
+ * Used by parseFlags to consume flag values; hallucinated flags fail at parse time.
+ */
 export const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
@@ -18,16 +24,31 @@ export const PROJECT_STRING_FLAGS = new Set([
   'source',
 ]);
 
+/**
+ * @internal Whitelist of boolean flags accepted by project subcommands (--help, --json, --follow).
+ */
 export const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 // `od templates …` mirrors NewProjectPanel / ExamplesTab. Same surface,
 // same /api/templates store. The CLI form is the embeddability contract:
 // external agents (hermes-agent, openclaw, ...) can snapshot, list, or
 // remove user-saved project templates without going through the web UI.
 
+/**
+ * Resolves the daemon base URL from flags or environment; wrapper around cliDaemonUrl.
+ * @async
+ * @param {object} flags - Parsed flag object (may include --daemon-url).
+ * @returns {Promise<string>} Normalized daemon base URL.
+ */
 export async function projectDaemonUrl(flags) {
   return cliDaemonUrl(flags);
 }
 
+/**
+ * @internal Safely reads and parses JSON from file path or stdin (- means fd 0).
+ * Returns null on parse failure; used by `od project create --metadata-json` to merge optional metadata.
+ * @param {string} p - File path or '-' for stdin.
+ * @returns {any} Parsed JSON or null.
+ */
 function safeReadJsonFile(p) {
   try {
     if (p === '-') return JSON.parse(readFileSync(0, 'utf8'));
@@ -37,6 +58,13 @@ function safeReadJsonFile(p) {
   }
 }
 
+/**
+ * Extracts positional (non-flag) arguments from argv, skipping flag values.
+ * Honors -- as the end of flag parsing, collecting all remaining args.
+ * @param {Array<any>} argv - Raw argument list.
+ * @param {Set<string>} [stringFlags=new Set()] - Flag names whose next value is consumed (not a positional).
+ * @returns {Array<string>} Positional argument list.
+ */
 export function collectCliPositionals(argv, stringFlags = new Set()) {
   const out = [];
   for (let i = 0; i < argv.length; i++) {
@@ -56,6 +84,14 @@ export function collectCliPositionals(argv, stringFlags = new Set()) {
   return out;
 }
 
+/**
+ * Resolves a folder path with tilde expansion (~, ~/) and absolute resolution.
+ * Falls back to INIT_CWD or process.cwd() if rawPath is empty/whitespace.
+ * Used by `od project import-folder` and `od run redesign` to normalize folder inputs.
+ * @async
+ * @param {string} [rawPath] - User-provided path or empty string.
+ * @returns {Promise<string>} Absolute resolved path.
+ */
 export async function resolveFolderPathForCli(rawPath) {
   const path = await import('node:path');
   const os = await import('node:os');
@@ -70,11 +106,28 @@ export async function resolveFolderPathForCli(rawPath) {
   return path.resolve(expanded);
 }
 
+/**
+ * Extracts the final path segment (folder name) for use as project display name.
+ * Returns 'Imported project' if the path basename is empty.
+ * @async
+ * @param {string} folderPath - Absolute folder path.
+ * @returns {Promise<string>} Folder basename or default.
+ */
 export async function basenameForCli(folderPath) {
   const path = await import('node:path');
   return path.basename(folderPath) || 'Imported project';
 }
 
+/**
+ * POSTs JSON body to daemon endpoint; handles HTTP errors and recoverable exit codes.
+ * Raises exitWithStructuredError for errors matching RECOVERABLE_EXIT_CODES; logs and exits 1 otherwise.
+ * @async
+ * @param {string} base - Daemon base URL.
+ * @param {string} route - HTTP route (e.g. '/api/projects').
+ * @param {object} body - Request body (JSON-stringified).
+ * @param {object} [headers={}] - Additional headers (content-type automatically set).
+ * @returns {Promise<object>} Parsed response JSON.
+ */
 export async function postJsonToDaemon(base, route, body, headers = {}) {
   let resp;
   try {
@@ -103,6 +156,15 @@ export async function postJsonToDaemon(base, route, body, headers = {}) {
   return data;
 }
 
+/**
+ * POSTs folder import body to /api/import/folder with optional desktop import token header.
+ * Token is minted via sidecar IPC (mintCliImportToken); failure to mint gracefully omits the header.
+ * @async
+ * @param {string} base - Daemon base URL.
+ * @param {object} body - Import request body.
+ * @param {string} baseDir - Folder path for token minting.
+ * @returns {Promise<object>} Parsed response (project, conversationId, etc.).
+ */
 export async function postImportFolderToDaemon(base, body, baseDir) {
   const headers = {};
   const importToken = await mintCliImportToken(baseDir);
@@ -112,6 +174,13 @@ export async function postImportFolderToDaemon(base, body, baseDir) {
   return postJsonToDaemon(base, '/api/import/folder', body, headers);
 }
 
+/**
+ * Main dispatcher for `od project` subcommands (list, info, create, create-design-system, duplicate, import, import-folder, delete, editors, open-in, handoff).
+ * Handoff is dispatched early (before generic flag parsing) to preserve its own exit code handling.
+ * @async
+ * @param {Array<string>} args - Subcommand and arguments.
+ * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
+ */
 export async function runProject(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:

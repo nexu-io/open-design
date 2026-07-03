@@ -1,9 +1,15 @@
 // @ts-nocheck
-/**
- * @module cli/memory/memory
+/** @module cli/memory/memory
+ * Implements the od memory command dispatcher for user memory management (tree, profile, rule, verify, config).
+ * Memory is the daemon's personal knowledge store (user profile, rules, verified artifacts, settings).
+ * Collaborators: cliDaemonBaseUrl from core; fetch-based HTTP (GET/POST/PATCH/DELETE).
  */
 import { cliDaemonBaseUrl, parseFlags, readMemoryBodyFromFlags, structuredHttpFailure, surfaceFetchError } from '../core/index.js';
 
+/**
+ * @internal Whitelist of string flags for memory subcommands.
+ * Includes --field (repeatable, scanned manually), --prompt-file (for long-form input), and structured fields for rules/profile.
+ */
 const MEMORY_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'description', 'type', 'body', 'body-file',
   // `od memory profile set` reads structured fields verbatim and/or a prose
@@ -20,10 +26,16 @@ const MEMORY_STRING_FLAGS = new Set([
   'enabled', 'profile', 'rewrite', 'verify', 'extraction',
 ]);
 
+/**
+ * @internal Whitelist of boolean flags (--help, --json).
+ */
 const MEMORY_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
 
+/**
+ * @internal Prints full help for all od memory subcommands.
+ */
 function printMemoryHelp() {
   console.log(`Usage:
   od memory tree list [--json]
@@ -84,6 +96,11 @@ Common options:
   --daemon-url <url>   Open Design daemon HTTP base.`);
 }
 
+/**
+ * @internal Extracts positional arguments from argv, skipping flag values.
+ * @param {Array<any>} values - Raw argument list.
+ * @returns {Array<string>} Positionals.
+ */
 function memoryPositionals(values) {
   const out = [];
   for (let i = 0; i < values.length; i++) {
@@ -100,6 +117,11 @@ function memoryPositionals(values) {
   return out;
 }
 
+/**
+ * @internal Formats memory tree node as tab-separated row (id, parentId, path, kind, type, scope, name).
+ * @param {object} node - Tree node.
+ * @returns {string} Tab-separated row.
+ */
 function formatMemoryTreeRow(node) {
   return [
     node.id,
@@ -112,6 +134,10 @@ function formatMemoryTreeRow(node) {
   ].join('\t');
 }
 
+/**
+ * @internal Prints memory entry in human-readable form (name, id, type, description, body markdown).
+ * @param {object} entry - Memory entry.
+ */
 function printMemoryEntry(entry) {
   console.log(`# ${entry.name}`);
   console.log(`id: ${entry.id}`);
@@ -121,6 +147,12 @@ function printMemoryEntry(entry) {
   process.stdout.write(`${entry.body ?? ''}\n`);
 }
 
+/**
+ * @internal GETs /api/memory/tree; returns derived tree structure with folders and entry nodes.
+ * @async
+ * @param {string} base - Daemon base URL.
+ * @returns {Promise<object>} Tree data.
+ */
 async function fetchMemoryTree(base) {
   let resp;
   try {
@@ -133,6 +165,14 @@ async function fetchMemoryTree(base) {
   return await resp.json();
 }
 
+/**
+ * @internal PATCHes /api/memory/tree/{id} with partial update (name, description, type, body).
+ * @async
+ * @param {string} base - Daemon base URL.
+ * @param {string} id - Node ID.
+ * @param {object} body - Partial update object.
+ * @returns {Promise<object>} Updated entry.
+ */
 async function patchMemoryTreeNode(base, id, body) {
   let resp;
   try {
@@ -152,6 +192,14 @@ async function patchMemoryTreeNode(base, id, body) {
 // GET /api/memory/:id, returning the MemoryEntry or null on a 404. Used by the
 // profile/rule subcommands so they can read-before-write (merge) without
 // crashing when the entry doesn't exist yet.
+/**
+ * @internal GETs /api/memory/{id}; returns null on 404 (entry not found yet).
+ * Used by profile/rule handlers for read-before-write merging.
+ * @async
+ * @param {string} base - Daemon base URL.
+ * @param {string} id - Entry ID.
+ * @returns {Promise<object|null>} Entry or null.
+ */
 async function fetchMemoryEntry(base, id) {
   let resp;
   try {
@@ -169,6 +217,12 @@ async function fetchMemoryEntry(base, id) {
 // Read the verbatim prose body for `od memory profile set` / `rule add`.
 // Accepts `--prompt-file <path>` or `--prompt-file -` (stdin). Returns
 // undefined when neither is supplied so the caller can fall back to flags.
+/**
+ * @internal Reads --prompt-file (path or - for stdin); returns undefined if flag is missing.
+ * @async
+ * @param {object} flags - Parsed flags.
+ * @returns {Promise<string|undefined>} File content or undefined.
+ */
 async function readMemoryPromptFile(flags) {
   if (typeof flags['prompt-file'] !== 'string' || flags['prompt-file'].length === 0) {
     return undefined;
@@ -190,6 +244,11 @@ async function readMemoryPromptFile(flags) {
 // Collect repeated `--field "Label=Value"` flags from the raw argv slice.
 // parseFlags collapses duplicate keys, so we scan manually like `--input`
 // in `od plugin apply`. Returns an ordered list of {label, value} pairs.
+/**
+ * @internal Manually scans argv for repeated --field "Label=Value" pairs (parseFlags collapses duplicates).
+ * @param {Array<any>} rest - Raw argument list.
+ * @returns {Array<{label: string, value: string}>} Collected field pairs.
+ */
 function collectMemoryFieldFlags(rest) {
   const out = [];
   for (let i = 0; i < rest.length; i++) {
@@ -214,6 +273,12 @@ function collectMemoryFieldFlags(rest) {
 // A legacy "- **Label:** value" line is tolerated on read. Lines that don't
 // match (free prose, blank lines, headings) are preserved verbatim ahead of
 // the list.
+/**
+ * @internal Parses profile markdown body into label→value map.
+ * Preserves preamble (free prose, headings); tolerates legacy **Label:** bold format.
+ * @param {string} body - Profile markdown.
+ * @returns {object} {labels: string[], byLabel: Map, preamble: string[]}.
+ */
 function parseProfileBody(body) {
   const labels = [];
   const byLabel = new Map();
@@ -232,6 +297,11 @@ function parseProfileBody(body) {
   return { labels, byLabel, preamble };
 }
 
+/**
+ * @internal Renders parsed profile back to markdown list format (preserving preamble).
+ * @param {object} parsed - Parsed profile object.
+ * @returns {string} Markdown body.
+ */
 function renderProfileBody(parsed) {
   const lines = [];
   if (parsed.preamble.length > 0) {
@@ -243,6 +313,10 @@ function renderProfileBody(parsed) {
   return lines.join('\n');
 }
 
+/**
+ * @internal Prints profile entry or 'no profile yet' if null.
+ * @param {object|null} entry - Profile entry.
+ */
 function printMemoryProfile(entry) {
   if (!entry) {
     console.log('no profile yet');
@@ -255,12 +329,24 @@ function printMemoryProfile(entry) {
 // `enabled`, the extraction hook `chatExtractionEnabled`, and the three new
 // loop hooks). The new flags may be absent from older daemons / before the
 // route patch lands, so we coalesce missing booleans to a printable dash.
+/**
+ * @internal Formats boolean config value as 'on' / 'off' / '-' (for missing/unimplemented).
+ * @param {any} value - Config value.
+ * @returns {string} Formatted string.
+ */
 function formatMemoryConfigSwitch(value) {
   if (value === true) return 'on';
   if (value === false) return 'off';
   return '-';
 }
 
+/**
+ * Main dispatcher for `od memory` subcommands (tree, profile, rule, verify, config).
+ * Tree is default; tree view/edit/move are nested verbs under tree.
+ * @async
+ * @param {Array<string>} args - Subcommand and arguments.
+ * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
+ */
 export async function runMemory(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     printMemoryHelp();
@@ -398,6 +484,16 @@ export async function runMemory(args) {
 // `od memory profile <show|set>` — the singleton structured user profile the
 // PRE loop (intent gateway) reads to expand a short query into a full brief.
 // Same store as every other memory entry; the well-known id is `user_profile`.
+/**
+ * @internal Handles `od memory profile show|set`.
+ * Show prints singleton user_profile entry; set merges --field pairs and/or --prompt-file body.
+ * @async
+ * @param {string} base - Daemon base URL.
+ * @param {Array<any>} rest - Raw arguments (scanned for positionals).
+ * @param {object} flags - Parsed flags.
+ * @param {Function} writeJson - JSON output helper.
+ * @returns {Promise<void>}
+ */
 async function runMemoryProfile(base, rest, flags, writeJson) {
   const parts = memoryPositionals(rest);
   const action = parts[0] ?? 'show';
@@ -462,6 +558,16 @@ async function runMemoryProfile(base, rest, flags, writeJson) {
 
 // `od memory rule <list|add>` — verified rules (assertion + check) the POST
 // self-verify loop enforces as scorecard rubric items.
+/**
+ * @internal Handles `od memory rule list|add|suggest`.
+ * List shows verified rules; add stores Assertion+Check+Rationale; suggest distils annotations into proposals (display-only).
+ * @async
+ * @param {string} base - Daemon base URL.
+ * @param {Array<any>} rest - Raw arguments.
+ * @param {object} flags - Parsed flags.
+ * @param {Function} writeJson - JSON output helper.
+ * @returns {Promise<void>}
+ */
 async function runMemoryRule(base, rest, flags, writeJson) {
   const parts = memoryPositionals(rest);
   const action = parts[0] ?? 'list';
@@ -590,6 +696,12 @@ async function runMemoryRule(base, rest, flags, writeJson) {
 // hold a JSON array of annotation objects, or plain text with one note per
 // line — both keep the --prompt-file embeddability contract clean for jobs
 // that pipe through xargs/jq/heredoc.
+/**
+ * @internal Collects annotation inputs for rule suggest from --note (+ context) or --prompt-file (JSON array or line-delimited).
+ * @async
+ * @param {object} flags - Parsed flags.
+ * @returns {Promise<Array<object>>} Annotation objects.
+ */
 async function collectDistillAnnotations(flags) {
   const annotations = [];
   if (typeof flags.note === 'string' && flags.note.trim()) {
@@ -642,6 +754,16 @@ async function collectDistillAnnotations(flags) {
 // enforcement history (THREAD 2). `list` prints recent enforcement outcomes
 // (`pass` / `fail` / `missing`) the daemon recorded for artifact turns with
 // active rules; `clear` drops the in-memory buffer.
+/**
+ * @internal Handles `od memory verify list|clear`.
+ * List prints recent POST self-verify outcomes; clear drops in-memory buffer.
+ * @async
+ * @param {string} base - Daemon base URL.
+ * @param {Array<any>} rest - Raw arguments.
+ * @param {object} flags - Parsed flags.
+ * @param {Function} writeJson - JSON output helper.
+ * @returns {Promise<void>}
+ */
 async function runMemoryVerify(base, rest, flags, writeJson) {
   const parts = memoryPositionals(rest);
   const action = parts[0] ?? 'list';
@@ -698,6 +820,16 @@ async function runMemoryVerify(base, rest, flags, writeJson) {
 // `od memory config` — inspect or toggle the master switch + the four hooks.
 // No flags ⇒ print every switch (read off GET /api/memory). Toggle flags ⇒
 // PATCH /api/memory/config and print the result. Flags accept true|false.
+/**
+ * @internal Handles `od memory config` with optional toggle flags (--enabled, --profile, --rewrite, --verify, --extraction).
+ * No flags: read-only GET /api/memory listing every switch; with flags: PATCH /api/memory/config.
+ * @async
+ * @param {string} base - Daemon base URL.
+ * @param {Array<any>} rest - Raw arguments.
+ * @param {object} flags - Parsed flags.
+ * @param {Function} writeJson - JSON output helper.
+ * @returns {Promise<void>}
+ */
 async function runMemoryConfig(base, rest, flags, writeJson) {
   // Map CLI flag → config field. --extraction is the chat-extraction hook;
   // --profile/--rewrite/--verify are the new PRE/POST loop hooks.

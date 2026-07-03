@@ -1,10 +1,18 @@
 // @ts-nocheck
-/**
- * @module cli/project/chat
+/** @module cli/project/chat
+ * Implements conversation and chat dispatchers for creating/listing conversations.
+ * Supports conversation forking (--seed-from + --fork-after) for Side Chat workflow.
+ * Collaborators: normalizeChatSessionModeFlag validation; positionalArgs from core.
  */
 import { parseFlags, positionalArgs, structuredHttpFailure } from '../core/index.js';
 import { PROJECT_BOOLEAN_FLAGS, PROJECT_STRING_FLAGS, projectDaemonUrl } from './project.js';
 
+/**
+ * Validates --mode flag to one of: design|chat|plan. Returns undefined if null/missing.
+ * Exits 2 if mode is unrecognized.
+ * @param {any} value - Raw flag value.
+ * @returns {string|undefined} Normalized mode or undefined.
+ */
 export function normalizeChatSessionModeFlag(value) {
   if (value == null) return undefined;
   const mode = String(value).trim().toLowerCase();
@@ -13,6 +21,13 @@ export function normalizeChatSessionModeFlag(value) {
   process.exit(2);
 }
 
+/**
+ * Main dispatcher for `od conversation` subcommands (new, list, info).
+ * New supports --seed-from (copy conversation) and --fork-after (stop copy at message).
+ * @async
+ * @param {Array<string>} args - Subcommand and arguments.
+ * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
+ */
 export async function runConversation(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
@@ -97,6 +112,13 @@ Common options:
   }
 }
 
+/**
+ * Main dispatcher for `od chat new` — Side Chat convenience wrapper around conversation new.
+ * Accepts --project as flag or positional; requires exactly one of the two forms.
+ * @async
+ * @param {Array<string>} args - Subcommand and arguments.
+ * @returns {Promise<void>} Outputs to stdout/stderr; exits on error.
+ */
 export async function runChat(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:

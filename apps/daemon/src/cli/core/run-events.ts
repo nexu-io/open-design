@@ -1,10 +1,18 @@
 // @ts-nocheck
-/**
- * @module cli/core/run-events
+/** @module cli/core/run-events
+ * SSE-to-NDJSON bridge for agent-run event streams, shared by the project
+ * (`od run --follow`) and plugin (`od plugin run`) domains.
+ * Foundation kernel: imports no sibling subdirectory.
  */
+
 // Stream the SSE events at /api/runs/:id/events as ND-JSON on stdout.
 // Each line is one event: { event, data } so a code agent can parse it
 // without needing an SSE library.
+/**
+ * Follows `/api/runs/:id/events` and re-emits each SSE block as one NDJSON
+ * line (`{ event, data }`) on stdout until the stream ends or an `end` event
+ * arrives. Exits the process with code 1 when the daemon refuses the stream.
+ */
 export async function streamRunEvents(base, runId) {
   const resp = await fetch(`${base}/api/runs/${encodeURIComponent(runId)}/events`, {
     headers: { accept: 'text/event-stream' },
