@@ -62,7 +62,14 @@ async function readSseUntil(response: Response, marker: string, maxChunks = 60):
       const { done, value } = await reader.read();
       if (done) break;
       body += decoder.decode(value, { stream: true });
-      if (body.includes(marker)) break;
+      // Stop only once the frame carrying the marker is COMPLETE: the marker
+      // text has appeared AND a blank-line terminator (`\n\n`) follows it, so
+      // the frame's `data:` line is fully buffered. Breaking on the bare marker
+      // races SSE chunk boundaries — the `event:` line can arrive one chunk
+      // before its `data:` line — which would hand parseSseFrames a half-written
+      // frame and make callers' JSON-field assertions spuriously fail.
+      const markerIdx = body.indexOf(marker);
+      if (markerIdx !== -1 && body.indexOf('\n\n', markerIdx) !== -1) break;
     }
   } finally {
     // Release so a follow-up readSseUntil on the same response can resume
@@ -253,8 +260,13 @@ process.exit(0);
         expect(createRes.status).toBe(202);
         const { runId } = await createRes.json() as { runId: string };
 
+        // Read through the terminal `end` frame in one pass so the parsed body
+        // carries BOTH the error frame and the terminal frame — then assert the
+        // SSE shapes directly instead of discarding the stream and trusting only
+        // the /api/runs record (which would still pass if the terminal SSE frame
+        // were missing or malformed).
         const eventsRes = await fetch(`${baseUrl}/api/runs/${runId}/events`);
-        const body = await readSseUntil(eventsRes, 'event: error');
+        const body = await readSseUntil(eventsRes, 'event: end');
         const frames = parseSseFrames(body);
 
         const errorFrame = frames.find((f) => f.event === 'error');
@@ -268,8 +280,11 @@ process.exit(0);
         expect(errData.error?.code).toBe('AGENT_EXECUTION_FAILED');
         expect(errData.message).toContain('golden-error');
 
-        // Terminal end event must reflect failure.
-        await readSseUntil(eventsRes, 'event: end');
+        // Terminal `end` frame must itself reflect failure.
+        const endFrame = [...frames].reverse().find((f) => f.event === 'end');
+        expect(endFrame).toBeTruthy();
+        expect((endFrame!.data as { status?: string })?.status).toBe('failed');
+
         const status = await waitForRunStatus(baseUrl, runId);
         expect(status.status).toBe('failed');
       },
@@ -293,10 +308,21 @@ process.exit(0);
       body: JSON.stringify({ agentId: 'claude', message: 'golden test' }),
     });
     const body = await chatRes.text();
+    const frames = parseSseFrames(body);
 
-    expect(body).toContain('AGENT_UNAVAILABLE');
-    // Must not contain succeeded status.
-    expect(body).not.toContain('"status":"succeeded"');
+    // Assert the actual error frame shape, not just a raw substring — a raw
+    // grep would still pass if the daemon emitted AGENT_UNAVAILABLE in the wrong
+    // frame or field.
+    const errorFrame = frames.find((f) => f.event === 'error');
+    expect(errorFrame).toBeTruthy();
+    const errData = errorFrame!.data as { error?: { code?: string } };
+    expect(errData.error?.code).toBe('AGENT_UNAVAILABLE');
+
+    // Terminal `end` frame (if the path emits one) must reflect failure, and no
+    // frame may report success.
+    const endFrame = [...frames].reverse().find((f) => f.event === 'end');
+    expect(endFrame).toBeTruthy();
+    expect((endFrame!.data as { status?: string })?.status).toBe('failed');
   }, 60_000);
 
   // ─── 4. SSE id counter ───────────────────────────────────────────────────
