@@ -1404,13 +1404,19 @@ body::before {
    (18px / 125%), weight 400 body, neutral 正文文字 #434343 (= --ink-soft),
    centered short emphasis text, --spacing-32 gap to the CTAs below. */
 .hero-lead {
+  /* Eyebrow / kicker carrying the SEO entry word ("Open Source Claude Design
+     Alternative", localized). Sits above the brand as a small emphasized label
+     rather than a body paragraph, so the H1 brand + positioning stays the
+     visual focus while the entry term remains crawlable HTML text. */
   max-width: 760px;
-  margin: 0 0 32px;
+  margin: 0 0 18px;
   font-family: var(--sans);
-  font-size: 16px;
-  line-height: 1.25;
-  font-weight: 400;
-  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--coral, var(--ink-soft));
   text-align: center;
 }
 /* Hero sub-line beneath the CTAs. Skill spec: Albert Sans, --font-size-16
@@ -1540,6 +1546,19 @@ body::before {
   line-height: 1;
   letter-spacing: -0.01em;
   color: var(--ink);
+}
+.hero-title-main {
+  /* Category positioning line ("The Vibe Design Workspace") — the product's
+     own umbrella term and the primary on-page positioning. Sits between the
+     brand slab above and the SEO entry-word sub-line below in the visual
+     hierarchy: sans display face, prominent but a step down from the brand. */
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: clamp(22px, 4.8vw, 40px);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin-top: 0.14em;
 }
 .hero-title-sub {
   font-family: var(--sans);
@@ -2213,6 +2232,29 @@ section.tight { padding: 90px 0; }
 }
 /* Live caption laid over the the painting card baked into these about images. Uses
    container query units so the text scales in lockstep with the image width. */
+.cta-pair {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.faq-download {
+  margin-top: 30px;
+}
+.faq-download-note {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-soft, #595959);
+}
+.about-ctas {
+  display: flex;
+  justify-content: center;
+  margin-top: 26px;
+}
+.about-panel:has(.about-panel-img) {
+  text-align: center;
+}
 .about-panel-img-captioned {
   position: relative;
   container-type: inline-size;
@@ -2447,6 +2489,18 @@ section.tight { padding: 90px 0; }
   gap: clamp(28px, 4vw, 72px);
   /* Top-align both columns so the art's top edge lines up with the first step. */
   align-items: start;
+}
+.cap-steps-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(20px, 3vh, 36px);
+}
+.cap-steps-link {
+  margin-top: 4px;
+  flex-direction: column;
+  align-items: stretch;
+  width: fit-content;
 }
 .cap-steps {
   display: flex;
@@ -2816,6 +2870,17 @@ section.tight { padding: 90px 0; }
   margin-bottom: 24px;
 }
 .labs-head h2 { font-size: 48px; text-align: center; }
+/* Keyword-rich lead under the "What can you make" heading — centered section
+   subtitle, one step down from the display H2. */
+.labs-head .labs-lead {
+  max-width: 720px;
+  margin: 14px auto 0;
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--ink-soft, var(--ink));
+  text-align: center;
+}
 /* Unify the title color: the trailing ？ stays ink like the rest of the line
    instead of the global coral dot. */
 .labs-head .display .dot { color: inherit; }
@@ -4909,6 +4974,17 @@ section.tight { padding: 90px 0; }
   color: var(--paper);
   border-color: var(--ink);
 }
+.faq-more {
+  margin-top: 10px;
+  font-size: 14px;
+}
+.faq-more a {
+  color: var(--coral, var(--accent, inherit));
+  text-decoration: none;
+  font-weight: 600;
+  border-bottom: 1px solid transparent;
+}
+.faq-more a:hover { border-bottom-color: currentColor; }
 .faq-a {
   grid-column: 2 / 3;
   margin: 0 0 16px;
@@ -5096,6 +5172,7 @@ footer .container {
 }
 
 /* Shared compact footer used by sub-pages and mirrored on the homepage. */
+
 .sub-footer {
   border-top: 1px solid var(--line);
   background: var(--paper);

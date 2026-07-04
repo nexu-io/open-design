@@ -52,6 +52,7 @@ import {
 } from '../providers/daemon';
 import type { AgentInfo, ApiProtocol, AppConfig, ExecMode } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
+import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
 import { PlanBadge } from './PlanBadge';
@@ -383,7 +384,10 @@ export function InlineModelSwitcher({
   }, [refreshAmrStatus, startAmrPolling, stopAmrPolling]);
 
   const installedAgents = useMemo(
-    () => orderAgentsWithOpenDesignFirst(agents.filter((a) => a.available)),
+    () =>
+      orderAgentsWithOpenDesignFirst(
+        agents.filter((a) => a.available && isVisibleLocalCliAgent(a)),
+      ),
     [agents],
   );
   const currentAgent = useMemo(

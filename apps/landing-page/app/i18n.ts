@@ -1047,6 +1047,8 @@ export interface HomeSeoCopy {
 export interface HomeFaqEntry {
   q: string;
   a: string;
+  /** Optional hub link to the page that explains this answer in depth. */
+  href?: string;
 }
 
 export interface HomePageCopy {
@@ -1600,6 +1602,8 @@ type HomeFaqTemplate = {
   q: string;
   a: string;
   official?: boolean;
+  /** Optional hub link to the page that explains this answer in depth. */
+  href?: string;
 };
 
 const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
@@ -2435,14 +2439,14 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
 
 const HOME_SEO_COPY: Record<LandingLocaleCode, HomeSeoCopy> = {
   en: {
-    title: 'Open Design — Best open-source Claude Design alternative',
+    title: 'Open Design — Best Open Source Claude Design Alternative',
     description:
-      'Open Design is the best open-source, local-first Claude Design alternative. Generate decks, landing pages, dashboards, and brand systems with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — driven by {skills} composable skills and {systems} portable DESIGN.md systems.',
+      'Open-source vibe design workspace & Claude Design alternative — build prototypes, landing pages, dashboards, slides & HTML video with your own coding agent.',
   },
   zh: {
     title: 'Open Design —— 最佳 Claude Design 开源替代',
     description:
-      'Open Design 是最佳的开源、本地优先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成演示文稿、落地页和仪表盘，背后由 {skills} 个可组合 SKILL.md 工作流驱动。',
+      'Open Design 是开源的 vibe design workspace，也是 Claude Design 的开源替代——用你自己的 coding agent 做原型、落地页、仪表盘、Slides 和 HTML 视频。',
   },
   'zh-tw': {
     title: 'Open Design —— 最佳 Claude Design 開源替代',
@@ -2452,42 +2456,42 @@ const HOME_SEO_COPY: Record<LandingLocaleCode, HomeSeoCopy> = {
   ja: {
     title: 'Open Design — 最高のオープンソース Claude Design 代替',
     description:
-      'Open Design は最高のオープンソースかつローカル優先の Claude Design 代替です。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen と {skills} 個のスキル、{systems} 個の DESIGN.md システムでデッキ、ランディングページ、ダッシュボード、ブランドシステムを生成します。',
+      'オープンソースの vibe design workspace であり Claude Design の代替。自分の coding agent でプロトタイプ、ランディングページ、ダッシュボード、スライド、HTML 動画を作成。',
   },
   ko: {
     title: 'Open Design — 최고의 오픈소스 Claude Design 대안',
     description:
-      'Open Design은 최고의 오픈소스, 로컬 우선 Claude Design 대안입니다. Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen과 {skills}개의 조합형 스킬, {systems}개의 DESIGN.md 시스템으로 덱, 랜딩 페이지, 대시보드, 브랜드 시스템을 만듭니다.',
+      '오픈소스 vibe design workspace이자 Claude Design 대안. 내 coding agent로 프로토타입, 랜딩 페이지, 대시보드, 슬라이드, HTML 비디오를 만드세요.',
   },
   de: {
     title: 'Open Design — beste Open-Source-Alternative zu Claude Design',
     description:
-      'Open Design ist die beste Open-Source- und Local-first-Alternative zu Claude Design. Erzeuge Decks, Landingpages, Dashboards und Brand-Systeme mit Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen — mit {skills} kombinierbaren Skills und {systems} portablen DESIGN.md-Systemen.',
+      'Open-Source Vibe Design Workspace und Claude-Design-Alternative – Prototypen, Landingpages, Dashboards, Slides & HTML-Video mit deinem eigenen Coding-Agent.',
   },
   fr: {
     title: "Open Design — la meilleure alternative open source à Claude Design",
     description:
-      "Open Design est la meilleure alternative open source et local-first à Claude Design. Générez des decks, landing pages, dashboards et systèmes de marque avec Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen — grâce à {skills} skills composables et {systems} systèmes DESIGN.md portables.",
+      'Vibe design workspace open source et alternative à Claude Design — créez prototypes, landing pages, dashboards, slides et vidéo HTML avec votre agent de code.',
   },
   ru: {
     title: 'Open Design — лучшая open-source альтернатива Claude Design',
     description:
-      'Open Design — лучшая open-source и local-first альтернатива Claude Design. Создавайте презентации, лендинги, дашборды и бренд-системы через Claude Code, Codex, Cursor, Gemini, OpenCode или Qwen на базе {skills} skills и {systems} DESIGN.md-систем.',
+      'Open-source vibe design workspace и альтернатива Claude Design — прототипы, лендинги, дашборды, слайды и HTML-видео с вашим кодинг-агентом.',
   },
   es: {
     title: 'Open Design — la mejor alternativa open source a Claude Design',
     description:
-      'Open Design es la mejor alternativa open source y local-first a Claude Design. Genera decks, landing pages, dashboards y sistemas de marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, impulsado por {skills} skills componibles y {systems} sistemas DESIGN.md portables.',
+      'Vibe design workspace open source y alternativa a Claude Design: crea prototipos, landing pages, dashboards, slides y vídeo HTML con tu agente de código.',
   },
   'pt-br': {
     title: 'Open Design — a melhor alternativa open source ao Claude Design',
     description:
-      'Open Design é a melhor alternativa open source e local-first ao Claude Design. Gere decks, landing pages, dashboards e sistemas de marca com Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen, usando {skills} skills combináveis e {systems} sistemas DESIGN.md portáteis.',
+      'Vibe design workspace open source e alternativa ao Claude Design — crie protótipos, landing pages, dashboards, slides e vídeo HTML com seu coding agent.',
   },
   it: {
     title: "Open Design — la migliore alternativa open source a Claude Design",
     description:
-      "Open Design è la migliore alternativa open source e local-first a Claude Design. Genera deck, landing page, dashboard e sistemi di marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, usando {skills} skill componibili e {systems} sistemi DESIGN.md portabili.",
+      'Vibe design workspace open source e alternativa a Claude Design: crea prototipi, landing page, dashboard, slide e video HTML con il tuo coding agent.',
   },
   vi: {
     title: 'Open Design — lựa chọn mã nguồn mở tốt nhất thay Claude Design',
@@ -2517,7 +2521,7 @@ const HOME_SEO_COPY: Record<LandingLocaleCode, HomeSeoCopy> = {
   tr: {
     title: "Open Design — Claude Design'ın en iyi açık kaynak alternatifi",
     description:
-      "Open Design, Claude Design'ın en iyi, açık kaynak ve local-first alternatifidir. Claude Code, Codex, Cursor, Gemini, OpenCode veya Qwen ile deck, landing page, dashboard ve marka sistemleri üretin; {skills} birleştirilebilir skill ve {systems} taşınabilir DESIGN.md sistemiyle çalışır.",
+      'Açık kaynaklı vibe design workspace ve Claude Design alternatifi — kendi kodlama ajanınla prototip, açılış sayfası, dashboard, slayt ve HTML video oluştur.',
   },
   uk: {
     title: 'Open Design — найкраща open-source альтернатива Claude Design',
@@ -2540,6 +2544,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     {
       q: 'How is Open Design different from Claude Design?',
       a: 'Claude Design is a hosted product tied to a single vendor. Open Design is local-first, open source under Apache-2.0, and BYOK: you bring your own agent, credentials, and DESIGN.md system.',
+    },
+    {
+      q: 'Is Open Design an open-source Claude Design alternative?',
+      a: 'Yes — Open Design is the open-source, local-first Claude Design alternative. Where Claude Design is closed, hosted, and locked to Anthropic models, Open Design is Apache-2.0, runs on your own machine, and is BYOK, so you drive it with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen and keep every artifact as files you own.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'What is a vibe design workspace?',
+      a: 'A vibe design workspace is where you design by describing intent to an AI agent — from prompt to prototype, web page, slides, or HTML video — instead of hand-placing every element. Open Design is an open-source, agent-native vibe design workspace: it wires the coding agent you already run into a full design workflow, so one tool takes you from a rough idea to production-ready output you own.',
+      href: '/blog/what-is-vibe-design/',
     },
     {
       q: 'Does Open Design run locally?',
@@ -2587,6 +2601,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
   ],
   zh: [
+    {
+      q: 'Open Design 是开源的 Claude Design 替代品吗？',
+      a: '是的——Open Design 是开源、本地优先的 Claude Design 替代方案。Claude Design 闭源、托管、锁定 Anthropic 模型；Open Design 是 Apache-2.0，跑在你自己的机器上，且 BYOK，你可以用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 驱动它，产出的每个文件都归你所有。',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: '什么是 vibe design workspace？',
+      a: 'vibe design workspace 是通过向 AI agent 描述意图来做设计——从 prompt 到原型、网页、slides、HTML 视频——而不是手动摆放每个元素。Open Design 是一个开源、agent-native 的 vibe design workspace：把你已经在用的 coding agent 接进完整设计工作流，一个工具就把你从粗略想法带到可交付、归你所有的成品。',
+      href: '/blog/what-is-vibe-design/',
+    },
     {
       q: 'Open Design 是什么？',
       a: 'Open Design 是 nexu-io/open-design 项目的官方开源 AI 设计工作台。它把本地编码 Agent（Claude Code、Codex、Cursor、Gemini CLI、OpenCode 或 Qwen）变成设计引擎，并由可组合 SKILL.md 工作流驱动。',
@@ -2698,6 +2722,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
   ],
   ja: [
     {
+      q: 'Open Design はオープンソースの Claude Design 代替ですか？',
+      a: 'はい——Open Design はオープンソースかつローカル優先の Claude Design 代替です。Claude Design はクローズドでホスト型、Anthropic モデルに固定されていますが、Open Design は Apache-2.0 で自分のマシン上で動き、BYOK。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen で駆動でき、生成物はすべて自分のファイルとして手元に残ります。',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'vibe design workspace とは？',
+      a: 'vibe design workspace とは、要素を一つずつ手で配置する代わりに、AI エージェントに意図を伝えて設計する場です——prompt からプロトタイプ、Web ページ、スライド、HTML 動画まで。Open Design はオープンソースで agent-native な vibe design workspace で、すでに使っているコーディングエージェントを完全な設計ワークフローに組み込み、ひとつのツールでラフなアイデアから自分のものになる完成物まで導きます。',
+      href: '/blog/what-is-vibe-design/',
+    },
+    {
       q: 'Open Design とは何ですか？',
       a: 'Open Design は nexu-io/open-design プロジェクト公式のオープンソース AI デザインワークスペースです。Claude Code、Codex、Cursor、Gemini CLI、OpenCode、Qwen などのローカル coding agent を、スキルと DESIGN.md システムで動くデザインエンジンにします。',
     },
@@ -2752,6 +2786,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
   ],
   ko: [
+    {
+      q: 'Open Design은 오픈소스 Claude Design 대안인가요?',
+      a: '네——Open Design은 오픈소스, 로컬 우선 Claude Design 대안입니다. Claude Design은 폐쇄형·호스팅형이며 Anthropic 모델에 묶여 있지만, Open Design은 Apache-2.0이고 내 컴퓨터에서 실행되며 BYOK입니다. Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen으로 구동할 수 있고 생성된 모든 산출물은 내 파일로 남습니다.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'vibe design workspace란 무엇인가요?',
+      a: 'vibe design workspace는 모든 요소를 손으로 배치하는 대신 AI 에이전트에 의도를 설명해 디자인하는 공간입니다 — prompt에서 프로토타입, 웹 페이지, 슬라이드, HTML 비디오까지. Open Design은 오픈소스이자 agent-native한 vibe design workspace로, 이미 쓰는 코딩 에이전트를 완전한 디자인 워크플로에 연결해 하나의 도구로 거친 아이디어에서 내 것이 되는 완성물까지 이끕니다.',
+      href: '/blog/what-is-vibe-design/',
+    },
     {
       q: 'Open Design은 무엇인가요?',
       a: 'Open Design은 nexu-io/open-design 프로젝트의 공식 오픈소스 AI 디자인 워크스페이스입니다. Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Qwen 같은 로컬 coding agent를 조합형 skill과 DESIGN.md 시스템으로 구동되는 디자인 엔진으로 바꿉니다.',
@@ -2808,6 +2852,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
   ],
   de: [
     {
+      q: 'Ist Open Design eine quelloffene Claude-Design-Alternative?',
+      a: 'Ja — Open Design ist die quelloffene, lokale Claude-Design-Alternative. Wo Claude Design geschlossen, gehostet und an Anthropic-Modelle gebunden ist, ist Open Design Apache-2.0, läuft auf deinem eigenen Rechner und ist BYOK: Du steuerst es mit Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen und behältst jedes Ergebnis als eigene Dateien.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'Was ist ein Vibe Design Workspace?',
+      a: 'Ein Vibe Design Workspace ist ein Ort, an dem du gestaltest, indem du einem KI-Agent deine Absicht beschreibst — vom Prompt zu Prototyp, Webseite, Slides oder HTML-Video — statt jedes Element von Hand zu platzieren. Open Design ist ein quelloffener, agent-nativer Vibe Design Workspace: Er bindet den Coding-Agent, den du bereits nutzt, in einen vollständigen Design-Workflow ein, sodass ein Werkzeug dich von der groben Idee zum fertigen, dir gehörenden Ergebnis bringt.',
+      href: '/blog/what-is-vibe-design/',
+    },
+    {
       q: 'Was ist Open Design?',
       a: 'Open Design ist der offizielle Open-Source-AI-Design-Workspace des Projekts nexu-io/open-design. Es macht lokale Coding-Agents wie Claude Code, Codex, Cursor, Gemini CLI, OpenCode oder Qwen zu einer Design-Engine auf Basis von Skills und DESIGN.md-Systemen.',
     },
@@ -2862,6 +2916,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
   ],
   fr: [
+    {
+      q: 'Open Design est-il une alternative open source à Claude Design ?',
+      a: 'Oui — Open Design est l’alternative open source et locale à Claude Design. Là où Claude Design est fermé, hébergé et verrouillé aux modèles Anthropic, Open Design est en Apache-2.0, s’exécute sur votre propre machine et fonctionne en BYOK : pilotez-le avec Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen et gardez chaque livrable sous forme de fichiers qui vous appartiennent.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'Qu’est-ce qu’un vibe design workspace ?',
+      a: 'Un vibe design workspace est un espace où l’on conçoit en décrivant son intention à un agent IA — du prompt au prototype, page web, slides ou vidéo HTML — plutôt qu’en plaçant chaque élément à la main. Open Design est un vibe design workspace open source et agent-native : il intègre l’agent de code que vous utilisez déjà dans un flux de design complet, pour passer d’une idée brute à un résultat livrable et bien à vous.',
+      href: '/blog/what-is-vibe-design/',
+    },
     {
       q: "Qu'est-ce qu'Open Design ?",
       a: "Open Design est l'espace de travail officiel et open source du projet nexu-io/open-design. Il transforme un agent local — Claude Code, Codex, Cursor, Gemini CLI, OpenCode ou Qwen — en moteur de design piloté par des skills composables et des systèmes DESIGN.md portables.",
@@ -2918,6 +2982,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
   ],
   ru: [
     {
+      q: 'Open Design — это open-source альтернатива Claude Design?',
+      a: 'Да — Open Design это открытая, локальная альтернатива Claude Design. Claude Design закрыт, работает в облаке и привязан к моделям Anthropic, а Open Design — Apache-2.0, запускается на вашей машине и работает по BYOK: управляйте им через Claude Code, Codex, Cursor, Gemini, OpenCode или Qwen и храните каждый результат как свои файлы.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'Что такое vibe design workspace?',
+      a: 'Vibe design workspace — это среда, где вы проектируете, описывая замысел ИИ-агенту — от промпта до прототипа, веб-страницы, слайдов или HTML-видео — вместо расстановки каждого элемента вручную. Open Design это открытый, agent-native vibe design workspace: он встраивает кодинг-агента, которым вы уже пользуетесь, в полный дизайн-процесс, и один инструмент ведёт вас от черновой идеи к готовому результату, который принадлежит вам.',
+      href: '/blog/what-is-vibe-design/',
+    },
+    {
       q: 'Что такое Open Design?',
       a: 'Open Design — официальный open-source AI design workspace проекта nexu-io/open-design. Он превращает локальный coding agent — Claude Code, Codex, Cursor, Gemini CLI, OpenCode или Qwen — в design-движок на базе composable skills и переносимых DESIGN.md-систем.',
     },
@@ -2972,6 +3046,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
   ],
   es: [
+    {
+      q: '¿Open Design es una alternativa open source a Claude Design?',
+      a: 'Sí — Open Design es la alternativa open source y local a Claude Design. Donde Claude Design es cerrado, alojado y atado a los modelos de Anthropic, Open Design es Apache-2.0, se ejecuta en tu propia máquina y es BYOK: contrólalo con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen y conserva cada resultado como archivos que son tuyos.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: '¿Qué es un vibe design workspace?',
+      a: 'Un vibe design workspace es un espacio donde diseñas describiendo tu intención a un agente de IA — del prompt al prototipo, página web, slides o vídeo HTML — en lugar de colocar cada elemento a mano. Open Design es un vibe design workspace open source y agent-native: conecta el agente de código que ya usas a un flujo de diseño completo, de modo que una sola herramienta te lleva de una idea en bruto a un resultado listo y tuyo.',
+      href: '/blog/what-is-vibe-design/',
+    },
     {
       q: '¿Qué es Open Design?',
       a: 'Open Design es el workspace oficial y open source de IA de diseño del proyecto nexu-io/open-design. Convierte un coding agent local — Claude Code, Codex, Cursor, Gemini CLI, OpenCode o Qwen — en un motor de diseño con skills componibles y sistemas DESIGN.md portables.',
@@ -3028,6 +3112,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
   ],
   'pt-br': [
     {
+      q: 'O Open Design é uma alternativa open source ao Claude Design?',
+      a: 'Sim — o Open Design é a alternativa open source e local ao Claude Design. Enquanto o Claude Design é fechado, hospedado e preso aos modelos da Anthropic, o Open Design é Apache-2.0, roda na sua própria máquina e é BYOK: use Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen para conduzi-lo e mantenha cada entrega como arquivos que são seus.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'O que é um vibe design workspace?',
+      a: 'Um vibe design workspace é onde você projeta descrevendo a intenção a um agente de IA — do prompt ao protótipo, página web, slides ou vídeo HTML — em vez de posicionar cada elemento à mão. O Open Design é um vibe design workspace open source e agent-native: integra o coding agent que você já usa a um fluxo de design completo, então uma ferramenta leva você de uma ideia bruta a um resultado pronto e seu.',
+      href: '/blog/what-is-vibe-design/',
+    },
+    {
       q: 'O que é Open Design?',
       a: 'Open Design é o workspace oficial, open source, de design com IA do projeto nexu-io/open-design. Ele transforma um coding agent local — Claude Code, Codex, Cursor, Gemini CLI, OpenCode ou Qwen — em um motor de design movido por skills componíveis e sistemas DESIGN.md portáteis.',
     },
@@ -3082,6 +3176,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
   ],
   it: [
+    {
+      q: 'Open Design è un’alternativa open source a Claude Design?',
+      a: 'Sì — Open Design è l’alternativa open source e locale a Claude Design. Dove Claude Design è chiuso, ospitato e legato ai modelli Anthropic, Open Design è Apache-2.0, gira sulla tua macchina ed è BYOK: guidalo con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen e conserva ogni risultato come file tuoi.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'Che cos’è un vibe design workspace?',
+      a: 'Un vibe design workspace è uno spazio in cui progetti descrivendo l’intento a un agente IA — dal prompt al prototipo, pagina web, slide o video HTML — invece di posizionare ogni elemento a mano. Open Design è un vibe design workspace open source e agent-native: collega il coding agent che già usi a un flusso di design completo, così un solo strumento ti porta da un’idea grezza a un risultato pronto e tuo.',
+      href: '/blog/what-is-vibe-design/',
+    },
     {
       q: "Cos'è Open Design?",
       a: 'Open Design è il workspace ufficiale e open source di AI design del progetto nexu-io/open-design. Trasforma un coding agent locale — Claude Code, Codex, Cursor, Gemini CLI, OpenCode o Qwen — in un motore di design guidato da skill componibili e sistemi DESIGN.md portabili.',
@@ -3412,6 +3516,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
   ],
   tr: [
+    {
+      q: 'Open Design açık kaynaklı bir Claude Design alternatifi mi?',
+      a: 'Evet — Open Design açık kaynaklı, yerel çalışan Claude Design alternatifidir. Claude Design kapalı, barındırılan ve Anthropic modellerine kilitliyken; Open Design Apache-2.0’dır, kendi makinende çalışır ve BYOK’tur: Claude Code, Codex, Cursor, Gemini, OpenCode veya Qwen ile çalıştır, her çıktıyı sana ait dosyalar olarak sakla.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'Vibe design workspace nedir?',
+      a: 'Vibe design workspace, her öğeyi elle yerleştirmek yerine bir yapay zeka ajanına niyetini anlatarak tasarım yaptığın yerdir — prompttan prototipe, web sayfasına, slaytlara veya HTML videoya. Open Design açık kaynaklı, agent-native bir vibe design workspace’tir: hâlihazırda kullandığın kodlama ajanını eksiksiz bir tasarım akışına bağlar; tek bir araç seni kaba bir fikirden sana ait, teslime hazır bir sonuca götürür.',
+      href: '/blog/what-is-vibe-design/',
+    },
     {
       q: 'Open Design nedir?',
       a: "Open Design, nexu-io/open-design projesinin resmi açık kaynak AI design workspace'idir. Claude Code, Codex, Cursor, Gemini CLI, OpenCode veya Qwen gibi yerel coding agent'ları, birleştirilebilir skill'ler ve taşınabilir DESIGN.md sistemleriyle çalışan bir tasarım motoruna dönüştürür.",
@@ -6897,6 +7011,7 @@ export function getHomeFaq(
     a: entry.a
       .replaceAll('{origin}', replacements.origin)
       .replaceAll('{repo}', replacements.repo),
+    ...(entry.href ? { href: entry.href } : {}),
   }));
 }
 

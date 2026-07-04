@@ -4,6 +4,8 @@ import {
   DEFAULT_AMR_RECHARGE_URL,
   amrAccountFailureDetails,
   classifyAmrAccountFailure,
+  classifyAmrAccountFailureDetails,
+  classifyAmrAccountFailureSignal,
 } from '../../src/integrations/vela-errors.js';
 
 describe('AMR account failure classification', () => {
@@ -22,6 +24,88 @@ describe('AMR account failure classification', () => {
       kind: 'amr_account',
       action: 'recharge',
       actionUrl: DEFAULT_AMR_RECHARGE_URL,
+    });
+  });
+
+  it('classifies structured Vela ACP insufficient-balance details without relying on message text', () => {
+    const failure = classifyAmrAccountFailureDetails({
+      kind: 'opencode_prompt_error',
+      runtime: 'opencode',
+      phase: 'event_stream',
+      code: 'insufficient_balance',
+      accountAction: 'recharge',
+      openCodeSessionId: 'ses_test',
+    });
+
+    expect(failure).toMatchObject({
+      code: 'AMR_INSUFFICIENT_BALANCE',
+      action: 'recharge',
+      actionUrl: DEFAULT_AMR_RECHARGE_URL,
+    });
+  });
+
+  it('classifies structured Vela ACP recharge actions even when code is absent', () => {
+    const failure = classifyAmrAccountFailureDetails({
+      kind: 'opencode_prompt_error',
+      accountAction: 'recharge',
+    });
+
+    expect(failure).toMatchObject({
+      code: 'AMR_INSUFFICIENT_BALANCE',
+      action: 'recharge',
+    });
+  });
+
+  it('does not classify unrelated structured ACP details as AMR balance errors', () => {
+    expect(classifyAmrAccountFailureDetails({
+      kind: 'opencode_prompt_error',
+      code: 'model_unavailable',
+      accountAction: 'choose_model',
+    })).toBeNull();
+    expect(classifyAmrAccountFailureDetails(null)).toBeNull();
+  });
+
+  it('classifies AMR account failures through the unified structured-first signal path', () => {
+    const failure = classifyAmrAccountFailureSignal({
+      details: {
+        kind: 'opencode_prompt_error',
+        code: 'insufficient_balance',
+        accountAction: 'recharge',
+      },
+      message: 'json-rpc id 4: request failed',
+      stderrTail: '',
+    });
+
+    expect(failure).toMatchObject({
+      code: 'AMR_INSUFFICIENT_BALANCE',
+      action: 'recharge',
+    });
+  });
+
+  it('uses stderr only as the final AMR account failure fallback', () => {
+    const failure = classifyAmrAccountFailureSignal({
+      message: 'json-rpc id 4: request failed',
+      errorMessage: 'request failed',
+      errorCode: 'AGENT_EXECUTION_FAILED',
+      stdoutTail: '',
+      stderrTail: 'opencode_event_stream_failure: [code=insufficient_balance] insufficient wallet balance',
+    });
+
+    expect(failure).toMatchObject({
+      code: 'AMR_INSUFFICIENT_BALANCE',
+      action: 'recharge',
+    });
+  });
+
+  it('does not use stderr when structured or protocol text already classifies the failure', () => {
+    const failure = classifyAmrAccountFailureSignal({
+      message: 'invalid session for AMR profile',
+      stderrTail: 'opencode_event_stream_failure: [code=insufficient_balance] insufficient wallet balance',
+    });
+
+    expect(failure).toMatchObject({
+      code: 'AMR_AUTH_REQUIRED',
+      action: 'relogin',
     });
   });
 

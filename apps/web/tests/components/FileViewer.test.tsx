@@ -3725,7 +3725,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
   });
 
-  it('uses a materialized srcDoc bridge while the Draw bar is open', async () => {
+  it('uses a materialized srcDoc bridge when Draw opens before the URL preview bridge is ready', async () => {
     render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
@@ -3752,6 +3752,38 @@ describe('FileViewer tweaks toolbar', () => {
     expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toBe(frame.srcdoc);
   });
 
+  it('keeps the URL-loaded iframe active when opening Draw after the URL preview bridge is ready', async () => {
+    const { container } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><button>Stateful tab</button><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const srcDocFrame = screen.getByTestId('artifact-preview-frame-srcdoc') as HTMLIFrameElement;
+    expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+    expect(urlFrame.getAttribute('src')).toContain('odPreviewBridge=snapshot');
+    expect(srcDocFrame.getAttribute('data-od-active')).toBe('false');
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: urlFrame.contentWindow,
+        data: { type: 'od:url-selection-bridge-ready' },
+      }));
+    });
+
+    clickAgentTool('draw-overlay-toggle');
+
+    await waitFor(() => {
+      const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(activeFrame).toBe(urlFrame);
+      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(activeFrame.getAttribute('data-od-active')).toBe('true');
+      expect(srcDocFrame.getAttribute('data-od-active')).toBe('false');
+      expect(container.querySelector('canvas')).toBeTruthy();
+    });
+  });
+
   it('keeps the URL-load iframe warm while the Draw bar is open (no reload on close)', async () => {
     const { container } = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
@@ -3766,11 +3798,11 @@ describe('FileViewer tweaks toolbar', () => {
     expect(warmSrc).not.toBe('about:blank');
     expect(warmSrc).toContain('/raw/');
 
-    // Opening Draw flips the *visible* frame to the materialized srcDoc bridge
-    // (see the test above), but the URL-load iframe must stay warm rather than
-    // park at about:blank — otherwise closing the bar re-fetches the whole
-    // artifact and the user sees a black → loading → reload after every
-    // screenshot. Regression guard for the post-screenshot refresh.
+    // Opening Draw before bridge-ready flips the *visible* frame to the
+    // materialized srcDoc bridge (see the test above), but the URL-load iframe
+    // must stay warm rather than park at about:blank — otherwise closing the
+    // bar re-fetches the whole artifact and the user sees a black → loading →
+    // reload after every screenshot.
     clickAgentTool('draw-overlay-toggle');
 
     await waitFor(() => {
