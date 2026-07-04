@@ -452,6 +452,36 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('- Image model: `senseaudio-image-1.0-260319`');
   });
 
+  it('prefers BYOK defaults over hardcoded model names in non-media dispatch hint', () => {
+    const out = composeSystemPrompt({
+      metadata: {
+        kind: 'prototype',
+        platform: 'responsive',
+      },
+      byokMediaDefaults: {
+        imageModel: 'senseaudio-image-1.0-260319',
+      },
+    });
+
+    // When BYOK defaults are present, the hint should prefer the configured model
+    expect(out).toContain('prefer your configured model: `senseaudio-image-1.0-260319`');
+    // Should NOT contain the fallback recommendation for flux-pro-ultra as "best"
+    expect(out).not.toContain('For the best image model use `--model flux-pro-ultra`');
+  });
+
+  it('falls back to fal model recommendations when no BYOK defaults configured', () => {
+    const out = composeSystemPrompt({
+      metadata: {
+        kind: 'prototype',
+        platform: 'responsive',
+      },
+    });
+
+    // Without BYOK defaults, keep the existing fal model recommendations as fallback
+    expect(out).toContain('For the best image model use `--model flux-pro-ultra`');
+    expect(out).not.toContain('prefer your configured model');
+  });
+
   it('keeps unrestricted enabled media contract unchanged', () => {
     const out = composeSystemPrompt({
       metadata: {

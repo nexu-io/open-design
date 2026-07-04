@@ -278,7 +278,7 @@ The daemon injects these env vars into your shell (**POSIX bash — not PowerShe
 - \`OD_BIN\`        — absolute path to the OD CLI script
 - \`OD_PROJECT_ID\` — the active project id
 
-**Always use the generate→wait loop below.** \`media generate\` always exits 0 — either with \`{"file":{...}}\` if done within ~25s, or with \`{"taskId":"..."}\` as a handoff for slow models (flux-pro-ultra ~60–180s, veo-3-fal longer). Whenever the output contains a \`taskId\`, keep polling with \`media wait\` until exit 0 (done) or exit 5 (failed).
+**Always use the generate→wait loop below.** \`media generate\` always exits 0 — either with \`{"file":{...}}\` if done within ~25s, or with \`{"taskId":"..."}\` as a handoff for slow models (~60–180s or longer). Whenever the output contains a \`taskId\`, keep polling with \`media wait\` until exit 0 (done) or exit 5 (failed).
 
 Use **POSIX \`$VAR\` syntax** — do NOT translate to PowerShell (\`$env:VAR\`, \`&\` operator). Uses \`python3\` for JSON parsing (do NOT use \`jq\`):
 
@@ -287,7 +287,7 @@ Use **POSIX \`$VAR\` syntax** — do NOT translate to PowerShell (\`$env:VAR\`, 
 out=\$("$OD_NODE_BIN" "$OD_BIN" media generate \\
   --project "$OD_PROJECT_ID" \\
   --surface image \\
-  --model flux-pro-ultra \\
+  --model <image-model> \\
   --prompt "..." \\
   --aspect 16:9)
 ec=\$?
@@ -313,7 +313,7 @@ printf '%s\\n' "\$last"
 
 **Never ask the user for an API key.** The daemon reads provider credentials from its config; keys are never passed through the shell. If the provider returns an auth error, tell the user to open Settings → AI Providers and confirm the key is configured there.
 
-For the best fal image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
+MODEL_SELECTION_GUIDANCE`;
 
 function renderByokMediaDefaultsHint(defaults?: ByokMediaDefaults): string {
   const lines: string[] = [];
@@ -337,7 +337,20 @@ ${lines.join('\n')}`;
 }
 
 function renderMediaDispatchHint(defaults?: ByokMediaDefaults): string {
-  return `${MEDIA_DISPATCH_HINT}${renderByokMediaDefaultsHint(defaults)}`;
+  const imageModel = defaults?.imageModel?.trim();
+  const videoModel = defaults?.videoModel?.trim();
+
+  let modelGuidance: string;
+  if (imageModel || videoModel) {
+    const imageRec = imageModel ? `\`${imageModel}\`` : '\`flux-pro-ultra\`';
+    const videoRec = videoModel ? `\`${videoModel}\`` : '\`veo-3-fal\` or \`wan-2.1-t2v\`';
+    modelGuidance = `For image generation prefer your configured model: ${imageRec}. For video: ${videoRec}. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
+  } else {
+    modelGuidance = `For the best image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
+  }
+
+  const hint = MEDIA_DISPATCH_HINT.replace('MODEL_SELECTION_GUIDANCE', modelGuidance);
+  return `${hint}${renderByokMediaDefaultsHint(defaults)}`;
 }
 
 const FILESYSTEM_HANDOFF_OVERRIDE = `
