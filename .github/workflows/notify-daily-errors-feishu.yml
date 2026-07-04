@@ -1,0 +1,59 @@
+name: notify-daily-errors-feishu
+
+# Every morning at 08:30 Asia/Shanghai, query PostHog (project 420348) for the
+# last 24h of run failures + exceptions, run an LLM reliability-triage analyst
+# over the deterministically-aggregated numbers, and post a prioritized digest
+# card to Feishu. Deterministic aggregation owns every number; the LLM only
+# ranks the urgent items and hypothesizes root cause. Degrades gracefully:
+# a missing POSTHOG_QUERY_API_KEY skips the post, a missing ANTHROPIC key falls
+# back to a deterministic narrative — neither hard-fails the run.
+#
+# schedule triggers only fire from the default branch (main), so this file must
+# live on main to run daily.
+
+on:
+  schedule:
+    # 00:30 UTC = 08:30 Asia/Shanghai (before the morning standup)
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notify-daily-errors-feishu
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    name: Post daily PostHog error triage to Feishu
+    if: github.repository == 'nexu-io/open-design' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Check triage script
+        run: node --experimental-strip-types .github/scripts/posthog-daily-triage.ts self-check
+
+      - name: Post daily error triage to Feishu
+        env:
+          POSTHOG_QUERY_API_KEY: ${{ secrets.POSTHOG_QUERY_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ vars.POSTHOG_PROJECT_ID }}
+          POSTHOG_QUERY_HOST: ${{ vars.POSTHOG_QUERY_HOST }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          TRIAGE_LLM_MODEL: ${{ vars.TRIAGE_LLM_MODEL }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_ERRORS_WEBHOOK || secrets.FEISHU_MAIN_CI_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_ERRORS_SIGN_SECRET }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node --experimental-strip-types .github/scripts/posthog-daily-triage.ts
