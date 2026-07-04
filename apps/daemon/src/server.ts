@@ -17,13 +17,9 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
-import { executionProfileFromStreamFormat, PLUGIN_SHARE_ACTION_PLUGIN_IDS } from '@open-design/contracts';
-import {
-  composeSystemPrompt,
-  resolveExclusiveSurface,
-} from './prompts/system.js';
+
 import { normalizeRunContextSelection, renderRunContextPrompt } from './prompts/run-context.js';
-import { emittedRenderableQuestionForm } from './question-form-detect.js';
+
 import { resolveProjectRoot } from './project-root.js';
 import {
   resolveDaemonCliPath,
@@ -62,16 +58,9 @@ export { createSseResponse, SSE_KEEPALIVE_INTERVAL_MS } from './http/sse.js';
 import { execCommandViaLoginShell } from './shell/commands.js';
 import {
   applyBakedPreviews,
-  resolvePluginPreviewsDir,
   PLUGIN_PREVIEWS_ROUTE,
 } from './plugin-preview-bakes.js';
-import { userFacingAgentLabel } from './user-facing-agent-label.js';
-import {
-  buildBrowserUseRunState,
-  collectBrowserUseDiscoveryFacts,
-  isBrowserUseRequested,
-  renderBrowserUseUnavailablePrompt,
-} from './browser-use-diagnostics.js';
+
 import {
   UPLOAD_DIR,
   composeLiveInstructionPrompt,
@@ -134,44 +123,15 @@ export {
 } from './runtimes/chat-run-lifecycle.js';
 
 export { resolveProjectRoot };
-import { createCommandInvocation } from '@open-design/platform';
+
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import {
-  buildLiveArtifactsMcpServersForAgent,
-  checkPromptArgvBudget,
-  checkWindowsCmdShimCommandLineBudget,
-  checkWindowsDirectExeCommandLineBudget,
   detectAgents,
   getAgentDef,
   isKnownModel,
-  openDesignAmrTraceEnv,
-  applyAgentLaunchEnv,
-  resolveAgentLaunch,
   sanitizeCustomModel,
-  spawnEnvForAgent,
 } from './agents.js';
-import {
-  getRememberedLiveModels,
-  preferFreshLiveModels,
-  rememberLiveModels,
-  resolveModelForAgent,
-} from './runtimes/models.js';
-import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
-import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
-import { buildOpenCodeByokProviderConfig } from './runtimes/byok-opencode.js';
-import {
-  readVelaLoginStatus,
-  resolveAmrProfile,
-} from './integrations/vela.js';
-import {
-  amrAccountFailureDetails,
-  classifyAmrAccountFailureSignal,
-} from './integrations/vela-errors.js';
-import { amrModelLoadingCache } from './runtimes/amr-model-cache.js';
-import {
-  fetchVelaPresetModels,
-  fetchVelaRemoteModelsWithRetry,
-} from './runtimes/defs/amr.js';
+
 import { migrateLegacyDataDirSync } from './legacy-data-migrator.js';
 import {
   consumedImportNonces,
@@ -197,11 +157,9 @@ import { readCurrentAppVersionInfo } from './app-version.js';
 import {
   findSkillById,
   listSkills,
-  resolveSkillId,
-  splitDerivedSkillId,
 } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
-import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
+
 import {
   buildWindowsFolderDialogCommand,
   parseFolderDialogStdout,
@@ -213,7 +171,9 @@ import {
   createPluginAssetCache,
   isCacheableExternalUrl,
 } from './plugin-asset-cache.js';
-import { defaultMediaExecutionPolicy, parseMediaExecutionPolicyInput } from './media/policy.js';
+import {
+  defaultMediaExecutionPolicy,
+} from './media/policy.js';
 import {
   applySandboxRuntimeEnv,
   ensureSandboxRuntimeDirs,
@@ -224,7 +184,6 @@ import {
   buildUserDesignSystemArchive,
   createUserDesignSystem,
   deleteUserDesignSystem,
-  digestDesignSystemContext,
   LEGACY_DESIGN_SYSTEM_ARTIFACTS,
   linkUserDesignSystemProject,
   listDesignSystems,
@@ -234,7 +193,6 @@ import {
   readDesignSystemPackageInfo,
   readDesignSystemStaticFile,
   readUserDesignSystemFile,
-  resolveDesignSystemAssets,
   updateUserDesignSystem,
   updateUserDesignSystemRevisionStatus,
 } from './design-systems/index.js';
@@ -243,11 +201,9 @@ import { createDesignSystemServerServices } from './design-systems/server-servic
 import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
 import { registerBrandRoutes } from './brand-routes.js';
 import {
-  applyDiffReviewDecisionToCwd,
   applyPlugin,
   buildConnectorProbe,
   defaultBundledRoot,
-  detectSkillPluginCandidate,
   dismissSkillPluginCandidate,
   doctorPlugin,
   FIRST_PARTY_ATOMS,
@@ -256,22 +212,16 @@ import {
   getSnapshot,
   installFromLocalFolder,
   installPlugin,
-  insertSkillPluginCandidate,
-  isDiffReviewSurfaceId,
   listSkillPluginCandidates,
   listInstalledPlugins,
-  listIterationsForRun,
   MissingInputError,
   pluginPromptBlock,
   pruneExpiredSnapshots,
   readPluginLockfile,
-  registerBuiltInAtomWorkers,
   registerBundledPlugins,
   registryRootsForDataDir,
   restoreProjectSnapshotLink,
   resolvePluginSnapshot,
-  runPipelineForRun,
-  runStageWithRegistry,
   startSnapshotGc,
   uninstallPlugin,
 } from './plugins/index.js';
@@ -279,84 +229,28 @@ import {
   marketplaceManifestUrlForRegistry,
   marketplaceRegistryIdFromUrl,
 } from './plugins/marketplaces.js';
-import {
-  composeMemoryBody,
-  extractFromMessage,
-  listActiveRuleEntries,
-  readMemoryConfig,
-} from './memory.js';
-import { attachAcpSession } from './acp.js';
-import { attachPiRpcSession } from './pi-rpc.js';
-import { stageAmrImagePaths } from './media/amr-image-staging.js';
+
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
-import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
-import { createAgentTitleMarkerStripper } from './title-marker.js';
-import { createRoleMarkerGuard } from './role-marker-guard.js';
-import { createToolLoopGuard, resolveToolLoopMode, type ToolLoopVerdict } from './tool-loop-guard.js';
-import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
+
 import { loadCritiqueConfigFromEnv } from './critique/config.js';
 import { reconcileStaleRuns } from './critique/persistence.js';
-import { runOrchestrator } from './critique/orchestrator.js';
+
 import { createRunRegistry } from './critique/run-registry.js';
 import { handleCritiqueInterrupt } from './critique/interrupt-handler.js';
 import { handleCritiqueArtifact } from './critique/artifact-handler.js';
-import {
-  isCritiqueEnabled,
-  parseEnvEnabled,
-  parseRolloutPhase,
-  type SkillCritiquePolicy,
-} from './critique/rollout.js';
-import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
-import { createCopilotStreamHandler } from './copilot-stream.js';
-import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
-import {
-  antigravityAuthGuidance,
-  antigravityQuotaGuidance,
-  classifyAgentAuthFailure,
-  classifyAgentServiceFailure,
-  cursorAuthGuidance,
-} from './runtimes/auth.js';
-import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
-import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
-import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
+
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
 import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
-import {
-  createRunLifecycleTracer,
-  runLifecycleMarkersForStreamEvent,
-} from './run-lifecycle-tracer.js';
-import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
-import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
-import { decideSafeRunRetry } from './run-retry-policy.js';
-import {
-  amrUserIdForRunAnalytics,
-  scanRunEventsForUsageAnalytics,
-} from './run-analytics-observability.js';
-import {
-  countDesignSystemPreviewModules,
-  countNewArtifacts,
-  didRunCreateDesignSystemFile,
-} from './runtimes/run-artifacts.js';
+
 import {
   createRunArtifactBaselines,
-  diffRunArtifacts,
-  snapshotProjectArtifacts,
 } from './run-artifact-fs.js';
-import {
-  AiHtmlVersionSnapshotError,
-  snapshotAiHtmlVersionsForRun,
-} from './run-html-version-snapshots.js';
-import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
-import { buildPromptStackTelemetry } from './prompt-telemetry.js';
+
 import { readAnalyticsContext } from './analytics.js';
-import {
-  agentIdToTracking,
-  modelIdForTracking,
-  projectKindFromMetadataToTracking,
-} from '@open-design/contracts/analytics';
+
 import {
   mergeNoProxyWithLoopbackDefaults,
   redactSecrets,
@@ -376,7 +270,7 @@ import {
 } from './finalize-design.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
-import { loadCraftSections } from './craft.js';
+
 import { skillCwdAliasSegment, stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopArtifactExportInput, buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media/index.js';
@@ -409,40 +303,24 @@ import {
   persistMediaTask,
   TASK_TTL_AFTER_DONE_MS,
 } from './media/task-registry.js';
+
 import {
-  MCP_TEMPLATES,
-  buildAcpMcpServers,
-  buildClaudeMcpJson,
-  buildOpenCodeMcpConfigContent,
-  isManagedProjectCwd,
-  readMcpConfig,
-  writeMcpConfig,
-} from './mcp-config.js';
-import {
-  resolveExternalMcpServersForRun,
-} from './run-tool-bundle.js';
-import {
-  beginAuth,
-  exchangeCodeForToken,
   PendingAuthCache,
   refreshAccessToken,
 } from './mcp-oauth.js';
 import {
-  clearToken,
-  getToken,
-  isTokenExpired,
-  readAllTokens,
   setToken,
 } from './mcp-tokens.js';
-import { agentCliEnvForAgent, readAppConfig, readPluginEnvKnobs, writeAppConfig } from './app-config.js';
+import {
+  readAppConfig,
+  writeAppConfig,
+} from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
 import { buildOrbitNoLiveArtifactSummary } from './orbit-agent-summary.js';
 import {
   RoutineService,
-  validateSchedule as validateRoutineSchedule,
-  validateTarget as validateRoutineTarget,
 } from './routines.js';
-import { buildMcpInstallPayload } from './mcp-install-info.js';
+
 import { createDiagnosticsExportHandler } from './diagnostics-export.js';
 import { DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
 import {
@@ -456,7 +334,6 @@ import {
   detectEntryFile,
   ensureProject,
   ensureProjectSubdir,
-  isRunTouchedProjectFile,
   isSafeId,
   listFiles,
   listProjectFolders,
@@ -467,19 +344,16 @@ import {
   renameProjectFile,
   removeProjectDir,
   resolveProjectDir,
-  SandboxImportedProjectError,
   sanitizeName,
   sanitizePath,
   searchProjectFiles,
   resolveProjectDir,
   resolveProjectFilePath,
   writeProjectFile,
-  reconcileHtmlArtifactManifest,
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifacts/manifest.js';
-import { ArtifactPublicationBlockedError } from './artifacts/publication-guard.js';
+
 import {
-  appendMessageAgentEvent,
   appendMessageStatusEvent,
   deleteConversation,
   deletePreviewComment,
@@ -488,12 +362,10 @@ import {
   getConversation,
   getDeployment,
   getDeploymentById,
-  getMessageTelemetryFinalizationState,
   getProject,
   getTemplate,
   insertConversation,
   insertProject,
-  insertRoutine,
   insertRoutineRun,
   insertScheduledRoutineRun,
   insertTemplate,
@@ -507,48 +379,35 @@ import {
   listPreviewComments,
   listProjects,
   listRoutines,
-  listRoutineRuns,
   listTabs,
   listTemplates,
   getLatestRoutineRun,
-  getRoutine,
-  normalizeConversationSessionMode,
-  deleteRoutine as dbDeleteRoutine,
   openDatabase,
   setTabs,
   updateConversation,
   updatePreviewCommentStatus,
   updateProject,
-  updateRoutine,
   updateRoutineRun,
-  clearAgentSession,
-  upsertAgentSession,
   upsertDeployment,
   upsertMessage,
   upsertPreviewComment,
 } from './db.js';
-import {
-  computeIncludeStable,
-  hashStableInstructions,
-  isAgentResumeFailure,
-  persistCapturedAgentSession,
-  resolveAgentResumeContext,
-} from './agent-session-resume.js';
+
 import {
   createLiveArtifact,
   deleteLiveArtifact,
   ensureLiveArtifactPreview,
   getLiveArtifact,
-  LiveArtifactRefreshLockError,
-  LiveArtifactStoreValidationError,
   listLiveArtifacts,
   listLiveArtifactRefreshLogEntries,
   readLiveArtifactCode,
   recoverStaleLiveArtifactRefreshes,
   updateLiveArtifact,
 } from './live-artifacts/store.js';
-import { LiveArtifactRefreshUnavailableError, refreshLiveArtifact } from './live-artifacts/refresh-service.js';
-import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
+import {
+  refreshLiveArtifact,
+} from './live-artifacts/refresh-service.js';
+
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './routes/active-context.js';
 import { registerAutomationRoutes } from './routes/automation.js';
@@ -587,16 +446,28 @@ import {
 } from './routes/static-resource.js';
 export { rewriteSkillAssetUrls } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
-import { resolveAmrModelProbe } from './runtimes/amr-model-probe.js';
+
 import { createStartChatRun } from './runtimes/start-chat-run.js';
-import { createPluginInstallationHelpers, normalizeProjectPluginFolderPath, resolveProjectChildDirectory } from './services/plugin-installation.js';
+import { createComposeDaemonSystemPrompt } from './runtimes/compose-daemon-system-prompt.js';
+import { firePipelineForRun } from './runtimes/fire-pipeline-for-run.js';
+import { registerApiBearerAuthMiddleware, registerApiOriginGuardMiddleware } from './http/api-security-middleware.js';
+import { createPluginRegistryView } from './plugin-registry-view.js';
+import { createPluginProjectHandlers } from './routes/plugins/project-handlers.js';
+import { createReportRunCompletionTelemetryFallback } from './run-telemetry-fallback.js';
+import {
+  createPluginInstallationHelpers,
+} from './services/plugin-installation.js';
 import { createPluginShareTaskStore } from './services/plugin-share-tasks.js';
 import { getRouteRegistrationInventory, installRouteRegistrationGuard } from './route-registration-guard.js';
 import { assertServerContextSatisfiesRoutes } from './route-context-contract.js';
-import { configureConnectorCredentialStore, connectorService, ConnectorServiceError, FileConnectorCredentialStore } from './connectors/service.js';
+import {
+  configureConnectorCredentialStore,
+  connectorService,
+  FileConnectorCredentialStore,
+} from './connectors/service.js';
 import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
-import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
+
 import {
   aggregateCloudflarePagesStatus,
   buildDeployFileSet,
@@ -616,19 +487,18 @@ import {
   writeDeployConfig,
 } from './deploy.js';
 import {
-  allowedBrowserPorts,
   configuredAllowedOrigins,
-  isAllowedBrowserOrigin,
   isLocalSameOrigin,
-  isZeroConfigClipperLibraryRequest,
 } from './origin-validation.js';
 import { registerLibraryRoutes } from './routes/library.js';
 import {
-  libraryExtensionAllowedOrigins,
   seedLibraryExtensionOrigins,
 } from './library-tokens.js';
 import { listLibraryTokenOrigins } from './library-store.js';
-import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
+import {
+  apiTokenFromEnv,
+  isApiAuthDisabled,
+} from './api-token-auth.js';
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 
 /** @typedef {import('@open-design/contracts').ApiErrorCode} ApiErrorCode */
@@ -1220,14 +1090,6 @@ export {
 // Plugin manifest reading + plugin-share prompt/staging helpers were extracted
 // verbatim to ./plugin-share.ts (strangler-fig slice 3). Import back the six
 // symbols server.ts references.
-import {
-  copyPluginFolderForProjectContext,
-  githubRepoNameFromPluginName,
-  normalizePluginShareAction,
-  PLUGIN_SHARE_ACTION_LABELS,
-  renderPluginSharePrompt,
-  USER_PLUGIN_SOURCE_KINDS,
-} from './plugin-share.js';
 
 const LANGFUSE_TERMINAL_FALLBACK_DELAY_MS = 15_000;
 
@@ -1407,9 +1269,7 @@ import {
   authorizeToolRequest,
   createProjectPreviewScopeRegistry,
   isLoopbackHostname,
-  isLoopbackPeerAddress,
   optionalToolGrantFromRequest,
-  parseProjectPreviewAssetPath,
   requestProjectOverride,
   requestRunOverride,
   requireLocalDaemonRequest,
@@ -1747,53 +1607,7 @@ export async function startServer({
   app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
-  // Plan §3.K1 — bearer-token middleware.
-  //
-  // Active only when OD_API_TOKEN is set and API auth is not disabled.
-  // Loopback origins skip the
-  // check (the desktop UI / local CLI never carry a bearer); every
-  // other request must present `Authorization: Bearer <token>` with a
-  // value matching `OD_API_TOKEN`. Health / readiness / version remain
-  // open so monitoring probes don't need the token. Server-minted
-  // project preview asset scopes are also accepted for GETs so sandboxed
-  // browser iframes can load HTML/CSS/JS without privileged headers.
-  // Rich daemon status stays authenticated because it includes local
-  // runtime paths.
-  if (isApiTokenMiddlewareEnabled()) {
-    const openProbePaths = new Set([
-      '/health',
-      '/api/health',
-      '/ready',
-      '/api/ready',
-      '/version',
-      '/api/version',
-    ]);
-    app.use('/api', (req, res, next) => {
-      if (openProbePaths.has(req.path)) return next();
-      if (req.method === 'GET') {
-        const previewAsset = parseProjectPreviewAssetPath(req.path);
-        if (
-          previewAsset &&
-          projectPreviewScopes.validate(previewAsset.projectId, previewAsset.scope)
-        ) {
-          return next();
-        }
-      }
-      // Loopback short-circuit. We ignore the proxied X-Forwarded-For
-      // header here because a reverse proxy MUST always forward the
-      // bearer; the loopback bypass exists for the localhost desktop
-      // UI which has no proxy in the path.
-      if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
-      const auth = req.get('authorization') ?? '';
-      const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
-      if (!match || match[1] !== apiToken) {
-        return res.status(401).json({
-          error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
-        });
-      }
-      return next();
-    });
-  }
+  registerApiBearerAuthMiddleware(app, { apiToken, projectPreviewScopes });
 
   const designSystemServices = createDesignSystemServerServices({
     roots: { SKILL_ROOTS, DESIGN_TEMPLATE_ROOTS, ALL_SKILL_LIKE_ROOTS },
@@ -1835,69 +1649,10 @@ export async function startServer({
     validateProjectSkillId,
   } = designSystemServices;
 
-  // Chrome may strip the port from the Origin header on same-origin GET
-  // requests. Only use this as a fallback for safe, idempotent GET requests;
-  // mutating routes always require an exact origin/host match.
-  function isPortlessLoopbackOrigin(origin) {
-    return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])$/.test(origin);
-  }
-
-  // Routes that serve content to sandboxed iframes (Origin: null) for
-  // read-only purposes.  All other /api routes reject Origin: null.
-  const _NULL_ORIGIN_SAFE_GET_RE =
-    /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$|^\/asset-cache$/;
-
-  // Reject cross-origin requests to API endpoints.
-  // Health/version remain open for monitoring probes.
-  // Non-browser clients (no Origin header) are always allowed.
-  app.use('/api', (req, res, next) => {
-    // Live artifact previews have stricter local-daemon validation and
-    // loopback CORS handling on the route itself. Let that middleware produce
-    // the structured error shape and preflight headers for preview embeds.
-    if (/^\/live-artifacts\/[^/]+\/preview$/.test(req.path)) return next();
-
-    // Zero-config browser extension: the OD Clipper only needs a liveness probe
-    // plus POST /api/library/ingest. A web page cannot forge a
-    // chrome-extension:// (or moz-extension://) origin, and the daemon is
-    // loopback-bound, so these two bootstrap routes are auto-trusted without a
-    // pairing handshake. Library read routes still fall through to the normal
-    // origin guard.
-    // NOTE: `req.path` here is mount-relative (the `/api` prefix is stripped),
-    // so the predicate matches `/library/ingest`, not `/api/library/ingest`.
-    if (isZeroConfigClipperLibraryRequest(req.method, req.path, req.headers.origin)) {
-      return next();
-    }
-
-    const origin = req.headers.origin;
-    // Non-browser client → allow.
-    if (origin == null || origin === '') return next();
-
-    // Origin: null (sandboxed iframes).  Only allowed for safe, read-only
-    // routes that set their own CORS headers for canvas drawing.
-    if (origin === 'null') {
-      const isSafeReadOnly =
-        req.method === 'GET' && _NULL_ORIGIN_SAFE_GET_RE.test(req.path);
-      if (!isSafeReadOnly) {
-        return res.status(403).json({ error: 'Origin: null not allowed for this route' });
-      }
-      return next();
-    }
-
-    // Fail-closed: block all browser origins until port is resolved.
-    if (!resolvedPort) {
-      return res.status(403).json({ error: 'Server initializing' });
-    }
-
-    const ports = allowedBrowserPorts(resolvedPort);
-    // Paired browser-extension origins are persisted in library_tokens and
-    // seeded into this in-memory allowlist at boot / on pairing.
-    const allowedOrigins = [...extraAllowedOrigins, ...libraryExtensionAllowedOrigins()];
-    if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, allowedOrigins)) {
-      if (req.method !== 'GET' || !isPortlessLoopbackOrigin(String(origin))) {
-        return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
-      }
-    }
-    next();
+  registerApiOriginGuardMiddleware(app, {
+    host,
+    extraAllowedOrigins,
+    getResolvedPort: () => resolvedPort,
   });
   const db = openDatabase(PROJECT_ROOT, { dataDir: RUNTIME_DATA_DIR });
   // Restore paired browser-extension origins into the in-memory allowlist the
@@ -2093,7 +1848,6 @@ export async function startServer({
 
   // ---- Projects (DB-backed) -------------------------------------------------
 
-
   registerMemoryRoutes(app, {
     http: { createSseResponse, requireLocalDaemonRequest },
     paths: { RUNTIME_DATA_DIR, PROJECT_ROOT, PROJECTS_DIR },
@@ -2148,42 +1902,12 @@ export async function startServer({
     reportedRuns,
     getAppVersion: telemetry.getCachedAppVersion,
   });
-  const reportRunCompletionTelemetryFallback = ({
-    analyticsContext,
-    run,
-    status,
-  }: {
-    analyticsContext: any;
-    run: any;
-    status: string;
-  }) => {
-    if (!shouldReportRunCompletionTelemetryFallbackStatus(status)) return;
-    const timer = setTimeout(() => {
-      if (reportedRuns.has(run.id)) return;
-      if (run.assistantMessageId) {
-        const messageTelemetry = getMessageTelemetryFinalizationState(db, run.assistantMessageId);
-        if (messageTelemetry.finalizedAt !== null) return;
-      }
-      reportFinalizedMessage(
-        {
-          id: run.assistantMessageId ?? `${run.id}-terminal`,
-          conversationId: run.conversationId,
-          endedAt: run.updatedAt,
-          role: 'assistant',
-          runId: run.id,
-          runStatus: status,
-        },
-        { telemetryFinalized: true },
-        {
-          analyticsContext,
-          conversationId: run.conversationId,
-          projectId: run.projectId,
-          reportTrigger: 'terminal_fallback',
-        },
-      );
-    }, LANGFUSE_TERMINAL_FALLBACK_DELAY_MS);
-    timer.unref?.();
-  };
+  const reportRunCompletionTelemetryFallback = createReportRunCompletionTelemetryFallback({
+    db,
+    reportedRuns,
+    reportFinalizedMessage,
+    LANGFUSE_TERMINAL_FALLBACK_DELAY_MS,
+  });
 
   const reportFeedback = telemetry.reportFeedback;
 
@@ -2773,6 +2497,8 @@ export async function startServer({
     env: process.env,
   });
 
+  const loadPluginRegistryView = createPluginRegistryView({ db, listAllSkills, listAllDesignSystems });
+
   const pluginRouteHelpers = {
     PLUGIN_PREVIEWS_DIR,
     applyBakedPreviews,
@@ -2790,202 +2516,18 @@ export async function startServer({
     isLocalSameOrigin,
     resolvedPortRef,
     pluginShareTaskStore,
-    installOrUpgradePlugin: async (req, res, mode) => {
-      const body = req.body && typeof req.body === 'object' ? req.body : {};
-      const id = req.params.id;
-      let source = '';
-      let marketplaceResolution = null;
-      if (mode === 'upgrade') {
-        const policy = body.policy === 'pinned' ? 'pinned' : 'latest';
-        const plugin = getInstalledPlugin(db, id);
-        if (!plugin) return res.status(404).json({ error: { code: 'plugin-not-found', message: `No installed plugin with id "${id}".`, data: { id } } });
-        if (plugin.sourceKind === 'bundled') return res.status(409).json({ error: { code: 'bundled-plugin', message: `Plugin "${id}" was shipped bundled with the daemon and upgrades only via daemon-image upgrade. The bundled boot walker re-registers bundled plugins on every boot.`, data: { id, sourceKind: plugin.sourceKind } } });
-        source = plugin.source;
-        if (policy === 'latest' && plugin.sourceMarketplaceEntryName) {
-          const { resolvePluginInMarketplaces } = await import('./plugins/marketplaces.js');
-          marketplaceResolution = resolvePluginInMarketplaces(db, plugin.sourceMarketplaceEntryName);
-          if (marketplaceResolution) source = marketplaceResolution.source;
-        }
-        if (!source) return res.status(409).json({ error: { code: 'missing-source', message: `Plugin "${id}" has no recorded install source — cannot upgrade. Reinstall via 'od plugin install --source <...>' to set one.`, data: { id } } });
-      } else {
-        source = typeof body.source === 'string' ? body.source : '';
-        if (!source) return res.status(400).json({ error: 'source is required' });
-        const looksAbsolute = source.startsWith('/') || source.startsWith('./') || source.startsWith('~');
-        const looksGithub = source.startsWith('github:');
-        const looksHttps = /^https:\/\//i.test(source);
-        if (!looksAbsolute && !looksGithub && !looksHttps) {
-          const { resolvePluginInMarketplaces } = await import('./plugins/marketplaces.js');
-          let lookupName = source;
-          const lockfile = await readPluginLockfile(PLUGIN_LOCKFILE_PATH);
-          const locked = lockfile.plugins[source];
-          if (locked?.version && !source.includes('@')) lookupName = `${source}@${locked.version}`;
-          const resolved = resolvePluginInMarketplaces(db, lookupName);
-          if (!resolved) return res.status(404).json({ error: { code: 'plugin-not-found', message: `No marketplace plugin named "${source}". Add a marketplace via 'od marketplace add <url>' or pass a github: / https:// / local source.`, data: { name: source } } });
-          marketplaceResolution = resolved;
-          source = resolved.source;
-        }
-      }
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.flushHeaders?.();
-      const writeEvent = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-      if (mode === 'upgrade') writeEvent('progress', { kind: 'progress', phase: 'resolving', message: `Upgrading ${id} from ${source} (policy=${body.policy === 'pinned' ? 'pinned' : 'latest'})` });
-      try {
-        const basePlugin = mode === 'upgrade' ? getInstalledPlugin(db, id) : null;
-        for await (const ev of installPlugin(db, {
-          source,
-          roots: PLUGIN_REGISTRY_ROOTS,
-          ...(mode === 'upgrade' ? { eventKind: 'upgraded' } : {}),
-          sourceMarketplaceId: marketplaceResolution?.marketplaceId ?? basePlugin?.sourceMarketplaceId,
-          sourceMarketplaceEntryName: marketplaceResolution?.pluginName ?? basePlugin?.sourceMarketplaceEntryName,
-          sourceMarketplaceEntryVersion: marketplaceResolution?.pluginVersion ?? basePlugin?.sourceMarketplaceEntryVersion,
-          marketplaceTrust: marketplaceResolution?.marketplaceTrust ?? basePlugin?.marketplaceTrust,
-          resolvedSource: marketplaceResolution?.source ?? basePlugin?.resolvedSource,
-          resolvedRef: marketplaceResolution?.ref ?? basePlugin?.resolvedRef,
-          manifestDigest: marketplaceResolution?.manifestDigest ?? basePlugin?.manifestDigest,
-          archiveIntegrity: marketplaceResolution?.archiveIntegrity ?? basePlugin?.archiveIntegrity,
-          lockfilePath: PLUGIN_LOCKFILE_PATH,
-        })) {
-          writeEvent(ev.kind, ev);
-          if (ev.kind === 'success' || ev.kind === 'error') break;
-        }
-      } catch (err) {
-        writeEvent('error', { kind: 'error', message: String(err), warnings: [] });
-      } finally {
-        res.end();
-      }
-    },
-    handleShareProject: async (req, res) => {
-      try {
-        const sourcePlugin = getInstalledPlugin(db, req.params.id);
-        if (!sourcePlugin) return sendApiError(res, 404, 'NOT_FOUND', 'plugin not found');
-        if (!USER_PLUGIN_SOURCE_KINDS.has(sourcePlugin.sourceKind)) return res.status(409).json({ ok: false, code: 'plugin-not-shareable', message: 'Only user-installed plugins can start a share project.' });
-        const body = req.body && typeof req.body === 'object' ? req.body : {};
-        const action = normalizePluginShareAction(body.action);
-        if (!action) return sendApiError(res, 400, 'BAD_REQUEST', 'action must be publish-github or contribute-open-design');
-        const actionPluginId = PLUGIN_SHARE_ACTION_PLUGIN_IDS[action];
-        const actionPlugin = getInstalledPlugin(db, actionPluginId);
-        if (!actionPlugin) return res.status(409).json({ ok: false, code: 'share-action-plugin-missing', message: `The bundled action plugin "${actionPluginId}" is not installed. Restart the daemon so bundled plugins are registered.` });
-        const now = Date.now(); const id = randomId(); const cid = randomId(); const sourceSlug = githubRepoNameFromPluginName(sourcePlugin.id); const stagedPath = `plugin-source/${sourceSlug}`; const prompt = renderPluginSharePrompt({ action, sourcePlugin, stagedPath }); const metadata = { kind: 'prototype' }; const projectRoot = await ensureProject(PROJECTS_DIR, id, metadata); await copyPluginFolderForProjectContext(sourcePlugin.fsPath, path.join(projectRoot, 'plugin-source', sourceSlug));
-        insertProject(db, { id, name: `${PLUGIN_SHARE_ACTION_LABELS[action]}: ${sourcePlugin.title || sourcePlugin.id}`, skillId: null, designSystemId: null, pendingPrompt: prompt, metadata, createdAt: now, updatedAt: now });
-        insertConversation(db, { id: cid, projectId: id, title: null, createdAt: now, updatedAt: now });
-        const registry = await loadPluginRegistryView(); const connectorProbe = buildConnectorProbe(connectorService); const resolved = resolvePluginSnapshot({ db, body: { pluginId: actionPluginId, pluginInputs: { source_plugin_id: sourcePlugin.id, source_plugin_title: sourcePlugin.title || sourcePlugin.id, source_plugin_version: sourcePlugin.version, source_plugin_path: sourcePlugin.fsPath, plugin_context_path: stagedPath }, locale: typeof body.locale === 'string' ? body.locale : undefined }, projectId: id, conversationId: cid, registry, connectorProbe });
-        if (resolved && !resolved.ok) return res.status(resolved.status).json(resolved.body);
-        const project = getProject(db, id); if (!project) return sendApiError(res, 500, 'INTERNAL_ERROR', 'created project could not be loaded');
-        res.json({ ok: true, project, conversationId: cid, ...(resolved?.ok ? { appliedPluginSnapshotId: resolved.snapshotId } : {}), actionPluginId, sourcePluginId: sourcePlugin.id, stagedPath, prompt, message: `Created a ${PLUGIN_SHARE_ACTION_LABELS[action]} task for ${sourcePlugin.title || sourcePlugin.id}.` });
-      } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err) }); }
-    },
-    handlePluginTrust: async (req, res) => {
-      try {
-        const plugin = getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' });
-        const body = req.body && typeof req.body === 'object' ? req.body : {}; const action = body.action === 'revoke' ? 'revoke' : 'grant';
-        const { validateCapabilityList, grantCapabilities, revokeCapabilities } = await import('./plugins/trust.js');
-        const { accepted, rejected } = validateCapabilityList(body.capabilities);
-        if (rejected.length > 0) return res.status(400).json({ error: { code: 'invalid-capability', message: `Capability validation failed: ${rejected.map((r) => r.capability).join(', ')}`, data: { rejected } } });
-        if (accepted.length === 0) return res.status(400).json({ error: { code: 'no-capabilities', message: 'capabilities[] is required and must contain at least one entry' } });
-        const next = action === 'revoke' ? revokeCapabilities({ db, pluginId: req.params.id, capabilities: accepted }) : grantCapabilities({ db, pluginId: req.params.id, capabilities: accepted });
-        const updated = getInstalledPlugin(db, req.params.id);
-        try { const { recordPluginEvent } = await import('./plugins/events.js'); recordPluginEvent({ kind: 'plugin.trust-changed', pluginId: req.params.id, details: { action, capabilities: accepted, total: next.length } }); } catch {}
-        res.status(action === 'grant' ? 201 : 200).json({ ok: true, id: req.params.id, action, capabilitiesGranted: next, plugin: updated });
-      } catch (err) { res.status(500).json({ error: String(err) }); }
-    },
-    handlePluginStats: async (res) => {
-      try { const { pluginInventoryStats, snapshotInventoryStats } = await import('./plugins/stats.js'); const installed = listInstalledPlugins(db); const inventoryRows = db.prepare(`SELECT status, project_id, run_id, applied_at FROM applied_plugin_snapshots`).all(); res.json({ plugins: pluginInventoryStats(installed), snapshots: snapshotInventoryStats(inventoryRows), generatedAt: Date.now() }); } catch (err) { res.status(500).json({ error: String(err) }); }
-    },
-    handleAppliedPluginExport: async (req, res) => {
-      try { const body = req.body && typeof req.body === 'object' ? req.body : {}; const target = body.target === 'od' || body.target === 'claude-plugin' || body.target === 'agent-skill' ? body.target : null; if (!target) return res.status(400).json({ error: 'target must be one of: od, claude-plugin, agent-skill' }); const outDir = typeof body.outDir === 'string' && body.outDir.length > 0 ? body.outDir : null; if (!outDir) return res.status(400).json({ error: 'outDir is required' }); const { exportPlugin, ExportError } = await import('./plugins/export.js'); try { const result = await exportPlugin({ db, target, outDir, ...(typeof body.snapshotId === 'string' ? { snapshotId: body.snapshotId } : {}), ...(typeof body.projectId === 'string' ? { projectId: body.projectId } : {}) }); res.json({ ok: true, ...result }); } catch (err) { if (err instanceof ExportError) return res.status(404).json({ error: err.message }); throw err; } } catch (err) { res.status(500).json({ error: String(err) }); }
-    },
-    handleProjectInstallFolder: async (req, res) => {
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const warnings = []; const log = []; let plugin = null; let message = 'Install finished.'; for await (const ev of installPlugin(db, { source: folder, roots: PLUGIN_REGISTRY_ROOTS })) { if (ev.message) log.push(ev.message); if (Array.isArray(ev.warnings)) warnings.splice(0, warnings.length, ...ev.warnings); if (ev.kind === 'success') { plugin = ev.plugin; message = `Installed ${ev.plugin.title}.`; break; } if (ev.kind === 'error') { message = ev.message; break; } } res.status(plugin ? 200 : 400).json({ ok: Boolean(plugin), plugin, warnings, message, log }); } catch (err) { const code = err && err.code; const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400; sendApiError(res, status, status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err)); }
-    },
-    handleProjectPluginCli: async (req, res, action) => {
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const subcommand = action === 'publish-github' ? 'publish-repo' : 'open-design-pr'; const timeout = action === 'publish-github' ? 240_000 : 300_000; const result = await execCommandViaLoginShell(OD_NODE_BIN, [OD_BIN, 'plugin', subcommand, folder, '--json'], { timeout }); const payload = result.stdout ? JSON.parse(result.stdout) : null; if (!result.ok || !payload?.ok) return res.status(500).json({ ok: false, code: payload?.error?.label || (action === 'publish-github' ? 'publish-repo-failed' : 'open-design-pr-failed'), message: payload?.error?.stderr || payload?.error?.stdout || (action === 'publish-github' ? 'GitHub repo publish failed.' : 'Open Design PR creation failed.'), log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || `${subcommand} failed`] }); res.json({ ok: true, message: action === 'publish-github' ? (payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.') : (payload.prUrl ? `Opened Open Design PR flow at ${payload.prUrl}.` : 'Opened Open Design PR flow.'), ...(payload.repoUrl ? { url: payload.repoUrl } : {}), ...(payload.prUrl ? { url: payload.prUrl } : {}), log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [] }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err), log: [] }); }
-    },
-    handleCandidateDraft: async (req, res) => {
-      if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const result = await generateSkillPluginDraft(db, projectRoot, req.params.id, req.params.candidateId); if (!result) return sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found'); res.status(result.ok ? 200 : 422).json(result); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err) }); }
-    },
-    handleCandidateShareTask: async (req, res) => {
-      if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const action = body.action === 'publish-github' || body.action === 'contribute-open-design' ? body.action : null; if (!action) return sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required'); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const draft = await generateSkillPluginDraft(db, projectRoot, req.params.id, req.params.candidateId); if (!draft) return sendApiError(res, 404, 'NOT_FOUND', 'plugin candidate not found'); if (!draft.validation.ok) return res.status(422).json({ ok: false, code: 'plugin-draft-invalid', message: 'Generated plugin draft is invalid.', draft }); const task = pluginShareTaskStore.createAndStart(req.params.id, { action, path: draft.draftPath }, draft.folder); res.status(202).json({ taskId: task.id, action, path: draft.draftPath, status: task.status, startedAt: task.startedAt, draft }); } catch (err) { res.status(400).json({ ok: false, message: String(err?.message || err) }); }
-    },
-    handleProjectShareTask: async (req, res) => {
-      if (!isLocalSameOrigin(req, resolvedPort)) return res.status(403).json({ error: 'cross-origin request rejected' });
-      try { const project = getProject(db, req.params.id); if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found'); const body = req.body && typeof req.body === 'object' ? req.body : {}; const action: PluginShareAction | null = body.action === 'publish-github' || body.action === 'contribute-open-design' ? body.action : null; if (!action) return sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required'); const relativePath = normalizeProjectPluginFolderPath(body.path); const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata); const folder = await resolveProjectChildDirectory(projectRoot, relativePath); const task = pluginShareTaskStore.createAndStart(req.params.id, { action, path: relativePath }, folder); res.status(202).json({ taskId: task.id, action, path: relativePath, status: task.status, startedAt: task.startedAt }); } catch (err) { const code = err && err.code; const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400; sendApiError(res, status, status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST', String(err?.message || err)); }
-    },
+    ...createPluginProjectHandlers({
+      db,
+      resolvedPortRef,
+      loadPluginRegistryView,
+      pluginShareTaskStore,
+      OD_BIN,
+      OD_NODE_BIN,
+      PROJECTS_DIR,
+      PLUGIN_REGISTRY_ROOTS,
+      randomId,
+    }),
   };
-
-  // Plan §3.A1: shared helper used by every endpoint that has to resolve
-  // plugin context against the live registry. Skills + design systems are
-  // walked from disk; craft is empty in v1; atoms come from the
-  // first-party catalog. Project-scoped overrides arrive in Phase 4.
-  async function loadPluginRegistryView() {
-    const [skills, designSystems] = await Promise.all([
-      listAllSkills(),
-      listAllDesignSystems(),
-    ]);
-    // Spec §23.3.3: surface the bundled scenario plugins so apply()
-    // can fall back to the matching scenario's pipeline when the
-    // consumer plugin omits od.pipeline. Each scenario carries a
-    // `taskKind` that picks the match.
-    const scenarios = collectBundledScenarios();
-    return {
-      skills: skills.map((s) => ({ id: s.id, title: s.name, description: s.description })),
-      designSystems: designSystems.map((d) => ({ id: d.id, title: d.title })),
-      craft: [],
-      atoms: FIRST_PARTY_ATOMS.map((a) => ({ id: a.id, label: a.label })),
-      scenarios,
-    };
-  }
-
-  // Pure read off `installed_plugins`: rows whose source_kind='bundled'
-  // AND od.kind='scenario' AND od.pipeline is non-empty become entries
-  // the apply path can fall back to. Scenario plugins from third-party
-  // sources are intentionally NOT trusted as defaults — the bundled
-  // boot walker (apps/daemon/src/plugins/bundled.ts) is the only writer
-  // of source_kind='bundled', so this function never grants the
-  // privilege to user-installed scenarios.
-  //
-  // Plan §3.O1 / §C-stage of plugin-driven-flow-plan: more than one
-  // bundled scenario may share a `taskKind` (e.g. `od-media-generation`
-  // also claims `new-generation` so the kind → scenario map can route
-  // image / video / audio projects to it). The pipeline-fallback
-  // resolver expects ONE scenario per taskKind, so this function
-  // dedupes and prefers the canonical id `od-<taskKind>` as the
-  // pipeline-fallback winner. Non-canonical scenarios still install
-  // and run through their explicit pluginId path; they just don't get
-  // to hijack a consumer plugin that omitted `od.pipeline`.
-  function collectBundledScenarios() {
-    type ScenarioEntry = {
-      id: string;
-      taskKind: 'new-generation' | 'figma-migration' | 'code-migration' | 'tune-collab';
-      pipeline: NonNullable<NonNullable<import('@open-design/contracts').PluginManifest['od']>['pipeline']>;
-    };
-    const byTaskKind = new Map<ScenarioEntry['taskKind'], ScenarioEntry>();
-    try {
-      const all = listInstalledPlugins(db);
-      for (const row of all) {
-        if (row.sourceKind !== 'bundled') continue;
-        const od = row.manifest.od;
-        if (!od || od.kind !== 'scenario') continue;
-        if (!od.pipeline || !Array.isArray(od.pipeline.stages) || od.pipeline.stages.length === 0) continue;
-        const taskKind = (od.taskKind ?? 'new-generation') as ScenarioEntry['taskKind'];
-        if (taskKind !== 'new-generation' && taskKind !== 'figma-migration' &&
-            taskKind !== 'code-migration' && taskKind !== 'tune-collab') continue;
-        const entry: ScenarioEntry = { id: row.id, taskKind, pipeline: od.pipeline };
-        const existing = byTaskKind.get(taskKind);
-        if (!existing || entry.id === `od-${taskKind}`) {
-          byTaskKind.set(taskKind, entry);
-        }
-      }
-    } catch {
-      // On a fresh install the table may not exist yet; surface no
-      // scenarios rather than crash the apply path.
-      return [];
-    }
-    return Array.from(byTaskKind.values());
-  }
 
   registerPluginRoutes(app, {
     db,
@@ -3068,637 +2610,21 @@ export async function startServer({
   });
   registerProjectUploadRoutes(app, { http: httpDeps, uploads: uploadDeps, node: nodeDeps });
 
-  const composeDaemonSystemPrompt = async ({
-    agentId,
-    projectId,
-    skillId,
-    skillIds,
-    designSystemId,
-    streamFormat,
-    locale,
-    sessionMode,
-    connectedExternalMcp,
-    appliedPluginSnapshotId,
-    mediaExecution,
-    byokMediaDefaults,
-  }) => {
-    const project =
-      typeof projectId === 'string' && projectId
-        ? getProject(db, projectId)
-        : null;
-    let appConfigForPrompt = null;
-    try {
-      appConfigForPrompt = await readAppConfig(RUNTIME_DATA_DIR);
-    } catch (err) {
-      console.warn('[app-config] readAppConfig failed', err);
-    }
-    let pluginDesignSystemId = null;
-    if (
-      typeof appliedPluginSnapshotId === 'string' &&
-      appliedPluginSnapshotId.length > 0
-    ) {
-      try {
-        pluginDesignSystemId = designSystemIdFromPluginSnapshot(
-          getSnapshot(db, appliedPluginSnapshotId),
-        );
-      } catch (err) {
-        console.warn(
-          `[plugins] designSystem selection failed: ${err?.message ?? err}`,
-        );
-      }
-    }
-    const effectiveSkillId =
-      typeof skillId === 'string' && skillId ? skillId : project?.skillId;
-    const designSystemSelection = resolveEffectiveDesignSystemSelection({
-      requestDesignSystemId: designSystemId,
-      pluginDesignSystemId,
-      projectDesignSystemId: project?.designSystemId,
-      appDefaultDesignSystemId: appConfigForPrompt?.designSystemId,
-      // A project row with designSystemId=null can mean the user picked
-      // "No design system"; do not reapply the global default behind their back.
-      allowAppDefault: project === null,
-    });
-    const effectiveDesignSystemId = designSystemSelection.id;
-    const metadata = project?.metadata;
-    let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntries> | null = null;
-    const loadAllSkills = async () => {
-      allSkillsPromise ??= listAllSkillLikeEntries();
-      return await allSkillsPromise;
-    };
-
-    // Per-turn skills picked via the composer's @-mention popover. They
-    // never persist on the project — we just append their bodies after the
-    // primary skill so the agent sees one combined block this turn.
-    const effectiveCanonicalSkillId =
-      typeof effectiveSkillId === 'string' && effectiveSkillId
-        ? resolveSkillId(effectiveSkillId)
-        : null;
-    const adHocSkillIds = Array.isArray(skillIds)
-      ? skillIds
-          .map((s) => (typeof s === 'string' ? s.trim() : ''))
-          .filter(Boolean)
-          .filter((id) => resolveSkillId(id) !== effectiveCanonicalSkillId)
-      : [];
-
-    let skillBody;
-    let skillName;
-    let skillMode;
-    const skillModes = new Set<NonNullable<Parameters<typeof composeSystemPrompt>[0]['skillMode']>>();
-    let skillCraftRequires = [];
-    let activeSkillDir = null;
-    const activeSkillDirs: string[] = [];
-    // Per-skill Critique Theater override sourced from
-    // `od.critique.policy` in the resolved skill's SKILL.md frontmatter.
-    // `null` means the skill has no opinion and the lower-priority tiers
-    // (project override, env override, rollout phase default) decide.
-    let skillCritiquePolicy: SkillCritiquePolicy = null;
-    let critiqueSkillId = effectiveCanonicalSkillId;
-    const registerSkillMode = (
-      mode: NonNullable<Parameters<typeof composeSystemPrompt>[0]['skillMode']> | null | undefined,
-    ) => {
-      if (!mode) return;
-      skillModes.add(mode);
-    };
-    const registerPrimarySkillMode = (
-      mode: NonNullable<Parameters<typeof composeSystemPrompt>[0]['skillMode']> | null | undefined,
-    ) => {
-      if (!mode) return;
-      skillMode ??= mode;
-      registerSkillMode(mode);
-    };
-    const registerSkillDir = (dir: string | null | undefined) => {
-      if (typeof dir !== 'string' || dir.length === 0) return;
-      if (!activeSkillDir) activeSkillDir = dir;
-      if (!activeSkillDirs.includes(dir)) activeSkillDirs.push(dir);
-    };
-    const mergeSkillCritiquePolicy = (
-      current: SkillCritiquePolicy,
-      next: SkillCritiquePolicy,
-    ): SkillCritiquePolicy => {
-      if (next === 'opt-out') return 'opt-out';
-      if (next === 'required') return current === 'opt-out' ? current : 'required';
-      if (next === 'opt-in') {
-        return current === 'required' || current === 'opt-out' ? current : 'opt-in';
-      }
-      return current;
-    };
-    if (effectiveSkillId) {
-      // Span both functional skills and design templates so a project
-      // saved against either surface keeps its system prompt after the
-      // skills/design-templates split. See specs/current/skills-and-design-templates.md.
-      const allSkills = await loadAllSkills();
-      const skill = findSkillById(allSkills, effectiveSkillId);
-      if (skill) {
-        skillBody = skill.body;
-        skillName = skill.name;
-        registerPrimarySkillMode(skill.mode);
-        registerSkillDir(skill.dir);
-        skillCritiquePolicy = mergeSkillCritiquePolicy(
-          skillCritiquePolicy,
-          skill.critiquePolicy,
-        );
-        if (Array.isArray(skill.craftRequires))
-          skillCraftRequires = skill.craftRequires;
-      }
-    }
-    let composedSkillBlocks = '';
-    if (adHocSkillIds.length > 0) {
-      const allSkills = await loadAllSkills();
-      const seen = new Set(
-        effectiveCanonicalSkillId ? [String(effectiveCanonicalSkillId)] : [],
-      );
-      const blocks = [];
-      const baseBody = skillBody && skillBody.trim().length > 0 ? skillBody : '';
-      for (const id of adHocSkillIds) {
-        const canonicalId = resolveSkillId(id);
-        if (typeof canonicalId !== 'string' || canonicalId.length === 0) continue;
-        if (seen.has(canonicalId)) continue;
-        seen.add(canonicalId);
-        const extra = findSkillById(allSkills, id);
-        if (!extra) continue;
-        registerSkillDir(extra.dir);
-        registerSkillMode(extra.mode);
-        if (!effectiveCanonicalSkillId && adHocSkillIds.length === 1) {
-          registerPrimarySkillMode(extra.mode);
-        }
-        if (!critiqueSkillId || extra.critiquePolicy !== null) critiqueSkillId = canonicalId;
-        skillCritiquePolicy = mergeSkillCritiquePolicy(
-          skillCritiquePolicy,
-          extra.critiquePolicy,
-        );
-        if (Array.isArray(extra.craftRequires)) {
-          for (const craft of extra.craftRequires) {
-            if (!skillCraftRequires.includes(craft)) skillCraftRequires.push(craft);
-          }
-        }
-        blocks.push(
-          `\n\n---\n\n## Composed skill — ${extra.name || id}\n\n${(extra.body || '').trim()}`,
-        );
-      }
-      if (blocks.length > 0) {
-        composedSkillBlocks = blocks.join('');
-        skillBody = baseBody + composedSkillBlocks;
-        if (!skillName) {
-          skillName = adHocSkillIds.length === 1
-            ? findSkillById(allSkills, adHocSkillIds[0])?.name ?? null
-            : 'composed';
-        }
-      }
-    }
-
-    // Stage A of plugin-driven-flow-plan: when the run is bound to a
-    // plugin snapshot, prefer the plugin's local SKILL.md (declared via
-    // `od.context.skills[{ path: './SKILL.md' }]`) over the global
-    // skill. Without this override the agent loses the plugin's
-    // template / token / layout rules and falls back to generic prompt
-    // behaviour even though the user explicitly applied the plugin.
-    if (
-      typeof appliedPluginSnapshotId === 'string'
-      && appliedPluginSnapshotId.length > 0
-    ) {
-      try {
-        const snap = getSnapshot(db, appliedPluginSnapshotId);
-        if (snap?.pluginId) {
-          const { getSnapshotContextCraft } = await import('./plugins/context-craft.js');
-          for (const craft of getSnapshotContextCraft(snap)) {
-            if (!skillCraftRequires.includes(craft)) skillCraftRequires.push(craft);
-          }
-          const plugin = getInstalledPlugin(db, snap.pluginId);
-          if (plugin) {
-            const { loadPluginLocalSkill } = await import('./plugins/local-skill.js');
-            const local = await loadPluginLocalSkill(plugin);
-            if (local) {
-              skillBody = local.body + composedSkillBlocks;
-              skillName = local.name;
-              activeSkillDir = local.dir;
-              registerSkillDir(local.dir);
-            }
-          }
-        }
-      } catch (err) {
-        console.warn(
-          `[plugins] pluginSkillBody load failed: ${err?.message ?? err}`,
-        );
-      }
-    }
-
-    let craftBody;
-    let craftSections;
-
-    // Personal-memory body is always recomputed at compose time so a
-    // memory the user just edited in settings shows up on the very next
-    // run. composeMemoryBody returns '' when memory is disabled or
-    // empty; the composer drops the block on a falsy value.
-    let memoryBody = '';
-    try {
-      memoryBody = await composeMemoryBody(RUNTIME_DATA_DIR);
-    } catch (err) {
-      console.warn('[memory] composeMemoryBody failed', err);
-    }
-
-    // Per-hook switches for the two-loop memory feature. Read alongside the
-    // memory body so the composer can gate the PRE intent-gateway brief and
-    // the POST self-verify scorecard on the same config the settings panel
-    // writes. Read failure falls through to undefined hooks, which the
-    // composer treats as on-by-default — matching the config's default-on
-    // semantics.
-    let memoryHooks: { profile?: boolean; rewrite?: boolean; verify?: boolean } | undefined;
-    try {
-      const memCfg = await readMemoryConfig(RUNTIME_DATA_DIR);
-      memoryHooks = {
-        profile: memCfg.profileEnabled,
-        rewrite: memCfg.rewriteEnabled,
-        verify: memCfg.verifyEnabled,
-      };
-    } catch (err) {
-      console.warn('[memory] readMemoryConfig failed', err);
-    }
-
-    // User-level custom instructions from app-config.json.
-    let userInstructions = '';
-    if (appConfigForPrompt?.customInstructions) {
-      userInstructions = appConfigForPrompt.customInstructions;
-    }
-
-    let designSystemBody;
-    let designSystemTitle;
-    // Compiled (tokens.css + components manifest / components.html)
-    // form of the active brand.
-    // Default-on as of PR-D — every chat that picks a brand with
-    // `tokens.css` + `components.html` siblings (today: `default` and
-    // `kami`; every other brand falls through silently because the
-    // files are absent) gets the structured token contract appended to
-    // the system prompt automatically.
-    //
-    // `OD_DESIGN_TOKEN_CHANNEL=0` is the kill switch: it forces the
-    // daemon back to the pre-PR-C DESIGN.md-only path for every brand,
-    // including the structured ones. Any other value (unset, `1`,
-    // `true`, etc.) keeps the new default. Drift on prose-only brands
-    // is pinned by `scripts/check-design-system-flag-parity.ts`.
-    let designSystemUsageMd;
-    let designSystemTokensCss;
-    let designSystemComponentsManifest;
-    let designSystemFixtureHtml;
-    let designSystemPullIndex;
-    let designSystemImportMode;
-    let designSystemCraftApplies = [];
-    let designSystemCraftExemptions = [];
-    let activeDesignSystemId = null;
-    let designSystemDigest = null;
-    if (effectiveDesignSystemId) {
-      let systems = await listAllDesignSystems();
-      let summary = systems.find((s) => s.id === effectiveDesignSystemId);
-      if (summary?.source === 'user') {
-        await ensureUserDesignSystemWorkspaceProject(db, effectiveDesignSystemId);
-        systems = await listAllDesignSystems();
-        summary = systems.find((s) => s.id === effectiveDesignSystemId);
-      }
-      const editingOwnDraftDesignSystem =
-        project?.metadata?.importedFrom === 'design-system'
-        && project.designSystemId === effectiveDesignSystemId;
-      designSystemTitle = summary?.title;
-      if (summary && (isProjectUsableDesignSystem(summary) || editingOwnDraftDesignSystem)) {
-        const workspaceBody = await readDesignSystemWorkspaceTextFile(db, summary, 'DESIGN.md');
-        const registryBody = await readAvailableDesignSystem(effectiveDesignSystemId);
-        designSystemBody = (workspaceBody ?? registryBody) ?? undefined;
-        // Single seam: env gate + built-in→user-installed fallback chain
-        // live together inside `resolveDesignSystemAssets` so the whole
-        // server-side asset-resolution path can be tested end-to-end
-        // from real disk fixtures (see `tests/design-system-assets.test.ts`).
-        const assets = await resolveDesignSystemAssets(
-          effectiveDesignSystemId,
-          DESIGN_SYSTEMS_DIR,
-          USER_DESIGN_SYSTEMS_DIR,
-        );
-        designSystemUsageMd = assets.usageMd;
-        designSystemTokensCss = assets.tokensCss;
-        designSystemComponentsManifest = assets.componentsManifest;
-        designSystemFixtureHtml = assets.fixtureHtml;
-        designSystemPullIndex = assets.pullIndex;
-        designSystemImportMode = assets.importMode;
-        designSystemCraftApplies = Array.isArray(assets.craftApplies) ? assets.craftApplies : [];
-        designSystemCraftExemptions = Array.isArray(assets.craftExemptions) ? assets.craftExemptions : [];
-        if (typeof designSystemBody === 'string' && designSystemBody.length > 0) {
-          activeDesignSystemId = effectiveDesignSystemId;
-          designSystemDigest = digestDesignSystemContext({
-            id: effectiveDesignSystemId,
-            title: designSystemTitle,
-            body: designSystemBody,
-            usageMd: designSystemUsageMd,
-            tokensCss: designSystemTokensCss,
-            componentsManifest: designSystemComponentsManifest,
-            fixtureHtml: designSystemFixtureHtml,
-            pullIndex: designSystemPullIndex,
-            importMode: designSystemImportMode,
-          });
-        }
-      }
-    }
-
-    const excludedCraft = new Set(designSystemCraftExemptions);
-    const requestedCraft = Array.from(
-      new Set([...skillCraftRequires, ...designSystemCraftApplies]),
-    ).filter((slug) => !excludedCraft.has(slug));
-    if (requestedCraft.length > 0) {
-      const loaded = await loadCraftSections(CRAFT_DIR, requestedCraft);
-      if (loaded.body) {
-        craftBody = loaded.body;
-        craftSections = loaded.sections;
-      }
-    }
-
-    const template =
-      metadata?.kind === 'template' && typeof metadata.templateId === 'string'
-        ? (getTemplate(db, metadata.templateId) ?? undefined)
-        : undefined;
-    let audioVoiceOptions = [];
-    let audioVoiceOptionsError;
-    if (
-      metadata?.kind === 'audio' &&
-      metadata?.audioKind === 'speech' &&
-      metadata?.audioModel === 'elevenlabs-v3' &&
-      !metadata?.voice
-    ) {
-      try {
-        audioVoiceOptions = await listElevenLabsVoiceOptions(PROJECT_ROOT, { limit: 100 });
-      } catch (err) {
-        audioVoiceOptionsError = err && err.message ? err.message : String(err);
-        console.warn('[elevenlabs] voice option lookup failed:', audioVoiceOptionsError);
-      }
-    }
-
-    // Thread the critique config plus the active design-system / skill data
-    // into the composer when critique is enabled. Without this the spawned
-    // child receives the legacy single-pass prompt and the parser waits for
-    // <CRITIQUE_RUN> tags the model was never told to emit. The composer
-    // itself ignores these fields when the top-line gate is false, so the
-    // legacy path stays untouched.
-    //
-    // Top-line gate (post-Phase-15 wireup): the daemon now routes every
-    // candidate run through the rollout resolver instead of reading the
-    // env-var flag directly. The resolver carries the full priority
-    // matrix: skill `od.critique.policy` veto > project override > env
-    // override > rollout phase default. On a fresh install with M0
-    // dark-launch defaults the resolver returns `false`, so prod traffic
-    // is unchanged until an operator flips the env var or a project
-    // opts in. The skill-policy input is sourced from
-    // `od.critique.policy` in the active skill's SKILL.md frontmatter
-    // (parsed in `skills.ts:normalizeCritiquePolicy`). The project
-    // override input is sourced from the `critiqueTheaterEnabled`
-    // field on the project's metadata blob, which is what the M1
-    // Settings toggle writes through the existing settings endpoint.
-    // Both inputs collapse to `null` when the skill / project has
-    // not expressed an opinion, which is the resolver's "fall through
-    // to env / phase default" signal.
-    // Per-project override: the M1 Settings toggle writes
-    // `critiqueTheaterEnabled` onto the project's metadata blob via
-    // the existing settings round-trip. A boolean wins outright; any
-    // other type (missing key, malformed value) collapses to `null`
-    // so the resolver falls through to the env / phase tiers exactly
-    // the way it did when the toggle had never been touched.
-    const projectCritiqueOverride = narrowProjectCritiqueOverride(metadata);
-    const critiqueEnabledForRun = isCritiqueEnabled({
-      phase: parseRolloutPhase(process.env.OD_CRITIQUE_ROLLOUT_PHASE),
-      skillPolicy: skillCritiquePolicy,
-      projectOverride: projectCritiqueOverride,
-      envOverride: parseEnvEnabled(process.env.OD_CRITIQUE_ENABLED),
-    });
-    const critiqueBrand = critiqueEnabledForRun
-      && typeof designSystemTitle === 'string'
-      && typeof designSystemBody === 'string'
-      ? { name: designSystemTitle, design_md: designSystemBody }
-      : undefined;
-    const critiqueSkill = critiqueEnabledForRun && typeof critiqueSkillId === 'string'
-      ? { id: critiqueSkillId }
-      : undefined;
-    // Single-source-of-truth eligibility check. The composer downstream
-    // appends <CRITIQUE_RUN> instructions only when this check passes, and
-    // the spawn path routes runs through runOrchestrator(...) only when the
-    // SAME flag is true, so prompt and orchestrator stay in lockstep.
-    //
-    // Non-plain adapters (claude-stream-json, copilot-stream-json,
-    // json-event-stream, acp-json-rpc, pi-rpc) emit their own wrapper
-    // protocol; the v1 critique parser only understands plain stdout. The
-    // spawn path falls through to legacy generation for those, so the
-    // panel addendum has to be suppressed here too: otherwise the model
-    // is instructed to emit Critique Theater tags that no orchestrator
-    // consumes.
-    const resolvedExclusiveSurface = resolveExclusiveSurface({
-      metadata,
-      skillMode,
-      skillModes: skillModes.size > 0 ? Array.from(skillModes) : undefined,
-    });
-    const isMediaSurface =
-      resolvedExclusiveSurface === 'image'
-      || resolvedExclusiveSurface === 'video'
-      || resolvedExclusiveSurface === 'audio';
-    const isPlainAdapter = (streamFormat ?? 'plain') === 'plain';
-    const critiqueShouldRun = critiqueEnabledForRun
-      && critiqueBrand !== undefined
-      && critiqueSkill !== undefined
-      && !isMediaSurface
-      && isPlainAdapter;
-    // Only thread the critique fields when the run is actually eligible;
-    // otherwise the composer's own internal eligibility check (cfg.enabled
-    // && brand && skill && !isMediaSurface) might still fire on
-    // non-plain adapters and we'd emit the panel for a run the orchestrator
-    // skips. Gating the threading itself keeps composer + orchestrator in
-    // exact lockstep regardless of which side enforces eligibility.
-    let pluginBlock;
-    if (
-      typeof appliedPluginSnapshotId === 'string'
-      && appliedPluginSnapshotId.length > 0
-    ) {
-      try {
-        const snap = getSnapshot(db, appliedPluginSnapshotId);
-        if (snap) pluginBlock = pluginPromptBlock(snap);
-      } catch (err) {
-        console.warn(
-          `[plugins] pluginBlock build failed: ${err?.message ?? err}`,
-        );
-      }
-    }
-
-    // Plan §3.M2 / §3.V1 / spec §23.4 — render each stage's atoms[]
-    // into `## Active stage` blocks via the contracts helper when
-    // the run carries a snapshot with a pipeline. Default is now ON
-    // (flipped in §3.V1 once the bundled SKILL.md fragments covered
-    // every Phase 6/7/8 atom); set OD_BUNDLED_ATOM_PROMPTS=0 to opt
-    // out (the runs that need pre-§3.V1 byte-equal prompts: snapshot
-    // replay against an older daemon, regression-bisects).
-    let activeStageBlocks;
-    const bundledAtomPromptsEnabled = process.env.OD_BUNDLED_ATOM_PROMPTS !== '0';
-    if (
-      bundledAtomPromptsEnabled
-      && typeof appliedPluginSnapshotId === 'string'
-      && appliedPluginSnapshotId.length > 0
-    ) {
-      try {
-        const snap = getSnapshot(db, appliedPluginSnapshotId);
-        const stages = snap?.pipeline?.stages ?? [];
-        if (stages.length > 0) {
-          const { loadAtomBodies } = await import('./plugins/atom-bodies.js');
-          const { renderActiveStageBlock } = await import('@open-design/contracts');
-          const blocks = [];
-          for (const stage of stages) {
-            const bodies = await loadAtomBodies(db, stage.atoms ?? []);
-            const block = renderActiveStageBlock({ stageId: stage.id, bodies });
-            if (block.trim().length > 0) blocks.push(block);
-          }
-          if (blocks.length > 0) activeStageBlocks = blocks;
-        }
-      } catch (err) {
-        console.warn(`[plugins] activeStageBlocks build failed: ${(err)?.message ?? err}`);
-      }
-    }
-
-    const prompt = composeSystemPrompt({
-      agentId,
-      includeCodexImagegenOverride: false,
-      skillBody,
-      skillName,
-      skillMode,
-      skillModes: skillModes.size > 0 ? Array.from(skillModes) : undefined,
-      designSystemBody,
-      designSystemTitle,
-      designSystemUsageMd,
-      designSystemTokensCss,
-      designSystemComponentsManifest,
-      designSystemFixtureHtml,
-      designSystemPullIndex,
-      designSystemImportMode,
-      craftBody,
-      craftSections,
-      memoryBody,
-      memoryHooks,
-      metadata,
-      template,
-      audioVoiceOptions,
-      audioVoiceOptionsError,
-      // critiqueCfg.enabled is loaded from OD_CRITIQUE_ENABLED only, so a
-      // run that the resolver enabled via phase / project / skill (env
-      // unset) would have critiqueShouldRun = true while critiqueCfg.enabled
-      // remains false. Without this override the composer's own gate
-      // (cfg.enabled) drops the panel addendum, the orchestrator still
-      // launches, and the parser waits for <CRITIQUE_RUN> tags the model
-      // was never told to emit (codex P2 on PR #1338). Build a derived
-      // config that pins enabled to the resolver decision so the composer
-      // and the orchestrator agree on every eligibility input.
-      critique: critiqueShouldRun ? { ...critiqueCfg, enabled: true } : undefined,
-      critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
-      critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
-      locale: typeof locale === 'string' ? locale : undefined,
-      sessionMode: normalizeConversationSessionMode(sessionMode),
-      mediaExecution,
-      byokMediaDefaults,
-      streamFormat,
-      executionProfile: executionProfileFromStreamFormat(streamFormat),
-      connectedExternalMcp: Array.isArray(connectedExternalMcp)
-        ? connectedExternalMcp
-        : undefined,
-      ...(pluginBlock ? { pluginBlock } : {}),
-      ...(activeStageBlocks ? { activeStageBlocks } : {}),
-      userInstructions,
-    });
-    // The chat handler also needs to know where the active skill lives
-    // on disk so it can stage a per-project copy of its side files
-    // before spawning the agent. Returning that here avoids a second
-    // `listSkills()` scan in `startChatRun`. critiqueShouldRun threads
-    // the same panel-eligibility decision down to the spawn-path
-    // orchestrator gate so prompt and orchestrator stay in lockstep.
-    return {
-      prompt,
-      activeSkillDir,
-      activeSkillDirs,
-      critiqueShouldRun,
-      designSystemSelection: {
-        id: activeDesignSystemId,
-        requestedId: effectiveDesignSystemId,
-        source: activeDesignSystemId ? designSystemSelection.source : 'none',
-        digest: designSystemDigest,
-      },
-      promptTelemetryParts: {
-        skillPrompt: skillBody ?? '',
-        designSystemPrompt: designSystemBody ?? '',
-        pluginStagePrompt: [pluginBlock, ...(activeStageBlocks ?? [])]
-          .filter((part) => typeof part === 'string' && part.trim().length > 0)
-          .join('\n\n---\n\n'),
-      },
-    };
-  };
-
-  // Plan §3.I1 / §3.D / spec §10.1: fire the pipeline schedule on a
-  // run's SSE stream. Synchronous first emit (the first
-  // pipeline_stage_started event lands before the agent process
-  // starts) + async tail. Stage D wires the atom-worker registry as
-  // the default stage runner; set OD_PIPELINE_RUNNER=stub to fall
-  // back to the canned v1 stub for diagnostic bisection or replay
-  // of pre-Stage-D runs. Errors are swallowed (logged) so a bad
-  // pipeline never blocks the agent run.
-  const firePipelineForRun = (args) => {
-    const { run, snapshot, runs, db: dbHandle } = args;
-    if (!snapshot?.pipeline?.stages?.length) return;
-    const env = { maxIterations: readPluginEnvKnobs().maxDevloopIterations };
-    const emitPipeline = (evt) => {
-      try { runs.emit(run, evt.kind, evt); } catch {/* ignore */}
-    };
-    const emitGenui = (evt) => {
-      try { runs.emit(run, evt.kind, evt); } catch {/* ignore */}
-    };
-    const projectIdForRun = run.projectId
-      ?? snapshot.resolvedContext?.items?.[0]?.id
-      ?? 'project-unknown';
-    const runnerMode = process.env.OD_PIPELINE_RUNNER === 'stub'
-      ? 'stub'
-      : 'registry';
-    let runStage;
-    if (runnerMode === 'stub') {
-      runStage = ({ iteration }) => ({
-        signals: {
-          'critique.score':  iteration >= 0 ? 4 : 0,
-          'preview.ok':      true,
-          'user.confirmed':  true,
-        },
-      });
-    } else {
-      registerBuiltInAtomWorkers();
-      runStage = async ({ stage, iteration, snapshot: stageSnapshot }) => {
-        const outcome = await runStageWithRegistry({
-          db:             dbHandle,
-          runId:          run.id,
-          projectId:      projectIdForRun,
-          conversationId: run.conversationId ?? null,
-          stage,
-          iteration,
-          snapshot:       stageSnapshot,
-        });
-        return {
-          signals:         outcome.signals,
-          critiqueSummary: outcome.critiqueSummary,
-        };
-      };
-    }
-    void runPipelineForRun({
-      db: dbHandle,
-      runId:           run.id,
-      projectId:       projectIdForRun,
-      conversationId:  run.conversationId ?? null,
-      snapshot,
-      pipeline:        snapshot.pipeline,
-      env,
-      runStage,
-      emitPipeline,
-      emitGenui,
-    }).catch((err) => {
-      try {
-        runs.emit(run, 'pipeline_stage_failed', {
-          runId:      run.id,
-          snapshotId: snapshot.snapshotId,
-          message:    String(err?.message ?? err),
-        });
-      } catch { /* ignore */ }
-    });
-  };
+  const composeDaemonSystemPrompt = createComposeDaemonSystemPrompt({
+    db,
+    critiqueCfg,
+    CRAFT_DIR,
+    DESIGN_SYSTEMS_DIR,
+    PROJECT_ROOT,
+    RUNTIME_DATA_DIR,
+    USER_DESIGN_SYSTEMS_DIR,
+    ensureUserDesignSystemWorkspaceProject,
+    isProjectUsableDesignSystem,
+    listAllDesignSystems,
+    listAllSkillLikeEntries,
+    readAvailableDesignSystem,
+    readDesignSystemWorkspaceTextFile,
+  });
 
   const startChatRun = createStartChatRun({
     ARTIFACTS_DIR,
@@ -4343,7 +3269,6 @@ export async function startServer({
   // dropped during the reconcile merge. Deleted to fix the BYOK crash.
   // Restore the plugin-runs-must-go-through-daemon gate by adding it
   // to chat-routes.ts if needed.
-
 
   registerChatRoutes(app, {
     db,

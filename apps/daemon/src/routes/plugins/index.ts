@@ -85,7 +85,6 @@ interface PluginRouteHelpers {
   assembleExample(templateHtml: string, slidesHtml: string, title: string): string;
   sendMulterError(res: Response, err: unknown): unknown;
   decodeMultipartFilename(name: string): string;
-  installOrUpgradePlugin(req: Request, res: Response, mode: 'install' | 'upgrade'): Promise<unknown>;
   loadPluginRegistryView(): Promise<unknown>;
   buildConnectorProbe(service: unknown): unknown;
   handleShareProject(req: Request, res: Response): Promise<unknown>;
@@ -170,13 +169,86 @@ export function registerPluginEventRoutes(app: Express, deps: RegisterPluginEven
 
 export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDeps): void {
   const { db, paths, ids, projectStore, conversations, plugins, helpers } = deps;
+  // Install or upgrade a plugin, streaming progress as SSE. Relocated from
+  // server.ts's inline pluginRouteHelpers: it needs only db + paths + the
+  // plugins service, all of which registerPluginRoutes already receives.
+  const installOrUpgradePlugin = async (
+    req: Request,
+    res: Response,
+    mode: 'install' | 'upgrade',
+  ): Promise<unknown> => {
+    const body: any = req.body && typeof req.body === 'object' ? req.body : {};
+    const id = req.params.id as string;
+    let source = '';
+    let marketplaceResolution: any = null;
+    if (mode === 'upgrade') {
+      const policy = body.policy === 'pinned' ? 'pinned' : 'latest';
+      const plugin: any = plugins.getInstalledPlugin(db, id);
+      if (!plugin) return res.status(404).json({ error: { code: 'plugin-not-found', message: `No installed plugin with id "${id}".`, data: { id } } });
+      if (plugin.sourceKind === 'bundled') return res.status(409).json({ error: { code: 'bundled-plugin', message: `Plugin "${id}" was shipped bundled with the daemon and upgrades only via daemon-image upgrade. The bundled boot walker re-registers bundled plugins on every boot.`, data: { id, sourceKind: plugin.sourceKind } } });
+      source = plugin.source;
+      if (policy === 'latest' && plugin.sourceMarketplaceEntryName) {
+        const { resolvePluginInMarketplaces } = await import('../../plugins/marketplaces.js');
+        marketplaceResolution = resolvePluginInMarketplaces(db as Parameters<typeof resolvePluginInMarketplaces>[0], plugin.sourceMarketplaceEntryName);
+        if (marketplaceResolution) source = marketplaceResolution.source;
+      }
+      if (!source) return res.status(409).json({ error: { code: 'missing-source', message: `Plugin "${id}" has no recorded install source — cannot upgrade. Reinstall via 'od plugin install --source <...>' to set one.`, data: { id } } });
+    } else {
+      source = typeof body.source === 'string' ? body.source : '';
+      if (!source) return res.status(400).json({ error: 'source is required' });
+      const looksAbsolute = source.startsWith('/') || source.startsWith('./') || source.startsWith('~');
+      const looksGithub = source.startsWith('github:');
+      const looksHttps = /^https:\/\//i.test(source);
+      if (!looksAbsolute && !looksGithub && !looksHttps) {
+        const { resolvePluginInMarketplaces } = await import('../../plugins/marketplaces.js');
+        let lookupName = source;
+        const lockfile: any = await plugins.readPluginLockfile(paths.PLUGIN_LOCKFILE_PATH);
+        const locked = lockfile.plugins[source];
+        if (locked?.version && !source.includes('@')) lookupName = `${source}@${locked.version}`;
+        const resolved = resolvePluginInMarketplaces(db as Parameters<typeof resolvePluginInMarketplaces>[0], lookupName);
+        if (!resolved) return res.status(404).json({ error: { code: 'plugin-not-found', message: `No marketplace plugin named "${source}". Add a marketplace via 'od marketplace add <url>' or pass a github: / https:// / local source.`, data: { name: source } } });
+        marketplaceResolution = resolved;
+        source = resolved.source;
+      }
+    }
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+    const writeEvent = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    if (mode === 'upgrade') writeEvent('progress', { kind: 'progress', phase: 'resolving', message: `Upgrading ${id} from ${source} (policy=${body.policy === 'pinned' ? 'pinned' : 'latest'})` });
+    try {
+      const basePlugin: any = mode === 'upgrade' ? plugins.getInstalledPlugin(db, id) : null;
+      for await (const ev of plugins.installPlugin(db, {
+        source,
+        roots: paths.PLUGIN_REGISTRY_ROOTS,
+        ...(mode === 'upgrade' ? { eventKind: 'upgraded' } : {}),
+        sourceMarketplaceId: marketplaceResolution?.marketplaceId ?? basePlugin?.sourceMarketplaceId,
+        sourceMarketplaceEntryName: marketplaceResolution?.pluginName ?? basePlugin?.sourceMarketplaceEntryName,
+        sourceMarketplaceEntryVersion: marketplaceResolution?.pluginVersion ?? basePlugin?.sourceMarketplaceEntryVersion,
+        marketplaceTrust: marketplaceResolution?.marketplaceTrust ?? basePlugin?.marketplaceTrust,
+        resolvedSource: marketplaceResolution?.source ?? basePlugin?.resolvedSource,
+        resolvedRef: marketplaceResolution?.ref ?? basePlugin?.resolvedRef,
+        manifestDigest: marketplaceResolution?.manifestDigest ?? basePlugin?.manifestDigest,
+        archiveIntegrity: marketplaceResolution?.archiveIntegrity ?? basePlugin?.archiveIntegrity,
+        lockfilePath: paths.PLUGIN_LOCKFILE_PATH,
+      }) as AsyncIterable<any>) {
+        writeEvent(ev.kind, ev);
+        if (ev.kind === 'success' || ev.kind === 'error') break;
+      }
+    } catch (err) {
+      writeEvent('error', { kind: 'error', message: String(err), warnings: [] });
+    } finally {
+      res.end();
+    }
+  };
   app.get('/api/plugins', async (_req, res) => { try { res.json({ plugins: helpers.applyBakedPreviews(plugins.listInstalledPlugins(db), helpers.PLUGIN_PREVIEWS_DIR) }); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.get('/api/plugins/:id', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); res.json(plugin); } catch (err) { res.status(500).json({ error: String(err) }); } });
   app.post('/api/plugins/upload-zip', (req, res) => helpers.pluginUpload.single('file')(req, res, async (err: unknown) => { if (err) return helpers.sendMulterError(res, err); try { const file = req.file; if (!file?.buffer) return res.status(400).json({ error: 'file is required' }); const result = await helpers.pluginInstallation.stageUploadedPluginZip(file.buffer, `upload:zip:${helpers.decodeMultipartFilename(file.originalname || 'plugin.zip')}`); res.status((result as { ok?: boolean }).ok ? 200 : 400).json(result); } catch (uploadErr: unknown) { res.status(400).json({ ok: false, warnings: [], message: uploadErr instanceof Error ? uploadErr.message : String(uploadErr), log: [] }); } }));
   app.post('/api/plugins/upload-folder', (req, res) => helpers.pluginUpload.array('files', 500)(req, res, async (err: unknown) => { if (err) return helpers.sendMulterError(res, err); try { const files = Array.isArray(req.files) ? req.files as Array<{ buffer: Buffer; originalname: string }> : []; if (files.length === 0) return res.status(400).json({ error: 'files are required' }); const result = await helpers.pluginInstallation.stageUploadedPluginFolder(files, req.body?.paths); res.status((result as { ok?: boolean } | null)?.ok ? 200 : 400).json(result); } catch (uploadErr: unknown) { res.status(400).json({ ok: false, warnings: [], message: uploadErr instanceof Error ? uploadErr.message : String(uploadErr), log: [] }); } }));
-  app.post('/api/plugins/install', async (req, res) => helpers.installOrUpgradePlugin(req, res, 'install'));
+  app.post('/api/plugins/install', async (req, res) => installOrUpgradePlugin(req, res, 'install'));
   app.post('/api/plugins/:id/uninstall', async (req, res) => { try { const result = await plugins.uninstallPlugin(db, req.params.id, paths.PLUGIN_REGISTRY_ROOTS); if (!result.ok && !result.removedFolder) return res.status(404).json({ error: 'plugin not found', warning: result.warning }); res.json(result); } catch (err) { res.status(500).json({ error: String(err) }); } });
-  app.post('/api/plugins/:id/upgrade', async (req, res) => helpers.installOrUpgradePlugin(req, res, 'upgrade'));
+  app.post('/api/plugins/:id/upgrade', async (req, res) => installOrUpgradePlugin(req, res, 'upgrade'));
   app.post('/api/plugins/:id/apply', async (req, res) => { try { const plugin = plugins.getInstalledPlugin(db, req.params.id); if (!plugin) return res.status(404).json({ error: 'plugin not found' }); const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {}; const inputs = body.inputs && typeof body.inputs === 'object' ? body.inputs : {}; const grantCaps = Array.isArray(body.grantCaps) ? body.grantCaps.filter((c: unknown): c is string => typeof c === 'string') : []; const locale = typeof body.locale === 'string' ? body.locale : undefined; const registry = await helpers.loadPluginRegistryView(); const connectorProbe = helpers.buildConnectorProbe(helpers.connectorService); const computed = plugins.applyPlugin({ plugin, inputs, registry, locale, connectorProbe }); if (grantCaps.length > 0) { const merged = new Set([...computed.result.capabilitiesGranted, ...grantCaps]); computed.result.capabilitiesGranted = Array.from(merged); computed.result.appliedPlugin.capabilitiesGranted = Array.from(merged); } res.json({ ok: true, ...computed.result, warnings: computed.warnings, manifestSourceDigest: computed.manifestSourceDigest }); } catch (err: unknown) { if (err instanceof plugins.MissingInputError) return res.status(422).json({ error: 'missing_inputs', fields: err.fields }); res.status(500).json({ error: String(err) }); } });
   app.post('/api/plugins/:id/duplicate-project', helpers.requireLocalDaemonRequest, async (req, res) => {
     let cleanupProjectId: string | null = null;
