@@ -147,13 +147,27 @@ function fmtDelta(deltaPct: number | null): string {
   return `${sign}${Math.abs(deltaPct).toFixed(0)}%`;
 }
 
+// Release-channel scope. "stable" = 正式版 only (an app_version with no
+// -beta/-betas/-preview/-prerelease suffix, i.e. releaseChannelFromVersion()
+// === 'stable'); "all" = every channel. Defaults to stable: production users
+// are the signal that matters, beta/prerelease are internal R&D validation
+// noise. Trade-off: stable lags beta by ~a day for regression detection, so
+// set TRIAGE_CHANNEL_SCOPE=all when you want beta as an early-warning signal.
+const CHANNEL_SCOPE: "stable" | "all" = optionalEnv("TRIAGE_CHANNEL_SCOPE", "stable") === "all" ? "all" : "stable";
+const SCOPE_LABEL = CHANNEL_SCOPE === "stable" ? "仅正式版" : "全渠道";
+
+// A run/exception carrying a usable version. Under stable scope also require a
+// hyphen-free version (e.g. 0.13.0) — position(x,'-')=0 means no prerelease tag.
+const VERSION_PRESENT = "isNotNull(properties.app_version) AND properties.app_version NOT IN ('', '0.0.0')";
+const SCOPE_CLAUSE = CHANNEL_SCOPE === "stable" ? `${VERSION_PRESENT} AND position(properties.app_version, '-') = 0` : VERSION_PRESENT;
+
 // The engineering "real fault" predicate, reused across queries. A failed run
-// that is neither user-noise nor old-version churn, and is either an
+// that is neither user-noise nor old-version churn, in scope, and is either an
 // engineering-view category or a hidden-bug user_action.
 const REAL_FAULT_PREDICATE = `properties.result = 'failed'
   AND properties.user_action NOT IN (${sqlList(USER_NOISE_ACTIONS)})
   AND (properties.failure_category IN (${sqlList(ENGINEERING_CATEGORIES)}) OR properties.user_action IN (${sqlList(HIDDEN_BUG_ACTIONS)}))
-  AND isNotNull(properties.app_version) AND properties.app_version NOT IN ('', '0.0.0')`;
+  AND ${SCOPE_CLAUSE}`;
 
 // ---------- PostHog HogQL client ----------
 
@@ -213,7 +227,7 @@ interface Bucket {
 }
 
 interface Health {
-  total: number;
+  total: number; // in-scope runs (stable-only by default) — the rate denominator
   ok: number;
   failed: number;
   cancelled: number;
@@ -221,6 +235,7 @@ interface Health {
   unknownFailed: number;
   userNoise: number;
   oldverNoise: number;
+  prereleaseExcluded: number; // failed runs on beta/prerelease/preview, excluded under stable scope
   engFailRate: number; // realFault / total * 100
   unknownRatio: number; // unknownFailed / failed (0..1)
 }
@@ -285,16 +300,20 @@ async function queryBuckets(): Promise<Bucket[]> {
 }
 
 async function queryHealth(): Promise<Health> {
+  // Denominators (total/ok/failed/cancelled/unknown) are scoped so the failure
+  // rate is measured over in-scope runs only. Noise counts are computed over
+  // ALL runs so the "已过滤噪音" section can show exactly what was excluded.
   const rows = await hogql(`
     SELECT
-      count() AS total,
-      countIf(properties.result = 'success') AS ok,
-      countIf(properties.result = 'failed') AS failed,
-      countIf(properties.result = 'cancelled') AS cancelled,
-      countIf(properties.result = 'failed' AND properties.failure_category = 'unknown') AS unknown_failed,
+      countIf(${SCOPE_CLAUSE}) AS total,
+      countIf(${SCOPE_CLAUSE} AND properties.result = 'success') AS ok,
+      countIf(${SCOPE_CLAUSE} AND properties.result = 'failed') AS failed,
+      countIf(${SCOPE_CLAUSE} AND properties.result = 'cancelled') AS cancelled,
+      countIf(${SCOPE_CLAUSE} AND properties.result = 'failed' AND properties.failure_category = 'unknown') AS unknown_failed,
       countIf(${REAL_FAULT_PREDICATE}) AS real_fault,
       countIf(properties.result = 'failed' AND properties.user_action IN (${sqlList(USER_NOISE_ACTIONS)})) AS user_noise,
-      countIf(properties.result = 'failed' AND (isNull(properties.app_version) OR properties.app_version IN ('', '0.0.0'))) AS oldver_noise
+      countIf(properties.result = 'failed' AND (isNull(properties.app_version) OR properties.app_version IN ('', '0.0.0'))) AS oldver_noise,
+      countIf(properties.result = 'failed' AND ${VERSION_PRESENT} AND position(properties.app_version, '-') > 0) AS prerelease_excluded
     FROM events
     WHERE event = 'run_finished' AND timestamp >= now() - INTERVAL 1 DAY`);
   const r = rows[0] ?? {};
@@ -311,6 +330,7 @@ async function queryHealth(): Promise<Health> {
     unknownFailed,
     userNoise: toNum(r.user_noise),
     oldverNoise: toNum(r.oldver_noise),
+    prereleaseExcluded: toNum(r.prerelease_excluded),
     engFailRate: pct(realFault, total),
     unknownRatio: failed > 0 ? unknownFailed / failed : 0,
   };
@@ -326,6 +346,7 @@ async function queryExceptions(): Promise<ExceptionRow[]> {
     FROM events
     WHERE event = '$exception'
       AND coalesce(properties.$exception_message, '') NOT IN (${sqlList(FETCH_NOISE_MESSAGES)})
+      AND ${SCOPE_CLAUSE}
       AND timestamp >= now() - INTERVAL 1 DAY
     GROUP BY type, message
     ORDER BY n DESC
@@ -348,7 +369,7 @@ async function queryVersions(): Promise<VersionRow[]> {
       count() AS total
     FROM events
     WHERE event = 'run_finished'
-      AND isNotNull(properties.app_version) AND properties.app_version NOT IN ('', '0.0.0')
+      AND ${SCOPE_CLAUSE}
       AND timestamp >= now() - INTERVAL 2 DAY
     GROUP BY version
     HAVING total >= 200
@@ -415,13 +436,16 @@ function extractJson(text: string): unknown {
 const ANALYST_SYSTEM = [
   "你是 Open Design 的可靠性值班分析师,擅长错误 trace 下钻与失败归因。",
   "你会收到一份【已经算好的】PostHog 聚合数据(近 24h,对比前 7 日基线的每日均值)。",
+  CHANNEL_SCOPE === "stable"
+    ? "范围:本报告只统计【正式版(stable)】,beta/prerelease/preview 等非正式版已排除。版本回归指正式版补丁之间(如 0.13.1 vs 0.13.0)的对比,不要提及 beta。"
+    : "范围:本报告统计所有发布渠道。",
   "铁律:",
   "1. 只依据给定数字判断,绝对不要编造任何数字、桶名或不存在的现象。",
   "2. 你的职责是判断轻重缓急、给根因假设、建议排查归属,不是复述数据。",
   "3. 工程视角真故障=我们能修的(process_exit/timeout/upstream_unavailable/empty_output/tool_error/rate_limit/unknown),",
   "   外加藏 bug 的 user_action(fix_config/reduce_context/switch_model)。login/recharge/老版本 是噪音,已被过滤,不要当故障。",
   "4. unknown 占比 > 2% 是归因腐化红线,必须点名。",
-  "5. 版本回归:某个较新版本(尤其 beta)真故障率明显高于其它版本 = 疑似发布引入回归。",
+  "5. 版本回归:某个较新版本真故障率明显高于其它版本 = 疑似发布引入回归。",
   `owner 只能从这些方向里选最贴切的一个:${OWNER_AREAS.join(" / ")}。`,
   "严格输出 JSON(中文),字段:",
   '  severity: "red"|"orange"|"blue"(有 P0 尖峰/unknown 超红线/明显版本回归=red;中度环比上升=orange;平稳=blue)',
@@ -506,7 +530,8 @@ function fallbackAnalysis(health: Health, buckets: Bucket[], versions: VersionRo
   const worst = sorted[0];
   const release = worst != null && worst.rate > 0 ? `真故障率最高版本:${worst.version}(${worst.channel},${fmtPct(worst.rate)},样本 ${worst.total})——需与其它版本对比确认是否回归。` : "今日无明显版本回归。";
   const severity: Analysis["severity"] = health.unknownRatio > UNKNOWN_RATIO_REDLINE ? "red" : spiking.length > 0 ? "orange" : "blue";
-  return { severity, headline: fallbackHeadline(health), top, changes, release, noiseNote: `已过滤 login/recharge ${health.userNoise} 次、老版本 ${health.oldverNoise} 次及 fetch 网络噪音。`, source: "fallback" };
+  const prereleaseNote = CHANNEL_SCOPE === "stable" ? `、非正式版 ${health.prereleaseExcluded} 次` : "";
+  return { severity, headline: fallbackHeadline(health), top, changes, release, noiseNote: `已过滤 login/recharge ${health.userNoise} 次、老版本 ${health.oldverNoise} 次${prereleaseNote}及 fetch 网络噪音。`, source: "fallback" };
 }
 
 // ---------- Feishu card ----------
@@ -554,8 +579,8 @@ function healthSection(health: Health): string {
   return [
     "🩺 **归因健康度**",
     `- unknown 占比:${fmtPct(health.unknownRatio * 100)} ${unknownFlag}(红线 <2%)`,
-    `- 工程视角失败率:${fmtPct(health.engFailRate)} · 真故障 ${health.realFault} 次`,
-    `- 近 24h 样本:${health.total}(成功 ${health.ok} / 失败 ${health.failed} / 取消 ${health.cancelled})`,
+    `- 工程视角失败率(${SCOPE_LABEL}):${fmtPct(health.engFailRate)} · 真故障 ${health.realFault} 次`,
+    `- 近 24h ${SCOPE_LABEL}样本:${health.total}(成功 ${health.ok} / 失败 ${health.failed} / 取消 ${health.cancelled})`,
   ].join("\n");
 }
 
@@ -563,6 +588,7 @@ function noiseSection(health: Health, noiseNote: string): string {
   return [
     "🧊 **已过滤噪音**(透明化 · 证明没吵也没漏)",
     `- 用户侧(login/recharge):${health.userNoise} 次 · 老版本(null/0.0.0):${health.oldverNoise} 次 · fetch 网络错误:已丢弃`,
+    CHANNEL_SCOPE === "stable" ? `- 非正式版(beta/prerelease/preview)失败:${health.prereleaseExcluded} 次 —— 本报告只看正式版` : "",
     noiseNote.length > 0 ? `- ${sanitizeMarkdown(noiseNote)}` : "",
   ]
     .filter(Boolean)
@@ -593,7 +619,7 @@ function buildCard(params: { now: Date; analysis: Analysis; health: Health; exce
   const footerBits = [
     `[PostHog 数据探索](${projectUrl})`,
     `分析来源:${analysis.source === "llm" ? `LLM(${LLM_MODEL})` : "确定性回退"}`,
-    `窗口:近 24h vs 前 7 日基线`,
+    `窗口:近 24h vs 前 7 日基线 · ${SCOPE_LABEL}`,
     `生成于 ${shanghaiDateTime(now)}`,
   ];
   if (runUrl.length > 0) footerBits.push(`[CI run](${runUrl})`);
@@ -668,7 +694,7 @@ async function safeQuery<T>(label: string, fn: () => Promise<T>, fallback: T, de
   }
 }
 
-const EMPTY_HEALTH: Health = { total: 0, ok: 0, failed: 0, cancelled: 0, realFault: 0, unknownFailed: 0, userNoise: 0, oldverNoise: 0, engFailRate: 0, unknownRatio: 0 };
+const EMPTY_HEALTH: Health = { total: 0, ok: 0, failed: 0, cancelled: 0, realFault: 0, unknownFailed: 0, userNoise: 0, oldverNoise: 0, prereleaseExcluded: 0, engFailRate: 0, unknownRatio: 0 };
 
 async function run(): Promise<void> {
   if (optionalEnv("POSTHOG_QUERY_API_KEY").length === 0) {
@@ -683,7 +709,7 @@ async function run(): Promise<void> {
     safeQuery("前端异常", queryExceptions, [] as ExceptionRow[], degraded),
     safeQuery("版本", queryVersions, [] as VersionRow[], degraded),
   ]);
-  const analysis = await analyze({ window: "近 24h vs 前 7 日基线", health, buckets, exceptions, versions });
+  const analysis = await analyze({ window: `近 24h vs 前 7 日基线(${SCOPE_LABEL})`, health, buckets, exceptions, versions });
   // Never let the LLM under-call an attribution-rot red line.
   if (health.unknownRatio > UNKNOWN_RATIO_REDLINE && analysis.severity !== "red") {
     analysis.severity = "red";
@@ -711,6 +737,9 @@ function selfCheck(): void {
   if (releaseChannelFromVersion("0.13.1-beta.2") !== "beta") throw new Error("self-check: beta channel derivation");
   if (releaseChannelFromVersion("0.13.0") !== "stable") throw new Error("self-check: stable channel derivation");
   if (releaseChannelFromVersion("") !== "stable") throw new Error("self-check: empty version derivation");
+  if (CHANNEL_SCOPE === "stable" && !REAL_FAULT_PREDICATE.includes("position(properties.app_version, '-') = 0")) {
+    throw new Error("self-check: stable scope must add the hyphen-free (正式版) version filter");
+  }
 
   // 2. Bucket folding: baseline is a 7-day daily average; today-only rows survive.
   const folded = foldBuckets([
@@ -726,7 +755,7 @@ function selfCheck(): void {
   if (fmtDelta(null) !== "🆕新出现") throw new Error("self-check: null delta must render as new");
 
   // 3. Card rendering with a fixed analysis (LLM skipped).
-  const health: Health = { total: 5000, ok: 4600, failed: 380, cancelled: 20, realFault: 260, unknownFailed: 30, userNoise: 90, oldverNoise: 40, engFailRate: pct(260, 5000), unknownRatio: 30 / 380 };
+  const health: Health = { total: 5000, ok: 4600, failed: 380, cancelled: 20, realFault: 260, unknownFailed: 30, userNoise: 90, oldverNoise: 40, prereleaseExcluded: 55, engFailRate: pct(260, 5000), unknownRatio: 30 / 380 };
   const analysis: Analysis = {
     severity: "orange",
     headline: "工程失败率 5.2%,stream_error 环比上升",
@@ -745,6 +774,9 @@ function selfCheck(): void {
   const json = JSON.stringify(card);
   for (const marker of ["今日必看", "归因健康度", "已过滤噪音", "版本回归哨兵", "可靠性日报"]) {
     if (!json.includes(marker)) throw new Error(`self-check: card missing section '${marker}'`);
+  }
+  if (CHANNEL_SCOPE === "stable" && (!json.includes("仅正式版") || !json.includes("非正式版"))) {
+    throw new Error("self-check: stable scope must label the card 仅正式版 and surface excluded 非正式版 noise");
   }
   const header = card.header as { template?: string };
   if (header.template !== "orange") throw new Error("self-check: header template must follow severity");
