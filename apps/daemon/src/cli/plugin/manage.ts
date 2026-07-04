@@ -390,7 +390,7 @@ async function fetchPluginList(flags) {
  */
 async function applyPluginFilters(plugins, flags, query) {
   if (!Array.isArray(plugins) || plugins.length === 0) return [];
-  const { searchInstalledPlugins } = await import('./plugins/search.js');
+  const { searchInstalledPlugins } = await import('../../plugins/search.js');
   const trustFlag = typeof flags.trust === 'string' ? flags.trust : undefined;
   const taskKind  = typeof flags['task-kind'] === 'string' ? flags['task-kind'] : undefined;
   const mode      = typeof flags.mode === 'string' ? flags.mode : undefined;

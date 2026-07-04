@@ -45,7 +45,7 @@ Writes <out|cwd>/<id>/{SKILL.md,open-design.json,README.md}.`);
   const targetDir = typeof flags.out === 'string' && flags.out.length > 0
     ? flags.out
     : process.cwd();
-  const { scaffoldPlugin, ScaffoldError } = await import('./plugins/scaffold.js');
+  const { scaffoldPlugin, ScaffoldError } = await import('../../plugins/scaffold.js');
   try {
     const input = {
       targetDir,
@@ -133,7 +133,7 @@ Exit codes:
 
   let result;
   try {
-    const { validatePluginFolder, flattenValidationDiagnostics } = await import('./plugins/validate.js');
+    const { validatePluginFolder, flattenValidationDiagnostics } = await import('../../plugins/validate.js');
     result = await validatePluginFolder({ folder, ...(registry ? { registry } : {}) });
     if (flags.json) {
       const flat = flattenValidationDiagnostics(result);
@@ -149,7 +149,7 @@ Exit codes:
         console.log(`[validate] pluginId: ${result.doctor.pluginId}`);
         console.log(`[validate] freshDigest: ${result.doctor.freshDigest.slice(0, 12)}\u2026`);
       }
-      const diagnostics = (await import('./plugins/validate.js')).flattenValidationDiagnostics(result);
+      const diagnostics = (await import('../../plugins/validate.js')).flattenValidationDiagnostics(result);
       const errors = diagnostics.filter((d) => d.severity === 'error');
       const warnings = diagnostics.filter((d) => d.severity === 'warning');
       const infos = diagnostics.filter((d) => d.severity === 'info');
@@ -209,7 +209,7 @@ Exit codes:
   }
   const folder = rest[0];
   try {
-    const { packPlugin, PackPluginError } = await import('./plugins/pack.js');
+    const { packPlugin, PackPluginError } = await import('../../plugins/pack.js');
     let result;
     try {
       result = await packPlugin({
