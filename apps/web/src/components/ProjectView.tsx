@@ -4704,12 +4704,22 @@ export function ProjectView({
               setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
             }
           }
+          const normalizedFullText = fullText.trim();
+          const normalizedStreamedText = streamedText.trim();
+          const normalizedLiveHtml = liveHtml.trim();
           const emptyApiResponse =
             config.mode === 'api' &&
-            !fullText.trim() &&
-            !streamedText.trim() &&
-            !liveHtml.trim();
-          if (emptyApiResponse) {
+            !normalizedFullText &&
+            !normalizedStreamedText &&
+            !normalizedLiveHtml;
+          const rawToolCallOnly =
+            config.mode === 'api' &&
+            !parsedArtifact &&
+            !normalizedLiveHtml &&
+            /^\s*<tool_call>[\s\S]*<\/tool_call>\s*$/i.test(
+              normalizedFullText || normalizedStreamedText,
+            );
+          if (emptyApiResponse || rawToolCallOnly) {
             const endedAt = Date.now();
             const diagnostic = t('assistant.emptyResponseMessage');
             updateMessageById(

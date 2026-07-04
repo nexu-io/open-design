@@ -562,6 +562,24 @@ describe('ProjectView API empty response handling', () => {
     expect(screen.queryByText('empty_response:deepseek-chat')).toBeNull();
   });
 
+  it('fails API completions that only emit raw tool_call markup', async () => {
+    const rawToolCall = '<tool_call>do-something</tool_call>';
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
+      handlers.onDelta(rawToolCall);
+      handlers.onDone(rawToolCall);
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+    expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
+  });
+
   it('opens the real HTML page instead of saving a pointer artifact as the preview entry', async () => {
     const realPage = {
       name: 'worker-edition-v2.html',
