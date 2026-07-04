@@ -58,118 +58,165 @@ export interface ResolveResult {
   digestRefs: Array<{ kind: string; ref: string }>;
 }
 
-export function resolveContext(manifest: PluginManifest, opts: ResolveOptions): ResolveResult {
-  const warnings: string[] = [];
-  const items: ContextItem[] = [];
-  const digestRefs: Array<{ kind: string; ref: string }> = [];
+type DigestRef = { kind: string; ref: string };
+type PluginContext = NonNullable<NonNullable<PluginManifest['od']>['context']>;
 
-  const ctx = manifest.od?.context;
+// Order-stable output threaded through the per-kind resolvers. Each resolver
+// appends in a fixed sequence; digestRefs order is load-bearing because it
+// feeds the manifest source digest.
+interface ResolveAccumulator {
+  items: ContextItem[];
+  digestRefs: DigestRef[];
+  warnings: string[];
+}
+
+export function resolveContext(manifest: PluginManifest, opts: ResolveOptions): ResolveResult {
   const registry = opts.registry;
+  const warnOnMissing = opts.warnOnMissing;
+  const ctx = manifest.od?.context;
+
+  const acc: ResolveAccumulator = { items: [], digestRefs: [], warnings: [] };
 
   if (ctx) {
-    // Skills
-    for (const ref of ctx.skills ?? []) {
-      const id = (ref.ref ?? ref.path ?? '').trim();
-      if (!id) continue;
-      const skill = registry.skills.find((s) => s.id === id || s.id === stripDotSlash(id));
-      if (!skill) {
-        if (opts.warnOnMissing) warnings.push(`Unknown skill ref: '${id}'`);
-        continue;
-      }
-      items.push({ kind: 'skill', id: skill.id, label: skill.title ?? skill.id });
-      digestRefs.push({ kind: 'skill', ref: skill.id });
-    }
-
-    // Design system
-    if (ctx.designSystem) {
-      const dsRef = ctx.designSystem;
-      const explicitRef = typeof dsRef.ref === 'string' ? dsRef.ref.trim() : '';
-      if (explicitRef) {
-        const ds = registry.designSystems.find((d) => d.id === explicitRef);
-        if (ds) {
-          items.push({ kind: 'design-system', id: ds.id, label: ds.title ?? ds.id, primary: true });
-          digestRefs.push({ kind: 'design-system', ref: ds.id });
-        } else if (opts.warnOnMissing) {
-          warnings.push(`Unknown design-system ref: '${explicitRef}'`);
-        }
-      } else if (registry.activeProjectDesignSystem) {
-        const ds = registry.activeProjectDesignSystem;
-        items.push({ kind: 'design-system', id: ds.id, label: ds.title ?? ds.id, primary: true });
-        digestRefs.push({ kind: 'design-system', ref: ds.id });
-      }
-    }
-
-    // Craft
-    for (const slug of ctx.craft ?? []) {
-      const id = String(slug).trim();
-      if (!id) continue;
-      const c = registry.craft.find((x) => x.id === id);
-      if (!c) {
-        if (opts.warnOnMissing) warnings.push(`Unknown craft slug: '${id}'`);
-        continue;
-      }
-      items.push({ kind: 'craft', id: c.id, label: c.title ?? c.id });
-      digestRefs.push({ kind: 'craft', ref: c.id });
-    }
-
-    // Assets — paths are kept as-is and validated by the installer at apply
-    // time. The chip strip uses the basename as the label.
-    for (const rawPath of ctx.assets ?? []) {
-      const p = String(rawPath).trim();
-      if (!p) continue;
-      const label = p.split('/').pop() ?? p;
-      items.push({ kind: 'asset', path: p, label });
-      digestRefs.push({ kind: 'asset', ref: p });
-    }
-
-    // MCP
-    for (const mcp of ctx.mcp ?? []) {
-      if (!mcp.name) continue;
-      items.push({
-        kind: 'mcp',
-        name: mcp.name,
-        label: mcp.name,
-        command: typeof mcp.command === 'string' ? mcp.command : undefined,
-      });
-      digestRefs.push({ kind: 'mcp', ref: mcp.name });
-    }
-
-    // Claude plugins
-    for (const ref of ctx.claudePlugins ?? []) {
-      const id = (ref.ref ?? ref.path ?? '').trim();
-      if (!id) continue;
-      items.push({ kind: 'claude-plugin', id, label: id });
-      digestRefs.push({ kind: 'claude-plugin', ref: id });
-    }
-
-    // Atoms
-    for (const atomId of ctx.atoms ?? []) {
-      const id = String(atomId).trim();
-      if (!id) continue;
-      const atom = registry.atoms.find((a) => a.id === id);
-      const label = atom?.label ?? id;
-      items.push({ kind: 'atom', id, label });
-      digestRefs.push({ kind: 'atom', ref: id });
-    }
+    resolveSkills(ctx, registry, warnOnMissing, acc);
+    resolveDesignSystem(ctx, registry, warnOnMissing, acc);
+    resolveCraft(ctx, registry, warnOnMissing, acc);
+    resolveAssets(ctx, acc);
+    resolveMcp(ctx, acc);
+    resolveClaudePlugins(ctx, acc);
+    resolveAtoms(ctx, registry, acc);
   }
 
-  // Pipeline stages flag additional atoms that may not have appeared in
-  // ctx.atoms; record them as digest refs so two manifests with different
-  // pipelines produce distinct digests.
-  for (const stage of manifest.od?.pipeline?.stages ?? []) {
-    for (const atomId of stage.atoms) {
-      digestRefs.push({ kind: 'pipeline-atom', ref: `${stage.id}:${atomId}` });
-    }
-  }
+  resolvePipelineAtoms(manifest, acc);
 
   return {
     context: {
-      items,
+      items: acc.items,
       atoms: ctx?.atoms ? Array.from(ctx.atoms) : undefined,
     },
-    warnings,
-    digestRefs,
+    warnings: acc.warnings,
+    digestRefs: acc.digestRefs,
   };
+}
+
+function resolveSkills(
+  ctx: PluginContext,
+  registry: RegistryView,
+  warnOnMissing: boolean | undefined,
+  acc: ResolveAccumulator,
+): void {
+  for (const ref of ctx.skills ?? []) {
+    const id = (ref.ref ?? ref.path ?? '').trim();
+    if (!id) continue;
+    const skill = registry.skills.find((s) => s.id === id || s.id === stripDotSlash(id));
+    if (!skill) {
+      if (warnOnMissing) acc.warnings.push(`Unknown skill ref: '${id}'`);
+      continue;
+    }
+    acc.items.push({ kind: 'skill', id: skill.id, label: skill.title ?? skill.id });
+    acc.digestRefs.push({ kind: 'skill', ref: skill.id });
+  }
+}
+
+// An explicit ref wins; a blank ref falls back to the active project design
+// system (SKILL.md authors that wrote `requires: true` without a concrete ref).
+function resolveDesignSystem(
+  ctx: PluginContext,
+  registry: RegistryView,
+  warnOnMissing: boolean | undefined,
+  acc: ResolveAccumulator,
+): void {
+  if (!ctx.designSystem) return;
+  const dsRef = ctx.designSystem;
+  const explicitRef = typeof dsRef.ref === 'string' ? dsRef.ref.trim() : '';
+  if (explicitRef) {
+    const ds = registry.designSystems.find((d) => d.id === explicitRef);
+    if (ds) {
+      acc.items.push({ kind: 'design-system', id: ds.id, label: ds.title ?? ds.id, primary: true });
+      acc.digestRefs.push({ kind: 'design-system', ref: ds.id });
+    } else if (warnOnMissing) {
+      acc.warnings.push(`Unknown design-system ref: '${explicitRef}'`);
+    }
+  } else if (registry.activeProjectDesignSystem) {
+    const ds = registry.activeProjectDesignSystem;
+    acc.items.push({ kind: 'design-system', id: ds.id, label: ds.title ?? ds.id, primary: true });
+    acc.digestRefs.push({ kind: 'design-system', ref: ds.id });
+  }
+}
+
+function resolveCraft(
+  ctx: PluginContext,
+  registry: RegistryView,
+  warnOnMissing: boolean | undefined,
+  acc: ResolveAccumulator,
+): void {
+  for (const slug of ctx.craft ?? []) {
+    const id = String(slug).trim();
+    if (!id) continue;
+    const c = registry.craft.find((x) => x.id === id);
+    if (!c) {
+      if (warnOnMissing) acc.warnings.push(`Unknown craft slug: '${id}'`);
+      continue;
+    }
+    acc.items.push({ kind: 'craft', id: c.id, label: c.title ?? c.id });
+    acc.digestRefs.push({ kind: 'craft', ref: c.id });
+  }
+}
+
+// Asset paths are kept as-is and validated by the installer at apply time.
+// The chip strip uses the basename as the label.
+function resolveAssets(ctx: PluginContext, acc: ResolveAccumulator): void {
+  for (const rawPath of ctx.assets ?? []) {
+    const p = String(rawPath).trim();
+    if (!p) continue;
+    const label = p.split('/').pop() ?? p;
+    acc.items.push({ kind: 'asset', path: p, label });
+    acc.digestRefs.push({ kind: 'asset', ref: p });
+  }
+}
+
+function resolveMcp(ctx: PluginContext, acc: ResolveAccumulator): void {
+  for (const mcp of ctx.mcp ?? []) {
+    if (!mcp.name) continue;
+    acc.items.push({
+      kind: 'mcp',
+      name: mcp.name,
+      label: mcp.name,
+      command: typeof mcp.command === 'string' ? mcp.command : undefined,
+    });
+    acc.digestRefs.push({ kind: 'mcp', ref: mcp.name });
+  }
+}
+
+function resolveClaudePlugins(ctx: PluginContext, acc: ResolveAccumulator): void {
+  for (const ref of ctx.claudePlugins ?? []) {
+    const id = (ref.ref ?? ref.path ?? '').trim();
+    if (!id) continue;
+    acc.items.push({ kind: 'claude-plugin', id, label: id });
+    acc.digestRefs.push({ kind: 'claude-plugin', ref: id });
+  }
+}
+
+function resolveAtoms(ctx: PluginContext, registry: RegistryView, acc: ResolveAccumulator): void {
+  for (const atomId of ctx.atoms ?? []) {
+    const id = String(atomId).trim();
+    if (!id) continue;
+    const atom = registry.atoms.find((a) => a.id === id);
+    const label = atom?.label ?? id;
+    acc.items.push({ kind: 'atom', id, label });
+    acc.digestRefs.push({ kind: 'atom', ref: id });
+  }
+}
+
+// Pipeline stages flag additional atoms that may not have appeared in
+// ctx.atoms; record them as digest refs so two manifests with different
+// pipelines produce distinct digests.
+function resolvePipelineAtoms(manifest: PluginManifest, acc: ResolveAccumulator): void {
+  for (const stage of manifest.od?.pipeline?.stages ?? []) {
+    for (const atomId of stage.atoms) {
+      acc.digestRefs.push({ kind: 'pipeline-atom', ref: `${stage.id}:${atomId}` });
+    }
+  }
 }
 
 function stripDotSlash(value: string): string {
