@@ -2432,6 +2432,10 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   font-size: 10.5px;
   font-weight: 500;
   line-height: 1;
+  margin-left: 6px;
+}
+.chat-history-menu-head .chat-history-new {
+  margin-left: auto;
 }
 .chat-history-search {
   display: flex;
