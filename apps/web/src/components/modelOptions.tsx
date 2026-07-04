@@ -10,6 +10,12 @@ import {
   MODEL_CAPABILITY_TAG_LABEL_KEYS,
 } from './modelCapabilityTags';
 
+const ALPHA_BY_LABEL = (a: AgentModelOption, b: AgentModelOption) => {
+  const la = a.label.toLowerCase();
+  const lb = b.label.toLowerCase();
+  return la < lb ? -1 : la > lb ? 1 : 0;
+};
+
 export function renderModelOptions(models: AgentModelOption[]) {
   const groups = new Map<string, AgentModelOption[]>();
   const flat: AgentModelOption[] = [];
@@ -24,7 +30,12 @@ export function renderModelOptions(models: AgentModelOption[]) {
     arr.push(m);
     groups.set(provider, arr);
   }
-  flat.sort((a, b) => (a.id === 'default' ? -1 : b.id === 'default' ? 1 : 0));
+  // Keep 'default' pinned first, then sort remaining flat options alphabetically
+  flat.sort((a, b) => {
+    if (a.id === 'default') return -1;
+    if (b.id === 'default') return 1;
+    return ALPHA_BY_LABEL(a, b);
+  });
   if (groups.size === 0) {
     return (
       <>
@@ -36,6 +47,13 @@ export function renderModelOptions(models: AgentModelOption[]) {
       </>
     );
   }
+  // Sort each group's items alphabetically and sort groups by provider name
+  const sortedGroups = Array.from(groups.entries()).sort(([a], [b]) =>
+    a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0,
+  );
+  for (const [, items] of sortedGroups) {
+    items.sort(ALPHA_BY_LABEL);
+  }
   return (
     <>
       {flat.map((m) => (
@@ -43,7 +61,7 @@ export function renderModelOptions(models: AgentModelOption[]) {
           {m.label}
         </option>
       ))}
-      {Array.from(groups.entries()).map(([provider, items]) => (
+      {sortedGroups.map(([provider, items]) => (
         <optgroup key={provider} label={provider}>
           {items.map((m) => (
             <option key={m.id} value={m.id}>
@@ -140,7 +158,11 @@ export const SearchableModelSelect = forwardRef<
         merged.set(option.value, { id: option.value, label: option.label });
       }
     }
-    return Array.from(merged.values());
+    return Array.from(merged.values()).sort((a, b) => {
+      const la = a.label.toLowerCase();
+      const lb = b.label.toLowerCase();
+      return la < lb ? -1 : la > lb ? 1 : 0;
+    });
   }, [additionalOptions, models]);
   const selectedOption =
     allOptions.find((option) => option.id === value) ??

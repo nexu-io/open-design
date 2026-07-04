@@ -27,19 +27,19 @@ describe('renderModelOptions', () => {
     expect(renderOptions([])).toBe('<select></select>');
   });
 
-  it('renders flat model lists as ungrouped options in input order', () => {
+  it('renders flat model lists alphabetically by label with default pinned first', () => {
     expect(
       renderOptions([
-        { id: 'default', label: 'Default' },
         { id: 'sonnet', label: 'Claude Sonnet' },
+        { id: 'default', label: 'Default' },
         { id: 'opus', label: 'Claude Opus' },
       ]),
     ).toBe(
-      '<select><option value="default">Default</option><option value="sonnet">Claude Sonnet</option><option value="opus">Claude Opus</option></select>',
+      '<select><option value="default">Default</option><option value="opus">Claude Opus</option><option value="sonnet">Claude Sonnet</option></select>',
     );
   });
 
-  it('pins default and other flat options before provider optgroups', () => {
+  it('pins default and sorts options + groups alphabetically', () => {
     expect(
       renderOptions([
         { id: 'openai/gpt-5.1', label: 'openai/gpt-5.1' },
@@ -49,16 +49,16 @@ describe('renderModelOptions', () => {
         { id: 'openai/o3', label: 'openai/o3' },
       ]),
     ).toBe(
-      '<select><option value="default">Default</option><option value="custom-local">Custom local</option><optgroup label="openai"><option value="openai/gpt-5.1">gpt-5.1</option><option value="openai/o3">o3</option></optgroup><optgroup label="anthropic"><option value="anthropic/claude-sonnet-4.5">claude-sonnet-4.5</option></optgroup></select>',
+      '<select><option value="default">Default</option><option value="custom-local">Custom local</option><optgroup label="anthropic"><option value="anthropic/claude-sonnet-4.5">claude-sonnet-4.5</option></optgroup><optgroup label="openai"><option value="openai/gpt-5.1">gpt-5.1</option><option value="openai/o3">o3</option></optgroup></select>',
     );
   });
 
-  it('treats leading-slash ids as flat and only strips matching provider label prefixes', () => {
+  it('treats leading-slash ids as flat and sorts items within groups', () => {
     expect(
       renderOptions([
         { id: '/missing-provider', label: '/missing-provider' },
-        { id: 'openai/gpt-5.1', label: 'GPT 5.1' },
         { id: 'openai/o3', label: 'openai/o3' },
+        { id: 'openai/gpt-5.1', label: 'GPT 5.1' },
       ]),
     ).toBe(
       '<select><option value="/missing-provider">/missing-provider</option><optgroup label="openai"><option value="openai/gpt-5.1">GPT 5.1</option><option value="openai/o3">o3</option></optgroup></select>',
