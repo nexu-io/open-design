@@ -137,23 +137,10 @@ function parseYamlSubset(src: string): FrontmatterObject {
     }
 
     if (val === '|' || val === '|-' || val === '>' || val === '>-') {
-      const collected: string[] = [];
-      const childIndent = indent + 2;
-      i++;
-      while (i < lines.length) {
-        const next = lines[i] ?? '';
-        if (/^\s*$/.test(next)) {
-          collected.push('');
-          i++;
-          continue;
-        }
-        const nIndent = next.match(/^\s*/)?.[0].length ?? 0;
-        if (nIndent < childIndent) break;
-        collected.push(next.slice(childIndent));
-        i++;
-      }
+      const { value, nextIndex } = collectBlockScalar(lines, i, indent + 2);
       if (Array.isArray(top.container)) throw new Error('frontmatter object container expected');
-      top.container[key] = collected.join('\n').trimEnd();
+      top.container[key] = value;
+      i = nextIndex;
       continue;
     }
 
@@ -166,11 +153,7 @@ function parseYamlSubset(src: string): FrontmatterObject {
 
     if (val.startsWith('[') && val.endsWith(']')) {
       if (Array.isArray(top.container)) throw new Error('frontmatter object container expected');
-      top.container[key] = val
-        .slice(1, -1)
-        .split(',')
-        .map((s) => coerce(s.trim()))
-        .filter((v): v is FrontmatterValue => v !== '');
+      top.container[key] = parseInlineArray(val);
       i++;
       continue;
     }
@@ -181,6 +164,43 @@ function parseYamlSubset(src: string): FrontmatterObject {
   }
 
   return root;
+}
+
+// Collect an indented block scalar (|, |-, >, >-). This subset joins physical
+// lines with `\n` (no YAML folding for `>`) and right-trims the result.
+// `keyIndex` points at the `key: |` line; returns the joined value and the
+// line index the caller should resume parsing from.
+function collectBlockScalar(
+  lines: string[],
+  keyIndex: number,
+  childIndent: number,
+): { value: string; nextIndex: number } {
+  const collected: string[] = [];
+  let i = keyIndex + 1;
+  while (i < lines.length) {
+    const next = lines[i] ?? '';
+    if (/^\s*$/.test(next)) {
+      collected.push('');
+      i++;
+      continue;
+    }
+    const nIndent = next.match(/^\s*/)?.[0].length ?? 0;
+    if (nIndent < childIndent) break;
+    collected.push(next.slice(childIndent));
+    i++;
+  }
+  return { value: collected.join('\n').trimEnd(), nextIndex: i };
+}
+
+// Parse a single-line inline array `[a, b, c]` into coerced scalars, dropping
+// empty entries (e.g. a trailing comma). The empty-array `[]` form is handled
+// by the caller before this runs.
+function parseInlineArray(val: string): FrontmatterValue[] {
+  return val
+    .slice(1, -1)
+    .split(',')
+    .map((s) => coerce(s.trim()))
+    .filter((v): v is FrontmatterValue => v !== '');
 }
 
 function coerce(raw: string | undefined): FrontmatterValue {
