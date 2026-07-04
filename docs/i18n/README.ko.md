@@ -1,6 +1,6 @@
 <h1 align="center">Open Design: 오픈소스 Claude Design 대안</h1>
 
-> 🔥 **Open Design 0.10.0 출시: 올인원 Agentic 디자인 워크스페이스.** 디자인의 모든 과정이 이제 하나의 창 안에서 이루어집니다 — 막연한 아이디어에서 출발해 레퍼런스 발견, 소재 수집, 인터랙티브 편집, 코멘트 큐잉, 모션 다듬기, 그리고 에디터나 Code Agent로의 인계까지, 앱을 떠나지 않고 완성하세요. 여러 세션을 병렬로 실행하면, 더 이상 한 명의 어시스턴트가 아니라 당신을 위해 일하는 로컬 디자인 팀처럼 느껴집니다. [0.10.0 다운로드](https://github.com/nexu-io/open-design/releases) · [토론 참여하기](https://github.com/nexu-io/open-design/discussions/4153)
+> 🔥 **Open Design 0.13.0 — _Stay in Flow_ 출시.** 긴 디자인 세션은 지금까지 중단될 때마다 끊겼습니다 — 실행은 진행 위치를 잃고, 모델 선택기는 추측하게 만들고, 내보내기는 한 번 더 우회해야 했습니다. 0.13.0은 세션을 계속 살아 있게 합니다: Codex / OpenCode / Pi / Open Design Cloud 실행을 여러 턴에 걸쳐 재개하고, 알맞은 모델을 더 빠르게 고르며, 스크린샷 기반 PPTX / PDF를 앱을 벗어나지 않고 전달하세요. [0.13.0 다운로드](https://github.com/nexu-io/open-design/releases) · [릴리스 노트](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
 >
 > ⚡ **Open Design Cloud — 공식 모델 서비스.** 한 번의 충전으로 Open Design 안에서 GPT, Claude, Gemini, DeepSeek를 바로 사용하세요. 20+ 플래그십 모델, 무설정, 실제 토큰 사용량 기반 과금. [Open Design Cloud 사용해 보기](https://open-design.ai/cloud/)
 >

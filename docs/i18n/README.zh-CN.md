@@ -1,6 +1,6 @@
 <h1 align="center">Open Design：The open-source Claude Design alternative</h1>
 
-> 🔥 **Open Design 0.10.0 正式发布：All-in-one 的 Agentic 设计工作台。** 设计的全流程从此只需一个窗口——从一个模糊的想法出发，到发现参考、收集素材、交互式编辑、评论排队、打磨动效，再交付给编辑器或 Code Agent，全程无需离开应用。配合多会话并行，它不再只是一个助手，而是一支为你工作的本地设计团队。[下载 0.10.0](https://github.com/nexu-io/open-design/releases) · [参与讨论](https://github.com/nexu-io/open-design/discussions/4153)
+> 🔥 **Open Design 0.13.0 —— _Stay in Flow_ 正式发布。** 过去，长时间的设计会话总在每一次中断时断裂——运行丢失了进度，模型选择器让你只能靠猜，导出还得多绕一道弯。0.13.0 让会话持续存活：跨轮次恢复 Codex / OpenCode / Pi / Open Design Cloud 的运行，更快选中合适的模型，并在不离开应用的情况下交付带截图支撑的 PPTX / PDF。[下载 0.13.0](https://github.com/nexu-io/open-design/releases) · [发布说明](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
 >
 > ⚡ **Open Design Cloud——官方模型服务。** 一次充值，即可在 Open Design 里直接使用 GPT、Claude、Gemini 与 DeepSeek：20+ 旗舰模型、零配置、按真实 token 用量计费。[立即体验](https://open-design.ai/cloud/)
 >

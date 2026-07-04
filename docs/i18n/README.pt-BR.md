@@ -1,6 +1,6 @@
 <h1 align="center">Open Design: a alternativa open-source ao Claude Design</h1>
 
-> 🔥 **O Open Design 0.10.0 chegou: o espaço de trabalho de design Agentic tudo-em-um.** Todo o ofício agora vive em uma única janela — vá de uma ideia vaga à descoberta de referências, coleta de material, edição interativa, fila de comentários, polimento de animações e entrega para um editor ou um Code Agent — sem sair do app. Com sessões em paralelo, deixa de parecer um assistente e passa a parecer um time de design local trabalhando para você. [Baixar 0.10.0](https://github.com/nexu-io/open-design/releases) · [Participar da discussão](https://github.com/nexu-io/open-design/discussions/4153)
+> 🔥 **O Open Design 0.13.0 — _Stay in Flow_ chegou.** Sessões de design longas costumavam quebrar a cada interrupção — uma execução perdia seu lugar, um seletor de modelos fazia você adivinhar, uma exportação exigia mais um desvio. O 0.13.0 mantém a sessão viva: retome execuções do Codex / OpenCode / Pi / Open Design Cloud entre turnos, escolha o modelo certo mais rápido e entregue PPTX / PDF apoiados em capturas de tela sem sair do app. [Baixar 0.13.0](https://github.com/nexu-io/open-design/releases) · [Notas da versão](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
 >
 > ⚡ **Open Design Cloud — o serviço de modelos oficial.** Uma única recarga para usar GPT, Claude, Gemini e DeepSeek dentro do Open Design: mais de 20 modelos de ponta, zero configuração, cobrança pelo uso real de tokens. [Experimentar o Open Design Cloud](https://open-design.ai/cloud/)
 >
