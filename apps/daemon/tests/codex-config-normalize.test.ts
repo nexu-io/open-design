@@ -39,7 +39,7 @@ import {
   normalizeCodexConfigFile,
   resolveCodexConfigPath,
   type CodexConfigIO,
-} from '../src/codex-config-normalize.js';
+} from '../src/codex/index.js';
 
 // ---------------------------------------------------------------------------
 // normalizeCodexConfigContent — pure string-level normalization (remove-only)

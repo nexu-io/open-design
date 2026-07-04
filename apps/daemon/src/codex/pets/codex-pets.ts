@@ -1,23 +1,30 @@
-// Codex hatch-pet registry. Lists pets that the upstream `hatch-pet`
-// skill packages under `${CODEX_HOME:-$HOME/.codex}/pets/<id>/` and the
-// curated set bundled with this repo under `assets/community-pets/<id>/`.
-//
-// On-disk shape (per the hatch-pet `references/codex-pet-contract.md`):
-//
-//   <root>/<id>/
-//     pet.json          # { id, displayName, description, spritesheetPath }
-//     spritesheet.webp  # 1536x1872 8x9 atlas (or .png / .gif fallback)
-//
-// We scan both folders lazily on every list request — there are only a
-// handful of pets in either location, and watching the filesystem would
-// add a daemon-side dependency that doesn't pay off here. When the same
-// pet id exists in both, the user's local copy wins so re-baking a
-// bundled pet locally is a supported workflow.
+/**
+ * @module codex/pets
+ *
+ * Codex hatch-pet registry. Lists pets that the upstream `hatch-pet`
+ * skill packages under `${CODEX_HOME:-$HOME/.codex}/pets/<id>/` and the
+ * curated set bundled with this repo under `assets/community-pets/<id>/`.
+ *
+ * On-disk shape (per the hatch-pet `references/codex-pet-contract.md`):
+ *
+ *   <root>/<id>/
+ *     pet.json          # { id, displayName, description, spritesheetPath }
+ *     spritesheet.webp  # 1536x1872 8x9 atlas (or .png / .gif fallback)
+ *
+ * We scan both folders lazily on every list request — there are only a
+ * handful of pets in either location, and watching the filesystem would
+ * add a daemon-side dependency that doesn't pay off here. When the same
+ * pet id exists in both, the user's local copy wins so re-baking a
+ * bundled pet locally is a supported workflow.
+ *
+ * Sibling relationship: resolves the Codex home through the domain foundation
+ * ({@link module:codex/core/codex-home}); everything else here is self-contained.
+ */
 
 import { readdir, readFile, stat } from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
+import { defaultCodexHome } from '../core/index.js';
 
 // Pre-scanned set of ids that live under the bundled `assets/community-pets/`
 // root. We resolve the `bundled` flag against this set rather than against
@@ -75,8 +82,17 @@ interface SpritesheetPick {
   ext: string;
 }
 
+/**
+ * Resolve the directory the daemon scans for the user's hatched Codex pets.
+ *
+ * This is the user-writable root (`$CODEX_HOME/pets`, defaulting to
+ * `~/.codex/pets`); the bundled curated set lives elsewhere and is passed in
+ * separately as `bundledRoot`.
+ *
+ * @returns Absolute path to the user's Codex pets directory.
+ */
 export function resolveCodexPetsRoot(): string {
-  const home = process.env.CODEX_HOME?.trim() || path.join(os.homedir(), '.codex');
+  const home = defaultCodexHome(process.env.CODEX_HOME);
   return path.join(home, 'pets');
 }
 
@@ -163,6 +179,19 @@ async function scanRoot(
   }
 }
 
+/**
+ * List every Codex hatch-pet available to the UI, newest-hatched first.
+ *
+ * Scans the user's `~/.codex/pets/` root first, then (when `bundledRoot` is
+ * supplied) the curated bundled set, deduping by id so a locally re-baked pet
+ * preempts its bundled twin for sprite content while still being flagged
+ * `bundled` via curated-set membership.
+ *
+ * @param options.baseUrl - Origin prefix for the generated spritesheet URLs
+ *   (empty string yields same-origin relative URLs).
+ * @param options.bundledRoot - Optional path to the curated bundled pets dir.
+ * @returns The merged, mtime-sorted pet summaries plus the user root scanned.
+ */
 export async function listCodexPets(
   options: { baseUrl?: string; bundledRoot?: string } = {},
 ): Promise<CodexPetListResult> {
@@ -190,11 +219,18 @@ export async function listCodexPets(
   return { pets: out, rootDir: userRoot };
 }
 
-// Returns { absPath, ext } for the resolved spritesheet of a given pet
-// id, or null if the pet folder / sheet is missing. Used by the
-// `/api/codex-pets/:id/spritesheet` route to safely serve the file —
-// the id is sanitised on both sides so users cannot path-escape into
-// arbitrary folders under their home directory or the bundled assets.
+/**
+ * Resolve the on-disk spritesheet for a single pet id, for the download route.
+ *
+ * Returns `{ absPath, ext }` for the resolved spritesheet, or `null` if the pet
+ * folder / sheet is missing. Backs the `/api/codex-pets/:id/spritesheet` route:
+ * the id is sanitised on both sides so a request cannot path-escape into
+ * arbitrary folders under the home directory or the bundled assets.
+ *
+ * @param id - The (unsanitised) pet id from the request path.
+ * @param options.bundledRoot - Optional curated bundled pets dir to also search.
+ * @returns The resolved spritesheet's absolute path and extension, or `null`.
+ */
 export async function readCodexPetSpritesheet(
   id: string,
   options: { bundledRoot?: string } = {},

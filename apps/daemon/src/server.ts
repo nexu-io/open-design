@@ -6816,7 +6816,7 @@ export async function startServer({
     // — a missing or read-only config.toml is fine, and the Codex CLI still
     // surfaces the original error if the write fails. See issue #4276 / #3408.
     if (def.id === 'codex') {
-      const { normalizeCodexConfigFile } = await import('./codex-config-normalize.js');
+      const { normalizeCodexConfigFile } = await import('./codex/index.js');
       // Route through spawnEnvForAgent so resolveCodexConfigPath sees the same
       // fully-expanded CODEX_HOME the Codex child process will see. In
       // particular, spawnEnvForAgent calls expandConfiguredEnv which expands

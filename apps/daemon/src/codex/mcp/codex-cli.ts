@@ -1,12 +1,17 @@
-// Thin wrapper over `codex mcp add|remove|get` so the Settings panel can
-// offer a one-click "Install to Codex" toggle instead of asking the user
-// to paste TOML into ~/.codex/config.toml. We shell out to the bundled
-// Codex CLI rather than rewriting config.toml ourselves so we inherit
-// Codex's own merge / dedupe / validation rules.
-//
-// CodexRunner is injected so tests can stub spawn without poking the
-// global child_process module; production uses defaultCodexRunner which
-// is a thin spawn() wrapper with a 30s timeout.
+/**
+ * @module codex/mcp
+ *
+ * Thin wrapper over `codex mcp add|remove|get` so the Settings panel can
+ * offer a one-click "Install to Codex" toggle instead of asking the user
+ * to paste TOML into ~/.codex/config.toml. We shell out to the bundled
+ * Codex CLI rather than rewriting config.toml ourselves so we inherit
+ * Codex's own merge / dedupe / validation rules.
+ *
+ * CodexRunner is injected so tests can stub spawn without poking the
+ * global child_process module; production uses defaultCodexRunner which
+ * is a thin spawn() wrapper with a 30s timeout. This concern is
+ * self-contained — it does not touch the Codex home foundation.
+ */
 
 import { spawn } from 'node:child_process';
 
@@ -53,8 +58,15 @@ const defaultCodexRunner: CodexRunner = {
 
 let _runner: CodexRunner | null = null;
 
-// Tests inject a stub runner; production callers use the default. Pass
-// null to restore the default (called from afterEach in test suites).
+/**
+ * Override the process-global Codex CLI runner.
+ *
+ * Tests inject a stub runner to exercise install/probe flows without spawning
+ * a real `codex` process; production callers never call this. Pass `null` to
+ * restore the default spawn-based runner (typically from an `afterEach`).
+ *
+ * @param runner - The stub runner to install, or `null` to reset to default.
+ */
 export function setCodexRunner(runner: CodexRunner | null): void {
   _runner = runner;
 }
@@ -74,6 +86,17 @@ export interface CodexInstallStatus {
   installed: boolean;
 }
 
+/**
+ * Probe whether the Codex CLI is present and whether an MCP server is installed.
+ *
+ * Runs `codex mcp get <name>`: a spawn `ENOENT` means the CLI is not on PATH
+ * (`available: false`), otherwise a zero exit means the named server is already
+ * registered in `~/.codex/config.toml` (`installed: true`). Drives the Settings
+ * one-click toggle's enabled state and install/uninstall label.
+ *
+ * @param name - The MCP server name to look up (e.g. `open-design`).
+ * @returns Availability of the Codex CLI and install state of `name`.
+ */
 export async function probeCodexInstall(name: string): Promise<CodexInstallStatus> {
   try {
     const result = await activeRunner().run(['mcp', 'get', name]);
@@ -97,6 +120,16 @@ export interface CodexInstallSpec {
   env: Record<string, string>;
 }
 
+/**
+ * Register (or re-register) an MCP server in the user's Codex config via the CLI.
+ *
+ * Builds `codex mcp add <name> [--env K=V]… -- <command> <args…>` so Codex
+ * applies its own merge/dedupe/validation. Throws with the CLI's stderr/stdout
+ * detail on a non-zero exit so the route layer can surface an actionable error.
+ *
+ * @param spec - Server name, launch command/args, and env for the MCP entry.
+ * @throws If the `codex mcp add` invocation exits non-zero.
+ */
 export async function installCodexMcp(spec: CodexInstallSpec): Promise<void> {
   const argv: string[] = ['mcp', 'add', spec.name];
   for (const [key, value] of Object.entries(spec.env)) {
@@ -109,6 +142,15 @@ export async function installCodexMcp(spec: CodexInstallSpec): Promise<void> {
   }
 }
 
+/**
+ * Remove an MCP server from the user's Codex config via the CLI.
+ *
+ * Runs `codex mcp remove <name>`, throwing with the CLI's failure detail on a
+ * non-zero exit. Backs the "uninstall" side of the Settings one-click toggle.
+ *
+ * @param name - The MCP server name to remove from `~/.codex/config.toml`.
+ * @throws If the `codex mcp remove` invocation exits non-zero.
+ */
 export async function uninstallCodexMcp(name: string): Promise<void> {
   const result = await activeRunner().run(['mcp', 'remove', name]);
   if (result.exitCode !== 0) {

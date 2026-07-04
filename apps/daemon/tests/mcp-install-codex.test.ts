@@ -6,7 +6,7 @@ import {
   setCodexRunner,
   uninstallCodexMcp,
   type CodexRunner,
-} from '../src/codex-cli.js';
+} from '../src/codex/index.js';
 
 // One-click "Install to Codex" relies on the bundled `codex` CLI's own
 // `codex mcp add/remove/get` subcommands rather than rewriting

@@ -1,43 +1,52 @@
-// Normalize ~/.codex/config.toml before launching the Codex CLI.
-//
-// The Codex CLI only accepts `service_tier = "fast"` or `"flex"`. Any other
-// value makes it exit before processing the prompt:
-//
-//   Error loading config.toml: unknown variant '<value>', expected 'fast'
-//   or 'flex' in `service_tier`
-//
-// The Codex app has written several invalid values over time ("priority",
-// "default", and others observed in production). An earlier version of this
-// module kept a hardcoded map of the known-stale values → "fast"; every new
-// invalid value the app emitted then slipped through and crashed the CLI until
-// someone added it to the map — whack-a-mole.
-//
-// Instead, this module takes the wildcard view: the valid set is small and
-// known ({fast, flex}), so ANY service_tier value outside it is treated as
-// invalid and its line is REMOVED, letting the Codex CLI fall back to its
-// built-in default tier. Removing — rather than forcing "fast" — is the
-// smallest assumption: it never imposes an opinionated tier on the user, and
-// "default"/unknown values semantically mean "let the system choose" anyway.
-//
-// The CLI parses config.toml before processing any -c flag overrides, so the
-// only way to prevent the exit is to fix the file on disk. The edit is
-// intentionally scoped: only standalone `service_tier` key lines are touched;
-// everything else in config.toml is preserved verbatim.
-//
-// The normalizer also removes nested `[features.*]` tables. Current Codex CLI
-// configs model `[features]` as a map of boolean flags; a nested table makes a
-// flag value a TOML map and the CLI exits with:
-//
-//   invalid type: map, expected a boolean in `features`
-//
-// The normalization is idempotent: if the file is absent, or if no invalid
-// service_tier value or nested features table is present, it is left unchanged.
+/**
+ * @module codex/config
+ *
+ * Normalize ~/.codex/config.toml before launching the Codex CLI.
+ *
+ * The Codex CLI only accepts `service_tier = "fast"` or `"flex"`. Any other
+ * value makes it exit before processing the prompt:
+ *
+ *   Error loading config.toml: unknown variant '<value>', expected 'fast'
+ *   or 'flex' in `service_tier`
+ *
+ * The Codex app has written several invalid values over time ("priority",
+ * "default", and others observed in production). An earlier version of this
+ * module kept a hardcoded map of the known-stale values → "fast"; every new
+ * invalid value the app emitted then slipped through and crashed the CLI until
+ * someone added it to the map — whack-a-mole.
+ *
+ * Instead, this module takes the wildcard view: the valid set is small and
+ * known ({fast, flex}), so ANY service_tier value outside it is treated as
+ * invalid and its line is REMOVED, letting the Codex CLI fall back to its
+ * built-in default tier. Removing — rather than forcing "fast" — is the
+ * smallest assumption: it never imposes an opinionated tier on the user, and
+ * "default"/unknown values semantically mean "let the system choose" anyway.
+ *
+ * The CLI parses config.toml before processing any -c flag overrides, so the
+ * only way to prevent the exit is to fix the file on disk. The edit is
+ * intentionally scoped: only standalone `service_tier` key lines are touched;
+ * everything else in config.toml is preserved verbatim.
+ *
+ * The normalizer also removes nested `[features.*]` tables. Current Codex CLI
+ * configs model `[features]` as a map of boolean flags; a nested table makes a
+ * flag value a TOML map and the CLI exits with:
+ *
+ *   invalid type: map, expected a boolean in `features`
+ *
+ * The normalization is idempotent: if the file is absent, or if no invalid
+ * service_tier value or nested features table is present, it is left unchanged.
+ *
+ * Sibling relationship: this concern resolves the Codex home independently of
+ * the domain foundation ({@link module:codex/core/codex-home}) because it must
+ * expand a leading `~` via `runtimes/paths` (`expandHomePath`) to mirror what
+ * the spawned Codex child sees — a deliberately different resolution.
+ */
 
 import { randomBytes } from 'node:crypto';
 import { rename, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { expandHomePath } from './runtimes/paths.js';
+import { expandHomePath } from '../../runtimes/paths.js';
 
 /**
  * Resolve the path to the Codex CLI config file, respecting CODEX_HOME.

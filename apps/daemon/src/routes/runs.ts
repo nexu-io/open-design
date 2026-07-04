@@ -29,7 +29,7 @@ import { agentCliEnvForAgent, readAppConfig } from '../app-config.js';
 import {
   codexSessionIdFromRunEvents,
   readCodexRolloutFirstCall,
-} from '../codex-rollout-usage.js';
+} from '../codex/index.js';
 import type { ConnectorService } from '../connectors/service.js';
 import { getProject, listConversations, updateProject, upsertMessage } from '../db.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';

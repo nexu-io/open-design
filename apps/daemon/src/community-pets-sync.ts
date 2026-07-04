@@ -10,7 +10,7 @@
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { resolveCodexPetsRoot } from './codex-pets.js';
+import { resolveCodexPetsRoot } from './codex/index.js';
 
 const PETSHARE_BASE = 'https://ihzwckyzfcuktrljwpha.supabase.co/functions/v1/petshare';
 const HATCHERY_LIST = 'https://j20.nz/hatchery/api/pets.json';

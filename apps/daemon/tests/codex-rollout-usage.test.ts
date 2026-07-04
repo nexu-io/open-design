@@ -7,7 +7,7 @@ import {
   codexSessionIdFromRunEvents,
   extractCodexLastTurnFirstCallUsage,
   readCodexRolloutFirstCall,
-} from '../src/codex-rollout-usage.js';
+} from '../src/codex/index.js';
 
 // Shapes mirror real codex 0.133.0 rollout JSONL (`~/.codex/sessions/**/rollout-*.jsonl`):
 // each turn opens with a `task_started` event_msg, and every model call emits a

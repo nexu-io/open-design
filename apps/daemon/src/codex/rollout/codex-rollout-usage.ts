@@ -1,19 +1,24 @@
-// codex reports only a cumulative `turn.completed` usage on the exec/json
-// stream the daemon consumes, so the stream cannot tell us the cache-hit rate
-// of a turn's OPENING model call — the signal session-reuse moves. codex does
-// record per-call usage in its rollout JSONL though: each `token_count`
-// `event_msg` carries `info.last_token_usage` (the most recent single call,
-// OpenAI-style where `input_tokens` INCLUDES the `cached_input_tokens` subset).
-//
-// A rollout accumulates every turn of a session, one `task_started` per turn.
-// The first `token_count` after the LAST `task_started` is the opening call of
-// the turn the daemon just finished — exactly the first-call number we want.
-// This module is the pure extractor; locating the rollout file for a run lives
-// at the call site (it needs CODEX_HOME + the captured session id).
+/**
+ * @module codex/rollout
+ *
+ * codex reports only a cumulative `turn.completed` usage on the exec/json
+ * stream the daemon consumes, so the stream cannot tell us the cache-hit rate
+ * of a turn's OPENING model call — the signal session-reuse moves. codex does
+ * record per-call usage in its rollout JSONL though: each `token_count`
+ * `event_msg` carries `info.last_token_usage` (the most recent single call,
+ * OpenAI-style where `input_tokens` INCLUDES the `cached_input_tokens` subset).
+ *
+ * A rollout accumulates every turn of a session, one `task_started` per turn.
+ * The first `token_count` after the LAST `task_started` is the opening call of
+ * the turn the daemon just finished — exactly the first-call number we want.
+ * This module is the pure extractor; it locates the rollout file under the
+ * Codex home resolved via the domain foundation
+ * ({@link module:codex/core/codex-home}).
+ */
 
-import os from 'node:os';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
+import { defaultCodexHome } from '../core/index.js';
 
 interface CodexFirstCallUsage {
   first_call_input_tokens: number;
@@ -164,7 +169,7 @@ export async function readCodexRolloutFirstCall(opts: {
   // CODEX_HOME when sandbox mode relocates it; with sandbox off the resolver
   // returns empty and codex writes under ~/.codex, so mirror that default here
   // rather than giving up (which silently dropped every non-sandboxed run).
-  const codexHome = opts.codexHome?.trim() || path.join(os.homedir(), '.codex');
+  const codexHome = defaultCodexHome(opts.codexHome);
   const sessionId = opts.sessionId?.trim();
   if (!sessionId) return null;
   try {

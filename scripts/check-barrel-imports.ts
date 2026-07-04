@@ -64,6 +64,17 @@ export const CAPABILITY_BARREL_DOMAINS: CapabilityBarrelDomain[] = [
       ['jobs', 'catalog'],
     ],
   },
+  {
+    name: 'codex',
+    root: 'apps/daemon/src/codex',
+    subdirs: ['core', 'mcp', 'config', 'pets', 'rollout'],
+    foundation: 'core',
+    // Pure star: mcp, config, pets, and rollout are four mutually independent
+    // Codex-facing concerns. Only pets and rollout lean on the `core` Codex
+    // home resolver (imported directly, as the foundation always may), so
+    // there are no cross-sibling edges to declare.
+    allowedEdges: [],
+  },
 ];
 
 export type BarrelImportViolation = {

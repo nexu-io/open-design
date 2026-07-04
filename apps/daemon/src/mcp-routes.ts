@@ -2,7 +2,7 @@ import type { Express } from 'express';
 import fs from 'node:fs';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { buildMcpInstallPayload, type McpInstallPayload } from './mcp-install-info.js';
-import { installCodexMcp, probeCodexInstall, uninstallCodexMcp } from './codex-cli.js';
+import { installCodexMcp, probeCodexInstall, uninstallCodexMcp } from './codex/index.js';
 import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProjectCwd, readMcpConfig, writeMcpConfig } from './mcp-config.js';
 import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
 import { clearToken, getToken, isTokenExpired, readAllTokens, setToken } from './mcp-tokens.js';

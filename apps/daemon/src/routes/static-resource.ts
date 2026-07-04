@@ -13,7 +13,7 @@ import {
   splitDerivedSkillId,
   updateUserSkill,
 } from '../skills.js';
-import { listCodexPets, readCodexPetSpritesheet } from '../codex-pets.js';
+import { listCodexPets, readCodexPetSpritesheet } from '../codex/index.js';
 import { syncCommunityPets } from '../community-pets-sync.js';
 import {
   readDesignSystem,
