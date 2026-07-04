@@ -146,7 +146,7 @@ Common options:
         process.exit(1);
       }
       const rows = id ? [data] : (data?.marketplaces ?? []);
-      const { doctorMarketplace } = await import('./plugins/marketplace-doctor.js');
+      const { doctorMarketplace } = await import('../../plugins/marketplace-doctor.js');
       const reports = [];
       for (const row of rows) {
         reports.push(await doctorMarketplace({

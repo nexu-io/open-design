@@ -69,7 +69,7 @@ export async function runPluginSnapshots(args) {
     }
     const a = await respA.json();
     const b = await respB.json();
-    const { diffSnapshots } = await import('./plugins/snapshot-diff.js');
+    const { diffSnapshots } = await import('../../plugins/snapshot-diff.js');
     const report = diffSnapshots({ a, b });
     if (flags.json) {
       process.stdout.write(JSON.stringify(report, null, 2) + '\n');
@@ -246,7 +246,7 @@ Exit codes:
   if (enabledSet.has('simulate')) {
     const pipeline = plugin?.manifest?.od?.pipeline;
     if (pipeline && Array.isArray(pipeline.stages) && pipeline.stages.length > 0) {
-      const { simulatePipeline } = await import('./plugins/simulate.js');
+      const { simulatePipeline } = await import('../../plugins/simulate.js');
       simulateReport = simulatePipeline({
         pipeline,
         signals: config.simulate?.signals ?? {},
@@ -284,7 +284,7 @@ Exit codes:
   }
 
   // 6. Aggregate.
-  const { verifyPlugin } = await import('./plugins/verify.js');
+  const { verifyPlugin } = await import('../../plugins/verify.js');
   const report = verifyPlugin({
     config: {
       enabled: [...enabledSet],
@@ -391,7 +391,7 @@ Closed signal vocabulary:
     }
     return;
   }
-  const { simulatePipeline, parseSignalKv } = await import('./plugins/simulate.js');
+  const { simulatePipeline, parseSignalKv } = await import('../../plugins/simulate.js');
   const parsedSignals = parseSignalKv(sValues);
   for (const w of parsedSignals.warnings) console.warn(`[simulate] warn: ${w}`);
   const cap = typeof flags.cap === 'string' ? Number(flags.cap) : undefined;
@@ -550,7 +550,7 @@ into 'added' / 'removed' / 'changed' with one line per field.`);
   }
   const a = await respA.json();
   const b = await respB.json();
-  const { diffPlugins } = await import('./plugins/diff.js');
+  const { diffPlugins } = await import('../../plugins/diff.js');
   const report = diffPlugins({ a, b });
   if (flags.json) {
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');

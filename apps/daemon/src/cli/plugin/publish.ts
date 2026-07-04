@@ -196,7 +196,7 @@ publish from a frozen run snapshot rather than the live installed copy.`);
     }
     return;
   }
-  const { buildPublishLink, PublishError } = await import('./plugins/publish.js');
+  const { buildPublishLink, PublishError } = await import('../../plugins/publish.js');
   let link;
   try {
     link = buildPublishLink({ catalog: target, meta });
@@ -526,7 +526,7 @@ async function publishToMarketplaceJson({ catalogPath, meta }) {
   const [{ dirname, resolve }, { mkdir, readFile, writeFile }, { PublishError, upsertMarketplaceJsonEntry }] = await Promise.all([
     import('node:path'),
     import('node:fs/promises'),
-    import('./plugins/publish.js'),
+    import('../../plugins/publish.js'),
   ]);
   const resolvedPath = resolve(process.cwd(), catalogPath);
   let existing = null;
