@@ -1,0 +1,19 @@
+{
+  "candidateId": "8ec71912-0dd6-453d-9495-c1425358eebb",
+  "projectId": "brand-guokaigdg-f6133b",
+  "runId": "09103e1c-e3c5-44fb-a414-1c817ea9656e",
+  "conversationId": "60886791-ac05-4896-bc08-9103bf9a1c6b",
+  "provenance": {
+    "summary": "Detected from SKILL.md after a successful run.",
+    "detectedAt": 1783129119626
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 959,
+      "copied": true
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "animal-island-ui-skill-mr5p26gs",
+  "title": "Animal Island UI Skill",
+  "version": "0.1.0",
+  "description": "--- name: animal-island-ui description: 使用 Animal Island UI 设计系统创建动森质感的 React/HTML 组件、页面和演示界面。 triggers: - animal island - 动森组件 - island ui - nookphone ---",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
