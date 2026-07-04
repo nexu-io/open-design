@@ -1,3 +1,8 @@
+/** @module export/routes/diagnostics
+ * Diagnostics-bundle download handler: assembles a support ZIP (app version, config,
+ * agent CLI logs, run-event logs, browser-use facts) for the diagnostics export route.
+ * Reaches daemon siblings (app-config, agents, browser-use-diagnostics); no export/ sibling.
+ */
 import { homedir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -24,10 +29,10 @@ import {
   type SidecarRuntimeContext,
 } from '@open-design/sidecar';
 
-import { readCurrentAppVersionInfo } from './app-version.js';
-import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
-import { spawnEnvForAgent } from './agents.js';
-import { collectBrowserUseDiscoveryFacts } from './browser/index.js';
+import { readCurrentAppVersionInfo } from '../../app-version.js';
+import { agentCliEnvForAgent, readAppConfig } from '../../app-config.js';
+import { spawnEnvForAgent } from '../../agents.js';
+import { collectBrowserUseDiscoveryFacts } from '../../browser/index.js';
 
 interface ResolvedAgentHomes {
   amrOpenCodeHome: string | null;
@@ -77,6 +82,7 @@ async function resolveAgentHomes(dataDir: string | null | undefined): Promise<Re
   }
 }
 
+/** Inputs to {@link createDiagnosticsExportHandler}: the sidecar runtime context and the paths needed to locate logs and crash reports. */
 export interface DiagnosticsHandlerOptions {
   /** Sidecar runtime context, present when daemon is launched via tools-dev or packaged sidecar. */
   runtime: SidecarRuntimeContext<SidecarStamp> | null;
@@ -99,6 +105,7 @@ function safeUsername(): string | undefined {
   }
 }
 
+/** Warning surfaced in the bundle when the daemon was launched without a sidecar runtime, so file-based logs were not captured. */
 export const STANDALONE_LAUNCH_WARNING =
   "Daemon started without a sidecar runtime (plain `od` / standalone launch); " +
   "file-based logs are not captured. Re-run via `pnpm tools-dev` or the packaged " +
@@ -172,6 +179,11 @@ function resolveDesktopCrashDumpsDir(runtime: SidecarRuntimeContext<SidecarStamp
   return join(dirname(desktopLog), 'crashes');
 }
 
+/**
+ * Builds the Express handler that assembles and streams the diagnostics support ZIP
+ * (app version, config, agent CLI logs, run-event logs, sidecar logs, browser-use facts).
+ * @returns a RequestHandler that responds with the diagnostics bundle.
+ */
 export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOptions): RequestHandler {
   return async (_req, res) => {
     try {

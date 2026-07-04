@@ -1,3 +1,8 @@
+/** @module export/renderers/pdf
+ * Desktop PDF/artifact render-input builders: read a project's HTML artifact and
+ * compose the DesktopExportPdfInput / DesktopExportArtifactInput the desktop shell
+ * renders. Shares the `<base href>` derivation with deck.ts; no export/ sibling import.
+ */
 import path from 'node:path';
 
 import type {
@@ -7,8 +12,9 @@ import type {
   DesktopExportPdfInput,
 } from '@open-design/sidecar-proto';
 
-import { readProjectFile } from './projects.js';
+import { readProjectFile } from '../../projects.js';
 
+/** Options for {@link buildDesktopPdfExportInput}: project identity, the HTML artifact, and deck/title hints. */
 export interface BuildDesktopPdfExportInputOptions {
   daemonUrl: string;
   deck?: boolean;
@@ -22,6 +28,12 @@ export interface BuildDesktopPdfExportInputOptions {
   title?: string;
 }
 
+/**
+ * Reads a project HTML artifact and composes the {@link DesktopExportPdfInput} the
+ * desktop shell renders to PDF, deriving the `<base href>` so relative assets resolve
+ * through the daemon's `/raw/` route.
+ * @returns the desktop PDF export input.
+ */
 export async function buildDesktopPdfExportInput(
   options: BuildDesktopPdfExportInputOptions,
 ): Promise<DesktopExportPdfInput> {
@@ -41,6 +53,7 @@ export async function buildDesktopPdfExportInput(
   };
 }
 
+/** Options for {@link buildDesktopArtifactExportInput}: like the PDF variant plus target format, image format, and size overrides. */
 export interface BuildDesktopArtifactExportInputOptions {
   daemonUrl: string;
   deck?: boolean;
@@ -58,6 +71,12 @@ export interface BuildDesktopArtifactExportInputOptions {
   height?: number;
 }
 
+/**
+ * Reads a project HTML artifact and composes the {@link DesktopExportArtifactInput}
+ * for the desktop shell's generic artifact exporter (PDF/PNG/etc.), carrying format,
+ * optional image format, and size overrides.
+ * @returns the desktop artifact export input.
+ */
 export async function buildDesktopArtifactExportInput(
   options: BuildDesktopArtifactExportInputOptions,
 ): Promise<DesktopExportArtifactInput> {

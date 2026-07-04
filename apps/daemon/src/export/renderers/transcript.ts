@@ -1,3 +1,8 @@
+/** @module export/renderers/transcript
+ * One-shot dump of a project's conversation history to a structured JSONL transcript
+ * file, the input primitive for downstream synthesis (finalize/handoff). Reads SQLite
+ * directly (the source of truth), guarded by a per-project lockfile. No export/ sibling.
+ */
 // One-shot dump of a project's conversation history to disk in a structured,
 // LLM-friendly JSON Lines file at <projectDir>/.transcript.jsonl.
 //
@@ -56,7 +61,7 @@ import fs from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { projectDir } from './projects.js';
+import { projectDir } from '../../projects.js';
 
 const SCHEMA_VERSION = 2;
 const TRANSCRIPT_FILENAME = '.transcript.jsonl';
@@ -133,6 +138,7 @@ type Block =
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   | { type: 'tool_result'; toolUseId: string; content: string; isError: boolean };
 
+/** Options for {@link exportProjectTranscript}: an optional clock and an optional single-conversation scope. */
 export interface TranscriptExportOptions {
   now?: () => Date;
   /**
@@ -143,6 +149,7 @@ export interface TranscriptExportOptions {
   conversationId?: string;
 }
 
+/** Summary of a completed transcript export: the written file path and conversation/message/byte counts. */
 export interface TranscriptExportResult {
   path: string;
   conversationCount: number;
@@ -150,6 +157,10 @@ export interface TranscriptExportResult {
   bytesWritten: number;
 }
 
+/**
+ * Thrown when a second concurrent transcript export cannot acquire the
+ * per-project `.transcript.lock` file. Callers surface it as a retryable conflict.
+ */
 export class TranscriptExportLockedError extends Error {
   constructor(message: string) {
     super(message);
@@ -157,6 +168,13 @@ export class TranscriptExportLockedError extends Error {
   }
 }
 
+/**
+ * Dumps a project's conversation history to `<projectDir>/.transcript.jsonl`,
+ * reading SQLite directly and coalescing streamed events into terminal text/thinking
+ * blocks. Writes atomically under a per-project lockfile.
+ * @returns the written path and conversation/message/byte counts.
+ * @throws {@link TranscriptExportLockedError} when a concurrent export holds the lock.
+ */
 export function exportProjectTranscript(
   db: Db,
   projectsRoot: string,

@@ -1,14 +1,19 @@
+/** @module export/routes/import-export
+ * HTTP route layer for project import, project export, and finalize. Registers the
+ * Express handlers, streams uploads, inlines assets, enforces reasoning-egress and
+ * sandbox guards, and delegates deck rendering to renderers/ (the one declared edge).
+ */
 import type { Express, Response } from 'express';
 import { PROJECT_EXPORT_MANIFEST_SCHEMA, isExportFormat } from '@open-design/contracts';
 import nodePath from 'node:path';
 import { readFile, rm } from 'node:fs/promises';
-import type { RouteDeps } from './server-context.js';
+import type { RouteDeps } from '../../server-context.js';
 import {
   InlineAssetsLimitError,
   MAX_INLINE_OWNER_BYTES,
   inlineRelativeAssets,
   type InlineAssetReader,
-} from './inline-assets.js';
+} from '../../inline-assets.js';
 import {
   buildDeckRenderInput,
   buildScreenshotPdf,
@@ -16,14 +21,19 @@ import {
   decodeSlideDataUrls,
   readSlideFiles,
   type BuildDeckRenderInputOptions,
-} from './deck-export.js';
-import { readProjectFileVersion } from './project-file-versions.js';
-import { authorizeReasoningEgress, sendReasoningEgressDenial } from './reasoning-egress.js';
-import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
-import { parseOrchestratorWorkspace } from './workspace-contract.js';
+} from '../renderers/index.js';
+import { readProjectFileVersion } from '../../project-file-versions.js';
+import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../../reasoning-egress.js';
+import { sandboxImportedProjectRootUnavailableReason } from '../../sandbox-mode.js';
+import { parseOrchestratorWorkspace } from '../../workspace-contract.js';
 
+/** Route-context dependencies required to register the project import routes. */
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {}
 
+/**
+ * Registers the project import HTTP routes (upload, extract, and materialize an
+ * imported project) on the Express app, wiring uploads, asset inlining, and validation.
+ */
 export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
@@ -399,8 +409,13 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
 
 }
 
+/** Route-context dependencies required to register the project export routes. */
 export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'node' | 'ids' | 'projectStore' | 'exports' | 'projectFiles' | 'validation'> {}
 
+/**
+ * Registers the project export HTTP routes (deck/pdf/image/pptx export) on the Express
+ * app, delegating slide rendering to renderers/ and enforcing reasoning-egress/sandbox guards.
+ */
 export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectExportRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
@@ -1446,8 +1461,12 @@ function roleForExportManifestFile(
   return 'other';
 }
 
+/** Route-context dependencies required to register the finalize routes. */
 export interface RegisterFinalizeRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'validation' | 'finalize'> {}
 
+/**
+ * Registers the finalize HTTP routes (produce a finalized design package) on the Express app.
+ */
 export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;

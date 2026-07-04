@@ -1,3 +1,8 @@
+/** @module export/renderers/deck
+ * Deck rendering: reads a project's deck HTML, composes the desktop renderer's
+ * slide-render input, and assembles the rasterized slides into a screenshot-based
+ * PPTX or PDF. Imports project file access from ../../projects.js; no export/ sibling.
+ */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -12,8 +17,13 @@ import type { DesktopRenderSlidesInput } from '@open-design/sidecar-proto';
 type PptxInstance = InstanceType<typeof import('pptxgenjs').default>;
 const PptxGenJS = PptxGenJSModule.default as unknown as { new (): PptxInstance };
 
-import { readProjectFile } from './projects.js';
+import { readProjectFile } from '../../projects.js';
 
+/**
+ * Options for {@link buildDeckRenderInput}: project identity, the deck file to
+ * render, and desktop-renderer sizing/threading knobs. `metadata.baseDir` is how
+ * imported-folder projects resolve their external workspace.
+ */
 export interface BuildDeckRenderInputOptions {
   daemonUrl: string;
   // Explicit page-vs-deck signal (the web knows whether the artifact is a deck).
@@ -43,6 +53,10 @@ export interface BuildDeckRenderInputOptions {
   title?: string;
 }
 
+/**
+ * A resolved deck-render request: the {@link DesktopRenderSlidesInput} for the
+ * desktop renderer plus the display title and default download filename.
+ */
 export interface DeckRenderRequest {
   defaultFilename: string;
   input: DesktopRenderSlidesInput;
@@ -84,6 +98,7 @@ export async function buildDeckRenderInput(
   };
 }
 
+/** A single rendered slide: its raw image bytes and whether it is JPEG (vs PNG). */
 export interface SlideImage {
   buffer: Buffer;
   jpeg: boolean;
@@ -113,6 +128,11 @@ export async function readSlideFiles(paths: string[]): Promise<SlideImage[]> {
   );
 }
 
+/**
+ * Decodes an ordered list of `data:image/(png|jpeg);base64,...` slide URLs into
+ * raw {@link SlideImage} buffers, rejecting anything that is not a base64 PNG/JPEG
+ * data URL so a malformed renderer response surfaces as an export failure.
+ */
 export function decodeSlideDataUrls(urls: string[]): SlideImage[] {
   return urls.map((url, index) => {
     const match = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(url ?? '');
@@ -181,6 +201,7 @@ export async function buildScreenshotPptx(
 // 960pt = a 16:9 slide of 960x540pt, matching PowerPoint's 16:9 page.
 const PDF_PAGE_LONGEST_PT = 960;
 
+/** Renders the per-slide images into a one-page-per-slide PDF (each page sized to its image per the note above). @returns the PDF bytes. */
 export async function buildScreenshotPdf(images: SlideImage[]): Promise<Buffer> {
   if (images.length === 0) throw new Error('no slides to export');
   const pdf = await PDFDocument.create();

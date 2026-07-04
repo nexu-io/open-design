@@ -17,8 +17,8 @@ import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS } from '@open-design/contracts';
-import { buildExportCliRequestBody, buildExportCliResultEnvelope, resolveExportCliDeckMode } from './export-cli-request.js';
-import { exportRoutePath } from './export-cli-routing.js';
+import { buildExportCliRequestBody, buildExportCliResultEnvelope, resolveExportCliDeckMode } from './export/index.js';
+import { exportRoutePath } from './export/index.js';
 import {
   AGENT_SLUGS,
   isAgentSlug,

@@ -17,7 +17,7 @@ import type { SidecarRuntimeContext } from '@open-design/sidecar';
 import {
   STANDALONE_LAUNCH_WARNING,
   createDiagnosticsExportHandler,
-} from '../src/diagnostics-export.js';
+} from '../src/export/index.js';
 
 interface MockResponse {
   status(code: number): MockResponse;

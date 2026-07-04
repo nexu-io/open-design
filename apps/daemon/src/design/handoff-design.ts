@@ -36,7 +36,7 @@ import {
   truncateTranscriptForPrompt,
   type AnthropicCallParams,
 } from './finalize-design.js';
-import { exportProjectTranscript } from '../transcript-export.js';
+import { exportProjectTranscript } from '../export/index.js';
 
 // Re-export the request/response types so the route handler and other
 // daemon-internal consumers reference the canonical contracts shape via
