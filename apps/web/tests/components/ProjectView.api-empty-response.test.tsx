@@ -580,6 +580,29 @@ describe('ProjectView API empty response handling', () => {
     expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
   });
 
+  it('fails a tool-call-only run when project file refresh rejects', async () => {
+    mockedFetchProjectFiles.mockReset();
+    mockedFetchProjectFiles.mockResolvedValueOnce([]);
+    mockedFetchProjectFiles.mockRejectedValueOnce(new Error('refresh failed'));
+    mockedFetchProjectFiles.mockResolvedValue([]);
+
+    const rawToolCall = '<tool_call>do-something</tool_call>';
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
+      handlers.onDelta(rawToolCall);
+      handlers.onDone(rawToolCall);
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(false);
+    expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
+  });
+
   it('keeps a run succeeded when tool-call-only text accompanies a newly produced file', async () => {
     const producedFile = {
       name: 'landing-page.html',
@@ -597,7 +620,7 @@ describe('ProjectView API empty response handling', () => {
     mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
       const { handlers } = options;
       handlers.onDelta(rawToolCall);
-      await handlers.onDone(rawToolCall);
+      handlers.onDone(rawToolCall);
     });
     renderProjectView();
 

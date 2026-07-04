@@ -4673,7 +4673,7 @@ export function ProjectView({
             },
           }));
         },
-        onDone: async (fullText = '') => {
+        onDone: (fullText = '') => {
           // The daemon delivers onDone even for a canceled run, so a run
           // superseded by a "send now" interrupt can still land here and must
           // not apply its completion side effects over the replacement. A run
@@ -4681,9 +4681,8 @@ export function ProjectView({
           // (recorded before handleStop cleared the refs), which is reliable
           // even before the replacement send attaches — unlike abortRef, whose
           // terminal onRunStatus / handleStop churn make it ambiguous here.
-          const runMayFinalize =
-            !supersededRunsRef.current.has(controller);
-          if (!runMayFinalize) {
+          const runMayFinalize = () => !supersededRunsRef.current.has(controller);
+          if (!runMayFinalize()) {
             textBuffer.cancel();
             cancelSendTextBuffer();
             clearTraceTouchedFilePaths();
@@ -4719,13 +4718,12 @@ export function ProjectView({
             /^\s*<tool_call>[\s\S]*<\/tool_call>\s*$/i.test(
               normalizedFullText || normalizedStreamedText,
             );
-          let rawToolCallOnly = false;
-          if (looksLikeRawToolCallOnly && !emptyApiResponse) {
-            const filesAfterToolCallCheck = await refreshProjectFiles();
-            const producedSoFar = computeProducedFiles(beforeFileNames, filesAfterToolCallCheck) ?? [];
-            rawToolCallOnly = producedSoFar.length === 0;
-          }
-          if (emptyApiResponse || rawToolCallOnly) {
+
+          const finalizeAsFailed = () => {
+            if (!runMayFinalize()) {
+              clearTraceTouchedFilePaths();
+              return;
+            }
             const endedAt = Date.now();
             const diagnostic = t('assistant.emptyResponseMessage');
             updateMessageById(
@@ -4755,81 +4753,115 @@ export function ProjectView({
             void refreshProjectFiles();
             onProjectsRefresh();
             clearTraceTouchedFilePaths();
+          };
+
+          const finalizeAsSucceededAndPersist = () => {
+            if (!runMayFinalize()) {
+              clearTraceTouchedFilePaths();
+              return;
+            }
+            const endedAt = Date.now();
+            let finalRunStatus: ChatMessage['runStatus'] = 'succeeded';
+            updateAssistant((prev) => {
+              finalRunStatus = resolveSucceededRunStatus(prev.runStatus);
+              return {
+                ...prev,
+                endedAt,
+                runStatus: finalRunStatus,
+              };
+            });
+            if (runCommentAttachments.length > 0) {
+              void patchAttachedStatuses(runCommentAttachments, 'needs_review');
+            }
+            const ownsCurrentRun = clearCurrentRunStreamingMarker(
+              runConversationId,
+              controller,
+              cancelController,
+            );
+            if (ownsCurrentRun) updateConversationLatestRun(finalRunStatus ?? 'succeeded', endedAt);
+            // Refetch the file list directly (rather than just bumping the
+            // refresh signal) so we can diff against the pre-turn snapshot
+            // and attach the new files to the assistant message as download
+            // chips.
+            void (async () => {
+              try {
+                let nextFiles = await refreshProjectFiles();
+                const finalText = streamedText || fullText;
+                const artifactToPersist = parsedArtifact?.html
+                  ? parsedArtifact
+                  : artifactFromStandaloneHtml(finalText);
+                if (artifactToPersist?.html) {
+                  const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                  const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
+                    artifactHtml: resolvePersistedArtifactHtml({
+                      artifactHtml: artifactToPersist.html,
+                      identifier: artifactToPersist.identifier,
+                      sourceText: finalText,
+                    }),
+                    producedFiles: producedBeforeFallback,
+                    readProjectHtml,
+                  });
+                  if (sameTurnHtmlWrite) {
+                    savedArtifactRef.current = sameTurnHtmlWrite.name;
+                    requestOpenFile(sameTurnHtmlWrite.name);
+                  } else {
+                    await persistArtifact(artifactToPersist, nextFiles, finalText);
+                    nextFiles = await refreshProjectFiles();
+                  }
+                }
+                const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                const traceObjectFiles = computeTraceObjectFiles(
+                  beforeFileNames,
+                  nextFiles,
+                  traceTouchedFilePaths,
+                ) ?? [];
+                const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced);
+                if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
+                setMessages((curr) => {
+                  const updated = curr.map((m) =>
+                    m.id === assistantId
+                      ? { ...m, producedFiles: produced, traceObjectFiles }
+                      : m,
+                  );
+                  const finalized = updated.find((m) => m.id === assistantId);
+                  if (finalized) persistMessage(finalized, { telemetryFinalized: true });
+                  return updated;
+                });
+                await auditDesignSystemWorkspaceAfterRun(assistantId);
+              } finally {
+                clearTraceTouchedFilePaths();
+              }
+            })();
+            onProjectsRefresh();
+          };
+
+          if (emptyApiResponse) {
+            finalizeAsFailed();
             return;
           }
-          const endedAt = Date.now();
-          let finalRunStatus: ChatMessage['runStatus'] = 'succeeded';
-          updateAssistant((prev) => {
-            finalRunStatus = resolveSucceededRunStatus(prev.runStatus);
-            return {
-              ...prev,
-              endedAt,
-              runStatus: finalRunStatus,
-            };
-          });
-          if (runCommentAttachments.length > 0) {
-            void patchAttachedStatuses(runCommentAttachments, 'needs_review');
-          }
-          const ownsCurrentRun = clearCurrentRunStreamingMarker(
-            runConversationId,
-            controller,
-            cancelController,
-          );
-          if (ownsCurrentRun) updateConversationLatestRun(finalRunStatus ?? 'succeeded', endedAt);
-          // Refetch the file list directly (rather than just bumping the
-          // refresh signal) so we can diff against the pre-turn snapshot
-          // and attach the new files to the assistant message as download
-          // chips.
-          void (async () => {
-            try {
-              let nextFiles = await refreshProjectFiles();
-              const finalText = streamedText || fullText;
-              const artifactToPersist = parsedArtifact?.html
-                ? parsedArtifact
-                : artifactFromStandaloneHtml(finalText);
-              if (artifactToPersist?.html) {
-                const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
-                const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
-                  artifactHtml: resolvePersistedArtifactHtml({
-                    artifactHtml: artifactToPersist.html,
-                    identifier: artifactToPersist.identifier,
-                    sourceText: finalText,
-                  }),
-                  producedFiles: producedBeforeFallback,
-                  readProjectHtml,
-                });
-                if (sameTurnHtmlWrite) {
-                  savedArtifactRef.current = sameTurnHtmlWrite.name;
-                  requestOpenFile(sameTurnHtmlWrite.name);
-                } else {
-                  await persistArtifact(artifactToPersist, nextFiles, finalText);
-                  nextFiles = await refreshProjectFiles();
+
+          if (looksLikeRawToolCallOnly) {
+            void (async () => {
+              try {
+                const filesAfterToolCallCheck = await refreshProjectFiles();
+                if (!runMayFinalize()) {
+                  clearTraceTouchedFilePaths();
+                  return;
                 }
+                const producedSoFar = computeProducedFiles(beforeFileNames, filesAfterToolCallCheck) ?? [];
+                if (producedSoFar.length === 0) {
+                  finalizeAsFailed();
+                } else {
+                  finalizeAsSucceededAndPersist();
+                }
+              } catch {
+                finalizeAsFailed();
               }
-              const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
-              const traceObjectFiles = computeTraceObjectFiles(
-                beforeFileNames,
-                nextFiles,
-                traceTouchedFilePaths,
-              ) ?? [];
-              const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced);
-              if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
-              setMessages((curr) => {
-                const updated = curr.map((m) =>
-                  m.id === assistantId
-                    ? { ...m, producedFiles: produced, traceObjectFiles }
-                    : m,
-                );
-                const finalized = updated.find((m) => m.id === assistantId);
-                if (finalized) persistMessage(finalized, { telemetryFinalized: true });
-                return updated;
-              });
-              await auditDesignSystemWorkspaceAfterRun(assistantId);
-            } finally {
-              clearTraceTouchedFilePaths();
-            }
-          })();
-          onProjectsRefresh();
+            })();
+            return;
+          }
+
+          finalizeAsSucceededAndPersist();
         },
         onError: (err: Error) => {
           const endedAt = Date.now();
