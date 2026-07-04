@@ -3616,6 +3616,10 @@ export function ProjectView({
             (prev) => ({
               ...prev,
               runStatus: 'canceled',
+              // Adopt the daemon's authoritative terminal timestamp rather than
+              // the stale disconnect-time stamp recorded when the earlier
+              // generic disconnect first fired.
+              endedAt: status.updatedAt,
               ...(status.resumable !== undefined ? { resumable: status.resumable } : {}),
             }),
             true,
@@ -3929,7 +3933,11 @@ export function ProjectView({
                   events: needsFullReplay ? replayedEvents : prev.events,
                   runStatus:
                     latestReattachRunStatus === 'canceled' ? 'canceled' : 'succeeded',
-                  endedAt: prev.endedAt ?? Date.now(),
+                  // Adopt the daemon's authoritative terminal timestamp (fetched
+                  // via fetchChatRunStatus above) rather than the stream-completion
+                  // time, so a reattached run's persisted duration reflects when
+                  // the daemon actually finished, not when this client noticed.
+                  endedAt: status.updatedAt,
                 }),
                 true,
                 latestReattachRunStatus === 'canceled'
@@ -4149,7 +4157,10 @@ export function ProjectView({
                           content: '',
                           events: [],
                           runStatus: 'succeeded',
-                          endedAt: prev.endedAt ?? Date.now(),
+                          // Adopt the daemon's authoritative terminal timestamp rather
+                          // than the stale disconnect-time stamp taken when the generic
+                          // disconnect first fired.
+                          endedAt: latestRunStatus.updatedAt,
                           ...(latestRunStatus.resumable !== undefined
                             ? { resumable: latestRunStatus.resumable }
                             : {}),
@@ -4164,7 +4175,7 @@ export function ProjectView({
                         (prev) => ({
                           ...removeErrorStatusEvent(prev, err.message, errorCode),
                           runStatus: 'succeeded',
-                          endedAt: prev.endedAt ?? Date.now(),
+                          endedAt: latestRunStatus.updatedAt,
                           ...(latestRunStatus.resumable !== undefined
                             ? { resumable: latestRunStatus.resumable }
                             : {}),
@@ -4184,7 +4195,7 @@ export function ProjectView({
                       (prev) => ({
                         ...prev,
                         runStatus: latestRunStatus.status,
-                        endedAt: prev.endedAt ?? Date.now(),
+                        endedAt: latestRunStatus.updatedAt,
                         ...(latestRunStatus.resumable !== undefined
                           ? { resumable: latestRunStatus.resumable }
                           : {}),
@@ -5266,7 +5277,10 @@ export function ProjectView({
                           ...recovered,
                           content: '',
                           events: [],
-                          endedAt: prev.endedAt ?? endedAt,
+                          // Adopt the daemon's authoritative terminal timestamp rather
+                          // than the stale disconnect-time stamp taken when the generic
+                          // disconnect first fired.
+                          endedAt: latestRunStatus.updatedAt,
                           runStatus: 'succeeded',
                           ...(latestRunStatus.resumable !== undefined
                             ? { resumable: latestRunStatus.resumable }
@@ -5275,7 +5289,7 @@ export function ProjectView({
                       }
                       return {
                         ...recovered,
-                        endedAt: prev.endedAt ?? endedAt,
+                        endedAt: latestRunStatus.updatedAt,
                         runStatus: 'succeeded',
                         ...(latestRunStatus.resumable !== undefined
                           ? { resumable: latestRunStatus.resumable }
@@ -5296,7 +5310,7 @@ export function ProjectView({
                     if (latestRunStatus.status === 'canceled') setError(null);
                     updateAssistant((prev) => ({
                       ...prev,
-                      endedAt: prev.endedAt ?? endedAt,
+                      endedAt: latestRunStatus.updatedAt,
                       runStatus: latestRunStatus.status,
                       ...(latestRunStatus.resumable !== undefined
                         ? { resumable: latestRunStatus.resumable }
