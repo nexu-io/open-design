@@ -31,13 +31,12 @@
 
 ## Open Design とは
 
-🎨 **ローカルファーストでオープンソースの [Claude Design][cd] 代替ツール。** &nbsp;🖥️ **macOS と Windows 向けのネイティブデスクトップアプリ。** &nbsp;⚡ **100 種類以上のスキル** · ✨ **150 のブランドグレード `DESIGN.md` システム** · 📦 **261 のすぐ使えるプラグイン。** &nbsp;🖼️ **ウェブ · デスクトップ · モバイルのプロトタイプ**、**ライブダッシュボード／アーティファクト**、**スライド**、**画像**、**動画**、さらに **HyperFrames** のモーショングラフィックスを生成。🔒 サンドボックス化された iframe プレビュー · HTML / PDF / PPTX / MP4 エクスポート。&nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity および 21 のローカル CLI 上で動作**、もしくは BYOK 経由で任意の OpenAI 互換エンドポイント上でも動作します。
+🎨 **ローカルファーストでオープンソースの Claude Design 代替ツール。** &nbsp;🖥️ **macOS と Windows 向けのネイティブデスクトップアプリ。** &nbsp;⚡ **100 種類以上のスキル** · ✨ **150 のブランドグレード `DESIGN.md` システム** · 📦 **261 のすぐ使えるプラグイン。** &nbsp;🖼️ **ウェブ · デスクトップ · モバイルのプロトタイプ**、**ライブダッシュボード／アーティファクト**、**スライド**、**画像**、**動画**、さらに **HyperFrames** のモーショングラフィックスを生成。🔒 サンドボックス化された iframe プレビュー · HTML / PDF / PPTX / MP4 エクスポート。&nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity および 21 のローカル CLI 上で動作**、もしくは BYOK 経由で任意の OpenAI 互換エンドポイント上でも動作します。
 
 Open Design は、Anthropic が Claude Design とともに送り出した **エージェントネイティブ**なループ——ブリーフを探り、方向性を確定し、アーティファクトをストリーミングし、批評し、納品する——がクローズドであることをやめ、ラップトップにすでにあるコーディングエージェントが読み・書き・リミックスできる **スキル・デザインシステム・プラグインのファイルシステム** になったときに得られるものです。あなたの CLI がデザインエンジンに、ラップトップがスタジオに、そしてチームの `DESIGN.md` がブランドの契約書になります。
 
 これはまた、**エージェント時代の Figma 代替ツール**でもあります——キャンバス上でピクセルを動かす代わりに、本物の CSS、本物のフォント、本物のコンポーネントによる単一ページのアーティファクトを納品し、HTML / PDF / PPTX / MP4 へ直接エクスポートします。すでにあなたのデザインシステムによって形づくられ、すでに日常的に使うエージェントの中で実行可能です。
 
-[cd]: https://x.com/claudeai/status/2045156267690213649
 
 ---
 
@@ -258,7 +257,7 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 
 ## なぜ Open Design なのか
 
-> **2026 年 4 月、Anthropic は [Claude Design][cd] をリリースしました——LLM が散文を書くのをやめ、デザインアーティファクトを直接納品し始めた初めての出来事でした。** これは一気に広まりました。しかし、それはクローズドソースのまま、有料のみ、クラウドのみで、Anthropic のモデル、Anthropic のスキル、Anthropic のサーフェスに縛られていました。チェックアウトもなく、セルフホストもなく、Vercel デプロイもなく、自前のエージェントへの差し替えもできません。
+> **2026 年 4 月、Anthropic は Claude Design をリリースしました——LLM が散文を書くのをやめ、デザインアーティファクトを直接納品し始めた初めての出来事でした。** これは一気に広まりました。しかし、それはクローズドソースのまま、有料のみ、クラウドのみで、Anthropic のモデル、Anthropic のスキル、Anthropic のサーフェスに縛られていました。チェックアウトもなく、セルフホストもなく、Vercel デプロイもなく、自前のエージェントへの差し替えもできません。
 
 Open Design (OD) はそのオープンソースの代替ツールです。同じループ、同じアーティファクトファーストのメンタルモデル、ロックインは一切なし:
 
@@ -271,7 +270,7 @@ Open Design (OD) はそのオープンソースの代替ツールです。同じ
 
 ### 比較
 
-| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
 |---|---|---|---|---|
 | オープンソース | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | セルフホスト／デスクトップ | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
@@ -715,7 +714,7 @@ gh pr create --fill
 
 | プロジェクト | 役割 |
 |---|---|
-| [Claude Design][cd] | このリポジトリがオープンソースの代替ツールとなっている、クローズドソースのプロダクト。 |
+| Claude Design | このリポジトリがオープンソースの代替ツールとなっている、クローズドソースのプロダクト。 |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | デザイン哲学の羅針盤——ジュニアデザイナーのワークフロー、ブランドアセットのプロトコル、アンチ AI スロップのチェックリスト、5 次元の批評。 |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | 雑誌風のウェブ PPT スキルで、[`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/) の下にそのままバンドルされています。deck モードのデフォルト。 |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | HTML PPT Studio ファミリー——15 のスライドテンプレート、36 のテーマ、31 のページレイアウト、アニメーションランタイム、マグネティックカードのプレゼンターモード。 |

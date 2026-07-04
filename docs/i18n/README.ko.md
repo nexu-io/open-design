@@ -31,13 +31,12 @@
 
 ## Open Design란
 
-🎨 **로컬 우선의 오픈소스 [Claude Design][cd] 대안.** &nbsp;🖥️ **macOS와 Windows용 네이티브 데스크톱 앱.** &nbsp;⚡ **100개 이상의 스킬** · ✨ **150개의 브랜드급 `DESIGN.md` 시스템** · 📦 **바로 쓸 수 있는 261개의 플러그인.** &nbsp;🖼️ **웹 · 데스크톱 · 모바일 프로토타입**, **라이브 대시보드 / 아티팩트**, **덱**, **이미지**, **비디오**, 그리고 **HyperFrames** 모션 그래픽을 생성합니다. 🔒 샌드박스 iframe 미리보기 · HTML / PDF / PPTX / MP4 내보내기. &nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 및 21개의 로컬 CLI에서 실행**되며, BYOK를 통해 OpenAI 호환 엔드포인트라면 무엇이든 사용할 수 있습니다.
+🎨 **로컬 우선의 오픈소스 Claude Design 대안.** &nbsp;🖥️ **macOS와 Windows용 네이티브 데스크톱 앱.** &nbsp;⚡ **100개 이상의 스킬** · ✨ **150개의 브랜드급 `DESIGN.md` 시스템** · 📦 **바로 쓸 수 있는 261개의 플러그인.** &nbsp;🖼️ **웹 · 데스크톱 · 모바일 프로토타입**, **라이브 대시보드 / 아티팩트**, **덱**, **이미지**, **비디오**, 그리고 **HyperFrames** 모션 그래픽을 생성합니다. 🔒 샌드박스 iframe 미리보기 · HTML / PDF / PPTX / MP4 내보내기. &nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 및 21개의 로컬 CLI에서 실행**되며, BYOK를 통해 OpenAI 호환 엔드포인트라면 무엇이든 사용할 수 있습니다.
 
 Open Design는 Anthropic이 Claude Design과 함께 선보인 **에이전트 네이티브** 루프 — 브리프를 파악하고, 방향을 확정하고, 아티팩트를 스트리밍하고, 비평하고, 전달하는 그 흐름 — 이 더 이상 닫혀 있지 않고, 노트북에 이미 있는 코딩 에이전트가 읽고 쓰고 리믹스할 수 있는 **스킬 · 디자인 시스템 · 플러그인의 파일시스템**이 될 때 얻게 되는 결과물입니다. CLI는 디자인 엔진이 되고, 노트북은 스튜디오가 되며, 팀의 `DESIGN.md`는 브랜드 계약서가 됩니다.
 
 또한 이것은 **에이전트 시대를 위한 Figma 대안**입니다 — 캔버스 위에서 픽셀을 밀어 옮기는 대신, 실제 CSS, 실제 폰트, 실제 컴포넌트로 된 단일 페이지 아티팩트를 HTML / PDF / PPTX / MP4로 곧바로 내보내 전달합니다 — 이미 당신의 디자인 시스템으로 빚어졌고, 이미 당신이 매일 쓰는 에이전트 안에서 실행 가능한 상태로요.
 
-[cd]: https://x.com/claudeai/status/2045156267690213649
 
 ---
 
@@ -258,7 +257,7 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 
 ## 왜 Open Design인가
 
-> **2026년 4월, Anthropic은 [Claude Design][cd]을 출시했습니다 — LLM이 산문 작성을 멈추고 디자인 아티팩트를 직접 전달하기 시작한 최초의 순간이었습니다.** 그것은 입소문을 탔습니다. 그러나 그것은 닫힌 소스로, 유료 전용으로, 클라우드 전용으로 머물렀고, Anthropic의 모델, Anthropic의 스킬, Anthropic의 표면에 묶여 있었습니다. 결제도, 셀프 호스트도, Vercel 배포도, 자신의 에이전트로 교체하는 것도 없었습니다.
+> **2026년 4월, Anthropic은 Claude Design을 출시했습니다 — LLM이 산문 작성을 멈추고 디자인 아티팩트를 직접 전달하기 시작한 최초의 순간이었습니다.** 그것은 입소문을 탔습니다. 그러나 그것은 닫힌 소스로, 유료 전용으로, 클라우드 전용으로 머물렀고, Anthropic의 모델, Anthropic의 스킬, Anthropic의 표면에 묶여 있었습니다. 결제도, 셀프 호스트도, Vercel 배포도, 자신의 에이전트로 교체하는 것도 없었습니다.
 
 Open Design(OD)는 그 오픈소스 대안입니다. 같은 루프, 같은 아티팩트 우선의 사고방식, 잠금은 전혀 없이:
 
@@ -271,7 +270,7 @@ Open Design(OD)는 그 오픈소스 대안입니다. 같은 루프, 같은 아�
 
 ### 비교
 
-| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
 |---|---|---|---|---|
 | 오픈소스 | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | 셀프 호스트 / 데스크톱 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
@@ -715,7 +714,7 @@ gh pr create --fill
 
 | 프로젝트 | 역할 |
 |---|---|
-| [Claude Design][cd] | 이 저장소가 오픈소스 대안으로 삼는 폐쇄 소스 제품. |
+| Claude Design | 이 저장소가 오픈소스 대안으로 삼는 폐쇄 소스 제품. |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | 디자인 철학의 나침반 — 주니어 디자이너 워크플로, 브랜드 에셋 프로토콜, 안티 AI 슬롭 체크리스트, 5차원 비평. |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | 매거진 스타일 웹 PPT 스킬로, [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/) 아래에 똑같이 번들로 제공됨. 덱 모드의 기본값. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | HTML PPT Studio 제품군 — 15개 덱 템플릿, 36개 테마, 31개 페이지 레이아웃, 애니메이션 런타임, 마그네틱 카드 프레젠터 모드. |
