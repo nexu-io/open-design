@@ -4,18 +4,18 @@ team:
   name: "智能继承团队"
   mode: inheritance
   auto_assign: true
-  
+
   agents:
     - id: initial_designer
       name: "初始设计师"
       role: "视觉设计"
       skills: ["hero-section", "layout-design"]
-      
+
     - id: polisher
       name: "精修者"
       role: "细节优化"
       skills: ["visual-polish", "micro-interactions"]
-      
+
     - id: codegen
       name: "代码生成"
       role: "前端开发"

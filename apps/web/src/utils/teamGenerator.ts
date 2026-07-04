@@ -61,7 +61,7 @@ const ROLE_LABELS: Record<string, string> = {
   synthesizer: '综合器',
 };
 
-const MODE_LABELS: Record<string, string> = {
+const MODE_LABELS = {
   parallel: '并行模式',
   serial: '串行模式',
   genetic: '遗传模式',
@@ -69,9 +69,9 @@ const MODE_LABELS: Record<string, string> = {
   hybrid: '混合模式',
   complementary: '互补模式',
   cycle: '循环模式',
-};
+} as const;
 
-const MODE_DESCRIPTIONS: Record<string, string> = {
+const MODE_DESCRIPTIONS = {
   parallel: '同层级 Agent 并行执行不同维度，适用多视角设计',
   serial: '链式执行，每阶段输出作为下阶段输入',
   genetic: '多变体并行生成 + 评分选择 + 优化迭代',
@@ -79,7 +79,7 @@ const MODE_DESCRIPTIONS: Record<string, string> = {
   hybrid: '串行主干 + 阶段内并行，适用复杂项目',
   complementary: '多专家视角链式协作，覆盖全生命周期',
   cycle: '生成器与评审者循环求精，直到达标',
-};
+} as const;
 
 interface AgentInfo {
   id: string;

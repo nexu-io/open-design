@@ -1,8 +1,8 @@
 # Multi-Agent Team Assembly — Visual Evidence Report
 
-This report demonstrates how the **intelligent team assembly system** 
-maps agent runtime capabilities to team roles for each of the 7 
-collaboration modes. All assignments are deterministic and based on 
+This report demonstrates how the **intelligent team assembly system**
+maps agent runtime capabilities to team roles for each of the 7
+collaboration modes. All assignments are deterministic and based on
 8-dimensional capability profiling of each agent's runtime characteristics.
 
 ---
@@ -21,7 +21,7 @@ collaboration modes. All assignments are deterministic and based on
 
 ## Parallel Mode
 
-**Strategy:** Best-Fit — each role assigned to the highest-scoring agent  
+**Strategy:** Best-Fit — each role assigned to the highest-scoring agent
 
 | Role | Agent | Runtime Type | Score | Reasoning |
 |---|---|---|---|---|
@@ -31,7 +31,7 @@ collaboration modes. All assignments are deterministic and based on
 
 ## Serial Mode
 
-**Strategy:** Chain-of-Experts — sequential handoff, no agent reused across stages  
+**Strategy:** Chain-of-Experts — sequential handoff, no agent reused across stages
 
 | Role | Agent | Runtime Type | Score | Reasoning |
 |---|---|---|---|---|
@@ -41,7 +41,7 @@ collaboration modes. All assignments are deterministic and based on
 
 ## Genetic Mode
 
-**Strategy:** Single Best All-Rounder — weighted composite score (reasoning 40% + design 30% + code 30%)  
+**Strategy:** Single Best All-Rounder — weighted composite score (reasoning 40% + design 30% + code 30%)
 
 | Role | Agent | Runtime Type | Score | Reasoning |
 |---|---|---|---|---|
@@ -49,7 +49,7 @@ collaboration modes. All assignments are deterministic and based on
 
 ## Inheritance Mode
 
-**Strategy:** Three-stage inheritance chain: Root(designer) → Child(polisher) → Leaf(developer)  
+**Strategy:** Three-stage inheritance chain: Root(designer) → Child(polisher) → Leaf(developer)
 
 | Role | Agent | Runtime Type | Score | Reasoning |
 |---|---|---|---|---|
@@ -59,7 +59,7 @@ collaboration modes. All assignments are deterministic and based on
 
 ## Hybrid Mode
 
-**Strategy:** Layered — parallel within layer, serial across layers  
+**Strategy:** Layered — parallel within layer, serial across layers
 
 | Role | Agent | Runtime Type | Score | Reasoning |
 |---|---|---|---|---|
@@ -69,7 +69,7 @@ collaboration modes. All assignments are deterministic and based on
 
 ## Complementary Mode
 
-**Strategy:** Diverse Non-Overlapping — designer→copywriter→developer→reviewer, each agent used once  
+**Strategy:** Diverse Non-Overlapping — designer→copywriter→developer→reviewer, each agent used once
 
 | Role | Agent | Runtime Type | Score | Reasoning |
 |---|---|---|---|---|
@@ -80,7 +80,7 @@ collaboration modes. All assignments are deterministic and based on
 
 ## Cycle Mode
 
-**Strategy:** Paired Generator↔Reviewer — different agents, creative vs critical roles  
+**Strategy:** Paired Generator↔Reviewer — different agents, creative vs critical roles
 
 | Role | Agent | Runtime Type | Score | Reasoning |
 |---|---|---|---|---|
@@ -212,4 +212,3 @@ collaboration modes. All assignments are deterministic and based on
   Chinese      |█████████████████░░░| 85
 
 **Top 3 Strengths:** 代码生成 (95), 深度推理 (85), 中文内容 (85)
-
