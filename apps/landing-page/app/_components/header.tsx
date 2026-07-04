@@ -23,9 +23,6 @@ const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_DISCUSSIONS = `${REPO}/discussions`;
 const DISCORD = 'https://discord.gg/mHAjSMV6gz';
 const X_PROFILE = 'https://x.com/OpenDesignHQ';
-// Open Design Cloud product surface on the production site.
-// Single destination for the Agent dropdown entry and cloud account surfaces.
-const CLOUD_URL = 'https://open-design.ai/cloud/';
 
 // Open Design Cloud endpoints for the header sign-in module.
 // Production defaults; overridable at build time via PUBLIC_* env so a
@@ -75,8 +72,7 @@ const TOOL_ENTRIES: ReadonlyArray<{ href: string; key: SolutionPageKey }> = [
   { href: '/solutions/screenshot-to-code/', key: 'screenshotToCode' },
 ];
 
-// Agent column — AMR (the design Agent) heads the dropdown in the markup,
-// followed by the coding agents with a dedicated long-form design page
+// Agent column — the coding agents with a dedicated long-form design page
 // upstream. Routes stay in lockstep with main's /agents/ hub.
 const AGENTS: ReadonlyArray<{ name: string; route: string }> = [
   { name: 'Codex', route: 'codex-design' },
@@ -314,8 +310,8 @@ export function Header({
               </ul>
             </li>
 
-            {/* Agent — AMR plus the coding agents with a dedicated design
-                page. The top-level link goes to the /agents/ hub. */}
+            {/* Agent — the coding agents with a dedicated design page. The
+                top-level link goes to the /agents/ hub. */}
             <li className='has-dropdown'>
               <a
                 href={href('/agents/')}
@@ -324,19 +320,12 @@ export function Header({
                 {productMenuCopy.agent}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
-              {/* 22 rows (AMR + 21 coding agents) — reuse the tall-dropdown
-                  height cap so the panel scrolls instead of running off
-                  short viewports. */}
+              {/* 21 coding-agent rows — reuse the tall-dropdown height cap so
+                  the panel scrolls instead of running off short viewports. */}
               <ul
                 className='nav-dropdown nav-dropdown-solution'
                 aria-label={productMenuCopy.agent}
               >
-                <li>
-                  <a href={CLOUD_URL}>
-                    <span className='dropdown-name'>{productMenuCopy.amrName}</span>
-                    <span className='dropdown-blurb'>{productMenuCopy.amrBlurb}</span>
-                  </a>
-                </li>
                 {AGENTS.map((agent) => (
                   <li key={agent.route}>
                     <a href={href(`/agents/${agent.route}/`)}>
