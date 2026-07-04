@@ -7,7 +7,7 @@ import {
   createRunArtifactBaselines,
   diffRunArtifacts,
   snapshotProjectArtifacts,
-} from '../src/run-artifact-fs.js';
+} from '../src/run/index.js';
 
 function tmpProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'od-artifact-fs-'));

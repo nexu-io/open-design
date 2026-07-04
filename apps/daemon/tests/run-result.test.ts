@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveRunErrorCode,
   runResultFromStatus,
-} from '../src/run-result.js';
+} from '../src/run/index.js';
 
 describe('runResultFromStatus', () => {
   it('maps succeeded -> success', () => {

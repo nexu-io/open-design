@@ -6,7 +6,7 @@ import {
   resolveExternalMcpServersForRun,
   summarizeRunToolBundle,
   validateRunToolBundleForAgent,
-} from '../src/run-tool-bundle.js';
+} from '../src/run/index.js';
 
 describe('run-scoped tool bundles', () => {
   it('sanitizes MCP servers onto the run and redacts spawn-only details in summaries', () => {

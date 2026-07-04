@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   scanRunEventsForUsageAnalytics,
   summarizeRunTimingAnalytics,
-} from '../src/run-analytics-observability.js';
+} from '../src/run/index.js';
 
 describe('scanRunEventsForUsageAnalytics', () => {
   it('extracts provider usage, cache tokens, and estimated context tokens', () => {

@@ -4,7 +4,7 @@ import {
   collectStderrTailSummary,
   collectStdoutTailSummary,
   summarizeRunDiagnosticsForAnalytics,
-} from '../src/run-diagnostics.js';
+} from '../src/run/index.js';
 
 describe('run diagnostics', () => {
   it('summarizes stderr into redacted bounded tails for Langfuse', () => {

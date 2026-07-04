@@ -12,7 +12,7 @@ import { deriveConfigureGlobals } from '@open-design/contracts/analytics';
 import {
   agentProviderIdForRunAnalytics,
   runtimeTypeForRunAnalytics,
-} from '../src/run-analytics-observability.js';
+} from '../src/run/index.js';
 
 describe('runtime_type on daemon run analytics', () => {
   it('lets a client byok hint override the daemon BYOK-blind derivation', () => {

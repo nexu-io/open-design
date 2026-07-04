@@ -42,19 +42,18 @@ import {
 import type { PromptStackTelemetry } from './prompt-telemetry.js';
 import { redactSecrets } from './redact.js';
 import {
+  classifyRunFailure,
+  collectStderrTailSummary,
+  collectStdoutTailSummary,
+  deriveRunErrorCode,
   hasExplicitRequestedModelForAnalytics,
+  runResultFromStatus,
   scanRunEventsForUsageAnalytics,
+  summarizeRunDiagnosticsForAnalytics,
   summarizeRunTimingAnalytics,
   type RunTelemetryTimestamps,
   type RunUsageAnalytics,
-} from './run-analytics-observability.js';
-import {
-  collectStderrTailSummary,
-  collectStdoutTailSummary,
-  summarizeRunDiagnosticsForAnalytics,
-} from './run-diagnostics.js';
-import { classifyRunFailure } from './run-failure-classification.js';
-import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
+} from './run/index.js';
 import { buildTraceObjectManifests } from './trace-object-manifest.js';
 import type { TraceArtifactObjectSource, TraceObjectUploadManifests } from './trace-object-manifest.js';
 

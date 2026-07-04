@@ -9,7 +9,7 @@ import {
   computeRetryBackoffMs,
   decideSafeRunRetry,
   type RunRetryPolicyInput,
-} from '../src/run-retry-policy.js';
+} from '../src/run/index.js';
 
 function decide(input: Partial<RunRetryPolicyInput> = {}) {
   return decideSafeRunRetry({

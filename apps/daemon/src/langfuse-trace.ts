@@ -27,10 +27,10 @@ import {
   type PromptStackTelemetry,
 } from './prompt-telemetry.js';
 import type {
+  RunFailureClassification,
   RunTelemetryTimestamps,
   RunTimingAnalytics,
-} from './run-analytics-observability.js';
-import type { RunFailureClassification } from './run-failure-classification.js';
+} from './run/index.js';
 import { readTelemetryEnvironment } from './telemetry-environment.js';
 
 // Langfuse US region: confirmed by an end-to-end smoke on 2026-05-07 — the

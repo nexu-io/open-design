@@ -6,7 +6,7 @@ import {
   scanRunEventsForFinishedProps,
   scanRunEventsForRetrySideEffects,
 } from '../../src/runtimes/run-lifecycle-analytics.js';
-import { hasExplicitRequestedModelForAnalytics } from '../../src/run-analytics-observability.js';
+import { hasExplicitRequestedModelForAnalytics } from '../../src/run/index.js';
 
 describe('run lifecycle analytics', () => {
   it('falls back to stored project metadata when analytics hints omit project kind', () => {

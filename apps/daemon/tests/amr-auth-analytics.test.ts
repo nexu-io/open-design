@@ -16,7 +16,7 @@ import {
   readVelaLoginStatus,
   type VelaLoginStatus,
 } from '../src/integrations/vela.js';
-import { amrUserIdForRunAnalytics } from '../src/run-analytics-observability.js';
+import { amrUserIdForRunAnalytics } from '../src/run/index.js';
 
 const ENV_AUTH: Record<string, string> = {
   VELA_RUNTIME_KEY: 'rk-test',

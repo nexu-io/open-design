@@ -22,7 +22,7 @@ vi.mock('../src/redact.js', () => ({
   redactSecrets: (value: string) => value,
 }));
 
-vi.mock('../src/run-analytics-observability.js', () => ({
+vi.mock('../src/run/index.js', () => ({
   hasExplicitRequestedModelForAnalytics: (value: unknown): value is string =>
     typeof value === 'string' && value.trim().length > 0 && value.trim() !== 'default',
   scanRunEventsForUsageAnalytics: vi.fn(() => ({
@@ -34,13 +34,7 @@ vi.mock('../src/run-analytics-observability.js', () => ({
     tool_call_count: 0,
     total_duration_ms: 0,
   })),
-}));
-
-vi.mock('../src/run-failure-classification.js', () => ({
   classifyRunFailure: vi.fn(() => undefined),
-}));
-
-vi.mock('../src/run-result.js', () => ({
   deriveRunErrorCode: vi.fn(() => null),
   runResultFromStatus: vi.fn(() => 'success'),
 }));

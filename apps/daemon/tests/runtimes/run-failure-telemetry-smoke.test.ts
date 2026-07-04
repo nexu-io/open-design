@@ -6,9 +6,12 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { startServer } from '../../src/server.js';
-import { classifyRunFailure } from '../../src/run-failure-classification.js';
-import { summarizeRunDiagnosticsForAnalytics } from '../../src/run-diagnostics.js';
-import { deriveRunErrorCode, runResultFromStatus } from '../../src/run-result.js';
+import {
+  classifyRunFailure,
+  deriveRunErrorCode,
+  runResultFromStatus,
+  summarizeRunDiagnosticsForAnalytics,
+} from '../../src/run/index.js';
 
 type StartedServer = {
   url: string;

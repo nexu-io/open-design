@@ -7,7 +7,7 @@ import { normalizeMediaExecutionPolicyForRun } from '../media/policy.js';
 import {
   normalizeRunToolBundleForRun,
   summarizeRunToolBundle,
-} from '../run-tool-bundle.js';
+} from '../run/index.js';
 import { createRunLifecycleTracer } from '../run-lifecycle-tracer.js';
 import { projectWorkspaceProvenance } from '../workspace-contract.js';
 

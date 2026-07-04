@@ -1,4 +1,4 @@
-import { redactSecrets } from './redact.js';
+import { redactSecrets } from '../../redact.js';
 
 export interface RunEventForDiagnostics {
   event: string;
