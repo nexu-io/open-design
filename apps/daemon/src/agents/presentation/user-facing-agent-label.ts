@@ -1,3 +1,10 @@
+/**
+ * @module agents/presentation/user-facing-agent-label
+ *
+ * Derives the human-readable agent label shown in chat status and diagnostics,
+ * deliberately never leaking resolved executable paths (packaged installs would
+ * expose app-bundle roots and custom install locations).
+ */
 import { basename } from 'node:path';
 
 /**

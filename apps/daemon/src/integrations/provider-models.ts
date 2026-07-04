@@ -8,7 +8,7 @@ import type {
   ProviderModelsResponse,
 } from '@open-design/contracts/api/providerModels';
 import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
-import { redactSecrets, validateBaseUrlResolved } from '../connectionTest.js';
+import { redactSecrets, validateBaseUrlResolved } from '../agents/index.js';
 import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
 import { aihubmixHeaders, aihubmixCatalogUrl, parseAIHubMixCatalog } from './aihubmix.js';
 

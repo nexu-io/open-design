@@ -13,7 +13,7 @@ import {
   executeAIHubMixGenerateVideo,
   executeAIHubMixGenerateImage,
   executeAIHubMixGenerateSpeech,
-} from '../src/byok-tools.js';
+} from '../src/agents/index.js';
 
 describe('BYOK_SENSEAUDIO_TOOLS', () => {
   it('exports an OpenAI-shaped generate_image tool definition', () => {

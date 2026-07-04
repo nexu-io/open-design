@@ -1,3 +1,10 @@
+/**
+ * @module agents/byok/byok-tools
+ *
+ * BYOK (bring-your-own-key) provider media tools — AIHubMix / SenseAudio image,
+ * speech, and video generation — exposed to BYOK chat sessions. Routes upstream
+ * download URLs through `core/`'s SSRF asset-URL guard.
+ */
 // Tool definitions and executors exposed to BYOK chat sessions.
 //
 // Why this file exists: the BYOK chat proxy (e.g. /api/proxy/senseaudio/stream)
@@ -15,10 +22,10 @@
 import path from 'node:path';
 import { writeFile, readFile, readdir, stat } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
-import { assertExternalAssetUrl, assertAndFetchExternalAsset } from './connectionTest.js';
-import { resolveProviderConfig } from './media/config.js';
-import { IMAGE_MODELS } from './media/models.js';
-import { ensureProject } from './projects.js';
+import { assertExternalAssetUrl, assertAndFetchExternalAsset } from '../core/index.js';
+import { resolveProviderConfig } from '../../media/config.js';
+import { IMAGE_MODELS } from '../../media/models.js';
+import { ensureProject } from '../../projects.js';
 import {
   AIHUBMIX_DEFAULT_BASE_URL,
   aihubmixHeaders,
@@ -29,13 +36,13 @@ import {
   aihubmixGeminiImageBytes,
   classifyAIHubMixModel,
   AIHUBMIX_IMAGE_ASPECT_TO_SIZE,
-} from './integrations/aihubmix.js';
+} from '../../integrations/aihubmix.js';
 import {
   aihubmixMediaRegistry,
   buildVideoRequest,
   deriveVideoFamily,
   type ModelCapability,
-} from './media-adapters/index.js';
+} from '../../media-adapters/index.js';
 
 // SenseAudio image model allowlist — derived from the shared media-models
 // registry so adding a new SenseAudio image model in one place (media-models)
@@ -52,6 +59,7 @@ export const BYOK_SENSEAUDIO_IMAGE_MODELS: readonly string[] = IMAGE_MODELS
 export const BYOK_SENSEAUDIO_DEFAULT_IMAGE_MODEL =
   BYOK_SENSEAUDIO_IMAGE_MODELS[0] ?? 'senseaudio-image-2.0-260319';
 
+/** True when `value` is a registered SenseAudio image model id. */
 export function isSenseAudioImageModel(value: unknown): value is string {
   return typeof value === 'string' && BYOK_SENSEAUDIO_IMAGE_MODELS.includes(value);
 }
@@ -66,6 +74,11 @@ export const BYOK_AIHUBMIX_IMAGE_MODELS: readonly string[] = IMAGE_MODELS
 export const BYOK_AIHUBMIX_DEFAULT_IMAGE_MODEL =
   BYOK_AIHUBMIX_IMAGE_MODELS[0] ?? 'aihubmix-gpt-image-1';
 
+/**
+ * True when `value` is an AIHubMix image model id. Accepts the full `aihubmix-`
+ * namespace because the live catalogue has 50+ models — only a handful are seeded
+ * in the static registry. The prefix is stripped to the wire name at request time.
+ */
 export function isAIHubMixImageModel(value: unknown): value is string {
   // AIHubMix image models are discovered live (50+), so the static registry
   // only seeds a couple. Any `aihubmix-` prefixed id renders through the same
@@ -80,6 +93,12 @@ export function isAIHubMixImageModel(value: unknown): value is string {
 // hand-maintained list. The prefix is stripped to the wire name before the
 // `/videos` call. When neither the composer picker nor the LLM supplies one,
 // the executor falls back to BYOK_AIHUBMIX_DEFAULT_VIDEO_MODEL.
+/**
+ * True when `value` is an AIHubMix video model id. Accepts the full `aihubmix-`
+ * namespace — the video catalogue is discovered live, so the prefix alone is the
+ * reliable discriminant. The prefix is stripped to the wire name before the
+ * `/videos` API call.
+ */
 export function isAIHubMixVideoModel(value: unknown): value is string {
   return typeof value === 'string' && value.startsWith('aihubmix-');
 }
@@ -92,6 +111,10 @@ export const BYOK_AIHUBMIX_DEFAULT_VIDEO_MODEL = 'aihubmix-doubao-seedance-2-0-f
 // AIHubMix speech (TTS) models — discovered live via `?type=tts`; like image and
 // video we accept the whole `aihubmix-` namespace (prefix stripped to the wire
 // name). Falls back to BYOK_AIHUBMIX_DEFAULT_SPEECH_MODEL when unset.
+/**
+ * True when `value` is an AIHubMix speech (TTS) model id. Accepts the full
+ * `aihubmix-` namespace — the TTS catalogue is discovered live.
+ */
 export function isAIHubMixSpeechModel(value: unknown): value is string {
   return typeof value === 'string' && value.startsWith('aihubmix-');
 }
@@ -451,6 +474,11 @@ export interface BYOKToolContext {
   requestInit?: Pick<RequestInit, 'dispatcher'>;
 }
 
+/**
+ * Return value from every BYOK tool executor. `ok: false` with an `error` string
+ * is fed back to the LLM as a `role:'tool'` reply so the model can apologise or
+ * retry rather than leaving the chat stream silently stopped.
+ */
 export interface ImageToolResult {
   ok: boolean;
   /** Daemon-served URL on success. */
@@ -470,6 +498,13 @@ function withToolRequestInit(
   };
 }
 
+/**
+ * Execute the SenseAudio `generate_speech` TTS tool. Calls `/t2a_v2`, decodes
+ * the returned hex-encoded MP3, persists it under the project directory, and
+ * returns a daemon-served URL. Failure modes return `{ok: false, error}` rather
+ * than throwing so the LLM can report back rather than the chat stream silently
+ * stopping.
+ */
 export async function executeGenerateSpeech(
   args: { text?: unknown; voice_id?: unknown },
   ctx: BYOKToolContext,
@@ -986,6 +1021,14 @@ async function resolveAIHubMixCredentials(
   return { apiKey, baseUrl };
 }
 
+/**
+ * Execute the AIHubMix `generate_image` tool. Routes through either the
+ * Gemini-native `generateContent` path (Gemini / Imagen models) or the OpenAI
+ * `/v1/images/generations` path (GPT-image, DALL-E, Qwen, Wan, etc.) based on
+ * the wire model family. Downloads the returned bytes, persists them under the
+ * project directory, and returns a daemon-served URL. The user's explicit
+ * Settings/composer model pick wins over the LLM's `model` arg.
+ */
 export async function executeAIHubMixGenerateImage(
   args: { prompt?: unknown; aspect_ratio?: unknown; model?: unknown },
   ctx: BYOKToolContext,
@@ -1137,6 +1180,13 @@ function pcmToWav(pcm: Buffer, sampleRate: number): Buffer {
   return Buffer.concat([h, pcm]);
 }
 
+/**
+ * Execute the AIHubMix `generate_speech` TTS tool. Routes to either the
+ * Gemini-native `generateContent` path (Gemini 2.5 TTS voices, returns L16 PCM
+ * wrapped as WAV) or the OpenAI `/v1/audio/speech` path (standard models,
+ * returns MP3) based on the wire model family. Persists the result under the
+ * project directory and returns a daemon-served URL.
+ */
 export async function executeAIHubMixGenerateSpeech(
   args: { text?: unknown; voice_id?: unknown; model?: unknown },
   ctx: BYOKToolContext,

@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { assertAndFetchExternalAsset } from '../src/connectionTest.js';
+import { assertAndFetchExternalAsset } from '../src/agents/index.js';
 import {
   executeAIHubMixGenerateVideo,
   executeAIHubMixGenerateImage,
-} from '../src/byok-tools.js';
+} from '../src/agents/index.js';
 
 // Regression guard for the BLOCKING SSRF reviews on PR #3583: every AIHubMix
 // asset download (chat video / chat image / media image / media video) routes

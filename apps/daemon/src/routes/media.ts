@@ -3,7 +3,7 @@ import type { Express } from 'express';
 import type { MediaExecutionPolicy } from '@open-design/contracts';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media/policy.js';
 import type { RouteDeps } from '../server-context.js';
-import { proxyDispatcherRequestInit } from '../connectionTest.js';
+import { proxyDispatcherRequestInit } from '../agents/index.js';
 import {
   aihubmixCatalogUrl,
   parseAIHubMixCatalog,

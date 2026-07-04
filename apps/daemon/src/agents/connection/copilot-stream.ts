@@ -1,4 +1,6 @@
 /**
+ * @module agents/connection/copilot-stream
+ *
  * Parses GitHub Copilot CLI's `--output-format json` JSONL stream into the
  * same UI-friendly events that claude-stream.js emits, so the chat panel
  * can render Copilot's thinking / tool calls / text the same way it does
@@ -28,6 +30,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+/**
+ * Build a stateful Copilot stream handler. Feed raw stdout chunks via `.feed()`;
+ * call `.flush()` when the child process closes to emit any partial final line.
+ * Each Copilot `--output-format json` JSONL event is translated to the UI-friendly
+ * event shape (see module docblock for the full mapping) and forwarded to `onEvent`.
+ *
+ * @param onEvent Callback invoked for each translated event.
+ */
 export function createCopilotStreamHandler(onEvent: EventSink) {
   let buffer = '';
 

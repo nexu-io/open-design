@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diagnoseClaudeCliFailure } from '../src/claude-diagnostics.js';
+import { diagnoseClaudeCliFailure } from '../src/agents/index.js';
 
 describe('diagnoseClaudeCliFailure', () => {
   it('maps Claude Not logged in stdout to /login guidance (#1928)', () => {

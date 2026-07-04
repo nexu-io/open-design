@@ -64,7 +64,7 @@ import {
   findProvider,
   modelsForSurface,
 } from './models.js';
-import { assertAndFetchExternalAsset } from '../connectionTest.js';
+import { assertAndFetchExternalAsset } from '../agents/index.js';
 import { normalizeCodexConfigFile } from '../codex-config-normalize.js';
 import {
   resolveCodexImagegenEnv,

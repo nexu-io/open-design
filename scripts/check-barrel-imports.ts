@@ -64,6 +64,18 @@ export const CAPABILITY_BARREL_DOMAINS: CapabilityBarrelDomain[] = [
       ['jobs', 'catalog'],
     ],
   },
+  {
+    name: 'agents',
+    root: 'apps/daemon/src/agents',
+    subdirs: ['core', 'connection', 'byok', 'session', 'presentation'],
+    foundation: 'core',
+    // Pure star: connection, byok, session, and presentation are mutually
+    // independent and lean only on the `core` SSRF asset-URL guard, so there
+    // are no cross-sibling edges to declare. (`acp`/`pi-rpc` protocol adapters
+    // and the `agents.ts` runtimes facade stay flat as shared kernel — pulling
+    // them in would cycle back through the runtime agent-def registry.)
+    allowedEdges: [],
+  },
 ];
 
 export type BarrelImportViolation = {

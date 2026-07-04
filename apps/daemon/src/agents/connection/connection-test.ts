@@ -1,3 +1,11 @@
+/**
+ * @module agents/connection/connection-test
+ *
+ * Settings "does my configuration work?" smoke tests for BYOK provider APIs and
+ * Local CLI adapters, plus the shared proxy/redaction/timeout helpers those
+ * probes and the daemon proxy routes reuse. Reaches `core/` for the SSRF
+ * asset-URL guard and the flat `acp`/`pi-rpc` protocol adapters.
+ */
 // Smoke tests for the Settings dialog. Two entry points:
 //
 //   - testProviderConnection: posts a tiny "Reply with only: ok" request to
@@ -17,7 +25,7 @@
 // contracts so Settings and daemon-side checks reject the same hosts.
 
 import { spawn } from 'node:child_process';
-import { promises as dnsPromises } from 'node:dns';
+import { validateBaseUrlResolved } from '../core/index.js';
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,42 +36,39 @@ import {
   getAgentDef,
   resolveAgentLaunch,
   spawnEnvForAgent,
-} from './agents.js';
+} from '../../agents.js';
 import {
   createCommandInvocation,
   mergeProxyAwareEnv,
   resolveSystemProxyEnv,
 } from '@open-design/platform';
-import { attachAcpSession } from './acp.js';
-import { attachPiRpcSession } from './pi-rpc.js';
-import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
+import { attachAcpSession } from '../../acp.js';
+import { attachPiRpcSession } from '../../pi-rpc.js';
+import { createClaudeStreamHandler } from '../../runtimes/claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
-import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
-import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
+import { createJsonEventStreamHandler } from '../../runtimes/json-event-stream.js';
+import { agentCliEnvForAgent, validateAgentCliEnv } from '../../app-config.js';
 import {
   classifyAgentAuthFailure,
   cursorAuthGuidance,
   probeAgentAuthStatus,
-} from './runtimes/auth.js';
-import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
+} from '../../runtimes/auth.js';
+import { loadMmdRouteLaunchEnv } from '../../runtimes/mmd-routes.js';
 import {
   buildLegacyMaxTokensParam,
   buildMaxCompletionTokensParam,
   buildOpenAIChatTokenParam,
   isUnsupportedMaxTokensError,
-} from './integrations/openai-chat-token-params.js';
-import { aihubmixHeaders } from './integrations/aihubmix.js';
-import type { AgentCliEnvPrefs } from './app-config.js';
-import type { RuntimeAgentDef } from './runtimes/types.js';
-import { resolveModelForAgent } from './runtimes/models.js';
-import { preparePromptFileForAgent, type PreparedPromptFile } from './runtimes/prompt-file.js';
+} from '../../integrations/openai-chat-token-params.js';
+import { aihubmixHeaders } from '../../integrations/aihubmix.js';
+import type { AgentCliEnvPrefs } from '../../app-config.js';
+import type { RuntimeAgentDef } from '../../runtimes/types.js';
+import { resolveModelForAgent } from '../../runtimes/models.js';
+import { preparePromptFileForAgent, type PreparedPromptFile } from '../../runtimes/prompt-file.js';
 import {
-  isBlockedExternalApiHostname,
   isLoopbackApiHost,
-  validateBaseUrl,
   type AgentTestRequest,
-  type BaseUrlValidationResult,
   type ConnectionTestDiagnostics,
   type ConnectionTestKind,
   type ConnectionTestPhase,
@@ -72,128 +77,8 @@ import {
   type ParsedBaseUrl,
   type ProviderTestRequest,
 } from '@open-design/contracts/api/connectionTest';
-import { googleGenerateContentUrl } from './integrations/google-models.js';
-import { resolveAmrProfile } from './integrations/vela.js';
-
-export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
-
-// DNS-aware companion to `validateBaseUrl`. The contracts-side check only
-// inspects the literal hostname string, so a public DNS name pointing at
-// internal infrastructure (`internal.example.com → 10.0.0.5`) slips through
-// and the daemon ends up issuing a request to a private address on behalf of
-// whichever caller supplied the base URL. Resolve the hostname and re-run
-// the block-list against every address the system would actually connect to.
-//
-// Loopback is intentionally allowed for local LLM providers like Ollama; any
-// hostname that resolves to a loopback address (including `*.localhost` per
-// RFC 6761 and IPv4-mapped IPv6 loopback) follows that same carve-out.
-//
-// DNS lookup failures are *not* treated as a security signal — the caller is
-// going to surface a connection error from `fetch` anyway, and turning a
-// transient resolver hiccup into a 403 would just confuse users. The sync
-// hostname check still rejected the obvious literal-IP cases before we ever
-// got here.
-
-export type DnsLookupAddress = { address: string; family: number };
-export type DnsLookupFn = (hostname: string) => Promise<DnsLookupAddress[]>;
-
-const defaultDnsLookup: DnsLookupFn = async (hostname) => {
-  const result = await dnsPromises.lookup(hostname, { all: true, family: 0 });
-  return result.map(({ address, family }) => ({ address, family }));
-};
-
-function looksLikeIpLiteral(hostname: string): boolean {
-  const host = hostname.startsWith('[') && hostname.endsWith(']')
-    ? hostname.slice(1, -1)
-    : hostname;
-  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return true;
-  return host.includes(':');
-}
-
-export async function validateBaseUrlResolved(
-  baseUrl: string,
-  lookup: DnsLookupFn = defaultDnsLookup,
-): Promise<BaseUrlValidationResult> {
-  const sync = validateBaseUrl(baseUrl);
-  if (sync.error || !sync.parsed) return sync;
-
-  const hostname = sync.parsed.hostname.toLowerCase();
-  if (isLoopbackApiHost(hostname)) return sync;
-  if (looksLikeIpLiteral(hostname)) return sync;
-
-  let addresses: DnsLookupAddress[];
-  try {
-    addresses = await lookup(hostname);
-  } catch {
-    return sync;
-  }
-
-  for (const addr of addresses) {
-    const ip = String(addr.address).toLowerCase();
-    if (isLoopbackApiHost(ip)) continue;
-    if (isBlockedExternalApiHostname(ip)) {
-      return { error: 'Internal IPs blocked', forbidden: true };
-    }
-  }
-
-  return sync;
-}
-
-/**
- * SSRF guard for asset URLs handed back inside a successful API
- * response — typically a `data.url` or `data.video_url` that points
- * at the gateway's CDN, but is attacker-controllable when the
- * upstream gateway is compromised or misconfigured. Routes the URL
- * through `validateBaseUrlResolved` (DNS-resolve → reject loopback,
- * RFC1918, link-local, CGNAT, metadata-service IPs) and returns a
- * discriminated union so callers don't have to repeat the
- * `validated.error || !validated.parsed` plumbing.
- *
- * Two callers today:
- *   - `byok-tools.ts` for the chat-tool image/video downloads
- *   - `media.ts` `renderSenseAudioImage` for the CLI agent path
- * Both hand the URL straight to `fetch(...)` next, so pair this
- * guard with `redirect: 'error'` on the fetch to also block a
- * 3xx hop into private space.
- */
-export async function assertExternalAssetUrl(
-  rawUrl: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (typeof rawUrl !== 'string' || !rawUrl) {
-    return { ok: false, error: 'empty download url' };
-  }
-  const validated = await validateBaseUrlResolved(rawUrl);
-  if (validated.error || !validated.parsed) {
-    return {
-      ok: false,
-      error: validated.forbidden
-        ? `blocked download url (${validated.error ?? 'internal address'})`
-        : `invalid download url: ${validated.error ?? 'unknown reason'}`,
-    };
-  }
-  return { ok: true };
-}
-
-/**
- * Validate an upstream-controlled asset URL and fetch it with the SSRF guard
- * pinned through redirects. Runs `assertExternalAssetUrl` on the literal URL
- * and forces `redirect: 'error'`, so a validated public URL that 302s into
- * loopback / RFC1918 / metadata space is rejected before any bytes are read.
- *
- * Throws on a blocked host — so the redirect bypass is impossible to forget at
- * call sites — and the platform fetch additionally throws when `redirect:
- * 'error'` encounters a 3xx. Callers keep their own `!resp.ok` HTTP-status
- * handling. The forced `redirect` is spread last so it overrides any value the
- * caller passed in `init`.
- */
-export async function assertAndFetchExternalAsset(
-  url: string,
-  init: RequestInit = {},
-): Promise<Response> {
-  const check = await assertExternalAssetUrl(url);
-  if (!check.ok) throw new Error(check.error);
-  return fetch(url, { ...init, redirect: 'error' });
-}
+import { googleGenerateContentUrl } from '../../integrations/google-models.js';
+import { resolveAmrProfile } from '../../integrations/vela.js';
 
 // Aggressive but not punitive — happy paths usually return in under 2 s.
 // Override with OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS for slow networks
@@ -214,6 +99,17 @@ const AGENT_STDOUT_DRAIN_MS = 25;
 // disarmed by an oversized env value.
 const MAX_CONNECTION_TEST_TIMEOUT_MS = 2_147_483_647;
 
+/**
+ * Read a connection-test timeout override from the process environment. Returns
+ * `fallback` when the key is absent, empty, or out of the safe integer range.
+ * Guards against values that would silently clamp via Node's `setTimeout`
+ * overflow (any value above 2^31 - 1 ms would fire almost immediately).
+ *
+ * @param key      Environment variable name (`OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS`
+ *                 or `OD_CONNECTION_TEST_AGENT_TIMEOUT_MS`).
+ * @param fallback Default timeout in milliseconds when the env var is unset.
+ * @param env      Process environment to read from; defaults to `process.env`.
+ */
 export function resolveConnectionTestTimeoutMs(
   key: 'OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS' | 'OD_CONNECTION_TEST_AGENT_TIMEOUT_MS',
   fallback: number,
@@ -245,6 +141,14 @@ function agentTimeoutMs(): number {
   );
 }
 
+/**
+ * Merge a `NO_PROXY` / `no_proxy` string with the standard loopback tokens
+ * (`localhost`, `127.0.0.1`, `[::1]`). Returns a deduplicated comma-separated
+ * string, or `null` when the result is empty. A wildcard `*` token is preserved
+ * and returned immediately without further deduplication.
+ *
+ * @param noProxy Raw `NO_PROXY` / `no_proxy` env value (may be `undefined`).
+ */
 export function mergeNoProxyWithLoopbackDefaults(noProxy: string | undefined): string | null {
   if (noProxy?.split(/[\s,]+/).some((token) => token.trim() === '*')) return '*';
   const seen = new Set<string>();
@@ -552,6 +456,15 @@ function socksProxyUrl(proxyUrl: string | undefined): string | undefined {
   }
 }
 
+/**
+ * Build a `RequestInit`-compatible `{ dispatcher }` fragment that routes HTTP
+ * requests through the system proxy (HTTP/HTTPS env proxy or SOCKS5 via
+ * `ALL_PROXY`). Returns `{ requestInit: {} }` when no proxy is configured.
+ * Always call `.close()` when done to release the undici connection pools.
+ *
+ * @param env     Process environment to read proxy settings from; defaults to `process.env`.
+ * @param options Undici pool options forwarded to the underlying agent constructors.
+ */
 export function proxyDispatcherRequestInit(
   env: NodeJS.ProcessEnv = process.env,
   options: Pool.Options = {},
@@ -660,6 +573,15 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Scrub API keys from text before logging or surfacing in UI. Strips `Bearer …`
+ * tokens, `x-api-key` / `api-key` / `x-goog-api-key` header values, and `?key=…`
+ * query parameters from the string, then also replaces any exact literal strings
+ * in `exactSecrets` (e.g. the current API key).
+ *
+ * @param text         The string to redact.
+ * @param exactSecrets Additional exact strings to remove (falsy values ignored).
+ */
 export function redactSecrets(
   text: string,
   exactSecrets: Array<string | undefined | null> = [],
@@ -695,6 +617,11 @@ function truncateSample(text: unknown): string {
   return `${trimmed.slice(0, SAMPLE_MAX_CHARS - 1)}…`;
 }
 
+/**
+ * True when the provider returned exactly the smoke-test reply we asked for
+ * (`"ok"`, case-insensitive after trimming). Distinguishes a connected-and-
+ * responsive provider from one that returned 2xx but produced unexpected text.
+ */
 export function isSmokeOkReply(text: unknown): boolean {
   return typeof text === 'string' && text.trim().toLowerCase() === 'ok';
 }
@@ -1284,6 +1211,13 @@ function extractOpenAIMessageText(data: unknown): string {
   return '';
 }
 
+/**
+ * POST a minimal smoke prompt to a BYOK provider API and return a categorized
+ * result. Validates the base URL (including DNS resolution), selects the correct
+ * wire shape for the provider protocol, fires one non-streaming completion, and
+ * maps the response or error to a `ConnectionTestResponse`. Persists nothing —
+ * safe to call from the Settings dialog without side effects.
+ */
 export async function testProviderConnection(
   input: ProviderConnectionInput,
 ): Promise<ConnectionTestResponse> {
@@ -1623,6 +1557,14 @@ function parseClaudeResultFrame(stdout: string): {
   return parsed;
 }
 
+/**
+ * Build a collector sink that mirrors the `send(event, payload)` interface
+ * expected by the stream parsers. Buffers all assistant text arriving as
+ * `text_delta` or `stdout` events, debounces result resolution so the final
+ * tokens arrive before the promise settles, and captures stderr/raw-stdout tails
+ * for diagnostics. Used by `testAgentConnection` so the stream parsers run
+ * unmodified against the test child process.
+ */
 export function createAgentSink(): AgentSink {
   let buffer = '';
   let stderrTail = '';
@@ -2567,6 +2509,13 @@ async function testAgentConnectionInternal(
   }
 }
 
+/**
+ * Spawn a Local CLI agent with a smoke prompt and return a categorized result.
+ * Handles the full lifecycle: binary resolution, optional auth preflight, child
+ * spawn, stream parsing, timeout / abort, and SIGTERM/SIGKILL cleanup. For
+ * Codex, automatically retries with the PATH binary when the configured
+ * `CODEX_BIN` override fails. Persists nothing — safe to call from Settings.
+ */
 export async function testAgentConnection(
   input: AgentConnectionInput,
 ): Promise<ConnectionTestResponse> {

@@ -1,7 +1,18 @@
+/**
+ * @module agents/connection/claude-diagnostics
+ *
+ * Turns a failed Claude CLI connection attempt into an actionable diagnostic
+ * (missing binary, auth, config) that the connection probe surfaces to Settings.
+ */
 import path from 'node:path';
 
-import { redactSecrets } from './redact.js';
+import { redactSecrets } from '../../redact.js';
 
+/**
+ * Inputs collected from a failed Claude CLI spawn. Passed to
+ * `diagnoseClaudeCliFailure` to classify the failure and compose an
+ * actionable user-facing message.
+ */
 export interface ClaudeCliDiagnosticInput {
   agentId: string;
   exitCode?: number | null;
@@ -12,6 +23,13 @@ export interface ClaudeCliDiagnosticInput {
   resolvedBin?: string | null;
 }
 
+/**
+ * Human-readable diagnosis of a failed Claude CLI connection attempt, returned
+ * by `diagnoseClaudeCliFailure`. `message` is the one-line title; `detail` is a
+ * full paragraph that includes contextual hints (config dir, custom base URL,
+ * raw CLI output tail). `retryable` is always `true` — all Claude failures are
+ * worth retrying after the indicated auth/config fix.
+ */
 export interface ClaudeCliDiagnostic {
   message: string;
   detail: string;
@@ -75,6 +93,17 @@ function selectedClaudeCompatibleRuntime(input: ClaudeCliDiagnosticInput): 'clau
   return base === 'openclaude' ? 'openclaude' : 'claude';
 }
 
+/**
+ * Match a failed Claude CLI spawn against known failure patterns (connection
+ * refused, dropped mid-stream, auth missing/expired, model unavailable, Windows
+ * credential mismatch, stale config state) and return an actionable diagnostic.
+ *
+ * Returns `null` when `agentId !== 'claude'`, when the process exited cleanly
+ * (exit code 0, no signal), or when none of the known patterns match.
+ *
+ * Supports both `claude` and `openclaude` binaries — the resolved binary name
+ * is used to pick the appropriate label in user-facing messages.
+ */
 export function diagnoseClaudeCliFailure(
   input: ClaudeCliDiagnosticInput,
 ): ClaudeCliDiagnostic | null {

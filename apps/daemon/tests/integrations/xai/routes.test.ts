@@ -50,7 +50,7 @@ vi.mock('../../../src/integrations/xai-oauth-server.js', () => ({
   startCallbackListener: startMock,
 }));
 
-vi.mock('../../../src/connectionTest.js', () => ({
+vi.mock('../../../src/agents/index.js', () => ({
   proxyDispatcherRequestInit: proxyDispatcherFactoryMock,
 }));
 

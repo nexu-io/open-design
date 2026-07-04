@@ -61,7 +61,7 @@ import {
   resolvePluginPreviewsDir,
   PLUGIN_PREVIEWS_ROUTE,
 } from './plugin-preview-bakes.js';
-import { userFacingAgentLabel } from './user-facing-agent-label.js';
+import { userFacingAgentLabel } from './agents/index.js';
 import {
   buildBrowserUseRunState,
   collectBrowserUseDiscoveryFacts,
@@ -284,7 +284,7 @@ import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { createAgentTitleMarkerStripper } from './title-marker.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
 import { createToolLoopGuard, resolveToolLoopMode, type ToolLoopVerdict } from './tool-loop-guard.js';
-import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
+import { diagnoseClaudeCliFailure } from './agents/index.js';
 import { loadCritiqueConfigFromEnv } from './critique/config.js';
 import { reconcileStaleRuns } from './critique/persistence.js';
 import { runOrchestrator } from './critique/orchestrator.js';
@@ -298,7 +298,7 @@ import {
   type SkillCritiquePolicy,
 } from './critique/rollout.js';
 import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
-import { createCopilotStreamHandler } from './copilot-stream.js';
+import { createCopilotStreamHandler } from './agents/index.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
 import {
   antigravityAuthGuidance,
@@ -308,7 +308,7 @@ import {
   cursorAuthGuidance,
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
-import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
+import { createAgentStderrVisibilityFilter } from './agents/index.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { importFigmaFromBytes } from './figma/figma-import.js';
@@ -355,7 +355,7 @@ import {
   testProviderConnection,
   validateBaseUrl,
   validateBaseUrlResolved,
-} from './connectionTest.js';
+} from './agents/index.js';
 import { listProviderModels } from './integrations/provider-models.js';
 import { importClaudeDesignZip } from './claude-design-import.js';
 import {
@@ -517,7 +517,7 @@ import {
   isAgentResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
-} from './agent-session-resume.js';
+} from './agents/index.js';
 import {
   createLiveArtifact,
   deleteLiveArtifact,

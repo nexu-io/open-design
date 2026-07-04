@@ -1,3 +1,10 @@
+/**
+ * @module agents/session/agent-session-resume
+ *
+ * Agent session capture and resume-invalidation logic: decides whether a prior
+ * agent session (Claude / Codex / OpenCode / AMR) can be resumed given changed
+ * instructions, and persists captured session results to the daemon DB.
+ */
 import { createHash, randomUUID } from 'node:crypto';
 
 import type Database from 'better-sqlite3';
@@ -7,7 +14,7 @@ import {
   getAgentSessionRecord,
   latestCompletedAssistantMessageId,
   upsertAgentSession,
-} from './db.js';
+} from '../../db.js';
 
 type SqliteDb = Database.Database;
 
@@ -35,6 +42,12 @@ export interface AgentResumeContext {
   invalidationReason: ResumeInvalidationReason | null;
 }
 
+/**
+ * Outcome of `persistCapturedAgentSession`. `'stored'` means the session row
+ * was upserted; `'cleared'` means a missing session id cleared the stale row
+ * so the next turn starts fresh; `'skipped'` means there was no conversation
+ * id to key on.
+ */
 export type CapturedAgentSessionResult = 'stored' | 'cleared' | 'skipped';
 
 /**

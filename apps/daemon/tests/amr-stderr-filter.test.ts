@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAgentStderrVisibilityFilter } from '../src/amr-stderr-filter.js';
+import { createAgentStderrVisibilityFilter } from '../src/agents/index.js';
 
 describe('AMR stderr visibility filter', () => {
   it('treats OpenCode bootstrap stderr as lifecycle noise while preserving real AMR diagnostics', () => {

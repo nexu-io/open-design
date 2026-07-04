@@ -21,7 +21,7 @@ import {
   testProviderConnection,
   validateBaseUrlResolved,
   type DnsLookupAddress,
-} from '../src/connectionTest.js';
+} from '../src/agents/index.js';
 import { listProviderModels } from '../src/integrations/provider-models.js';
 import { startServer } from '../src/server.js';
 import { rememberLiveModels } from '../src/runtimes/models.js';

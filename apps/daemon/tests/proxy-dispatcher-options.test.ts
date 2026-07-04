@@ -76,7 +76,7 @@ describe('proxyDispatcherRequestInit', () => {
 
   it('forwards agent timeout options into EnvHttpProxyAgent construction', async () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
-    const { proxyDispatcherRequestInit } = await import('../src/connectionTest.js');
+    const { proxyDispatcherRequestInit } = await import('../src/agents/index.js');
 
     try {
       const { close, requestInit } = proxyDispatcherRequestInit(
@@ -104,7 +104,7 @@ describe('proxyDispatcherRequestInit', () => {
 
   it('uses Socks5ProxyAgent when only ALL_PROXY carries a SOCKS proxy', async () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
-    const { proxyDispatcherRequestInit } = await import('../src/connectionTest.js');
+    const { proxyDispatcherRequestInit } = await import('../src/agents/index.js');
 
     try {
       const { close, requestInit } = proxyDispatcherRequestInit({
@@ -125,7 +125,7 @@ describe('proxyDispatcherRequestInit', () => {
 
   it('normalizes socks5h ALL_PROXY values for Socks5ProxyAgent', async () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
-    const { proxyDispatcherRequestInit } = await import('../src/connectionTest.js');
+    const { proxyDispatcherRequestInit } = await import('../src/agents/index.js');
 
     try {
       const { close, requestInit } = proxyDispatcherRequestInit({
@@ -146,7 +146,7 @@ describe('proxyDispatcherRequestInit', () => {
 
   it('forwards agent timeout options into Socks5ProxyAgent construction', async () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
-    const { proxyDispatcherRequestInit } = await import('../src/connectionTest.js');
+    const { proxyDispatcherRequestInit } = await import('../src/agents/index.js');
 
     try {
       const { close, requestInit } = proxyDispatcherRequestInit(
@@ -205,7 +205,7 @@ describe('proxyDispatcherRequestInit', () => {
     expectedProxyOptions,
   }) => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
-    const { proxyDispatcherRequestInit } = await import('../src/connectionTest.js');
+    const { proxyDispatcherRequestInit } = await import('../src/agents/index.js');
 
     try {
       const { close, requestInit } = proxyDispatcherRequestInit(systemProxyEnv);
@@ -254,7 +254,7 @@ describe('proxyDispatcherRequestInit', () => {
 
   it('bypasses SOCKS proxy dispatch for loopback targets from NO_PROXY defaults', async () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
-    const { proxyDispatcherRequestInit } = await import('../src/connectionTest.js');
+    const { proxyDispatcherRequestInit } = await import('../src/agents/index.js');
 
     try {
       const { close, requestInit } = proxyDispatcherRequestInit({
@@ -290,7 +290,7 @@ describe('proxyDispatcherRequestInit', () => {
 
   it('bypasses SOCKS proxy dispatch for explicit NO_PROXY hosts', async () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
-    const { proxyDispatcherRequestInit } = await import('../src/connectionTest.js');
+    const { proxyDispatcherRequestInit } = await import('../src/agents/index.js');
 
     try {
       const { close, requestInit } = proxyDispatcherRequestInit({
@@ -319,7 +319,7 @@ describe('proxyDispatcherRequestInit', () => {
 
   it('keeps SOCKS proxy dispatch for hosts outside NO_PROXY', async () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
-    const { proxyDispatcherRequestInit } = await import('../src/connectionTest.js');
+    const { proxyDispatcherRequestInit } = await import('../src/agents/index.js');
 
     try {
       const { close, requestInit } = proxyDispatcherRequestInit({
@@ -348,7 +348,7 @@ describe('proxyDispatcherRequestInit', () => {
 
   it('bypasses HTTP proxy dispatch for simple hosts when NO_PROXY includes <local>', async () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
-    const { proxyDispatcherRequestInit } = await import('../src/connectionTest.js');
+    const { proxyDispatcherRequestInit } = await import('../src/agents/index.js');
 
     try {
       const { close, requestInit } = proxyDispatcherRequestInit({

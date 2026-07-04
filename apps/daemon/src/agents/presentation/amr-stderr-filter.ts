@@ -1,3 +1,10 @@
+/**
+ * @module agents/presentation/amr-stderr-filter
+ *
+ * Stderr visibility filter that keeps known AMR/Vela/OpenCode bootstrap noise
+ * out of user-visible and persisted stderr surfaces, while letting real
+ * failures through.
+ */
 // Daemon-side compatibility guard for older Vela/OpenCode stderr behavior.
 // These lifecycle lines are not failures and should not become structured
 // error events in Open Design. Real AMR/OpenCode failures should continue to
@@ -19,6 +26,17 @@ function coerceStderrChunk(chunk: unknown): string {
   return typeof chunk === 'string' ? chunk : String(chunk);
 }
 
+/**
+ * Build a line-buffering stderr filter for the given agent. For the `amr`
+ * (Vela/OpenCode) agent, well-known SQLite-migration and server-startup lines
+ * are suppressed so they never reach user-visible or persisted stderr surfaces.
+ * For all other agents the filter is a transparent pass-through.
+ *
+ * Call `.write(chunk)` on each incoming stderr chunk; call `.flush()` when the
+ * child process closes to emit any partial final line.
+ *
+ * @param agentId Runtime agent id (e.g. `'amr'`, `'claude'`, `'codex'`).
+ */
 export function createAgentStderrVisibilityFilter(agentId: string | undefined) {
   if (agentId !== 'amr') {
     return {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { userFacingAgentLabel } from '../src/user-facing-agent-label.js';
+import { userFacingAgentLabel } from '../src/agents/index.js';
 
 describe('userFacingAgentLabel', () => {
   it('prefers the configured agent id over the resolved executable path', () => {

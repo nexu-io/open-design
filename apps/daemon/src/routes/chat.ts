@@ -22,7 +22,7 @@ import {
   isAIHubMixSpeechModel,
   type BYOKToolContext,
   type ImageToolResult,
-} from '../byok-tools.js';
+} from '../agents/index.js';
 import {
   AIHUBMIX_DEFAULT_BASE_URL,
   aihubmixHeaders,
@@ -32,7 +32,7 @@ import {
 } from '../integrations/aihubmix.js';
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
-import { proxyDispatcherRequestInit, validateBaseUrlResolved } from '../connectionTest.js';
+import { proxyDispatcherRequestInit, validateBaseUrlResolved } from '../agents/index.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
