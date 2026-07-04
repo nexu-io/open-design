@@ -1179,26 +1179,17 @@ export function createAgentRuntimeToolPrompt(
   ].join('\n');
 }
 
-export function normalizeProjectDisplayStatus(status) {
-  return status === 'starting' || status === 'queued' ? 'running' : status;
-}
-
-export function composeProjectDisplayStatus(
-  baseStatus,
-  awaitingInputProjects,
-  projectId,
-) {
-  if (
-    baseStatus.value === 'succeeded' &&
-    awaitingInputProjects.has(projectId)
-  ) {
-    return { ...baseStatus, value: 'awaiting_input' };
-  }
-  return {
-    ...baseStatus,
-    value: normalizeProjectDisplayStatus(baseStatus.value),
-  };
-}
+// Project run-status display helpers were extracted verbatim to
+// ./project-display-status.ts (strangler-fig slice 3). Imported back for the
+// deps object and re-exported to preserve server.ts's public surface.
+import {
+  composeProjectDisplayStatus,
+  normalizeProjectDisplayStatus,
+} from './project-display-status.js';
+export {
+  composeProjectDisplayStatus,
+  normalizeProjectDisplayStatus,
+} from './project-display-status.js';
 
 async function readProjectPluginManifest(folder) {
   const raw = await fs.promises.readFile(path.join(folder, 'open-design.json'), 'utf8');
@@ -2420,44 +2411,14 @@ function openNativeFolderDialog() {
  * @param {string} message
  * @param {Omit<ApiError, 'code' | 'message'>} [init]
  */
-function createSseErrorPayload(code, message, init = {}) {
-  return { message, error: createCompatApiError(code, message, init) };
-}
-
-function rewriteKnownAgentStreamError(agentId, message, failureText = '') {
-  const rawMessage =
-    typeof message === 'string' && message.trim()
-      ? message.trim()
-      : 'Agent stream error';
-  const combined = `${rawMessage}\n${failureText}`;
-  if (
-    /bufio\.scanner:\s*token too long/i.test(combined) &&
-    /opencode/i.test(combined) &&
-    (agentId === 'opencode' || agentId === 'mimo' || agentId === 'amr' || /json-rpc id \d+/i.test(combined))
-  ) {
-    return 'The run failed due to an unknown upstream streaming error. Please retry.';
-  }
-  return rawMessage;
-}
-
-function createAmrModelUnavailablePayload(model, init = {}) {
-  const modelText = typeof model === 'string' && model.trim()
-    ? `"${model.trim()}"`
-    : 'the selected model';
-  return createSseErrorPayload(
-    'AMR_MODEL_UNAVAILABLE',
-    `AMR model ${modelText} is not available from Vela. Refresh the AMR model list, choose a supported model, and retry this run.`,
-    {
-      retryable: false,
-      details: {
-        kind: 'amr_model',
-        action: 'choose_model',
-        ...(typeof model === 'string' && model.trim() ? { model: model.trim() } : {}),
-        ...init,
-      },
-    },
-  );
-}
+// SSE/AMR error payload builders were extracted verbatim to
+// ./http/error-payloads.ts (strangler-fig slice 3). Imported back here for the
+// chat-run deps object.
+import {
+  createAmrModelUnavailablePayload,
+  createSseErrorPayload,
+  rewriteKnownAgentStreamError,
+} from './http/error-payloads.js';
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
