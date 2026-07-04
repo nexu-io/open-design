@@ -361,6 +361,7 @@
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
+  white-space: nowrap;
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
