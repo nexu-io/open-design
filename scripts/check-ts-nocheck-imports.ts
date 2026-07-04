@@ -40,9 +40,23 @@ const skippedDirectories = new Set([
 // Files that can carry a meaningful `@ts-nocheck` (TypeScript sources).
 const scannedExtensions = new Set([".ts", ".tsx", ".mts", ".cts"]);
 
-// Candidate source extensions a `./x.js`-style specifier may resolve to under
-// NodeNext (a `.js` specifier maps to its `.ts` sibling), plus the raw JS forms.
+// Every source/JS extension a bare (extensionless) or directory-index import
+// may resolve to.
 const moduleResolutionExtensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
+
+// The source extensions each *emitted* JS extension can legitimately come from
+// under NodeNext. This is extension-specific on purpose: `.mts` emits `.mjs`
+// and `.cts` emits `.cjs`, while a same-basename `.ts` emits `.js`. So a
+// `./x.mjs` import must NOT be satisfied by a sibling `x.ts` (its output is
+// `x.js`, not `x.mjs`) — sharing one broad list would let that dead import
+// pass, defeating the guard. Keys are checked by suffix; `.mjs`/`.cjs`/`.jsx`
+// never end with `.js`, so ordering is irrelevant.
+const sourceCandidatesByJsExtension: Record<string, readonly string[]> = {
+  ".js": [".ts", ".tsx", ".js", ".jsx"],
+  ".jsx": [".tsx", ".jsx"],
+  ".mjs": [".mts", ".mjs"],
+  ".cjs": [".cts", ".cjs"],
+};
 
 export type TsNocheckImportViolation = {
   filePath: string;
@@ -78,8 +92,9 @@ export function hasLeadingTsNocheck(source: string): boolean {
  * Resolve a relative import specifier the way NodeNext + this repo's TS build
  * do, returning whether a real module exists for it.
  *
- * - `./x.js` / `.mjs` / `.cjs` map to a sibling TypeScript or JS source file.
- * - `./x.jsx` maps to `.tsx`/`.jsx`.
+ * - A JS-flavored specifier resolves only to the source extensions NodeNext
+ *   emits it from: `./x.js` from `.ts`/`.tsx`/`.js`/`.jsx`, `./x.mjs` from
+ *   `.mts`/`.mjs`, `./x.cjs` from `.cts`/`.cjs`, `./x.jsx` from `.tsx`/`.jsx`.
  * - An explicit `.ts`/`.tsx`/`.mts`/`.cts` or a non-code asset extension
  *   (`.json`, `.css`, ...) must exist verbatim.
  * - An extensionless specifier resolves to a source file or a directory
@@ -88,15 +103,11 @@ export function hasLeadingTsNocheck(source: string): boolean {
 export function resolvesRelativeSpecifier(fromDirectory: string, specifier: string): boolean {
   const target = path.resolve(fromDirectory, specifier);
 
-  for (const jsExtension of [".js", ".mjs", ".cjs"]) {
+  for (const [jsExtension, candidates] of Object.entries(sourceCandidatesByJsExtension)) {
     if (specifier.endsWith(jsExtension)) {
       const base = target.slice(0, -jsExtension.length);
-      return moduleResolutionExtensions.some((extension) => existsSync(base + extension));
+      return candidates.some((extension) => existsSync(base + extension));
     }
-  }
-  if (specifier.endsWith(".jsx")) {
-    const base = target.slice(0, -".jsx".length);
-    return [".tsx", ".jsx"].some((extension) => existsSync(base + extension));
   }
   if (path.extname(specifier) !== "") {
     // Explicit .ts/.tsx/.mts/.cts source or a non-code asset (.json/.css/...).

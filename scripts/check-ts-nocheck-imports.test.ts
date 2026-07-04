@@ -83,6 +83,31 @@ test("resolvesRelativeSpecifier maps .js specifiers to their real sibling and fo
   await rm(root, { force: true, recursive: true });
 });
 
+test("resolvesRelativeSpecifier keeps .mjs/.cjs resolution extension-specific", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "od-tsnocheck-"));
+  // NodeNext: .mts emits .mjs, .cts emits .cjs, a same-basename .ts emits .js.
+  await writeFile(path.join(root, "esm.mts"), "export const a = 1;", "utf8");
+  await writeFile(path.join(root, "cjs.cts"), "export const a = 1;", "utf8");
+  await writeFile(path.join(root, "plain.ts"), "export const a = 1;", "utf8");
+
+  // Correct matches resolve.
+  assert.equal(resolvesRelativeSpecifier(root, "./esm.mjs"), true);
+  assert.equal(resolvesRelativeSpecifier(root, "./cjs.cjs"), true);
+
+  // Mismatches must be REJECTED: a `.ts` emits `.js`, never `.mjs`/`.cjs`, so
+  // an import of `./plain.mjs` / `./plain.cjs` would fail at runtime and the
+  // guard must catch it (this was the reviewed false negative).
+  assert.equal(resolvesRelativeSpecifier(root, "./plain.mjs"), false);
+  assert.equal(resolvesRelativeSpecifier(root, "./plain.cjs"), false);
+  // ...and a `.mts` (emits `.mjs`) must not satisfy a `.cjs` import, or vice-versa.
+  assert.equal(resolvesRelativeSpecifier(root, "./esm.cjs"), false);
+  assert.equal(resolvesRelativeSpecifier(root, "./cjs.mjs"), false);
+  // A plain `.js` import still resolves to the `.ts` source.
+  assert.equal(resolvesRelativeSpecifier(root, "./plain.js"), true);
+
+  await rm(root, { force: true, recursive: true });
+});
+
 test("collectTsNocheckImportViolationsFromSource flags only the unresolved import in a @ts-nocheck file", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "od-tsnocheck-"));
   await writeFile(path.join(root, "present.ts"), "export const a = 1;", "utf8");
