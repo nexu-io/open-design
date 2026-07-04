@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenDesign SaaS Hero PR Demo</title>
+  <style>
+    :root {
+      --bg: oklch(99% 0.002 180);
+      --surface: oklch(100% 0 0);
+      --surface-soft: oklch(97.5% 0.006 180);
+      --fg: oklch(16% 0.018 185);
+      --muted: oklch(48% 0.014 185);
+      --border: oklch(90% 0.008 185);
+      --accent: oklch(61% 0.14 164);
+      --accent-soft: color-mix(in oklch, var(--accent) 13%, transparent);
+      --ink-soft: color-mix(in oklch, var(--fg) 6%, transparent);
+      --ok: oklch(63% 0.15 145);
+      --warn: oklch(70% 0.14 78);
+      --font-display: 'Iowan Old Style', 'Charter', Georgia, serif;
+      --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+      --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+      --radius: 16px;
+      --radius-sm: 10px;
+      --shadow: 0 26px 80px color-mix(in oklch, var(--fg) 13%, transparent);
+    }
+
+    * { box-sizing: border-box; }
+    html { min-height: 100%; background: var(--bg); }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background:
+        radial-gradient(circle at 78% 18%, color-mix(in oklch, var(--accent) 17%, transparent), transparent 31%),
+        linear-gradient(180deg, var(--bg), var(--surface-soft));
+      color: var(--fg);
+      font: 16px/1.55 var(--font-body);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; }
+    p, h1, h2, h3 { margin: 0; }
+    h1, h2, h3 { text-wrap: balance; }
+    p { text-wrap: pretty; }
+
+    .page {
+      width: min(100%, 1440px);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: 24px clamp(20px, 4vw, 56px) 56px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 10px 0 42px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      background:
+        linear-gradient(135deg, var(--accent), color-mix(in oklch, var(--fg) 40%, var(--accent)));
+      display: grid;
+      place-items: center;
+      color: var(--surface);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      box-shadow: 0 10px 28px color-mix(in oklch, var(--accent) 22%, transparent);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: clamp(16px, 2.6vw, 34px);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .nav-links a:hover { color: var(--fg); }
+
+    .nav-cta {
+      display: inline-flex;
+      align-items: center;
+      min-height: 38px;
+      padding: 0 15px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: color-mix(in oklch, var(--surface) 78%, transparent);
+      color: var(--fg);
+      font-size: 14px;
+    }
+
+    .hero {
+      flex: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 0.93fr) minmax(420px, 1.07fr);
+      align-items: center;
+      gap: clamp(34px, 6vw, 88px);
+      padding: clamp(24px, 5vw, 58px) 0 34px;
+    }
+
+    .copy {
+      max-width: 650px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 11px;
+      border: 1px solid color-mix(in oklch, var(--accent) 34%, var(--border));
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: color-mix(in oklch, var(--accent) 82%, var(--fg));
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .pulse {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 50%, transparent);
+      animation: pulse 1.8s ease-out infinite;
+    }
+
+    h1 {
+      margin-top: 26px;
+      font-family: var(--font-display);
+      font-size: clamp(48px, 7vw, 92px);
+      line-height: 0.96;
+      letter-spacing: -0.045em;
+      max-width: 10.5ch;
+    }
+
+    .lead {
+      margin-top: 26px;
+      max-width: 58ch;
+      color: var(--muted);
+      font-size: clamp(17px, 1.6vw, 21px);
+      line-height: 1.62;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 34px;
+    }
+
+    .btn {
+      min-height: 48px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      padding: 0 20px;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms, background 160ms;
+    }
+
+    .btn:active { transform: translateY(1px); }
+    .btn-primary {
+      background: var(--fg);
+      border-color: var(--fg);
+      color: var(--surface);
+    }
+    .btn-primary:hover { background: color-mix(in oklch, var(--fg) 88%, var(--accent)); }
+    .btn-secondary {
+      background: color-mix(in oklch, var(--surface) 86%, transparent);
+      border-color: var(--border);
+      color: var(--fg);
+    }
+    .btn-secondary:hover { border-color: color-mix(in oklch, var(--fg) 36%, var(--border)); }
+
+    .proof-row {
+      margin-top: 34px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .proof-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: color-mix(in oklch, var(--surface) 72%, transparent);
+    }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--ok);
+    }
+
+    .product {
+      min-width: 0;
+      position: relative;
+    }
+
+    .orbit {
+      position: absolute;
+      inset: -52px -34px auto auto;
+      width: 168px;
+      height: 168px;
+      border: 1px solid color-mix(in oklch, var(--accent) 30%, transparent);
+      border-radius: 50%;
+      opacity: 0.7;
+      animation: rotate 16s linear infinite;
+    }
+
+    .orbit::before,
+    .orbit::after {
+      content: "";
+      position: absolute;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent);
+      top: 20px;
+      left: 24px;
+    }
+
+    .orbit::after {
+      width: 6px;
+      height: 6px;
+      top: auto;
+      left: auto;
+      right: 22px;
+      bottom: 32px;
+      background: var(--warn);
+    }
+
+    .app-frame {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid color-mix(in oklch, var(--border) 78%, var(--surface));
+      border-radius: 28px;
+      background: color-mix(in oklch, var(--surface) 90%, var(--bg));
+      box-shadow: var(--shadow);
+    }
+
+    .frame-top {
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--border);
+      background: color-mix(in oklch, var(--surface) 72%, transparent);
+      backdrop-filter: blur(16px);
+    }
+
+    .traffic {
+      display: flex;
+      gap: 7px;
+    }
+
+    .traffic span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+
+    .frame-title {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .frame-body {
+      display: grid;
+      grid-template-columns: 156px 1fr;
+      min-height: 514px;
+    }
+
+    .sidebar {
+      padding: 20px 14px;
+      border-right: 1px solid var(--border);
+      background: var(--surface-soft);
+    }
+
+    .side-label {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .side-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 34px;
+      padding: 0 10px;
+      border-radius: 9px;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .side-item.active {
+      color: var(--fg);
+      background: var(--surface);
+      box-shadow: 0 1px 0 color-mix(in oklch, var(--fg) 6%, transparent);
+    }
+
+    .mini-icon {
+      width: 14px;
+      height: 14px;
+      border: 1px solid currentColor;
+      border-radius: 4px;
+      opacity: 0.75;
+    }
+
+    .workspace {
+      padding: 22px;
+      background:
+        linear-gradient(180deg, color-mix(in oklch, var(--surface) 78%, transparent), var(--surface)),
+        var(--surface);
+    }
+
+    .workspace-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .workspace h2 {
+      font-family: var(--font-display);
+      font-size: clamp(28px, 3vw, 42px);
+      line-height: 1.03;
+      letter-spacing: -0.03em;
+    }
+
+    .status-pill {
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: color-mix(in oklch, var(--accent) 78%, var(--fg));
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .preview-grid {
+      display: grid;
+      grid-template-columns: 1.12fr 0.88fr;
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .canvas-preview {
+      position: relative;
+      min-height: 318px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background:
+        linear-gradient(135deg, color-mix(in oklch, var(--accent) 10%, transparent), transparent 42%),
+        var(--surface-soft);
+      padding: 20px;
+    }
+
+    .canvas-preview::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--ink-soft) 1px, transparent 1px),
+        linear-gradient(90deg, var(--ink-soft) 1px, transparent 1px);
+      background-size: 36px 36px;
+      mask-image: linear-gradient(180deg, transparent, black 18%, black 82%, transparent);
+      pointer-events: none;
+    }
+
+    .mock-hero {
+      position: relative;
+      z-index: 1;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      border: 1px solid color-mix(in oklch, var(--fg) 8%, transparent);
+      border-radius: 17px;
+      background: color-mix(in oklch, var(--surface) 82%, transparent);
+      padding: 18px;
+    }
+
+    .mock-nav,
+    .mock-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .line {
+      height: 8px;
+      border-radius: 999px;
+      background: var(--border);
+    }
+
+    .line.dark { background: color-mix(in oklch, var(--fg) 82%, transparent); }
+    .line.accent { background: var(--accent); }
+    .mock-logo { width: 72px; }
+    .mock-nav-lines { display: flex; gap: 8px; }
+    .mock-nav-lines .line { width: 38px; }
+    .mock-title { margin-top: 48px; max-width: 76%; }
+    .mock-title .line { height: 19px; margin-bottom: 10px; }
+    .mock-copy { width: 62%; margin-top: 14px; }
+    .mock-copy .line { margin-bottom: 8px; }
+    .mock-button { width: 88px; height: 34px; border-radius: 10px; background: var(--fg); }
+    .mock-link { width: 96px; }
+
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .step {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 13px;
+      background: var(--surface);
+      animation: floatIn 6s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+    }
+
+    .step:nth-child(2) { animation-delay: 0.24s; }
+    .step:nth-child(3) { animation-delay: 0.48s; }
+    .step:nth-child(4) { animation-delay: 0.72s; }
+
+    .step-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .step-name {
+      font-weight: 650;
+      font-size: 13px;
+    }
+
+    .step-time {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .step p {
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+
+    .signal-strip {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .signal {
+      padding: 14px 16px;
+      border-right: 1px solid var(--border);
+    }
+
+    .signal:last-child { border-right: 0; }
+    .signal strong {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 16px;
+      letter-spacing: -0.03em;
+    }
+    .signal span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .video-note {
+      margin-top: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: color-mix(in oklch, var(--surface) 70%, transparent);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .video-note strong {
+      color: var(--fg);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 45%, transparent); }
+      70% { box-shadow: 0 0 0 10px transparent; }
+      100% { box-shadow: 0 0 0 0 transparent; }
+    }
+
+    @keyframes rotate {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes floatIn {
+      0%, 100% { transform: translateY(0); }
+      35% { transform: translateY(-4px); }
+      70% { transform: translateY(2px); }
+    }
+
+    @media (max-width: 980px) {
+      .page { padding-bottom: 38px; }
+      .nav { padding-bottom: 18px; }
+      .nav-links { display: none; }
+      .hero {
+        grid-template-columns: 1fr;
+        align-items: start;
+      }
+      h1 { max-width: 12ch; }
+      .product { width: 100%; }
+      .frame-body { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .preview-grid { grid-template-columns: 1fr; }
+      .canvas-preview { min-height: 260px; }
+    }
+
+    @media (max-width: 620px) {
+      .page { padding-inline: 16px; }
+      .hero { gap: 28px; }
+      h1 {
+        font-size: clamp(42px, 15vw, 64px);
+        max-width: 9ch;
+      }
+      .lead { font-size: 16px; }
+      .actions { width: 100%; }
+      .btn { width: 100%; }
+      .app-frame { border-radius: 20px; }
+      .frame-top { padding-inline: 14px; }
+      .workspace { padding: 16px; }
+      .workspace-head { flex-direction: column; }
+      .signal-strip { grid-template-columns: 1fr; }
+      .signal { border-right: 0; border-bottom: 1px solid var(--border); }
+      .signal:last-child { border-bottom: 0; }
+      .video-note {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="nav" data-od-id="topnav">
+      <a class="brand" href="#" aria-label="OpenDesign">
+        <span class="brand-mark">OD</span>
+        <span>OpenDesign</span>
+      </a>
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="#">Design Systems</a>
+        <a href="#">Plugins</a>
+        <a href="#">Artifacts</a>
+        <a href="#">Docs</a>
+      </nav>
+      <a class="nav-cta" href="#">Open Studio</a>
+    </header>
+
+    <main>
+      <section class="hero" data-od-id="hero">
+        <div class="copy">
+          <p class="eyebrow"><span class="pulse"></span>Agent-native design studio</p>
+          <h1>把一句 brief 变成可交付的设计资产。</h1>
+          <p class="lead">
+            OpenDesign 把设计系统、插件、编码 Agent 和预览画布放进同一个本地工作流。
+            团队可以生成 landing、deck、dashboard 与视频素材，并把每次输出沉淀成可复用的品牌能力。
+          </p>
+          <div class="actions" data-od-id="hero-actions">
+            <a class="btn btn-primary" href="#">Start from a brief</a>
+            <a class="btn btn-secondary" href="#">Watch PR demo</a>
+          </div>
+          <div class="proof-row" aria-label="OpenDesign capability summary">
+            <span class="proof-chip"><span class="dot"></span>DESIGN.md driven</span>
+            <span class="proof-chip"><span class="dot"></span>HTML / PDF / MP4 ready</span>
+            <span class="proof-chip"><span class="dot"></span>CLI + Web surface</span>
+          </div>
+        </div>
+
+        <div class="product" data-od-id="product-preview">
+          <div class="orbit" aria-hidden="true"></div>
+          <div class="app-frame">
+            <div class="frame-top">
+              <div class="traffic" aria-hidden="true"><span></span><span></span><span></span></div>
+              <span class="frame-title">project/opendesign-hero</span>
+              <span class="status-pill"><span class="pulse"></span>streaming artifact</span>
+            </div>
+            <div class="frame-body">
+              <aside class="sidebar" aria-label="OpenDesign project tools">
+                <p class="side-label">Studio</p>
+                <div class="side-item active"><span class="mini-icon"></span>Brief</div>
+                <div class="side-item"><span class="mini-icon"></span>Design System</div>
+                <div class="side-item"><span class="mini-icon"></span>Templates</div>
+                <div class="side-item"><span class="mini-icon"></span>Artifacts</div>
+                <p class="side-label" style="margin-top: 22px;">Output</p>
+                <div class="side-item"><span class="mini-icon"></span>HTML</div>
+                <div class="side-item"><span class="mini-icon"></span>Video brief</div>
+              </aside>
+
+              <div class="workspace">
+                <div class="workspace-head">
+                  <div>
+                    <h2>Landing Hero · SaaS launch</h2>
+                    <p class="lead" style="font-size: 14px; margin-top: 8px;">
+                      绑定品牌规则、布局节奏和 PR 录屏叙事，一次生成可预览的资产。
+                    </p>
+                  </div>
+                  <span class="status-pill">PR-ready</span>
+                </div>
+
+                <div class="preview-grid">
+                  <div class="canvas-preview" aria-label="Generated landing page hero preview">
+                    <div class="mock-hero">
+                      <div class="mock-nav">
+                        <span class="line dark mock-logo"></span>
+                        <span class="mock-nav-lines" aria-hidden="true">
+                          <span class="line"></span><span class="line"></span><span class="line"></span>
+                        </span>
+                      </div>
+                      <div>
+                        <div class="mock-title">
+                          <span class="line dark" style="width: 100%;"></span>
+                          <span class="line dark" style="width: 78%;"></span>
+                          <span class="line accent" style="width: 44%;"></span>
+                        </div>
+                        <div class="mock-copy">
+                          <span class="line" style="width: 100%;"></span>
+                          <span class="line" style="width: 84%;"></span>
+                        </div>
+                      </div>
+                      <div class="mock-actions">
+                        <span class="mock-button"></span>
+                        <span class="line mock-link"></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="timeline" aria-label="Agent generation timeline">
+                    <article class="step">
+                      <div class="step-top">
+                        <span class="step-name">01 · Discovery</span>
+                        <span class="step-time">00:03</span>
+                      </div>
+                      <p>锁定受众、输出类型与品牌边界，避免先写页面再返工。</p>
+                    </article>
+                    <article class="step">
+                      <div class="step-top">
+                        <span class="step-name">02 · Bind system</span>
+                        <span class="step-time">00:08</span>
+                      </div>
+                      <p>读取 DESIGN.md，把颜色、字体、圆角和节奏落到 token。</p>
+                    </article>
+                    <article class="step">
+                      <div class="step-top">
+                        <span class="step-name">03 · Generate</span>
+                        <span class="step-time">00:14</span>
+                      </div>
+                      <p>产出 HTML、PR 视频说明与可截图的产品预览画面。</p>
+                    </article>
+                    <article class="step">
+                      <div class="step-top">
+                        <span class="step-name">04 · Review</span>
+                        <span class="step-time">00:21</span>
+                      </div>
+                      <p>检查占位、响应式、层级与输出可交付性。</p>
+                    </article>
+                  </div>
+                </div>
+
+                <div class="signal-strip" data-od-id="hero-signals">
+                  <div class="signal">
+                    <strong>150+</strong>
+                    <span>brand-grade design systems</span>
+                  </div>
+                  <div class="signal">
+                    <strong>HTML</strong>
+                    <span>artifact-first output</span>
+                  </div>
+                  <div class="signal">
+                    <strong>PR</strong>
+                    <span>demo script included</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="video-note" data-od-id="video-note">
+            <strong>Record this frame</strong>
+            <span>建议 12 秒录屏：从左侧主张平移到右侧生成时间线，结尾定格在 PR-ready 状态。</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

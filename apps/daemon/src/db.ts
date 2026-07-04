@@ -17,7 +17,7 @@ import { migratePlugins } from './plugins/persistence.js';
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
 type JsonObject = Record<string, unknown>;
-type ChatSessionMode = 'design' | 'chat';
+type ChatSessionMode = 'design' | 'chat' | 'plan';
 
 let dbInstance: SqliteDb | null = null;
 let dbFile: string | null = null;
@@ -117,6 +117,7 @@ function migrate(db: SqliteDb): void {
       events_json TEXT,
       attachments_json TEXT,
       produced_files_json TEXT,
+      trace_object_files_json TEXT,
       feedback_json TEXT,
       pre_turn_file_names_json TEXT,
       session_mode TEXT,
@@ -287,6 +288,9 @@ function migrate(db: SqliteDb): void {
   }
   if (!messageCols.some((c: DbRow) => c.name === 'pre_turn_file_names_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN pre_turn_file_names_json TEXT`);
+  }
+  if (!messageCols.some((c: DbRow) => c.name === 'trace_object_files_json')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN trace_object_files_json TEXT`);
   }
   if (!messageCols.some((c: DbRow) => c.name === 'session_mode')) {
     db.exec(`ALTER TABLE messages ADD COLUMN session_mode TEXT`);
@@ -630,6 +634,85 @@ export function listLatestProjectRunStatuses(db: SqliteDb) {
   return latestByProject;
 }
 
+export function listLatestConversationRunStatuses(db: SqliteDb) {
+  const rows = db
+    .prepare(
+      `SELECT m.conversation_id AS conversationId,
+              m.run_id AS runId,
+              m.run_status AS status,
+              COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt,
+              m.position AS position
+         FROM messages m
+        WHERE m.run_status IS NOT NULL
+        ORDER BY updatedAt DESC, m.position DESC`,
+    )
+    .all() as DbRow[];
+  const latestByConversation = new Map<string, DbRow>();
+  for (const row of rows) {
+    if (!latestByConversation.has(row.conversationId)) {
+      latestByConversation.set(row.conversationId, {
+        value: normalizeProjectRunStatus(row.status),
+        updatedAt: Number(row.updatedAt),
+        runId: row.runId ?? undefined,
+      });
+    }
+  }
+  return latestByConversation;
+}
+
+export function listFirstConversationRunStatuses(db: SqliteDb) {
+  const rows = db
+    .prepare(
+      `SELECT m.conversation_id AS conversationId,
+              m.run_id AS runId,
+              m.run_status AS status,
+              COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt,
+              m.position AS position
+         FROM messages m
+        WHERE m.run_status IS NOT NULL
+          AND m.run_id IS NOT NULL
+        ORDER BY m.position ASC`,
+    )
+    .all() as DbRow[];
+  const firstByConversation = new Map<string, DbRow>();
+  for (const row of rows) {
+    if (!firstByConversation.has(row.conversationId)) {
+      firstByConversation.set(row.conversationId, {
+        value: normalizeProjectRunStatus(row.status),
+        updatedAt: Number(row.updatedAt),
+        runId: row.runId ?? undefined,
+      });
+    }
+  }
+  return firstByConversation;
+}
+
+export function listLatestRunStatuses(db: SqliteDb) {
+  const rows = db
+    .prepare(
+      `SELECT m.run_id AS runId,
+              m.run_status AS status,
+              COALESCE(m.ended_at, m.started_at, m.created_at) AS updatedAt,
+              m.position AS position
+         FROM messages m
+        WHERE m.run_status IS NOT NULL
+          AND m.run_id IS NOT NULL
+        ORDER BY updatedAt DESC, m.position DESC`,
+    )
+    .all() as DbRow[];
+  const latestByRun = new Map<string, DbRow>();
+  for (const row of rows) {
+    if (!latestByRun.has(row.runId)) {
+      latestByRun.set(row.runId, {
+        value: normalizeProjectRunStatus(row.status),
+        updatedAt: Number(row.updatedAt),
+        runId: row.runId ?? undefined,
+      });
+    }
+  }
+  return latestByRun;
+}
+
 export function listProjectsAwaitingInput(db: SqliteDb) {
   const rows = db
     .prepare(
@@ -668,6 +751,41 @@ export function listProjectsAwaitingInput(db: SqliteDb) {
     )
     .all() as DbRow[];
   return new Set((rows as DbRow[]).map((row: DbRow) => row.projectId));
+}
+
+export function listConversationsAwaitingInput(db: SqliteDb) {
+  const rows = db
+    .prepare(
+      `SELECT latest.conversationId
+         FROM (
+           SELECT m.conversation_id AS conversationId,
+                  m.created_at AS createdAt,
+                  m.position AS position,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY m.conversation_id
+                    ORDER BY m.created_at DESC, m.position DESC
+                  ) AS rowNum
+             FROM messages m
+            WHERE m.role = 'assistant'
+              AND (
+                LOWER(m.content) LIKE '%<question-form%'
+                OR LOWER(m.content) LIKE '%<ask-question%'
+              )
+         ) latest
+        WHERE latest.rowNum = 1
+          AND NOT EXISTS (
+            SELECT 1
+              FROM messages reply
+             WHERE reply.conversation_id = latest.conversationId
+               AND reply.role = 'user'
+               AND (
+                 reply.created_at > latest.createdAt
+                 OR (reply.created_at = latest.createdAt AND reply.position > latest.position)
+               )
+          )`,
+    )
+    .all() as DbRow[];
+  return new Set((rows as DbRow[]).map((row: DbRow) => row.conversationId));
 }
 
 export function getProject(db: SqliteDb, id: string) {
@@ -960,7 +1078,7 @@ function normalizeConversation(r: DbRow) {
 }
 
 export function normalizeConversationSessionMode(value: unknown): ChatSessionMode {
-  return value === 'chat' ? 'chat' : 'design';
+  return value === 'chat' || value === 'plan' ? value : 'design';
 }
 
 function numberProperty(key: string, value: unknown) {
@@ -1262,6 +1380,7 @@ export function listMessages(db: SqliteDb, conversationId: string) {
               attachments_json AS attachmentsJson,
               comment_attachments_json AS commentAttachmentsJson,
               produced_files_json AS producedFilesJson,
+              trace_object_files_json AS traceObjectFilesJson,
               feedback_json AS feedbackJson,
               pre_turn_file_names_json AS preTurnFileNamesJson,
               session_mode AS sessionMode,
@@ -1288,7 +1407,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
           SET role = ?, content = ?, agent_id = ?, agent_name = ?,
               run_id = ?, run_status = ?, last_run_event_id = ?,
               events_json = ?, attachments_json = ?, comment_attachments_json = ?,
-              produced_files_json = ?, feedback_json = ?,
+              produced_files_json = ?, trace_object_files_json = ?, feedback_json = ?,
               pre_turn_file_names_json = ?,
               session_mode = ?, run_context_json = ?, applied_plugin_snapshot_json = ?,
               telemetry_finalized_at = CASE
@@ -1309,6 +1428,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
+      m.traceObjectFiles ? JSON.stringify(m.traceObjectFiles) : null,
       m.feedback ? JSON.stringify(m.feedback) : null,
       m.preTurnFileNames ? JSON.stringify(m.preTurnFileNames) : null,
       normalizeMessageSessionModeForStorage(m.sessionMode),
@@ -1330,10 +1450,10 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     const createdAt = typeof m.createdAt === 'number' && Number.isFinite(m.createdAt)
       ? m.createdAt
       : now;
-    // 23 values: id, conversation_id, role, content, agent_id, agent_name,
+    // 24 values: id, conversation_id, role, content, agent_id, agent_name,
     // run_id, run_status, last_run_event_id, events_json, attachments_json,
-    // comment_attachments_json, produced_files_json, feedback_json,
-    // pre_turn_file_names_json, session_mode, run_context_json,
+    // comment_attachments_json, produced_files_json, trace_object_files_json,
+    // feedback_json, pre_turn_file_names_json, session_mode, run_context_json,
     // applied_plugin_snapshot_json, telemetry_finalized_at, started_at,
     // ended_at, position, created_at.
     db.prepare(
@@ -1341,10 +1461,10 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
          (id, conversation_id, role, content, agent_id, agent_name,
           run_id, run_status, last_run_event_id, events_json,
           attachments_json, comment_attachments_json, produced_files_json,
-          feedback_json, pre_turn_file_names_json,
+          trace_object_files_json, feedback_json, pre_turn_file_names_json,
           session_mode, run_context_json, applied_plugin_snapshot_json,
           telemetry_finalized_at, started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -1359,6 +1479,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
+      m.traceObjectFiles ? JSON.stringify(m.traceObjectFiles) : null,
       m.feedback ? JSON.stringify(m.feedback) : null,
       m.preTurnFileNames ? JSON.stringify(m.preTurnFileNames) : null,
       normalizeMessageSessionModeForStorage(m.sessionMode),
@@ -1385,6 +1506,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               attachments_json AS attachmentsJson,
               comment_attachments_json AS commentAttachmentsJson,
               produced_files_json AS producedFilesJson,
+              trace_object_files_json AS traceObjectFilesJson,
               feedback_json AS feedbackJson,
               pre_turn_file_names_json AS preTurnFileNamesJson,
               session_mode AS sessionMode,
@@ -1763,6 +1885,7 @@ function normalizeMessage(row: DbRow) {
     attachments: parseJsonOrUndef(row.attachmentsJson),
     commentAttachments: parseJsonOrUndef(row.commentAttachmentsJson),
     producedFiles: parseJsonOrUndef(row.producedFilesJson),
+    traceObjectFiles: parseJsonOrUndef(row.traceObjectFilesJson),
     feedback: parseJsonOrUndef(row.feedbackJson),
     preTurnFileNames: parseJsonOrUndef(row.preTurnFileNamesJson),
     sessionMode: normalizeMessageSessionMode(row.sessionMode),
@@ -1775,11 +1898,11 @@ function normalizeMessage(row: DbRow) {
 }
 
 function normalizeMessageSessionMode(value: unknown): ChatSessionMode | undefined {
-  return value === 'chat' || value === 'design' ? value : undefined;
+  return value === 'chat' || value === 'design' || value === 'plan' ? value : undefined;
 }
 
 function normalizeMessageSessionModeForStorage(value: unknown): ChatSessionMode | null {
-  return value === 'chat' || value === 'design' ? value : null;
+  return value === 'chat' || value === 'design' || value === 'plan' ? value : null;
 }
 
 function parseJsonOrUndef(s: unknown): any {

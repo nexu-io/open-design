@@ -16,7 +16,7 @@ import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
 import type { TrackingRuntimeType } from '../analytics/public-params.js';
 
 export type ChatRole = 'user' | 'assistant';
-export type ChatSessionMode = 'design' | 'chat';
+export type ChatSessionMode = 'design' | 'chat' | 'plan';
 export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
 
 export interface ChatRequest {
@@ -76,6 +76,28 @@ export interface ChatRequest {
    * bucket, DS origin) used by the design_system_project run shape.
    */
   analyticsHints?: ChatAnalyticsHints;
+  /**
+   * Multi-agent team selected via @team mention. When present, the daemon
+   * should route the run through the multi-agent team module instead of
+   * the default single-agent path.
+   */
+  team?: ChatTeamSelection;
+}
+
+export interface ChatTeamSelection {
+  id: string;
+  mode: string;
+  name: string;
+  assignments: ChatTeamAssignment[];
+}
+
+export interface ChatTeamAssignment {
+  agentId: string;
+  agentType: string;
+  agentName: string;
+  role: string;
+  score: number;
+  reason: string;
 }
 
 export type ChatAnalyticsEntryFrom =
@@ -488,6 +510,7 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   commentAttachments?: ChatCommentAttachment[];
   producedFiles?: ProjectFile[];
+  traceObjectFiles?: ProjectFile[];
   // Diff baseline so reattach can rebuild producedFiles after reload.
   preTurnFileNames?: string[];
   feedback?: ChatMessageFeedback;

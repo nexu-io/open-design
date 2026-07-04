@@ -18,6 +18,7 @@ import type {
   ChatRunStatus,
   ChatRunStatusResponse,
   ChatRequest,
+  ChatTeamSelection,
   ChatSessionMode,
   ChatSseEvent,
   ChatSseStartPayload,
@@ -297,6 +298,8 @@ export interface DaemonStreamOptions {
   // (page_name / area / entry_from / DS context). Behavior never
   // depends on them.
   analyticsHints?: ChatAnalyticsHints;
+  /** Multi-agent team selection from @team mention. */
+  team?: ChatTeamSelection;
 }
 
 export interface DaemonReattachOptions {
@@ -361,7 +364,7 @@ function shouldSuppressLifecycleExitFallback(
 }
 
 const AMR_OPENCODE_INCOMPLETE_MESSAGE =
-  'AMR/OpenCode started, but the run did not complete. Please retry or check the run details for the session stream error.';
+  'Open Design started, but the run did not complete. Please retry or check the run details for the session stream error.';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -445,10 +448,10 @@ function formatOpenCodeSessionError(value: unknown): string | null {
     return message;
   }
   if (statusCode === 404) {
-    return 'The model service returned 404 Not Found for the configured runtime endpoint. Check the AMR Link URL or model route.';
+    return 'The model service returned 404 Not Found for the configured runtime endpoint. Check the Open Design link URL or model route.';
   }
   if (statusCode === 401 || statusCode === 403) {
-    return 'AMR authentication failed. Please sign in again or refresh the runtime key.';
+    return 'Open Design authentication failed. Please sign in again or refresh the runtime key.';
   }
   if (statusCode === 429) {
     return 'The model service rejected the request due to quota or rate limits. Retry later or check quota and rate limits.';
@@ -587,6 +590,7 @@ export async function streamViaDaemon({
   onRunStatus,
   onRunEventId,
   analyticsHints,
+  team,
 }: DaemonStreamOptions): Promise<void> {
   const emitRunStatus = (status: ChatRunStatus) => {
     onRunStatus?.(status);
@@ -619,6 +623,7 @@ export async function streamViaDaemon({
     ...(mediaExecution ? { mediaExecution } : {}),
     ...(titleGeneration?.enabled ? { titleGeneration: { enabled: true } } : {}),
     ...(analyticsHints ? { analyticsHints } : {}),
+    ...(team ? { team } : {}),
   };
   const body = JSON.stringify(request);
 
@@ -740,6 +745,47 @@ export interface VelaUser {
   name?: string;
   image?: string | null;
   plan?: string;
+  /** Wallet balance (USD, string) from the live `/api/v1/me` projection; `null` when unknown. */
+  balanceUsd?: string | null;
+}
+
+/**
+ * Format a raw wallet `balanceUsd` string (e.g. "12.3") into a display string
+ * (e.g. "$12.30"). Returns `null` when the balance is unknown/unparseable so
+ * callers can simply hide the balance area.
+ */
+export function formatVelaBalanceUsd(raw?: string | null): string | null {
+  if (raw == null || raw === '') return null;
+  const amount = Number(raw);
+  if (!Number.isFinite(amount)) return null;
+  return `$${amount.toFixed(2)}`;
+}
+
+/** Top subscription tier — no upgrade affordance is shown at/above this. */
+export const VELA_TOP_PLAN_TIER = 'max';
+
+/**
+ * Whether to surface an "Upgrade" affordance for the given plan tier. True for
+ * a KNOWN tier below the top (free/plus/pro); false at the top tier AND when
+ * the plan is unknown. The unknown case matters: a signed-in session whose live
+ * billing summary has not resolved yet has no plan, and treating that as
+ * upgradeable would flash an Upgrade CTA at top-tier users until billing loads.
+ */
+export function canUpgradeVelaPlan(plan?: string | null): boolean {
+  const normalized = plan?.trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized !== VELA_TOP_PLAN_TIER;
+}
+
+/**
+ * Live billing projection (plan tier + wallet balance) for the signed-in
+ * account, surfaced on its OWN field rather than on {@link VelaUser} so
+ * env-backed sessions (where `user` is null) can show plan/balance without a
+ * fabricated identity. Absent means unknown → hide the fields.
+ */
+export interface VelaLiveAccount {
+  plan?: string;
+  balanceUsd?: string | null;
 }
 
 export interface VelaLoginStatus {
@@ -747,6 +793,7 @@ export interface VelaLoginStatus {
   loginInFlight?: boolean;
   profile: string;
   user: VelaUser | null;
+  account?: VelaLiveAccount;
   configPath: string;
   // Device-authorization details parsed from `vela login` output while a login
   // is in flight, so the UI can offer a manual sign-in link when the browser

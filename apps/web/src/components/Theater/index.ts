@@ -20,6 +20,10 @@ export {
   useCritiqueTheaterEnabled,
   setCritiqueTheaterEnabled,
 } from './hooks/useCritiqueTheaterEnabled';
+export {
+  useWaitTeamEnabled,
+  setWaitTeamEnabled,
+} from './hooks/useWaitTeamEnabled';
 export type {
   CritiqueState,
   CritiqueAction,

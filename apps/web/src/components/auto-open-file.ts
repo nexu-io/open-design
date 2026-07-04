@@ -101,16 +101,46 @@ function isHtmlPreviewFile(file: CandidateFile): boolean {
   return file.kind === 'html' || /\.html?$/i.test(path);
 }
 
-export function selectAutoOpenProducedHtml(
+// Markdown documents (plan.md, report.md, DESIGN.md, …) render inline in the
+// viewer, so a turn that produces one should surface it just like an HTML
+// page. The daemon maps `.md`/`.txt` to the same `kind: 'text'`, so the
+// extension — not `kind` — is the only reliable discriminator: we open
+// markdown but deliberately leave plain `.txt` alone.
+function isMarkdownPreviewFile(file: CandidateFile): boolean {
+  const path = file.path ?? file.name;
+  return /\.(md|markdown)$/i.test(path);
+}
+
+// Auto-open priority for a turn's produced files. Higher wins. HTML is the
+// primary visual deliverable, so when a turn writes both an HTML page and a
+// markdown note (e.g. index.html + README.md) the page takes focus; markdown
+// is the next-best previewable artifact; everything else (decks, images, raw
+// text) has no in-place reshape preview worth stealing focus for and is left
+// for the user to open from the produced-files chips.
+function autoOpenPreviewRank(file: CandidateFile): number {
+  if (isHtmlPreviewFile(file)) return 2;
+  if (isMarkdownPreviewFile(file)) return 1;
+  return 0;
+}
+
+// Pick which of a turn's produced files to auto-open in the viewer. Among
+// previewable files, a higher-priority kind always beats a lower one; ties
+// break to the most recently written file (newest mtime). Returns null when
+// the turn produced nothing previewable.
+export function selectAutoOpenProducedArtifact(
   producedFiles: ReadonlyArray<CandidateFile>,
 ): string | null {
   let selected: CandidateFile | null = null;
+  let selectedRank = 0;
   for (const file of producedFiles) {
-    if (!isHtmlPreviewFile(file)) continue;
-    if (!selected) {
+    const rank = autoOpenPreviewRank(file);
+    if (rank === 0) continue;
+    if (!selected || rank > selectedRank) {
       selected = file;
+      selectedRank = rank;
       continue;
     }
+    if (rank < selectedRank) continue;
     const nextMtime = typeof file.mtime === 'number' && Number.isFinite(file.mtime) ? file.mtime : 0;
     const selectedMtime =
       typeof selected.mtime === 'number' && Number.isFinite(selected.mtime) ? selected.mtime : 0;

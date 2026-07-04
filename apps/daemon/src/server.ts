@@ -1,5 +1,12 @@
 // @ts-nocheck
-import type { DesktopExportArtifactInput, DesktopExportArtifactResult, DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design/sidecar-proto';
+import type {
+  DesktopExportArtifactInput,
+  DesktopExportArtifactResult,
+  DesktopExportPdfInput,
+  DesktopExportPdfResult,
+  DesktopRenderSlidesInput,
+  DesktopRenderSlidesResult,
+} from '@open-design/sidecar-proto';
 import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
@@ -308,6 +315,10 @@ import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
 import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
+import {
+  createRunLifecycleTracer,
+  runLifecycleMarkersForStreamEvent,
+} from './run-lifecycle-tracer.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
 import { decideSafeRunRetry } from './run-retry-policy.js';
@@ -322,8 +333,13 @@ import {
 } from './runtimes/run-artifacts.js';
 import {
   createRunArtifactBaselines,
+  diffRunArtifacts,
   snapshotProjectArtifacts,
 } from './run-artifact-fs.js';
+import {
+  AiHtmlVersionSnapshotError,
+  snapshotAiHtmlVersionsForRun,
+} from './run-html-version-snapshots.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import { buildPromptStackTelemetry } from './prompt-telemetry.js';
 import { readAnalyticsContext } from './analytics.js';
@@ -643,6 +659,61 @@ const PLUGIN_PREVIEWS_DIR = resolveDaemonPluginPreviewsDir({
 });
 const OD_BIN = resolveDaemonCliPath();
 const OD_NODE_BIN = process.execPath;
+// Resolve the odteam CLI binary path. Used when ChatRequest.team is
+// present — daemon spawns odteam to orchestrate the multi-agent run
+// instead of the single-agent spawn path. Resolution order:
+//   1. OD_TEAM_BIN env var (explicit override)
+//   2. Built binary in the monorepo (packages/multi-agent-team/cmd/odteam/odteam)
+type OdTeamSpawn = { command: string; args: string[]; cwd?: string };
+
+function resolveOdTeamBin(): OdTeamSpawn | null {
+  // 1. OD_TEAM_BIN env var (custom binary path)
+  if (process.env.OD_TEAM_BIN) {
+    return { command: process.env.OD_TEAM_BIN, args: [] };
+  }
+  // 2. Packaged install: DAEMON_RESOURCE_ROOT/bin/odteam(.exe)
+  //    (bundled by tools-pack via copyBundledOdTeamBinary)
+  if (DAEMON_RESOURCE_ROOT) {
+    const odteamName = process.platform === 'win32' ? 'odteam.exe' : 'odteam';
+    const packagedPath = path.join(DAEMON_RESOURCE_ROOT, 'bin', odteamName);
+    try {
+      if (fs.existsSync(packagedPath) && fs.statSync(packagedPath).isFile()) {
+        fs.accessSync(packagedPath, fs.constants.X_OK);
+        return { command: packagedPath, args: [] };
+      }
+    } catch { /* not executable or doesn't exist */ }
+  }
+  // 3. Pre-built binary in monorepo (e.g. make build)
+  const binPath = path.join(PROJECT_ROOT, 'packages', 'multi-agent-team', 'cmd', 'odteam', 'odteam');
+  try {
+    if (fs.existsSync(binPath) && fs.statSync(binPath).isFile()) {
+      fs.accessSync(binPath, fs.constants.X_OK);
+      return { command: binPath, args: [] };
+    }
+  } catch { /* not executable or doesn't exist */ }
+  // 4. Dev fallback: go run ./cmd/odteam when source exists but binary
+  //    hasn't been built yet (go build ./... does not produce an executable)
+  const modDir = path.join(PROJECT_ROOT, 'packages', 'multi-agent-team');
+  const mainFile = path.join(modDir, 'cmd', 'odteam', 'main.go');
+  if (fs.existsSync(mainFile)) {
+    return { command: 'go', args: ['run', './cmd/odteam'], cwd: modDir };
+  }
+  return null;
+}
+
+/** Remove a team run workDir tree after the odteam process exits so
+ *  per-run files under RUNTIME_DATA_DIR/team-runs don't accumulate.
+ *  This is a best-effort cleanup — failures are logged but never thrown. */
+function cleanupTeamWorkDir(workDir) {
+  try {
+    if (workDir && fs.existsSync(workDir)) {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    }
+  } catch (err) {
+    console.warn('[team] cleanupTeamWorkDir failed', workDir, err);
+  }
+}
+
 const SKILLS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'skills',
@@ -1152,6 +1223,8 @@ const WORKSPACE_CONTEXT_KINDS = new Set([
   'design-system',
   'file',
   'folder',
+  'project',
+  'local-code',
   'browser',
   'terminal',
   'side-chat',
@@ -1323,6 +1396,16 @@ function renderWorkspaceContextToolHints(items) {
       '- File and Design Files tabs: use project-relative paths exactly as shown. Read before editing, and keep generated screenshots/briefs/assets in Design Files when the user asks to capture or extract references.',
     );
   }
+  if (kinds.has('project')) {
+    hints.push(
+      '- Referenced projects: use the absolute path as a read-only reference project when present. Search and read relevant files before applying ideas to the current project; do not edit the referenced project unless the user explicitly asks.',
+    );
+  }
+  if (kinds.has('local-code')) {
+    hints.push(
+      '- Local code folders: use the absolute path as read-only implementation context. Inspect files under that folder when useful, align with its conventions, and make edits only in the active Open Design project unless the user explicitly asks otherwise.',
+    );
+  }
   if (kinds.has('live-artifact')) {
     hints.push(
       '- Live artifact tabs: treat the selected live artifact as the preview target. Inspect or modify its source files rather than editing generated runtime output when possible.',
@@ -1337,7 +1420,7 @@ function renderRunContextPrompt(selection, metadata) {
   if (Array.isArray(context.workspaceItems) && context.workspaceItems.length > 0) {
     lines.push('### Active workspace context');
     lines.push(
-      'The user did not manually choose this context; Open Design selected the currently focused workspace tab. Use it as the default target for phrases like "this", "current", "the browser", "the terminal", or "that file" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files.',
+      'The user selected these workspace contexts or Open Design inferred the currently focused workspace tab. Use them as the default target for phrases like "this", "current", "the browser", "the terminal", "that file", or "the referenced code/project" unless the user says otherwise. Use project-relative paths exactly when reading or editing project files, and treat absolute local paths as reference context unless explicitly asked to edit them.',
     );
     lines.push(formatWorkspaceContextList(context.workspaceItems));
     const toolHints = renderWorkspaceContextToolHints(context.workspaceItems);
@@ -3056,24 +3139,45 @@ const projectUpload = multer({
           meta,
         );
         (req as any)._uploadRelDir = relDir;
+        (req as any)._uploadAbsDir = absDir;
         cb(null, absDir);
       } catch (err) {
         cb(err, '');
       }
     },
-    filename: (_req, file, cb) => {
+    filename: (req, file, cb) => {
       // multer@1 hands us latin1-decoded multipart filenames; restore the
       // original UTF-8 so the response (and the on-disk name) preserves
-      // non-ASCII characters instead of mangling them. Then run the
-      // shared sanitiser and prepend a base36 timestamp so multiple
-      // uploads with the same original name don't clobber each other.
+      // non-ASCII characters instead of mangling them. Then run the shared
+      // sanitiser and only add a suffix when that sanitized source name
+      // would collide with an existing or same-batch upload.
       file.originalname = decodeMultipartFilename(file.originalname);
       const safe = sanitizeName(file.originalname);
-      cb(null, `${Date.now().toString(36)}-${safe}`);
+      const uploadDir = typeof (req as any)._uploadAbsDir === 'string' ? (req as any)._uploadAbsDir : '';
+      const reserved = (req as any)._uploadReservedNames instanceof Set
+        ? (req as any)._uploadReservedNames
+        : ((req as any)._uploadReservedNames = new Set());
+      cb(null, uniqueUploadFileName(uploadDir, safe, reserved));
     },
   }),
   limits: { fileSize: 200 * 1024 * 1024 },  // 200MB — covers the largest design assets we expect (PPTX/PDF/raw images)
 });
+
+function uniqueUploadFileName(uploadDir, safeName, reserved) {
+  const parsed = path.parse(safeName);
+  const base = parsed.name || parsed.base || 'file';
+  const ext = parsed.ext || '';
+  for (let index = 0; index < 10_000; index += 1) {
+    const candidate = index === 0 ? safeName : `${base}-${index}${ext}`;
+    if (reserved.has(candidate)) continue;
+    if (uploadDir && fs.existsSync(path.join(uploadDir, candidate))) continue;
+    reserved.add(candidate);
+    return candidate;
+  }
+  const fallback = `${base}-${Date.now().toString(36)}${ext}`;
+  reserved.add(fallback);
+  return fallback;
+}
 
 function handleProjectUpload(req, res, next) {
   projectUpload.array('files', 12)(req, res, (err) => {
@@ -3302,6 +3406,7 @@ export function createSseResponse(
 }
 
 export type DesktopPdfExporter = (input: DesktopExportPdfInput) => Promise<DesktopExportPdfResult>;
+export type DesktopSlideRenderer = (input: DesktopRenderSlidesInput) => Promise<DesktopRenderSlidesResult>;
 export type DesktopArtifactExporter = (input: DesktopExportArtifactInput) => Promise<DesktopExportArtifactResult>;
 
 // Loosely typed shape — we only access `namespace`, `base`, `mode`, and
@@ -3318,6 +3423,7 @@ export interface DaemonRuntimeContext {
 export interface StartServerOptions {
   desktopArtifactExporter?: DesktopArtifactExporter | null;
   desktopPdfExporter?: DesktopPdfExporter | null;
+  desktopSlideRenderer?: DesktopSlideRenderer | null;
   host?: string;
   port?: number;
   returnServer?: boolean;
@@ -3336,6 +3442,7 @@ export async function startServer({
   host = normalizeDaemonBindHost(process.env.OD_BIND_HOST),
   returnServer = false,
   desktopPdfExporter = null,
+  desktopSlideRenderer = null,
   desktopArtifactExporter = null,
   runtime = null,
 }: StartServerOptions = {}) {
@@ -3996,6 +4103,7 @@ export async function startServer({
     buildDesktopPdfExportInput,
     buildDesktopArtifactExportInput,
     desktopPdfExporter,
+    desktopSlideRenderer,
     desktopArtifactExporter,
     daemonUrlRef,
     sanitizeArchiveFilename,
@@ -4366,6 +4474,8 @@ export async function startServer({
     db,
     http: httpDeps,
     paths: pathDeps,
+    node: nodeDeps,
+    ids: idDeps,
     projectStore: projectStoreDeps,
     exports: projectExportDeps,
     projectFiles: projectFileDeps,
@@ -4411,6 +4521,7 @@ export async function startServer({
   const pluginRouteHelpers = {
     PLUGIN_PREVIEWS_DIR,
     applyBakedPreviews,
+    assembleExample,
     pluginUpload,
     pluginInstallation,
     sendMulterError,
@@ -4624,6 +4735,9 @@ export async function startServer({
   registerPluginRoutes(app, {
     db,
     paths: { PROJECTS_DIR, PLUGIN_REGISTRY_ROOTS, PLUGIN_LOCKFILE_PATH },
+    ids: idDeps,
+    projectStore: projectStoreDeps,
+    conversations: conversationDeps,
     plugins: {
       listInstalledPlugins,
       getInstalledPlugin,
@@ -4673,6 +4787,9 @@ export async function startServer({
   registerProjectPluginRoutes(app, {
     db,
     paths: { PROJECTS_DIR, PLUGIN_REGISTRY_ROOTS, PLUGIN_LOCKFILE_PATH },
+    ids: idDeps,
+    projectStore: projectStoreDeps,
+    conversations: conversationDeps,
     plugins: {
       listInstalledPlugins,
       getInstalledPlugin,
@@ -5327,10 +5444,8 @@ export async function startServer({
   };
 
   const startChatRun = async (chatBody, run) => {
-    run.analyticsTelemetry = {
-      ...(run.analyticsTelemetry ?? {}),
-      startChatRunStartedAt: Date.now(),
-    };
+    const lifecycle = createRunLifecycleTracer(run);
+    lifecycle.mark('chat_run_started');
     /** @type {Partial<ChatRequest> & { imagePaths?: string[] }} */
     chatBody = chatBody || {};
     const {
@@ -5355,11 +5470,9 @@ export async function startServer({
       research,
       context,
       titleGeneration,
+      team,
     } = chatBody;
-    run.analyticsTelemetry = {
-      ...(run.analyticsTelemetry ?? {}),
-      promptBuildStartAt: Date.now(),
-    };
+    lifecycle.mark('prompt_build_start');
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
       run.conversationId = conversationId;
@@ -5384,7 +5497,7 @@ export async function startServer({
         ? getConversation(db, conversationId)
         : null;
     const runSessionMode =
-      sessionMode === 'chat' || sessionMode === 'design'
+      sessionMode === 'chat' || sessionMode === 'design' || sessionMode === 'plan'
         ? normalizeConversationSessionMode(sessionMode)
         : normalizeConversationSessionMode(conversationSession?.sessionMode);
     const def = getAgentDef(agentId);
@@ -5396,6 +5509,16 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    // Multi-agent team: when a team selection is present, record it on
+    // the run so downstream consumers (run history, analytics) can distinguish
+    // team-orchestrated runs from single-agent runs. The actual routing to
+    // the odteam CLI happens later in this function (after `send` is defined)
+    // so the team event stream can be forwarded as SSE events.
+    if (team && typeof team === 'object' && team.id) {
+      run.teamMode = team.mode;
+      run.teamName = team.name;
+      run.teamAssignments = team.assignments;
+    }
     // Validate the checked-in `inactivityTimeoutMs` hint immediately
     // after the runtime def is selected and before any side-effectful
     // setup (auto-memory extract, `.mcp.json` write/unlink,
@@ -5752,6 +5875,58 @@ export async function startServer({
         // Snapshotting is best-effort; finish falls back to the tool-stream count.
       }
     }
+    const latestRunPromptForHtmlVersionSnapshot = () => {
+      if (run.conversationId) {
+        try {
+          const row = db.prepare(
+            `SELECT content
+               FROM messages
+              WHERE conversation_id = ?
+                AND role = 'user'
+                AND LENGTH(TRIM(content)) > 0
+              ORDER BY COALESCE(ended_at, started_at, created_at, 0) DESC,
+                       position DESC
+              LIMIT 1`,
+          ).get(run.conversationId);
+          if (typeof row?.content === 'string' && row.content.trim()) {
+            return { prompt: row.content.trim(), promptSource: 'message' as const };
+          }
+        } catch {
+          // Version prompt provenance is best-effort.
+        }
+      }
+      const requestPrompt =
+        typeof currentPrompt === 'string' && currentPrompt.trim()
+          ? currentPrompt.trim()
+          : typeof message === 'string' && message.trim()
+            ? message.trim()
+            : null;
+      return requestPrompt ? { prompt: requestPrompt, promptSource: 'message' as const } : { prompt: null };
+    };
+    const snapshotAiHtmlVersionsBeforeSuccess = async () => {
+      if (!run?.id || !run.projectId) return;
+      const artifactBaseline = runArtifactBaselines.peek(run.id);
+      if (!artifactBaseline || artifactBaseline.contended) return;
+      let diff;
+      try {
+        diff = diffRunArtifacts(
+          artifactBaseline.before,
+          snapshotProjectArtifacts(artifactBaseline.cwd),
+        );
+      } catch {
+        return;
+      }
+      const promptInfo = latestRunPromptForHtmlVersionSnapshot();
+      await snapshotAiHtmlVersionsForRun({
+        projectsRoot: PROJECTS_DIR,
+        projectId: run.projectId,
+        projectRoot: artifactBaseline.cwd,
+        diff,
+        prompt: promptInfo.prompt,
+        ...(promptInfo.promptSource ? { promptSource: promptInfo.promptSource } : {}),
+        metadata: projectRecord?.metadata,
+      });
+    };
     let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
       agentId,
       projectRecord?.metadata,
@@ -6027,10 +6202,8 @@ export async function startServer({
         },
       ],
     });
-    run.analyticsTelemetry = {
-      ...(run.analyticsTelemetry ?? {}),
-      promptBuildEndAt: Date.now(),
-    };
+    lifecycle.mark('prompt_build_end');
+    lifecycle.mark('launch_preflight_start');
     // (model resolution + AMR concretization hoisted above the resume guard)
     const executionProfile = executionProfileFromStreamFormat(def.streamFormat);
     // Accumulates the agent's visible text this run so the close handler can
@@ -6050,6 +6223,16 @@ export async function startServer({
     let clarifyingQuestionText = '';
     let visibleAssistantText = '';
     const send = (event, data) => {
+      const lifecycleMarkers = runLifecycleMarkersForStreamEvent(event, data);
+      if (lifecycleMarkers.firstModelEventType) {
+        lifecycle.markFirstModelEvent(lifecycleMarkers.firstModelEventType);
+      }
+      if (lifecycleMarkers.firstVisibleOutput) {
+        lifecycle.mark('first_visible_output');
+      }
+      if (lifecycleMarkers.firstArtifactWrite) {
+        lifecycle.mark('first_artifact_write');
+      }
       if (
         event === 'agent' &&
         data &&
@@ -6073,6 +6256,139 @@ export async function startServer({
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
     };
+    // ── Multi-agent team orchestration fork ──────────────────────
+    // When ChatRequest.team is present, route the run through the
+    // multi-agent team module (odteam CLI) instead of the default
+    // single-agent spawn path. daemon spawns odteam, passes the team
+    // selection + prompt + context via stdin as JSON, and forwards
+    // the JSON-lines event stream from stdout as SSE events.
+    if (team && typeof team === 'object' && team.id) {
+      const odteamSpawn = resolveOdTeamBin();
+      if (!odteamSpawn) {
+        send('error', createSseErrorPayload(
+          'AGENT_UNAVAILABLE',
+          'odteam CLI is not available. In dev: cd packages/multi-agent-team && go build -o cmd/odteam/odteam ./cmd/odteam/. In production: set OD_TEAM_BIN to the odteam executable path.',
+          { retryable: false },
+        ));
+        return design.runs.finish(run, 'failed', 1, null);
+      }
+      const teamPrompt = (typeof message === 'string' && message) || currentPrompt || '';
+      if (!teamPrompt.trim() && safeCommentAttachments.length === 0) {
+        return design.runs.fail(run, 'BAD_REQUEST', 'message required');
+      }
+      // Team run workspace lives under RUNTIME_DATA_DIR so generated
+      // artifacts are owned by the same data-directory contract as the
+      // rest of daemon-managed runs. Cleaned up on process exit.
+      const TEAM_RUNS_DIR = path.join(RUNTIME_DATA_DIR, 'team-runs');
+      fs.mkdirSync(TEAM_RUNS_DIR, { recursive: true });
+      const teamWorkDir = path.join(TEAM_RUNS_DIR, run.id);
+      fs.mkdirSync(teamWorkDir, { recursive: true });
+      const teamReq = {
+        prompt: teamPrompt,
+        daemonAddr: daemonUrl,
+        workDir: teamWorkDir,
+        projectId: typeof projectId === 'string' ? projectId : '',
+        conversationId: typeof conversationId === 'string' ? conversationId : '',
+        team: {
+          id: team.id,
+          mode: team.mode,
+          name: team.name,
+          assignments: Array.isArray(team.assignments)
+            ? team.assignments.map((a) => ({
+                agentId: a.agentId,
+                agentType: a.agentType,
+                agentName: a.agentName,
+                role: a.role,
+              }))
+            : [],
+        },
+      };
+      run.status = 'running';
+      run.updatedAt = Date.now();
+      send('start', {
+        runId: run.id,
+        agentId: typeof agentId === 'string' ? agentId : 'team',
+        bin: 'odteam',
+        streamFormat: 'plain',
+        projectId: typeof projectId === 'string' ? projectId : null,
+        cwd,
+        model: null,
+        reasoning: null,
+        toolTokenExpiresAt: null,
+      });
+      const teamChild = spawn(odteamSpawn.command, odteamSpawn.args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env },
+        cwd: odteamSpawn.cwd ?? cwd,
+      });
+      run.child = teamChild;
+      let teamStdoutBuf = '';
+      let teamStderrTail = '';
+      teamChild.stdin.write(JSON.stringify(teamReq));
+      teamChild.stdin.end();
+      teamChild.stdout.on('data', (chunk) => {
+        teamStdoutBuf += chunk.toString();
+        const lines = teamStdoutBuf.split('\n');
+        teamStdoutBuf = lines.pop() ?? '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const evt = JSON.parse(trimmed);
+            if (evt.event === 'agent' && evt.data) {
+              send('agent', evt.data);
+            } else if (evt.event === 'error' && evt.data) {
+              send('error', createSseErrorPayload(
+                'AGENT_EXECUTION_FAILED',
+                evt.data.message || 'team orchestration error',
+              ));
+            } else if (evt.event === 'team_start' || evt.event === 'task_result' || evt.event === 'team_end') {
+              send('agent', {
+                type: 'diagnostic',
+                name: evt.event,
+                source: 'odteam',
+                ...(typeof evt.data === 'object' && evt.data ? evt.data : { data: evt.data }),
+              });
+            }
+          } catch { /* ignore non-JSON lines */ }
+        }
+      });
+      teamChild.stderr.on('data', (chunk) => {
+        const text = chunk.toString();
+        teamStderrTail = `${teamStderrTail}${text}`.slice(-2000);
+        send('stderr', { chunk: text });
+      });
+      teamChild.on('error', (err) => {
+        cleanupTeamWorkDir(teamWorkDir);
+        send('error', createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          `odteam spawn failed: ${err.message}`,
+        ));
+        design.runs.finish(run, 'failed', 1, null);
+      });
+      teamChild.on('close', (code, signal) => {
+        // Flush any remaining buffered stdout
+        if (teamStdoutBuf.trim()) {
+          try {
+            const evt = JSON.parse(teamStdoutBuf.trim());
+            if (evt.event === 'agent' && evt.data) {
+              send('agent', evt.data);
+            }
+          } catch { /* ignore */ }
+        }
+        cleanupTeamWorkDir(teamWorkDir);
+        const teamStatus = code === 0 ? 'succeeded' : 'failed';
+        design.runs.emit(run, 'diagnostic', {
+          type: 'runtime_close',
+          rpc_close_reason: 'team_orchestration_exit',
+          status: teamStatus,
+          ...(typeof code === 'number' ? { exit_code: code } : {}),
+          ...(signal ? { signal } : {}),
+        });
+        design.runs.finish(run, teamStatus, code, signal);
+      });
+      return;
+    }
     const retryAnalyticsBase = (decision, failure, errorCode) => {
       const runProjectKind = resolveRunProjectKindForAnalytics({
         hintProjectKind: null,
@@ -6149,6 +6465,7 @@ export async function startServer({
       run.error = null;
       run.errorCode = null;
       run.stdinOpen = false;
+      lifecycle.resetForAttempt(run.retryAttemptCount ?? 0);
       run.analyticsTelemetry = {
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
       };
@@ -6237,10 +6554,7 @@ export async function startServer({
       return 'unknown';
     };
     const finishWithRetryDecision = (status, code = null, signal = null) => {
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        finalizeStartAt: run.analyticsTelemetry?.finalizeStartAt ?? Date.now(),
-      };
+      lifecycle.mark('finalize_start');
       const result = runResultFromStatus(status);
       const errorCode = deriveRunErrorCode({
         status,
@@ -6529,7 +6843,7 @@ export async function startServer({
         failure.code,
         failure.message,
         {
-          retryable: true,
+          retryable: false,
           details: amrAccountFailureDetails(failure),
         },
       ));
@@ -7197,10 +7511,8 @@ export async function startServer({
         args,
         env,
       });
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        processSpawnStartedAt: Date.now(),
-      };
+      lifecycle.mark('launch_preflight_end');
+      lifecycle.mark('process_spawn_start');
       child = spawn(invocation.command, invocation.args, {
         env,
         stdio: [stdinMode, 'pipe', 'pipe'],
@@ -7212,10 +7524,7 @@ export async function startServer({
         // breaks paths containing spaces (issue #315).
         windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        processSpawnedAt: Date.now(),
-      };
+      lifecycle.mark('process_spawned');
       run.child = child;
       run.childPid = typeof child.pid === 'number' ? child.pid : null;
       run.processGroupId =
@@ -7561,23 +7870,20 @@ export async function startServer({
     // be recorded for that failure mode. See PR #3412.
     let firstBufferedStdoutAt: number | null = null;
     // Tracks whether any stream the run is using actually emitted user-
-    // visible content. Only the streams routed through `sendAgentEvent`
-    // contribute to this flag; ACP sessions and plain stdout streams are
-    // covered by their own success/failure paths and the empty-output
-    // guard below skips them via `trackingSubstantiveOutput`.
+    // visible content or a deliverable. Only the streams routed through
+    // `sendAgentEvent` contribute to this flag; ACP sessions and plain stdout
+    // streams are covered by their own success/failure paths and the
+    // empty-output guard below skips them via `trackingSubstantiveOutput`.
     let agentProducedOutput = false;
     let trackingSubstantiveOutput = false;
-    // Event types that count as "the agent actually produced something the
-    // user can see." Lifecycle markers (`status`) and meter readings
-    // (`usage`) deliberately do NOT count — a model can emit token-usage
-    // numbers for an empty completion (issue #691), and a `status:running`
-    // banner without any follow-up is exactly the silent-failure shape we
-    // want to surface as failed instead of succeeded.
+    // Event types that count as "the agent actually produced a response or a
+    // deliverable." Lifecycle markers (`status`), meter readings (`usage`),
+    // reasoning deltas, and tool activity deliberately do NOT count: a run can
+    // think/read/call tools and still terminate before returning text/artifacts
+    // to the user. Treat that as empty output instead of a silent success
+    // (issues #691, #4814).
     const SUBSTANTIVE_AGENT_EVENT_TYPES = new Set([
       'text_delta',
-      'thinking_delta',
-      'tool_use',
-      'tool_result',
       'artifact',
     ]);
     // First-token timing must reflect when the user actually starts seeing
@@ -7593,10 +7899,8 @@ export async function startServer({
     ]);
     const noteFirstTokenAt = (timestamp = Date.now()) => {
       if (run.analyticsTelemetry?.firstTokenAt) return;
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        firstTokenAt: timestamp,
-      };
+      lifecycle.mark('first_token', timestamp);
+      lifecycle.mark('first_visible_output', timestamp);
     };
     // Subsegment markers inside `processSpawnedAt -> firstTokenAt` (#3408 §4).
     // `cliReadyAt` is the first well-formed adapter output and is stamped for
@@ -8610,6 +8914,24 @@ export async function startServer({
         });
       }
       if (status === 'succeeded') {
+        try {
+          await snapshotAiHtmlVersionsBeforeSuccess();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const details = err instanceof AiHtmlVersionSnapshotError
+            ? { failures: err.failures }
+            : undefined;
+          send('error', createSseErrorPayload(
+            'HTML_VERSION_SNAPSHOT_FAILED',
+            message,
+            {
+              retryable: false,
+              ...(details ? { details } : {}),
+            },
+          ));
+          design.runs.finish(run, 'failed', 1, signal);
+          return;
+        }
         persistDeliveredAgentSessionState();
       }
       finishWithRetryDecision(status, code, signal);
@@ -8627,9 +8949,11 @@ export async function startServer({
     });
     if (writePromptToChildStdin && child.stdin) {
       const promptInputFormat = def.promptInputFormat ?? 'text';
-      run.analyticsTelemetry = {
-        ...(run.analyticsTelemetry ?? {}),
-        modelCallStartAt: Date.now(),
+      lifecycle.mark('model_call_start');
+      lifecycle.mark('stdin_write_start');
+      const markStdinWriteEnd = (err?: Error | null) => {
+        if (err) return;
+        lifecycle.mark('stdin_write_end');
       };
       if (promptInputFormat === 'stream-json') {
         // Wrap the prompt as an Anthropic user message and write it as one
@@ -8646,7 +8970,7 @@ export async function startServer({
           },
         });
         try {
-          child.stdin.write(`${userMessage}\n`, 'utf8');
+          child.stdin.write(`${userMessage}\n`, 'utf8', markStdinWriteEnd);
         } catch (err) {
           // Swallow EPIPE here for the same reason as the listener above —
           // a fast-exiting child has already routed its failure through
@@ -8655,7 +8979,7 @@ export async function startServer({
         }
         run.stdinOpen = true;
       } else {
-        child.stdin.end(composed, 'utf8');
+        child.stdin.end(composed, 'utf8', markStdinWriteEnd);
       }
     }
   };

@@ -22,7 +22,7 @@ const menu = getHeaderProductMenuCopy(locale);
 const href = (path: string) => localizedHref(path, locale);
 
 const REPO = 'https://github.com/nexu-io/open-design';
-const DISCORD = 'https://discord.gg/9ptkbbqRu';
+const DISCORD = 'https://discord.gg/mHAjSMV6gz';
 const X_TWITTER = 'https://x.com/OpenDesignHQ';
 const YOUTUBE = 'https://www.youtube.com/channel/UChtshixMhvtgBWzoD9R_Qfg';
 
@@ -107,6 +107,11 @@ const l = L[locale as keyof typeof L] ?? L.en;
           <li><a href={href('/alternatives/bolt/')}>Bolt</a></li>
           <li><a href={href('/alternatives/v0/')}>v0</a></li>
           <li><a href={href('/alternatives/framer/')}>Framer</a></li>
+          <li><a href={href('/alternatives/stitch/')}>Google Stitch</a></li>
+          <li><a href={href('/alternatives/genspark/')}>Genspark</a></li>
+          <li><a href={href('/alternatives/figma-make/')}>Figma Make</a></li>
+          <li><a href={href('/alternatives/qoder/')}>Qoder</a></li>
+          <li><a href={href('/alternatives/trae/')}>Trae</a></li>
         </ul>
       </div>
 
@@ -118,6 +123,15 @@ const l = L[locale as keyof typeof L] ?? L.en;
           <li><a href={href('/download/')}>{menu.resourceItems.download}</a></li>
           <li><a href={href('/quickstart/')}>{ui.footer.quickstart}</a></li>
           <li><a href={href('/official/')}>{ui.footer.official}</a></li>
+        </ul>
+      </div>
+
+      <div class='sub-footer-col'>
+        <h5><a href={href('/community/')}>{menu.community}</a></h5>
+        <ul>
+          <li><a href={href('/community/contributors/')}>{menu.communityItems.contributors}</a></li>
+          <li><a href={href('/community/ambassadors/')}>{menu.communityItems.ambassadors}</a></li>
+          <li><a href={href('/community/moderators/')}>{menu.communityItems.moderators}</a></li>
         </ul>
       </div>
 

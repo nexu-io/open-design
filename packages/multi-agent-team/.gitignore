@@ -1,0 +1,4 @@
+# Build artifacts
+cmd/odteam/odteam
+cmd/demoserver/demoserver
+cmd/profilereport/profilereport

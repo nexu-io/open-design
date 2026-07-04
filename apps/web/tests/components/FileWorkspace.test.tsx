@@ -29,6 +29,7 @@ vi.mock('../../src/providers/registry', async () => {
     ...actual,
     fetchProjectFileText: vi.fn(),
     uploadProjectFiles: vi.fn(),
+    writeProjectBase64File: vi.fn(),
     writeProjectTextFile: vi.fn(),
     fetchProjectFolders: vi.fn().mockResolvedValue([]),
   };
@@ -39,18 +40,63 @@ vi.mock('../../src/components/DesignBrowserPanel', () => ({
     initialIconUrl,
     initialTitle,
     initialUrl,
+    navigateRequest,
+    onPageSnapshotToast,
   }: {
     initialIconUrl?: string;
     initialTitle?: string;
     initialUrl?: string;
+    navigateRequest?: { url: string; nonce: number };
+    onPageSnapshotToast?: (event: {
+      actionFileName?: string;
+      actionLabel?: string;
+      actionTarget?: 'design-files' | 'file';
+      elapsedSeconds?: number;
+      message: string;
+      status: 'loading' | 'success' | 'error' | 'canceled';
+      tabId: string;
+      ttlMs?: number;
+    }) => void;
   }) => (
     <div
       data-testid="design-browser-panel"
       data-initial-icon-url={initialIconUrl ?? ''}
       data-initial-title={initialTitle ?? ''}
       data-initial-url={initialUrl ?? ''}
-    />
+      data-navigate-url={navigateRequest?.url ?? ''}
+      data-navigate-nonce={navigateRequest?.nonce ?? ''}
+    >
+      <button
+        type="button"
+        data-testid="emit-browser-snapshot-success"
+        onClick={() => onPageSnapshotToast?.({
+          actionFileName: 'browser-archive/example/manifest.json',
+          actionLabel: 'View Design Files',
+          actionTarget: 'design-files',
+          elapsedSeconds: 0,
+          message: 'Saved page snapshot (HTML + CSS).',
+          status: 'success',
+          tabId: '__browser__:1',
+          ttlMs: 8000,
+        })}
+      >
+        emit snapshot success
+      </button>
+    </div>
   ),
+  labelFromUrl: (url: string) => {
+    try {
+      return new URL(url).hostname.replace(/^www\./, '') || url;
+    } catch {
+      return url;
+    }
+  },
+  normalizeBrowserAddress: (rawAddress: string) => {
+    const value = rawAddress.trim();
+    if (/^https?:\/\//i.test(value)) return value;
+    if (/^[\w.-]+\.[a-z]{2,}/i.test(value)) return `https://${value}`;
+    return value || 'about:blank';
+  },
 }));
 
 vi.mock('../../src/components/workspace/TerminalViewer', () => ({
@@ -58,6 +104,63 @@ vi.mock('../../src/components/workspace/TerminalViewer', () => ({
     <div data-testid="terminal-viewer">{terminalId}</div>
   ),
 }));
+
+const { excalidrawWorkspaceMock } = vi.hoisted(() => ({
+  excalidrawWorkspaceMock: {
+    lastProps: null as Record<string, any> | null,
+  },
+}));
+
+vi.mock('@excalidraw/excalidraw', async () => {
+  const React = await import('react');
+  const MainMenu = Object.assign(
+    (props: Record<string, any>) => React.createElement('div', null, props.children),
+    {
+      Item: ({ children, disabled, icon, onClick, ...rest }: Record<string, any>) => React.createElement(
+        'button',
+        {
+          ...rest,
+          type: 'button',
+          disabled,
+          onClick,
+        },
+        icon,
+        children,
+      ),
+      DefaultItems: {
+        SearchMenu: () => null,
+        Help: () => null,
+        ClearCanvas: () => null,
+        ChangeCanvasBackground: () => null,
+      },
+      Separator: () => null,
+    },
+  );
+  return {
+    Excalidraw: (props: Record<string, any>) => {
+      excalidrawWorkspaceMock.lastProps = props;
+      React.useEffect(() => {
+        props.excalidrawAPI?.({
+          getSceneElementsIncludingDeleted: () => [{ id: 'workspace-element', type: 'freedraw', isDeleted: false }],
+          getAppState: () => ({ viewBackgroundColor: '#ffffff' }),
+          getFiles: () => ({}),
+          updateScene: vi.fn(),
+          setOpenDialog: vi.fn(),
+        });
+      }, [props]);
+      return React.createElement(
+        'div',
+        { 'data-testid': 'excalidraw' },
+        React.createElement('canvas'),
+        props.renderTopRightUI?.(false, {}),
+        props.children,
+      );
+    },
+    MainMenu,
+    convertToExcalidrawElements: vi.fn((elements: unknown[]) => elements),
+    exportToBlob: vi.fn(async () => new Blob(['mock image'], { type: 'image/png' })),
+  };
+});
 
 // Records the `folders` prop DesignFilesPanel receives on EVERY render (still
 // renders the real component). Lets a test observe the first render after a
@@ -107,6 +210,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  excalidrawWorkspaceMock.lastProps = null;
   if (root) {
     act(() => root?.unmount());
     root = null;
@@ -269,6 +373,53 @@ describe('FileWorkspace upload input', () => {
 
     expect(markup).toContain('data-testid="design-files-upload-input"');
     expect(markup).not.toContain('accept=');
+  });
+
+  it('auto-saves a newly created sketch into project files', async () => {
+    const onRefreshFiles = vi.fn();
+    const onTabsStateChange = vi.fn();
+    mockedWriteProjectTextFile.mockImplementation(async (_projectId, name) => ({
+      name,
+      path: name,
+      type: 'file',
+      size: 128,
+      mtime: 1710000000,
+      kind: 'sketch',
+      mime: 'application/json',
+    }));
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={onRefreshFiles}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('design-files-empty-new-sketch'));
+
+    await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1));
+    const [projectId, name, content] = mockedWriteProjectTextFile.mock.calls[0]!;
+    expect(projectId).toBe('project-1');
+    expect(name).toMatch(/^sketch-.*\.sketch\.json$/);
+    expect(JSON.parse(content as string)).toMatchObject({
+      type: 'excalidraw',
+      version: 2,
+    });
+    await waitFor(() => expect(onRefreshFiles).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(onTabsStateChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tabs: [name],
+          active: name,
+        }),
+      ),
+    );
   });
 
   it('hides upload failure details during in-panel preview and restores them after closing preview', async () => {
@@ -511,6 +662,51 @@ describe('FileWorkspace upload input', () => {
     expect(screen.queryByTestId('upload-error-banner')).toBeNull();
   });
 
+  it('uploads files pasted from the clipboard in Design Files', () => {
+    const pastedFile = new File(['mock'], 'clipboard.png', { type: 'image/png' });
+    const onUploadFiles = vi.fn();
+    const onClearUploadError = vi.fn();
+    renderDesignFilesPanel({ onUploadFiles, onClearUploadError });
+
+    const event = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(event, 'clipboardData', {
+      value: {
+        files: [pastedFile],
+        items: [],
+      },
+    });
+
+    window.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(onClearUploadError).toHaveBeenCalledTimes(1);
+    expect(onUploadFiles).toHaveBeenCalledWith([pastedFile]);
+  });
+
+  it('does not steal clipboard files from text inputs', () => {
+    const pastedFile = new File(['mock'], 'clipboard.png', { type: 'image/png' });
+    const onUploadFiles = vi.fn();
+    renderDesignFilesPanel({ onUploadFiles });
+    const textarea = document.createElement('textarea');
+    document.body.appendChild(textarea);
+
+    try {
+      const event = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+      Object.defineProperty(event, 'clipboardData', {
+        value: {
+          files: [pastedFile],
+          items: [],
+        },
+      });
+      textarea.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(onUploadFiles).not.toHaveBeenCalled();
+    } finally {
+      textarea.remove();
+    }
+  });
+
   it('shows a recoverable read error when a dragged entry disappears before import', async () => {
     const onUploadFiles = vi.fn();
     const { container } = renderDesignFilesPanel({ onUploadFiles });
@@ -686,6 +882,9 @@ describe('FileWorkspace launcher tab creation', () => {
 
     expect(screen.queryByRole('button', { name: /New Terminal/i })).toBeNull();
     expect(screen.getByRole('button', { name: /New Browser/i })).toBeTruthy();
+    expect(
+      screen.getByText('Sketch rough layouts and notes for the agent to use as design context'),
+    ).toBeTruthy();
     expect(screen.getByText('Create new')).toBeTruthy();
   });
 
@@ -728,6 +927,53 @@ describe('FileWorkspace launcher tab creation', () => {
       'New Terminal',
       'Side chat',
     ]);
+  });
+
+  it('opens Design Files from the browser snapshot toast action instead of the manifest file', async () => {
+    const onTabsStateChange = vi.fn();
+    const browserTab = {
+      id: '__browser__:1',
+      insertAfter: '__design_files__',
+      label: 'Browser',
+      title: 'Example',
+      url: 'https://example.com',
+    };
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: [],
+          active: '__browser__:1',
+          browserTabs: [browserTab],
+        }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('emit-browser-snapshot-success'));
+    await screen.findByRole('button', { name: 'View Design Files' });
+    const toastAction = document.querySelector<HTMLButtonElement>('.od-toast-action');
+    if (!toastAction) throw new Error('Could not find browser snapshot toast action');
+    await act(async () => {
+      fireEvent.click(toastAction);
+    });
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: [],
+        active: DESIGN_FILES_TAB,
+        browserTabs: [browserTab],
+      });
+    });
+    expect(onTabsStateChange).not.toHaveBeenCalledWith(
+      expect.objectContaining({ active: 'browser-archive/example/manifest.json' }),
+    );
   });
 
   it('anchors a new browser after the visible tab tail', async () => {
@@ -950,6 +1196,44 @@ describe('FileWorkspace launcher tab creation', () => {
         active: '__browser__:1',
         browserTabs,
       });
+    });
+  });
+
+  it('creates and navigates a browser tab from a browser open request', async () => {
+    const onTabsStateChange = vi.fn();
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('cover.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['cover.html'], active: 'cover.html' }}
+        browserOpenRequest={{ tabId: '__browser__:1', url: 'https://economist.com/', nonce: 7 }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onTabsStateChange).toHaveBeenCalledWith({
+        tabs: ['cover.html'],
+        active: '__browser__:1',
+        browserTabs: [
+          {
+            id: '__browser__:1',
+            insertAfter: 'cover.html',
+            label: 'Browser',
+            title: 'economist.com',
+            url: 'https://economist.com/',
+          },
+        ],
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('design-browser-panel').getAttribute('data-navigate-url'))
+        .toBe('https://economist.com/');
     });
   });
 
@@ -1530,6 +1814,103 @@ describe('scrollWorkspaceTabsWithWheel', () => {
 });
 
 describe('FileWorkspace sketch save', () => {
+  it('opens a persisted sketch through the editor path without rendering the static preview first', async () => {
+    const file: ProjectFile = {
+      name: 'test.sketch.json',
+      path: 'test.sketch.json',
+      type: 'file',
+      size: 100,
+      mtime: 1700000000,
+      kind: 'sketch',
+      mime: 'application/json',
+    };
+
+    mockedFetchProjectFileText.mockResolvedValue(
+      JSON.stringify({
+        type: 'excalidraw',
+        version: 2,
+        elements: [{ id: 'box', type: 'rectangle', isDeleted: false }],
+        appState: { viewBackgroundColor: '#ffffff' },
+        files: {},
+      }),
+    );
+
+    const { container } = render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[file]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Loading sketch…')).toBeTruthy();
+    expect(container.querySelector('[data-testid="sketch-preview-svg"]')).toBeNull();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('excalidraw')).toBeTruthy();
+    });
+
+    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1);
+    expect(mockedFetchProjectFileText).toHaveBeenCalledWith('project-1', 'test.sketch.json');
+    expect(container.querySelector('[data-testid="sketch-preview-svg"]')).toBeNull();
+  });
+
+  it('preloads persisted sketches before the tab is opened', async () => {
+    const file: ProjectFile = {
+      name: 'test.sketch.json',
+      path: 'test.sketch.json',
+      type: 'file',
+      size: 100,
+      mtime: 1700000000,
+      kind: 'sketch',
+      mime: 'application/json',
+    };
+
+    mockedFetchProjectFileText.mockResolvedValue(
+      JSON.stringify({
+        type: 'excalidraw',
+        version: 2,
+        elements: [{ id: 'box', type: 'rectangle', isDeleted: false }],
+        appState: { viewBackgroundColor: '#ffffff' },
+        files: {},
+      }),
+    );
+
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-1',
+      projectKind: 'prototype',
+      files: [file],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+    };
+    const { rerender } = render(
+      <FileWorkspace {...baseProps} />,
+    );
+
+    await waitFor(() => {
+      expect(mockedFetchProjectFileText).toHaveBeenCalledWith('project-1', 'test.sketch.json');
+    });
+
+    rerender(
+      <FileWorkspace
+        {...baseProps}
+        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
+      />,
+    );
+
+    expect(screen.queryByText('Loading sketch…')).toBeNull();
+    expect(screen.getByTestId('excalidraw')).toBeTruthy();
+    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps saving state visible for at least 500ms', async () => {
     // Simulate user doing some edits in the workspace
     const file: ProjectFile = {
@@ -1594,6 +1975,384 @@ describe('FileWorkspace sketch save', () => {
     });
     expect(btn.textContent).not.toBe('Saving…');
     expect(btn.querySelector('svg')).not.toBeNull();
+  });
+
+  it('autosaves an empty sketch when clear happens before a pending sketch autosave', async () => {
+    const file: ProjectFile = {
+      name: 'test.sketch.json',
+      path: 'test.sketch.json',
+      type: 'file',
+      size: 100,
+      mtime: 1700000000,
+      kind: 'sketch',
+      mime: 'application/json',
+    };
+
+    mockedFetchProjectFileText.mockResolvedValue(
+      JSON.stringify({
+        type: 'excalidraw',
+        version: 2,
+        elements: [],
+        appState: { viewBackgroundColor: '#ffffff' },
+        files: {},
+      }),
+    );
+    mockedWriteProjectTextFile.mockResolvedValue(file);
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[file]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('excalidraw')).toBeTruthy();
+    });
+
+    vi.useFakeTimers();
+    const props = excalidrawWorkspaceMock.lastProps;
+    if (!props?.onChange) throw new Error('expected Excalidraw onChange');
+
+    act(() => {
+      props.onChange(
+        [{ id: 'baseline', type: 'rectangle', isDeleted: false }],
+        { viewBackgroundColor: '#ffffff' },
+        {},
+      );
+      props.onChange(
+        [{ id: 'drawn-before-clear', type: 'rectangle', isDeleted: false }],
+        { viewBackgroundColor: '#ffffff' },
+        {},
+      );
+    });
+
+    const clearButton = screen.getByRole('button', { name: 'Clear' }) as HTMLButtonElement;
+    expect(clearButton.disabled).toBe(false);
+    act(() => {
+      fireEvent.click(clearButton);
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(800);
+      await Promise.resolve();
+    });
+
+    expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1);
+    const savedText = mockedWriteProjectTextFile.mock.calls[0]?.[2];
+    if (typeof savedText !== 'string') throw new Error('expected saved sketch JSON');
+    const saved = JSON.parse(savedText) as { elements?: unknown[] };
+    expect(saved.elements).toEqual([]);
+  });
+
+  it('serializes overlapping sketch autosaves so the latest scene wins', async () => {
+    const file: ProjectFile = {
+      name: 'test.sketch.json',
+      path: 'test.sketch.json',
+      type: 'file',
+      size: 100,
+      mtime: 1700000000,
+      kind: 'sketch',
+      mime: 'application/json',
+    };
+    let resolveFirstSave!: (file: ProjectFile) => void;
+    const firstSave = new Promise<ProjectFile>((resolve) => {
+      resolveFirstSave = resolve;
+    });
+    const savedTexts: string[] = [];
+
+    mockedFetchProjectFileText.mockResolvedValue(
+      JSON.stringify({
+        type: 'excalidraw',
+        version: 2,
+        elements: [],
+        appState: { viewBackgroundColor: '#ffffff' },
+        files: {},
+      }),
+    );
+    mockedWriteProjectTextFile.mockImplementation(async (_projectId, _name, text) => {
+      savedTexts.push(text);
+      return savedTexts.length === 1 ? firstSave : file;
+    });
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[file]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('excalidraw')).toBeTruthy();
+    });
+
+    vi.useFakeTimers();
+    const props = excalidrawWorkspaceMock.lastProps;
+    if (!props?.onChange) throw new Error('expected Excalidraw onChange');
+
+    act(() => {
+      props.onChange(
+        [{ id: 'baseline', type: 'rectangle', isDeleted: false }],
+        { viewBackgroundColor: '#ffffff' },
+        {},
+      );
+      props.onChange(
+        [{ id: 'autosave-a', type: 'rectangle', isDeleted: false }],
+        { viewBackgroundColor: '#ffffff' },
+        {},
+      );
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(800);
+      await Promise.resolve();
+    });
+
+    expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      props.onChange(
+        [{ id: 'autosave-b', type: 'rectangle', isDeleted: false }],
+        { viewBackgroundColor: '#ffffff' },
+        {},
+      );
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(800);
+      await Promise.resolve();
+    });
+
+    expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFirstSave(file);
+      await firstSave;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(2);
+    const firstSaved = JSON.parse(savedTexts[0]!) as { elements?: Array<{ id?: string }> };
+    const secondSaved = JSON.parse(savedTexts[1]!) as { elements?: Array<{ id?: string }> };
+    expect(firstSaved.elements?.[0]?.id).toBe('autosave-a');
+    expect(secondSaved.elements?.[0]?.id).toBe('autosave-b');
+  });
+
+  it('does not wire Excalidraw library item changes into sketch autosave', async () => {
+    const file: ProjectFile = {
+      name: 'test.sketch.json',
+      path: 'test.sketch.json',
+      type: 'file',
+      size: 100,
+      mtime: 1700000000,
+      kind: 'sketch',
+      mime: 'application/json',
+    };
+
+    mockedFetchProjectFileText.mockResolvedValue(
+      JSON.stringify({
+        type: 'excalidraw',
+        version: 2,
+        elements: [],
+        appState: { viewBackgroundColor: '#ffffff' },
+        files: {},
+        libraryItems: [],
+      }),
+    );
+    mockedWriteProjectTextFile.mockResolvedValue(file);
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[file]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('excalidraw')).toBeTruthy();
+    });
+
+    const props = excalidrawWorkspaceMock.lastProps;
+    expect(props?.onLibraryChange).toBeUndefined();
+    expect(props?.initialData?.libraryItems).toBeUndefined();
+    expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
+  });
+
+  it('flushes pending sketch autosaves when the workspace unmounts before debounce', async () => {
+    const file: ProjectFile = {
+      name: 'test.sketch.json',
+      path: 'test.sketch.json',
+      type: 'file',
+      size: 100,
+      mtime: 1700000000,
+      kind: 'sketch',
+      mime: 'application/json',
+    };
+
+    mockedFetchProjectFileText.mockResolvedValue(
+      JSON.stringify({
+        type: 'excalidraw',
+        version: 2,
+        elements: [],
+        appState: { viewBackgroundColor: '#ffffff' },
+        files: {},
+        libraryItems: [],
+      }),
+    );
+    mockedWriteProjectTextFile.mockResolvedValue(file);
+
+    const { unmount } = render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[file]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('excalidraw')).toBeTruthy();
+    });
+
+    const props = excalidrawWorkspaceMock.lastProps;
+    if (!props?.onChange) throw new Error('expected Excalidraw onChange');
+
+    act(() => {
+      props.onChange([], { viewBackgroundColor: '#ffffff' }, {});
+      props.onChange(
+        [{ id: 'scene-before-unmount', type: 'rectangle', isDeleted: false }],
+        { viewBackgroundColor: '#ffffff' },
+        {},
+      );
+      unmount();
+    });
+
+    await waitFor(() => {
+      expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1);
+    });
+    const savedText = mockedWriteProjectTextFile.mock.calls[0]?.[2];
+    if (typeof savedText !== 'string') throw new Error('expected saved sketch JSON');
+    const saved = JSON.parse(savedText) as { elements?: Array<{ id?: string }>; libraryItems?: unknown[] };
+    expect(saved.elements?.map((item) => item.id)).toEqual(['scene-before-unmount']);
+    expect(saved.libraryItems).toBeUndefined();
+  });
+
+  it('preserves a newer sketch scene while its autosave is still debouncing', async () => {
+    const file: ProjectFile = {
+      name: 'test.sketch.json',
+      path: 'test.sketch.json',
+      type: 'file',
+      size: 100,
+      mtime: 1700000000,
+      kind: 'sketch',
+      mime: 'application/json',
+    };
+    const writes: Array<{
+      text: string;
+      resolve: (file: ProjectFile | null) => void;
+    }> = [];
+
+    mockedFetchProjectFileText.mockResolvedValue(
+      JSON.stringify({
+        type: 'excalidraw',
+        version: 2,
+        elements: [],
+        appState: { viewBackgroundColor: '#ffffff' },
+        files: {},
+      }),
+    );
+    mockedWriteProjectTextFile.mockImplementation((_projectId, _name, text) => new Promise((resolve) => {
+      if (typeof text !== 'string') throw new Error('expected saved sketch JSON');
+      writes.push({ text, resolve });
+    }));
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[file]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['test.sketch.json'], active: 'test.sketch.json' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('excalidraw')).toBeTruthy();
+    });
+
+    vi.useFakeTimers();
+    const props = excalidrawWorkspaceMock.lastProps;
+    if (!props?.onChange) throw new Error('expected Excalidraw onChange');
+
+    act(() => {
+      props.onChange(
+        [{ id: 'baseline', type: 'rectangle', isDeleted: false }],
+        { viewBackgroundColor: '#ffffff' },
+        {},
+      );
+      props.onChange(
+        [{ id: 'older-scene', type: 'rectangle', isDeleted: false }],
+        { viewBackgroundColor: '#ffffff' },
+        {},
+      );
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(800);
+      await Promise.resolve();
+    });
+    expect(writes).toHaveLength(1);
+
+    act(() => {
+      props.onChange(
+        [{ id: 'latest-scene', type: 'rectangle', isDeleted: false }],
+        { viewBackgroundColor: '#ffffff' },
+        {},
+      );
+    });
+
+    await act(async () => {
+      writes[0]?.resolve(file);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(writes).toHaveLength(2);
+
+    await act(async () => {
+      writes[1]?.resolve(file);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const firstSaved = JSON.parse(writes[0]?.text ?? '{}') as { elements?: Array<{ id?: string }> };
+    const latestSaved = JSON.parse(writes[1]?.text ?? '{}') as { elements?: Array<{ id?: string }> };
+    expect(firstSaved.elements?.map((element) => element.id)).toEqual(['older-scene']);
+    expect(latestSaved.elements?.map((element) => element.id)).toEqual(['latest-scene']);
   });
 });
 
@@ -1800,6 +2559,53 @@ describe('FileWorkspace add-module menu', () => {
       tabs: [],
       active: '__design_files__',
     });
+  });
+
+  it('keeps the pinned brand browser tab mounted while another tab is active', () => {
+    const browserTabs = [
+      {
+        id: '__browser__:1',
+        label: 'Browser',
+        title: 'The Economist',
+        url: 'https://www.economist.com/',
+      },
+    ];
+
+    // Without the pin, a browser tab that was never activated this session is
+    // not mounted while a file tab is active, so its live (post-wall) DOM can't
+    // be read — this is the failure the pin fixes.
+    const { unmount } = render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('brand.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['brand.html'], active: 'brand.html', browserTabs }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('design-browser-panel')).toBeNull();
+    unmount();
+
+    // With the pin, the same inactive browser tab stays mounted so the chat
+    // "Continue extraction" handler can read its post-wall DOM.
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('brand.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['brand.html'], active: 'brand.html', browserTabs }}
+        pinnedBrowserTabId="__browser__:1"
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+    const panel = screen.getByTestId('design-browser-panel');
+    expect(panel.dataset.initialTitle).toBe('The Economist');
   });
 
 });

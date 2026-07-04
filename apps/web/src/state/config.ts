@@ -203,6 +203,42 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     ],
   },
   {
+    label: 'SiliconFlow',
+    protocol: 'openai',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    model: 'deepseek-ai/DeepSeek-V3.1',
+    models: [
+      'deepseek-ai/DeepSeek-V3.1',
+      'deepseek-ai/DeepSeek-R1',
+      'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+    ],
+  },
+  {
+    label: 'PPIO',
+    protocol: 'openai',
+    baseUrl: 'https://api.ppinfra.com/v3/openai',
+    model: 'deepseek/deepseek-v3.1',
+    models: ['deepseek/deepseek-v3.1', 'deepseek/deepseek-r1'],
+  },
+  {
+    label: 'NVIDIA',
+    protocol: 'openai',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    model: 'openai/gpt-oss-120b',
+    models: [
+      'openai/gpt-oss-120b',
+      'meta/llama-3.1-405b-instruct',
+      'nvidia/llama-3.1-nemotron-70b-instruct',
+    ],
+  },
+  {
+    label: 'StepFun',
+    protocol: 'openai',
+    baseUrl: 'https://api.stepfun.ai/v1',
+    model: 'step-2-mini',
+    models: ['step-2-mini', 'step-1-8k', 'step-1-32k'],
+  },
+  {
     label: 'DeepSeek — OpenAI',
     protocol: 'openai',
     baseUrl: 'https://api.deepseek.com',
@@ -213,6 +249,71 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'deepseek-v4-flash',
       'deepseek-v4-pro',
     ],
+  },
+  {
+    label: 'Mistral AI',
+    protocol: 'openai',
+    baseUrl: 'https://api.mistral.ai/v1',
+    model: 'mistral-large-latest',
+    models: ['mistral-large-latest', 'ministral-8b-latest', 'ministral-3b-latest'],
+  },
+  {
+    label: 'xAI',
+    protocol: 'openai',
+    baseUrl: 'https://api.x.ai/v1',
+    model: 'grok-4',
+    models: ['grok-4', 'grok-3', 'grok-3-mini'],
+  },
+  {
+    label: 'Together AI',
+    protocol: 'openai',
+    baseUrl: 'https://api.together.xyz/v1',
+    model: 'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
+    models: [
+      'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
+      'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
+      'Qwen/Qwen2.5-Coder-32B-Instruct',
+    ],
+  },
+  {
+    label: 'Hugging Face',
+    protocol: 'openai',
+    baseUrl: 'https://router.huggingface.co/v1',
+    model: 'openai/gpt-oss-120b',
+    models: [
+      'openai/gpt-oss-120b',
+      'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+      'meta-llama/Llama-3.1-8B-Instruct',
+    ],
+  },
+  {
+    label: 'Qwen',
+    protocol: 'openai',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    model: 'qwen-plus',
+    models: ['qwen-plus', 'qwen-turbo', 'qwen-max', 'qwen3-coder-plus'],
+  },
+  {
+    label: 'Volcengine Ark',
+    protocol: 'openai',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    model: 'doubao-seed-1-6',
+    models: ['doubao-seed-1-6', 'doubao-seed-1-6-thinking', 'deepseek-v3'],
+  },
+  {
+    label: 'Baidu Qianfan',
+    protocol: 'openai',
+    baseUrl: 'https://qianfan.baidubce.com/v2',
+    model: 'ernie-4.5-turbo-128k',
+    models: ['ernie-4.5-turbo-128k', 'ernie-4.5-8k-preview'],
+  },
+  {
+    label: 'vLLM',
+    protocol: 'openai',
+    baseUrl: 'http://127.0.0.1:8000/v1',
+    model: 'model',
+    models: ['model', 'llama3', 'qwen3'],
+    requiresApiKey: false,
   },
   {
     label: 'MiniMax — OpenAI',
@@ -235,6 +336,20 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
     model: 'mimo-v2.5-pro',
     models: ['mimo-v2.5-pro'],
+  },
+  {
+    label: 'Moonshot',
+    protocol: 'openai',
+    baseUrl: 'https://api.moonshot.cn/v1',
+    model: 'kimi-k2-0711-preview',
+    models: ['kimi-k2-0711-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
+  },
+  {
+    label: 'Zhipu',
+    protocol: 'openai',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    model: 'glm-4.6',
+    models: ['glm-4.6', 'glm-4-plus', 'glm-4-air'],
   },
   {
     label: 'Ollama Cloud (managed)',
@@ -365,6 +480,36 @@ function isValidOrbitTime(time: string): boolean {
   return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
 }
 
+function isBedrockRuntimeBaseUrl(baseUrl: string): boolean {
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase();
+    return (
+      /^bedrock-runtime(?:-fips)?[.-].*\.amazonaws\.com(?:\.cn)?$/.test(hostname)
+      || /^bedrock-runtime(?:-fips)?[.-].*\.api\.aws$/.test(hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function downgradeUnsupportedChatProtocol(config: AppConfig): boolean {
+  if (
+    config.apiProtocol !== 'bedrock'
+    && !isBedrockRuntimeBaseUrl(config.baseUrl)
+  ) {
+    return false;
+  }
+
+  config.apiProtocol = DEFAULT_CONFIG.apiProtocol;
+  config.apiKey = DEFAULT_CONFIG.apiKey;
+  config.apiVersion = DEFAULT_CONFIG.apiVersion;
+  config.baseUrl = DEFAULT_CONFIG.baseUrl;
+  config.model = DEFAULT_CONFIG.model;
+  config.apiProviderBaseUrl = DEFAULT_CONFIG.apiProviderBaseUrl;
+  delete config.apiProtocolConfigs?.bedrock;
+  return true;
+}
+
 function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
   try {
     const normalized = (baseUrl || '').toLowerCase();
@@ -454,6 +599,9 @@ export function loadConfig(): AppConfig {
       merged.configMigrationVersion = CONFIG_MIGRATION_VERSION;
     }
 
+    const downgradedUnsupportedChatProtocol =
+      downgradeUnsupportedChatProtocol(merged);
+
     // Fixed-origin gateways (e.g. AIHubMix) hide the Base URL field, so a config
     // persisted before the origin was auto-resolved can carry an empty baseUrl.
     // Backfill it here so every consumer (Settings form, top-bar switcher, chat)
@@ -461,6 +609,10 @@ export function loadConfig(): AppConfig {
     // model-list fetch and leaves only the static suggestion list.
     if (merged.apiProtocol) {
       merged.baseUrl = resolveFixedOriginBaseUrl(merged.apiProtocol, merged.baseUrl);
+    }
+
+    if (downgradedUnsupportedChatProtocol) {
+      saveConfig(merged);
     }
 
     return merged;

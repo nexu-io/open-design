@@ -226,6 +226,14 @@ export interface HeaderCopy {
   starAria: string;
   starTitle: string;
   starPrefix: string;
+  /** Open Design Cloud (AMR) account entry — see header-enhancer.astro. */
+  signIn: string;
+  /** aria-label for the signed-in avatar / account menu trigger. */
+  accountAria: string;
+  /** Avatar dropdown: open the Cloud console (AMR app). */
+  menuConsole: string;
+  /** Avatar dropdown: sign out of the Cloud session. */
+  menuSignOut: string;
 }
 
 export interface HeaderProductMenuCopy {
@@ -251,9 +259,14 @@ export interface HeaderProductMenuCopy {
   useCaseItems: [string, string, string, string, string, string];
   roles: string;
   roleItems: [string, string, string, string, string];
+  // Tool / generator pages (`/solutions/ai-<x>-generator/`). Group label plus
+  // the three tool names, in the same Wireframe → UI → Design-to-code order
+  // the hub and the dropdown render.
+  tools: string;
   agent: string;
   plugins: string;
   pluginItems: { templates: string; skills: string; systems: string };
+  pricing: string;
   resources: string;
   resourceItems: {
     blog: string;
@@ -287,6 +300,7 @@ export interface CommonCopy {
 
 const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy> = {
   en: {
+    pricing: "Pricing",
     toggleNavigationMenu: 'Toggle navigation menu',
     product: 'Product',
     openDesignName: 'Open Design',
@@ -295,7 +309,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / data to ship-ready HTML, by your local agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'A prompt, article, or repo to a real MP4 — by your local agent.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Design Agent',
     amrBlurb: 'Professional design Agent, zero-config use, built-in SOTA models & Harness',
     tutorialsName: 'Tutorials',
@@ -305,6 +319,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototype', 'Dashboard', 'Slides', 'Image', 'Video', 'Design System'],
     roles: 'Roles',
     roleItems: ['Solo Builder', 'Designer', 'Engineering', 'Product Managers', 'Marketing'],
+    tools: 'Tools',
     agent: 'Agent',
     plugins: 'Plugins',
     pluginItems: { templates: 'Templates', skills: 'Skills', systems: 'Systems' },
@@ -326,6 +341,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   zh: {
+    pricing: "价格",
     toggleNavigationMenu: '切换导航菜单',
     product: '产品',
     openDesignName: 'Open Design',
@@ -334,7 +350,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / 数据变成可交付 HTML，由本地 Agent 完成。',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: '一个 prompt、文章或仓库，变成真实 MP4——由你的本地 Agent 完成。',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: '设计 Agent',
     amrBlurb: '专业设计Agent、零配置使用、自带SOTA模型与Harness',
     tutorialsName: '教程',
@@ -344,6 +360,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['原型', '看板', '幻灯片', '图片', '视频', '设计系统'],
     roles: '角色',
     roleItems: ['独立开发者', '设计师', '工程', '产品经理', '市场'],
+    tools: '工具',
     agent: 'Agent',
     plugins: '插件',
     pluginItems: { templates: '模板', skills: '技能', systems: '设计系统' },
@@ -365,6 +382,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   'zh-tw': {
+    pricing: "價格",
     toggleNavigationMenu: '切換導覽選單',
     product: '產品',
     openDesignName: 'Open Design',
@@ -373,7 +391,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / 資料變成可交付 HTML，由本地 Agent 完成。',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: '一個 prompt、文章或倉庫，變成真實 MP4——由你的本地 Agent 完成。',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: '設計 Agent',
     amrBlurb: '專業設計 Agent、零配置使用、內建 SOTA 模型與 Harness',
     tutorialsName: '教學',
@@ -383,6 +401,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['原型', '儀表板', '投影片', '圖片', '影片', '設計系統'],
     roles: '角色',
     roleItems: ['獨立開發者', '設計師', '工程', '產品經理', '行銷'],
+    tools: '工具',
     agent: 'Agent',
     plugins: '外掛',
     pluginItems: { templates: '模板', skills: '技能', systems: '設計系統' },
@@ -404,6 +423,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ja: {
+    pricing: "料金",
     toggleNavigationMenu: 'ナビゲーションメニューを切り替え',
     product: 'プロダクト',
     openDesignName: 'Open Design',
@@ -412,7 +432,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / データをローカル Agent で納品可能な HTML へ。',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'プロンプト、記事、リポジトリを本物のMP4に — あなたのローカルエージェントで。',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'デザイン Agent',
     amrBlurb: 'プロ向けデザイン Agent、ゼロ設定で利用、SOTA モデルと Harness 内蔵',
     tutorialsName: 'チュートリアル',
@@ -422,6 +442,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['プロトタイプ', 'ダッシュボード', 'スライド', '画像', '動画', 'デザインシステム'],
     roles: 'ロール',
     roleItems: ['ソロビルダー', 'デザイナー', 'エンジニアリング', 'プロダクトマネージャー', 'マーケティング'],
+    tools: 'ツール',
     agent: 'エージェント',
     plugins: 'プラグイン',
     pluginItems: { templates: 'テンプレート', skills: 'スキル', systems: 'システム' },
@@ -443,6 +464,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ko: {
+    pricing: "요금제",
     toggleNavigationMenu: '내비게이션 메뉴 전환',
     product: '제품',
     openDesignName: 'Open Design',
@@ -451,7 +473,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / 데이터를 로컬 Agent로 배포 가능한 HTML로 변환.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: '프롬프트, 글, 레포만 있으면 — 로컬 에이전트가 진짜 MP4로.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: '디자인 Agent',
     amrBlurb: '전문 디자인 Agent, 무설정 사용, SOTA 모델과 Harness 내장',
     tutorialsName: '튜토리얼',
@@ -461,6 +483,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['프로토타입', '대시보드', '슬라이드', '이미지', '영상', '디자인 시스템'],
     roles: '역할',
     roleItems: ['솔로 빌더', '디자이너', '엔지니어링', '프로덕트 매니저', '마케팅'],
+    tools: '도구',
     agent: '에이전트',
     plugins: '플러그인',
     pluginItems: { templates: '템플릿', skills: '스킬', systems: '시스템' },
@@ -482,6 +505,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   de: {
+    pricing: "Preise",
     toggleNavigationMenu: 'Navigationsmenu umschalten',
     product: 'Produkt',
     openDesignName: 'Open Design',
@@ -490,7 +514,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / Daten werden durch deinen lokalen Agent zu fertigem HTML.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Eine Idee, ein Artikel oder ein Repo – per lokalem Agent zu einem echten MP4.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Design-Agent',
     amrBlurb: 'Professioneller Design-Agent, null Konfiguration, integrierte SOTA-Modelle & Harness',
     tutorialsName: 'Tutorials',
@@ -500,6 +524,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototyp', 'Dashboard', 'Slides', 'Bild', 'Video', 'Designsystem'],
     roles: 'Rollen',
     roleItems: ['Solo-Builder', 'Designer', 'Engineering', 'Produktmanager', 'Marketing'],
+    tools: 'Tools',
     agent: 'Agent',
     plugins: 'Plugins',
     pluginItems: { templates: 'Vorlagen', skills: 'Skills', systems: 'Systeme' },
@@ -521,6 +546,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   fr: {
+    pricing: "Tarifs",
     toggleNavigationMenu: 'Basculer le menu de navigation',
     product: 'Produit',
     openDesignName: 'Open Design',
@@ -529,7 +555,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / données vers du HTML prêt à livrer via votre agent local.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Une consigne, un article ou un repo vers une vraie vidéo MP4 — par votre agent local.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent de design professionnel, zéro configuration, modèles SOTA et Harness intégrés',
     tutorialsName: 'Tutoriels',
@@ -539,6 +565,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototype', 'Tableau de bord', 'Diapositives', 'Image', 'Vidéo', 'Système de design'],
     roles: 'Rôles',
     roleItems: ['Créateur solo', 'Designer', 'Ingénierie', 'Product managers', 'Marketing'],
+    tools: 'Outils',
     agent: 'Agent',
     plugins: 'Plugins',
     pluginItems: { templates: 'Modèles', skills: 'Skills', systems: 'Systèmes' },
@@ -560,6 +587,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ru: {
+    pricing: "Цены",
     toggleNavigationMenu: 'Переключить меню навигации',
     product: 'Продукт',
     openDesignName: 'Open Design',
@@ -568,7 +596,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / данные в готовый HTML через локального Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Промпт, статья или репозиторий — в настоящий MP4 с помощью локального агента.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Дизайн-Agent',
     amrBlurb: 'Профессиональный дизайн-Agent, без настройки, со встроенными SOTA-моделями и Harness',
     tutorialsName: 'Руководства',
@@ -578,6 +606,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Прототип', 'Дашборд', 'Слайды', 'Изображение', 'Видео', 'Дизайн-система'],
     roles: 'Роли',
     roleItems: ['Соло-разработчик', 'Дизайнер', 'Инженерия', 'Продакт-менеджеры', 'Маркетинг'],
+    tools: 'Инструменты',
     agent: 'Агенты',
     plugins: 'Плагины',
     pluginItems: { templates: 'Шаблоны', skills: 'Skills', systems: 'Системы' },
@@ -599,6 +628,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   es: {
+    pricing: "Precios",
     toggleNavigationMenu: 'Alternar menú de navegación',
     product: 'Producto',
     openDesignName: 'Open Design',
@@ -607,7 +637,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / datos a HTML listo para entregar con tu Agent local.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Una idea, artículo o repo a un MP4 real — con tu agente local.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent diseño',
     amrBlurb: 'Agent de diseño profesional, uso sin configuración, modelos SOTA y Harness integrados',
     tutorialsName: 'Tutoriales',
@@ -617,6 +647,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototipo', 'Panel', 'Diapositivas', 'Imagen', 'Vídeo', 'Sistema de diseño'],
     roles: 'Roles',
     roleItems: ['Creador en solitario', 'Diseñador', 'Ingeniería', 'Product Managers', 'Marketing'],
+    tools: 'Herramientas',
     agent: 'Agente',
     plugins: 'Plugins',
     pluginItems: { templates: 'Plantillas', skills: 'Skills', systems: 'Sistemas' },
@@ -638,6 +669,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   'pt-br': {
+    pricing: "Preços",
     toggleNavigationMenu: 'Alternar menu de navegação',
     product: 'Produto',
     openDesignName: 'Open Design',
@@ -646,7 +678,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / dados viram HTML pronto com seu Agent local.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Uma ideia, artigo ou repo vira um MP4 de verdade — pelo seu agente local.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent de design profissional, uso sem configuração, modelos SOTA e Harness integrados',
     tutorialsName: 'Tutoriais',
@@ -656,6 +688,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Protótipo', 'Painel', 'Slides', 'Imagem', 'Vídeo', 'Sistema de design'],
     roles: 'Funções',
     roleItems: ['Criador solo', 'Designer', 'Engenharia', 'Product Managers', 'Marketing'],
+    tools: 'Ferramentas',
     agent: 'Agente',
     plugins: 'Plugins',
     pluginItems: { templates: 'Modelos', skills: 'Skills', systems: 'Sistemas' },
@@ -677,6 +710,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   it: {
+    pricing: "Prezzi",
     toggleNavigationMenu: 'Apri o chiudi il menu di navigazione',
     product: 'Prodotto',
     openDesignName: 'Open Design',
@@ -685,7 +719,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / dati in HTML pronto alla consegna con il tuo Agent locale.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Una richiesta, un articolo o un repo in un vero MP4 — dal tuo agente locale.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent di design professionale, uso senza configurazione, modelli SOTA e Harness integrati',
     tutorialsName: 'Tutorial',
@@ -695,6 +729,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototipo', 'Dashboard', 'Slide', 'Immagine', 'Video', 'Design system'],
     roles: 'Ruoli',
     roleItems: ['Solo builder', 'Designer', 'Ingegneria', 'Product Manager', 'Marketing'],
+    tools: 'Strumenti',
     agent: 'Agente',
     plugins: 'Plugin',
     pluginItems: { templates: 'Template', skills: 'Skill', systems: 'Sistemi' },
@@ -716,6 +751,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   vi: {
+    pricing: "Giá",
     toggleNavigationMenu: 'Chuyển menu điều hướng',
     product: 'Sản phẩm',
     openDesignName: 'Open Design',
@@ -724,7 +760,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / dữ liệu thành HTML sẵn sàng giao bằng Agent cục bộ.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Một prompt, bài viết hay repo thành video MP4 thật — bằng agent của bạn.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent thiết kế',
     amrBlurb: 'Agent thiết kế chuyên nghiệp, dùng không cần cấu hình, tích hợp mô hình SOTA và Harness',
     tutorialsName: 'Hướng dẫn',
@@ -734,6 +770,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Nguyên mẫu', 'Dashboard', 'Slide', 'Hình ảnh', 'Video', 'Hệ thống thiết kế'],
     roles: 'Vai trò',
     roleItems: ['Nhà phát triển độc lập', 'Nhà thiết kế', 'Kỹ thuật', 'Quản lý sản phẩm', 'Tiếp thị'],
+    tools: 'Công cụ',
     agent: 'Agent',
     plugins: 'Plugin',
     pluginItems: { templates: 'Mẫu', skills: 'Skill', systems: 'Hệ thống' },
@@ -755,6 +792,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   pl: {
+    pricing: "Cennik",
     toggleNavigationMenu: 'Przełącz menu nawigacji',
     product: 'Produkt',
     openDesignName: 'Open Design',
@@ -763,7 +801,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / dane do gotowego HTML przez lokalnego Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Prompt, artykuł lub repo w prawdziwe MP4 — dzięki Twojemu lokalnemu agentowi.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent designu',
     amrBlurb: 'Profesjonalny Agent do projektowania, zero konfiguracji, wbudowane modele SOTA i Harness',
     tutorialsName: 'Poradniki',
@@ -773,6 +811,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototyp', 'Dashboard', 'Slajdy', 'Grafika', 'Wideo', 'System projektowy'],
     roles: 'Role',
     roleItems: ['Samodzielny twórca', 'Projektant', 'Inżynieria', 'Menedżerowie produktu', 'Marketing'],
+    tools: 'Narzędzia',
     agent: 'Agent',
     plugins: 'Wtyczki',
     pluginItems: { templates: 'Szablony', skills: 'Skills', systems: 'Systemy' },
@@ -794,6 +833,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   id: {
+    pricing: "Harga",
     toggleNavigationMenu: 'Alihkan menu navigasi',
     product: 'Produk',
     openDesignName: 'Open Design',
@@ -802,7 +842,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / data menjadi HTML siap kirim lewat Agent lokal.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Prompt, artikel, atau repo jadi MP4 sungguhan — lewat agent lokalmu.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent desain',
     amrBlurb: 'Agent desain profesional, tanpa konfigurasi, model SOTA dan Harness bawaan',
     tutorialsName: 'Tutorial',
@@ -812,6 +852,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototipe', 'Dashboard', 'Slide', 'Gambar', 'Video', 'Sistem Desain'],
     roles: 'Peran',
     roleItems: ['Solo Builder', 'Desainer', 'Teknik', 'Product Manager', 'Pemasaran'],
+    tools: 'Alat',
     agent: 'Agent',
     plugins: 'Plugin',
     pluginItems: { templates: 'Templat', skills: 'Skill', systems: 'Sistem' },
@@ -833,6 +874,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   nl: {
+    pricing: "Prijzen",
     toggleNavigationMenu: 'Navigatiemenu wisselen',
     product: 'Product',
     openDesignName: 'Open Design',
@@ -841,7 +883,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / data naar opleverklare HTML via je lokale Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Een prompt, artikel of repo naar een echte MP4 — door je lokale agent.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Design-Agent',
     amrBlurb: 'Professionele design-Agent, nul configuratie, ingebouwde SOTA-modellen en Harness',
     tutorialsName: 'Tutorials',
@@ -851,6 +893,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototype', 'Dashboard', 'Slides', 'Afbeelding', 'Video', 'Designsysteem'],
     roles: 'Rollen',
     roleItems: ['Solobouwer', 'Ontwerper', 'Engineering', 'Productmanagers', 'Marketing'],
+    tools: 'Tools',
     agent: 'Agent',
     plugins: 'Plug-ins',
     pluginItems: { templates: 'Sjablonen', skills: 'Skills', systems: 'Systemen' },
@@ -872,6 +915,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ar: {
+    pricing: "الأسعار",
     toggleNavigationMenu: 'تبديل قائمة التنقل',
     product: 'المنتج',
     openDesignName: 'Open Design',
@@ -880,7 +924,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / البيانات إلى HTML جاهز عبر Agent المحلي.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'موجِّه أو مقال أو مستودع إلى فيديو MP4 حقيقي — بواسطة وكيلك المحلي.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent تصميم',
     amrBlurb: 'Agent تصميم احترافي، استخدام بلا إعداد، نماذج SOTA و Harness مدمجة',
     tutorialsName: 'الدروس',
@@ -890,6 +934,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['نموذج أولي', 'لوحة بيانات', 'شرائح', 'صورة', 'فيديو', 'نظام التصميم'],
     roles: 'الأدوار',
     roleItems: ['مطوّر فردي', 'مصمّم', 'الهندسة', 'مديرو المنتجات', 'التسويق'],
+    tools: 'الأدوات',
     agent: 'الوكلاء',
     plugins: 'الإضافات',
     pluginItems: { templates: 'قوالب', skills: 'Skills', systems: 'أنظمة' },
@@ -911,6 +956,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   tr: {
+    pricing: "Fiyatlandırma",
     toggleNavigationMenu: 'Gezinme menüsünü aç/kapat',
     product: 'Ürün',
     openDesignName: 'Open Design',
@@ -919,7 +965,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / veriler yerel Agent ile teslim edilebilir HTML olur.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Bir prompt, makale ya da repo\'dan gerçek bir MP4\'e — yerel ajanınla.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Tasarım Agent',
     amrBlurb: 'Profesyonel tasarım Agent, sıfır yapılandırma, yerleşik SOTA modelleri ve Harness',
     tutorialsName: 'Eğitimler',
@@ -929,6 +975,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototip', 'Pano', 'Slaytlar', 'Görsel', 'Video', 'Tasarım Sistemi'],
     roles: 'Roller',
     roleItems: ['Tek Kişilik Geliştirici', 'Tasarımcı', 'Mühendislik', 'Ürün Yöneticileri', 'Pazarlama'],
+    tools: 'Araçlar',
     agent: 'Agent',
     plugins: 'Eklentiler',
     pluginItems: { templates: 'Şablonlar', skills: 'Skill', systems: 'Sistemler' },
@@ -950,6 +997,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   uk: {
+    pricing: "Ціни",
     toggleNavigationMenu: 'Перемкнути меню навігації',
     product: 'Продукт',
     openDesignName: 'Open Design',
@@ -958,7 +1006,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / дані у готовий HTML через локального Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Підказка, стаття чи репозиторій — у справжнє MP4 від вашого локального агента.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Дизайн-Agent',
     amrBlurb: 'Професійний дизайн-Agent, без налаштувань, із вбудованими SOTA-моделями та Harness',
     tutorialsName: 'Навчальні матеріали',
@@ -968,6 +1016,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Прототип', 'Панель', 'Слайди', 'Зображення', 'Відео', 'Дизайн-система'],
     roles: 'Ролі',
     roleItems: ['Соло-розробник', 'Дизайнер', 'Інженерія', 'Продакт-менеджери', 'Маркетинг'],
+    tools: 'Інструменти',
     agent: 'Агенти',
     plugins: 'Плагіни',
     pluginItems: { templates: 'Шаблони', skills: 'Skills', systems: 'Системи' },
@@ -1594,6 +1643,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Star Open Design on GitHub',
       starTitle: 'Click to star us on GitHub',
       starPrefix: 'Star',
+      signIn: 'Sign in',
+      accountAria: 'Account menu',
+      menuConsole: 'Console',
+      menuSignOut: 'Sign out',
     },
   },
   zh: {
@@ -1636,6 +1689,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: '在 GitHub 为 Open Design 点 Star',
       starTitle: '去 GitHub 点 Star',
       starPrefix: 'Star',
+      signIn: '登录',
+      accountAria: '账户菜单',
+      menuConsole: '控制台',
+      menuSignOut: '退出登录',
     },
   },
   'zh-tw': {
@@ -1678,6 +1735,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: '在 GitHub 為 Open Design 按 Star',
       starTitle: '去 GitHub 按 Star',
       starPrefix: '點星',
+      signIn: '登入',
+      accountAria: '帳戶選單',
+      menuConsole: '控制台',
+      menuSignOut: '登出',
     },
   },
   ja: {
@@ -1720,6 +1781,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'GitHub で Open Design にスター',
       starTitle: 'GitHub でスターする',
       starPrefix: 'スター',
+      signIn: 'ログイン',
+      accountAria: 'アカウントメニュー',
+      menuConsole: 'コンソール',
+      menuSignOut: 'ログアウト',
     },
   },
   ko: {
@@ -1762,6 +1827,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'GitHub에서 Open Design에 스타 주기',
       starTitle: 'GitHub에서 스타 주기',
       starPrefix: '스타',
+      signIn: '로그인',
+      accountAria: '계정 메뉴',
+      menuConsole: '콘솔',
+      menuSignOut: '로그아웃',
     },
   },
   de: {
@@ -1804,6 +1873,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Open Design auf GitHub mit Stern markieren',
       starTitle: 'Auf GitHub sternen',
       starPrefix: 'Stern',
+      signIn: 'Anmelden',
+      accountAria: 'Kontomenü',
+      menuConsole: 'Konsole',
+      menuSignOut: 'Abmelden',
     },
   },
   fr: {
@@ -1846,6 +1919,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Ajouter une étoile à Open Design sur GitHub',
       starTitle: 'Mettre une étoile sur GitHub',
       starPrefix: 'Étoile',
+      signIn: 'Se connecter',
+      accountAria: 'Menu du compte',
+      menuConsole: 'Console',
+      menuSignOut: 'Se déconnecter',
     },
   },
   ru: {
@@ -1888,6 +1965,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Поставить звезду Open Design на GitHub',
       starTitle: 'Поставить звезду на GitHub',
       starPrefix: 'Звезда',
+      signIn: 'Войти',
+      accountAria: 'Меню аккаунта',
+      menuConsole: 'Консоль',
+      menuSignOut: 'Выйти',
     },
   },
   es: {
@@ -1930,6 +2011,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Dar Star a Open Design en GitHub',
       starTitle: 'Dar Star en GitHub',
       starPrefix: 'Estrella',
+      signIn: 'Iniciar sesión',
+      accountAria: 'Menú de cuenta',
+      menuConsole: 'Consola',
+      menuSignOut: 'Cerrar sesión',
     },
   },
   'pt-br': {
@@ -1972,6 +2057,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Dar Star no Open Design no GitHub',
       starTitle: 'Dar Star no GitHub',
       starPrefix: 'Estrela',
+      signIn: 'Entrar',
+      accountAria: 'Menu da conta',
+      menuConsole: 'Console',
+      menuSignOut: 'Sair',
     },
   },
   it: {
@@ -2014,6 +2103,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Metti una Star a Open Design su GitHub',
       starTitle: 'Metti una Star su GitHub',
       starPrefix: 'Stella',
+      signIn: 'Accedi',
+      accountAria: 'Menu account',
+      menuConsole: 'Console',
+      menuSignOut: 'Esci',
     },
   },
   vi: {
@@ -2056,6 +2149,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Star Open Design trên GitHub',
       starTitle: 'Star trên GitHub',
       starPrefix: 'Sao',
+      signIn: 'Đăng nhập',
+      accountAria: 'Menu tài khoản',
+      menuConsole: 'Bảng điều khiển',
+      menuSignOut: 'Đăng xuất',
     },
   },
   pl: {
@@ -2098,6 +2195,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Daj gwiazdkę Open Design na GitHubie',
       starTitle: 'Daj gwiazdkę na GitHubie',
       starPrefix: 'Gwiazdka',
+      signIn: 'Zaloguj się',
+      accountAria: 'Menu konta',
+      menuConsole: 'Konsola',
+      menuSignOut: 'Wyloguj się',
     },
   },
   id: {
@@ -2140,6 +2241,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Beri Star Open Design di GitHub',
       starTitle: 'Beri Star di GitHub',
       starPrefix: 'Bintang',
+      signIn: 'Masuk',
+      accountAria: 'Menu akun',
+      menuConsole: 'Konsol',
+      menuSignOut: 'Keluar',
     },
   },
   nl: {
@@ -2182,6 +2287,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Geef Open Design een Star op GitHub',
       starTitle: 'Star op GitHub',
       starPrefix: 'Ster',
+      signIn: 'Inloggen',
+      accountAria: 'Accountmenu',
+      menuConsole: 'Console',
+      menuSignOut: 'Uitloggen',
     },
   },
   ar: {
@@ -2224,6 +2333,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'ضع نجمة لـ Open Design على GitHub',
       starTitle: 'ضع نجمة على GitHub',
       starPrefix: 'نجمة',
+      signIn: 'تسجيل الدخول',
+      accountAria: 'قائمة الحساب',
+      menuConsole: 'لوحة التحكم',
+      menuSignOut: 'تسجيل الخروج',
     },
   },
   tr: {
@@ -2266,6 +2379,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: "GitHub'da Open Design'a Star ver",
       starTitle: "GitHub'da Star ver",
       starPrefix: 'Yıldız',
+      signIn: 'Giriş yap',
+      accountAria: 'Hesap menüsü',
+      menuConsole: 'Konsol',
+      menuSignOut: 'Çıkış yap',
     },
   },
   uk: {
@@ -2308,6 +2425,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Поставити зірку Open Design на GitHub',
       starTitle: 'Поставити зірку на GitHub',
       starPrefix: 'Зірка',
+      signIn: 'Увійти',
+      accountAria: 'Меню облікового запису',
+      menuConsole: 'Консоль',
+      menuSignOut: 'Вийти',
     },
   },
 };

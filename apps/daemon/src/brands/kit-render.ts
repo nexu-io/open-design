@@ -56,8 +56,10 @@ export function loadBrandKitTemplate(skillsRoot: string): string {
   return html;
 }
 
+export type BrandKitStatus = 'extracting' | 'ready' | 'draft' | 'failed';
+
 export interface BrandKitPayload {
-  status: 'extracting' | 'ready';
+  status: BrandKitStatus;
   host: string;
   brand: Record<string, unknown>;
   assets: Array<{ kind: string; label: string; desc: string; href: string; available: boolean }>;
@@ -147,7 +149,7 @@ export interface WriteBrandKitOptions {
   projectsRoot: string;
   projectId: string;
   brand: Record<string, unknown>;
-  status: 'extracting' | 'ready';
+  status: BrandKitStatus;
   /** Fallback host label before brand.sourceUrl is known. */
   host?: string;
   metadata?: ProjectMetadata;

@@ -1,12 +1,15 @@
-// Shared DTOs for the programmatic export capability (PDF / image).
+// Shared DTOs for the programmatic export capability (PDF / image / PPTX).
 //
-// Both surfaces speak this shape: the web UI's Download menu rasterizes
-// client-side (SVG-foreignObject snapshot + jsPDF) and the
-// `od export` CLI calls `POST /api/projects/:id/export`, which delegates
-// rasterization to the desktop Electron renderer. Keep this file pure
-// TypeScript — no Node, DOM, or runtime deps — per the contracts boundary.
+// Both surfaces speak this shape: the web UI's Download menu and the
+// `od export` CLI call the daemon export routes, which delegate rasterization
+// to the desktop Electron renderer (screenshot-based for `image`/`pptx` and the
+// raster `pdf`). Keep this file pure TypeScript — no Node, DOM, or runtime deps
+// — per the contracts boundary.
 
-export const EXPORT_FORMATS = ['pdf', 'image'] as const;
+// `pptx` is a slide-deck-only format (one screenshot slide per deck page); the
+// daemon rejects it for a non-deck artifact. It is served by the dedicated
+// `/export/pptx` route, and the generic `/export` route also accepts it.
+export const EXPORT_FORMATS = ['pdf', 'image', 'pptx'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 // Programmatic image export delegates to the desktop Electron renderer, whose
@@ -42,6 +45,8 @@ export interface ExportResult {
   format: ExportFormat;
   /** Absolute path the file was written to (CLI `--out` / desktop Save dialog). */
   path?: string;
+  /** Deprecated CLI JSON alias for `path`; kept for existing automation. */
+  out?: string;
   /** Byte size of the produced file when known. */
   bytes?: number;
   /** The user dismissed the desktop Save dialog — treated as a successful no-op. */

@@ -168,6 +168,21 @@ interface RunCreateMeta extends JsonRecord {
   message?: string;
   currentPrompt?: string;
   projectMetadata?: ProjectMetadata;
+  /** Multi-agent team selection. When present, startChatRun should route
+   *  through the multi-agent team module instead of the single-agent path. */
+  team?: {
+    id: string;
+    mode: string;
+    name: string;
+    assignments: Array<{
+      agentId: string;
+      agentType: string;
+      agentName: string;
+      role: string;
+      score: number;
+      reason: string;
+    }>;
+  };
 }
 
 interface RunListFilters {

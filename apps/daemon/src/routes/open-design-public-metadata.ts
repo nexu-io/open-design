@@ -59,7 +59,7 @@ export function registerOpenDesignPublicMetadataRoutes(
     try {
       const presence = await openDesignPublicMetadata.readDiscordPresence();
       const payload: OpenDesignDiscordPresenceResponse = {
-        inviteCode: '9ptkbbqRu',
+        inviteCode: 'mHAjSMV6gz',
         inviteUrl: OPEN_DESIGN_DISCORD_INVITE_URL,
         onlineCount: presence.onlineCount,
         memberCount: presence.memberCount,

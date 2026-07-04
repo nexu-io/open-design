@@ -10,7 +10,15 @@ import { Icon } from './Icon';
  * fight for visual weight, but remains discoverable for first-time users
  * who'd rather not dig into the settings dialog just to swap languages.
  */
-export function LanguageMenu({ compact = false }: { compact?: boolean } = {}) {
+export function LanguageMenu({
+  compact = false,
+  placement = 'up',
+  align = 'start',
+}: {
+  compact?: boolean;
+  placement?: 'up' | 'down';
+  align?: 'start' | 'end';
+} = {}) {
   const { locale, setLocale } = useI18n();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -55,7 +63,9 @@ export function LanguageMenu({ compact = false }: { compact?: boolean } = {}) {
       <AnimatePresence>
         {open ? (
           <motion.div
-            className={`lang-menu-popover${compact ? ' lang-menu-popover--compact' : ''}`}
+            className={`lang-menu-popover lang-menu-popover--${placement}${
+              compact ? ' lang-menu-popover--compact' : ''
+            } lang-menu-popover--align-${align}`}
             role="menu"
             variants={popoverIn}
             initial="hidden"

@@ -1,6 +1,198 @@
 import type { InputFieldSpec } from '@open-design/contracts';
 import type { Locale } from './types';
 
+type PluginChromeKey =
+  | 'about'
+  | 'applying'
+  | 'assets'
+  | 'atoms'
+  | 'author'
+  | 'by'
+  | 'capabilities'
+  | 'capabilitiesHint'
+  | 'claudePlugins'
+  | 'closeDetails'
+  | 'closeEsc'
+  | 'connectors'
+  | 'contextBundles'
+  | 'contextBundlesHint'
+  | 'contribute'
+  | 'copy'
+  | 'copied'
+  | 'craft'
+  | 'defaultPrefix'
+  | 'designSpecOnly'
+  | 'designSystem'
+  | 'details'
+  | 'detailsAria'
+  | 'developerDetails'
+  | 'examplePrefix'
+  | 'exampleQuery'
+  | 'exampleQueryHint'
+  | 'genuiSurfaces'
+  | 'genuiSurfacesHint'
+  | 'homepage'
+  | 'image'
+  | 'inputs'
+  | 'inputsHint'
+  | 'installed'
+  | 'license'
+  | 'marketplaceId'
+  | 'mcpServers'
+  | 'moreWaysTo'
+  | 'onFailurePrefix'
+  | 'openContributePage'
+  | 'openIssueOnGithub'
+  | 'optional'
+  | 'origin'
+  | 'path'
+  | 'persistsAt'
+  | 'pinnedRef'
+  | 'pluginInfo'
+  | 'primary'
+  | 'repeat'
+  | 'required'
+  | 'source'
+  | 'spec'
+  | 'skills'
+  | 'trust'
+  | 'untilPrefix'
+  | 'version'
+  | 'video'
+  | 'audio'
+  | 'workflow'
+  | 'workflowHint';
+
+const EN_PLUGIN_CHROME: Record<PluginChromeKey, string> = {
+  about: 'About',
+  applying: 'Applying…',
+  assets: 'Assets',
+  atoms: 'Atoms',
+  author: 'Author',
+  by: 'by',
+  capabilities: 'Capabilities',
+  capabilitiesHint: 'Permissions the plugin requests when applied.',
+  claudePlugins: 'Claude plugins',
+  closeDetails: 'Close details',
+  closeEsc: 'Close (Esc)',
+  connectors: 'Connectors',
+  contextBundles: 'Context bundles',
+  contextBundlesHint:
+    'Skills, design systems, MCP servers and other refs the plugin will pull in at apply time.',
+  contribute: 'Contribute',
+  copy: 'Copy',
+  copied: 'Copied',
+  craft: 'Craft',
+  defaultPrefix: 'default:',
+  designSpecOnly:
+    'This plugin ships only the design spec — open Plugin info to read DESIGN.md.',
+  designSystem: 'Design system',
+  details: 'details',
+  detailsAria: '{title} details',
+  developerDetails: 'Developer details',
+  examplePrefix: 'e.g.',
+  exampleQuery: 'Example query',
+  exampleQueryHint: 'Inserted into the prompt textarea when you apply this plugin.',
+  genuiSurfaces: 'GenUI surfaces',
+  genuiSurfacesHint: 'Interactive prompts the plugin may surface during a run.',
+  homepage: 'Homepage',
+  image: 'Image',
+  inputs: 'Inputs',
+  inputsHint: 'Variables substituted into the example query at apply time.',
+  installed: 'Installed',
+  license: 'License',
+  marketplaceId: 'Marketplace ID',
+  mcpServers: 'MCP servers',
+  moreWaysTo: 'More ways to {label}',
+  onFailurePrefix: 'on failure:',
+  openContributePage: 'Open the contribute page',
+  openIssueOnGithub: 'Open an issue on GitHub',
+  optional: 'Optional',
+  origin: 'Origin',
+  path: 'Path',
+  persistsAt: 'persists at',
+  pinnedRef: 'Pinned ref',
+  pluginInfo: 'Plugin info',
+  primary: 'primary',
+  repeat: 'repeat',
+  required: 'required',
+  source: 'Source',
+  spec: 'Spec',
+  skills: 'Skills',
+  trust: 'Trust',
+  untilPrefix: 'until:',
+  version: 'Version',
+  video: 'Video',
+  audio: 'Audio',
+  workflow: 'Workflow',
+  workflowHint:
+    'Pipeline stages run in order. Atoms inside a stage run sequentially unless the stage repeats.',
+};
+
+const ZH_PLUGIN_CHROME: Partial<Record<PluginChromeKey, string>> = {
+  about: '简介',
+  applying: '正在应用…',
+  assets: '资产',
+  atoms: 'Atoms',
+  author: '作者',
+  by: '作者',
+  capabilities: '能力',
+  capabilitiesHint: '插件应用时请求的权限。',
+  claudePlugins: 'Claude 插件',
+  closeDetails: '关闭详情',
+  closeEsc: '关闭（Esc）',
+  connectors: '连接器',
+  contextBundles: '上下文包',
+  contextBundlesHint: '插件应用时会拉取的技能、设计体系、MCP 服务和其他引用。',
+  contribute: '贡献',
+  copy: '复制',
+  copied: '已复制',
+  craft: '工艺规则',
+  defaultPrefix: '默认：',
+  designSpecOnly:
+    '这个插件只提供设计规范，请打开插件信息查看 DESIGN.md。',
+  designSystem: '设计体系',
+  details: '详情',
+  detailsAria: '{title} 详情',
+  developerDetails: '开发者详情',
+  examplePrefix: '例如：',
+  exampleQuery: '示例请求',
+  exampleQueryHint: '应用这个插件时会插入到提示词输入框。',
+  genuiSurfaces: 'GenUI 界面',
+  genuiSurfacesHint: '插件运行过程中可能展示的交互式提示。',
+  homepage: '主页',
+  image: '图片',
+  inputs: '输入项',
+  inputsHint: '应用时会替换到示例请求里的变量。',
+  installed: '安装时间',
+  license: '许可证',
+  marketplaceId: '市场 ID',
+  mcpServers: 'MCP 服务',
+  moreWaysTo: '更多使用方式：{label}',
+  onFailurePrefix: '失败时：',
+  openContributePage: '打开贡献页面',
+  openIssueOnGithub: '在 GitHub 打开 issue',
+  optional: '可选',
+  origin: '来源',
+  path: '路径',
+  persistsAt: '持久化到',
+  pinnedRef: '固定引用',
+  pluginInfo: '插件信息',
+  primary: '主',
+  repeat: '重复',
+  required: '必填',
+  source: '来源',
+  spec: '规范',
+  skills: '技能',
+  trust: '信任',
+  untilPrefix: '直到：',
+  version: '版本',
+  video: '视频',
+  audio: '音频',
+  workflow: '工作流',
+  workflowHint: '流水线阶段会按顺序运行；阶段内的 atoms 默认顺序执行，除非该阶段设置了重复。',
+};
+
 const ZH_INPUT_LABELS: Record<string, string> = {
   'Artifact kind': '产物类型',
   Fidelity: '保真度',
@@ -121,4 +313,18 @@ export function localizePluginDisplayValue(locale: Locale, value: unknown): stri
   if (value === undefined || value === null) return '';
   const text = String(value);
   return locale === 'zh-CN' ? ZH_DISPLAY_VALUES[text] ?? text : text;
+}
+
+export function localizePluginChrome(
+  locale: Locale,
+  key: PluginChromeKey,
+  vars: Record<string, string | number> = {},
+): string {
+  const phrase =
+    locale === 'zh-CN'
+      ? ZH_PLUGIN_CHROME[key] ?? EN_PLUGIN_CHROME[key]
+      : EN_PLUGIN_CHROME[key];
+  return phrase.replace(/\{(\w+)\}/g, (match, name) =>
+    Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : match,
+  );
 }

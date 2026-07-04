@@ -52,7 +52,7 @@ export interface UseBrandExtract {
    *  (in which case `state.error` is set). */
   run: (
     url: string,
-    options?: { description?: string; designMd?: string },
+    options?: { description?: string; designMd?: string; throwOnError?: boolean },
   ) => Promise<BrandExtractStartResponse | null>;
   reset: () => void;
 }
@@ -69,11 +69,18 @@ export function useBrandExtract(): UseBrandExtract {
 
   const run = useCallback(async (
     url: string,
-    options: { description?: string; designMd?: string } = {},
+    options: { description?: string; designMd?: string; throwOnError?: boolean } = {},
   ): Promise<BrandExtractStartResponse | null> => {
     if (inFlightRef.current) return null;
     inFlightRef.current = true;
     setState({ ...INITIAL_STATE, phase: 'starting' });
+
+    const fail = (message: string): null => {
+      inFlightRef.current = false;
+      setState({ ...INITIAL_STATE, phase: 'error', error: message });
+      if (options.throwOnError) throw new Error(message);
+      return null;
+    };
 
     let resp: Response;
     try {
@@ -89,13 +96,7 @@ export function useBrandExtract(): UseBrandExtract {
         }),
       });
     } catch (err) {
-      inFlightRef.current = false;
-      setState({
-        ...INITIAL_STATE,
-        phase: 'error',
-        error: err instanceof Error ? err.message : 'Could not reach the daemon',
-      });
-      return null;
+      return fail(err instanceof Error ? err.message : 'Could not reach the daemon');
     }
 
     if (!resp.ok) {
@@ -106,22 +107,14 @@ export function useBrandExtract(): UseBrandExtract {
       } catch {
         // Non-JSON error body; keep the status-based message.
       }
-      inFlightRef.current = false;
-      setState({ ...INITIAL_STATE, phase: 'error', error: message });
-      return null;
+      return fail(message);
     }
 
     let result: BrandExtractStartResponse;
     try {
       result = (await resp.json()) as BrandExtractStartResponse;
     } catch (err) {
-      inFlightRef.current = false;
-      setState({
-        ...INITIAL_STATE,
-        phase: 'error',
-        error: err instanceof Error ? err.message : 'Malformed extraction response',
-      });
-      return null;
+      return fail(err instanceof Error ? err.message : 'Malformed extraction response');
     }
 
     inFlightRef.current = false;

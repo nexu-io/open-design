@@ -152,7 +152,7 @@ export type RuntimeAgentDef = {
   //                            under MiMo's env namespace.
   //
   // Leave undefined for adapters that have no native MCP transport
-  // wired yet (codex, gemini, cursor-agent, copilot, qoder, pi). The
+  // wired yet (codex, cursor-agent, copilot, qoder, pi). The
   // settings UI reads this field to surface an explicit "external MCP
   // is not forwarded to <agent>; configure servers in <agent>'s own
   // config file instead" hint, replacing the previous silent-failure

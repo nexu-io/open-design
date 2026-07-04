@@ -107,7 +107,7 @@
   left: 50%;
   transform: translateX(-50%);
   max-width: 480px;
-  padding: 10px 14px;
+  padding: 10px 36px 10px 14px;
   border-radius: var(--radius-sm, 4px);
   background: var(--text-strong, #1f2328);
   color: var(--bg, white);
@@ -116,6 +116,18 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   z-index: 1000;
   pointer-events: auto;
+}
+.od-toast.od-toast-browser-snapshot {
+  bottom: 34px;
+  width: min(460px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  padding: 14px 52px 14px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  box-shadow:
+    0 18px 52px rgba(15, 23, 42, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.58);
 }
 .od-toast.placement-top {
   top: 64px;
@@ -196,11 +208,33 @@
 .od-toast-message {
   font-weight: 500;
 }
+.od-toast.od-toast-browser-snapshot .od-toast-message {
+  font-size: 13.5px;
+  font-weight: 650;
+}
 .od-toast-details {
   margin-top: 4px;
   font-size: 11.5px;
   opacity: 0.85;
   font-weight: 400;
+}
+.od-toast-action {
+  margin-top: 8px;
+  background: color-mix(in srgb, var(--accent, #4f46e5) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #4f46e5) 34%, var(--border));
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+.od-toast-action:hover {
+  background: color-mix(in srgb, var(--accent, #4f46e5) 24%, transparent);
+}
+.od-toast.od-toast-browser-snapshot .od-toast-details {
+  margin-top: 6px;
+  font-size: 12px;
 }
 .od-toast-code {
   margin: 8px 0 0;
@@ -216,6 +250,58 @@
   overflow: auto;
   user-select: text;
 }
+.od-toast-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  /* Reset the global `button { padding: 6px 12px }` primitive. With
+     box-sizing: border-box, that padding eats the entire 26px box (26 − 24
+     − 2px border = 0 content width), collapsing the inner SVG to zero width
+     so the glyph clips away and the disc reads as "no close icon". */
+  padding: 0;
+  /* A solid surface disc (not a faint tint) so the close affordance lifts off
+     light toast bodies — the pale success/error fills previously swallowed the
+     low-opacity glyph, which read as "no close button". The tinted border +
+     soft shadow keep it integrated with the tone. */
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 999px;
+  background: var(--bg, #fff);
+  color: var(--text-strong, #1f2328);
+  cursor: pointer;
+  opacity: 1;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.16);
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.od-toast:not(.tone-success):not(.tone-error) .od-toast-close {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--bg, #fff);
+}
+.od-toast-close svg {
+  /* flex-shrink:0 so the glyph can never be crushed to 0 width by the
+     flex button even if the content box gets tight again. */
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.4;
+}
+.od-toast-close:hover {
+  border-color: color-mix(in srgb, currentColor 34%, transparent);
+  background: color-mix(in srgb, var(--bg, #fff) 92%, currentColor 8%);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+}
+.od-toast:not(.tone-success):not(.tone-error) .od-toast-close:hover {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.24);
+}
 .od-toast-dismiss {
   margin-top: 8px;
   background: rgba(255, 255, 255, 0.12);
@@ -228,6 +314,27 @@
 }
 .od-toast-dismiss:hover {
   background: rgba(255, 255, 255, 0.18);
+}
+.od-toast-action {
+  margin-top: 8px;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: currentColor;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.od-toast.od-toast-browser-snapshot .od-toast-action {
+  margin-top: 10px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.od-toast-action:hover {
+  background: color-mix(in srgb, currentColor 20%, transparent);
 }
 
 /* ---------------- Routines (Settings → Automations) ---------------- */
@@ -1176,7 +1283,7 @@
 .app .live-code-box {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg-fill-secondary);
+  background: transparent;
 }
 .app .live-code-box .live-code-head {
   cursor: default;
@@ -2699,7 +2806,7 @@
 }
 .project-ds-picker-body {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(200px, 1.1fr);
+  grid-template-columns: minmax(210px, 0.84fr) minmax(300px, 1.16fr);
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -2811,11 +2918,15 @@
   flex-direction: column;
   gap: 8px;
 }
-/* When the previewed design system is a brand, the rich Brand Kit card
-   (BrandPreviewCard, compact variant) owns the right pane and stretches to its
-   full width. */
-.project-ds-picker-preview-brand {
+.project-ds-picker-preview-kit-wrap,
+.project-ds-picker-preview-kit {
   width: 100%;
+}
+.project-ds-picker-preview-kit-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
 }
 .project-ds-picker-preview-open {
   margin-top: 8px;
@@ -2840,6 +2951,27 @@
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
+.design-system-kit-preview-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+.ds-modal-kit-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  background: var(--bg);
+}
 .project-ds-picker-preview-head {
   display: flex;
   align-items: center;
@@ -2857,51 +2989,6 @@
   overflow: hidden;
   background: var(--bg-panel);
 }
-.project-ds-picker-preview-expand {
-  position: absolute;
-  left: 50%;
-  bottom: 10px;
-  transform: translate(-50%, 6px);
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 12px;
-  border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
-  -webkit-backdrop-filter: saturate(1.1) blur(8px);
-  backdrop-filter: saturate(1.1) blur(8px);
-  color: var(--text-strong, var(--text));
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  opacity: 0;
-  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.4);
-  transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    background 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.project-ds-picker-preview-stage:hover .project-ds-picker-preview-expand,
-.project-ds-picker-preview-expand:focus-visible {
-  opacity: 1;
-  transform: translate(-50%, 0);
-}
-.project-ds-picker-preview-expand:hover {
-  background: var(--bg-panel);
-}
-.project-ds-picker-preview-expand svg {
-  display: block;
-  width: 13px !important;
-  height: 13px !important;
-}
-.project-ds-picker-preview-expand:hover {
-  color: var(--accent);
-  border-color: var(--border-strong, var(--border));
-  background: color-mix(in srgb, var(--text-muted) 8%, var(--bg-panel));
-}
 .project-ds-picker-preview-cat {
   font-size: 10.5px;
   padding: 1px 6px;
@@ -2914,34 +3001,6 @@
   color: var(--text-muted);
   line-height: 1.5;
   margin: 0;
-}
-.project-ds-picker-preview-swatches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.project-ds-picker-preview-swatch {
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-xs);
-  border: 1px solid var(--border);
-}
-.project-ds-picker-preview-frame {
-  /* Render the design-system page at desktop width (1280×720), then scale
-     the whole thing down so the 16:9 stage shows a faithful first-screen
-     thumbnail rather than a cramped narrow-viewport reflow. scale() needs a
-     unitless ratio, so this is pinned to the stage's resolved width
-     (popover≈440 → right column≈232px ⇒ 232/1280 ≈ 0.181). */
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 1280px;
-  height: 720px;
-  border: 0;
-  background: #fff;
-  transform: scale(0.181);
-  transform-origin: top left;
-  pointer-events: none;
 }
 .project-ds-picker-preview-empty,
 .project-ds-picker-preview-loading {

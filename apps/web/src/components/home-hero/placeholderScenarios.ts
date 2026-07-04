@@ -20,6 +20,7 @@
 // missing translation can't silently break the one-click create.
 
 import type { Dict } from '../../i18n/types';
+import type { ChatSessionMode } from '@open-design/contracts';
 
 // A scenario after its copy has been resolved through `t()`. Carousel display
 // and the submit path consume this shape.
@@ -30,6 +31,8 @@ export interface PlaceholderScenario {
   text: string;
   // Create-rail chip id the scenario binds on submit (the "template").
   chipId: string;
+  // Optional per-turn mode for in-project follow-up scenarios.
+  sessionMode?: ChatSessionMode;
 }
 
 // The data table: stable id + i18n key + bound template. HomeHero maps each
@@ -61,6 +64,51 @@ export const PLACEHOLDER_SCENARIO_DEFS: ReadonlyArray<PlaceholderScenarioDef> = 
   { id: 'app-idea', textKey: 'homeHero.carousel.appIdea', chipId: 'mobile' },
   { id: 'landing-layout', textKey: 'homeHero.carousel.landingLayout', chipId: 'wireframe' },
 ];
+
+export interface BuildPlaceholderScenariosInput {
+  activeChipId: string | null;
+  resolveTextKey: (key: keyof Dict) => string;
+  examplesForChip?: (chipId: string) => ReadonlyArray<string>;
+  fallbackForChip?: (chipId: string) => string | null;
+  scenarioDefs?: ReadonlyArray<PlaceholderScenarioDef>;
+}
+
+export function buildPlaceholderScenarios({
+  activeChipId,
+  resolveTextKey,
+  examplesForChip = () => [],
+  fallbackForChip = () => null,
+  scenarioDefs = PLACEHOLDER_SCENARIO_DEFS,
+}: BuildPlaceholderScenariosInput): PlaceholderScenario[] {
+  if (activeChipId) {
+    const chipScenarioDefs = scenarioDefs.filter((def) => def.chipId === activeChipId);
+    if (chipScenarioDefs.length > 0) {
+      return chipScenarioDefs.map((def) => ({
+        id: def.id,
+        chipId: def.chipId,
+        text: resolveTextKey(def.textKey),
+      }));
+    }
+    const examples = examplesForChip(activeChipId);
+    if (examples.length > 0) {
+      return examples.map((text, index) => ({
+        id: `${activeChipId}-prompt-example-${index + 1}`,
+        chipId: activeChipId,
+        text,
+      }));
+    }
+    const fallback = fallbackForChip(activeChipId);
+    return fallback
+      ? [{ id: `${activeChipId}-fallback`, chipId: activeChipId, text: fallback }]
+      : [];
+  }
+
+  return scenarioDefs.map((def) => ({
+    id: def.id,
+    chipId: def.chipId,
+    text: resolveTextKey(def.textKey),
+  }));
+}
 
 // ---- Typewriter state machine (pure, so it is unit-testable) --------------
 

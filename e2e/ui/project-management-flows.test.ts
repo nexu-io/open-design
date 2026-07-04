@@ -1,5 +1,6 @@
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
+import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
+import { T } from '@/timeouts';
 import type { Locator, Page, Request, Route } from '@playwright/test';
 import { routeAgents } from '../lib/playwright/mock-factory.js';
 
@@ -70,6 +71,37 @@ const DESIGN_SYSTEMS = [
     swatches: ['#EAF4F4', '#5EAAA8', '#05668D', '#0B132B'],
   },
 ];
+
+async function stubEmptyProjectsNewProjectData(page: Page): Promise<void> {
+  await page.route('**/api/skills', async (route) => {
+    await route.fulfill({ json: { skills: TAB_SKILLS } });
+  });
+  await page.route('**/api/connectors', async (route) => {
+    await route.fulfill({ json: { connectors: [] } });
+  });
+  await page.route('**/api/connectors/status', async (route) => {
+    await route.fulfill({ json: { statuses: {} } });
+  });
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects: [] } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/design-systems', async (route) => {
+    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
+  });
+}
+
+async function openNewProjectFromEmptyProjects(page: Page): Promise<void> {
+  await page.goto('/projects');
+  await expect(page.locator('.designs-empty-state')).toBeVisible();
+  await page.locator('.designs-empty-cta').click();
+
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+}
 
 const TAB_SKILLS = [
   skillSummary('prototype-skill', 'Prototype Skill', 'prototype', 'web', ['prototype']),
@@ -245,12 +277,8 @@ test('[P0] projects empty state create action opens the new project flow', async
 });
 
 test('[P1] design system multi-select stores primary and inspiration metadata', async ({ page }) => {
-  await page.route('**/api/design-systems', async (route) => {
-    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
-  });
-
-  await page.goto('/');
-  await openNewProjectPanel(page);
+  await stubEmptyProjectsNewProjectData(page);
+  await openNewProjectFromEmptyProjects(page);
   await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill('Design system multi select metadata');
   await expect(page.getByTestId('design-system-trigger')).toContainText('Nexu Soft Tech');
@@ -284,12 +312,8 @@ test('[P1] design system multi-select stores primary and inspiration metadata', 
 });
 
 test('[P1] design system picker searches and switches the single selected system', async ({ page }) => {
-  await page.route('**/api/design-systems', async (route) => {
-    await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
-  });
-
-  await page.goto('/');
-  await openNewProjectPanel(page);
+  await stubEmptyProjectsNewProjectData(page);
+  await openNewProjectFromEmptyProjects(page);
   await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill('Design system single switch flow');
   await expect(page.getByTestId('design-system-trigger')).toBeVisible();
@@ -313,6 +337,92 @@ test('[P1] design system picker searches and switches the single selected system
     };
   };
   expect(body.designSystemId).toBe('data-mist');
+  expect(body.metadata?.inspirationDesignSystemIds).toBeUndefined();
+});
+
+test('[P1] design system picker can clear the default system before creating a project', async ({ page }) => {
+  await stubEmptyProjectsNewProjectData(page);
+  await openNewProjectFromEmptyProjects(page);
+  await page.getByTestId('new-project-tab-prototype').click();
+  await page.getByTestId('new-project-name').fill('Design system clear create flow');
+  await expect(page.getByTestId('design-system-trigger')).toContainText('Nexu Soft Tech');
+
+  await page.getByTestId('design-system-trigger').click();
+  await page.getByRole('option', { name: /None.*freeform/i }).click();
+
+  await expect(page.getByTestId('design-system-trigger')).toContainText('None');
+  await expect(page.getByTestId('design-system-trigger')).not.toContainText('Nexu Soft Tech');
+
+  const createProjectRequest = page.waitForRequest(isCreateProjectRequest);
+  await expect(page.getByTestId('create-project')).toBeEnabled();
+  await page.getByTestId('create-project').click({ force: true });
+  const request = await createProjectRequest;
+  const body = request.postDataJSON() as {
+    designSystemId?: string | null;
+    metadata?: {
+      inspirationDesignSystemIds?: string[];
+    };
+  };
+  expect(body.designSystemId).toBeNull();
+  expect(body.metadata?.inspirationDesignSystemIds).toBeUndefined();
+});
+
+test('[P1] stale daemon default design system is not posted when creating a project', async ({ page }) => {
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({
+        json: {
+          config: {
+            onboardingCompleted: true,
+            privacyDecisionAt: 1,
+            telemetry: { metrics: false, content: false, artifactManifest: false },
+            mode: 'daemon',
+            agentId: 'codex',
+            skillId: null,
+            designSystemId: 'stale-design-system',
+            agentModels: { codex: { model: 'default' } },
+            agentCliEnv: {},
+          },
+        },
+      });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+          mode: 'daemon',
+          agentId: 'codex',
+          skillId: null,
+          designSystemId: 'stale-design-system',
+          agentModels: { codex: { model: 'default' } },
+          agentCliEnv: {},
+        },
+      },
+    });
+  });
+  await stubEmptyProjectsNewProjectData(page);
+  await openNewProjectFromEmptyProjects(page);
+  await page.getByTestId('new-project-tab-prototype').click();
+  await page.getByTestId('new-project-name').fill('Stale design system default flow');
+
+  await expect(page.getByTestId('design-system-trigger')).toContainText('None');
+  await expect(page.getByTestId('design-system-trigger')).not.toContainText('stale-design-system');
+
+  const createProjectRequest = page.waitForRequest(isCreateProjectRequest);
+  await expect(page.getByTestId('create-project')).toBeEnabled();
+  await page.getByTestId('create-project').click({ force: true });
+  const request = await createProjectRequest;
+  const body = request.postDataJSON() as {
+    designSystemId?: string | null;
+    metadata?: {
+      inspirationDesignSystemIds?: string[];
+    };
+  };
+  expect(body.designSystemId).toBeNull();
+  expect(body.designSystemId).not.toBe('stale-design-system');
   expect(body.metadata?.inspirationDesignSystemIds).toBeUndefined();
 });
 
@@ -807,6 +917,71 @@ test('[P2] project header keeps the settings, handoff, and avatar controls pinne
   expect(layout.avatarRight).toBeLessThanOrEqual(layout.viewportWidth - 8);
 });
 
+test('[P1] project handoff AMR website link carries attribution from the CLI tab', async ({ page }) => {
+  await routeHandoffEditors(page);
+  await page.goto('/');
+  await createProject(page, 'Handoff AMR attribution');
+  await expectWorkspaceReady(page);
+
+  const menu = await openHandoffCliTab(page);
+  const amrLink = menu.locator('.handoff-amr-link');
+  await expect(amrLink).toBeVisible();
+
+  const popupPromise = page.waitForEvent('popup');
+  await amrLink.click();
+  const popup = await popupPromise;
+  const url = new URL(popup.url());
+  await popup.close();
+
+  expect(url.searchParams.get('od_origin')).toBe('open_design');
+  expect(url.searchParams.get('od_entry_source')).toBe('handoff_amr_website');
+  expect(url.searchParams.get('od_entry_id')).toBeTruthy();
+});
+
+test('[P1] project handoff CLI prompt copies the project path, framework, id, and target agent', async ({ page }) => {
+  await page.addInitScript(() => {
+    const store: string[] = [];
+    Object.defineProperty(window, '__copiedTexts', {
+      value: store,
+      configurable: true,
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: {
+        writeText(text: string) {
+          store.push(text);
+          return Promise.resolve();
+        },
+      },
+      configurable: true,
+    });
+  });
+  await routeHandoffEditors(page);
+  await page.goto('/');
+  await createProject(page, 'Handoff CLI prompt contract');
+  await expectWorkspaceReady(page);
+  const { projectId } = getProjectContextFromUrl(page);
+
+  const menu = await openHandoffCliTab(page);
+  const pathButton = menu.locator('.handoff-path-button');
+  await expect(pathButton).toBeEnabled();
+  const projectDir = await pathButton.getAttribute('title');
+  expect(projectDir).toBeTruthy();
+
+  await menu.getByRole('button', { name: /^Next\.js$/ }).click();
+  await menu.getByTestId('handoff-cli-item-codex').click();
+  await expect(menu.getByTestId('handoff-cli-item-codex')).toContainText('Copied');
+
+  const copied = await page.evaluate(() => {
+    return (window as typeof window & { __copiedTexts?: string[] }).__copiedTexts ?? [];
+  });
+  const prompt = copied.at(-1) ?? '';
+  expect(prompt).toContain(projectDir as string);
+  expect(prompt).toContain('cd ');
+  expect(prompt).toContain('Target: Next.js / React');
+  expect(prompt).toContain('CLI: Codex CLI (codex)');
+  expect(prompt).toContain(`Project ID: ${projectId}`);
+});
+
 test('[P1] canceling design file deletion keeps the file and open tab', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Design file delete cancel flow');
@@ -1110,7 +1285,9 @@ test('[P0] @critical project detail share menu publish action opens the deploy f
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('heading', { name: /Deploy to Vercel/i })).toBeVisible();
   await expect(dialog.locator('select').first()).toHaveValue('vercel-self');
-  expect(deployConfigUrl).toContain('providerId=vercel-self');
+  await expect
+    .poll(() => deployConfigUrl ?? '', { timeout: T.medium })
+    .toContain('providerId=vercel-self');
 });
 
 test('[P1] home design card deletion supports cancel and confirm flows', async ({ page }) => {
@@ -1953,11 +2130,7 @@ function conversationIdFromMessagesApiPath(url: string): string {
 }
 
 async function openNewProjectPanel(page: Page) {
-  if (await page.getByTestId('new-project-panel').isVisible()) return;
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModal(page);
 }
 
 async function expectDesignsView(page: Page) {
@@ -2071,7 +2244,45 @@ async function expectWorkspaceReady(page: Page) {
   await expect(page.getByTestId('project-title')).toBeVisible();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.locator('.chat-loading-state')).toHaveCount(0, { timeout: T.medium });
   await expect(page.getByTestId('file-workspace')).toBeVisible();
+}
+
+async function routeHandoffEditors(page: Page): Promise<void> {
+  await page.route('**/api/editors', async (route) => {
+    await route.fulfill({
+      json: {
+        platform: 'darwin',
+        editors: [
+          {
+            id: 'cursor',
+            label: 'Cursor',
+            icon: 'cursor',
+            available: true,
+            resolvedPath: '/Applications/Cursor.app',
+            platforms: ['darwin', 'win32', 'linux'],
+          },
+          {
+            id: 'finder',
+            label: 'Finder',
+            icon: 'finder',
+            available: true,
+            resolvedPath: '/System/Library/CoreServices/Finder.app',
+            platforms: ['darwin'],
+          },
+        ],
+      },
+    });
+  });
+}
+
+async function openHandoffCliTab(page: Page): Promise<Locator> {
+  await page.getByTestId('handoff-caret').click();
+  const menu = page.getByTestId('handoff-menu');
+  await expect(menu).toBeVisible();
+  await menu.getByRole('tab', { name: /^Copy for CLI$/ }).click();
+  await expect(menu.locator('.handoff-amr-link')).toBeVisible();
+  return menu;
 }
 
 async function dismissPrivacyDialog(page: Page) {
