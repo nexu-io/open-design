@@ -1229,7 +1229,6 @@ import {
   USER_PLUGIN_SOURCE_KINDS,
 } from './plugin-share.js';
 
-const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 const LANGFUSE_TERMINAL_FALLBACK_DELAY_MS = 15_000;
 
 function reconcileAssistantMessageOnRunEnd(db, runs, run) {
@@ -1579,283 +1578,32 @@ function pinAssistantMessageOnRunCreate(db, run) {
   });
 }
 
-export function shouldReportRunCompletedFromMessage(saved, body = {}) {
-  return Boolean(
-    saved &&
-      saved.runId &&
-      typeof saved.runStatus === 'string' &&
-      TERMINAL_RUN_STATUSES.has(saved.runStatus) &&
-      body?.telemetryFinalized === true,
-  );
-}
-
-export function telemetryPromptFromRunRequest(message, currentPrompt) {
-  return typeof currentPrompt === 'string' ? currentPrompt : message;
-}
-
-const FORM_ANSWERS_HEADER_RE = /^\s*\[form answers\s+(?:\u2014|-)\s*([^\]\r\n]+)\]/i;
-
-// Aggressive OVERRIDE for weak / medium-strength plain agents (e.g.
-// GPT-OSS-120B Medium, Gemini 3.5 Flash) that otherwise echo RULE 1's
-// fenced form example back at the user on follow-up turns even when
-// they correctly understand the form is answered. Strong models
-// (Claude Sonnet 4.6, Gemini 3.1 Pro) already handle a shorter
-// OVERRIDE; enumerating the anti-patterns is a no-op for them and a
-// strong suppressor for the weaker ones. RULE 1 itself stays in the
-// system prompt so turn 1 can still emit a valid form.
-//
-// Exported so tests pin both the trigger condition and the literal
-// anti-patterns we ask the model to skip \u2014 silently weakening the
-// list (e.g. dropping the markdown-fence ban) would reintroduce the
-// form-echo regression on GPT-OSS / Gemini Flash.
-export const FORM_ANSWERED_SYSTEM_OVERRIDE = `## OVERRIDE \u2014 form already answered (this is turn 2 or later)
-
-The user already submitted their form answers (see # User request below).
-RULE 1 documents the turn-1 ask flow; that flow is finished. Treat RULE 1
-as read-only documentation for this turn \u2014 do not execute any of it.
-
-Forbidden output for this turn:
-- A \`<question-form>\` tag of any id, including \`discovery\` or \`task-type\`.
-- A markdown \`\`\`json fenced block echoing the form schema or example.
-- Form-asking prose such as "Got it \u2014 tell me the following" or
-  "\u8bf7\u544a\u8bc9\u6211\u4ee5\u4e0b\u4fe1\u606f".
-- Narrating fake system events such as "subagents stopped" or
-  "server restart".
-
-Required output for this turn:
-- Open with a brief prose confirmation of what the brief is.
-- Then proceed to RULE 2 (branch on the submitted \`brand\` value) and
-  RULE 3 (emit the \`<artifact>\` block with the full HTML document).
-
-`;
-
-// Smaller override for non-discovery / non-task-type form ids. These
-// forms are not artifact-build transitions, so we only need to suppress
-// the form re-ask without directing the model toward RULE 2 / RULE 3.
-// Exported so tests can pin the literal content independently.
-export const FORM_ANSWERED_GENERIC_OVERRIDE = `## OVERRIDE \u2014 form already answered (this is turn 2 or later)
-
-The user already submitted their form answers (see # User request below).
-Do not ask the same form again. Treat the submitted answers as the active
-user instruction and respond accordingly.
-
-`;
-
-function formAnswerTransitionForCurrentPrompt(currentPrompt) {
-  if (typeof currentPrompt !== 'string') return null;
-  const trimmed = currentPrompt.trim();
-  if (!trimmed) return null;
-  const match = FORM_ANSWERS_HEADER_RE.exec(trimmed);
-  if (!match) return null;
-  const rawFormId = (match[1] || 'form').trim() || 'form';
-  const formId = rawFormId.replace(/[^\w.-]/g, '') || 'form';
-  const lines = [
-    '## Latest user turn - form answers submitted',
-    trimmed,
-    '',
-    // Keep the wording in lock-step with main — the stronger "do not
-    // emit any `<question-form>`" suppression now lives in the
-    // system-prompt `FORM_ANSWERED_SYSTEM_OVERRIDE` block, which
-    // every plain / stream-json adapter sees. Diverging the
-    // user-request transition string here breaks `chat-route.test
-    // marks submitted discovery form answers ...` which asserts on
-    // the exact main wording.
-    `The user has answered the ${formId} form. Do not emit another ${formId} form.`,
-  ];
-  if (formId.toLowerCase() === 'discovery' || formId.toLowerCase() === 'task-type') {
-    lines.push(
-      'Continue with RULE 2 / RULE 3 now. For Branch B answers, build now instead of asking another brief.',
-    );
-  } else {
-    lines.push(
-      'Treat these form answers as the active user turn instead of replaying the transcript as a fresh request.',
-    );
-  }
-  return lines.join('\n');
-}
-
-export function composeChatUserRequestForAgent(
-  message,
-  currentPrompt,
-  options: { skipTranscript?: boolean } = {},
-) {
-  // When the adapter resumes its own session (today: `agy -c`), the
-  // daemon-rendered `## user` / `## assistant` transcript is a duplicate
-  // of what the upstream CLI already has in memory — and the embedded
-  // copy carries the literal `<question-form>` markup the agent emitted
-  // on turn 1, which the model then re-emits on turn 2. Send only the
-  // latest user turn (`currentPrompt`) in that case; the upstream
-  // session memory provides the rest. See
-  // `RuntimeAgentDef.resumesSessionViaCli`.
-  const skip = options.skipTranscript === true;
-  const bodySource = skip ? currentPrompt : message;
-  const body =
-    typeof bodySource === 'string' && bodySource.trim()
-      ? bodySource
-      : '(No extra typed instruction.)';
-  const transition = formAnswerTransitionForCurrentPrompt(currentPrompt);
-  if (!transition) return body;
-  if (skip) {
-    return [transition, body].join('\n\n');
-  }
-  return [
-    transition,
-    '## Full conversation transcript',
-    body,
-  ].join('\n\n');
-}
-
-export function createFinalizedMessageTelemetryReporter({
-  design,
-  db,
-  dataDir,
-  reportedRuns,
-  getAppVersion = () => null,
-  report = reportRunCompletedFromDaemon,
-}: {
-  design: any;
-  db: unknown;
-  dataDir: string;
-  reportedRuns: Set<string>;
-  getAppVersion?: () => any;
-  report?: typeof reportRunCompletedFromDaemon;
-}) {
-  const appVersionForCapture = () => {
-    const appVersion = getAppVersion();
-    if (typeof appVersion === 'string') return appVersion;
-    if (appVersion && typeof appVersion.version === 'string') return appVersion.version;
-    if (typeof design?.getAppVersion === 'function') return design.getAppVersion();
-    return 'unknown';
-  };
-  const captureResult = ({
-    analyticsContext,
-    conversationId,
-    delivery,
-    durationMs,
-    projectId,
-    reportResult,
-    reportTrigger = 'final_message',
-    run,
-    runId,
-    skipReason,
-    status,
-  }) => {
-    const context = analyticsContext ?? run?.analyticsContext ?? null;
-    if (!context || !design?.analytics?.capture || !runId || !delivery) return;
-    const terminalResult = status ? runResultFromStatus(status) : undefined;
-    design.analytics.capture({
-      eventName: 'langfuse_report_result',
-      context,
-      appVersion: appVersionForCapture(),
-      properties: {
-        page_name: 'chat_panel',
-        area: 'chat_panel',
-        project_id: run?.projectId ?? projectId ?? null,
-        conversation_id: run?.conversationId ?? conversationId ?? null,
-        run_id: runId,
-        langfuse_trace_id: runId,
-        langfuse_expected: delivery.langfuse_expected,
-        langfuse_delivery_status: delivery.langfuse_delivery_status,
-        ...(delivery.langfuse_drop_reason
-          ? { langfuse_drop_reason: delivery.langfuse_drop_reason }
-          : {}),
-        langfuse_report_result: reportResult,
-        langfuse_report_trigger: reportTrigger,
-        ...(skipReason ? { langfuse_report_skip_reason: skipReason } : {}),
-        ...(durationMs !== undefined ? { report_duration_ms: durationMs } : {}),
-        ...(terminalResult ? { result: terminalResult } : {}),
-        ...(run?.errorCode ? { error_code: run.errorCode } : {}),
-        ...(run?.agentId ? { agent_provider_id: agentIdToTracking(run.agentId) } : {}),
-        ...(run?.model !== undefined ? { model_id: modelIdForTracking(run.model) } : {}),
-      },
-      insertId: `${runId}-langfuse-report-${reportTrigger}-${reportResult}${skipReason ? `-${skipReason}` : ''}`,
-    });
-  };
-  return (saved, body = {}, options = {}) => {
-    if (!shouldReportRunCompletedFromMessage(saved, body)) return;
-    const runId = saved.runId;
-    const run = design.runs.get(runId);
-    if (!run) {
-      captureResult({
-        analyticsContext: options.analyticsContext,
-        conversationId: options.conversationId ?? saved.conversationId,
-        delivery: {
-          langfuse_expected: true,
-          langfuse_delivery_status: 'failed',
-          langfuse_drop_reason: 'network_error',
-        },
-        projectId: options.projectId,
-        reportTrigger: options.reportTrigger,
-        reportResult: 'skipped',
-        runId,
-        skipReason: 'run_not_found',
-        status: saved.runStatus,
-      });
-      return;
-    }
-    const reportTrigger = options.reportTrigger ?? 'final_message';
-    if (reportedRuns.has(run.id)) {
-      captureResult({
-        analyticsContext: options.analyticsContext,
-        conversationId: options.conversationId ?? saved.conversationId,
-        delivery: {
-          langfuse_expected: true,
-          langfuse_delivery_status: 'failed',
-          langfuse_drop_reason: 'network_error',
-        },
-        projectId: options.projectId,
-        reportTrigger: options.reportTrigger,
-        reportResult: 'skipped',
-        run,
-        runId: run.id,
-        skipReason: 'duplicate_run',
-        status: saved.runStatus,
-      });
-      return;
-    }
-    if (reportTrigger !== 'terminal_fallback') {
-      reportedRuns.add(run.id);
-    }
-    void (async () => {
-      const start = Date.now();
-      const delivery = await report({
-        db,
-        dataDir,
-        run,
-        persistedRunStatus: saved.runStatus,
-        persistedEndedAt: saved.endedAt,
-        appVersion: getAppVersion(),
-      });
-      const state = delivery ?? {
-        langfuse_expected: true,
-        langfuse_delivery_status: 'accepted',
-      };
-      captureResult({
-        analyticsContext: options.analyticsContext,
-        conversationId: options.conversationId ?? saved.conversationId,
-        delivery: state,
-        durationMs: Date.now() - start,
-        projectId: options.projectId,
-        reportTrigger,
-        reportResult: state.langfuse_expected === false
-          ? 'skipped'
-          : state.langfuse_delivery_status === 'accepted'
-            ? 'accepted'
-            : state.langfuse_delivery_status === 'failed'
-              ? 'failed'
-              : 'skipped',
-        run,
-        runId: run.id,
-        skipReason: state.langfuse_expected === false ? 'not_expected' : undefined,
-        status: saved.runStatus,
-      });
-    })();
-  };
-}
-
-export function shouldReportRunCompletionTelemetryFallbackStatus(status: unknown): boolean {
-  return status === 'failed' || status === 'canceled';
-}
+// Finalized-run Langfuse telemetry was extracted verbatim to ./run-telemetry.ts
+// and the turn-2 form-answer / chat-request composition helpers to
+// ./chat-request-composition.ts (strangler-fig slice 3). Import back the symbols
+// server.ts references and re-export the public surface.
+import {
+  createFinalizedMessageTelemetryReporter,
+  shouldReportRunCompletionTelemetryFallbackStatus,
+  telemetryPromptFromRunRequest,
+} from './run-telemetry.js';
+export {
+  createFinalizedMessageTelemetryReporter,
+  shouldReportRunCompletedFromMessage,
+  shouldReportRunCompletionTelemetryFallbackStatus,
+  telemetryPromptFromRunRequest,
+} from './run-telemetry.js';
+import {
+  composeChatUserRequestForAgent,
+  FORM_ANSWERED_GENERIC_OVERRIDE,
+  FORM_ANSWERED_SYSTEM_OVERRIDE,
+  FORM_ANSWERS_HEADER_RE,
+} from './chat-request-composition.js';
+export {
+  composeChatUserRequestForAgent,
+  FORM_ANSWERED_GENERIC_OVERRIDE,
+  FORM_ANSWERED_SYSTEM_OVERRIDE,
+} from './chat-request-composition.js';
 
 const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
 
