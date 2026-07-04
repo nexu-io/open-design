@@ -4673,7 +4673,7 @@ export function ProjectView({
             },
           }));
         },
-        onDone: (fullText = '') => {
+        onDone: async (fullText = '') => {
           // The daemon delivers onDone even for a canceled run, so a run
           // superseded by a "send now" interrupt can still land here and must
           // not apply its completion side effects over the replacement. A run
@@ -4712,13 +4712,19 @@ export function ProjectView({
             !normalizedFullText &&
             !normalizedStreamedText &&
             !normalizedLiveHtml;
-          const rawToolCallOnly =
+          const looksLikeRawToolCallOnly =
             config.mode === 'api' &&
             !parsedArtifact &&
             !normalizedLiveHtml &&
             /^\s*<tool_call>[\s\S]*<\/tool_call>\s*$/i.test(
               normalizedFullText || normalizedStreamedText,
             );
+          let rawToolCallOnly = false;
+          if (looksLikeRawToolCallOnly && !emptyApiResponse) {
+            const filesAfterToolCallCheck = await refreshProjectFiles();
+            const producedSoFar = computeProducedFiles(beforeFileNames, filesAfterToolCallCheck) ?? [];
+            rawToolCallOnly = producedSoFar.length === 0;
+          }
           if (emptyApiResponse || rawToolCallOnly) {
             const endedAt = Date.now();
             const diagnostic = t('assistant.emptyResponseMessage');

@@ -580,6 +580,35 @@ describe('ProjectView API empty response handling', () => {
     expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
   });
 
+  it('keeps a run succeeded when tool-call-only text accompanies a newly produced file', async () => {
+    const producedFile = {
+      name: 'landing-page.html',
+      path: 'landing-page.html',
+      kind: 'html',
+      mime: 'text/html',
+      size: 2048,
+      mtime: 2,
+    };
+    mockedFetchProjectFiles
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([producedFile] as never);
+
+    const rawToolCall = '<tool_call>do-something</tool_call>';
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
+      handlers.onDelta(rawToolCall);
+      await handlers.onDone(rawToolCall);
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+    expect(hasSavedAssistantMessage((message) => message.runStatus === 'failed')).toBe(false);
+  });
+
   it('opens the real HTML page instead of saving a pointer artifact as the preview entry', async () => {
     const realPage = {
       name: 'worker-edition-v2.html',
