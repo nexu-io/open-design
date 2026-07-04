@@ -9,7 +9,7 @@ import type {
   ObjectManifestCompleteness,
 } from './langfuse-trace.js';
 import { INPUT_MAX_BYTES } from './langfuse-trace.js';
-import { mimeFor, readProjectFile, resolveProjectFilePath } from './projects.js';
+import { mimeFor, readProjectFile, resolveProjectFilePath } from './project/index.js';
 
 const OBJECT_RELAY_MARKER_HEADER = 'X-Open-Design-Telemetry';
 const OBJECT_RELAY_MARKER_VALUE = 'object-ingestion-v1';

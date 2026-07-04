@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { normalizeArtifactRuntimeImports } from '../../src/artifacts/runtime-compat.js';
-import { writeProjectFile } from '../../src/projects.js';
+import { writeProjectFile } from '../../src/project/index.js';
 
 const brokenReactMotionHtml = `<!doctype html>
 <html>

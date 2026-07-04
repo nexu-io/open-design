@@ -11,7 +11,7 @@
 // a subdirectory in the desired name must survive name resolution.
 
 import { describe, expect, it } from 'vitest';
-import { sanitizeName, sanitizePath } from '../src/projects.js';
+import { sanitizeName, sanitizePath } from '../src/project/index.js';
 
 describe('project upload name resolution preserves subdirectories', () => {
   it('sanitizeName flattens a subdirectory path (the pre-fix behavior)', () => {

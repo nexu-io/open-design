@@ -4,8 +4,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { getProjectFileVersionRootStats } from '../src/project-file-versions.js';
-import { projectFileWriteTestHooks } from '../src/projects.js';
+import { getProjectFileVersionRootStats } from '../src/project/index.js';
+import { projectFileWriteTestHooks } from '../src/project/index.js';
 import { startServer } from '../src/server.js';
 
 describe('project file version routes', () => {

@@ -12,7 +12,7 @@ import {
   subscribe,
   type ProjectWatchEvent,
   type ProjectWatcherOptions,
-} from '../src/project-watchers.js';
+} from '../src/project/index.js';
 
 type WatcherFactoryOptions = Required<Pick<ProjectWatcherOptions, 'ignored' | 'awaitWriteFinish'>>;
 
@@ -288,7 +288,7 @@ describe('project-watchers (real chokidar)', () => {
     // Without an 'error' listener, transient FS faults (ENOSPC, EPERM,
     // EMFILE on saturated inotify watches) would surface as unhandled
     // exceptions and could crash the daemon — taking down all routes.
-    const { _internalWatcherForTests } = await import('../src/project-watchers.js');
+    const { _internalWatcherForTests } = await import('../src/project/index.js');
     const { root, projectId } = await makeProjectsRoot();
     const events: ProjectWatchEvent[] = [];
     const sub = subscribe(root, projectId, recordEvent(events), FAST_WATCH_OPTIONS);

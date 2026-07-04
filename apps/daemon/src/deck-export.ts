@@ -11,7 +11,7 @@ import type { DesktopRenderSlidesInput } from '@open-design/sidecar-proto';
 type PptxInstance = InstanceType<typeof import('pptxgenjs').default>;
 const PptxGenJS = PptxGenJSModule.default as unknown as { new (): PptxInstance };
 
-import { readProjectFile } from './projects.js';
+import { readProjectFile } from './project/index.js';
 
 export interface BuildDeckRenderInputOptions {
   daemonUrl: string;

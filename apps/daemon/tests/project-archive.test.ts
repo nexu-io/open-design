@@ -5,7 +5,7 @@ import path from 'node:path';
 import JSZip from 'jszip';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { buildProjectArchive } from '../src/projects.js';
+import { buildProjectArchive } from '../src/project/index.js';
 
 describe('buildProjectArchive', () => {
   let projectsRoot = '';

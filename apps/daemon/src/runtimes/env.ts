@@ -8,7 +8,7 @@ import { resolveProjectRelativePath } from '../home-expansion.js';
 import { expandConfiguredEnv } from './paths.js';
 import { resolveAmrOpenCodeExecutable } from './executables.js';
 import { amrVelaProfileEnv } from '../integrations/vela-profile.js';
-import { resolveProjectRootFromNestedModule } from '../project-root.js';
+import { resolveProjectRootFromNestedModule } from '../project/index.js';
 import {
   applySandboxRuntimeEnv,
   isSandboxModeEnabled,

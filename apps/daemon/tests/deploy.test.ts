@@ -41,7 +41,7 @@ import {
   writeVercelConfig,
 } from '../src/deploy.js';
 import { closeDatabase, getDeployment, insertProject, openDatabase, upsertDeployment } from '../src/db.js';
-import { ensureProject } from '../src/projects.js';
+import { ensureProject } from '../src/project/index.js';
 
 async function setupProject() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-test-'));

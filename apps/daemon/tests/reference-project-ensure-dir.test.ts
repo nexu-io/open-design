@@ -16,7 +16,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ensureReferencedProjectDir } from '../src/routes/project/index.js';
-import { ensureProject } from '../src/projects.js';
+import { ensureProject } from '../src/project/index.js';
 
 const tempDirs: string[] = [];
 

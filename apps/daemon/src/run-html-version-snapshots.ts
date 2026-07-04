@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import type { ProjectFileVersionPromptSource } from '@open-design/contracts';
 
-import { ensureCurrentProjectFileVersion } from './project-file-versions.js';
+import { ensureCurrentProjectFileVersion } from './project/index.js';
 import type { RunArtifactDiff } from './run-artifact-fs.js';
 
 export interface AiHtmlVersionSnapshotInput {

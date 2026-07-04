@@ -5,7 +5,7 @@ import type {
   ProjectMetadata,
 } from '@open-design/contracts';
 import { load } from 'cheerio';
-import { ensureProject } from '../projects.js';
+import { ensureProject } from '../project/index.js';
 
 const MAX_ENTRY_BYTES = 20 * 1024 * 1024;
 const MAX_COPY_BYTES = 160 * 1024 * 1024;

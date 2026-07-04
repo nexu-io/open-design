@@ -30,7 +30,7 @@ import {
   aihubmixOriginFromBase,
   classifyAIHubMixModel,
 } from '../integrations/aihubmix.js';
-import { isSafeId as isSafeProjectId } from '../projects.js';
+import { isSafeId as isSafeProjectId } from '../project/index.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateBaseUrlResolved } from '../connectionTest.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';

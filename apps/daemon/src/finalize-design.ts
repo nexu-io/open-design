@@ -39,7 +39,7 @@ import {
   reconcileHtmlArtifactManifest,
   resolveProjectDir,
   validateProjectPath,
-} from './projects.js';
+} from './project/index.js';
 import { exportProjectTranscript } from './transcript-export.js';
 import { googleGenerateContentUrl } from './integrations/google-models.js';
 

@@ -1,11 +1,15 @@
 // @ts-nocheck
-// Project files registry. Each project is a folder under
-// <projectRoot>/.od/projects/<projectId>/. The frontend's project list
-// (localStorage) carries metadata; this module is the single owner of the
-// on-disk content (HTML artifacts, sketches, uploaded images, pasted text).
-//
-// All paths flowing in from HTTP handlers are validated against the project
-// directory to prevent path traversal — see resolveSafe().
+/** @module core/projects
+ * Project files registry. Each project is a folder under
+ * `<projectRoot>/.od/projects/<projectId>/`. The frontend's project list
+ * (localStorage) carries metadata; this module is the single owner of the
+ * on-disk content (HTML artifacts, sketches, uploaded images, pasted text).
+ *
+ * All paths flowing in from HTTP handlers are validated against the project
+ * directory to prevent path traversal — see resolveSafe().
+ * Core kernel file: imports only same-subdir ignored-dirs.ts and daemon modules
+ * outside the project domain (artifacts/, sandbox-mode, workspace-contract) — never a sibling subdirectory.
+ */
 
 import { link, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -14,43 +18,52 @@ import {
   inferLegacyManifest,
   parsePersistedManifest,
   validateArtifactManifestInput,
-} from './artifacts/manifest.js';
+} from '../../artifacts/manifest.js';
 import {
   ArtifactRegressionError,
   STUB_GUARDED_MANIFEST_KINDS,
   evaluateArtifactStubGuard,
   readArtifactStubGuardConfigFromEnv,
-} from './artifacts/stub-guard.js';
+} from '../../artifacts/stub-guard.js';
 import {
   assertArtifactPublicationAllowed,
   isPublicationGuardedArtifactKind,
-} from './artifacts/publication-guard.js';
-import { normalizeArtifactRuntimeImports } from './artifacts/runtime-compat.js';
-import { isIgnoredProjectDirName } from './project-ignored-dirs.js';
+} from '../../artifacts/publication-guard.js';
+import { normalizeArtifactRuntimeImports } from '../../artifacts/runtime-compat.js';
+import { isIgnoredProjectDirName } from './ignored-dirs.js';
 import {
   isSandboxImportedProjectRootAllowed,
   isSandboxModeEnabled,
   SANDBOX_IMPORTED_PROJECT_UNAVAILABLE_MESSAGE,
-} from './sandbox-mode.js';
-import { isOrchestratorScratchWorkspace } from './workspace-contract.js';
+} from '../../sandbox-mode.js';
+import { isOrchestratorScratchWorkspace } from '../../workspace-contract.js';
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
 const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.file-versions', '.live-artifacts']);
 const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
 const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';
+/** Clock-skew grace applied when deciding whether a file was touched by an agent run (see {@link isRunTouchedProjectFile}). */
 export const RUN_ARTIFACT_RECONCILE_MTIME_GRACE_MS = 1000;
+/** Test seam: lets rename tests inject a fault between path resolution and the commit of a file rename. */
 export const projectFileRenameTestHooks = {
   beforeCommit: null as null | ((paths: { source: string; target: string }) => Promise<void> | void),
 };
+/** Test seam: invoked after a project file write commits, before the manifest sidecar is persisted. */
 export const projectFileWriteTestHooks = {
   afterCommit: null as null | ((write: { safeName: string; target: string; body: Buffer | string }) => Promise<void> | void),
 };
 
+/**
+ * True when a file's mtime falls at-or-after a run's start time, with a small
+ * grace window so filesystem timestamp granularity can't misclassify a file
+ * the run just wrote.
+ */
 export function isRunTouchedProjectFile(fileMtimeMs, runStartTimeMs) {
   if (!Number.isFinite(fileMtimeMs) || !Number.isFinite(runStartTimeMs)) return false;
   return fileMtimeMs + RUN_ARTIFACT_RECONCILE_MTIME_GRACE_MS >= runStartTimeMs;
 }
 
+/** @internal True when any segment of a project-relative path is an ignored directory name. */
 function containsIgnoredProjectDirSegment(name: string): boolean {
   return name
     .split('/')
@@ -58,11 +71,23 @@ function containsIgnoredProjectDirSegment(name: string): boolean {
     .some((segment) => isIgnoredProjectDirName(segment));
 }
 
+/**
+ * The standard managed directory for a project id under `projectsRoot`.
+ * Unlike {@link resolveProjectDir}, this never consults metadata — use it only
+ * where a managed (non-imported) project is guaranteed.
+ *
+ * @throws Error when the id fails {@link isSafeId}.
+ */
 export function projectDir(projectsRoot, projectId) {
   if (!isSafeId(projectId)) throw new Error('invalid project id');
   return path.join(projectsRoot, projectId);
 }
 
+/**
+ * Raised when sandbox mode blocks access to a folder-imported project whose
+ * external root is outside the sandbox allowlist. Routes map its `code` to a
+ * user-facing unavailability response.
+ */
 export class SandboxImportedProjectError extends Error {
   code = 'SANDBOX_IMPORTED_PROJECT_UNAVAILABLE';
 
@@ -72,11 +97,18 @@ export class SandboxImportedProjectError extends Error {
   }
 }
 
+/** @internal True when project metadata carries an absolute external `baseDir` (folder-imported project). */
 function hasExternalProjectRoot(metadata?) {
   if (typeof metadata?.baseDir !== 'string') return false;
   return path.isAbsolute(path.normalize(metadata.baseDir));
 }
 
+/**
+ * Enforces the sandbox-mode rule that an imported project's external root must
+ * be allowlisted (orchestrator scratch workspaces are exempt).
+ *
+ * @throws SandboxImportedProjectError when the root is not available.
+ */
 export function assertSandboxProjectRootAvailable(metadata?) {
   if (
     isSandboxModeEnabled(process.env) &&
@@ -88,6 +120,7 @@ export function assertSandboxProjectRootAvailable(metadata?) {
   }
 }
 
+/** @internal Whether file operations should target the external `baseDir` instead of the managed path. */
 function usesExternalProjectRoot(metadata?) {
   if (!hasExternalProjectRoot(metadata)) return false;
   if (isOrchestratorScratchWorkspace(metadata)) return true;
@@ -95,9 +128,14 @@ function usesExternalProjectRoot(metadata?) {
   return isSandboxImportedProjectRootAllowed(metadata.baseDir);
 }
 
-// Returns the folder a project's files live in. For git-linked projects
-// (metadata.baseDir set), this is the user's own folder. Otherwise falls
-// back to the standard computed path under projectsRoot.
+/**
+ * Returns the folder a project's files live in. For git-linked projects
+ * (metadata.baseDir set), this is the user's own folder. Otherwise falls
+ * back to the standard computed path under projectsRoot.
+ *
+ * @param opts.allowUnavailableSandboxImportedProject Skip the sandbox availability assertion.
+ * @throws SandboxImportedProjectError when sandbox mode blocks the external root.
+ */
 export function resolveProjectDir(projectsRoot, projectId, metadata?, opts = {}) {
   if (!opts.allowUnavailableSandboxImportedProject) {
     assertSandboxProjectRootAvailable(metadata);
@@ -109,6 +147,12 @@ export function resolveProjectDir(projectsRoot, projectId, metadata?, opts = {})
   return path.join(projectsRoot, projectId);
 }
 
+/**
+ * Resolves a project's directory and creates it when it is daemon-managed.
+ * Git-linked folders already exist; mkdir is skipped there to avoid side-effects.
+ *
+ * @returns The absolute project directory.
+ */
 export async function ensureProject(projectsRoot, projectId, metadata?) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   // Git-linked folders already exist; skip mkdir to avoid side-effects.
@@ -118,6 +162,13 @@ export async function ensureProject(projectsRoot, projectId, metadata?) {
   return dir;
 }
 
+/**
+ * Recursively lists a project's visible files (newest first), skipping
+ * dotfiles, ignored dependency/build trees, and `.artifact.json` sidecars.
+ * Each entry carries size/mtime/kind/mime plus any artifact manifest.
+ *
+ * @param opts.since Epoch ms; when set, only files modified strictly after it are returned.
+ */
 export async function listFiles(projectsRoot, projectId, opts = {}) {
   const metadata = opts?.metadata;
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
@@ -135,6 +186,10 @@ export async function listFiles(projectsRoot, projectId, opts = {}) {
   return out;
 }
 
+/**
+ * Recursively lists a project's visible folders (sorted by name), applying the
+ * same dotfile/ignored-directory filtering as {@link listFiles}.
+ */
 export async function listProjectFolders(projectsRoot, projectId, opts = {}) {
   const metadata = opts?.metadata;
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
@@ -144,6 +199,7 @@ export async function listProjectFolders(projectsRoot, projectId, opts = {}) {
   return out;
 }
 
+/** @internal Depth-first folder walk feeding {@link listProjectFolders}; tolerates a vanished directory (ENOENT). */
 async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) => boolean) {
   let entries = [];
   try {
@@ -170,6 +226,13 @@ async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) =
   }
 }
 
+/**
+ * Creates a folder (and parents) inside the project sandbox from a raw
+ * user-supplied name, sanitizing each segment and confining the target with
+ * the symlink-aware resolver.
+ *
+ * @returns A dir-shaped listing entry for the created folder.
+ */
 export async function createProjectFolder(projectsRoot, projectId, name, metadata?) {
   const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
@@ -190,11 +253,13 @@ export async function createProjectFolder(projectsRoot, projectId, name, metadat
   };
 }
 
-// Resolve (and create) a subdirectory under a project root, confined to the
-// project sandbox. Returns the absolute directory plus the sanitized,
-// forward-slash relative path ('' when no subdir was requested). Used by the
-// upload route so attachments dropped/picked while viewing a folder land in
-// that folder instead of the project root.
+/**
+ * Resolve (and create) a subdirectory under a project root, confined to the
+ * project sandbox. Returns the absolute directory plus the sanitized,
+ * forward-slash relative path ('' when no subdir was requested). Used by the
+ * upload route so attachments dropped/picked while viewing a folder land in
+ * that folder instead of the project root.
+ */
 export async function ensureProjectSubdir(projectsRoot, projectId, subdir, metadata?) {
   const dir = await ensureProject(projectsRoot, projectId, metadata);
   const raw = typeof subdir === 'string' ? subdir.trim() : '';
@@ -205,9 +270,13 @@ export async function ensureProjectSubdir(projectsRoot, projectId, subdir, metad
   return { absDir: target, relDir };
 }
 
-// Recursively delete a folder (and everything under it) within the project
-// sandbox. Refuses to delete the project root itself. resolveSafeReal confines
-// the target to the project tree even across descendant symlinks.
+/**
+ * Recursively delete a folder (and everything under it) within the project
+ * sandbox. Refuses to delete the project root itself. resolveSafeReal confines
+ * the target to the project tree even across descendant symlinks.
+ *
+ * @throws EINVAL for the project root; ENOTDIR when the target is not a folder.
+ */
 export async function deleteProjectFolder(projectsRoot, projectId, name, metadata?) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
@@ -227,10 +296,12 @@ export async function deleteProjectFolder(projectsRoot, projectId, name, metadat
   await rm(target, { recursive: true, force: true });
 }
 
-// Best-effort entry-file detector — looks for index.html at the root,
-// then any *.html file. Returns null if nothing obvious is found, in
-// which case the project simply opens to the file panel with no
-// auto-selected tab.
+/**
+ * Best-effort entry-file detector — looks for index.html at the root,
+ * then any *.html file. Returns null if nothing obvious is found, in
+ * which case the project simply opens to the file panel with no
+ * auto-selected tab.
+ */
 export async function detectEntryFile(dir: string): Promise<string | null> {
   try {
     await stat(path.join(dir, 'index.html'));
@@ -244,6 +315,7 @@ export async function detectEntryFile(dir: string): Promise<string | null> {
   return null;
 }
 
+/** @internal Depth-first file walk feeding {@link listFiles}; attaches artifact manifests and tolerates ENOENT. */
 async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => boolean, projectRoot = dir) {
   let entries = [];
   try {
@@ -280,12 +352,17 @@ async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => 
   }
 }
 
-// Build a ZIP of every file under the project directory (or under `root`,
-// if it points at a subdirectory). Mirrors listFiles' filtering — dotfiles
-// and `.artifact.json` sidecars are excluded — so the archive matches what
-// the user sees in the file panel. Used by the "Download as .zip" share
-// menu item, which exports the user's actual project tree (e.g. the
-// uploaded `ui-design/` folder), not just the rendered HTML.
+/**
+ * Build a ZIP of every file under the project directory (or under `root`,
+ * if it points at a subdirectory). Mirrors listFiles' filtering — dotfiles
+ * and `.artifact.json` sidecars are excluded — so the archive matches what
+ * the user sees in the file panel. Used by the "Download as .zip" share
+ * menu item, which exports the user's actual project tree (e.g. the
+ * uploaded `ui-design/` folder), not just the rendered HTML. Injects
+ * DESIGN-HANDOFF.md and DESIGN-MANIFEST.json companions when absent.
+ *
+ * @returns `{ buffer, baseName }` — the ZIP bytes and the subdirectory basename ('' for full-project archives).
+ */
 export async function buildProjectArchive(projectsRoot, projectId, root, metadata?) {
   const projectRoot = resolveProjectDir(projectsRoot, projectId, metadata);
   let archiveRoot = projectRoot;
@@ -352,6 +429,12 @@ export async function buildProjectArchive(projectsRoot, projectId, root, metadat
   return { buffer, baseName: archiveBaseName };
 }
 
+/**
+ * Builds a ZIP of an explicit file selection with strict all-or-nothing
+ * semantics: any hidden segment, sidecar, symlink (at any path level), or
+ * missing/non-regular file rejects the whole request (BAD_REQUEST with the
+ * per-file reasons attached).
+ */
 export async function buildBatchArchive(projectsRoot, projectId, fileNames, metadata?) {
   const projectRoot = resolveProjectDir(projectsRoot, projectId, metadata);
   const zip = new JSZip();
@@ -469,6 +552,7 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
   return { buffer, baseName: '' };
 }
 
+/** @internal Archive walk mirroring {@link collectFiles} filtering, without manifest lookups. */
 async function collectArchiveEntries(dir, relDir, out) {
   let entries = [];
   try {
@@ -493,6 +577,7 @@ async function collectArchiveEntries(dir, relDir, out) {
   }
 }
 
+/** @internal Adds the generated DESIGN-HANDOFF.md to the archive unless the project ships its own. */
 function addDesignHandoff(zip, entries, projectLabel) {
   if (entries.some((entry) => entry.relPath === DESIGN_HANDOFF_FILENAME)) return;
   zip.file(DESIGN_HANDOFF_FILENAME, buildDesignHandoff(entries, projectLabel), {
@@ -501,6 +586,7 @@ function addDesignHandoff(zip, entries, projectLabel) {
   });
 }
 
+/** @internal Adds the generated DESIGN-MANIFEST.json to the archive unless the project ships its own. */
 function addDesignManifest(zip, entries, projectLabel) {
   if (entries.some((entry) => entry.relPath === DESIGN_MANIFEST_FILENAME)) return;
   zip.file(DESIGN_MANIFEST_FILENAME, buildDesignManifest(entries, projectLabel), {
@@ -516,10 +602,12 @@ function addDesignManifest(zip, entries, projectLabel) {
 // deliverables and must not be dropped from manifest screens.
 const FRAME_WRAPPER_FILE_RE = /(^|\/)(frames?\/|device-frames?\/)|(^|\/)(browser-chrome|device-frame)\.html?$/i;
 
+/** @internal True for preview-chrome wrapper HTML (frames/ dirs, browser-chrome/device-frame templates). */
 function isFrameWrapperHtmlFile(file: string): boolean {
   return FRAME_WRAPPER_FILE_RE.test(file);
 }
 
+/** @internal Buckets archive entries by role (html/screens/css/js/assets) and picks the entry file. */
 function projectFileMap(entries) {
   const files = entries.map((entry) => entry.relPath).sort((a, b) => a.localeCompare(b));
   const htmlFiles = files.filter((name) => /\.html?$/i.test(name));
@@ -536,6 +624,7 @@ function projectFileMap(entries) {
   return { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile };
 }
 
+/** @internal Renders the machine-readable DESIGN-MANIFEST.json body for an archive. */
 function buildDesignManifest(entries, projectLabel) {
   const { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = projectFileMap(entries);
   const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
@@ -619,6 +708,7 @@ function buildDesignManifest(entries, projectLabel) {
   }, null, 2);
 }
 
+/** @internal Renders the human-readable DESIGN-HANDOFF.md body for an archive. */
 function buildDesignHandoff(entries, projectLabel) {
   const { files, htmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = projectFileMap(entries);
   const accentLikelyBrandLed =
@@ -720,6 +810,11 @@ ${list(assetFiles)}
 `;
 }
 
+/**
+ * Reads a project file into memory through the symlink-aware resolver,
+ * returning its bytes plus normalized listing metadata (path, size, mtime,
+ * mime, kind, artifact manifest).
+ */
 export async function readProjectFile(projectsRoot, projectId, name, metadata?) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
@@ -741,8 +836,10 @@ export async function readProjectFile(projectsRoot, projectId, name, metadata?) 
   };
 }
 
-// Like readProjectFile but skips loading the file content into memory.
-// Used by the media streaming endpoint so large video files are never buffered.
+/**
+ * Like readProjectFile but skips loading the file content into memory.
+ * Used by the media streaming endpoint so large video files are never buffered.
+ */
 export async function resolveProjectFilePath(projectsRoot, projectId, name, metadata?) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
@@ -759,6 +856,16 @@ export async function resolveProjectFilePath(projectsRoot, projectId, name, meta
   };
 }
 
+/**
+ * Writes a project file inside the sandbox, the single choke-point every
+ * artifact write flows through: normalizes runtime imports, enforces the
+ * publication guard and stub-regression guard for guarded artifact kinds,
+ * persists a validated `.artifact.json` sidecar when a manifest is supplied,
+ * and honors `overwrite: false` with EEXIST.
+ *
+ * @returns The written file's listing entry (plus `stubGuardWarning` in warn mode).
+ * @throws ArtifactRegressionError when the stub guard rejects the write.
+ */
 export async function writeProjectFile(
   projectsRoot,
   projectId,
@@ -859,10 +966,20 @@ export async function writeProjectFile(
   return result;
 }
 
+/** @internal Sidecar filename convention: `<file>.artifact.json`. */
 function artifactManifestNameFor(name) {
   return `${name}.artifact.json`;
 }
 
+/**
+ * Ensures an HTML file that appeared on disk (e.g. written by an agent run
+ * outside writeProjectFile) has an artifact manifest: returns the existing
+ * sidecar when present, otherwise infers a legacy manifest, persists it
+ * flagged `inferred`/`reconciled`, and returns it. Vite dev entry HTML and
+ * ignored-directory paths are deliberately skipped.
+ *
+ * @returns The manifest, or `null` when the file is not a reconcilable HTML artifact.
+ */
 export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, name, metadata?) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const safeName = validateProjectPath(name);
@@ -922,6 +1039,7 @@ export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, nam
   return validated.value;
 }
 
+/** @internal Reads the sidecar manifest for a path (skipping ignored dirs and Vite dev HTML), falling back to legacy inference. */
 async function readManifestForPath(projectDirPath, relPath) {
   if (containsIgnoredProjectDirSegment(relPath)) return null;
   const fullPath = path.join(projectDirPath, relPath);
@@ -939,16 +1057,26 @@ async function readManifestForPath(projectDirPath, relPath) {
   return inferLegacyManifest(relPath);
 }
 
+/** @internal Parses a persisted manifest document; returns null for invalid JSON/shape. */
 function parseManifest(raw) {
   return parsePersistedManifest(raw, '');
 }
 
+/** Unlinks a single project file, resolved through the symlink-aware sandbox check. */
 export async function deleteProjectFile(projectsRoot, projectId, name, metadata?) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   await unlink(file);
 }
 
+/**
+ * Renames a project file without clobbering: the move commits via a temp path
+ * + hard-link so an existing target survives (EEXIST), then the artifact
+ * manifest sidecar is renamed alongside and every other manifest's references
+ * to the old name are rewritten. A same-name rename is a metadata no-op.
+ *
+ * @returns `{ file, oldName, newName }` with the target's fresh listing entry.
+ */
 export async function renameProjectFile(projectsRoot, projectId, fromName, toName, metadata?) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const oldName = validateProjectPath(fromName);
@@ -1029,6 +1157,12 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   };
 }
 
+/**
+ * @internal
+ * Two-phase rename through a temp path; with `noOverwrite`, commits via
+ * link() so an existing target fails with EEXIST instead of being replaced.
+ * On failure the source path is restored best-effort.
+ */
 async function renameFilePath(source, target, opts = {}) {
   const { noOverwrite = false } = opts;
   if (source === target) return;
@@ -1055,6 +1189,7 @@ async function renameFilePath(source, target, opts = {}) {
   }
 }
 
+/** @internal Allocates an unused `.od-rename-*.tmp` sibling path for the two-phase rename. */
 async function uniqueRenameTempPath(source) {
   const dir = path.dirname(source);
   const base = path.basename(source);
@@ -1072,6 +1207,7 @@ async function uniqueRenameTempPath(source) {
   throw err;
 }
 
+/** @internal Loads the old sidecar (if any) and pre-validates the target sidecar path before a rename commits. */
 async function prepareArtifactManifestRename(dir, oldName, newName) {
   const oldManifestName = artifactManifestNameFor(oldName);
   const oldManifestPath = await resolveSafeReal(dir, oldManifestName).catch((err) => {
@@ -1107,6 +1243,7 @@ async function prepareArtifactManifestRename(dir, oldName, newName) {
   return { oldManifestPath, newManifestPath: targetManifestPath, raw, oldName };
 }
 
+/** @internal Rewrites the sidecar's entry to the new name (when it pointed at the old) and moves it into place. */
 async function commitArtifactManifestRename(manifestRename, newName) {
   if (!manifestRename) return;
   const { oldManifestPath, newManifestPath, raw, oldName } = manifestRename;
@@ -1129,6 +1266,7 @@ async function commitArtifactManifestRename(manifestRename, newName) {
   await renameFilePath(oldManifestPath, newManifestPath, { noOverwrite: true });
 }
 
+/** @internal Sweeps every other manifest in the project and rewrites entry/primary/supportingFiles refs to the renamed file. */
 async function updateArtifactManifestRefsForRename(dir, oldName, newName) {
   const manifests = [];
   await collectArtifactManifestFiles(dir, '', manifests);
@@ -1158,6 +1296,7 @@ async function updateArtifactManifestRefsForRename(dir, oldName, newName) {
   }
 }
 
+/** @internal Recursively collects every `.artifact.json` sidecar in the project (skipping hidden dirs). */
 async function collectArtifactManifestFiles(dir, relDir, out) {
   let entries = [];
   try {
@@ -1180,6 +1319,7 @@ async function collectArtifactManifestFiles(dir, relDir, out) {
   }
 }
 
+/** @internal Detects a Vite dev-server index.html (module script into /src/ + vite config or dependency) that must not be treated as an artifact. */
 async function isViteDevHtmlEntry(projectDirPath, safeName, targetPath) {
   if (!/(^|\/)index\.html?$/i.test(safeName)) return false;
   let body = '';
@@ -1216,12 +1356,14 @@ async function isViteDevHtmlEntry(projectDirPath, safeName, targetPath) {
   }
 }
 
+/** @internal The project file a sidecar belongs to (strips `.artifact.json`), or null for non-sidecars. */
 function ownerNameForArtifactManifest(manifestName) {
   const suffix = '.artifact.json';
   if (!manifestName.endsWith(suffix)) return null;
   return manifestName.slice(0, -suffix.length);
 }
 
+/** @internal Rewrites a manifest's entry/primary/supportingFiles refs from oldName to newName; reports whether anything changed. */
 function rewriteArtifactManifestRenameRefs(manifest, { ownerName, oldName, newName }) {
   let changed = false;
   const next = { ...manifest };
@@ -1256,6 +1398,7 @@ function rewriteArtifactManifestRenameRefs(manifest, { ownerName, oldName, newNa
   return { changed, manifest: next };
 }
 
+/** @internal Rewrites one manifest ref (project-root or owner-relative form) when it resolves to the renamed file. */
 function rewriteManifestRefForRename(
   ref,
   ownerName,
@@ -1285,6 +1428,7 @@ function rewriteManifestRefForRename(
   return { changed: false, value: ref };
 }
 
+/** @internal Owner-relative form of a target path; falls back to the project-root form when it would escape upward. */
 function relativeManifestRefForOwner(ownerName, targetName) {
   const ownerDir = path.posix.dirname(ownerName);
   if (ownerDir === '.') return targetName;
@@ -1295,10 +1439,12 @@ function relativeManifestRefForOwner(ownerName, targetName) {
   return relative;
 }
 
+/** @internal Normalizes a ref interpreted from the project root; null when unsafe. */
 function normalizeManifestProjectRootRef(ref) {
   return normalizeManifestProjectRef(ref, '');
 }
 
+/** @internal Resolves a manifest ref against its owner's directory to a safe project-relative path; null when it escapes or is a URL/absolute. */
 function normalizeManifestProjectRef(ref, ownerName) {
   if (typeof ref !== 'string' || !ref.trim()) return null;
   const value = ref.trim().replace(/\\/g, '/');
@@ -1312,11 +1458,13 @@ function normalizeManifestProjectRef(ref, ownerName) {
   return normalized;
 }
 
+/** Deletes a managed project's entire directory tree (never applies to imported baseDir folders). */
 export async function removeProjectDir(projectsRoot, projectId) {
   const dir = projectDir(projectsRoot, projectId);
   await rm(dir, { recursive: true, force: true });
 }
 
+/** @internal String-prefix containment check: resolves a validated relative path under `dir` or throws. Symlink-blind — see resolveSafeReal. */
 function resolveSafe(dir, name) {
   const safePath = validateProjectPath(name);
   const target = path.resolve(dir, safePath);
@@ -1326,14 +1474,17 @@ function resolveSafe(dir, name) {
   return target;
 }
 
-// Symlink-aware variant of resolveSafe. resolveSafe only does string-prefix
-// validation, which is fooled by symlinks *inside* the project tree
-// (a `assets/` symlink pointing at `/Users/me/.ssh` passes the prefix
-// check because the literal path stays under dir, but the OS follows
-// the link at open() time). This helper realpath()s the resolved
-// candidate (or its existing prefix, for writes that haven't created
-// the file yet) and re-validates against the realpath of dir, so
-// descendant symlinks can't reach outside the project.
+/**
+ * @internal
+ * Symlink-aware variant of resolveSafe. resolveSafe only does string-prefix
+ * validation, which is fooled by symlinks *inside* the project tree
+ * (a `assets/` symlink pointing at `/Users/me/.ssh` passes the prefix
+ * check because the literal path stays under dir, but the OS follows
+ * the link at open() time). This helper realpath()s the resolved
+ * candidate (or its existing prefix, for writes that haven't created
+ * the file yet) and re-validates against the realpath of dir, so
+ * descendant symlinks can't reach outside the project.
+ */
 async function resolveSafeReal(dir, name) {
   const candidate = resolveSafe(dir, name);
   const rootReal = await realpath(dir).catch(() => dir);
@@ -1354,6 +1505,7 @@ async function resolveSafeReal(dir, name) {
   return real;
 }
 
+/** @internal Realpaths the longest existing ancestor of a not-yet-created path and re-appends the missing tail. */
 async function resolveExistingPrefix(p) {
   const parts = p.split(path.sep);
   for (let i = parts.length; i > 0; i--) {
@@ -1369,11 +1521,24 @@ async function resolveExistingPrefix(p) {
   return p;
 }
 
+/**
+ * Validates a raw relative path and sanitizes every segment through
+ * {@link sanitizeName}. Use for user-chosen names that must become safe paths;
+ * use {@link validateProjectPath} alone when the path must already be exact.
+ */
 export function sanitizePath(raw) {
   const normalized = validateProjectPath(raw);
   return normalized.split('/').map(sanitizeName).join('/');
 }
 
+/**
+ * Normalizes and validates a project-relative path: forward slashes, no NUL,
+ * no drive letter or leading slash, no empty/dot/dot-dot segments, and no
+ * reserved store segments (`.file-versions`, `.live-artifacts`).
+ *
+ * @returns The normalized `a/b/c` form.
+ * @throws Error('invalid file name' | 'reserved project path') on violation.
+ */
 export function validateProjectPath(raw) {
   if (typeof raw !== 'string' || !raw.trim()) {
     throw new Error('invalid file name');
@@ -1392,6 +1557,7 @@ export function validateProjectPath(raw) {
   return parts.join('/');
 }
 
+/** Non-throwing check for paths that touch reserved store segments (`.file-versions`, `.live-artifacts`). */
 export function isReservedProjectFilePath(raw) {
   try {
     const normalized = String(raw ?? '').replace(/\\/g, '/');
@@ -1401,12 +1567,14 @@ export function isReservedProjectFilePath(raw) {
   }
 }
 
-// Keep Unicode letters/digits as-is; replace path separators, control
-// characters, and reserved punctuation with underscore. Spaces collapse
-// to dashes (matches the kebab-case style used by the agent's slugs).
-// The previous ASCII-only filter collapsed every non-ASCII character to
-// '_', so a Chinese filename like '测试文档.docx' became '____.docx'
-// (issue #144).
+/**
+ * Keep Unicode letters/digits as-is; replace path separators, control
+ * characters, and reserved punctuation with underscore. Spaces collapse
+ * to dashes (matches the kebab-case style used by the agent's slugs).
+ * The previous ASCII-only filter collapsed every non-ASCII character to
+ * '_', so a Chinese filename like '测试文档.docx' became '____.docx'
+ * (issue #144).
+ */
 export function sanitizeName(raw) {
   const cleaned = String(raw ?? '')
     .replace(/[\\/]/g, '_')
@@ -1417,10 +1585,12 @@ export function sanitizeName(raw) {
   return cleaned || `file-${Date.now()}`;
 }
 
-// multer@1 decodes multipart filenames as latin1, which mangles any
-// UTF-8 bytes (Chinese, Japanese, Cyrillic, ...) the user uploads. Re-
-// decode as UTF-8 when the result round-trips back to the original
-// bytes; otherwise the source was genuine latin1 and we leave it alone.
+/**
+ * multer@1 decodes multipart filenames as latin1, which mangles any
+ * UTF-8 bytes (Chinese, Japanese, Cyrillic, ...) the user uploads. Re-
+ * decode as UTF-8 when the result round-trips back to the original
+ * bytes; otherwise the source was genuine latin1 and we leave it alone.
+ */
 export function decodeMultipartFilename(name) {
   if (!name || typeof name !== 'string') return name ?? '';
   // If any code point exceeds 0xFF the source is already a properly
@@ -1435,19 +1605,22 @@ export function decodeMultipartFilename(name) {
   return Buffer.from(utf8, 'utf8').equals(buf) ? utf8 : name;
 }
 
+/** @internal Converts an OS-separator relative path to the forward-slash project form. */
 function toProjectPath(raw) {
   return raw.split(path.sep).join('/');
 }
 
-// Validates an id string for use as a path segment under a daemon-managed
-// directory (`.od/projects/<id>`, `design-systems/<id>`, etc.). The character
-// class allows dots so ids like `my-project.v2` work, but pure-dot ids
-// (`.`, `..`, `...`) MUST be rejected — they pass the char-class check but
-// resolve to the parent directory when fed into `path.join`. Without the
-// pure-dot guard, an attacker could create a project row with id `..` (or
-// reach this code via a percent-encoded URL like `/api/projects/%2e%2e/...`
-// which Express decodes before the route handler sees it) and steer
-// finalize / write operations outside `.od/projects/`.
+/**
+ * Validates an id string for use as a path segment under a daemon-managed
+ * directory (`.od/projects/<id>`, `design-systems/<id>`, etc.). The character
+ * class allows dots so ids like `my-project.v2` work, but pure-dot ids
+ * (`.`, `..`, `...`) MUST be rejected — they pass the char-class check but
+ * resolve to the parent directory when fed into `path.join`. Without the
+ * pure-dot guard, an attacker could create a project row with id `..` (or
+ * reach this code via a percent-encoded URL like `/api/projects/%2e%2e/...`
+ * which Express decodes before the route handler sees it) and steer
+ * finalize / write operations outside `.od/projects/`.
+ */
 export function isSafeId(id) {
   if (typeof id !== 'string') return false;
   if (id.length === 0 || id.length > 128) return false;
@@ -1493,15 +1666,18 @@ const EXT_MIME = {
   '.m4a': 'audio/mp4',
 };
 
+/** Content-Type for a project file by extension; unknown extensions serve as `application/octet-stream`. */
 export function mimeFor(name) {
   const ext = path.extname(name).toLowerCase();
   return EXT_MIME[ext] || 'application/octet-stream';
 }
 
-// Parses an HTTP Range header (RFC 7233) for a single byte range.
-// Returns { start, end } for a satisfiable range, 'unsatisfiable' for a
-// 416-class range, or null if the header is absent/malformed/multi-range
-// (callers fall back to a full 200 response in the null case).
+/**
+ * Parses an HTTP Range header (RFC 7233) for a single byte range.
+ * Returns { start, end } for a satisfiable range, 'unsatisfiable' for a
+ * 416-class range, or null if the header is absent/malformed/multi-range
+ * (callers fall back to a full 200 response in the null case).
+ */
 export function parseByteRange(header, fileSize) {
   if (!header || !header.startsWith('bytes=')) return null;
   const spec = header.slice(6).trim();
@@ -1536,6 +1712,13 @@ export function parseByteRange(header, fileSize) {
   return { start, end };
 }
 
+/**
+ * Case-insensitive literal search across a project's textual files.
+ *
+ * @param opts.pattern Optional `*`-glob restricting which file names are searched.
+ * @param opts.max Result cap (default 200, hard cap 1000).
+ * @returns `{ file, line, snippet }` matches, snippets truncated to 220 chars.
+ */
 export async function searchProjectFiles(projectsRoot, projectId, query, opts = {}) {
   const max = Math.min(Number(opts.max) || 200, 1000);
   const pattern = opts.pattern || null;
@@ -1566,6 +1749,7 @@ export async function searchProjectFiles(projectsRoot, projectId, query, opts = 
   return matches;
 }
 
+/** @internal True for MIME types whose content is meaningfully line-searchable. */
 function isTextualMime(mime) {
   if (!mime) return false;
   return (
@@ -1576,6 +1760,7 @@ function isTextualMime(mime) {
   );
 }
 
+/** @internal Minimal `*`-only glob matcher for search file filters. */
 function globMatch(name, glob) {
   const re = new RegExp(
     '^' +
@@ -1588,7 +1773,7 @@ function globMatch(name, glob) {
   return re.test(name);
 }
 
-// Coarse kind buckets the frontend uses to pick a viewer.
+/** Coarse kind buckets the frontend uses to pick a viewer. */
 export function kindFor(name) {
   // Editable sketches use a compound extension so they slot into the
   // "sketch" bucket while still being valid JSON on disk.

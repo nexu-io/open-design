@@ -11,7 +11,7 @@ import {
   respondSurface as respondSurfaceRow,
   revokeProjectSurface,
 } from '../genui/index.js';
-import { resolveProjectDir } from '../projects.js';
+import { resolveProjectDir } from '../project/index.js';
 
 export interface RegisterGenuiRoutesDeps {
   db: Database.Database;

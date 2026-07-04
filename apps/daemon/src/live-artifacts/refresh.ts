@@ -3,7 +3,7 @@ import { lstat, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-import { listFiles, projectDir, readProjectFile, validateProjectPath } from '../projects.js';
+import { listFiles, projectDir, readProjectFile, validateProjectPath } from '../project/index.js';
 import type { BoundedJsonObject, BoundedJsonValue, LiveArtifact, LiveArtifactRefreshSourceMetadata, LiveArtifactSource } from './schema.js';
 import { validateBoundedJsonObject } from './schema.js';
 

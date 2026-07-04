@@ -11,7 +11,7 @@ import {
   VERCEL_PROVIDER_ID,
   SAVED_CLOUDFLARE_TOKEN_MASK,
 } from '../src/deploy.js';
-import { ensureProject } from '../src/projects.js';
+import { ensureProject } from '../src/project/index.js';
 import { startServer } from '../src/server.js';
 
 describe('deploy provider routes', () => {

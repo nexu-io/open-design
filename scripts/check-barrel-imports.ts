@@ -64,6 +64,13 @@ export const CAPABILITY_BARREL_DOMAINS: CapabilityBarrelDomain[] = [
       ['jobs', 'catalog'],
     ],
   },
+  {
+    name: 'project',
+    root: 'apps/daemon/src/project',
+    subdirs: ['core', 'locations', 'watchers', 'versions'],
+    foundation: 'core',
+    allowedEdges: [],
+  },
 ];
 
 export type BarrelImportViolation = {

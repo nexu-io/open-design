@@ -18,7 +18,7 @@ import { randomBytes } from 'node:crypto';
 import { assertExternalAssetUrl, assertAndFetchExternalAsset } from './connectionTest.js';
 import { resolveProviderConfig } from './media/config.js';
 import { IMAGE_MODELS } from './media/models.js';
-import { ensureProject } from './projects.js';
+import { ensureProject } from './project/index.js';
 import {
   AIHUBMIX_DEFAULT_BASE_URL,
   aihubmixHeaders,

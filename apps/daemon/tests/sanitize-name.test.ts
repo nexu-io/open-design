@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeMultipartFilename, sanitizeName } from '../src/projects.js';
+import { decodeMultipartFilename, sanitizeName } from '../src/project/index.js';
 
 describe('sanitizeName', () => {
   it('keeps ASCII letters, digits, dot, dash, underscore as-is', () => {

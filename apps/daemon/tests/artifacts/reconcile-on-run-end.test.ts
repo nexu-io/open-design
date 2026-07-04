@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { closeDatabase, insertProject, openDatabase } from '../../src/db.js';
-import { isRunTouchedProjectFile, listFiles, reconcileHtmlArtifactManifest, writeProjectFile } from '../../src/projects.js';
+import { isRunTouchedProjectFile, listFiles, reconcileHtmlArtifactManifest, writeProjectFile } from '../../src/project/index.js';
 
 const PROJECT_ID = 'reconcile-test';
 let tempDir = null;

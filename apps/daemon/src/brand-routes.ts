@@ -25,7 +25,7 @@ import {
   listProjectsAwaitingInput,
   type insertProject,
 } from './db.js';
-import { resolveProjectDir } from './projects.js';
+import { resolveProjectDir } from './project/index.js';
 import {
   continueBrandExtraction,
   extractBrandFromHtml,

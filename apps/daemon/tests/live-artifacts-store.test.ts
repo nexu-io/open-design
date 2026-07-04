@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { deleteProjectFile, listFiles, readProjectFile, writeProjectFile } from '../src/projects.js';
+import { deleteProjectFile, listFiles, readProjectFile, writeProjectFile } from '../src/project/index.js';
 import {
   acquireLiveArtifactRefreshLock,
   appendLiveArtifactRefreshLogEntry,

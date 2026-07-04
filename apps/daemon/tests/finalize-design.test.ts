@@ -20,7 +20,7 @@ import {
   openDatabase,
   upsertMessage,
 } from '../src/db.js';
-import { isSafeId, writeProjectFile } from '../src/projects.js';
+import { isSafeId, writeProjectFile } from '../src/project/index.js';
 import {
   appendVersionedApiPath,
   buildSynthesisPrompt,

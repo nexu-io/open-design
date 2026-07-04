@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { projectFileRenameTestHooks } from '../src/projects.js';
+import { projectFileRenameTestHooks } from '../src/project/index.js';
 import { startServer } from '../src/server.js';
 
 describe('project file rename route', () => {

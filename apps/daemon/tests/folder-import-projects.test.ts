@@ -10,7 +10,7 @@ import {
   listFiles,
   resolveProjectDir,
   SandboxImportedProjectError,
-} from '../src/projects.js';
+} from '../src/project/index.js';
 
 function withSandboxMode<T>(run: () => T): T {
   const previous = process.env.OD_SANDBOX_MODE;

@@ -24,7 +24,7 @@ import {
   readProjectFileVersion,
   renameProjectFileVersionStore,
   withProjectFileVersionLock,
-} from '../../project-file-versions.js';
+} from '../../project/index.js';
 import {
   createUserDesignSystem,
   deleteUserDesignSystem,
@@ -41,7 +41,7 @@ import {
 import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
 import { listSkills } from '../../skills.js';
-import { isSafeId } from '../../projects.js';
+import { isSafeId } from '../../project/index.js';
 import {
   BUILT_IN_PROJECT_LOCATION_ID,
   allProjectLocations,
@@ -49,7 +49,7 @@ import {
   ensureProjectLocation,
   scanProjectLocation,
   writeProjectManifest,
-} from '../../project-locations.js';
+} from '../../project/index.js';
 import { auditDesignSystemPackage } from '../../tools-connectors-cli.js';
 import { parseOrchestratorWorkspace } from '../../workspace-contract.js';
 import { registerProjectConversationRoutes } from './conversations.js';

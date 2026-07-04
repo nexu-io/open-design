@@ -8,7 +8,7 @@ import {
   isPublicationGuardedArtifactKind,
   shouldBlockArtifactPublication,
 } from '../../src/artifacts/publication-guard.js';
-import { listFiles, writeProjectFile } from '../../src/projects.js';
+import { listFiles, writeProjectFile } from '../../src/project/index.js';
 
 const deckManifest = {
   kind: 'deck',

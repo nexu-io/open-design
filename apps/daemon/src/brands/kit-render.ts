@@ -13,7 +13,7 @@ import path from 'node:path';
 
 import type { ProjectMetadata } from '@open-design/contracts';
 
-import { resolveProjectDir, writeProjectFile } from '../projects.js';
+import { resolveProjectDir, writeProjectFile } from '../project/index.js';
 import { fontFaceCss, readFontManifest } from './fonts.js';
 import { brandKitCopy, localizedBrandKitAssetDefs } from './kit-i18n.js';
 

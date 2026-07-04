@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { buildCreateArtifactRequestBody, createProjectArtifactFile } from '../../src/artifacts/create.js';
-import { listFiles, writeProjectFile } from '../../src/projects.js';
+import { listFiles, writeProjectFile } from '../../src/project/index.js';
 
 describe('normal artifact create helper', () => {
   it('builds the non-overwrite HTTP request body used by MCP and CLI', () => {

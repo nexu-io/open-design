@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { listFiles } from '../src/projects.js';
+import { listFiles } from '../src/project/index.js';
 
 const tempRoots: string[] = [];
 

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import JSZip from 'jszip';
-import { kindFor } from './projects.js';
+import { kindFor } from './project/index.js';
 
 const execFileP = promisify(execFile);
 const MAX_COMPRESSED_PREVIEW_BYTES = 10 * 1024 * 1024;

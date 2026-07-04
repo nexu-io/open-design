@@ -7,7 +7,7 @@ import type {
   DesktopExportPdfInput,
 } from '@open-design/sidecar-proto';
 
-import { readProjectFile } from './projects.js';
+import { readProjectFile } from './project/index.js';
 
 export interface BuildDesktopPdfExportInputOptions {
   daemonUrl: string;

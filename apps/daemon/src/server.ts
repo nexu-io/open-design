@@ -23,7 +23,7 @@ import {
   resolveExclusiveSurface,
 } from './prompts/system.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
-import { resolveProjectRoot } from './project-root.js';
+import { resolveProjectRoot } from './project/index.js';
 import {
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
@@ -315,7 +315,7 @@ import {
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
-import { subscribe as subscribeFileEvents } from './project-watchers.js';
+import { subscribe as subscribeFileEvents } from './project/index.js';
 import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/index.js';
 import { renderDesignSystemShowcase } from './design-systems/index.js';
@@ -464,7 +464,7 @@ import {
   resolveProjectFilePath,
   writeProjectFile,
   reconcileHtmlArtifactManifest,
-} from './projects.js';
+} from './project/index.js';
 import { validateArtifactManifestInput } from './artifacts/manifest.js';
 import { ArtifactPublicationBlockedError } from './artifacts/publication-guard.js';
 import {

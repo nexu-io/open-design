@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { parseByteRange, resolveProjectFilePath } from '../src/projects.js';
+import { parseByteRange, resolveProjectFilePath } from '../src/project/index.js';
 import { startServer } from '../src/server.js';
 
 // ---------------------------------------------------------------------------

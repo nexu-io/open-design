@@ -50,7 +50,7 @@ import {
   listFiles,
   resolveProjectDir,
   SandboxImportedProjectError,
-} from '../projects.js';
+} from '../project/index.js';
 import {
   amrUserIdForRunAnalytics,
   hasExplicitRequestedModelForAnalytics,

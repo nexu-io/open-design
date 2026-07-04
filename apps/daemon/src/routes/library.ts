@@ -45,7 +45,7 @@ import {
   writeFigmaSidecar,
 } from '../library.js';
 import { reconcileLibrary, type ReconcileLibraryResult } from '../library-sync.js';
-import { ensureProjectSubdir } from '../projects.js';
+import { ensureProjectSubdir } from '../project/index.js';
 import {
   confirmPairing,
   libraryConnectionStatus,

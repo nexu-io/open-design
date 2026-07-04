@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const projectFileReadTracker = vi.hoisted(() => ({ calls: 0 }));
 
-vi.mock('../src/projects.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../src/projects.js')>();
+vi.mock('../src/project/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/project/index.js')>();
   return {
     ...actual,
     readProjectFile: async (...args: Parameters<typeof actual.readProjectFile>) => {

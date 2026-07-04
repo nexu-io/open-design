@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { kindFor, mimeFor } from '../src/projects.js';
+import { kindFor, mimeFor } from '../src/project/index.js';
 
 // `kindFor` and `mimeFor` are the daemon's two file-classifier helpers.
 // `kindFor` returns the coarse bucket the frontend dispatches to a viewer

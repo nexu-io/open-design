@@ -1,26 +1,29 @@
-import path from 'node:path';
-import chokidar, { type FSWatcher } from 'chokidar';
-
-import { isIgnoredProjectDirName } from './project-ignored-dirs.js';
-import { projectDir, resolveProjectDir } from './projects.js';
-
-/**
+/** @module watchers
  * Refcounted per-project file watcher registry.
  *
  * Subscribers receive `{type, path, kind}` events when files inside the project
  * change on disk. The first subscribe lazy-creates a chokidar watcher; the last
  * unsubscribe closes it, so we never hold descriptors for projects no UI is
  * looking at.
+ * Depends only on core/ (directory resolution + ignored-directory policy); no sibling imports.
  */
+import path from 'node:path';
+import chokidar, { type FSWatcher } from 'chokidar';
+
+import { isIgnoredProjectDirName, projectDir, resolveProjectDir } from '../core/index.js';
 
 // Names we never want to surface as project file changes. Tested per-segment
 // against the path *relative to the watch root* so that ancestor directories
 // (e.g. the daemon's own `.od/` runtime dir, which contains every project) do
 // not accidentally match and silence every event in the tree.
 const WATCHER_ONLY_IGNORE_NAMES = new Set(['.ds_store']);
+/** Kind of filesystem change reported to subscribers. */
 export type ProjectWatchKind = 'add' | 'change' | 'unlink';
+/** Event delivered to subscribers; `path` is project-relative with forward slashes. */
 export interface ProjectWatchEvent { type: 'file-changed'; path: string; kind: ProjectWatchKind }
+/** Subscriber callback invoked for every file change inside the watched project. */
 export type ProjectWatchCallback = (evt: ProjectWatchEvent) => void;
+/** Options for {@link subscribe}; `_watcherFactory` is a test seam. */
 export interface ProjectWatcherOptions {
   ignored?: (absPath: string) => boolean;
   awaitWriteFinish?: false | { stabilityThreshold: number; pollInterval: number };
@@ -36,6 +39,15 @@ interface WatcherEntry {
 }
 type WatcherFactory = (dir: string, opts: Required<Pick<ProjectWatcherOptions, 'ignored' | 'awaitWriteFinish'>>) => WatcherEntry;
 
+/**
+ * Builds the default chokidar `ignored` predicate for a watch root: a path is
+ * ignored when any segment *relative to the root* is an ignored project
+ * directory or a watcher-only noise name (`.DS_Store`). Testing relative
+ * segments keeps ancestor directories (e.g. the daemon's own `.od/` runtime
+ * dir) from silencing every event in the tree.
+ *
+ * @param rootDir Absolute watch root the predicate is scoped to.
+ */
 export function makeIgnored(rootDir: string): (absPath: string) => boolean {
   return (absPath: string): boolean => {
     const rel = path.relative(rootDir, absPath);
@@ -47,6 +59,7 @@ export function makeIgnored(rootDir: string): (absPath: string) => boolean {
   };
 }
 
+/** Default chokidar `awaitWriteFinish` tuning: debounce events until a file has been stable for 200ms. */
 export const DEFAULT_AWAIT_WRITE_FINISH = {
   stabilityThreshold: 200,
   pollInterval: 50,
@@ -55,11 +68,21 @@ export const DEFAULT_AWAIT_WRITE_FINISH = {
 const registry = new Map<string, WatcherEntry>();
 const PREFERS_POLLING = process.env.OD_WATCHER_USE_POLLING === '1' || process.env.CHOKIDAR_USEPOLLING === '1';
 
+/**
+ * @internal
+ * True for descriptor-exhaustion errors (EMFILE/ENOSPC) where switching the
+ * watcher to polling mode can recover.
+ */
 function isPollingFallbackError(err: unknown): boolean {
   const code = (err as NodeJS.ErrnoException | undefined)?.code;
   return code === 'EMFILE' || code === 'ENOSPC';
 }
 
+/**
+ * @internal
+ * Instantiates a chokidar watcher for a project directory with the module's
+ * safety defaults (no initial events, no symlink following, optional polling).
+ */
 function createWatcher(
   dir: string,
   opts: Required<Pick<ProjectWatcherOptions, 'ignored' | 'awaitWriteFinish'>>,
@@ -80,6 +103,12 @@ function createWatcher(
   return chokidar.watch(dir, watcherOptions);
 }
 
+/**
+ * @internal
+ * Creates a registry entry: one shared chokidar watcher plus its subscriber
+ * set, ready promise, and automatic fallback-to-polling on EMFILE/ENOSPC.
+ * A throwing subscriber never poisons its siblings.
+ */
 function makeEntry(dir: string, opts: Required<Pick<ProjectWatcherOptions, 'ignored' | 'awaitWriteFinish'>>): WatcherEntry {
   let resolveReady: () => void;
   const ready = new Promise<void>((resolve) => { resolveReady = resolve; });

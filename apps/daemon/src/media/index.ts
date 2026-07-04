@@ -78,7 +78,7 @@ import {
   kindFor,
   mimeFor,
   sanitizeName,
-} from '../projects.js';
+} from '../project/index.js';
 import {
   AIHUBMIX_DEFAULT_BASE_URL,
   aihubmixHeaders,

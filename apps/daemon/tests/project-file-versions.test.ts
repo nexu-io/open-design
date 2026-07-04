@@ -10,8 +10,8 @@ import {
   markProjectFileVersionStoreDeleted,
   readProjectFileVersion,
   renameProjectFileVersionStore,
-} from '../src/project-file-versions.js';
-import { ensureProject } from '../src/projects.js';
+} from '../src/project/index.js';
+import { ensureProject } from '../src/project/index.js';
 
 describe('project file versions', () => {
   async function withProject(fn: (projectsRoot: string, projectId: string) => Promise<void>) {
