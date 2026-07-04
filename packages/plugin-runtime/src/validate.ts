@@ -41,53 +41,76 @@ export function validateManifest(value: unknown): ValidateResult {
 }
 
 export function validateSafe(manifest: PluginManifest): ValidateResult {
+  const od = manifest.od;
+  if (!od) return { ok: true, warnings: [], errors: [] };
+
+  const warnings = unknownCapabilityWarnings(od);
+  const errors = [...pipelineRepeatErrors(od), ...genuiOauthErrors(od)];
+
+  return { ok: errors.length === 0, warnings, errors };
+}
+
+type PluginOd = NonNullable<PluginManifest['od']>;
+
+// Pipeline stages with `repeat: true` must declare an `until` expression
+// (spec §10.2 hard constraint).
+function pipelineRepeatErrors(od: PluginOd): string[] {
+  const errors: string[] = [];
+  const stages = od.pipeline?.stages ?? [];
+  for (const stage of stages) {
+    if (stage.repeat && !stage.until) {
+      errors.push(`pipeline.stages[${stage.id}]: repeat=true requires an 'until' expression`);
+    }
+  }
+  return errors;
+}
+
+// Capability ids outside the v1 vocabulary land in `warnings[]` (not
+// `errors[]`) so a forward spec patch can introduce new caps without
+// breaking installs. `connector:*` caps are always allowed.
+function unknownCapabilityWarnings(od: PluginOd): string[] {
   const warnings: string[] = [];
+  const caps = od.capabilities ?? [];
+  for (const cap of caps) {
+    if (cap.startsWith('connector:')) continue;
+    if (!KNOWN_CAPABILITIES.has(cap)) {
+      warnings.push(`capability '${cap}' is not in the v1 vocabulary; doctor will surface this to the operator`);
+    }
+  }
+  return warnings;
+}
+
+// GenUI oauth surfaces must reference a connector/mcp server the plugin
+// actually declared (only enforced when the corresponding declarations
+// are present, so partial manifests stay installable).
+function genuiOauthErrors(od: PluginOd): string[] {
   const errors: string[] = [];
 
-  const od = manifest.od;
-  if (od) {
-    const stages = od.pipeline?.stages ?? [];
-    for (const stage of stages) {
-      if (stage.repeat && !stage.until) {
-        errors.push(`pipeline.stages[${stage.id}]: repeat=true requires an 'until' expression`);
+  const declaredConnectorIds = new Set<string>();
+  for (const ref of od.connectors?.required ?? []) declaredConnectorIds.add(ref.id);
+  for (const ref of od.connectors?.optional ?? []) declaredConnectorIds.add(ref.id);
+
+  const declaredMcpNames = new Set<string>();
+  for (const mcp of od.context?.mcp ?? []) {
+    if (typeof mcp.name === 'string') declaredMcpNames.add(mcp.name);
+  }
+
+  for (const surface of od.genui?.surfaces ?? []) {
+    const oauth = surface.oauth;
+    if (!oauth) continue;
+    if (oauth.route === 'connector') {
+      if (!oauth.connectorId) {
+        errors.push(`genui.surfaces[${surface.id}]: oauth.route='connector' requires connectorId`);
+      } else if (declaredConnectorIds.size > 0 && !declaredConnectorIds.has(oauth.connectorId)) {
+        errors.push(`genui.surfaces[${surface.id}]: oauth.connectorId='${oauth.connectorId}' is not in od.connectors.required/optional`);
       }
-    }
-
-    const caps = od.capabilities ?? [];
-    for (const cap of caps) {
-      if (cap.startsWith('connector:')) continue;
-      if (!KNOWN_CAPABILITIES.has(cap)) {
-        warnings.push(`capability '${cap}' is not in the v1 vocabulary; doctor will surface this to the operator`);
-      }
-    }
-
-    const declaredConnectorIds = new Set<string>();
-    for (const ref of od.connectors?.required ?? []) declaredConnectorIds.add(ref.id);
-    for (const ref of od.connectors?.optional ?? []) declaredConnectorIds.add(ref.id);
-
-    const declaredMcpNames = new Set<string>();
-    for (const mcp of od.context?.mcp ?? []) {
-      if (typeof mcp.name === 'string') declaredMcpNames.add(mcp.name);
-    }
-
-    for (const surface of od.genui?.surfaces ?? []) {
-      const oauth = surface.oauth;
-      if (!oauth) continue;
-      if (oauth.route === 'connector') {
-        if (!oauth.connectorId) {
-          errors.push(`genui.surfaces[${surface.id}]: oauth.route='connector' requires connectorId`);
-        } else if (declaredConnectorIds.size > 0 && !declaredConnectorIds.has(oauth.connectorId)) {
-          errors.push(`genui.surfaces[${surface.id}]: oauth.connectorId='${oauth.connectorId}' is not in od.connectors.required/optional`);
-        }
-      } else if (oauth.route === 'mcp') {
-        if (!oauth.mcpServerId) {
-          errors.push(`genui.surfaces[${surface.id}]: oauth.route='mcp' requires mcpServerId`);
-        } else if (declaredMcpNames.size > 0 && !declaredMcpNames.has(oauth.mcpServerId)) {
-          errors.push(`genui.surfaces[${surface.id}]: oauth.mcpServerId='${oauth.mcpServerId}' is not declared in od.context.mcp`);
-        }
+    } else if (oauth.route === 'mcp') {
+      if (!oauth.mcpServerId) {
+        errors.push(`genui.surfaces[${surface.id}]: oauth.route='mcp' requires mcpServerId`);
+      } else if (declaredMcpNames.size > 0 && !declaredMcpNames.has(oauth.mcpServerId)) {
+        errors.push(`genui.surfaces[${surface.id}]: oauth.mcpServerId='${oauth.mcpServerId}' is not declared in od.context.mcp`);
       }
     }
   }
-
-  return { ok: errors.length === 0, warnings, errors };
+  return errors;
 }
