@@ -572,6 +572,7 @@ Vollständige Architektur → [`docs/architecture.md`](../../docs/architecture.m
 - [x] Artefakt-Lint-API + 5-dimensionales Selbstkritik-Pre-Emit-Gate
 - [x] **0.8.0** — Plugin-Marktplatz-Infrastruktur (261 offizielle Plugins, Manifest-Spezifikation, Installationsskripte pro Agent)
 - [x] **0.9.0** — Open Design AMR (offizieller Model Router in die App integriert: keine Konfiguration, Ein-Klick-Anmeldung)
+- [x] **0.10.0** — All-in-one Agentic-Design-Arbeitsplatz (Lexical-Editor， interaktive Terminals， Kommentarwarteschlange， Referenztafel， 對話分叉)
 - [x] Gepackte Electron-Builds — macOS (Apple Silicon + Intel) + Windows (x64) + Linux-AppImage (optionale Spur)
 - [ ] Kommentar-Modus für chirurgische Bearbeitungen — teilweise ausgeliefert; zuverlässiges gezieltes Patchen in Arbeit
 - [ ] KI-ausgegebenes Tweaks-Panel-UX — noch nicht implementiert

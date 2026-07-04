@@ -7,6 +7,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-11
+
+🎉 **200+ PRs · 20+ contributors · 13 days** — Meet the **all-in-one Agentic design workspace**. The whole craft now lives in one window — go from a vague idea to discovering references, gathering material, editing interactively, queuing comments, polishing motion, and handing off to an editor or a Code Agent — without leaving the app. With parallel sessions, it stops feeling like one assistant and starts feeling like a local design team working for you. 🚀
+
+### Highlights
+
+- 🎨 **All-in-one Agentic design workspace.** The whole craft now lives in one window — go from a vague idea to discovering references, gathering material, editing interactively, queuing comments, polishing motion, and handing off to an editor or a Code Agent — without leaving the app. With parallel sessions, it stops feeling like one assistant and starts feeling like a local design team working for you.
+- 🤖 **Open Design AMR enhancements.** AMR cloud card shows skeleton while detection is in flight, model catalog resolved from cache instead of blocking per-run, and AMR_CLIENT_SOURCE forwarded to vela + source on wallet links.
+- 🧩 **Plugin ecosystem improvements.** Composer plugin menu & design toolbox hover preview, plugin detail "Use plugin" split menu, content-hashed preview filenames + immutable CDN caching, and pre-baked hover-pan preview clips for the gallery.
+- 💬 **Chat & workflow enhancements.** Replicate-first Use menu + send-button attention pulse, working-directory picker grants read-only local-folder awareness, and resume an interrupted run instead of restarting from scratch.
+- 🌐 **Landing page & community.** Agent design pages — rich layout, hero illustrations, and full localization, /alternatives/ comparison series — rich layout, all locales, Compare nav & footer, and human-in-the-loop tutorial sync + contribute CTA.
+- 📊 **Analytics & tracking.** Fill tracking gaps (popovers, questions form, reference board, plugin flows), amr_auth_result event, amr configure_type bucket, user_id bridge, and instrument composer, workspace tabs, HyperFrames kind + daemon $os.
+- 🪟 **Windows & packaging improvements.** Serve baked plugin previews in the packaged app, sharpen the packaged startup splash video, and live system proxy changes.
+- 🌍 **Internationalization.** Localize the curated facet subcategory labels and French UI locale refreshed with additional template/plugin surfaces localized.
+
+### ✨ Added
+
+#### 🤖 Agents & runtimes
+- **AMR cloud card shows skeleton while detection is in flight.** (#4112) Thanks @lefarcen.
+- **AMR model catalog resolved from cache** instead of a blocking per-run `vela model list`. (#4075) Thanks @lefarcen.
+- **AMR_CLIENT_SOURCE forwarded to vela** + source on wallet links. (#4005) Thanks @lefarcen.
+- **Hidden AMR profile menu in desktop.** (#3899) Thanks @lefarcen.
+- **Codebuddy Code CLI agent adapter.** (#3961) Thanks @lefarcen.
+- **Amp CLI as a coding-agent adapter.** (#3861) Thanks @lefarcen.
+
+#### 💬 Chat, comments & Studio
+- **Replicate-first Use menu + send-button attention pulse.** (#4059) Thanks @lefarcen.
+- **Working-directory picker grants read-only local-folder awareness.** (#3979) Thanks @lefarcen.
+- **Resume an interrupted run** instead of restarting from scratch. (#3991) Thanks @lefarcen.
+- **Composer plugin menu & design toolbox hover preview.** (#4000) Thanks @elihahah666.
+- **Plugin detail "Use plugin" split menu** + align use-with-query with example-prompt seed. (#3997) Thanks @elihahah666.
+- **Live-preview Community gallery** + redesigned plugin detail modal. (#3903) Thanks @elihahah666.
+- **Unify design-system pickers** and add "No design system" choice. (#3936) Thanks @elihahah666.
+
+#### 🧩 Skills, plugins, design systems & templates
+- **Content-hashed preview filenames** + immutable CDN caching. (#4007) Thanks @elihahah666.
+- **Pre-baked hover-pan preview clips** for the gallery. (#3994) Thanks @elihahah666.
+- **Desk hologram AR realdesk Seedance 2.0 video template.** (#3967) Thanks @elihahah666.
+
+#### 🏠 Home, projects, files & landing
+- **Agent design pages** — rich layout, hero illustrations, and full localization. (#3972) Thanks @elihahah666.
+- **/alternatives/ comparison series** — rich layout, all locales, Compare nav & footer. (#4072) Thanks @elihahah666.
+- **Human-in-the-loop tutorial sync** + contribute CTA. (#4038) Thanks @elihahah666.
+- **Surface user-submitted tutorial issues and PRs** in the daily digest. (#4095) Thanks @elihahah666.
+- **Score tutorial candidates** and post a Feishu card with a verdict. (#4089) Thanks @elihahah666.
+- **Narrow tutorial digest** to same-day newly published videos. (#4055) Thanks @elihahah666.
+- **Backfill community youtube tutorials** + daily sync workflow. (#4013) Thanks @elihahah666.
+
+#### 📊 Analytics & tracking
+- **Fill tracking gaps** (popovers, questions form, reference board, plugin flows). (#4065) Thanks @lefarcen.
+- **amr_auth_result event**, amr configure_type bucket, user_id bridge. (#4042) Thanks @lefarcen.
+- **Instrument home example-prompt area** + plugin attribution. (#3974) Thanks @lefarcen.
+- **Instrument composer, workspace tabs**, HyperFrames kind + daemon $os. (#3932) Thanks @lefarcen.
+
+#### 📦 Packaging, platform & diagnostics
+- **Serve baked plugin previews** in the packaged app. (#4035) Thanks @lefarcen.
+- **Sharpen the packaged startup splash video.** (#4004) Thanks @lefarcen.
+- **Preserve structured daemon stream errors.** (#4052) Thanks @lefarcen.
+- **Skip build targets without tsconfig.json** so partial install contexts survive. (#4039) Thanks @lefarcen.
+
+#### 🌍 Internationalization
+- **Localize the curated facet subcategory labels.** (#4074) Thanks @elihahah666.
+
+### 🔁 Changed
+
+- **Split onboarding newsletter into its own third step.** (#4106) Thanks @lefarcen.
+- **Show AMR cloud card as a skeleton** while detection is in flight. (#4112) Thanks @lefarcen.
+- **Align next-step Design toolbox** with the composer's action menu. (#4096) Thanks @lefarcen.
+- **Seed example/replicate composer prompts** with the curated description. (#4103) Thanks @lefarcen.
+- **Restore the design toolbox entry** in the composer "+" menu. (#4070) Thanks @lefarcen.
+- **Scope Use actions to the plugin detail modal** and decouple the Community filter from hero chips. (#4037) Thanks @lefarcen.
+- **Default anonymous metrics on** + mint installationId unless opted out. (#4131) Thanks @lefarcen.
+- **Don't auto-pick a default agent** during first-run onboarding. (#4108) Thanks @lefarcen.
+
+### 🐛 Fixed
+
+- **Keep reopened question form editable.** (#4120) Thanks @lefarcen.
+- **Gate the next-step card** on having a previewable artifact. (#4119) Thanks @lefarcen.
+- **Suppress AMR DSML artifact echoes.** (#4068) Thanks @lefarcen.
+- **Correct deck/scroll preview capture** + smoother gallery playback. (#4044) Thanks @elihahah666.
+- **Keep OpenCode from clobbering** the daemon's pnpm workspace. (#4024) Thanks @lefarcen.
+- **Deck slide-tour bakes**, CJK font fix, framing + reveal height. (#4020) Thanks @elihahah666.
+- **Default baked-preview URLs** to the R2 public origin. (#4014) Thanks @elihahah666.
+- **Drop generation-preview progress card**, restore file-list empty state. (#3986) Thanks @lefarcen.
+- **Stop misclassifying signals/interrupts** as retryable timeout. (#3980) Thanks @lefarcen.
+- **Classify Claude mid-stream socket drops** as retryable. (#3937) Thanks @lefarcen.
+- **Pin the Motion React UMD loader** in motionsites plugins. (#3992) Thanks @lefarcen.
+- **Keep startup splash animation transparent** so background renders white. (#3987) Thanks @lefarcen.
+- **Interrupt the active run** when sending a queued chat now. (#3959) Thanks @lefarcen.
+- **Chat & workspace UI polish** from a review pass. (#3941) Thanks @lefarcen.
+- **Hide external browser annotation tools.** (#3954) Thanks @lefarcen.
+- **Trim studio action icons.** (#3969) Thanks @lefarcen.
+- **Add skip_nightly_gate escape hatch** for stable promotion. (#4150) Thanks @lefarcen.
+- **Pass RELEASE_COMMIT/RUN_ID** to every publish step. (#4147) Thanks @lefarcen.
+- **Restore nightly stableVersion** + github attribution for stable promotion. (#4144) Thanks @lefarcen.
+- **Retry R2 storage uploads** on transient ECONNRESET/5xx. (#4107) Thanks @lefarcen.
+- **Fix newsletter subscribe CORS** for packaged app. (#4113) Thanks @lefarcen.
+- **Fix onboarding dropdown styling.** Thanks @elihahah666.
+
 ## [0.9.0] - 2026-05-29
 
 🎉 **310 PRs · 88 contributors · 7 days** — Meet the **install-and-create release**. No more API-key scavenger hunts. No more asking teammates to install three different CLIs before their first prompt. **Open Design AMR** is now built into the app: sign in once, pick a model, and start building. Around that zero-config first run, 0.9.0 brings a bigger agent bench, faster model picking, a more discoverable plugin marketplace, richer review workflows, smoother Studio tools, and easier installs across Windows, macOS, and Linux. 🚀
@@ -1234,7 +1333,8 @@ First public release of Open Design — a local-first, open-source alternative t
 - Beta release workflow placeholder. ([#36])
 - Git commit co-author policy. ([#131])
 
-[Unreleased]: https://github.com/nexu-io/open-design/compare/open-design-v0.9.0...HEAD
+[Unreleased]: https://github.com/nexu-io/open-design/compare/open-design-v0.10.0...HEAD
+[0.10.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0
 [0.9.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.9.0
 [0.8.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.8.0
 [0.7.0]: https://github.com/nexu-io/open-design/releases/tag/open-design-v0.7.0

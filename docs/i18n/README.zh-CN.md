@@ -571,6 +571,8 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] Sidecar 协议 + Electron 桌面 + IPC 自动化
 - [x] 工件 Lint API + 五维自评预输出门控
 - [x] **0.8.0**——插件市场基础设施（261 个官方插件、manifest 规范、逐 Agent 安装脚本）
+- [x] **0.9.0**——Open Design AMR（官方 Model Router 内置于应用：零配置、一键登录）
+- [x] **0.10.0**——All-in-one 的 Agentic 设计工作台（Lexical 编辑器、交互式终端、评论队列、参考面板、对话分叉）
 - [x] 打包 Electron 构建——macOS（Apple Silicon + Intel）+ Windows（x64）+ Linux AppImage（可选通道）
 - [ ] 评论模式精确编辑——部分已发布，可靠的定向补丁进行中
 - [ ] AI 输出的调参面板 UX——尚未实现

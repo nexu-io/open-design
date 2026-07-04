@@ -572,6 +572,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] 아티팩트 린트 API + 5차원 자가 비평 내보내기 전 게이트
 - [x] **0.8.0** — 플러그인 마켓플레이스 인프라(261개 공식 플러그인, 매니페스트 사양, 에이전트별 설치 스크립트)
 - [x] **0.9.0** — Open Design AMR(앱에 내장된 공식 Model Router: 설정 불필요, 원클릭 로그인)
+- [x] **0.10.0** — 올인원 Agentic 디자인 워크스페이스 (Lexical 편집기， 인터랙티브 터미널， 댓글 큐， 레퍼런스 보드， 對話分叉)
 - [x] 패키징된 Electron 빌드 — macOS(Apple Silicon + Intel) + Windows(x64) + Linux AppImage(선택적 레인)
 - [ ] 코멘트 모드 정밀 편집 — 부분 출시됨; 안정적인 타깃 패칭 진행 중
 - [ ] AI가 내보내는 tweaks 패널 UX — 아직 구현되지 않음

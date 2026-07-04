@@ -572,6 +572,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] Artifact lint API + 5 維自我評析的發出前閘門
 - [x] **0.8.0**——外掛市集基礎建設（261 個官方外掛、manifest 規格、各 agent 安裝腳本）
 - [x] **0.9.0**——Open Design AMR（內建於應用程式的官方 Model Router：零設定、一鍵登入）
+- [x] **0.10.0**——All-in-one 的 Agentic 設計工作台（Lexical 編輯器、互動式終端機、留言佇列、參考面板、對話分叉）
 - [x] 打包的 Electron 建置——macOS（Apple Silicon + Intel）+ Windows（x64）+ Linux AppImage（選用通道）
 - [ ] 註解模式的精準編輯——部分完成；可靠的定點修補開發中
 - [ ] AI 發出的 tweaks 面板 UX——尚未實作

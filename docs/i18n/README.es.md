@@ -572,6 +572,7 @@ Arquitectura completa → [`docs/architecture.md`](../../docs/architecture.md). 
 - [x] API de lint de artefactos + barrera de autocrítica de 5 dimensiones previa a la emisión
 - [x] **0.8.0** — infraestructura del marketplace de plugins (261 plugins oficiales, especificación de manifiesto, scripts de instalación por agente)
 - [x] **0.9.0** — Open Design AMR (Model Router oficial integrado en la app: cero configuración, inicio de sesión de un clic)
+- [x] **0.10.0** — Espacio de trabajo de diseño Agentic todo en uno (editor Lexical， terminales interactivos， cola de comentarios， tablero de referencias， 對話分叉)
 - [x] Compilaciones empaquetadas de Electron — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (vía opcional)
 - [ ] Ediciones quirúrgicas en modo comentario — parcialmente lanzado; aplicación de parches dirigida y fiable en progreso
 - [ ] UX del panel de ajustes emitido por IA — aún no implementado

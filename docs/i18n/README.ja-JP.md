@@ -572,6 +572,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] アーティファクト lint API + 5 次元の自己批評による発行前ゲート
 - [x] **0.8.0** — プラグインマーケットプレイスのインフラ（261 の公式プラグイン、マニフェスト仕様、エージェントごとのインストールスクリプト）
 - [x] **0.9.0** — Open Design AMR（アプリに組み込まれた公式 Model Router: 設定ゼロ、ワンクリックのサインイン）
+- [x] **0.10.0** — オールインワンの Agentic デザインワークスペース (Lexical エディタ， インタラクティブターミナル， コメントキュー， リファレンスボード， 對話分叉)
 - [x] パッケージ化された Electron ビルド — macOS（Apple Silicon + Intel） + Windows（x64） + Linux AppImage（オプションのレーン）
 - [ ] コメントモードの外科的な編集 — 一部提供済み。信頼性の高いターゲット指定のパッチ適用は進行中
 - [ ] AI が発行する tweaks パネルの UX — 未実装

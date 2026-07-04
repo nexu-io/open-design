@@ -574,6 +574,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] واجهة API لفحص المخرجات + بوابة نقد ذاتي بخمسة أبعاد قبل الإصدار
 - [x] **0.8.0** — بنية تحتية لسوق الإضافات (261 إضافة رسمية، مواصفة البيان، سكربتات تثبيت لكل وكيل)
 - [x] **0.9.0** — Open Design AMR (Model Router الرسمي مدمج في التطبيق: بلا إعداد، تسجيل دخول بنقرة واحدة)
+- [x] **0.10.0** — مساحة عمل التصميم الوكيلة الكل-في-واحد (محرر Lexical، terminaux interactifs، file d'attente de commentaires، tableau de références، 對話分叉)
 - [x] إصدارات Electron مجمَّعة — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (مسار اختياري)
 - [ ] تعديلات جراحية في وضع التعليق — مشحونة جزئيًا؛ الترقيع المستهدف الموثوق قيد التنفيذ
 - [ ] تجربة استخدام لوحة تعديلات يصدرها الذكاء الاصطناعي — لم تُنفَّذ بعد

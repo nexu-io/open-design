@@ -574,6 +574,7 @@ Full architecture → [`docs/architecture.md`](docs/architecture.md). Skill prot
 - [x] Artifact lint API + 5-dim self-critique pre-emit gate
 - [x] **0.8.0** — plugin marketplace infrastructure (261 official plugins, manifest spec, per-agent install scripts)
 - [x] **0.9.0** — Open Design AMR (official Model Router built into the app: zero config, one-click sign-in)
+- [x] **0.10.0** — All-in-one Agentic design workspace (Lexical composer, interactive terminals, comment queue, reference board, conversation forking)
 - [x] Packaged Electron builds — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (optional lane)
 - [ ] Comment-mode surgical edits — partially shipped; reliable targeted patching in progress
 - [ ] AI-emitted tweaks panel UX — not yet implemented

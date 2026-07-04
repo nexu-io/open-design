@@ -572,6 +572,7 @@ Tam mimari → [`docs/architecture.md`](../../docs/architecture.md). Beceri prot
 - [x] Artifact lint API'si + 5 boyutlu öz-eleştiri ön-yayın kapısı
 - [x] **0.8.0** — eklenti pazar yeri altyapısı (261 resmî eklenti, manifest spesifikasyonu, ajan başına kurulum betikleri)
 - [x] **0.9.0** — Open Design AMR (uygulamaya gömülü resmî Model Router: sıfır yapılandırma, tek tıkla oturum açma)
+- [x] **0.10.0** — Hepsi bir arada Agentic tasarım çalışma alanı (Lexical düzenleyici， etkileşimli terminaller， yorum kuyruğu， referans panosu， 對話分叉)
 - [x] Paketlenmiş Electron derlemeleri — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (isteğe bağlı hat)
 - [ ] Yorum modu cerrahi düzenlemeler — kısmen sunuldu; güvenilir hedefli yamalama devam ediyor
 - [ ] AI tarafından yayılan ayar paneli UX'i — henüz uygulanmadı
