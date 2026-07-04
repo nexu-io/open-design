@@ -10,7 +10,7 @@ triggers:
 
 # Animal Island UI Skill
 
-使用本技能时，先读取当前目录的 `DESIGN.md`、`brand.json`、`tokens.light.json`、`tokens.dark.json` 和 `system/variables.css`。
+本插件只依赖随包发布的 `SKILL.md` 和 `references/` 内容。使用本技能时，先阅读本文件；如果宿主项目额外提供品牌规范、设计 token 或 CSS 变量文件，可以把它们作为补充证据读取，但不要假设它们一定存在。
 
 ## 设计姿态
 
