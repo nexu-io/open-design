@@ -8028,6 +8028,28 @@ export async function startServer({
         noteCliReadyAt();
         if (ev?.type === 'error') {
           if (agentStreamError) return;
+          // Hold back a resume-failure error so the close handler's transparent
+          // reseed stays invisible. An is_error result frame on a dead --resume
+          // now surfaces here as a stream error; the resume-target-missing
+          // block in the close handler clears the stale handle and re-runs the
+          // turn fresh, so forwarding this error would flash an execution
+          // failure a beat before the invisible recovery. Mirrors the ACP
+          // resume_failed suppression below; the close handler stays the sole
+          // authority on how a resume failure ends.
+          if (
+            (def.resumesSessionViaCli === true || def.resumesSessionViaAcpLoad === true) &&
+            agentResumeCtx.isResuming &&
+            !run.resumeAutoReseeded &&
+            isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
+          ) {
+            design.runs.emit(run, 'diagnostic', {
+              type: 'agent_resume_failed_suppressed',
+              agent_id: def.id,
+              reason: 'resume_failed',
+              previous_session_id: agentResumeCtx.resumeSessionId ?? null,
+            });
+            return;
+          }
           flushVisibleAgentStderr();
           const message = String((ev as any).message || 'Claude Code stream error');
           const failureText = [
