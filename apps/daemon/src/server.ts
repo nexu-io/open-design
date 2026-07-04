@@ -382,7 +382,7 @@ import {
   snapshotAiHtmlVersionsForRun,
 } from './run-html-version-snapshots.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
-import { buildPromptStackTelemetry } from './prompt-telemetry.js';
+import { buildPromptStackTelemetry } from './telemetry/index.js';
 import { readAnalyticsContext } from './analytics.js';
 import {
   agentIdToTracking,

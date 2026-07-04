@@ -24,7 +24,7 @@ import {
   EVENT_SCHEMA_VERSION,
 } from '@open-design/contracts/analytics';
 import { readAppConfig } from './app-config.js';
-import { readTelemetryEnvironment } from './telemetry-environment.js';
+import { readTelemetryEnvironment } from './telemetry/index.js';
 
 const DEFAULT_HOST = 'https://us.i.posthog.com';
 

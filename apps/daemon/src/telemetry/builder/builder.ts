@@ -1,88 +1,28 @@
+/** @module builder/builder
+ * Assembles prompt-stack telemetry from raw prompt sections: fingerprints and
+ * measures each section, allocates a byte budget for captured content by
+ * priority, and derives content-free / structured / flat projections of the
+ * result. Depends on the foundation (`../core`) for types and constants and on
+ * the redaction sibling (`../redaction`, a declared allowedEdge) for content
+ * sanitization.
+ */
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 
-import { redactSecrets } from './redact.js';
-
-export const PROMPT_STACK_REDACTION_VERSION = 'prompt-stack-redaction-v1';
-export const PROMPT_STACK_PATH_MARKER = '[REDACTED:path]';
+import {
+  PROMPT_STACK_REDACTION_VERSION,
+  type PromptStackTelemetry,
+  type PromptTelemetryInputSection,
+  type PromptTelemetrySection,
+  type PromptTelemetrySectionKind,
+  type StructuredPromptStackInput,
+} from '../core/index.js';
+import { redactPromptText, sanitizeSectionContent } from '../redaction/index.js';
 
 const KIB = 1024;
 const DAEMON_SYSTEM_PROMPT_MAX_BYTES = 128 * KIB;
 const SECTION_MAX_BYTES = 64 * KIB;
 const TOTAL_REDACTED_CONTENT_MAX_BYTES = 512 * KIB;
-
-export type PromptTelemetrySectionKind =
-  | 'formOverride'
-  | 'daemonSystemPrompt'
-  | 'runtimeToolPrompt'
-  | 'researchCommandContract'
-  | 'runContextPrompt'
-  | 'clientSystemPrompt'
-  | 'echoGuard'
-  | 'userRequest'
-  | 'skillPrompt'
-  | 'designSystemPrompt'
-  | 'pluginStagePrompt'
-  | 'cwdHint'
-  | 'linkedDirsHint'
-  | 'attachments'
-  | 'commentAttachments'
-  | 'promptImagePaths';
-
-export interface PromptTelemetryInputSection {
-  kind: PromptTelemetrySectionKind;
-  content?: string | null;
-  captureContent?: boolean;
-  metadata?: unknown;
-}
-
-export interface PromptTelemetrySection {
-  kind: PromptTelemetrySectionKind;
-  ordinal: number;
-  present: boolean;
-  contentMode: 'redacted-section-content' | 'metadata-only';
-  rawBytes: number;
-  redactedBytes: number;
-  fingerprint: string;
-  truncated: boolean;
-  truncationReason?: 'section_byte_limit' | 'total_budget_exceeded';
-  redactedContent?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface PromptStackTelemetry {
-  redactionVersion: typeof PROMPT_STACK_REDACTION_VERSION;
-  promptFingerprint: string;
-  stackFingerprint: string;
-  rawBytes: number;
-  redactedBytes: number;
-  sectionCount: number;
-  redactedContentBytes: number;
-  redactedContentBudgetBytes: number;
-  sections: PromptTelemetrySection[];
-}
-
-export interface StructuredPromptStackInput {
-  type: 'open-design.prompt-stack';
-  redactionVersion: typeof PROMPT_STACK_REDACTION_VERSION;
-  promptFingerprint: string;
-  stackFingerprint: string;
-  sectionCount: number;
-  redactedContentBytes: number;
-  redactedContentBudgetBytes: number;
-  sections: Array<{
-    kind: PromptTelemetrySectionKind;
-    ordinal: number;
-    contentMode: PromptTelemetrySection['contentMode'];
-    rawBytes: number;
-    redactedBytes: number;
-    fingerprint: string;
-    truncated: boolean;
-    truncationReason?: PromptTelemetrySection['truncationReason'];
-    redactedContent?: string;
-    metadata?: Record<string, unknown>;
-  }>;
-}
 
 interface MutablePromptTelemetrySection extends PromptTelemetrySection {
   redactedSource: string;
@@ -116,21 +56,27 @@ const SECTION_PRIORITY = new Map<PromptTelemetrySectionKind, number>([
   ['userRequest', 9],
 ]);
 
-const FILE_LOCAL_PATH =
-  /(^|[\s([{"'`@])file:\/\/(?:localhost)?\/[^\s)\]}"'`,;<>]+/gi;
-const POSIX_LOCAL_PATH =
-  /(^|[\s([{"'`@])\/(?:Users|home|root|tmp|private\/tmp|private\/var\/folders|private\/var\/tmp|var\/folders|var\/tmp|usr\/local|opt|Volumes|mnt|media|srv|workspace|workspaces|app)\/[^\s)\]}"'`,;<>]+/g;
-const WINDOWS_LOCAL_PATH =
-  /(^|[\s([{"'`@])(?:[A-Za-z]:\\|\\\\)[^\s)\]}"'`,;<>]+/g;
-
+/**
+ * @internal
+ * Prefixed SHA-256 hex digest used for every fingerprint in the payload.
+ */
 function sha256(value: string): string {
   return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;
 }
 
+/**
+ * @internal
+ * UTF-8 byte length of a string (all budgets and measurements are in bytes).
+ */
 function byteLength(value: string): number {
   return Buffer.byteLength(value, 'utf8');
 }
 
+/**
+ * @internal
+ * Truncates a string to at most `maxBytes` UTF-8 bytes without splitting a
+ * multi-byte code point.
+ */
 function truncateUtf8(value: string, maxBytes: number): string {
   const buf = Buffer.from(value, 'utf8');
   if (buf.length <= maxBytes) return value;
@@ -139,42 +85,20 @@ function truncateUtf8(value: string, maxBytes: number): string {
   return buf.subarray(0, cut).toString('utf8');
 }
 
-export function redactLocalPaths(input: string): string {
-  if (!input) return input;
-  return input
-    .replace(FILE_LOCAL_PATH, (_match, prefix: string) => {
-      return `${prefix}${PROMPT_STACK_PATH_MARKER}`;
-    })
-    .replace(POSIX_LOCAL_PATH, (_match, prefix: string) => {
-      return `${prefix}${PROMPT_STACK_PATH_MARKER}`;
-    })
-    .replace(WINDOWS_LOCAL_PATH, (_match, prefix: string) => {
-      return `${prefix}${PROMPT_STACK_PATH_MARKER}`;
-    });
-}
-
-function redactPromptText(input: string): string {
-  return redactLocalPaths(redactSecrets(input));
-}
-
-function stripRuntimeToolPromptTokens(input: string): string {
-  return input
-    .split(/\r?\n/)
-    .filter((line) => !line.includes('OD_TOOL_TOKEN'))
-    .join('\n');
-}
-
-function sanitizeSectionContent(kind: PromptTelemetrySectionKind, content: string): string {
-  const structurallySafe =
-    kind === 'runtimeToolPrompt' ? stripRuntimeToolPromptTokens(content) : content;
-  return redactPromptText(structurallySafe);
-}
-
+/**
+ * @internal
+ * Lowercased file extension (no dot) from a path-like string, or null.
+ */
 function extensionFromPath(value: string): string | null {
   const ext = path.extname(value).replace(/^\./, '').toLowerCase();
   return ext || null;
 }
 
+/**
+ * @internal
+ * Coarse size bucket label for a byte count, so metadata summaries never leak
+ * exact sizes.
+ */
 function sizeBucket(value: number): string {
   if (value <= 0) return 'unknown';
   if (value <= 10 * KIB) return '0-10KiB';
@@ -183,6 +107,12 @@ function sizeBucket(value: number): string {
   return '1MiB+';
 }
 
+/**
+ * @internal
+ * Reduces arbitrary section metadata to a privacy-safe summary: counts,
+ * sorted file extensions, size buckets, and selection-kind tallies for arrays;
+ * key inventories for objects; extension/count for strings.
+ */
 function summarizeMetadataValue(value: unknown): Record<string, unknown> {
   if (Array.isArray(value)) {
     const extensions = new Set<string>();
@@ -243,6 +173,11 @@ function summarizeMetadataValue(value: unknown): Record<string, unknown> {
   return {};
 }
 
+/**
+ * @internal
+ * Chooses the summary source for a section's fingerprint: explicit metadata
+ * when provided, otherwise a summary of its content.
+ */
 function metadataFingerprintSource(
   section: PromptTelemetryInputSection,
 ): Record<string, unknown> {
@@ -252,12 +187,24 @@ function metadataFingerprintSource(
   return summarizeMetadataValue(section.content ?? '');
 }
 
+/**
+ * @internal
+ * Per-section capture byte limit; the daemon system prompt gets a larger cap.
+ */
 function perSectionLimit(kind: PromptTelemetrySectionKind): number {
   return kind === 'daemonSystemPrompt'
     ? DAEMON_SYSTEM_PROMPT_MAX_BYTES
     : SECTION_MAX_BYTES;
 }
 
+/**
+ * Builds the full prompt-stack telemetry payload from a composed prompt and its
+ * constituent sections: redacts and fingerprints each section, records raw and
+ * redacted byte sizes, then allocates the shared capture budget across
+ * content-bearing sections in priority order (truncating per-section and when
+ * the total budget is exhausted). The result is the canonical
+ * {@link PromptStackTelemetry} that all downstream projections derive from.
+ */
 export function buildPromptStackTelemetry({
   composedPrompt,
   sections,
@@ -355,6 +302,11 @@ export function buildPromptStackTelemetry({
   };
 }
 
+/**
+ * Projects a telemetry payload with all captured section content stripped
+ * (fingerprints and byte counts retained), for consumers that must not receive
+ * even redacted prompt text.
+ */
 export function promptStackWithoutContent(
   telemetry: PromptStackTelemetry,
 ): PromptStackTelemetry {
@@ -365,6 +317,11 @@ export function promptStackWithoutContent(
   };
 }
 
+/**
+ * Projects the telemetry into the wire shape ingested by the trace pipeline as
+ * a structured input (`open-design.prompt-stack`), omitting present/rawBytes
+ * bookkeeping and including optional fields only when set.
+ */
 export function structuredPromptStackInput(
   telemetry: PromptStackTelemetry,
 ): StructuredPromptStackInput {
@@ -395,6 +352,11 @@ export function structuredPromptStackInput(
   };
 }
 
+/**
+ * Flattens the telemetry's top-level fingerprints and byte counters into a
+ * `promptStack_`-prefixed key/value map suitable for flat analytics event
+ * properties.
+ */
 export function buildPromptStackFlatMetadata(
   telemetry: PromptStackTelemetry,
 ): Record<string, unknown> {

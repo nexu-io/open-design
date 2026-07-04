@@ -64,6 +64,15 @@ export const CAPABILITY_BARREL_DOMAINS: CapabilityBarrelDomain[] = [
       ['jobs', 'catalog'],
     ],
   },
+  {
+    name: 'telemetry',
+    root: 'apps/daemon/src/telemetry',
+    subdirs: ['core', 'redaction', 'builder'],
+    foundation: 'core',
+    allowedEdges: [
+      ['builder', 'redaction'],
+    ],
+  },
 ];
 
 export type BarrelImportViolation = {

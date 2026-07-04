@@ -39,7 +39,7 @@ import {
   type ToolCallSummary,
   type TurnInfo,
 } from './langfuse-trace.js';
-import type { PromptStackTelemetry } from './prompt-telemetry.js';
+import type { PromptStackTelemetry } from './telemetry/index.js';
 import { redactSecrets } from './redact.js';
 import {
   hasExplicitRequestedModelForAnalytics,

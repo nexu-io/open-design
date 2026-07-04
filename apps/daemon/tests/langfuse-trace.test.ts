@@ -13,7 +13,7 @@ import {
   type ReportContext,
   type TelemetrySinkConfig,
 } from '../src/langfuse-trace.js';
-import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
+import { buildPromptStackTelemetry } from '../src/telemetry/index.js';
 
 function makeCtx(overrides: Partial<ReportContext> = {}): ReportContext {
   const base: ReportContext = {

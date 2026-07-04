@@ -23,15 +23,15 @@ import {
   buildPromptStackFlatMetadata,
   promptStackWithoutContent,
   structuredPromptStackInput,
+  readTelemetryEnvironment,
   type PromptTelemetrySection,
   type PromptStackTelemetry,
-} from './prompt-telemetry.js';
+} from './telemetry/index.js';
 import type {
   RunTelemetryTimestamps,
   RunTimingAnalytics,
 } from './run-analytics-observability.js';
 import type { RunFailureClassification } from './run-failure-classification.js';
-import { readTelemetryEnvironment } from './telemetry-environment.js';
 
 // Langfuse US region: confirmed by an end-to-end smoke on 2026-05-07 — the
 // project's keys authenticate against `us.cloud.langfuse.com` only. EU host

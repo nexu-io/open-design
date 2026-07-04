@@ -6,7 +6,7 @@ import {
   buildPromptStackTelemetry,
   promptStackWithoutContent,
   redactLocalPaths,
-} from '../src/prompt-telemetry.js';
+} from '../src/telemetry/index.js';
 
 describe('prompt telemetry builder', () => {
   it('redacts local paths and secrets before hashing or content capture', () => {
