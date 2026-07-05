@@ -776,6 +776,7 @@ export const id: Dict = {
   'handoff.notInstalled': 'Belum terpasang',
   'handoff.notDetectedTitle': '{target} - tidak terdeteksi di $PATH',
   'designSystemPicker.select': 'Pilih design system',
+  'designSystemPicker.useCurrent': 'Gunakan design system ini',
   'designSystemPicker.loading': 'Memuat design system…',
   'designSystemPicker.searchPlaceholder': 'Cari sistem desain (judul / kategori / ringkasan)',
   'designSystemPicker.searchCompactPlaceholder': 'Cari sistem desain',

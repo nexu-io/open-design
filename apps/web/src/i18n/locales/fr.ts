@@ -776,6 +776,7 @@ export const fr: Dict = {
   'handoff.notInstalled': 'Non détecté',
   'handoff.notDetectedTitle': '{target} - non détecté dans $PATH',
   'designSystemPicker.select': 'Choisir un système de design',
+  'designSystemPicker.useCurrent': 'Utiliser ce système de design',
   'designSystemPicker.loading': 'Chargement des systèmes de design…',
   'designSystemPicker.searchPlaceholder': 'Rechercher des systèmes de design (titre / catégorie / résumé)',
   'designSystemPicker.searchCompactPlaceholder': 'Rechercher des systèmes de design',

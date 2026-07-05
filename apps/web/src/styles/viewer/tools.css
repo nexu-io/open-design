@@ -580,6 +580,13 @@
   align-items: center;
   gap: 6px;
 }
+.template-share-trigger.is-icon-only {
+  width: 54px;
+  min-width: 54px;
+  height: 35px;
+  padding-inline: 10px;
+  gap: 4px;
+}
 .template-share-trigger[aria-expanded='true'] {
   background: var(--accent-tint);
   border-color: var(--accent);

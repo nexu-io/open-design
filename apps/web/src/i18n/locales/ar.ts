@@ -776,6 +776,7 @@ export const ar: Dict = {
   'handoff.notInstalled': 'غير مُثبَّت',
   'handoff.notDetectedTitle': '{target} - لم يُكتشف في $PATH',
   'designSystemPicker.select': 'اختر نظام التصميم',
+  'designSystemPicker.useCurrent': 'استخدم نظام التصميم هذا',
   'designSystemPicker.loading': 'جارٍ تحميل أنظمة التصميم…',
   'designSystemPicker.searchPlaceholder': 'البحث في أنظمة التصميم (العنوان / الفئة / الملخص)',
   'designSystemPicker.searchCompactPlaceholder': 'البحث في أنظمة التصميم',

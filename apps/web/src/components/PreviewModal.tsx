@@ -56,6 +56,9 @@ export interface PreviewView {
 export interface PreviewSidebar {
   // Header label and toggle button label.
   label: string;
+  // Optional title shown inside the side pane itself. Useful when the
+  // toolbar toggle is hidden and the pane still needs a visible identity.
+  header?: ReactNode;
   // Side-pane content — caller renders whatever it likes (markdown source
   // view, swatch grid, etc.). Always optional; when absent the toggle is
   // not shown.
@@ -70,6 +73,8 @@ export interface PreviewSidebar {
   // can prime a fresh fetch — e.g. swapping between design systems while the
   // DESIGN.md panel stays open.
   contentKey?: string | number;
+  // Optional style hook for surface-specific width/content treatments.
+  className?: string;
 }
 
 // Optional accent CTA rendered on the left side of the action row,
@@ -92,6 +97,7 @@ export interface PreviewPrimaryAction {
   busyLabel?: string;
   disabled?: boolean;
   testId?: string;
+  className?: string;
   // When present, the primary button becomes a split button: clicking the
   // main face still runs `onClick`, while a caret toggle opens this menu of
   // secondary variants (e.g. "Use plugin" vs "Use with query"). Mirrors the
@@ -205,6 +211,9 @@ interface Props {
   // Used by the design-system preview to surface the raw DESIGN.md beside
   // the rendered showcase, matching the styles.refero.design layout.
   sidebar?: PreviewSidebar;
+  // Optional left-side navigation shown beside the preview stage. Kept
+  // separate from `sidebar`, which is the right-side companion pane.
+  navigation?: ReactNode;
   // Logical viewport width the iframe content is rendered at. The iframe is
   // then visually scaled (transform: scale) to fit the actual stage width
   // so squeezing the preview behind a sidebar never reflows the inner page
@@ -229,10 +238,13 @@ interface Props {
   onFullscreenClick?: () => void;
   onShareClick?: () => void;
   onSidebarToggleClick?: (open: boolean) => void;
-  // Hide the header sidebar-toggle button (the plugin detail opens its
-  // collapsed info panel via the preview-edge handle instead). Other
-  // variants — design-system "DESIGN.md", media, scenario — keep it.
-  hideSidebarToggle?: boolean;
+  // Hide the header sidebar-toggle button when the preview-edge handle is
+  // the preferred control. `true` keeps the small-screen fallback; `always`
+  // omits the header toggle entirely.
+  hideSidebarToggle?: boolean | 'always';
+  // Compact surfaces can render the share trigger as a single icon while
+  // keeping the same popover, title, and screen-reader label.
+  shareTriggerVariant?: 'default' | 'icon';
   // Fires when the user picks any share-popover item — social platforms,
   // "copy_link" / "copy_share_text" and the file exports ("pdf" / "zip" /
   // "html" / "image" / "open_in_new_tab"). Used by callers that want to
@@ -253,11 +265,13 @@ export function PreviewModal({
   onView,
   onClose,
   sidebar,
+  navigation,
   designWidth = 1280,
   primaryAction,
   headerExtras,
   shareTarget,
   hideSidebarToggle = false,
+  shareTriggerVariant = 'default',
   onFullscreenClick,
   onShareClick,
   onSidebarToggleClick,
@@ -550,6 +564,8 @@ export function PreviewModal({
   const showTabs = views.length > 1;
   const showTemplateShareMenu = !isCustomView || Boolean(shareTarget?.url);
   const canOpenTemplateShareMenu = canExportFiles || Boolean(previewShareUrl);
+  const omitHeaderSidebarToggle = hideSidebarToggle === 'always';
+  const compactOnlySidebarToggle = hideSidebarToggle === true;
 
   return (
     <div
@@ -559,558 +575,594 @@ export function PreviewModal({
       aria-label={`${title} preview`}
     >
       <div
-        className={`ds-modal ${fullscreen ? 'ds-modal-fullscreen' : ''}`}
+        className={`ds-modal ${fullscreen ? 'ds-modal-fullscreen' : ''}${
+          navigation ? ' has-navigation' : ''
+        }`}
       >
-        <header className="ds-modal-header">
-          <div className="ds-modal-header-top">
-            <div className="ds-modal-title-block">
-              <div className="ds-modal-title">{title}</div>
-              {subtitle ? (
-                <div className="ds-modal-subtitle">{subtitle}</div>
-              ) : null}
-            </div>
-            {showTabs ? (
-              <div className="ds-modal-tabs" role="tablist">
-                {views.map((v) => (
-                  <button
-                    key={v.id}
-                    role="tab"
-                    aria-selected={activeId === v.id}
-                    className={`ds-modal-tab ${activeId === v.id ? 'active' : ''}`}
-                    onClick={() => setActiveId(v.id)}
-                  >
-                    {v.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            <div className="ds-modal-actions">
-              {primaryAction ? (
-                primaryAction.menu && primaryAction.menu.length > 0 ? (
-                  <div
-                    className="ds-modal-primary-action-group"
-                    ref={primaryMenuRef}
-                  >
-                    <button
-                      type="button"
-                      className="ds-modal-primary-action ds-modal-primary-action--split"
-                      onClick={primaryAction.onClick}
-                      disabled={primaryAction.disabled || primaryAction.busy}
-                      aria-busy={primaryAction.busy ? 'true' : undefined}
-                      {...(primaryAction.testId
-                        ? { 'data-testid': primaryAction.testId }
-                        : {})}
-                    >
-                      {primaryAction.busy
-                        ? primaryAction.busyLabel ?? primaryAction.label
-                        : primaryAction.label}
-                    </button>
-                    <button
-                      type="button"
-                      className="ds-modal-primary-action ds-modal-primary-action-caret"
-                      onClick={() => setPrimaryMenuOpen((v) => !v)}
-                      disabled={primaryAction.disabled || primaryAction.busy}
-                      aria-haspopup="menu"
-                      aria-expanded={primaryMenuOpen}
-                      aria-label={`More ways to ${primaryAction.label}`}
-                      {...(primaryAction.testId
-                        ? { 'data-testid': `${primaryAction.testId}-menu` }
-                        : {})}
-                    >
-                      <Icon name="chevron-down" size={12} />
-                    </button>
-                    {primaryMenuOpen ? (
-                      <div
-                        className="share-menu-popover ds-modal-primary-action-popover"
-                        role="menu"
+        <div className={`ds-modal-shell${navigation ? ' has-navigation' : ''}`}>
+          {navigation ? (
+            <aside className="ds-modal-navigation">
+              {navigation}
+            </aside>
+          ) : null}
+          <div className="ds-modal-main">
+            <header className="ds-modal-header">
+              <div className="ds-modal-header-top">
+                <div className="ds-modal-title-block">
+                  <div className="ds-modal-title">{title}</div>
+                  {subtitle ? (
+                    <div className="ds-modal-subtitle">{subtitle}</div>
+                  ) : null}
+                </div>
+                {showTabs ? (
+                  <div className="ds-modal-tabs" role="tablist">
+                    {views.map((v) => (
+                      <button
+                        key={v.id}
+                        role="tab"
+                        aria-selected={activeId === v.id}
+                        className={`ds-modal-tab ${activeId === v.id ? 'active' : ''}`}
+                        onClick={() => setActiveId(v.id)}
                       >
-                        {primaryAction.menu.map((item, index) => (
-                          <button
-                            key={item.testId ?? `${item.label}-${index}`}
-                            type="button"
-                            role="menuitem"
-                            className="share-menu-item ds-modal-primary-action-option"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => {
-                              setPrimaryMenuOpen(false);
-                              item.onClick();
-                            }}
-                            {...(item.testId
-                              ? { 'data-testid': item.testId }
-                              : {})}
-                          >
-                            <span className="ds-modal-primary-action-option__body">
-                              <span className="ds-modal-primary-action-option__label">
-                                {item.label}
-                              </span>
-                              {item.description ? (
-                                <span className="ds-modal-primary-action-option__desc">
-                                  {item.description}
-                                </span>
-                              ) : null}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
+                        {v.label}
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="ds-modal-primary-action"
-                    onClick={primaryAction.onClick}
-                    disabled={primaryAction.disabled || primaryAction.busy}
-                    aria-busy={primaryAction.busy ? 'true' : undefined}
-                    {...(primaryAction.testId
-                      ? { 'data-testid': primaryAction.testId }
-                      : {})}
-                  >
-                    {primaryAction.busy
-                      ? primaryAction.busyLabel ?? primaryAction.label
-                      : primaryAction.label}
-                  </button>
-                )
-              ) : null}
-              {sidebar ? (
-                <button
-                  className={`ghost ${sidebarOpen ? 'is-active' : ''}${
-                    hideSidebarToggle ? ' ds-modal-sidebar-toggle--compact-only' : ''
-                  }`}
-                  onClick={() => {
-                    setSidebarOpen((v) => {
-                      const next = !v;
-                      onSidebarToggleClick?.(next);
-                      return next;
-                    });
-                  }}
-                  aria-pressed={sidebarOpen}
-                  title={sidebar.label}
-                >
-                  {sidebar.label}
-                </button>
-              ) : null}
-              {showTemplateShareMenu ? (
-                <div className="share-menu template-share-menu" ref={templateShareRef}>
-                  <button
-                    className="ghost template-share-trigger"
-                    aria-haspopup="menu"
-                    aria-expanded={templateShareOpen}
-                    onClick={() => {
-                      onShareClick?.();
-                      setTemplateShareOpen((v) => !v);
-                    }}
-                    disabled={!canOpenTemplateShareMenu}
-                  >
-                    <Icon name="share" size={12} />
-                    <span>{t('preview.shareMenu')}</span>
-                    <Icon name="chevron-down" size={12} />
-                  </button>
-                  {templateShareOpen ? (
-                    <div className="share-menu-popover template-share-popover" role="menu">
-                      <div className="template-share-summary">
-                        <span className="template-share-summary__eyebrow">
-                          {t('preview.shareTemplateBadge')}
-                        </span>
-                        <strong>{previewShareTitle}</strong>
-                        {previewShareUrlDisplay ? (
-                          <span>{previewShareUrlDisplay}</span>
+                ) : null}
+                <div className="ds-modal-actions">
+                  {primaryAction ? (
+                    primaryAction.menu && primaryAction.menu.length > 0 ? (
+                      <div
+                        className={`ds-modal-primary-action-group${
+                          primaryAction.className ? ` ${primaryAction.className}` : ''
+                        }`}
+                        ref={primaryMenuRef}
+                      >
+                        <button
+                          type="button"
+                          className="ds-modal-primary-action ds-modal-primary-action--split"
+                          onClick={primaryAction.onClick}
+                          disabled={primaryAction.disabled || primaryAction.busy}
+                          aria-busy={primaryAction.busy ? 'true' : undefined}
+                          {...(primaryAction.testId
+                            ? { 'data-testid': primaryAction.testId }
+                            : {})}
+                        >
+                          {primaryAction.busy
+                            ? primaryAction.busyLabel ?? primaryAction.label
+                            : primaryAction.label}
+                        </button>
+                        <button
+                          type="button"
+                          className="ds-modal-primary-action ds-modal-primary-action-caret"
+                          onClick={() => setPrimaryMenuOpen((v) => !v)}
+                          disabled={primaryAction.disabled || primaryAction.busy}
+                          aria-haspopup="menu"
+                          aria-expanded={primaryMenuOpen}
+                          aria-label={`More ways to ${primaryAction.label}`}
+                          {...(primaryAction.testId
+                            ? { 'data-testid': `${primaryAction.testId}-menu` }
+                            : {})}
+                        >
+                          <Icon name="chevron-down" size={12} />
+                        </button>
+                        {primaryMenuOpen ? (
+                          <div
+                            className="share-menu-popover ds-modal-primary-action-popover"
+                            role="menu"
+                          >
+                            {primaryAction.menu.map((item, index) => (
+                              <button
+                                key={item.testId ?? `${item.label}-${index}`}
+                                type="button"
+                                role="menuitem"
+                                className="share-menu-item ds-modal-primary-action-option"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  setPrimaryMenuOpen(false);
+                                  item.onClick();
+                                }}
+                                {...(item.testId
+                                  ? { 'data-testid': item.testId }
+                                  : {})}
+                              >
+                                <span className="ds-modal-primary-action-option__body">
+                                  <span className="ds-modal-primary-action-option__label">
+                                    {item.label}
+                                  </span>
+                                  {item.description ? (
+                                    <span className="ds-modal-primary-action-option__desc">
+                                      {item.description}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
                         ) : null}
                       </div>
-                      {previewShareUrl ? (
-                        <>
-                          <section className="template-share-section">
-                            <div className="template-share-section__label">
-                              {t('preview.shareSocialGroup')}
-                            </div>
-                            <div className="template-share-platform-grid">
-                              {socialShareTargets.map((item) => (
-                                <a
-                                  key={item.platform}
-                                  className={`template-share-platform template-share-platform--${item.platform}`}
-                                  role="menuitem"
-                                  href={item.href || undefined}
-                                  target={item.href ? '_blank' : undefined}
-                                  rel={item.href ? 'noreferrer noopener' : undefined}
-                                  aria-disabled={item.href ? undefined : 'true'}
-                                  tabIndex={item.href ? undefined : -1}
-                                  onClick={(event) => {
-                                    if (!item.href) {
-                                      event.preventDefault();
-                                      return;
-                                    }
-                                    onSharePopoverItemClick?.(item.platform);
-                                    if (item.mode === 'copy-open') {
-                                      event.preventDefault();
-                                      const shareWindow = window.open('about:blank', '_blank');
-                                      const feedbackKey = `social-${item.platform}`;
-                                      void copyPreviewShare(previewShareCopy, feedbackKey).then((ok) => {
-                                        if (!ok || !item.href) {
-                                          shareWindow?.close();
+                    ) : (
+                      <button
+                        type="button"
+                        className={`ds-modal-primary-action${
+                          primaryAction.className ? ` ${primaryAction.className}` : ''
+                        }`}
+                        onClick={primaryAction.onClick}
+                        disabled={primaryAction.disabled || primaryAction.busy}
+                        aria-busy={primaryAction.busy ? 'true' : undefined}
+                        {...(primaryAction.testId
+                          ? { 'data-testid': primaryAction.testId }
+                          : {})}
+                      >
+                        {primaryAction.busy
+                          ? primaryAction.busyLabel ?? primaryAction.label
+                          : primaryAction.label}
+                      </button>
+                    )
+                  ) : null}
+                  {sidebar && !omitHeaderSidebarToggle ? (
+                    <button
+                      className={`ghost ${sidebarOpen ? 'is-active' : ''}${
+                        compactOnlySidebarToggle ? ' ds-modal-sidebar-toggle--compact-only' : ''
+                      }`}
+                      onClick={() => {
+                        setSidebarOpen((v) => {
+                          const next = !v;
+                          onSidebarToggleClick?.(next);
+                          return next;
+                        });
+                      }}
+                      aria-pressed={sidebarOpen}
+                      title={sidebar.label}
+                    >
+                      {sidebar.label}
+                    </button>
+                  ) : null}
+                  {showTemplateShareMenu ? (
+                    <div className="share-menu template-share-menu" ref={templateShareRef}>
+                      <button
+                        type="button"
+                        className={`ghost template-share-trigger${
+                          shareTriggerVariant === 'icon' ? ' is-icon-only' : ''
+                        }`}
+                        aria-haspopup="menu"
+                        aria-expanded={templateShareOpen}
+                        aria-label={t('preview.shareMenu')}
+                        title={t('preview.shareMenu')}
+                        onClick={() => {
+                          onShareClick?.();
+                          setTemplateShareOpen((v) => !v);
+                        }}
+                        disabled={!canOpenTemplateShareMenu}
+                      >
+                        <Icon name="share" size={shareTriggerVariant === 'icon' ? 14 : 12} />
+                        {shareTriggerVariant === 'icon' ? (
+                          <Icon name="chevron-down" size={12} />
+                        ) : (
+                          <>
+                            <span>{t('preview.shareMenu')}</span>
+                            <Icon name="chevron-down" size={12} />
+                          </>
+                        )}
+                      </button>
+                      {templateShareOpen ? (
+                        <div className="share-menu-popover template-share-popover" role="menu">
+                          <div className="template-share-summary">
+                            <span className="template-share-summary__eyebrow">
+                              {t('preview.shareTemplateBadge')}
+                            </span>
+                            <strong>{previewShareTitle}</strong>
+                            {previewShareUrlDisplay ? (
+                              <span>{previewShareUrlDisplay}</span>
+                            ) : null}
+                          </div>
+                          {previewShareUrl ? (
+                            <>
+                              <section className="template-share-section">
+                                <div className="template-share-section__label">
+                                  {t('preview.shareSocialGroup')}
+                                </div>
+                                <div className="template-share-platform-grid">
+                                  {socialShareTargets.map((item) => (
+                                    <a
+                                      key={item.platform}
+                                      className={`template-share-platform template-share-platform--${item.platform}`}
+                                      role="menuitem"
+                                      href={item.href || undefined}
+                                      target={item.href ? '_blank' : undefined}
+                                      rel={item.href ? 'noreferrer noopener' : undefined}
+                                      aria-disabled={item.href ? undefined : 'true'}
+                                      tabIndex={item.href ? undefined : -1}
+                                      onClick={(event) => {
+                                        if (!item.href) {
+                                          event.preventDefault();
+                                          return;
+                                        }
+                                        onSharePopoverItemClick?.(item.platform);
+                                        if (item.mode === 'copy-open') {
+                                          event.preventDefault();
+                                          const shareWindow = window.open('about:blank', '_blank');
+                                          const feedbackKey = `social-${item.platform}`;
+                                          void copyPreviewShare(previewShareCopy, feedbackKey).then((ok) => {
+                                            if (!ok || !item.href) {
+                                              shareWindow?.close();
+                                              return;
+                                            }
+                                            setTemplateShareOpen(false);
+                                            openShareDestination(item.href, shareWindow);
+                                          });
                                           return;
                                         }
                                         setTemplateShareOpen(false);
-                                        openShareDestination(item.href, shareWindow);
-                                      });
-                                      return;
-                                    }
-                                    setTemplateShareOpen(false);
+                                      }}
+                                    >
+                                      <span className="template-share-platform__mark">
+                                        {item.mark}
+                                      </span>
+                                      <span>
+                                        {copyShareFeedback?.key === `social-${item.platform}`
+                                          ? copyShareFeedback.ok
+                                            ? t('preview.shareCopied')
+                                            : t('preview.shareCopyFailed')
+                                          : t(item.labelKey)}
+                                      </span>
+                                    </a>
+                                  ))}
+                                </div>
+                              </section>
+                              <section className="template-share-section">
+                                <div className="template-share-section__label">
+                                  {t('preview.shareCopyGroup')}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="share-menu-item"
+                                  role="menuitem"
+                                  onClick={() => {
+                                    onSharePopoverItemClick?.('copy_link');
+                                    void copyPreviewShare(previewShareUrl, 'link');
                                   }}
                                 >
-                                  <span className="template-share-platform__mark">
-                                    {item.mark}
+                                  <span className="share-menu-icon">
+                                    <Icon
+                                      name={
+                                        copyShareFeedback?.key === 'link'
+                                          ? copyShareFeedback.ok
+                                            ? 'check'
+                                            : 'close'
+                                          : 'link'
+                                      }
+                                      size={14}
+                                    />
                                   </span>
                                   <span>
-                                    {copyShareFeedback?.key === `social-${item.platform}`
+                                    {copyShareFeedback?.key === 'link'
                                       ? copyShareFeedback.ok
                                         ? t('preview.shareCopied')
                                         : t('preview.shareCopyFailed')
-                                      : t(item.labelKey)}
+                                      : t('preview.copyTemplateLink')}
                                   </span>
-                                </a>
-                              ))}
-                            </div>
-                          </section>
-                          <section className="template-share-section">
-                            <div className="template-share-section__label">
-                              {t('preview.shareCopyGroup')}
-                            </div>
-                            <button
-                              type="button"
-                              className="share-menu-item"
-                              role="menuitem"
-                              onClick={() => {
-                                onSharePopoverItemClick?.('copy_link');
-                                void copyPreviewShare(previewShareUrl, 'link');
-                              }}
-                            >
-                              <span className="share-menu-icon">
-                                <Icon
-                                  name={
-                                    copyShareFeedback?.key === 'link'
+                                </button>
+                                <button
+                                  type="button"
+                                  className="share-menu-item"
+                                  role="menuitem"
+                                  onClick={() => {
+                                    onSharePopoverItemClick?.('copy_share_text');
+                                    void copyPreviewShare(previewShareCopy, 'text');
+                                  }}
+                                >
+                                  <span className="share-menu-icon">
+                                    <Icon
+                                      name={
+                                        copyShareFeedback?.key === 'text'
+                                          ? copyShareFeedback.ok
+                                            ? 'check'
+                                            : 'close'
+                                          : 'copy'
+                                      }
+                                      size={14}
+                                    />
+                                  </span>
+                                  <span>
+                                    {copyShareFeedback?.key === 'text'
                                       ? copyShareFeedback.ok
-                                        ? 'check'
-                                        : 'close'
-                                      : 'link'
+                                        ? t('preview.shareCopied')
+                                        : t('preview.shareCopyFailed')
+                                      : t('preview.copyShareText')}
+                                  </span>
+                                </button>
+                              </section>
+                            </>
+                          ) : null}
+                          {canExportFiles ? (
+                            <section className="template-share-section">
+                              <div className="template-share-section__label">
+                                {t('preview.shareExportGroup')}
+                              </div>
+                              <button
+                                type="button"
+                                className="share-menu-item"
+                                role="menuitem"
+                                onClick={() => {
+                                  onSharePopoverItemClick?.('pdf');
+                                  setTemplateShareOpen(false);
+                                  if (activeHtml) {
+                                    exportAsPdf(activeHtml, exportTitle, { deck: activeDeck });
                                   }
-                                  size={14}
-                                />
-                              </span>
-                              <span>
-                                {copyShareFeedback?.key === 'link'
-                                  ? copyShareFeedback.ok
-                                    ? t('preview.shareCopied')
-                                    : t('preview.shareCopyFailed')
-                                  : t('preview.copyTemplateLink')}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              className="share-menu-item"
-                              role="menuitem"
-                              onClick={() => {
-                                onSharePopoverItemClick?.('copy_share_text');
-                                void copyPreviewShare(previewShareCopy, 'text');
-                              }}
-                            >
-                              <span className="share-menu-icon">
-                                <Icon
-                                  name={
-                                    copyShareFeedback?.key === 'text'
-                                      ? copyShareFeedback.ok
-                                        ? 'check'
-                                        : 'close'
-                                      : 'copy'
+                                }}
+                              >
+                                <span className="share-menu-icon">
+                                  <Icon name="file" size={14} />
+                                </span>
+                                <span>{t('common.exportPdf')}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="share-menu-item"
+                                role="menuitem"
+                                onClick={() => {
+                                  onSharePopoverItemClick?.('zip');
+                                  setTemplateShareOpen(false);
+                                  if (activeHtml) exportAsZip(activeHtml, exportTitle);
+                                }}
+                              >
+                                <span className="share-menu-icon">
+                                  <Icon name="download" size={14} />
+                                </span>
+                                <span>{t('common.exportZip')}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="share-menu-item"
+                                role="menuitem"
+                                onClick={() => {
+                                  onSharePopoverItemClick?.('html');
+                                  setTemplateShareOpen(false);
+                                  if (activeHtml) exportAsHtml(activeHtml, exportTitle);
+                                }}
+                              >
+                                <span className="share-menu-icon">
+                                  <Icon name="file-code" size={14} />
+                                </span>
+                                <span>{t('common.exportHtml')}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="share-menu-item"
+                                role="menuitem"
+                                onClick={async () => {
+                                  onSharePopoverItemClick?.('image');
+                                  setTemplateShareOpen(false);
+                                  const iframe = previewIframeRef.current;
+                                  if (!iframe) return;
+                                  const snap =
+                                    (await captureHostIframeSnapshot(iframe)) ??
+                                    (await requestPreviewSnapshot(iframe));
+                                  try {
+                                    if (snap) {
+                                      exportAsImage(snap.dataUrl, exportTitle);
+                                    } else {
+                                      console.warn('[PreviewModal] snapshot capture returned null');
+                                      alert(t('common.exportImageFailed'));
+                                    }
+                                  } catch (err) {
+                                    console.warn('[PreviewModal] failed to convert snapshot:', err);
+                                    alert(t('common.exportImageFailed'));
                                   }
-                                  size={14}
-                                />
-                              </span>
-                              <span>
-                                {copyShareFeedback?.key === 'text'
-                                  ? copyShareFeedback.ok
-                                    ? t('preview.shareCopied')
-                                    : t('preview.shareCopyFailed')
-                                  : t('preview.copyShareText')}
-                              </span>
-                            </button>
-                          </section>
-                        </>
-                      ) : null}
-                      {canExportFiles ? (
-                        <section className="template-share-section">
-                          <div className="template-share-section__label">
-                            {t('preview.shareExportGroup')}
-                          </div>
-                          <button
-                            type="button"
-                            className="share-menu-item"
-                            role="menuitem"
-                            onClick={() => {
-                              onSharePopoverItemClick?.('pdf');
-                              setTemplateShareOpen(false);
-                              if (activeHtml) {
-                                exportAsPdf(activeHtml, exportTitle, { deck: activeDeck });
-                              }
-                            }}
-                          >
-                            <span className="share-menu-icon">
-                              <Icon name="file" size={14} />
-                            </span>
-                            <span>{t('common.exportPdf')}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="share-menu-item"
-                            role="menuitem"
-                            onClick={() => {
-                              onSharePopoverItemClick?.('zip');
-                              setTemplateShareOpen(false);
-                              if (activeHtml) exportAsZip(activeHtml, exportTitle);
-                            }}
-                          >
-                            <span className="share-menu-icon">
-                              <Icon name="download" size={14} />
-                            </span>
-                            <span>{t('common.exportZip')}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="share-menu-item"
-                            role="menuitem"
-                            onClick={() => {
-                              onSharePopoverItemClick?.('html');
-                              setTemplateShareOpen(false);
-                              if (activeHtml) exportAsHtml(activeHtml, exportTitle);
-                            }}
-                          >
-                            <span className="share-menu-icon">
-                              <Icon name="file-code" size={14} />
-                            </span>
-                            <span>{t('common.exportHtml')}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="share-menu-item"
-                            role="menuitem"
-                            onClick={async () => {
-                              onSharePopoverItemClick?.('image');
-                              setTemplateShareOpen(false);
-                              const iframe = previewIframeRef.current;
-                              if (!iframe) return;
-                              const snap =
-                                (await captureHostIframeSnapshot(iframe)) ??
-                                (await requestPreviewSnapshot(iframe));
-                              try {
-                                if (snap) {
-                                  exportAsImage(snap.dataUrl, exportTitle);
-                                } else {
-                                  console.warn('[PreviewModal] snapshot capture returned null');
-                                  alert(t('common.exportImageFailed'));
-                                }
-                              } catch (err) {
-                                console.warn('[PreviewModal] failed to convert snapshot:', err);
-                                alert(t('common.exportImageFailed'));
-                              }
-                            }}
-                          >
-                            <span className="share-menu-icon">
-                              <Icon name="image" size={14} />
-                            </span>
-                            <span>{t('common.exportImage')}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="share-menu-item"
-                            role="menuitem"
-                            onClick={() => {
-                              onSharePopoverItemClick?.('open_in_new_tab');
-                              setTemplateShareOpen(false);
-                              openInNewTab();
-                            }}
-                          >
-                            <span className="share-menu-icon">
-                              <Icon name="external-link" size={14} />
-                            </span>
-                            <span>{t('preview.openInNewTab')}</span>
-                          </button>
-                        </section>
+                                }}
+                              >
+                                <span className="share-menu-icon">
+                                  <Icon name="image" size={14} />
+                                </span>
+                                <span>{t('common.exportImage')}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="share-menu-item"
+                                role="menuitem"
+                                onClick={() => {
+                                  onSharePopoverItemClick?.('open_in_new_tab');
+                                  setTemplateShareOpen(false);
+                                  openInNewTab();
+                                }}
+                              >
+                                <span className="share-menu-icon">
+                                  <Icon name="external-link" size={14} />
+                                </span>
+                                <span>{t('preview.openInNewTab')}</span>
+                              </button>
+                            </section>
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
                   ) : null}
+                  {headerExtras}
                 </div>
-              ) : null}
-              {headerExtras}
-            </div>
-            <button
-              type="button"
-              className="ds-modal-close"
-              onClick={onClose}
-              title={t('preview.closeTitle')}
-              aria-label={t('common.close')}
-            >
-              <Icon name="close" size={14} />
-            </button>
-          </div>
-        </header>
-        <div
-          className={`ds-modal-stage ${sidebar && sidebarOpen ? 'has-sidebar' : ''}`}
-          ref={stageRef}
-        >
-          <div className="ds-modal-stage-iframe" ref={stageFrameRef}>
-            {/* Also render for custom-stage views (media players: image /
-                video / audio) — the header no longer carries fullscreen, so
-                this hover icon is their only fullscreen affordance. */}
-            {!activeUnavailable && !activeError ? (
-              <button
-                type="button"
-                className="ds-modal-stage-fullscreen"
-                onClick={() => {
-                  onFullscreenClick?.();
-                  if (fullscreen) exitFullscreen();
-                  else enterFullscreen();
-                }}
-                title={fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')}
-                aria-label={fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')}
-              >
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
+                <button
+                  type="button"
+                  className="ds-modal-close"
+                  onClick={onClose}
+                  title={t('preview.closeTitle')}
+                  aria-label={t('common.close')}
                 >
-                  {fullscreen ? (
-                    <path d="M9 3v6H3M3 9l6-6M15 21v-6h6M21 15l-6 6" />
-                  ) : (
-                    <path d="M3 9V3h6M3 3l6 6M21 15v6h-6M21 21l-6-6" />
-                  )}
-                </svg>
-              </button>
-            ) : null}
-            {isCustomView ? (
-              // Caller-rendered ReactNode (e.g. plugin media player).
-              // The modal still owns chrome (header, sidebar toggle,
-              // fullscreen, close) so every plugin variant shares the
-              // same layout language.
-              <div className="ds-modal-stage-custom">{activeCustom}</div>
-            ) : activeUnavailable ? (
-              // Skills declared as `image` / `markdown` / etc. ship no
-              // HTML preview, so the daemon's `/example` endpoint would
-              // 404 into the generic "Couldn't load this example." copy
-              // — misleading, since nothing failed: there's just no
-              // preview to render. Show a calm placeholder pointing the
-              // user at "Use this prompt" instead. Issues #897, #2840.
-              //
-              // `noun` lets the same placeholder read with the right
-              // word per surface — Skills tab, Community/Plugins,
-              // design-template (deck) cards. Defaults to 'skill' so
-              // pre-noun callers keep their existing copy. Issue #3216.
-              (() => {
-                const nounKey = ((): 'preview.nounSkill' | 'preview.nounPlugin' | 'preview.nounTemplate' => {
-                  switch (activeUnavailable.noun) {
-                    case 'plugin':
-                      return 'preview.nounPlugin';
-                    case 'template':
-                      return 'preview.nounTemplate';
-                    case 'skill':
-                    default:
-                      return 'preview.nounSkill';
-                  }
-                })();
-                const noun = t(nounKey);
-                return (
-                  <div
-                    className="ds-modal-empty ds-modal-unavailable"
-                    data-testid="preview-unavailable"
+                  <Icon name="close" size={14} />
+                </button>
+              </div>
+            </header>
+            <div className="ds-modal-body">
+              <div
+                className={`ds-modal-stage ${sidebar && sidebarOpen ? 'has-sidebar' : ''}`}
+                ref={stageRef}
+              >
+                <div className="ds-modal-stage-iframe" ref={stageFrameRef}>
+              {/* Also render for custom-stage views (media players: image /
+                  video / audio) — the header no longer carries fullscreen, so
+                  this hover icon is their only fullscreen affordance. */}
+              {!activeUnavailable && !activeError ? (
+                <button
+                  type="button"
+                  className="ds-modal-stage-fullscreen"
+                  onClick={() => {
+                    onFullscreenClick?.();
+                    if (fullscreen) exitFullscreen();
+                    else enterFullscreen();
+                  }}
+                  title={fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')}
+                  aria-label={fullscreen ? t('common.exitFullscreen') : t('common.fullscreen')}
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
                   >
-                    <div className="ds-modal-unavailable-title">
-                      {t('preview.unavailableTitle', { noun })}
+                    {fullscreen ? (
+                      <path d="M9 3v6H3M3 9l6-6M15 21v-6h6M21 15l-6 6" />
+                    ) : (
+                      <path d="M3 9V3h6M3 3l6 6M21 15v6h-6M21 21l-6-6" />
+                    )}
+                  </svg>
+                </button>
+              ) : null}
+              {isCustomView ? (
+                // Caller-rendered ReactNode (e.g. plugin media player).
+                // The modal still owns chrome (header, sidebar toggle,
+                // fullscreen, close) so every plugin variant shares the
+                // same layout language.
+                <div className="ds-modal-stage-custom">{activeCustom}</div>
+              ) : activeUnavailable ? (
+                // Skills declared as `image` / `markdown` / etc. ship no
+                // HTML preview, so the daemon's `/example` endpoint would
+                // 404 into the generic "Couldn't load this example." copy
+                // — misleading, since nothing failed: there's just no
+                // preview to render. Show a calm placeholder pointing the
+                // user at "Use this prompt" instead. Issues #897, #2840.
+                //
+                // `noun` lets the same placeholder read with the right
+                // word per surface — Skills tab, Community/Plugins,
+                // design-template (deck) cards. Defaults to 'skill' so
+                // pre-noun callers keep their existing copy. Issue #3216.
+                (() => {
+                  const nounKey = ((): 'preview.nounSkill' | 'preview.nounPlugin' | 'preview.nounTemplate' => {
+                    switch (activeUnavailable.noun) {
+                      case 'plugin':
+                        return 'preview.nounPlugin';
+                      case 'template':
+                        return 'preview.nounTemplate';
+                      case 'skill':
+                      default:
+                        return 'preview.nounSkill';
+                    }
+                  })();
+                  const noun = t(nounKey);
+                  return (
+                    <div
+                      className="ds-modal-empty ds-modal-unavailable"
+                      data-testid="preview-unavailable"
+                    >
+                      <div className="ds-modal-unavailable-title">
+                        {t('preview.unavailableTitle', { noun })}
+                      </div>
+                      <div className="ds-modal-unavailable-body">
+                        {t('preview.unavailableBody', {
+                          kind: activeUnavailable.kind || 'preview',
+                          noun,
+                        })}
+                      </div>
                     </div>
-                    <div className="ds-modal-unavailable-body">
-                      {t('preview.unavailableBody', {
-                        kind: activeUnavailable.kind || 'preview',
-                        noun,
-                      })}
-                    </div>
+                  );
+                })()
+              ) : activeError ? (
+                // Distinct error state so a fetch failure stops looking
+                // like an indefinite "Loading…". The Retry button re-fires
+                // onView for this view id; the caller is responsible for
+                // clearing the error state and re-running the fetch.
+                // Issue #860.
+                <div className="ds-modal-empty ds-modal-error">
+                  <div className="ds-modal-error-title">
+                    {t('preview.errorTitle')}
                   </div>
-                );
-              })()
-            ) : activeError ? (
-              // Distinct error state so a fetch failure stops looking
-              // like an indefinite "Loading…". The Retry button re-fires
-              // onView for this view id; the caller is responsible for
-              // clearing the error state and re-running the fetch.
-              // Issue #860.
-              <div className="ds-modal-empty ds-modal-error">
-                <div className="ds-modal-error-title">
-                  {t('preview.errorTitle')}
+                  <div className="ds-modal-error-body">
+                    {t('preview.errorBody')}
+                  </div>
+                  {onView && activeView ? (
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => onView(activeView.id)}
+                    >
+                      {t('preview.retry')}
+                    </button>
+                  ) : null}
                 </div>
-                <div className="ds-modal-error-body">
-                  {t('preview.errorBody')}
+              ) : activeHtml === null || activeHtml === undefined ? (
+                <div className="ds-modal-empty">
+                  {t('preview.loading', {
+                    label:
+                      activeView?.label.toLowerCase() ?? t('common.preview').toLowerCase(),
+                  })}
                 </div>
-                {onView && activeView ? (
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={() => onView(activeView.id)}
+              ) : (
+                <div className="ds-modal-stage-iframe-scaler" style={scalerStyle}>
+                  <iframe
+                    key={activeView?.id ?? 'view'}
+                    ref={previewIframeRef}
+                    title={`${title} ${activeView?.label ?? ''}`}
+                    sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+                    srcDoc={srcDoc}
+                  />
+                </div>
+              )}
+              {sidebar && !sidebarOpen ? (
+                <button
+                  type="button"
+                  className="ds-modal-stage-handle is-expand"
+                  onClick={() => {
+                    onSidebarToggleClick?.(true);
+                    setSidebarOpen(true);
+                  }}
+                  data-tooltip={t('preview.showSidebar', { label: sidebar.label })}
+                  aria-label={t('preview.showSidebar', { label: sidebar.label })}
+                >
+                  <span aria-hidden="true">‹</span>
+                </button>
+              ) : null}
+                </div>
+                {sidebar && sidebarOpen ? (
+                  <aside
+                    className={`ds-modal-sidebar${sidebar.className ? ` ${sidebar.className}` : ''}`}
+                    aria-label={sidebar.label}
                   >
-                    {t('preview.retry')}
-                  </button>
+                    <button
+                      type="button"
+                      className="ds-modal-stage-handle is-collapse"
+                      onClick={() => {
+                        onSidebarToggleClick?.(false);
+                        setSidebarOpen(false);
+                      }}
+                      data-tooltip={t('preview.hideSidebar', { label: sidebar.label })}
+                      aria-label={t('preview.hideSidebar', { label: sidebar.label })}
+                    >
+                      <span aria-hidden="true">›</span>
+                    </button>
+                    {sidebar.header ? (
+                      <div className="ds-modal-sidebar-header">
+                        <span className="ds-modal-sidebar-title">{sidebar.header}</span>
+                      </div>
+                    ) : null}
+                    {sidebar.content}
+                  </aside>
                 ) : null}
               </div>
-            ) : activeHtml === null || activeHtml === undefined ? (
-              <div className="ds-modal-empty">
-                {t('preview.loading', {
-                  label:
-                    activeView?.label.toLowerCase() ?? t('common.preview').toLowerCase(),
-                })}
-              </div>
-            ) : (
-              <div className="ds-modal-stage-iframe-scaler" style={scalerStyle}>
-                <iframe
-                  key={activeView?.id ?? 'view'}
-                  ref={previewIframeRef}
-                  title={`${title} ${activeView?.label ?? ''}`}
-                  sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-                  srcDoc={srcDoc}
-                />
-              </div>
-            )}
-            {sidebar && !sidebarOpen ? (
-              <button
-                type="button"
-                className="ds-modal-stage-handle is-expand"
-                onClick={() => {
-                  onSidebarToggleClick?.(true);
-                  setSidebarOpen(true);
-                }}
-                title={t('preview.showSidebar', { label: sidebar.label })}
-                aria-label={t('preview.showSidebar', { label: sidebar.label })}
-              >
-                <span aria-hidden="true">‹</span>
-              </button>
-            ) : null}
+            </div>
           </div>
-          {sidebar && sidebarOpen ? (
-            <aside className="ds-modal-sidebar" aria-label={sidebar.label}>
-              <button
-                type="button"
-                className="ds-modal-stage-handle is-collapse"
-                onClick={() => {
-                  onSidebarToggleClick?.(false);
-                  setSidebarOpen(false);
-                }}
-                title={t('preview.hideSidebar', { label: sidebar.label })}
-                aria-label={t('preview.hideSidebar', { label: sidebar.label })}
-              >
-                <span aria-hidden="true">›</span>
-              </button>
-              {sidebar.content}
-            </aside>
-          ) : null}
         </div>
       </div>
     </div>

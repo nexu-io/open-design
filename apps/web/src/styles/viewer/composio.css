@@ -1397,6 +1397,19 @@
   max-width: none;
   border-radius: 0;
 }
+.ds-modal-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+.ds-modal-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 /* Two-row header: title row keeps the title/subtitle + close together at
    the top; toolbar row hosts tabs (left) and the action cluster (right).
    This split lets the title breathe even when the toolbar carries a busy
@@ -1436,7 +1449,7 @@
 .ds-modal-title {
   font-size: 16px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1500,6 +1513,31 @@
 .ds-modal-actions .share-menu > button {
   white-space: nowrap;
   flex-shrink: 0;
+}
+.ds-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+.ds-modal-navigation {
+  flex: 0 0 160px;
+  width: 160px;
+  min-width: 146px;
+  max-width: 172px;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.ds-modal-body > .ds-modal-stage {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ds-modal-fullscreen .ds-modal-navigation {
+  display: none;
 }
 .ds-modal-stage {
   flex: 1;
@@ -1583,6 +1621,27 @@
      slightly longer ease-out keeps it from snapping. */
   animation: ds-modal-sidebar-in 340ms cubic-bezier(0.16, 1, 0.3, 1);
 }
+.ds-modal-sidebar--design-spec {
+  flex: 0 1 32%;
+  min-width: 300px;
+  max-width: 460px;
+}
+.ds-modal-sidebar-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.ds-modal-sidebar-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
 @keyframes ds-modal-sidebar-in {
   from {
     opacity: 0;
@@ -1634,16 +1693,45 @@
   transition: color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 .ds-modal-stage-handle:hover { color: var(--text); background: var(--bg-subtle); }
+.ds-modal-stage-handle[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: 50%;
+  z-index: 5;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+.ds-modal-stage-handle[data-tooltip]:hover::after,
+.ds-modal-stage-handle[data-tooltip]:focus-visible::after {
+  opacity: 1;
+}
 .ds-modal-stage-handle.is-expand {
   right: 0;
   border-right: none;
   border-radius: 8px 0 0 8px;
 }
+.ds-modal-stage-handle.is-expand::after {
+  right: calc(100% + 8px);
+}
 .ds-modal-stage-handle.is-collapse {
-  position: sticky;
+  position: absolute;
   left: 0;
   border-left: none;
   border-radius: 0 8px 8px 0;
+}
+.ds-modal-stage-handle.is-collapse::after {
+  left: calc(100% + 8px);
 }
 .ds-modal-fullscreen .ds-modal-stage:fullscreen .ds-modal-stage-iframe-scaler,
 .ds-modal-stage:fullscreen .ds-modal-stage-iframe-scaler {
@@ -1858,6 +1946,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  height: 35px;
   padding: 7px 16px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--accent);
@@ -1878,8 +1967,14 @@
   transform: translateY(0.5px);
 }
 .ds-modal-primary-action:disabled {
-  cursor: progress;
+  cursor: default;
   opacity: 0.6;
+}
+.ds-modal-primary-action[aria-busy='true'] {
+  cursor: progress;
+}
+.ds-modal-primary-action--trailing {
+  order: 20;
 }
 /* Split-button variant: the "Use plugin" CTA grows a caret toggle that opens
    a menu of use-variants ("Use plugin" / "Use with query"). Mirrors the home
@@ -1974,7 +2069,7 @@
 }
 .design-spec-pre {
   margin: 0;
-  padding: 16px 18px;
+  padding: 10px 14px 16px;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   line-height: 1.6;
@@ -2037,6 +2132,16 @@
   .ds-modal { border-radius: 0; }
   .ds-modal-header { gap: 10px; padding: 12px 14px; }
   .ds-modal-actions { justify-content: flex-start; }
+  .ds-modal-shell.has-navigation { flex-direction: column; }
+  .ds-modal-navigation {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    flex: 0 0 auto;
+    max-height: 220px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
   .ds-modal-stage { flex-direction: column; }
   .ds-modal-stage.has-sidebar .ds-modal-stage-iframe { flex: 1 1 50%; }
   .ds-modal-sidebar {

@@ -776,6 +776,7 @@ export const th: Dict = {
   'handoff.notInstalled': 'ยังไม่ได้ติดตั้ง',
   'handoff.notDetectedTitle': '{target} - ไม่พบบน $PATH',
   'designSystemPicker.select': 'เลือกดีไซน์ซิสเต็ม',
+  'designSystemPicker.useCurrent': 'ใช้ดีไซน์ซิสเต็มนี้',
   'designSystemPicker.loading': 'กำลังโหลด design systems…',
   'designSystemPicker.searchPlaceholder': 'ค้นหาดีไซน์ซิสเต็ม (ชื่อ / หมวดหมู่ / สรุป)',
   'designSystemPicker.searchCompactPlaceholder': 'ค้นหาดีไซน์ซิสเต็ม',

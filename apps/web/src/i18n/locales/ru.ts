@@ -776,6 +776,7 @@ export const ru: Dict = {
   'handoff.notInstalled': 'Не установлено',
   'handoff.notDetectedTitle': '{target} — не обнаружено в $PATH',
   'designSystemPicker.select': 'Выберите дизайн-систему',
+  'designSystemPicker.useCurrent': 'Использовать эту дизайн-систему',
   'designSystemPicker.loading': 'Загрузка дизайн-систем…',
   'designSystemPicker.searchPlaceholder': 'Поиск дизайн-систем (название / категория / описание)',
   'designSystemPicker.searchCompactPlaceholder': 'Поиск дизайн-систем',
