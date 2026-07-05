@@ -36,7 +36,7 @@ import { readVelaLoginStatus } from '../integrations/vela.js';
 import {
   deriveLangfuseDeliveryState,
   readTelemetrySinkConfig,
-} from '../langfuse-trace.js';
+} from '../langfuse-trace/index.js';
 import { parseMediaExecutionPolicyInput } from '../media/policy.js';
 import { isManagedProjectCwd } from '../mcp-config.js';
 import {

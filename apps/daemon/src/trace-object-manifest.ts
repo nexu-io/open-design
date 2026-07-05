@@ -7,8 +7,8 @@ import type {
   AttachmentManifestEntry,
   InputTextSnapshotManifestEntry,
   ObjectManifestCompleteness,
-} from './langfuse-trace.js';
-import { INPUT_MAX_BYTES } from './langfuse-trace.js';
+} from './langfuse-trace/index.js';
+import { INPUT_MAX_BYTES } from './langfuse-trace/index.js';
 import { mimeFor, readProjectFile, resolveProjectFilePath } from './projects.js';
 
 const OBJECT_RELAY_MARKER_HEADER = 'X-Open-Design-Telemetry';

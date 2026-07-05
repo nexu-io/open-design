@@ -38,7 +38,7 @@ import {
   type TraceObjectSummary,
   type ToolCallSummary,
   type TurnInfo,
-} from './langfuse-trace.js';
+} from './langfuse-trace/index.js';
 import type { PromptStackTelemetry } from './prompt-telemetry.js';
 import { redactSecrets } from './redact.js';
 import {

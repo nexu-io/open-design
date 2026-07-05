@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { buildTracePayload } from '../src/langfuse-trace.js';
+import { buildTracePayload } from '../src/langfuse-trace/index.js';
 
 const ORIGINAL_OD_TELEMETRY_ENV = process.env.OD_TELEMETRY_ENV;
 

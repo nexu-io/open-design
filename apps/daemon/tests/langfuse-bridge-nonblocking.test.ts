@@ -12,7 +12,7 @@ vi.mock('../src/db.js', () => ({
   listMessages: listMessagesMock,
 }));
 
-vi.mock('../src/langfuse-trace.js', () => ({
+vi.mock('../src/langfuse-trace/index.js', () => ({
   readTelemetrySinkConfig: vi.fn(() => ({ kind: 'langfuse' })),
   reportRunCompleted: reportRunCompletedMock,
   reportRunFeedback: vi.fn(),
