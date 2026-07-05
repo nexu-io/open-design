@@ -1900,6 +1900,7 @@ describe('netlify and railway deploys', () => {
       deployToRailway({
         config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
         projectId: 'p1',
+        projectsRoot: 'C:\\tmp\\projects',
         files,
       })
     ).rejects.toThrowError(/Invalid Railway API Token/);
@@ -1908,6 +1909,7 @@ describe('netlify and railway deploys', () => {
       await deployToRailway({
         config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
         projectId: 'p1',
+        projectsRoot: 'C:\\tmp\\projects',
         files,
       });
       throw new Error('Should have thrown');
@@ -2053,6 +2055,7 @@ describe('netlify and railway deploys', () => {
       deployToRailway({
         config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
         projectId: 'p1',
+        projectsRoot: 'C:\\tmp\\projects',
         files,
         priorMetadata: { serviceId: 'service-1' },
       })
@@ -2146,6 +2149,7 @@ describe('netlify and railway deploys', () => {
     await deployToRailway({
       config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
       projectId: 'p1',
+      projectsRoot: 'C:\\tmp\\projects',
       files,
       priorMetadata: { serviceId: 'service-1' },
     });
@@ -2317,6 +2321,7 @@ describe('netlify and railway deploys', () => {
     await deployToRailway({
       config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
       projectId: 'p1',
+      projectsRoot: 'C:\\tmp\\projects',
       files,
     });
 
@@ -2506,6 +2511,7 @@ describe('netlify and railway deploys', () => {
     await deployToRailway({
       config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
       projectId: 'p1',
+      projectsRoot: 'C:\\tmp\\projects',
       files,
     });
 
@@ -2708,6 +2714,7 @@ describe('netlify and railway deploys', () => {
       deployToRailway({
         config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
         projectId: 'p1',
+        projectsRoot: 'C:\\tmp\\projects',
         files: [
           {
             file: 'index.html',
@@ -2794,6 +2801,7 @@ describe('netlify and railway deploys', () => {
     const result = await deployToRailway({
       config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
       projectId: 'p1',
+      projectsRoot: 'C:\\tmp\\projects',
       files: [{ file: 'index.html', data: Buffer.from('test'), contentType: 'text/html' }],
       priorMetadata: { serviceId: 'service-1' },
     });
@@ -2860,6 +2868,7 @@ describe('netlify and railway deploys', () => {
       deployToRailway({
         config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
         projectId: 'p1',
+        projectsRoot: 'C:\\tmp\\projects',
         files: [{ file: 'index.html', data: Buffer.from('test'), contentType: 'text/html' }],
         priorMetadata: { serviceId: 'service-1' },
       })
@@ -2936,6 +2945,7 @@ describe('netlify and railway deploys', () => {
       deployToRailway({
         config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
         projectId: 'p1',
+        projectsRoot: 'C:\\tmp\\projects',
         files: [{ file: 'index.html', data: Buffer.from('test'), contentType: 'text/html' }],
         priorMetadata: { serviceId: 'service-1' },
       })
@@ -2993,6 +3003,7 @@ describe('netlify and railway deploys', () => {
       deployToRailway({
         config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
         projectId: 'p1',
+        projectsRoot: 'C:\\tmp\\projects',
         files: [{ file: 'index.html', data: Buffer.from('test'), contentType: 'text/html' }],
         priorMetadata: { railwayProjectId: 'railway-project-1', environmentId: 'environment-1', serviceId: 'service-1' },
       })
@@ -3075,6 +3086,7 @@ describe('netlify and railway deploys', () => {
     const deployPromise = deployToRailway({
       config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
       projectId: 'p1',
+      projectsRoot: 'C:\\tmp\\projects',
       files: [{ file: 'index.html', data: Buffer.from('test'), contentType: 'text/html' }],
       priorMetadata: { railwayProjectId: 'railway-project-1', environmentId: 'environment-1', serviceId: 'service-1' },
     });
@@ -3123,6 +3135,7 @@ describe('netlify and railway deploys', () => {
       await deployToRailway({
         config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
         projectId: 'p1',
+        projectsRoot: 'C:\\tmp\\projects',
         files,
       });
       throw new Error('Should have thrown');
@@ -3386,6 +3399,7 @@ describe('netlify and railway deploys', () => {
     const result = await deployToRailway({
       config: { token: 'railway-token-secret', githubToken: 'github-token-secret' },
       projectId: 'p1',
+      projectsRoot: 'C:\\tmp\\projects',
       files: [
         {
           file: 'index.html',
