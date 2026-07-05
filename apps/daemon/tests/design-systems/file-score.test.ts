@@ -4,7 +4,7 @@ import {
   isTextSnapshotPath,
   scoreDesignFile,
   shouldSkipRepoPath,
-} from '../../src/tools-connectors-cli.js';
+} from '../../src/tools-connectors-cli/index.js';
 
 describe('shouldSkipRepoPath', () => {
   it('skips editor / CI / agent-tooling directories', () => {

@@ -50,7 +50,7 @@ import {
   scanProjectLocation,
   writeProjectManifest,
 } from '../../project-locations.js';
-import { auditDesignSystemPackage } from '../../tools-connectors-cli.js';
+import { auditDesignSystemPackage } from '../../tools-connectors-cli/index.js';
 import { parseOrchestratorWorkspace } from '../../workspace-contract.js';
 import { registerProjectConversationRoutes } from './conversations.js';
 
