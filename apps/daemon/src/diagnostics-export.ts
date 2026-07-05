@@ -25,7 +25,7 @@ import {
 } from '@open-design/sidecar';
 
 import { readCurrentAppVersionInfo } from './app-version.js';
-import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
+import { agentCliEnvForAgent, readAppConfig } from './config/index.js';
 import { spawnEnvForAgent } from './agents.js';
 import { collectBrowserUseDiscoveryFacts } from './browser/index.js';
 

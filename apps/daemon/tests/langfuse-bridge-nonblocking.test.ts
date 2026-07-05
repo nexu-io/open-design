@@ -4,7 +4,7 @@ const readAppConfigMock = vi.fn();
 const listMessagesMock = vi.fn();
 const reportRunCompletedMock = vi.fn();
 
-vi.mock('../src/app-config.js', () => ({
+vi.mock('../src/config/index.js', () => ({
   readAppConfig: readAppConfigMock,
 }));
 

@@ -72,7 +72,7 @@ import {
   resolveAgentLaunch,
   spawnEnvForAgent,
 } from './agents.js';
-import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
+import { agentCliEnvForAgent, readAppConfig } from './config/index.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
 
 const SYSTEM_PROMPT = `You are a memory extractor for a personal AI design assistant.

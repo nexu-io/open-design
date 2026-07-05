@@ -1,6 +1,6 @@
 import { lstat, mkdir, readdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { ProjectLocationPrefs } from './app-config.js';
+import type { ProjectLocationPrefs } from './config/index.js';
 import { expandHomePrefix } from './home-expansion.js';
 import { isSafeId } from './projects.js';
 

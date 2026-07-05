@@ -21,7 +21,7 @@ import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
-import { expandHomePrefix } from './home-expansion.js';
+import { expandHomePrefix } from '../home-expansion.js';
 
 import {
   readInstallationFile,

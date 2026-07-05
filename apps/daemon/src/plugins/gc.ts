@@ -11,7 +11,7 @@
 
 import type Database from 'better-sqlite3';
 import { pruneExpiredSnapshots, type PruneExpiredResult } from './snapshots.js';
-import { readPluginEnvKnobs } from '../app-config.js';
+import { readPluginEnvKnobs } from '../config/index.js';
 
 type SqliteDb = Database.Database;
 

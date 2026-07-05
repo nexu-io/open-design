@@ -4,11 +4,11 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { readAppConfig, writeAppConfig } from '../src/app-config.js';
+import { readAppConfig, writeAppConfig } from '../src/config/index.js';
 import {
   readInstallationFile,
   writeInstallationFile,
-} from '../src/installation.js';
+} from '../src/config/installation.js';
 
 /**
  * The contract these tests pin down is the **0.7.x → 0.8.0 person

@@ -14,7 +14,7 @@ import path from 'node:path';
 
 import { modelIdForTracking } from '@open-design/contracts/analytics';
 
-import { readAppConfig } from './app-config.js';
+import { readAppConfig } from './config/index.js';
 import type { AppVersionInfo } from './app-version.js';
 import { listMessages } from './db.js';
 import {
