@@ -14,7 +14,7 @@ import {
 } from 'vitest';
 
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from '../src/app-config.js';
-import { isLocalSameOrigin } from '../src/origin-validation.js';
+import { isLocalSameOrigin } from '../src/auth/index.js';
 
 // Default telemetry preference applied when an existing config has no
 // telemetry block (fresh install, pre-disclosure). See

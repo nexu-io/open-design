@@ -6,7 +6,7 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { DesignSystemTokenContractRebuildJobResponse } from '@open-design/contracts';
 
-import { isLocalSameOrigin } from '../src/origin-validation.js';
+import { isLocalSameOrigin } from '../src/auth/index.js';
 import { listDesignSystems } from '../src/design-systems/index.js';
 import { registerStaticResourceRoutes } from '../src/routes/static-resource.js';
 

@@ -60,7 +60,7 @@ import { aihubmixHeaders } from './integrations/aihubmix.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
 import { preparePromptFileForAgent, type PreparedPromptFile } from './runtimes/prompt-file.js';
-import { configuredAllowedInternalHosts } from './origin-validation.js';
+import { configuredAllowedInternalHosts } from './auth/index.js';
 import {
   isAllowlistedInternalHost,
   isBlockedExternalApiHostname,

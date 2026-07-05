@@ -8,7 +8,7 @@ import { ComposioConnectorProvider, composioConnectorProvider, getStaticComposio
 import type { ConnectorCatalogDefinition, ConnectorDetail } from '../src/connectors/catalog.js';
 import { readComposioConfig, writeComposioConfig, type ComposioConfig } from '../src/connectors/composio-config.js';
 import { deleteConnectorCredentialsByProvider } from '../src/connectors/service.js';
-import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from '../src/tool-tokens.js';
+import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from '../src/auth/index.js';
 
 type JsonObject = Record<string, any>;
 type StartedServer = { url: string; server: Server };

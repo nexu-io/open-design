@@ -5,7 +5,7 @@ import os from 'node:os';
 import express from 'express';
 import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { isLocalSameOrigin } from '../src/origin-validation.js';
+import { isLocalSameOrigin } from '../src/auth/index.js';
 import { buildMcpInstallPayload } from '../src/mcp-install-info.js';
 
 // The install-info endpoint is a self-contained handler that resolves

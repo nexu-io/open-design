@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, ToolTokenRegistry } from '../src/tool-tokens.js';
+import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, ToolTokenRegistry } from '../src/auth/index.js';
 
 afterEach(() => {
   vi.useRealTimers();

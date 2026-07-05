@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { startServer } from '../../src/server.js';
 import { connectorService, ConnectorServiceError } from '../../src/connectors/service.js';
-import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from '../../src/tool-tokens.js';
+import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from '../../src/auth/index.js';
 
 type StartedServer = { server: http.Server; url: string };
 type JsonObject = Record<string, any>;
