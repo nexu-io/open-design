@@ -40,7 +40,7 @@ import {
   writeCloudflarePagesConfig,
   writeVercelConfig,
 } from '../src/deploy.js';
-import { closeDatabase, getDeployment, insertProject, openDatabase, upsertDeployment } from '../src/db.js';
+import { closeDatabase, getDeployment, insertProject, openDatabase, upsertDeployment } from '../src/db/index.js';
 import { ensureProject } from '../src/projects.js';
 
 async function setupProject() {

@@ -8,7 +8,7 @@ vi.mock('../src/app-config.js', () => ({
   readAppConfig: readAppConfigMock,
 }));
 
-vi.mock('../src/db.js', () => ({
+vi.mock('../src/db/index.js', () => ({
   listMessages: listMessagesMock,
 }));
 

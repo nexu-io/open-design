@@ -11,7 +11,7 @@ import type {
   PluginManifest,
 } from '@open-design/contracts';
 import { applyPlugin } from '../src/plugins/apply.js';
-import { openDatabase } from '../src/db.js';
+import { openDatabase } from '../src/db/index.js';
 import { upsertInstalledPlugin } from '../src/plugins/registry.js';
 import { resolveAppliedPipeline, type ScenarioRegistryEntry } from '@open-design/plugin-runtime';
 

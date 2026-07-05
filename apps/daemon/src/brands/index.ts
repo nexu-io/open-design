@@ -45,7 +45,7 @@ import {
   setTabs,
   upsertMessage,
   updateProject,
-} from '../db.js';
+} from '../db/index.js';
 import { listFiles, readProjectFile, resolveProjectDir, writeProjectFile } from '../projects.js';
 import { brandFromDesignMd, sourceUrlForDesignMd } from './design-md-input.js';
 import { brandGuideMd, brandToDesignMd } from './design-md.js';

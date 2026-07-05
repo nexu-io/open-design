@@ -16,7 +16,7 @@ import { modelIdForTracking } from '@open-design/contracts/analytics';
 
 import { readAppConfig } from './app-config.js';
 import type { AppVersionInfo } from './app-version.js';
-import { listMessages } from './db.js';
+import { listMessages } from './db/index.js';
 import {
   deriveLangfuseDeliveryState,
   readTelemetrySinkConfig,

@@ -7,7 +7,7 @@ import {
   getAgentSessionRecord,
   latestCompletedAssistantMessageId,
   upsertAgentSession,
-} from './db.js';
+} from './db/index.js';
 
 type SqliteDb = Database.Database;
 

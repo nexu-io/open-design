@@ -14,7 +14,7 @@ import {
   listRoutineRuns,
   listRoutines,
   updateRoutine,
-} from '../db.js';
+} from '../db/index.js';
 import { ingestAutomationSource } from '../automation-ingestions.js';
 import {
   validateSchedule as validateRoutineSchedule,

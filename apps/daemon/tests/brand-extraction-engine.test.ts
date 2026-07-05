@@ -15,7 +15,7 @@ import {
   listTabs,
   openDatabase,
   upsertMessage,
-} from '../src/db.js';
+} from '../src/db/index.js';
 import {
   backfillBrandExtractionTranscriptForProject,
   continueBrandExtraction,

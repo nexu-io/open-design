@@ -19,7 +19,7 @@ import {
   insertProject,
   openDatabase,
   upsertMessage,
-} from '../src/db.js';
+} from '../src/db/index.js';
 import { listLibraryAssets } from '../src/library-store.js';
 import { reconcileLibrary } from '../src/library-sync.js';
 import type Database from 'better-sqlite3';

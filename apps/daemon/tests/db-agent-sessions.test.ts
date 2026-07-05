@@ -15,7 +15,7 @@ import {
   updateAgentSessionStableHash,
   upsertAgentSession,
   upsertMessage,
-} from '../src/db.js';
+} from '../src/db/index.js';
 
 describe('agent_sessions persistence', () => {
   let tempDir: string;

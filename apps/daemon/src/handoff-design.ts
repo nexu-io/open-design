@@ -27,7 +27,7 @@ import type {
   HandoffResponse,
 } from '@open-design/contracts/api/handoff';
 import fs from 'node:fs';
-import { getProject } from './db.js';
+import { getProject } from './db/index.js';
 import {
   callAnthropicWithRetry,
   DEFAULT_TIMEOUT_MS,

@@ -14,7 +14,7 @@ import {
   insertProject,
   openDatabase,
   upsertMessage,
-} from '../src/db.js';
+} from '../src/db/index.js';
 import {
   buildHandoffPrompt,
   EmptyTranscriptError,

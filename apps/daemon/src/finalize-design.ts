@@ -31,7 +31,7 @@ import type {
   FinalizeArtifactRef,
   FinalizeProviderProtocol,
 } from '@open-design/contracts/api/finalize';
-import { getProject } from './db.js';
+import { getProject } from './db/index.js';
 import { readDesignSystem } from './design-systems/index.js';
 import {
   listFiles,

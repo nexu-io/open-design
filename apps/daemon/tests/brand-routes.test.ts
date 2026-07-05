@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { registerBrandRoutes, type BrandRoutesDeps } from '../src/brand-routes.js';
-import { closeDatabase, insertConversation, insertProject, listMessages, openDatabase, upsertMessage } from '../src/db.js';
+import { closeDatabase, insertConversation, insertProject, listMessages, openDatabase, upsertMessage } from '../src/db/index.js';
 import type { PrefetchResult } from '../src/brands/prefetch.js';
 
 const NO_LOGO_FALLBACK = async () => ({ changed: false });

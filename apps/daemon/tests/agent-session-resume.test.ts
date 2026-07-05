@@ -11,7 +11,7 @@ import {
   openDatabase,
   upsertAgentSession,
   upsertMessage,
-} from '../src/db.js';
+} from '../src/db/index.js';
 import {
   computeIncludeStable,
   hashStableInstructions,

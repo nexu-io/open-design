@@ -15,7 +15,7 @@ import {
   insertScheduledRoutineRun,
   insertProject,
   openDatabase,
-} from '../src/db.js';
+} from '../src/db/index.js';
 import { startServer } from '../src/server.js';
 import { upsertInstalledPlugin } from '../src/plugins/registry.js';
 import { createSnapshot, linkSnapshotToProject } from '../src/plugins/snapshots.js';

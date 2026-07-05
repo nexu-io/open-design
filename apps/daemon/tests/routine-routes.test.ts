@@ -10,7 +10,7 @@ import {
   insertProject,
   insertRoutineRun,
   openDatabase,
-} from '../src/db.js';
+} from '../src/db/index.js';
 import { registerRoutineRoutes } from '../src/routes/routine.js';
 
 describe('routine routes', () => {

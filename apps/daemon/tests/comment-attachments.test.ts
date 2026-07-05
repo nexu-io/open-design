@@ -16,7 +16,7 @@ import {
   updatePreviewCommentStatus,
   upsertMessage,
   upsertPreviewComment,
-} from '../src/db.js';
+} from '../src/db/index.js';
 import {
   normalizeCommentAttachments,
   renderCommentAttachmentHint,

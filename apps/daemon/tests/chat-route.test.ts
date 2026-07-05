@@ -33,7 +33,7 @@ import {
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { getAgentDef } from '../src/agents.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
-import { upsertMessage } from '../src/db.js';
+import { upsertMessage } from '../src/db/index.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
 
 const FAKE_VELA_FIXTURE = resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');

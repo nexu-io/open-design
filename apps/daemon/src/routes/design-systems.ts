@@ -16,7 +16,7 @@ import type {
   DesignSystemRevisionInput,
   DesignSystemTokenContractRebuildInput,
 } from '../design-systems/generation-jobs.js';
-import type { openDatabase } from '../db.js';
+import type { openDatabase } from '../db/index.js';
 import type { Project, ProjectFile } from '@open-design/contracts';
 
 type DbHandle = ReturnType<typeof openDatabase>;

@@ -16,7 +16,7 @@ import {
   listProjectsAwaitingInput,
   openDatabase,
   upsertMessage,
-} from '../src/db.js';
+} from '../src/db/index.js';
 import { composeProjectDisplayStatus } from '../src/server.js';
 
 const tempDirs: string[] = [];

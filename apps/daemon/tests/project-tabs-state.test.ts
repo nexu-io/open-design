@@ -9,7 +9,7 @@ import {
   listTabs,
   openDatabase,
   setTabs,
-} from '../src/db.js';
+} from '../src/db/index.js';
 
 describe('project tabs state persistence', () => {
   let tempDir: string;

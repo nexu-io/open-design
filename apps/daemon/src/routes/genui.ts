@@ -2,7 +2,7 @@ import type { Express } from 'express';
 import type Database from 'better-sqlite3';
 
 import { applyDiffReviewDecisionToCwd, getSnapshot, isDiffReviewSurfaceId, listIterationsForRun } from '../plugins/index.js';
-import { getProject } from '../db.js';
+import { getProject } from '../db/index.js';
 import {
   getSurface,
   listSurfacesForProject,

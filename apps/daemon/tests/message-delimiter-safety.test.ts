@@ -10,7 +10,7 @@ import {
   listMessages,
   openDatabase,
   upsertMessage,
-} from '../src/db.js';
+} from '../src/db/index.js';
 
 describe('message delimiter safety', () => {
   let tempDir: string;

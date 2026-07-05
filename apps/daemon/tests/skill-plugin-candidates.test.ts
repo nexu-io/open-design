@@ -9,7 +9,7 @@ import {
   listMessages,
   openDatabase,
   upsertMessage,
-} from '../src/db.js';
+} from '../src/db/index.js';
 import {
   detectSkillPluginCandidate,
   dismissSkillPluginCandidate,

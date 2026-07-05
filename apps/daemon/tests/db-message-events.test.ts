@@ -12,7 +12,7 @@ import {
   listMessages,
   openDatabase,
   upsertMessage,
-} from '../src/db.js';
+} from '../src/db/index.js';
 
 describe('message event persistence', () => {
   let tempDir: string;

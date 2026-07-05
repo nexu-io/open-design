@@ -31,7 +31,7 @@ import {
   readCodexRolloutFirstCall,
 } from '../codex-rollout-usage.js';
 import type { ConnectorService } from '../connectors/service.js';
-import { getProject, listConversations, updateProject, upsertMessage } from '../db.js';
+import { getProject, listConversations, updateProject, upsertMessage } from '../db/index.js';
 import { readVelaLoginStatus } from '../integrations/vela.js';
 import {
   deriveLangfuseDeliveryState,

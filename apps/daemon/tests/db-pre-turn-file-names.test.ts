@@ -10,7 +10,7 @@ import {
   listMessages,
   openDatabase,
   upsertMessage,
-} from '../src/db.js';
+} from '../src/db/index.js';
 
 describe('preTurnFileNames persistence', () => {
   let tempDir: string;

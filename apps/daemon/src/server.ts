@@ -515,7 +515,7 @@ import {
   upsertDeployment,
   upsertMessage,
   upsertPreviewComment,
-} from './db.js';
+} from './db/index.js';
 import {
   computeIncludeStable,
   hashStableInstructions,

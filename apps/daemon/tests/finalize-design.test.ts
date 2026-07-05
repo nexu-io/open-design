@@ -19,7 +19,7 @@ import {
   insertProject,
   openDatabase,
   upsertMessage,
-} from '../src/db.js';
+} from '../src/db/index.js';
 import { isSafeId, writeProjectFile } from '../src/projects.js';
 import {
   appendVersionedApiPath,

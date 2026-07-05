@@ -24,7 +24,7 @@ import {
   listLatestRunStatuses,
   listProjectsAwaitingInput,
   type insertProject,
-} from './db.js';
+} from './db/index.js';
 import { resolveProjectDir } from './projects.js';
 import {
   continueBrandExtraction,
