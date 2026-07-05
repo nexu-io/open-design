@@ -10,6 +10,80 @@ const CONTAINER_THEME = {
   messenger: {screenBg: "#F3F5F8", headerBg: "#FFFFFF", bubbleLeft: "#FFFFFF", bubbleRight: "#0A84FF", subtitle: "#7E8695"},
 } as const;
 
+const CHAT_WIDTH = 780;
+const ROW_MAX_WIDTH_RATIO = 0.86;
+const AVATAR_SIZE = 62;
+const AVATAR_GAP = 12;
+const BUBBLE_HORIZONTAL_PADDING = 44;
+const BUBBLE_WIDTH_SAFETY = 18;
+const BUBBLE_FONT_SIZE = 30;
+const BUBBLE_FONT_WEIGHT = 500;
+const FONT_FAMILY = `"PingFang SC", "Alibaba PuHuiTi", "Noto Sans SC", sans-serif`;
+const CANVAS_CACHE_KEY = "__chat_motion_overlay_measure_canvas__";
+
+const estimateCharWidth = (char: string) => {
+  if (/\s/.test(char)) return BUBBLE_FONT_SIZE * 0.35;
+  if (/[\u0000-\u00ff]/.test(char)) return BUBBLE_FONT_SIZE * 0.58;
+  return BUBBLE_FONT_SIZE * 1.02;
+};
+
+const measureTextWidth = (text: string) => {
+  if (typeof document === "undefined") {
+    return Array.from(text).reduce((sum, char) => sum + estimateCharWidth(char), 0);
+  }
+  const win = document.defaultView as (Window & {[CANVAS_CACHE_KEY]?: HTMLCanvasElement}) | null;
+  if (!win) {
+    return Array.from(text).reduce((sum, char) => sum + estimateCharWidth(char), 0);
+  }
+  const canvas = win[CANVAS_CACHE_KEY] ?? document.createElement("canvas");
+  if (!win[CANVAS_CACHE_KEY]) {
+    win[CANVAS_CACHE_KEY] = canvas;
+  }
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return Array.from(text).reduce((sum, char) => sum + estimateCharWidth(char), 0);
+  }
+  context.font = `${BUBBLE_FONT_WEIGHT} ${BUBBLE_FONT_SIZE}px ${FONT_FAMILY}`;
+  return context.measureText(text).width;
+};
+
+const maxTextWidthFor = (container: ChatSpec["sceneConfig"]["container"]) => {
+  const horizontalPadding = container === "none" ? 184 : 44;
+  const availableRowWidth = (CHAT_WIDTH - horizontalPadding) * ROW_MAX_WIDTH_RATIO;
+  return availableRowWidth - AVATAR_SIZE - AVATAR_GAP - BUBBLE_HORIZONTAL_PADDING;
+};
+
+const wrapMessageText = (text: string, maxTextWidth: number) => {
+  const paragraphs = text.split("\n");
+  const wrapped = paragraphs.map((paragraph) => {
+    if (!paragraph || measureTextWidth(paragraph) <= maxTextWidth) {
+      return paragraph;
+    }
+    const lines: string[] = [];
+    let currentLine = "";
+    for (const char of paragraph) {
+      const nextLine = currentLine + char;
+      if (currentLine && measureTextWidth(nextLine) > maxTextWidth) {
+        lines.push(currentLine);
+        currentLine = char;
+        continue;
+      }
+      currentLine = nextLine;
+    }
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    return lines.join("\n");
+  });
+  return wrapped.join("\n");
+};
+
+const bubbleWidthFor = (text: string, maxTextWidth: number) => {
+  const lines = text.split("\n");
+  const widestLine = lines.reduce((max, line) => Math.max(max, measureTextWidth(line)), 0);
+  return Math.min(maxTextWidth, widestLine + BUBBLE_WIDTH_SAFETY) + BUBBLE_HORIZONTAL_PADDING;
+};
+
 const Bubble = ({
   message,
   participant,
@@ -34,6 +108,24 @@ const Bubble = ({
   const opacity = interpolate(local, [0, 8], [0, 1], {extrapolateRight: "clamp"});
   const bubbleBg = isRight ? theme.bubbleRight : theme.bubbleLeft;
   const textColor = chatSpec.sceneConfig.container === "messenger" && isRight ? "#FFFFFF" : "#1F1F1F";
+  const displayText = React.useMemo(
+    () => wrapMessageText(message.text, maxTextWidthFor(chatSpec.sceneConfig.container)),
+    [chatSpec.sceneConfig.container, message.text]
+  );
+  const singleLineWidth = React.useMemo(() => measureTextWidth(message.text), [message.text]);
+  const fitsSingleLine = React.useMemo(
+    () =>
+      !message.text.includes("\n") &&
+      singleLineWidth + BUBBLE_WIDTH_SAFETY <= maxTextWidthFor(chatSpec.sceneConfig.container),
+    [chatSpec.sceneConfig.container, message.text, singleLineWidth]
+  );
+  const bubbleWidth = React.useMemo(
+    () =>
+      fitsSingleLine
+        ? singleLineWidth + BUBBLE_WIDTH_SAFETY + BUBBLE_HORIZONTAL_PADDING
+        : bubbleWidthFor(displayText, maxTextWidthFor(chatSpec.sceneConfig.container)),
+    [chatSpec.sceneConfig.container, displayText, fitsSingleLine, singleLineWidth]
+  );
   const showName =
     chatSpec.sceneConfig.nicknameMode === "always" ||
     (chatSpec.sceneConfig.nicknameMode === "first-message-only" && !seenBySpeaker);
@@ -53,19 +145,26 @@ const Bubble = ({
           <div
             style={{
               background: bubbleBg,
+              display: "block",
+              width: Math.ceil(bubbleWidth),
+              maxWidth: "100%",
               padding: "16px 22px",
               borderRadius: 16,
-              fontSize: 30,
+              fontSize: BUBBLE_FONT_SIZE,
               lineHeight: 1.35,
-              fontWeight: 500,
+              fontWeight: BUBBLE_FONT_WEIGHT,
               color: textColor,
+              fontFamily: FONT_FAMILY,
+              whiteSpace: fitsSingleLine ? "nowrap" : "pre-wrap",
+              wordBreak: "break-word",
+              overflowWrap: "normal",
               boxShadow: message.highlight ? "0 8px 26px rgba(236,135,120,0.18)" : "0 2px 6px rgba(0,0,0,0.05)",
               border: message.highlight ? "2px solid rgba(235,135,120,0.45)" : "1px solid rgba(0,0,0,0.04)",
               transform: `translateX(${x}px) scale(${scale})`,
               transformOrigin: isRight ? "right center" : "left center",
             }}
           >
-            {message.text}
+            {displayText}
           </div>
         </div>
       </div>
