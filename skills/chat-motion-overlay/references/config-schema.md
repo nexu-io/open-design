@@ -42,6 +42,7 @@ Provide a JSON file when the user wants anything beyond the defaults.
 - `deviceFrame`
   - `none`
   - `iphone-dynamic-island`
+  - `container: none` only supports `deviceFrame: none`; phone framing is available for app containers
 
 - `nicknameMode`
   - `hidden`

@@ -22,8 +22,8 @@ Validated the new `$chat-motion-overlay` skill across:
 
 ## Matrix Result
 
-- Total cases: 17
-- Passed: 17
+- Total cases: 18
+- Passed: 18
 - Failed: 0
 
 ## Covered Cases
@@ -46,6 +46,7 @@ Validated the new `$chat-motion-overlay` skill across:
 15. `invalid_preset_mode_upload_path`
 16. `config_preset_overrides_transcript_avatar_hint`
 17. `invalid_force_dangerous_output_dir`
+18. `invalid_bubble_only_phone_frame`
 
 ## Issues Found And Fixed
 
@@ -98,6 +99,9 @@ Validated the new `$chat-motion-overlay` skill across:
 16. The documented MOV/WebM export commands and shipped package scripts omitted `src/index.ts`, so Remotion would treat the composition id as the entry file.
     - Fix: update both package scripts and `references/output-modes.md` to use `remotion render src/index.ts ChatMotionOverlay ...`, and keep that path checked in the matrix.
 
+17. `container=none` could still be combined with `deviceFrame=iphone-dynamic-island`, which let a 1080x1920 bubble-only scene render into the smaller phone viewport and clip right-side content.
+    - Fix: reject that unsupported combination during config validation, and document it in the config schema, visual rules, and matrix.
+
 ## Verification Notes
 
 - Representative bundles were rendered to still images successfully.
@@ -115,6 +119,7 @@ Validated the new `$chat-motion-overlay` skill across:
 - Dangerous `--force` output targets are rejected before any recursive deletion occurs.
 - Failed uploaded-avatar copies do not leave a generated `chatSpec.ts` containing local upload paths.
 - Shipped Remotion render scripts keep `src/index.ts` before the composition id.
+- `container=none + deviceFrame=iphone-dynamic-island` fails with a clear validation error before any bundle or render step.
 
 ## References
 

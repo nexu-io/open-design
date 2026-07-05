@@ -17,6 +17,7 @@ This matrix covers the configurable surface of `$chat-motion-overlay`.
 - Validate `uploadPath` is rejected when `avatarMode` is `preset`
 - Validate config participant presets override transcript avatar hints
 - Validate `--force` rejects dangerous output directories instead of deleting them
+- Reject the unsupported bubble-only plus phone-frame combination before rendering
 ## Covered Dimensions
 
 - `container`: `none`, `wechat`, `telegram`, `messenger`
@@ -123,6 +124,11 @@ This matrix covers the configurable surface of `$chat-motion-overlay`.
    - `--force` targets a dangerous existing directory such as the skill root
    - Expected: bundle preparation fails before any recursive deletion happens
 
+18. `invalid_bubble_only_phone_frame`
+   - Container: `none`
+   - Device frame: `iphone-dynamic-island`
+   - Expected: fail with a validation error instead of generating a clipped phone-frame scene
+
 ## Pass Criteria
 
 - Valid cases generate JSON spec successfully
@@ -142,4 +148,5 @@ This matrix covers the configurable surface of `$chat-motion-overlay`.
 - Config participant presets take precedence over transcript avatar hints when both are present
 - `--force` rejects dangerous output directories before deleting anything
 - Advertised Remotion render scripts keep `src/index.ts` before the composition id
+- `container=none + deviceFrame=iphone-dynamic-island` fails with a clear validation error
 - Question policy is documented with defaults, triggers, and user-facing wording

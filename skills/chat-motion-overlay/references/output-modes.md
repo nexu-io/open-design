@@ -35,5 +35,6 @@ Use this when the user wants to keep composing downstream rather than receiving 
 ## Visual Rules
 
 - `container: none` should keep only bubbles and avatars on a transparent root.
+- `container: none` only supports `deviceFrame: none`; do not pair bubble-only overlays with `iphone-dynamic-island`.
 - App containers should keep their own screen background but never add a global background outside the content region.
 - `deviceFrame: iphone-dynamic-island` adds phone hardware while preserving transparent outer space.

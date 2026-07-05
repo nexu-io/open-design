@@ -129,6 +129,8 @@ def validate_config(config: dict) -> None:
         raise ValueError(f"Unsupported nicknameMode: {config['nicknameMode']}")
     if config["deliveryFormat"] not in ALLOWED_DELIVERY_FORMATS:
         raise ValueError(f"Unsupported deliveryFormat: {config['deliveryFormat']}")
+    if config["container"] == "none" and config["deviceFrame"] == "iphone-dynamic-island":
+        raise ValueError("container=none does not support deviceFrame=iphone-dynamic-island; use deviceFrame=none or choose an app container")
 
     for speaker, participant in config.get("participants", {}).items():
         side = participant.get("side")
