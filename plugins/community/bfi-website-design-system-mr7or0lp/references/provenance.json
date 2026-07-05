@@ -1,0 +1,40 @@
+{
+  "candidateId": "6f7b5b9c-9a31-4fbe-ac51-563b69cc6a2f",
+  "projectId": "ds-bfi-website-based-design-system-design-system",
+  "runId": "cbdc8c43-154e-4954-8075-42dc79e09ee8",
+  "conversationId": "a446b447-7ae5-4ccb-896c-ab39aa3d35cb",
+  "provenance": {
+    "summary": "Detected from README.md, SKILL.md, ui_kits/app/README.md, context/source-context.md after a successful run.",
+    "detectedAt": 1783249406215
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 11828,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 7205,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "ui_kits/app/README.md",
+      "label": "ui_kits/app/README.md",
+      "size": 6615,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 10673,
+      "copied": true
+    }
+  ]
+}

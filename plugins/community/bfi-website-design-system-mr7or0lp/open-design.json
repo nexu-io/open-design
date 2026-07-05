@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "bfi-website-design-system-mr7or0lp",
+  "title": "BFI Website Design System",
+  "version": "0.1.0",
+  "description": "> **Source**: https://www.bfi.org.uk > **Category**: Custom · Web > **Extracted**: 2025-07-05",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
