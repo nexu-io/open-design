@@ -23,6 +23,7 @@ const SHARED = [
   'references/worked-example.md',
   'references/research-subagent.md',
   'references/review-subagent.md',
+  'references/topic-subagent.md',
 ];
 
 describe('naver-blog catalog mirror is in sync', () => {
