@@ -62,7 +62,7 @@ describe('renderMarkdown', () => {
     expect(out).toContain('>here</a>');
   });
 
-  it('marks bare URLs with the bare-link class so CSS can break them mid-string', () => {
+  it('marks bare URLs with the bare-link class so CSS can apply URL-specific wrapping', () => {
     const out = html('See https://example.com/very/long/path?with=long&query=string');
     expect(out).toContain('md-link-bare');
   });
