@@ -495,6 +495,9 @@ export default function Page({
                   </span>
                 </a>
               </div>
+              {/* `{systems}` in heroSub is substituted with the live
+                  getCatalogCounts() total (same source as the meta description
+                  and stat cards) so the design-systems count never drifts. */}
               <p className='hero-sub' data-reveal>
                 <BreakText text={t.heroSub.replace('{systems}', systems)} />
               </p>
