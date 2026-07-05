@@ -50,6 +50,7 @@ import {
 } from "./design-files/pluginFolders";
 import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
 import { Icon } from "./Icon";
+import { TeamProgressView, type TeamAgentState } from "./TeamProgressView";
 import { NextStepActions, type NextStepActionsVariant } from "./NextStepActions";
 import type { DesignToolboxActionId } from "../runtime/design-toolbox";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
@@ -852,6 +853,17 @@ function AssistantMessageImpl({
             // shimmering "Preparing…" label instead of its own pill.
             if (b.label === "initializing") return null;
             return <StatusPill key={i} label={b.label} detail={b.detail} />;
+          }
+          if (b.kind === "team-progress") {
+            return (
+              <TeamProgressView
+                key="team-progress"
+                teamName={b.teamName}
+                mode={b.mode}
+                agents={b.agents}
+                allDone={b.allDone}
+              />
+            );
           }
           return null;
         })}
@@ -3080,7 +3092,14 @@ type Block =
       confidence?: number | undefined;
       draftPath?: string | null | undefined;
     }
-  | { kind: "status"; label: string; detail?: string | undefined };
+  | { kind: "status"; label: string; detail?: string | undefined }
+  | {
+      kind: "team-progress";
+      teamName?: string;
+      mode?: string;
+      agents: TeamAgentState[];
+      allDone?: boolean;
+    };
 
 /**
  * Walk the event stream and build the rendering layout list. We additionally
@@ -3154,7 +3173,53 @@ function buildBlocks(events: AgentEvent[]): Block[] {
   for (const ev of events) {
     if (ev.kind === "tool_result") resultByToolId.set(ev.toolUseId, ev);
   }
+  // Team progress accumulation — team_start registers agents, task_start marks
+  // them running, task_result marks them done / failed.
+  let teamName: string | undefined;
+  let teamMode: string | undefined;
+  const teamAgents = new Map<string, TeamAgentState>();
+  let teamAllDone = false;
+
   for (const ev of events) {
+    if (ev.kind === "team_progress") {
+      const tp = ev;
+      if (tp.name === "team_start") {
+        teamName = tp.teamName ?? teamName;
+        teamMode = tp.mode ?? teamMode;
+        if (tp.agents) {
+          for (const a of tp.agents) {
+            if (!teamAgents.has(a.agentId)) {
+              teamAgents.set(a.agentId, {
+                agentId: a.agentId,
+                agentType: a.agentType,
+                agentName: a.agentName,
+                role: a.role,
+                status: "pending",
+              });
+            }
+          }
+        }
+      } else if (tp.name === "task_start") {
+        const aid = tp.agentId;
+        if (aid) {
+          const agent = teamAgents.get(aid);
+          if (agent) agent.status = "running";
+        }
+      } else if (tp.name === "task_result") {
+        const aid = tp.agentId;
+        if (aid) {
+          const agent = teamAgents.get(aid);
+          if (agent) {
+            agent.status = tp.success ? "completed" : "failed";
+            agent.duration = tp.duration;
+            agent.error = tp.error;
+          }
+        }
+      } else if (tp.name === "team_end") {
+        teamAllDone = true;
+      }
+      continue;
+    }
     if (ev.kind === "text") {
       const last = out[out.length - 1];
       if (last && last.kind === "text") last.text += ev.text;
@@ -3221,6 +3286,17 @@ function buildBlocks(events: AgentEvent[]): Block[] {
       out.push({ kind: "status", label: ev.label, detail: ev.detail });
       continue;
     }
+  }
+  // Prepend the team progress panel so it renders at the top of the
+  // assistant message, ahead of any agent output blocks.
+  if (teamAgents.size > 0) {
+    out.unshift({
+      kind: "team-progress",
+      teamName,
+      mode: teamMode,
+      agents: Array.from(teamAgents.values()),
+      allDone: teamAllDone,
+    });
   }
   return out;
 }

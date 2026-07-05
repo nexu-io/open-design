@@ -88,7 +88,7 @@ import {
   mentionTokenPresent,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
-import { generateTeams, type GeneratedTeam } from '../utils/teamGenerator';
+import { generateTeams, type GeneratedTeam, MODE_LABELS, MODE_DESCRIPTIONS, MODE_ICONS, ROLE_LABELS } from '../utils/teamGenerator';
 import { useWaitTeamEnabled } from './Theater';
 import { workspaceContextLinkedDir, workspaceContextLinkedDirs } from './workspace-context';
 import {
@@ -510,6 +510,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const waitTeamEnabled = useWaitTeamEnabled();
     const [generatedTeams, setGeneratedTeams] = useState<GeneratedTeam[]>([]);
     const [stagedTeam, setStagedTeam] = useState<GeneratedTeam | null>(null);
+    // Installed agent list (for custom team builder)
+    const [availableAgents, setAvailableAgents] = useState<Array<{ id: string; name: string; available: boolean }>>([]);
+    // Custom team builder state
+    const [teamSubMode, setTeamSubMode] = useState<'recommended' | 'custom'>('recommended');
+    const [teamBuilderMode, setTeamBuilderMode] = useState('parallel');
+    const [teamBuilderName, setTeamBuilderName] = useState('');
+    const [teamBuilderAssignments, setTeamBuilderAssignments] = useState<Array<{
+      agentId: string; agentType: string; agentName: string; role: string;
+    }>>([]);
     // Lexical owns the caret, so the mention/slash trigger state only carries
     // the typed query — no cursor offset.
     const [mention, setMention] = useState<{ q: string } | null>(null);
@@ -717,11 +726,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         .then((data: { agents?: Array<{ id: string; name: string; available: boolean }> }) => {
           if (cancelled) return;
           const agents = data.agents ?? [];
+          setAvailableAgents(agents);
           const teams = generateTeams(agents);
           if (!cancelled) setGeneratedTeams(teams);
         })
         .catch(() => {
-          if (!cancelled) setGeneratedTeams([]);
+          if (!cancelled) { setAvailableAgents([]); setGeneratedTeams([]); }
         });
       return () => { cancelled = true; };
     }, [waitTeamEnabled]);
@@ -2344,6 +2354,62 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setMention(null);
     }
 
+    function buildCustomTeam(): GeneratedTeam | null {
+      const assignments = teamBuilderAssignments;
+      if (assignments.length === 0) return null;
+      const mode = teamBuilderMode;
+      const name = teamBuilderName.trim() || `${MODE_LABELS[mode] ?? mode} · 自定义`;
+      const uniqueId = `team-custom-${Date.now()}`;
+      return {
+        id: uniqueId,
+        mode,
+        name,
+        description: `${MODE_DESCRIPTIONS[mode] ?? ''} (${assignments.length} Agent 自定义编排)`,
+        assignments: assignments.map((a) => ({
+          agentId: a.agentId,
+          agentType: a.agentType,
+          agentName: a.agentName,
+          role: a.role || 'agent',
+          score: 0,
+          reason: '用户自定义分配',
+        })),
+      };
+    }
+
+    function handleCreateCustomTeam() {
+      const team = buildCustomTeam();
+      if (!team) return;
+      setStagedTeam(team);
+      editorRef.current?.insertMention({
+        token: inlineMentionToken(team.name),
+        entity: { id: team.id, kind: 'team', label: team.name },
+      });
+      setMention(null);
+      setTeamSubMode('recommended');
+      setTeamBuilderAssignments([]);
+      setTeamBuilderName('');
+    }
+
+    function toggleTeamBuilderAgent(agent: { id: string; name: string; available: boolean }) {
+      if (!agent.available) return;
+      setTeamBuilderAssignments((prev) => {
+        const exists = prev.find((a) => a.agentId === agent.id);
+        if (exists) return prev.filter((a) => a.agentId !== agent.id);
+        return [...prev, {
+          agentId: agent.id,
+          agentType: agent.id,
+          agentName: agent.name,
+          role: '',
+        }];
+      });
+    }
+
+    function updateTeamBuilderRole(agentId: string, role: string) {
+      setTeamBuilderAssignments((prev) =>
+        prev.map((a) => (a.agentId === agentId ? { ...a, role } : a)),
+      );
+    }
+
     function insertTeamMention(team: GeneratedTeam) {
       setStagedTeam(team);
       editorRef.current?.insertMention({
@@ -2735,6 +2801,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 onScenarioChange={setPlaceholderScenario}
               />
             ) : null}
+            {waitTeamEnabled && !stagedTeam && placeholderCarouselActive ? (
+              <div className="composer-team-hint">
+                <span>{t('waiteam.chatTeamHint')}</span>
+              </div>
+            ) : null}
           </div>
           <CaretFloatingLayer
             caret={caretRect}
@@ -2748,6 +2819,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               skills={filteredSkills}
               mcpServers={filteredMcpServers}
               connectors={filteredConnectors}
+              teams={filteredTeams}
               query={mention?.q ?? ''}
               tab={mentionTab}
               onTabChange={(nextTab) => {
@@ -2762,6 +2834,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onPickSkill={(skill) => void insertSkillMention(skill)}
               onPickMcp={insertMcpMention}
               onPickConnector={insertConnectorMention}
+              onPickTeam={insertTeamMention}
+              // Custom team builder
+              teamSubMode={teamSubMode}
+              onTeamSubModeChange={setTeamSubMode}
+              teamBuilderMode={teamBuilderMode}
+              teamBuilderName={teamBuilderName}
+              teamBuilderAssignments={teamBuilderAssignments}
+              availableAgents={availableAgents}
+              onTeamBuilderModeChange={setTeamBuilderMode}
+              onTeamBuilderNameChange={setTeamBuilderName}
+              onToggleAgent={toggleTeamBuilderAgent}
+              onUpdateRole={updateTeamBuilderRole}
+              onCreateCustomTeam={handleCreateCustomTeam}
             />
           </CaretFloatingLayer>
           <CaretFloatingLayer
@@ -5198,6 +5283,7 @@ function MentionPopover({
   plugins,
   skills,
   mcpServers,
+  teams,
   query,
   tab,
   onTabChange,
@@ -5209,6 +5295,19 @@ function MentionPopover({
   onPickSkill,
   onPickMcp,
   onPickConnector,
+  onPickTeam,
+  // --- Custom team builder ---
+  teamSubMode,
+  teamBuilderMode,
+  teamBuilderName,
+  teamBuilderAssignments,
+  availableAgents,
+  onTeamSubModeChange,
+  onTeamBuilderModeChange,
+  onTeamBuilderNameChange,
+  onToggleAgent,
+  onUpdateRole,
+  onCreateCustomTeam,
 }: {
   files: ProjectFile[];
   workspaceContexts: WorkspaceContextItem[];
@@ -5216,6 +5315,7 @@ function MentionPopover({
   plugins: InstalledPluginRecord[];
   skills: SkillSummary[];
   mcpServers: McpServerConfig[];
+  teams: GeneratedTeam[];
   query: string;
   tab: MentionTab;
   onTabChange: (tab: MentionTab) => void;
@@ -5227,9 +5327,23 @@ function MentionPopover({
   onPickSkill: (skill: SkillSummary) => void;
   onPickMcp: (server: McpServerConfig) => void;
   onPickConnector: (connector: ConnectorDetail) => void;
+  onPickTeam: (team: GeneratedTeam) => void;
+  // --- Custom team builder props ---
+  teamSubMode: 'recommended' | 'custom';
+  onTeamSubModeChange: (mode: 'recommended' | 'custom') => void;
+  teamBuilderMode: string;
+  teamBuilderName: string;
+  teamBuilderAssignments: Array<{ agentId: string; agentType: string; agentName: string; role: string }>;
+  availableAgents: Array<{ id: string; name: string; available: boolean }>;
+  onTeamBuilderModeChange: (mode: string) => void;
+  onTeamBuilderNameChange: (name: string) => void;
+  onToggleAgent: (agent: { id: string; name: string; available: boolean }) => void;
+  onUpdateRole: (agentId: string, role: string) => void;
+  onCreateCustomTeam: () => void;
 }) {
   const { locale, t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
+  console.log('[MentionPopover] tabs includes teams:', { tabCount: 8, tabs: ['all','files','tabs','plugins','skills','mcp','connectors','teams'] });
   const tabs: Array<{ id: MentionTab; label: string }> = [
     { id: 'all', label: t('chat.mentionTabAll') },
     { id: 'files', label: t('chat.mentionTabFiles') },
@@ -5238,6 +5352,7 @@ function MentionPopover({
     { id: 'skills', label: t('chat.mentionTabSkills') },
     { id: 'mcp', label: t('chat.mentionTabMcp') },
     { id: 'connectors', label: t('chat.mentionTabConnectors') },
+    { id: 'teams', label: t('chat.mentionTabTeams') },
   ];
   const showTabs = tab === 'all' || tab === 'tabs';
   const showFiles = tab === 'all' || tab === 'files';
@@ -5245,13 +5360,15 @@ function MentionPopover({
   const showSkills = tab === 'all' || tab === 'skills';
   const showMcp = tab === 'all' || tab === 'mcp';
   const showConnectors = tab === 'all' || tab === 'connectors';
+  const showTeams = tab === 'all' || tab === 'teams';
   const hasVisibleResults =
     (showFiles && files.length > 0) ||
     (showTabs && workspaceContexts.length > 0) ||
     (showPlugins && plugins.length > 0) ||
     (showSkills && skills.length > 0) ||
     (showMcp && mcpServers.length > 0) ||
-    (showConnectors && connectors.length > 0);
+    (showConnectors && connectors.length > 0) ||
+    (showTeams && (teams.length > 0 || tab === 'teams'));
   useEffect(() => {
     if (ref.current) ref.current.scrollTop = 0;
   }, [connectors, files, plugins, skills, mcpServers, tab, workspaceContexts]);
@@ -5479,6 +5596,177 @@ function MentionPopover({
               );
             })}
           </>
+        ) : null}
+        {showTeams && (teams.length > 0 || tab === 'teams') ? (
+          <>
+            {/* Sub-mode toggle: Recommended / Custom */}
+            <div className="mention-team-tabs" role="tablist">
+              <button
+                role="tab"
+                aria-selected={teamSubMode === 'recommended'}
+                className={`mention-team-tab${teamSubMode === 'recommended' ? ' is-active' : ''}`}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onTeamSubModeChange('recommended')}
+              >
+                <Icon name="sparkles" size={11} />
+                {t('waiteam.teamTabRecommended')}
+              </button>
+              <button
+                role="tab"
+                aria-selected={teamSubMode === 'custom'}
+                className={`mention-team-tab${teamSubMode === 'custom' ? ' is-active' : ''}`}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onTeamSubModeChange('custom')}
+              >
+                <Icon name="sliders" size={11} />
+                {t('waiteam.teamTabCustom')}
+              </button>
+            </div>
+
+            {teamSubMode === 'recommended' ? (
+              /* Preset team list */
+              teams.map((team) => {
+                const flat = optionIndex;
+                optionIndex += 1;
+                const active = flat === activeIndex;
+                const modeLabel = MODE_LABELS[team.mode] ?? team.mode;
+                const modeIcon = MODE_ICONS[team.mode] ?? 'users';
+                return (
+                  <button
+                    key={`team-${team.id}`}
+                    id={`mention-opt-${flat}`}
+                    role="option"
+                    aria-selected={active}
+                    className={`mention-item mention-item--team mention-item--team-${team.mode}${active ? ' is-active' : ''}`}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onPickTeam(team)}
+                    title={team.description}
+                  >
+                    <span className="mention-item-team-icon">
+                      <Icon name={modeIcon} size={14} />
+                    </span>
+                    <span className="mention-item-body">
+                      <strong className="mention-item-team-name">{team.name}</strong>
+                      <span className="mention-meta mention-meta--desc">
+                        {team.description || modeLabel}
+                      </span>
+                      <span className="mention-meta mention-team-members">
+                        {team.assignments.map((a, i) => (
+                          <span key={i} className="mention-team-member-chip">
+                            <span className="mention-team-member-role">{ROLE_LABELS[a.role] ?? a.role}</span>
+                            <span className="mention-team-member-agent">{a.agentName}</span>
+                          </span>
+                        ))}
+                      </span>
+                    </span>
+                    <span className="mention-meta mention-item-kind mention-team-mode-badge">{modeLabel}</span>
+                  </button>
+                );
+              })
+            ) : (
+              /* Custom team builder panel */
+              <div className="mention-team-builder">
+                {/* Mode selector */}
+                <div className="mention-team-builder-field">
+                  <label>{t('waiteam.customTeamModeLabel')}</label>
+                  <select
+                    value={teamBuilderMode}
+                    onChange={(e) => onTeamBuilderModeChange(e.target.value)}
+                  >
+                    {Object.entries(MODE_LABELS).map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label} — {MODE_DESCRIPTIONS[key] ?? ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {/* Team name */}
+                <div className="mention-team-builder-field">
+                  <label>{t('waiteam.customTeamNameLabel')}</label>
+                  <input
+                    type="text"
+                    value={teamBuilderName}
+                    onChange={(e) => onTeamBuilderNameChange(e.target.value)}
+                    placeholder={t('waiteam.customTeamNamePlaceholder')}
+                  />
+                </div>
+                {/* Agent picker */}
+                <div className="mention-team-builder-field">
+                  <label>{t('waiteam.customTeamAgentsLabel')}</label>
+                  <div className="mention-team-builder-agents">
+                    {availableAgents.filter((a) => a.available).map((agent) => {
+                      const assigned = teamBuilderAssignments.find((a) => a.agentId === agent.id);
+                      return (
+                        <div
+                          key={agent.id}
+                          className={`mention-team-builder-agent ${assigned ? 'selected' : ''}`}
+                        >
+                          <button
+                            type="button"
+                            className="mention-team-builder-agent-toggle"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => onToggleAgent(agent)}
+                          >
+                            <span className="agent-check">{assigned ? '✓' : '+'}</span>
+                            <span className="agent-name">{agent.name}</span>
+                          </button>
+                          {assigned ? (
+                            <select
+                              value={assigned.role}
+                              onChange={(e) => onUpdateRole(agent.id, e.target.value)}
+                              className="mention-team-builder-role-select"
+                            >
+                              <option value="">{t('waiteam.customTeamPickRole')}</option>
+                              {Object.entries(ROLE_LABELS).map(([key, label]) => (
+                                <option key={key} value={key}>{label}</option>
+                              ))}
+                            </select>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                    {availableAgents.filter((a) => a.available).length === 0 ? (
+                      <span className="mention-team-builder-empty">
+                        {t('waiteam.customTeamNoAgents')}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                {/* Unavailable agents with install links */}
+                {availableAgents.filter((a) => !a.available).length > 0 ? (
+                  <div className="mention-team-builder-field">
+                    <label>{t('waiteam.customTeamMissingAgents')}</label>
+                    <div className="mention-team-builder-agents">
+                      {availableAgents.filter((a) => !a.available).map((agent) => (
+                        <div key={agent.id} className="mention-team-builder-agent unavailable">
+                          <span className="agent-name">{agent.name}</span>
+                          <span className="agent-tag">{t('waiteam.customTeamNotInstalled')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {/* Action buttons */}
+                <div className="mention-team-builder-actions">
+                  <button
+                    type="button"
+                    className="mention-team-builder-action create"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onCreateCustomTeam()}
+                    disabled={teamBuilderAssignments.length === 0 || teamBuilderAssignments.some((a) => !a.role)}
+                  >
+                    {t('waiteam.customTeamCreate')}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : null}
+        {showTeams && teams.length === 0 && tab !== 'all' ? (
+          <div className="mention-empty">{t('chat.mentionTeamEmpty')}</div>
         ) : null}
       </div>
     </div>

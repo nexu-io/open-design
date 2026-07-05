@@ -4000,6 +4000,24 @@ export interface Dict {
   'advancedDesign.multiAgentTitle': string;
   'waiteam.settingsEnabledLabel': string;
   'waiteam.settingsEnabledDescription': string;
+  'waiteam.settingsUsageHint': string;
+  'waiteam.chatTeamHint': string;
+  // Custom team builder
+  'waiteam.customTeamButton': string;
+  'waiteam.customTeamHint': string;
+  'waiteam.customTeamTitle': string;
+  'waiteam.customTeamModeLabel': string;
+  'waiteam.customTeamNameLabel': string;
+  'waiteam.customTeamNamePlaceholder': string;
+  'waiteam.customTeamAgentsLabel': string;
+  'waiteam.customTeamPickRole': string;
+  'waiteam.customTeamNoAgents': string;
+  'waiteam.customTeamMissingAgents': string;
+  'waiteam.customTeamNotInstalled': string;
+  'waiteam.customTeamCancel': string;
+  'waiteam.customTeamCreate': string;
+  'waiteam.teamTabRecommended': string;
+  'waiteam.teamTabCustom': string;
 
   // Diagnostics export
   'diagnostics.exportTitle': string;

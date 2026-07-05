@@ -50,7 +50,9 @@ export const codebuddyAgentDef = {
     bin: 'codebuddy',
     // `cbc` is the short alias shipped alongside `codebuddy`. Tried as a
     // fallback when the primary binary isn't on PATH.
-    fallbackBins: ['cbc'],
+    // `buddy` covers Windows IDE installations where the CLI ships as
+    // `buddy.cmd` inside the IDE's `bin/` directory (e.g. D:\CodeBuddy\bin\buddy.cmd).
+    fallbackBins: ['cbc', 'buddy'],
     versionArgs: ['--version'],
     helpArgs: ['-p', '--help'],
     capabilityFlags: {

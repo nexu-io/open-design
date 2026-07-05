@@ -979,6 +979,10 @@ async function consumeDaemonRun({
   let endResumable = false;
   let lastEventId: string | null = initialLastEventId ?? null;
   let canceled = false;
+  // Track which team agents have started for multi-agent team runs.
+  // When odteam wraps per-agent SSE events with agentId, we emit a
+  // synthetic task_start the first time we see each agent.
+  const teamAgentSeen = new Set<string>();
   const cancelRun = () => {
     if (canceled) return;
     canceled = true;
@@ -1056,6 +1060,18 @@ async function consumeDaemonRun({
           }
 
           if (event.event === 'agent') {
+            // Per-agent events from odteam carry an agentId via SetEventSink.
+            // Emit a synthetic task_start the first time we see each agent so
+            // the TeamProgressView can track which agents are active.
+            const dataAgentId = typeof event.data.agentId === 'string' ? event.data.agentId : undefined;
+            if (dataAgentId && !teamAgentSeen.has(dataAgentId)) {
+              teamAgentSeen.add(dataAgentId);
+              handlers.onAgentEvent({
+                kind: 'team_progress',
+                name: 'task_start',
+                agentId: dataAgentId,
+              });
+            }
             if (event.data.type === 'tool_input_delta') {
               if (
                 typeof event.data.id === 'string' &&
@@ -1339,6 +1355,26 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
   }
   if (t === 'raw' && typeof data.line === 'string') {
     return { kind: 'raw', line: data.line };
+  }
+  // Multi-agent team orchestration events from odteam
+  if (t === 'diagnostic' && data.source === 'odteam') {
+    const name = data.name as string;
+    if (name === 'team_start' || name === 'task_start' || name === 'task_result' || name === 'team_end') {
+      return {
+        kind: 'team_progress',
+        name,
+        mode: typeof data.mode === 'string' ? data.mode : undefined,
+        teamName: typeof data.teamName === 'string' ? data.teamName : undefined,
+        agents: Array.isArray(data.agents) ? data.agents : undefined,
+        agentId: typeof data.agentId === 'string' ? data.agentId : undefined,
+        agentName: typeof data.agentName === 'string' ? data.agentName : undefined,
+        agentRole: typeof data.agentRole === 'string' ? data.agentRole : undefined,
+        status: typeof data.status === 'string' ? data.status as 'running' | 'completed' | 'failed' : undefined,
+        success: typeof data.success === 'boolean' ? data.success : undefined,
+        duration: typeof data.duration === 'string' ? data.duration : undefined,
+        error: typeof data.error === 'string' ? data.error : undefined,
+      };
+    }
   }
   return null;
 }

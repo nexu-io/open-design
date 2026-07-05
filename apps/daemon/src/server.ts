@@ -684,7 +684,8 @@ function resolveOdTeamBin(): OdTeamSpawn | null {
     } catch { /* not executable or doesn't exist */ }
   }
   // 3. Pre-built binary in monorepo (e.g. make build)
-  const binPath = path.join(PROJECT_ROOT, 'packages', 'multi-agent-team', 'cmd', 'odteam', 'odteam');
+  const odteamName = process.platform === 'win32' ? 'odteam.exe' : 'odteam';
+  const binPath = path.join(PROJECT_ROOT, 'packages', 'multi-agent-team', 'cmd', 'odteam', odteamName);
   try {
     if (fs.existsSync(binPath) && fs.statSync(binPath).isFile()) {
       fs.accessSync(binPath, fs.constants.X_OK);
@@ -6342,7 +6343,25 @@ export async function startServer({
                 'AGENT_EXECUTION_FAILED',
                 evt.data.message || 'team orchestration error',
               ));
-            } else if (evt.event === 'team_start' || evt.event === 'task_result' || evt.event === 'team_end') {
+            } else if (evt.event === 'team_start') {
+              // Enrich with agent details from the team selection so the
+              // frontend can render a per-agent progress pipeline.
+              send('agent', {
+                type: 'diagnostic',
+                name: 'team_start',
+                source: 'odteam',
+                mode: typeof evt.data?.mode === 'string' ? evt.data.mode : undefined,
+                teamName: typeof evt.data?.teamName === 'string' ? evt.data.teamName : undefined,
+                agents: Array.isArray(team.assignments)
+                  ? team.assignments.map((a) => ({
+                      agentId: a.agentId,
+                      agentType: a.agentType,
+                      agentName: a.agentName,
+                      role: a.role,
+                    }))
+                  : [],
+              });
+            } else if (evt.event === 'task_result' || evt.event === 'team_end') {
               send('agent', {
                 type: 'diagnostic',
                 name: evt.event,

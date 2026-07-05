@@ -484,7 +484,22 @@ export type PersistedAgentEvent =
       draftPath?: string | null;
     }
   | { kind: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number; durationMs?: number }
-  | { kind: 'raw'; line: string };
+  | { kind: 'raw'; line: string }
+  /** Multi-agent team orchestration progress — emitted by odteam during team runs. */
+  | {
+      kind: 'team_progress';
+      name: 'team_start' | 'task_start' | 'task_result' | 'team_end';
+      mode?: string;
+      teamName?: string;
+      agents?: Array<{ agentId: string; agentType?: string; agentName: string; role: string }>;
+      agentId?: string;
+      agentName?: string;
+      agentRole?: string;
+      status?: 'running' | 'completed' | 'failed';
+      success?: boolean;
+      duration?: string;
+      error?: string;
+    };
 
 export interface ChatMessage {
   id: string;

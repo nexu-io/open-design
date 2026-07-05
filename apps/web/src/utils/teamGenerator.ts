@@ -44,6 +44,8 @@ const CAPABILITY_TABLE: Record<string, AgentCapabilityScores> = {
   opencode:      { creativeDesign: 65,  codeGen: 80,  contentWriting: 70,  criticalReview: 75,  systemOps: 80,  fastIteration: 75,  deepReasoning: 80,  chineseContent: 50 },
   copilot:       { creativeDesign: 55,  codeGen: 85,  contentWriting: 60,  criticalReview: 65,  systemOps: 60,  fastIteration: 70,  deepReasoning: 65,  chineseContent: 40 },
   hermes:        { creativeDesign: 60,  codeGen: 70,  contentWriting: 65,  criticalReview: 70,  systemOps: 85,  fastIteration: 75,  deepReasoning: 75,  chineseContent: 45 },
+  codebuddy:     { creativeDesign: 85,  codeGen: 80,  contentWriting: 80,  criticalReview: 75,  systemOps: 70,  fastIteration: 75,  deepReasoning: 85,  chineseContent: 80 },
+  amr:           { creativeDesign: 70,  codeGen: 75,  contentWriting: 70,  criticalReview: 65,  systemOps: 60,  fastIteration: 65,  deepReasoning: 80,  chineseContent: 70 },
 };
 
 const DEFAULT_SCORES: AgentCapabilityScores = {
@@ -51,7 +53,7 @@ const DEFAULT_SCORES: AgentCapabilityScores = {
   systemOps: 50, fastIteration: 50, deepReasoning: 50, chineseContent: 50,
 };
 
-const ROLE_LABELS: Record<string, string> = {
+export const ROLE_LABELS: Record<string, string> = {
   designer: '设计师',
   developer: '开发者',
   copywriter: '文案写手',
@@ -61,7 +63,7 @@ const ROLE_LABELS: Record<string, string> = {
   synthesizer: '综合器',
 };
 
-const MODE_LABELS: Record<string, string> = {
+export const MODE_LABELS: Record<string, string> = {
   parallel: '并行模式',
   serial: '串行模式',
   genetic: '遗传模式',
@@ -71,7 +73,7 @@ const MODE_LABELS: Record<string, string> = {
   cycle: '循环模式',
 };
 
-const MODE_DESCRIPTIONS: Record<string, string> = {
+export const MODE_DESCRIPTIONS: Record<string, string> = {
   parallel: '同层级 Agent 并行执行不同维度，适用多视角设计',
   serial: '链式执行，每阶段输出作为下阶段输入',
   genetic: '多变体并行生成 + 评分选择 + 优化迭代',
@@ -79,6 +81,17 @@ const MODE_DESCRIPTIONS: Record<string, string> = {
   hybrid: '串行主干 + 阶段内并行，适用复杂项目',
   complementary: '多专家视角链式协作，覆盖全生命周期',
   cycle: '生成器与评审者循环求精，直到达标',
+};
+
+/** Mode → icon name for team cards */
+export const MODE_ICONS: Record<string, string> = {
+  parallel: 'grid',
+  serial: 'chevron-right',
+  genetic: 'sparkles',
+  inheritance: 'layers-filled',
+  hybrid: 'puzzle',
+  complementary: 'orbit',
+  cycle: 'refresh',
 };
 
 interface AgentInfo {

@@ -8210,6 +8210,11 @@ function CritiqueTheaterSection() {
           <small className="hint">
             {t('waiteam.settingsEnabledDescription')}
           </small>
+          {waitTeamEnabled ? (
+            <small className="hint" style={{ color: 'var(--od-color-accent, #3b82f6)' }}>
+              💡 {t('waiteam.settingsUsageHint')}
+            </small>
+          ) : null}
         </label>
       </div>
     </section>
