@@ -315,10 +315,8 @@ export function DesignSystemPreviewModal({
       )}
       onClose={onClose}
       navigation={navigation}
-      hideSidebarToggle="always"
-      shareTriggerVariant="icon"
       primaryAction={onUseSystem ? {
-        label: t('designSystemPicker.useCurrent'),
+        label: t('preview.replicateContent'),
         onClick: () => {
           onUseSystem(activeSystem.id);
           onClose();
@@ -364,11 +362,9 @@ export function DesignSystemPreviewModal({
       }
       sidebar={{
         label: t('ds.specToggle'),
-        header: t('ds.specToggle'),
         defaultOpen: true,
         onToggle: handleSidebarToggle,
         contentKey: activeSystem.id,
-        className: 'ds-modal-sidebar--design-spec',
         content: (
           <DesignSpecView
             source={specBody}

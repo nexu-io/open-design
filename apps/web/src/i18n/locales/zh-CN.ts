@@ -805,7 +805,6 @@ export const zhCN: Dict = {
   "handoff.notInstalled": "未安装",
   "handoff.notDetectedTitle": "{target} - 未在 $PATH 中检测到",
   "designSystemPicker.select": "选择设计系统",
-  "designSystemPicker.useCurrent": "使用该设计系统",
   "designSystemPicker.loading": "正在加载设计系统…",
   "designSystemPicker.searchPlaceholder": "搜索设计系统（标题 / 分类 / 摘要）",
   "designSystemPicker.searchCompactPlaceholder": "搜索设计系统",

@@ -776,7 +776,6 @@ export const hu: Dict = {
   'handoff.notInstalled': 'Nincs telepítve',
   'handoff.notDetectedTitle': '{target} – nem észlelhető a $PATH útvonalon',
   'designSystemPicker.select': 'Válassz tervezési rendszert',
-  'designSystemPicker.useCurrent': 'Használd ezt a tervezési rendszert',
   'designSystemPicker.loading': 'Design rendszerek betöltése…',
   'designSystemPicker.searchPlaceholder': 'Tervezési rendszerek keresése (cím / kategória / összegzés)',
   'designSystemPicker.searchCompactPlaceholder': 'Tervezési rendszerek keresése',

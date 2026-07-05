@@ -1173,7 +1173,6 @@ export interface Dict {
   'handoff.notInstalled': string;
   'handoff.notDetectedTitle': string;
   'designSystemPicker.select': string;
-  'designSystemPicker.useCurrent': string;
   'designSystemPicker.loading': string;
   'designSystemPicker.searchPlaceholder': string;
   'designSystemPicker.searchCompactPlaceholder': string;

@@ -808,7 +808,6 @@ export const zhTW: Dict = {
   "handoff.notInstalled": "未安裝",
   "handoff.notDetectedTitle": "{target} - 未在 $PATH 中偵測到",
   "designSystemPicker.select": "選擇設計系統",
-  "designSystemPicker.useCurrent": "使用此設計系統",
   "designSystemPicker.loading": "正在載入設計系統…",
   "designSystemPicker.searchPlaceholder": "搜尋設計系統（標題 / 分類 / 摘要）",
   "designSystemPicker.searchCompactPlaceholder": "搜尋設計系統",

@@ -776,7 +776,6 @@ export const pl: Dict = {
   'handoff.notInstalled': 'Nie zainstalowano',
   'handoff.notDetectedTitle': '{target} - nie wykryto w $PATH',
   'designSystemPicker.select': 'Wybierz system projektowy',
-  'designSystemPicker.useCurrent': 'Użyj tego systemu projektowego',
   'designSystemPicker.loading': 'Wczytywanie systemów projektowych…',
   'designSystemPicker.searchPlaceholder': 'Szukaj systemów projektowych (tytuł / kategoria / podsumowanie)',
   'designSystemPicker.searchCompactPlaceholder': 'Szukaj systemów projektowych',

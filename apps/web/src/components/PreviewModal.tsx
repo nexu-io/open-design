@@ -56,9 +56,6 @@ export interface PreviewView {
 export interface PreviewSidebar {
   // Header label and toggle button label.
   label: string;
-  // Optional title shown inside the side pane itself. Useful when the
-  // toolbar toggle is hidden and the pane still needs a visible identity.
-  header?: ReactNode;
   // Side-pane content — caller renders whatever it likes (markdown source
   // view, swatch grid, etc.). Always optional; when absent the toggle is
   // not shown.
@@ -73,8 +70,6 @@ export interface PreviewSidebar {
   // can prime a fresh fetch — e.g. swapping between design systems while the
   // DESIGN.md panel stays open.
   contentKey?: string | number;
-  // Optional style hook for surface-specific width/content treatments.
-  className?: string;
 }
 
 // Optional accent CTA rendered on the left side of the action row,
@@ -238,13 +233,10 @@ interface Props {
   onFullscreenClick?: () => void;
   onShareClick?: () => void;
   onSidebarToggleClick?: (open: boolean) => void;
-  // Hide the header sidebar-toggle button when the preview-edge handle is
-  // the preferred control. `true` keeps the small-screen fallback; `always`
-  // omits the header toggle entirely.
-  hideSidebarToggle?: boolean | 'always';
-  // Compact surfaces can render the share trigger as a single icon while
-  // keeping the same popover, title, and screen-reader label.
-  shareTriggerVariant?: 'default' | 'icon';
+  // Hide the header sidebar-toggle button (the plugin detail opens its
+  // collapsed info panel via the preview-edge handle instead). Other
+  // variants — design-system "DESIGN.md", media, scenario — keep it.
+  hideSidebarToggle?: boolean;
   // Fires when the user picks any share-popover item — social platforms,
   // "copy_link" / "copy_share_text" and the file exports ("pdf" / "zip" /
   // "html" / "image" / "open_in_new_tab"). Used by callers that want to
@@ -271,7 +263,6 @@ export function PreviewModal({
   headerExtras,
   shareTarget,
   hideSidebarToggle = false,
-  shareTriggerVariant = 'default',
   onFullscreenClick,
   onShareClick,
   onSidebarToggleClick,
@@ -564,8 +555,6 @@ export function PreviewModal({
   const showTabs = views.length > 1;
   const showTemplateShareMenu = !isCustomView || Boolean(shareTarget?.url);
   const canOpenTemplateShareMenu = canExportFiles || Boolean(previewShareUrl);
-  const omitHeaderSidebarToggle = hideSidebarToggle === 'always';
-  const compactOnlySidebarToggle = hideSidebarToggle === true;
 
   return (
     <div
@@ -700,10 +689,10 @@ export function PreviewModal({
                       </button>
                     )
                   ) : null}
-                  {sidebar && !omitHeaderSidebarToggle ? (
+                  {sidebar ? (
                     <button
                       className={`ghost ${sidebarOpen ? 'is-active' : ''}${
-                        compactOnlySidebarToggle ? ' ds-modal-sidebar-toggle--compact-only' : ''
+                        hideSidebarToggle ? ' ds-modal-sidebar-toggle--compact-only' : ''
                       }`}
                       onClick={() => {
                         setSidebarOpen((v) => {
@@ -721,29 +710,18 @@ export function PreviewModal({
                   {showTemplateShareMenu ? (
                     <div className="share-menu template-share-menu" ref={templateShareRef}>
                       <button
-                        type="button"
-                        className={`ghost template-share-trigger${
-                          shareTriggerVariant === 'icon' ? ' is-icon-only' : ''
-                        }`}
+                        className="ghost template-share-trigger"
                         aria-haspopup="menu"
                         aria-expanded={templateShareOpen}
-                        aria-label={t('preview.shareMenu')}
-                        title={t('preview.shareMenu')}
                         onClick={() => {
                           onShareClick?.();
                           setTemplateShareOpen((v) => !v);
                         }}
                         disabled={!canOpenTemplateShareMenu}
                       >
-                        <Icon name="share" size={shareTriggerVariant === 'icon' ? 14 : 12} />
-                        {shareTriggerVariant === 'icon' ? (
-                          <Icon name="chevron-down" size={12} />
-                        ) : (
-                          <>
-                            <span>{t('preview.shareMenu')}</span>
-                            <Icon name="chevron-down" size={12} />
-                          </>
-                        )}
+                        <Icon name="share" size={12} />
+                        <span>{t('preview.shareMenu')}</span>
+                        <Icon name="chevron-down" size={12} />
                       </button>
                       {templateShareOpen ? (
                         <div className="share-menu-popover template-share-popover" role="menu">
@@ -1128,7 +1106,7 @@ export function PreviewModal({
                     onSidebarToggleClick?.(true);
                     setSidebarOpen(true);
                   }}
-                  data-tooltip={t('preview.showSidebar', { label: sidebar.label })}
+                  title={t('preview.showSidebar', { label: sidebar.label })}
                   aria-label={t('preview.showSidebar', { label: sidebar.label })}
                 >
                   <span aria-hidden="true">‹</span>
@@ -1136,10 +1114,7 @@ export function PreviewModal({
               ) : null}
                 </div>
                 {sidebar && sidebarOpen ? (
-                  <aside
-                    className={`ds-modal-sidebar${sidebar.className ? ` ${sidebar.className}` : ''}`}
-                    aria-label={sidebar.label}
-                  >
+                  <aside className="ds-modal-sidebar" aria-label={sidebar.label}>
                     <button
                       type="button"
                       className="ds-modal-stage-handle is-collapse"
@@ -1147,16 +1122,11 @@ export function PreviewModal({
                         onSidebarToggleClick?.(false);
                         setSidebarOpen(false);
                       }}
-                      data-tooltip={t('preview.hideSidebar', { label: sidebar.label })}
+                      title={t('preview.hideSidebar', { label: sidebar.label })}
                       aria-label={t('preview.hideSidebar', { label: sidebar.label })}
                     >
                       <span aria-hidden="true">›</span>
                     </button>
-                    {sidebar.header ? (
-                      <div className="ds-modal-sidebar-header">
-                        <span className="ds-modal-sidebar-title">{sidebar.header}</span>
-                      </div>
-                    ) : null}
                     {sidebar.content}
                   </aside>
                 ) : null}

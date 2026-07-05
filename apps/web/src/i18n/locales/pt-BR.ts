@@ -776,7 +776,6 @@ export const ptBR: Dict = {
   'handoff.notInstalled': 'Não instalado',
   'handoff.notDetectedTitle': '{target} - não detectado no $PATH',
   'designSystemPicker.select': 'Escolher design system',
-  'designSystemPicker.useCurrent': 'Usar este design system',
   'designSystemPicker.loading': 'Carregando design systems…',
   'designSystemPicker.searchPlaceholder': 'Pesquisar design systems (título / categoria / resumo)',
   'designSystemPicker.searchCompactPlaceholder': 'Pesquisar design systems',

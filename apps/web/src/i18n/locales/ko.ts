@@ -776,7 +776,6 @@ export const ko: Dict = {
   'handoff.notInstalled': '설치되지 않음',
   'handoff.notDetectedTitle': '{target} - $PATH에서 감지되지 않음',
   'designSystemPicker.select': '디자인 시스템 선택',
-  'designSystemPicker.useCurrent': '이 디자인 시스템 사용',
   'designSystemPicker.loading': '디자인 시스템을 불러오는 중…',
   'designSystemPicker.searchPlaceholder': '디자인 시스템 검색 (제목 / 카테고리 / 요약)',
   'designSystemPicker.searchCompactPlaceholder': '디자인 시스템 검색',

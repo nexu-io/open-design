@@ -776,7 +776,6 @@ export const ja: Dict = {
   'handoff.notInstalled': '未インストール',
   'handoff.notDetectedTitle': '{target} - $PATH上で検出されませんでした',
   'designSystemPicker.select': 'デザインシステムを選択',
-  'designSystemPicker.useCurrent': 'このデザインシステムを使用',
   'designSystemPicker.loading': 'デザインシステムを読み込み中…',
   'designSystemPicker.searchPlaceholder': 'デザインシステムを検索（タイトル / カテゴリ / 概要）',
   'designSystemPicker.searchCompactPlaceholder': 'デザインシステムを検索',

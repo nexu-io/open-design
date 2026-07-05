@@ -776,7 +776,6 @@ export const fa: Dict = {
   'handoff.notInstalled': 'نصب نشده',
   'handoff.notDetectedTitle': '{target} - در $PATH شناسایی نشد',
   'designSystemPicker.select': 'انتخاب سیستم طراحی',
-  'designSystemPicker.useCurrent': 'استفاده از این سیستم طراحی',
   'designSystemPicker.loading': 'در حال بارگذاری سیستم‌های طراحی…',
   'designSystemPicker.searchPlaceholder': 'جستجوی سیستم‌های طراحی (عنوان / دسته‌بندی / خلاصه)',
   'designSystemPicker.searchCompactPlaceholder': 'جستجوی سیستم‌های طراحی',

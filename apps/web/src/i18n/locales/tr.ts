@@ -776,7 +776,6 @@ export const tr: Dict = {
   'handoff.notInstalled': 'Yüklü değil',
   'handoff.notDetectedTitle': '{target} - $PATH üzerinde algılanmadı',
   'designSystemPicker.select': 'Tasarım sistemi seçin',
-  'designSystemPicker.useCurrent': 'Bu tasarım sistemini kullan',
   'designSystemPicker.loading': 'Tasarım sistemleri yükleniyor…',
   'designSystemPicker.searchPlaceholder': 'Tasarım sistemlerinde ara (başlık / kategori / özet)',
   'designSystemPicker.searchCompactPlaceholder': 'Tasarım sistemlerinde ara',
