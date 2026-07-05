@@ -27,7 +27,7 @@ import type {
   HandoffResponse,
 } from '@open-design/contracts/api/handoff';
 import fs from 'node:fs';
-import { getProject } from './db.js';
+import { getProject } from '../db.js';
 import {
   callAnthropicWithRetry,
   DEFAULT_TIMEOUT_MS,
@@ -36,7 +36,7 @@ import {
   truncateTranscriptForPrompt,
   type AnthropicCallParams,
 } from './finalize-design.js';
-import { exportProjectTranscript } from './transcript-export.js';
+import { exportProjectTranscript } from '../transcript-export.js';
 
 // Re-export the request/response types so the route handler and other
 // daemon-internal consumers reference the canonical contracts shape via
