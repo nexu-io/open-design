@@ -496,7 +496,7 @@ export default function Page({
                 </a>
               </div>
               <p className='hero-sub' data-reveal>
-                <BreakText text={t.heroSub} />
+                <BreakText text={t.heroSub.replace('{systems}', systems)} />
               </p>
               {/* Product shot sits just under the hero copy. fetchPriority=low
                   lets the full-bleed hero-bg (the LCP element, fetchpriority
