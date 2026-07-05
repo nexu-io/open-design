@@ -470,12 +470,19 @@ function isGenericDaemonDisconnect(err: unknown): boolean {
   );
 }
 
+// A persisted status/error event represents a generic daemon disconnect when
+// either its structured `code` matches GENERIC_DAEMON_DISCONNECT_CODE, OR
+// (legacy rows persisted before this code was introduced) its `detail`
+// equals the canonical GENERIC_DAEMON_DISCONNECT_MESSAGE with no code set.
+// Mirrors isGenericDaemonDisconnect() above, which checks the equivalent
+// code-or-message pair on live Error objects for the same reason.
 function hasGenericDisconnectFailureEvent(message: ChatMessage): boolean {
   return (message.events ?? []).some(
     (event) =>
       event.kind === 'status' &&
       event.label === 'error' &&
-      event.code === GENERIC_DAEMON_DISCONNECT_CODE,
+      (event.code === GENERIC_DAEMON_DISCONNECT_CODE ||
+        event.detail === GENERIC_DAEMON_DISCONNECT_MESSAGE),
   );
 }
 const MIN_NORMAL_SPLIT_WIDTH =

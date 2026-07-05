@@ -3595,6 +3595,114 @@ afterEach(() => {
     });
   });
 
+  // Regression (#4607): messages persisted BEFORE this PR started tagging
+  // disconnects with a structured `code` recorded the generic disconnect as
+  // a legacy status/error event — `detail` matches the generic-disconnect
+  // message but there is no `code` field. `hasGenericDisconnectFailureEvent`
+  // must still recognize that legacy shape so a spuriously-failed row
+  // recovers on reload once the daemon reports the run actually succeeded.
+  // The row is seeded with non-empty partial content (rather than empty
+  // content) specifically to prove the plain empty-content spurious-fail
+  // heuristic is NOT what catches this row — only the legacy-detail
+  // predicate does. Recovery replaces that local content with the daemon's
+  // authoritative replayed transcript (`attachRecoverableRuns` wipes and
+  // re-drives `reattachDaemonRun`), so the persisted content must match the
+  // REPLAYED content, not the originally-seeded partial content.
+  it('recovers a legacy message-only generic-disconnect failure (partial content, no code) when the daemon reports succeeded', async () => {
+    const runCreatedAt = Date.now();
+    const partialContent = 'Partial output captured before the browser SSE reconnect loop gave up.';
+    const replayedContent =
+      '<artifact identifier="real-daemon-smoke" type="text/html" title="Real Daemon Smoke">' +
+      '<!doctype html><html><body><h1>Real Daemon Smoke</h1></body></html>' +
+      '</artifact>';
+    const legacyDisconnectEvents = [
+      {
+        kind: 'status',
+        label: 'error',
+        detail: 'daemon stream disconnected before run completed',
+      },
+    ];
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-legacy-disconnect-partial',
+        role: 'assistant',
+        content: partialContent,
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-legacy-disconnect-partial',
+        runStatus: 'failed',
+        events: legacyDisconnectEvents,
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-legacy-disconnect-partial',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+    });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onDelta: (delta: string) => void;
+        onDone: () => void;
+      };
+    }) => {
+      options.handlers.onDelta(replayedContent);
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-legacy-disconnect-partial', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    // The daemon reattach must actually be entered — this is what proves the
+    // legacy no-code event was recognized as recoverable in the first place.
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-legacy-disconnect-partial',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-legacy-disconnect-partial',
+          content: replayedContent,
+          runStatus: 'succeeded',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+  });
+
   it('keeps reload artifact recovery retryable after a transient persistence miss', async () => {
     const runCreatedAt = Date.now();
     const recoveredArtifact = artifactProjectFile('real-daemon-smoke.html', runCreatedAt + 2);
