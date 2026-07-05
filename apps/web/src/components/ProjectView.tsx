@@ -3611,15 +3611,15 @@ export function ProjectView({
         }
         if (spuriouslyFailedPending && status.status === 'canceled') {
           setError(null);
+          // Route through the shared invariant helper: `status` is already
+          // terminal here, so this resolves to `status.updatedAt` directly.
+          const endedAt = await resolveTerminalEndedAt(runId, status);
           updateMessageById(
             message.id,
             (prev) => ({
               ...prev,
               runStatus: 'canceled',
-              // Adopt the daemon's authoritative terminal timestamp rather than
-              // the stale disconnect-time stamp recorded when the earlier
-              // generic disconnect first fired.
-              endedAt: status.updatedAt,
+              endedAt,
               ...(status.resumable !== undefined ? { resumable: status.resumable } : {}),
             }),
             true,
@@ -3678,13 +3678,18 @@ export function ProjectView({
               }
             }
 
+            // Legacy rows persisted before `endedAt` existed reach this
+            // branch with no stored `endedAt` at all — fall back to the
+            // daemon's authoritative terminal timestamp (already fetched
+            // above as `status`) rather than the reload's wall-clock time.
+            const legacyReplayEndedAt = await resolveTerminalEndedAt(runId, status);
             updateMessageById(
               message.id,
               (prev) => ({
                 ...prev,
                 content: replayedContent,
                 runStatus: resolveSucceededRunStatus(prev.runStatus),
-                endedAt: prev.endedAt ?? Date.now(),
+                endedAt: prev.endedAt ?? legacyReplayEndedAt,
               }),
               true,
               { telemetryFinalized: true },
@@ -3889,7 +3894,7 @@ export function ProjectView({
               replayedEvents = [...replayedEvents, ev];
               textBuffer.appendEvent(ev);
             },
-            onDone: () => {
+            onDone: async () => {
               // A reattached run interrupted by a "send now" still receives a
               // late onDone from the daemon. Decide ownership first, then bail
               // BEFORE any current-run side effect (committing buffered text,
@@ -3925,6 +3930,12 @@ export function ProjectView({
                   setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
                 }
               }
+              // `status` is the pre-reattach snapshot fetched before
+              // reattachDaemonRun started — on a reload-while-running it is
+              // still 'running' (a near-run-start heartbeat), not the
+              // daemon's terminal time. Re-probe now, at the end of
+              // recovery, for the authoritative terminal `updatedAt`.
+              const endedAt = await resolveTerminalEndedAt(runId, status);
               updateMessageById(
                 message.id,
                 (prev) => ({
@@ -3933,11 +3944,7 @@ export function ProjectView({
                   events: needsFullReplay ? replayedEvents : prev.events,
                   runStatus:
                     latestReattachRunStatus === 'canceled' ? 'canceled' : 'succeeded',
-                  // Adopt the daemon's authoritative terminal timestamp (fetched
-                  // via fetchChatRunStatus above) rather than the stream-completion
-                  // time, so a reattached run's persisted duration reflects when
-                  // the daemon actually finished, not when this client noticed.
-                  endedAt: status.updatedAt,
+                  endedAt,
                 }),
                 true,
                 latestReattachRunStatus === 'canceled'
@@ -4081,6 +4088,17 @@ export function ProjectView({
                     const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced);
                     if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
                     if (latestRunStatus?.status === 'succeeded') setError(null);
+                    // Unlike the recoverArtifacts sibling below, this row's
+                    // endedAt was already stamped synchronously above (~4041)
+                    // at disconnect time — `prev.endedAt` is never null here,
+                    // so a `prev.endedAt ?? ...` fallback would never fire.
+                    // Overwrite it, but ONLY when the daemon just confirmed
+                    // succeeded (the same condition gating the runStatus
+                    // upgrade below) — `latestRunStatus` is already the fresh,
+                    // confirmed-terminal probe from above, so its `updatedAt`
+                    // is authoritative directly, with no extra re-probe.
+                    // Otherwise this row is still not terminal and must keep
+                    // its existing endedAt.
                     updateMessageById(
                       message.id,
                       (prev) => ({
@@ -4088,7 +4106,10 @@ export function ProjectView({
                         content: replayedContent,
                         producedFiles: produced.length > 0 ? produced : prev.producedFiles,
                         runStatus: latestRunStatus?.status === 'succeeded' ? 'succeeded' : prev.runStatus,
-                        endedAt: prev.endedAt ?? Date.now(),
+                        endedAt:
+                          latestRunStatus?.status === 'succeeded'
+                            ? latestRunStatus.updatedAt
+                            : prev.endedAt,
                       }),
                       true,
                       { telemetryFinalized: true },
@@ -4420,6 +4441,12 @@ export function ProjectView({
           recoveredArtifactMessagesRef.current.add(message.id);
           const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced);
           if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
+          // This message's persisted runStatus was already terminal (a
+          // precondition of hasRecoverableArtifactMessage); when it has no
+          // stored endedAt, fall back to the daemon's authoritative terminal
+          // timestamp (already fetched above as latestRunStatus) instead of
+          // this reload/poll's wall-clock time.
+          const recoveredArtifactEndedAt = await resolveTerminalEndedAt(runId, latestRunStatus);
           updateMessageById(
             message.id,
             (prev) => ({
@@ -4430,7 +4457,7 @@ export function ProjectView({
                 latestRunStatus?.status === 'succeeded'
                   ? 'succeeded'
                   : prev.runStatus,
-              endedAt: prev.endedAt ?? Date.now(),
+              endedAt: prev.endedAt ?? recoveredArtifactEndedAt,
             }),
             true,
             { telemetryFinalized: true },
@@ -5194,11 +5221,27 @@ export function ProjectView({
           onProjectsRefresh();
         },
         onError: async (err: Error) => {
-          const endedAt = Date.now();
+          // Disconnect-time stamp, used as-is for non-generic-disconnect
+          // failures. When the generic-disconnect retry-cap probe below
+          // resolves a terminal daemon status, this is advanced to that
+          // authoritative `updatedAt` so BOTH the assistant message row and
+          // updateConversationLatestRun() (which drives the sidebar/dropdown
+          // sort + duration) reflect the daemon's terminal time rather than
+          // this stale pre-probe timestamp.
+          let endedAt = Date.now();
           const errorCode = (err as Error & { code?: string }).code;
           const resumable = (err as Error & { resumable?: boolean }).resumable === true;
           let finalRunStatusAfterError: ChatMessage['runStatus'] = 'failed';
           let refreshConversationAfterError = false;
+          // The final onError invocation whose retry-cap probe turns terminal
+          // may arrive AFTER an earlier invocation already consumed
+          // ownership via clearCurrentRunStreamingMarker (abortRef/cancelRef
+          // are nulled out the first time, so a later call with the same
+          // controller reads ownsCurrentRun as false). Track whether the
+          // terminal-probe branches below already stamped the conversation
+          // directly, so the unconditional call at the bottom does not need
+          // (and must not double-apply) that same update.
+          let conversationFinalizedInline = false;
           // A run superseded by a "send now" interrupt can still surface a
           // late disconnect error (e.g. a canceled stream that lost its
           // terminal SSE). It must not paint a global failure banner or
@@ -5265,6 +5308,10 @@ export function ProjectView({
                 if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
                 } else if (latestRunStatus.status === 'succeeded') {
                   clearProjectTimeout(backoffTimer);
+                  // Advance the outer endedAt so updateConversationLatestRun()
+                  // below adopts this same authoritative terminal timestamp,
+                  // matching the message row's endedAt set further down.
+                  endedAt = latestRunStatus.updatedAt;
                   if (runMayFinalize) {
                     setError(null);
                     updateAssistant((prev) => {
@@ -5296,6 +5343,8 @@ export function ProjectView({
                           : {}),
                       };
                     });
+                    updateConversationLatestRun('succeeded', endedAt);
+                    conversationFinalizedInline = true;
                   }
                   if (runCommentAttachments.length > 0) {
                     void patchAttachedStatuses(runCommentAttachments, 'needs_review');
@@ -5306,6 +5355,9 @@ export function ProjectView({
                   genericDisconnectBackoffUntilRef.current.delete(runIdForGenericDisconnect);
                 } else {
                   clearProjectTimeout(backoffTimer);
+                  // Same rationale as the succeeded branch above: keep the
+                  // conversation-level stamp in step with the message row.
+                  endedAt = latestRunStatus.updatedAt;
                   if (runMayFinalize) {
                     if (latestRunStatus.status === 'canceled') setError(null);
                     updateAssistant((prev) => ({
@@ -5316,6 +5368,8 @@ export function ProjectView({
                         ? { resumable: latestRunStatus.resumable }
                         : {}),
                     }));
+                    updateConversationLatestRun(latestRunStatus.status, endedAt);
+                    conversationFinalizedInline = true;
                   }
                   finalRunStatusAfterError = latestRunStatus.status;
                   refreshConversationAfterError = true;
@@ -5337,7 +5391,9 @@ export function ProjectView({
             controller,
             cancelController,
           );
-          if (ownsCurrentRun) updateConversationLatestRun(finalRunStatusAfterError, endedAt);
+          if (ownsCurrentRun && !conversationFinalizedInline) {
+            updateConversationLatestRun(finalRunStatusAfterError, endedAt);
+          }
           setMessages((curr) => {
             const finalized = curr.find((m) => m.id === assistantId);
             if (finalized) persistMessage(finalized, { telemetryFinalized: true });
@@ -8518,6 +8574,43 @@ function isTerminalRunStatus(status: ChatMessage['runStatus']): boolean {
 
 function isActiveRunStatus(status: ChatMessage['runStatus']): boolean {
   return status === 'queued' || status === 'running';
+}
+
+/** A daemon run-status snapshot, as returned by `fetchChatRunStatus`/`listActiveChatRuns`. */
+type RunStatusSnapshot = Awaited<ReturnType<typeof fetchChatRunStatus>>;
+
+/**
+ * Resolves the authoritative `endedAt` for a terminal-recovery branch.
+ *
+ * Invariant: every terminal-recovery branch (reload reattach, generic
+ * disconnect retry-cap probe, stale/legacy row replay) must stamp `endedAt`
+ * from an authoritative TERMINAL `updatedAt` — a status snapshot whose
+ * `status` is terminal (succeeded/canceled/failed), observed at the END of
+ * recovery — never from a pre-reattach/heartbeat snapshot or a stale
+ * disconnect-time value.
+ *
+ * `candidate` is whatever status snapshot the caller already has in hand
+ * (e.g. fetched before `reattachDaemonRun` started, which may still read
+ * 'running'/'queued' if the daemon only finished afterward). When it is
+ * already terminal, its `updatedAt` IS the authoritative value and is
+ * returned with no extra round trip. When it is missing or still active, a
+ * fresh probe is taken via `fetchChatRunStatus` — the daemon may have
+ * finished in the interim — and used if terminal. If the fresh probe is
+ * also unavailable or non-terminal, `Date.now()` is the last-resort
+ * fallback so `endedAt` is never left unset.
+ */
+async function resolveTerminalEndedAt(
+  runId: string,
+  candidate: RunStatusSnapshot | null | undefined,
+): Promise<number> {
+  if (candidate && !isActiveRunStatus(candidate.status)) {
+    return candidate.updatedAt;
+  }
+  const probed = await fetchChatRunStatus(runId).catch(() => null);
+  if (probed && !isActiveRunStatus(probed.status)) {
+    return probed.updatedAt;
+  }
+  return Date.now();
 }
 
 function isProgrammaticBrandExtractionStatusMessage(

@@ -4059,4 +4059,425 @@ afterEach(() => {
     );
     expect(succeededSave?.[2]?.endedAt).toBe(daemonTerminalUpdatedAt);
   });
+
+  // Regression (#4607): a reload while a run is still active fetches the
+  // daemon status exactly once, before reattachDaemonRun starts. For the
+  // ordinary reload-while-running path (no generic disconnect in the mix)
+  // that one snapshot is still 'running' — a near-run-start heartbeat, not
+  // a terminal completion time. The reattach onDone handler must not stamp
+  // that heartbeat as endedAt; it must observe an authoritative terminal
+  // status before finalizing, so endedAt advances past the initial running
+  // snapshot instead of freezing at it.
+  it('advances the recovered endedAt past the initial running snapshot when a reload reattaches an active run', async () => {
+    const runCreatedAt = Date.now();
+    const initialRunningUpdatedAt = runCreatedAt + 1;
+    // Far enough past the pre-reattach heartbeat that the two timestamps can
+    // never coincide by accident.
+    const daemonTerminalUpdatedAt = runCreatedAt + 10_000_000;
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reload-active-run',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reload-active',
+        runStatus: 'running',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-reload-active',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: initialRunningUpdatedAt,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reload-active',
+        status: 'succeeded',
+        createdAt: runCreatedAt,
+        updatedAt: daemonTerminalUpdatedAt,
+        exitCode: 0,
+        signal: null,
+      });
+    // A plain, error-free reattach: the daemon stream simply finishes.
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: { onDone: () => void };
+    }) => {
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reload-active-endedat', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-reload-active-endedat',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-reload-active-run',
+          runStatus: 'succeeded',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+    const recoveredSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-reload-active-endedat' &&
+        call[2]?.id === 'msg-reload-active-run' &&
+        call[2]?.runStatus === 'succeeded',
+    );
+    // Must land on the daemon's authoritative terminal time, not the
+    // pre-reattach 'running' heartbeat fetched before recovery started.
+    expect(recoveredSave?.[2]?.endedAt).toBe(daemonTerminalUpdatedAt);
+    expect(recoveredSave?.[2]?.endedAt).not.toBe(initialRunningUpdatedAt);
+  });
+
+  // Regression (#4607): updateConversationLatestRun() drives the sidebar/
+  // dropdown's conversation.updatedAt, latestRun.endedAt, and durationMs.
+  // The live generic-disconnect onError handler already patches the
+  // assistant MESSAGE row with the daemon's authoritative terminal
+  // timestamp once the retry-cap status probe turns terminal, but the
+  // `endedAt` threaded into updateConversationLatestRun() is still the
+  // stale disconnect-time stamp captured at the top of onError. This
+  // regression asserts the conversation-level metadata advances too.
+  it('threads the daemon terminal timestamp into the conversation latestRun after a live generic disconnect recovers as succeeded', async () => {
+    const runCreatedAt = Date.now();
+    const daemonTerminalUpdatedAt = runCreatedAt + 10_000_000;
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-conv-endedat-succeeded',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: daemonTerminalUpdatedAt,
+      exitCode: 0,
+      signal: null,
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => Promise<void> };
+    }) => {
+      options.onRunCreated?.('run-conv-endedat-succeeded');
+      await options.handlers.onError(genericDisconnect);
+      await options.handlers.onError(genericDisconnect);
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-conv-endedat-succeeded', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('terminal success after disconnect (conversation endedAt check)', [], []);
+
+    await waitFor(() => {
+      const succeededSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-conv-endedat-succeeded' &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-conv-endedat-succeeded' &&
+          call[2]?.runStatus === 'succeeded',
+      );
+      expect(succeededSave).toBeTruthy();
+    });
+
+    const conversations = chatPaneSpy.mock.calls.at(-1)?.[0]?.conversations as
+      | Array<{ id: string; latestRun?: { endedAt?: number; durationMs?: number } }>
+      | undefined;
+    const conversation = conversations?.find((c) => c.id === 'conv-1');
+    // The conversation-level metadata must adopt the same daemon terminal
+    // timestamp as the message row, not the stale disconnect-time stamp
+    // captured before the terminal probe resolved.
+    expect(conversation?.latestRun?.endedAt).toBe(daemonTerminalUpdatedAt);
+  });
+
+  // Regression (#4607): proves neither surface — the assistant message row
+  // nor the conversation's latestRun metadata — keeps the stale
+  // disconnect-time stamp after a generic-disconnect recovery. Uses a
+  // terminal 'failed' probe (rather than 'succeeded') to cover the sibling
+  // branch of the same onError handler.
+  it('advances both the message row and the conversation latestRun to the daemon terminal time when a live generic disconnect probe turns failed', async () => {
+    const runCreatedAt = Date.now();
+    const daemonTerminalUpdatedAt = runCreatedAt + 10_000_000;
+    const genericDisconnect = await createGenericDisconnectError() as Error & {
+      resumable?: boolean;
+    };
+    genericDisconnect.resumable = false;
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-both-endedat-failed',
+      status: 'failed',
+      createdAt: runCreatedAt,
+      updatedAt: daemonTerminalUpdatedAt,
+      exitCode: 1,
+      signal: null,
+      resumable: true,
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => Promise<void> };
+    }) => {
+      options.onRunCreated?.('run-both-endedat-failed');
+      await options.handlers.onError(genericDisconnect);
+      await options.handlers.onError(genericDisconnect);
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-both-endedat-failed', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('terminal failed after disconnect (both surfaces check)', [], []);
+
+    // Match on `resumable === true` (the daemon-probed terminal value) to
+    // land on the FINAL save, not the interim 'failed' save the first
+    // onError call persists before the retry-cap probe ever fires (that
+    // interim save carries `resumable: false` from the disconnect error
+    // itself, per the same disambiguation the pre-existing "patches live
+    // generic-disconnect terminal metadata from a failed daemon status"
+    // test above uses).
+    await waitFor(() => {
+      const failedSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-both-endedat-failed' &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-both-endedat-failed' &&
+          call[2]?.runStatus === 'failed' &&
+          call[2]?.resumable === true,
+      );
+      expect(failedSave).toBeTruthy();
+    });
+    const failedSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-both-endedat-failed' &&
+        call[2]?.role === 'assistant' &&
+        call[2]?.runId === 'run-both-endedat-failed' &&
+        call[2]?.runStatus === 'failed' &&
+        call[2]?.resumable === true,
+    );
+    // Message row surface: already threads the daemon terminal timestamp.
+    expect(failedSave?.[2]?.endedAt).toBe(daemonTerminalUpdatedAt);
+
+    const conversations = chatPaneSpy.mock.calls.at(-1)?.[0]?.conversations as
+      | Array<{ id: string; latestRun?: { endedAt?: number; durationMs?: number } }>
+      | undefined;
+    const conversation = conversations?.find((c) => c.id === 'conv-1');
+    // Conversation-metadata surface: must not keep the stale disconnect-time
+    // stamp while the message row has already moved on.
+    expect(conversation?.latestRun?.endedAt).toBe(daemonTerminalUpdatedAt);
+  });
+
+  // Regression (#4607): the reattach onError handler's recoverable-artifact
+  // branch (entered when a non-generic-disconnect error still carries
+  // artifact-shaped replayed content) first stamps the message with the
+  // disconnect-time endedAt synchronously, then later fetches the daemon's
+  // authoritative terminal status to recover the artifact. The final
+  // updateMessageById call must adopt that authoritative terminal time —
+  // not fall back to the disconnect-time stamp `prev.endedAt` already
+  // carries by the time it runs.
+  it('adopts the daemon terminal time instead of the disconnect stamp when a reattach recovers an artifact after a non-generic error', async () => {
+    const runCreatedAt = Date.now();
+    const initialRunningUpdatedAt = runCreatedAt + 1;
+    // Far enough past any disconnect-time Date.now() stamp taken during this
+    // test run that the two timestamps can never coincide by accident.
+    const daemonTerminalUpdatedAt = runCreatedAt + 10_000_000;
+    const artifactContent =
+      '<artifact identifier="recoverable-artifact" type="text/html" title="Recoverable Artifact">' +
+      '<!doctype html><html><body><h1>Recovered</h1></body></html>' +
+      '</artifact>';
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-recoverable-artifact-endedat',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-recoverable-artifact-endedat',
+        runStatus: 'running',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-recoverable-artifact-endedat',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: initialRunningUpdatedAt,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-recoverable-artifact-endedat',
+        status: 'succeeded',
+        createdAt: runCreatedAt,
+        updatedAt: daemonTerminalUpdatedAt,
+        exitCode: 0,
+        signal: null,
+      });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onDelta: (delta: string) => void;
+        onError: (error: Error) => Promise<void>;
+      };
+    }) => {
+      options.handlers.onDelta(artifactContent);
+      // A genuine (non-generic-disconnect) failure — the daemon stream
+      // really dropped mid-turn, not a browser SSE reconnect-budget
+      // exhaustion, so the generic-disconnect retry/backoff machinery must
+      // not apply here.
+      await options.handlers.onError(new Error('some real non-generic failure'));
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-recoverable-artifact-endedat', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      const recoveredSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-recoverable-artifact-endedat' &&
+          call[2]?.id === 'msg-recoverable-artifact-endedat' &&
+          call[2]?.runStatus === 'succeeded',
+      );
+      expect(recoveredSave).toBeTruthy();
+    });
+    const recoveredSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-recoverable-artifact-endedat' &&
+        call[2]?.id === 'msg-recoverable-artifact-endedat' &&
+        call[2]?.runStatus === 'succeeded',
+    );
+    // Must land on the daemon's authoritative terminal time, not the
+    // disconnect-time stamp the synchronous onError handler wrote onto
+    // `prev.endedAt` moments earlier.
+    expect(recoveredSave?.[2]?.endedAt).toBe(daemonTerminalUpdatedAt);
+  });
 });
