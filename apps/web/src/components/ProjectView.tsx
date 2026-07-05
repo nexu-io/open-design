@@ -5894,6 +5894,7 @@ export function ProjectView({
               apiKey: byokOpenCodeProvider.apiKey,
               baseUrl: byokOpenCodeProvider.baseUrl,
               apiVersion: byokOpenCodeProvider.apiVersion,
+              model: byokOpenCodeProvider.model,
             }
           : undefined;
         if (userText.length > 0) {
