@@ -67,7 +67,7 @@ import {
   collectBrowserUseDiscoveryFacts,
   isBrowserUseRequested,
   renderBrowserUseUnavailablePrompt,
-} from './browser-use-diagnostics.js';
+} from './browser/index.js';
 import {
   UPLOAD_DIR,
   composeLiveInstructionPrompt,
@@ -378,7 +378,7 @@ import { buildDesktopArtifactExportInput, buildDesktopPdfExportInput } from './p
 import { generateMedia } from './media/index.js';
 import { listElevenLabsVoiceOptions } from './integrations/elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
-import { openBrowser } from './browser-open.js';
+import { openBrowser } from './browser/index.js';
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,

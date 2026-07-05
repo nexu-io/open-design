@@ -9,7 +9,7 @@ import {
   collectBrowserUseDiscoveryFacts,
   isBrowserUseRequested,
   renderBrowserUseUnavailablePrompt,
-} from '../src/browser-use-diagnostics.js';
+} from '../src/browser/index.js';
 
 let tempDir: string;
 
