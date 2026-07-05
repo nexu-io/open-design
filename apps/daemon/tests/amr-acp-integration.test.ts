@@ -215,10 +215,11 @@ describe('AMR runtime def', () => {
     expect(models.map((model) => model.id)).not.toContain('seedance-2');
   });
 
-  it('parses Vela preset and remote JSON without legacy id normalization', () => {
+  it('parses Vela JSON catalog ids through normalizeVelaModelId on the live AMR path', () => {
     const models = parseVelaModelJson(JSON.stringify({
       source: 'remote',
       data: [
+        { id: 'public_model_kimi_k2_7_code' },
         { id: 'public_model_deepseek_v3_2' },
         { id: 'deepseek-v4-flash' },
         { id: 'gpt-image-2' },
@@ -227,8 +228,11 @@ describe('AMR runtime def', () => {
     }), 'remote');
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
-      { id: 'public_model_deepseek_v3_2', label: 'public_model_deepseek_v3_2' },
+      { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
+      { id: 'kimi-k2.7-code', label: 'kimi-k2.7-code' },
     ]);
+    expect(models.map((m) => m.id)).not.toContain('gpt-image-2');
+    expect(models.map((m) => m.id)).not.toContain('public_model_kimi_k2_7_code');
     expect(() => parseVelaModelJson(JSON.stringify({ source: 'preset', data: [] }), 'remote'))
       .toThrow(/expected remote/);
   });
@@ -260,6 +264,54 @@ describe('AMR runtime def', () => {
       { id: 'minimax-m2.7', label: 'minimax-m2.7' },
       { id: 'qwen3-235b-a22b', label: 'qwen3-235b-a22b' },
     ]);
+  });
+
+  it('regression #4410: normalizes kimi_k2_7_code from live catalog and routes it via session/set_model', async () => {
+    const rawListJson = JSON.stringify({
+      source: 'remote',
+      data: [
+        { id: 'public_model_kimi_k2_7_code' },
+        { id: 'deepseek-v4-flash' },
+      ],
+    });
+
+    // Step 1: live catalog path normalizes the raw id to the canonical form.
+    const models = await amrAgentDef.fetchModels?.(FAKE_VELA, {
+      ...process.env,
+      FAKE_VELA_MODEL_LIST_JSON: rawListJson,
+    });
+    const ids = (models ?? []).map((m) => m.id);
+    expect(ids).toContain('kimi-k2.7-code');
+    expect(ids).not.toContain('public_model_kimi_k2_7_code');
+    expect(ids).not.toContain('kimi-k2-7-code');
+
+    // Step 2: the normalized id survives the full ACP session/set_model flow.
+    const child = spawnFakeVela({
+      FAKE_VELA_TEXT: 'K2.7 response.',
+      FAKE_VELA_MODEL_LIST_JSON: rawListJson,
+    });
+    const events: Array<{ event: string; payload: unknown }> = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Hello',
+        cwd: process.cwd(),
+        model: 'kimi-k2.7-code',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => events.push({ event, payload }),
+      });
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(false);
+      expect(session.completedSuccessfully()).toBe(true);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    const textDeltas = events
+      .filter((e) => e.event === 'agent' && (e.payload as { type?: unknown }).type === 'text_delta')
+      .map((e) => (e.payload as { delta?: unknown }).delta);
+    expect(textDeltas.join('')).toBe('K2.7 response.');
   });
 
   it('retries transient `vela model list --format json` failures before succeeding', async () => {

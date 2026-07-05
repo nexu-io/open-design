@@ -11,7 +11,7 @@
 //
 // The parser + payload types live in '@open-design/contracts' (od-card.ts) so
 // web and daemon share one source of truth. This file only renders.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type {
   OdCard,
   OdCardTaskBrief,
@@ -31,8 +31,14 @@ const RULE_PROPOSAL_DECISION_PREFIX = 'od:rule-proposal-decision:';
 
 type RuleProposalDecision =
   | { status: 'idle' }
-  | { status: 'saved'; name: string }
+  | { status: 'saved'; name: string; id?: string }
   | { status: 'discarded' };
+
+type MemoryEntrySummaryLike = {
+  id?: unknown;
+  name?: unknown;
+  type?: unknown;
+};
 
 function hashRuleProposalKey(input: string): string {
   let hash = 5381;
@@ -66,12 +72,22 @@ function readRuleProposalDecision(key: string): RuleProposalDecision {
       return {
         status: 'saved',
         name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name : '',
+        ...(typeof parsed.id === 'string' && parsed.id.trim() ? { id: parsed.id } : {}),
       };
     }
   } catch {
     // Storage can be unavailable in hardened contexts; fall back to per-mount state.
   }
   return { status: 'idle' };
+}
+
+function clearRuleProposalDecision(key: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Best effort only: storage can be unavailable in hardened contexts.
+  }
 }
 
 function writeRuleProposalDecision(key: string, decision: Exclude<RuleProposalDecision, { status: 'idle' }>) {
@@ -97,6 +113,28 @@ export interface BrandBrowserAssistResult {
 export type BrandBrowserAssistConfirm = (
   card: OdCardBrandBrowserAssist,
 ) => Promise<BrandBrowserAssistResult | void> | BrandBrowserAssistResult | void;
+
+function isMatchingRuleEntry(decision: Extract<RuleProposalDecision, { status: 'saved' }>, entry: MemoryEntrySummaryLike) {
+  if (entry.type !== 'rule') return false;
+  if (decision.id && entry.id === decision.id) return true;
+  return typeof entry.name === 'string' && entry.name === decision.name;
+}
+
+async function validateCachedRuleProposalDecision(
+  decision: RuleProposalDecision,
+): Promise<RuleProposalDecision | null> {
+  if (decision.status === 'idle') return decision;
+
+  const resp = await fetch('/api/memory');
+  if (!resp.ok) return null;
+  if (decision.status === 'discarded') return decision;
+
+  const body = await resp.json().catch(() => null) as { entries?: unknown } | null;
+  if (!Array.isArray(body?.entries)) return null;
+
+  const entries = body.entries as MemoryEntrySummaryLike[];
+  return entries.some((entry) => isMatchingRuleEntry(decision, entry)) ? decision : { status: 'idle' };
+}
 
 export function OdCardView({
   card,
@@ -299,6 +337,27 @@ function RuleProposalCard({
   const [editing, setEditing] = useState(false);
   const [status, setStatus] = useState<'idle' | 'saving' | 'error'>('idle');
 
+  useEffect(() => {
+    const cachedDecision = readRuleProposalDecision(storageKey);
+    if (cachedDecision.status === 'idle') return;
+
+    let cancelled = false;
+    void validateCachedRuleProposalDecision(cachedDecision)
+      .then((validated) => {
+        if (cancelled || !validated) return;
+        if (validated.status === 'idle') {
+          clearRuleProposalDecision(storageKey);
+          setDecision({ status: 'idle' });
+        }
+      })
+      .catch(() => {
+        // Keep the cached state on transient validation failures.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey]);
+
   if (decision.status === 'discarded') return null;
 
   if (decision.status === 'saved') {
@@ -344,7 +403,12 @@ function RuleProposalCard({
         setStatus('error');
         return;
       }
-      const savedDecision = { status: 'saved', name: name.trim() } as const;
+      const body = await resp.json().catch(() => null) as { entry?: { id?: unknown } } | null;
+      const savedDecision = {
+        status: 'saved',
+        name: name.trim(),
+        ...(typeof body?.entry?.id === 'string' ? { id: body.entry.id } : {}),
+      } as const;
       writeRuleProposalDecision(storageKey, savedDecision);
       setDecision(savedDecision);
       setStatus('idle');

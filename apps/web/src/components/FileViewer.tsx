@@ -12,6 +12,7 @@ import {
 import {
   anonymizeArtifactId,
   artifactKindToTracking,
+  type TrackingFileVersionSource,
   type TrackingProjectKind,
   type TrackingDeployProvider,
 } from '@open-design/contracts/analytics';
@@ -24,6 +25,9 @@ import {
   trackArtifactToolbarClick,
   trackCommentPopoverClick,
   trackDrawToolbarClick,
+  trackFileVersionModalClick,
+  trackFileVersionModalSurfaceView,
+  trackFileVersionRestoreResult,
   trackPageView,
   trackPresentPopoverClick,
   trackShareOptionPopoverClick,
@@ -2535,6 +2539,14 @@ function fileVersionSourceClassName(version: ProjectFileVersion): string {
   return 'ai';
 }
 
+// Any unknown/legacy source value counts as 'ai', matching the label and
+// class-name fallbacks above.
+function fileVersionSourceToTracking(version: ProjectFileVersion): TrackingFileVersionSource {
+  if (version.source === 'manual') return 'manual';
+  if (version.source === 'restore') return 'restore';
+  return 'ai';
+}
+
 export function fileVersionPreviewOptions(
   projectId: string,
   fileName: string,
@@ -2548,18 +2560,23 @@ export function fileVersionPreviewOptions(
 
 function FileVersionManagerModal({
   projectId,
+  projectKind,
   file,
   currentSource,
+  entryFrom,
   onClose,
   onRestored,
 }: {
   projectId: string;
+  projectKind: TrackingProjectKind | null;
   file: ProjectFile;
   currentSource: string | null;
+  entryFrom: 'toolbar' | 'more_menu';
   onClose: () => void;
   onRestored: (content: string, version: ProjectFileVersion) => Promise<void> | void;
 }) {
   const { locale, t } = useI18n();
+  const analytics = useAnalytics();
   const tRef = useRef(t);
   const [versions, setVersions] = useState<ProjectFileVersion[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -2589,6 +2606,51 @@ function FileVersionManagerModal({
   // zero-reparse). `inFlightRef` dedupes concurrent hover-prefetch + click.
   const contentCacheRef = useRef<Map<string, string>>(new Map());
   const inFlightRef = useRef<Map<string, Promise<void>>>(new Map());
+  const trackingArtifactId = useMemo(
+    () => anonymizeArtifactId({ projectId, fileName: file.name }),
+    [projectId, file.name],
+  );
+  const trackingArtifactKind = artifactKindToTracking({ fileKind: file.kind ?? null });
+  const fireModalClick = (
+    element:
+      | 'version_item'
+      | 'viewport_toggle'
+      | 'prompt_toggle'
+      | 'copy_prompt'
+      | 'open_in_new_tab'
+      | 'restore'
+      | 'restore_confirm'
+      | 'restore_cancel',
+    extra?: {
+      version_source?: TrackingFileVersionSource;
+      version_is_current?: boolean;
+      viewport?: PreviewViewportId;
+    },
+  ) => {
+    trackFileVersionModalClick(analytics.track, {
+      page_name: 'artifact',
+      area: 'file_version_modal',
+      element,
+      artifact_id: trackingArtifactId,
+      artifact_kind: trackingArtifactKind,
+      version_count: versions.length,
+      ...extra,
+    });
+  };
+  // One impression per modal open. The component unmounts on close, so a
+  // fire-once ref is enough — no dependency bookkeeping needed.
+  const surfaceViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (surfaceViewFiredRef.current) return;
+    surfaceViewFiredRef.current = true;
+    trackFileVersionModalSurfaceView(analytics.track, {
+      page_name: 'artifact',
+      area: 'file_version_modal',
+      entry_from: entryFrom,
+      artifact_id: trackingArtifactId,
+      artifact_kind: trackingArtifactKind,
+    });
+  }, [analytics.track, entryFrom, trackingArtifactId, trackingArtifactKind]);
   const versionById = useMemo(() => {
     const map = new Map<string, ProjectFileVersion>();
     for (const version of versions) map.set(version.id, version);
@@ -2796,6 +2858,9 @@ function FileVersionManagerModal({
 
   async function copyPrompt() {
     if (!selectedPrompt) return;
+    fireModalClick('copy_prompt', {
+      ...(selectedVersion ? { version_source: fileVersionSourceToTracking(selectedVersion) } : {}),
+    });
     const ok = await copyToClipboard(selectedPrompt);
     if (!ok) return;
     setCopied(true);
@@ -2804,6 +2869,9 @@ function FileVersionManagerModal({
 
   function openVersionInNewTab() {
     if (loadingContent || !selectedContentMatchesVersion || !selectedContent || !selectedVersion) return;
+    fireModalClick('open_in_new_tab', {
+      version_source: fileVersionSourceToTracking(selectedVersion),
+    });
     openSandboxedPreviewInNewTab(
       selectedContent,
       `${file.name} · v${selectedVersion.version}`,
@@ -2816,12 +2884,33 @@ function FileVersionManagerModal({
     setRestoring(true);
     setError(null);
     let closingAfterRestore = false;
+    const restoreStarted = performance.now();
+    // `versions` is sorted newest-first, so the index is "how many versions
+    // back from the newest" the restore target sits.
+    const fireRestoreResult = (result: 'success' | 'failed', errorCode?: string) => {
+      trackFileVersionRestoreResult(analytics.track, {
+        page_name: 'artifact',
+        area: 'file_version_modal',
+        artifact_id: trackingArtifactId,
+        artifact_kind: trackingArtifactKind,
+        project_id: projectId,
+        project_kind: projectKind,
+        version_source: fileVersionSourceToTracking(selectedVersion),
+        version_gap: Math.max(0, versions.findIndex((version) => version.id === selectedVersion.id)),
+        version_count: versions.length,
+        result,
+        ...(errorCode ? { error_code: errorCode } : {}),
+        restore_duration_ms: Math.round(performance.now() - restoreStarted),
+      });
+    };
     try {
       const result = await restoreProjectFileVersion(projectId, file.name, selectedVersion);
       if (!result) {
+        fireRestoreResult('failed', 'restore_request_failed');
         setError(t('fileViewer.versions.restoreFailed'));
         return;
       }
+      fireRestoreResult('success', result.versionWarning?.code);
       const restoredVersion = result.version ?? selectedVersion;
       await onRestored(selectedContent, restoredVersion);
       if (result.versionWarning) {
@@ -2914,7 +3003,15 @@ function FileVersionManagerModal({
                     className={`file-version-item${selected ? ' active' : ''}`}
                     role="option"
                     aria-selected={selected}
-                    onClick={() => setSelectedId(version.id)}
+                    onClick={() => {
+                      if (!selected) {
+                        fireModalClick('version_item', {
+                          version_source: fileVersionSourceToTracking(version),
+                          version_is_current: Boolean(version.current),
+                        });
+                      }
+                      setSelectedId(version.id);
+                    }}
                     onMouseEnter={prefetch}
                     onFocus={prefetch}
                   >
@@ -2974,7 +3071,16 @@ function FileVersionManagerModal({
                     aria-expanded={promptOpen}
                     aria-controls={promptOpen ? promptPopoverId : undefined}
                     disabled={!selectedVersion}
-                    onClick={() => setPromptOpen((value) => !value)}
+                    onClick={() => {
+                      if (!promptOpen) {
+                        fireModalClick('prompt_toggle', {
+                          ...(selectedVersion
+                            ? { version_source: fileVersionSourceToTracking(selectedVersion) }
+                            : {}),
+                        });
+                      }
+                      setPromptOpen((value) => !value);
+                    }}
                   >
                     <RemixIcon name="chat-3-line" size={15} />
                     <span>{t('fileViewer.versions.promptTitle')}</span>
@@ -3015,7 +3121,14 @@ function FileVersionManagerModal({
                     aria-haspopup="dialog"
                     aria-expanded={confirmRestore}
                     aria-controls={confirmRestore ? restorePopoverId : undefined}
-                    onClick={() => setConfirmRestore((value) => !value)}
+                    onClick={() => {
+                      if (!confirmRestore) {
+                        fireModalClick('restore', {
+                          version_source: fileVersionSourceToTracking(selectedVersion),
+                        });
+                      }
+                      setConfirmRestore((value) => !value);
+                    }}
                   >
                     <RemixIcon name={restoring ? 'loader-4-line' : 'git-branch-line'} size={14} />
                     <span>
@@ -3037,7 +3150,12 @@ function FileVersionManagerModal({
                         <button
                           type="button"
                           className="viewer-action"
-                          onClick={() => setConfirmRestore(false)}
+                          onClick={() => {
+                            fireModalClick('restore_cancel', {
+                              version_source: fileVersionSourceToTracking(selectedVersion),
+                            });
+                            setConfirmRestore(false);
+                          }}
                         >
                           {t('common.cancel')}
                         </button>
@@ -3046,6 +3164,9 @@ function FileVersionManagerModal({
                           className="viewer-action primary"
                           disabled={restoreDisabled}
                           onClick={() => {
+                            fireModalClick('restore_confirm', {
+                              version_source: fileVersionSourceToTracking(selectedVersion),
+                            });
                             setConfirmRestore(false);
                             void restoreVersion();
                           }}
@@ -3059,7 +3180,12 @@ function FileVersionManagerModal({
               ) : null}
               <FileVersionViewportControls
                 viewport={previewViewport}
-                onViewport={setPreviewViewport}
+                onViewport={(viewport) => {
+                  if (viewport !== previewViewport) {
+                    fireModalClick('viewport_toggle', { viewport });
+                  }
+                  setPreviewViewport(viewport);
+                }}
                 t={t}
               />
               <button
@@ -5448,7 +5574,9 @@ function HtmlViewer({
       | 'edit'
       | 'zoom_out'
       | 'zoom_level_dropdown'
-      | 'zoom_in',
+      | 'zoom_in'
+      | 'versions',
+    entryFrom?: 'toolbar' | 'more_menu',
   ) => {
     trackArtifactToolbarClick(analytics.track, {
       page_name: 'artifact',
@@ -5456,6 +5584,7 @@ function HtmlViewer({
       element,
       artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
       artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+      ...(entryFrom ? { entry_from: entryFrom } : {}),
     });
   };
   const fireDrawToolbarClick = (
@@ -5527,7 +5656,9 @@ function HtmlViewer({
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
   const [deployMenuOpen, setDeployMenuOpen] = useState(false);
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
-  const [versionModalOpen, setVersionModalOpen] = useState(false);
+  // False when closed; otherwise records which entry opened the modal so the
+  // surface_view impression can carry entry_from.
+  const [versionModalOpen, setVersionModalOpen] = useState<false | 'toolbar' | 'more_menu'>(false);
   const [toolbarMoreOpen, setToolbarMoreOpen] = useState(false);
   const toolbarMoreRef = useRef<HTMLDivElement | null>(null);
   const [exportReadyNudge, setExportReadyNudge] = useState(false);
@@ -5584,6 +5715,10 @@ function HtmlViewer({
   }, [closeDeployModal, deployModalOpen]);
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // Set to true permanently once `source` has been populated for the first
+  // time. After the first load, we never show the "loading" skeleton again —
+  // even if a reload temporarily clears `source` to null (issue #4650).
+  const sourceEverLoadedRef = useRef(false);
   const [boardMode, setBoardMode] = useState(false);
   const [commentPanelOpen, setCommentPanelOpen] = useState(false);
   const [commentCreateMode, setCommentCreateMode] = useState(false);
@@ -5801,6 +5936,31 @@ function HtmlViewer({
   const manualEditStyleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualEditPreviewVersionRef = useRef(0);
   const sourceRef = useRef<string | null>(source);
+  // Holds the last-good source snapshot taken just before reloadHtmlPreview
+  // clears source to null on the srcDoc path.  The fetch effect restores this
+  // value if fetchProjectFileText returns null (non-2xx / transient network
+  // error), so the iframe never goes blank on a failed reload attempt.
+  //
+  // The snapshot is keyed by projectId + fileName so that:
+  //   (a) a rapid second Reload click — which sees source===null from the
+  //       first click's setSource(null) — does not overwrite the ref with null
+  //       and destroy the fallback (double-click race, PR #4652 review);
+  //   (b) switching to a different file while a reload fetch is in flight
+  //       does not restore the previous file's HTML into the new preview
+  //       (file-switch contamination race, PR #4652 review).
+  const prevSourceBeforeReloadRef = useRef<{
+    source: string;
+    projectId: string;
+    fileName: string;
+  } | null>(null);
+  // Holds the most recently fetched non-null source for routing-predicate
+  // stability.  Content-derived predicates (needsSandboxShim, needsFocusGuard,
+  // looksLikeDeck) fall back to this ref when source is null (i.e. during the
+  // reload window between setSource(null) and the fetch resolving), so
+  // urlLoadDecision stays stable and the srcDoc iframe does not briefly flip
+  // to URL-load (Codex P2, issue #4650).  Cleared on file/project switch so
+  // a new file never inherits the previous file's routing predicates.
+  const lastGoodSourceForRoutingRef = useRef<string | null>(null);
   const sourceFileKeyRef = useRef<string | null>(null);
   const templateNameId = useId();
   const templateDescriptionId = useId();
@@ -6099,6 +6259,7 @@ function HtmlViewer({
     const sourceFileKey = `${projectId}\0${file.name}\0${liveHtml === undefined ? 'raw' : 'live'}`;
     if (liveHtml !== undefined) {
       sourceFileKeyRef.current = sourceFileKey;
+      sourceEverLoadedRef.current = true;
       setSource(liveHtml);
       sourceRef.current = liveHtml;
       return;
@@ -6108,6 +6269,11 @@ function HtmlViewer({
     if (fileChanged) {
       setSource(null);
       sourceRef.current = null;
+      // Note: prevSourceBeforeReloadRef is cleared by the [projectId,
+      // file.name] reset effect that runs on file/project switch.  The
+      // identity check in the null-restore branch below is defense-in-depth
+      // for races where an in-flight async callback fires after the file
+      // switches but before the effect has run.
     }
     let cancelled = false;
     // Cache-bust the fetch on every mtime / reload / files-refresh bump.
@@ -6124,7 +6290,39 @@ function HtmlViewer({
       // Chokidar emits agent rewrites as unlink+add+change bursts; a
       // transient null mid-burst would blank source → srcDoc empty →
       // shell stays on prior frame. Keep the last good text instead.
-      if (text == null) return;
+      if (text == null) {
+        // A srcDoc Reload may have cleared source to null just before this
+        // fetch resolved.  If the fetch failed (non-2xx, network error),
+        // restore the pre-reload source so the iframe doesn't go blank.
+        // prevSourceBeforeReloadRef is null on a normal file-change fetch,
+        // so this branch is a no-op outside of the Reload failure case.
+        //
+        // Guard: only restore if the snapshot was taken for the current
+        // file.  A file-switch clears the ref (see fileChanged block above),
+        // but we double-check the identity here to prevent cross-file
+        // contamination in case the ref was not yet cleared by the time this
+        // async callback fires (file-switch race, PR #4652 review).
+        const snap = prevSourceBeforeReloadRef.current;
+        if (
+          snap != null &&
+          snap.projectId === projectId &&
+          snap.fileName === file.name
+        ) {
+          setSource(snap.source);
+          sourceRef.current = snap.source;
+          prevSourceBeforeReloadRef.current = null;
+        } else if (snap != null) {
+          // Identity mismatch: the snapshot belongs to a different file or
+          // project. Clear it now so it cannot leak forward and be consumed by
+          // a later normal failed load on the original file (PR #4652
+          // third-pass review, Codex P2 finding).
+          prevSourceBeforeReloadRef.current = null;
+        }
+        return;
+      }
+      prevSourceBeforeReloadRef.current = null;
+      sourceEverLoadedRef.current = true;
+      lastGoodSourceForRoutingRef.current = text;
       setSource(text);
       sourceRef.current = text;
     });
@@ -6157,8 +6355,9 @@ function HtmlViewer({
   // asked for one in plain prose; without this, prev/next and Present
   // never surface and the deck becomes a static, unnavigable preview.
   const looksLikeDeck = useMemo(() => {
-    if (!source) return false;
-    return /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(source);
+    const s = source ?? lastGoodSourceForRoutingRef.current;
+    if (!s) return false;
+    return /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(s);
   }, [source]);
   const effectiveDeck = isDeck || looksLikeDeck;
   const showDeckNavigation = effectiveDeck && (slideState === null || slideState.count > 0);
@@ -6213,20 +6412,21 @@ function HtmlViewer({
   // `injectSandboxShim` before any user script, so those artifacts render.
   // Memoized on `source` so HtmlViewer's frequent re-renders (board/inspect/
   // edit mode toggles, slide nav) don't re-scan the HTML each time.
-  const needsSandboxShim = useMemo(
-    () => source != null && htmlNeedsSandboxShim(source),
-    [source],
-  );
-  const needsFocusGuard = useMemo(
-    () => source != null && htmlNeedsFocusGuard(source),
-    [source],
-  );
+  const needsSandboxShim = useMemo(() => {
+    const s = source ?? lastGoodSourceForRoutingRef.current;
+    return s != null && htmlNeedsSandboxShim(s);
+  }, [source]);
+  const needsFocusGuard = useMemo(() => {
+    const s = source ?? lastGoodSourceForRoutingRef.current;
+    return s != null && htmlNeedsFocusGuard(s);
+  }, [source]);
   const [urlSelectionBridgeReady, setUrlSelectionBridgeReady] = useState(false);
   const urlLoadDecision: UrlLoadDecision = {
     mode,
     isDeck: effectiveDeck,
     commentMode: boardMode,
     urlCommentBridge: urlSelectionBridgeReady,
+    urlSnapshotBridge: urlSelectionBridgeReady,
     editMode: manualEditMode,
     urlModeBridge,
     inspectMode,
@@ -6282,6 +6482,20 @@ function HtmlViewer({
     setCommentPanelOpen(false);
     setCommentCreateMode(false);
     setActivePreviewCommentId(null);
+    // Reset the "ever loaded" sentinel so the loading skeleton is shown again
+    // while the new file's source is being fetched. Without this reset the
+    // sentinel stays true from the previous file, the render guard skips the
+    // skeleton, and a slow fetch leaves the user staring at a blank iframe
+    // instead of the loading indicator (codex P2 finding, issue #4650).
+    //
+    // The snapshot ref (prevSourceBeforeReloadRef) is the restore branch only —
+    // it must NOT gate this sentinel. Keeping the guard caused a new file's
+    // preview to bypass the loading skeleton entirely and mount an empty srcDoc
+    // iframe when a reload snapshot was non-null at switch time (PR #4652
+    // third-pass review, PerishCode finding).
+    sourceEverLoadedRef.current = false;
+    lastGoodSourceForRoutingRef.current = null;
+    prevSourceBeforeReloadRef.current = null;
   }, [projectId, file.name]);
   const activePreviewSrcUrl = (
     previewSrcUrl === effectiveBasePreviewSrcUrl ||
@@ -6345,8 +6559,11 @@ function HtmlViewer({
       editBridge: true,
       paletteBridge: false,
       previewFocusGuard: true,
+      // Embed the reload counter so the srcdoc string differs across reloads
+      // even when the fetched HTML bytes are identical (issue #4650).
+      reloadKey,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, reloadKey],
   );
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
@@ -8325,6 +8542,50 @@ function HtmlViewer({
     setInlinedSource(null);
     setReloadKey((key) => key + 1);
     if (!useUrlLoadPreview) {
+      // Capture the current source so the fetch effect can restore it if
+      // fetchProjectFileText returns null (non-2xx / transient network error).
+      // Without this, a failed reload leaves source null and the iframe blank
+      // because the existing keep-last-good guard in the fetch effect has
+      // nothing to fall back to (PR #4652).
+      //
+      // Only overwrite the ref when source is non-null: if a rapid second
+      // Reload click fires while source is already null (cleared by the first
+      // click), we must NOT overwrite the ref — doing so would discard the
+      // genuine last-good snapshot that the first click stored, and the
+      // restore path would have nothing to fall back to (double-click race,
+      // PR #4652 review).  The snapshot is keyed with the current file
+      // identity so the restore guard can reject stale cross-file snapshots.
+      if (source !== null) {
+        prevSourceBeforeReloadRef.current = {
+          source,
+          projectId,
+          fileName: file.name,
+        };
+      }
+      // Clear source synchronously so previewSource becomes null and the
+      // srcDoc memo recomputes to '' before the async re-fetch resolves.
+      // Without this, the remounted iframe carries stale srcdoc content
+      // until the fetch completes (issue #4650).
+      //
+      // Skip the synchronous clear when Manual Edit is active
+      // (manualEditFrozenSource !== null).  Nulling source here also nulls
+      // sourceRef.current (via the [source] useEffect at ~line 5962), which
+      // causes applyManualEdit to hit its null guard and silently drop the
+      // save before the reload fetch resolves (PR #4652 Codex P2 / issue #4650).
+      // The reload still re-fetches via the reloadKey increment above; source
+      // stays at the last-good frozen value until the fetch resolves, so
+      // applyManualEdit continues to work throughout the reload window.
+      if (!manualEditFrozenSource) {
+        setSource(null);
+      }
+      // Clear the annotation-freeze snapshot so previewSource is not pinned
+      // to the stale V1 content while annotationFreezeActive is true.  The
+      // annotation-freeze useEffect (deps: annotationFreezeActive,
+      // annotationFrozenSource, livePreviewSource) re-captures from
+      // livePreviewSource on the next render once the fresh `source` lands,
+      // so the frozen source updates to the new V2 content automatically
+      // (PR #4652 / issue #4650 mrcfps review).
+      setAnnotationFrozenSource(null);
       activatedSrcDocTransportHtmlRef.current = null;
       setSrcDocShellReady(false);
       setSrcDocTransportResetKey((key) => key + 1);
@@ -9617,7 +9878,10 @@ function HtmlViewer({
               aria-label={t('fileViewer.versions.title')}
               data-tooltip={t('fileViewer.versions.title')}
               data-tooltip-placement="bottom"
-              onClick={() => setVersionModalOpen(true)}
+              onClick={() => {
+                fireArtifactToolbarClick('versions', 'toolbar');
+                setVersionModalOpen('toolbar');
+              }}
             >
               <RemixIcon name="history-line" size={14} />
               <span>{t('fileViewer.versions.entry')}</span>
@@ -9833,7 +10097,8 @@ function HtmlViewer({
                     role="menuitem"
                     disabled={source === null}
                     onClick={() => {
-                      setVersionModalOpen(true);
+                      fireArtifactToolbarClick('versions', 'more_menu');
+                      setVersionModalOpen('more_menu');
                       setToolbarMoreOpen(false);
                     }}
                   >
@@ -10351,7 +10616,7 @@ function HtmlViewer({
           ) : null}
         </>)}
       <div className="viewer-body" ref={previewBodyRef}>
-        {source === null ? (
+        {source === null && !sourceEverLoadedRef.current ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
           <div
@@ -10721,8 +10986,10 @@ function HtmlViewer({
       {versionModalOpen && versioningAvailable && typeof document !== 'undefined' ? (
         <FileVersionManagerModal
           projectId={projectId}
+          projectKind={projectKind}
           file={file}
           currentSource={source}
+          entryFrom={versionModalOpen}
           onClose={() => setVersionModalOpen(false)}
           onRestored={handleVersionRestored}
         />

@@ -318,6 +318,26 @@ describe('streamViaDaemon', () => {
     expect(transcript).toContain('second gemini request');
   });
 
+  it('keeps legacy API-mode assistant context when routing through BYOK OpenCode', () => {
+    const transcript = buildDaemonTranscript(
+      [
+        { id: '1', role: 'user', content: 'draft the registration flow' },
+        {
+          id: '2',
+          role: 'assistant',
+          content: 'openai api response with design decisions',
+          agentId: 'openai-api',
+        },
+        { id: '3', role: 'user', content: 'make the second step clearer' },
+      ],
+      'byok-opencode',
+    );
+
+    expect(transcript).toContain('draft the registration flow');
+    expect(transcript).toContain('openai api response with design decisions');
+    expect(transcript).toContain('make the second step clearer');
+  });
+
   it('extracts only the latest user prompt for telemetry', () => {
     expect(
       latestUserPromptFromHistory([
@@ -1776,7 +1796,12 @@ describe('streamViaDaemon', () => {
     });
 
     expect(fetchMock).not.toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
-    expect(handlers.onError).toHaveBeenCalledWith(new Error('daemon stream disconnected before run completed'));
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'daemon stream disconnected before run completed',
+        code: 'DAEMON_STREAM_DISCONNECTED',
+      }),
+    );
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
@@ -1815,7 +1840,12 @@ describe('streamViaDaemon', () => {
 
     expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/runs/run-1')).toBe(true);
     expect(onRunStatus).toHaveBeenCalledWith('failed');
-    expect(handlers.onError).toHaveBeenCalledWith(new Error('daemon stream disconnected before run completed'));
+    expect(handlers.onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'daemon stream disconnected before run completed',
+        code: 'DAEMON_STREAM_DISCONNECTED',
+      }),
+    );
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 

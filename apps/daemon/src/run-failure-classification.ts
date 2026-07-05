@@ -671,17 +671,19 @@ export function classifyRunFailure(
   }
 
   if (errorCode === 'RATE_LIMITED' || serviceFailure === 'RATE_LIMITED' || isHardQuotaText(text) || isRateLimitText(text)) {
-    const retryable = retryableHint ?? !isHardQuotaText(text);
+    const hardQuota = isHardQuotaText(text);
+    const workspaceCredits = isWorkspaceCreditsText(text);
+    const retryable = hardQuota ? false : (retryableHint ?? true);
     return classification(
       'rate_limit',
-      isWorkspaceCreditsText(text)
+      workspaceCredits
         ? 'workspace_credits_exhausted'
-        : isHardQuotaText(text)
+        : hardQuota
           ? 'hard_quota'
           : 'rate_limit_429',
       'session_init',
       retryable,
-      retryable ? 'retry' : isWorkspaceCreditsText(text) ? 'recharge' : 'none',
+      retryable ? 'retry' : workspaceCredits ? 'recharge' : 'none',
     );
   }
 

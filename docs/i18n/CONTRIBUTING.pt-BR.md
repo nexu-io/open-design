@@ -4,7 +4,7 @@ Obrigado por considerar contribuir. O OD é pequeno de propósito — a maior pa
 
 Este guia diz exatamente onde olhar para cada tipo de contribuição e qual a barra que um PR precisa atingir antes do merge.
 
-<p align="center"><a href="../../CONTRIBUTING.md">English</a> · <b>Português (Brasil)</b> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a></p>
+<p align="center"><a href="../../CONTRIBUTING.md">English</a> · <b>Português (Brasil)</b> · <a href="CONTRIBUTING.de.md">Deutsch</a> · <a href="CONTRIBUTING.fr.md">Français</a> · <a href="CONTRIBUTING.zh-CN.md">简体中文</a> · <a href="CONTRIBUTING.ja-JP.md">日本語</a> · <a href="CONTRIBUTING.ko.md">한국어</a> · <a href="CONTRIBUTING.th.md">ภาษาไทย</a></p>
 
 ---
 

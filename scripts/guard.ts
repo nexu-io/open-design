@@ -146,6 +146,10 @@ const residualAllowedPathPrefixes = [
   "e2e/ui/test-results/",
   // Vendored upstream HyperFrames helper scripts (design template).
   "design-templates/hyperframes/scripts/",
+  // Vendored upstream Web Clone skill helper scripts. These are portable
+  // Node-run skill utilities executed from user workspaces via explicit script
+  // paths, and stay as `.mjs` to preserve the upstream skill packaging.
+  "skills/web-clone/scripts/",
   // Vendored upstream Last30Days runtime helper used by the engine (design template).
   "design-templates/last30days/scripts/lib/vendor/",
   // Vendored upstream html-ppt runtime assets (lewislulu/html-ppt-skill, design template).

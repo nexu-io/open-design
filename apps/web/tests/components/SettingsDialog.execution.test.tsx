@@ -865,8 +865,11 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
+    // A non-http scheme is still rejected client-side. (An internal-IP URL is
+    // no longer rejected here — it is syntactically valid and the daemon owns
+    // the allowlist decision; see #3225.)
     fireEvent.change(screen.getByLabelText('Base URL'), {
-      target: { value: 'http://10.0.0.5:11434/v1' },
+      target: { value: 'ftp://api.example.com' },
     });
     expect(screen.getByRole('alert').textContent).toContain(
       'Use a public http:// or https:// URL.',
@@ -1621,6 +1624,41 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       ([input]) => input.toString() === '/api/test/connection',
     );
     expect(testConnectionCalls).toHaveLength(1);
+  });
+
+  it('shows provider upstream detail for failed BYOK connection tests', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          kind: 'upstream_unavailable',
+          latencyMs: 42,
+          status: 400,
+          detail:
+            'The selected NVIDIA model instance is currently unavailable at the provider. Try a different model or retry later.',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog({ apiKey: 'sk-ant-test-provider' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    expect(
+      await screen.findByText(
+        /Provider returned 400\. Try again in a moment\. The selected NVIDIA model instance is currently unavailable/,
+      ),
+    ).toBeTruthy();
   });
 
   it('blocks an obvious OpenAI key in the Anthropic tab before testing', async () => {
