@@ -482,12 +482,15 @@ describe('SettingsDialog provider model fetch helpers', () => {
         'openai',
       ),
     ).toBe(false);
+    // #3225 — an internal-IP endpoint is now fetchable from the UI's
+    // perspective; the daemon enforces the OD_ALLOWED_INTERNAL_HOSTS allowlist
+    // and returns the authoritative allow/block decision.
     expect(
       canFetchProviderModels(
         { apiKey: 'sk-openai', baseUrl: 'http://10.0.0.5:11434/v1' },
         'openai',
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       canFetchProviderModels(
         { apiKey: 'azure-key', baseUrl: 'https://example.openai.azure.com' },
@@ -671,17 +674,35 @@ describe('SettingsDialog API Base URL validation', () => {
     expect(isValidApiBaseUrl('ftp://api.example.com')).toBe(false);
     expect(isValidApiBaseUrl('http:api.example.com')).toBe(false);
     expect(isValidApiBaseUrl('https://')).toBe(false);
-    expect(isValidApiBaseUrl('http://0.0.0.0:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://10.0.0.5:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://100.64.0.1:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://169.254.1.5:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://172.16.0.5:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://192.168.1.5:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://224.0.0.1:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://[::]:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://[fd00::1]:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://[fe80::1]:11434/v1')).toBe(false);
-    expect(isValidApiBaseUrl('http://[::ffff:192.168.1.5]:11434/v1')).toBe(false);
+  });
+
+  it('keeps syntactically-valid internal-IP base URLs UI-valid so the daemon allowlist can decide (#3225)', () => {
+    // The internal-IP / SSRF decision belongs to the daemon, which honors the
+    // operator's OD_ALLOWED_INTERNAL_HOSTS allowlist — a value the browser
+    // cannot see. These are well-formed URLs that merely point at internal
+    // addresses, so the client must not block them: the operator needs to run
+    // the connection test / model fetch and get the daemon's authoritative
+    // answer (allowed when listed, "Internal IPs blocked" otherwise).
+    for (const internal of [
+      'http://0.0.0.0:11434/v1',
+      'http://10.0.0.5:11434/v1',
+      'http://100.64.0.1:11434/v1',
+      'http://169.254.1.5:11434/v1',
+      'http://172.16.0.5:11434/v1',
+      'http://192.168.1.5:11434/v1',
+      'http://224.0.0.1:11434/v1',
+      'http://[::]:11434/v1',
+      'http://[fd00::1]:11434/v1',
+      'http://[fe80::1]:11434/v1',
+      'http://[::ffff:192.168.1.5]:11434/v1',
+    ]) {
+      expect(isValidApiBaseUrl(internal)).toBe(true);
+    }
+  });
+
+  it('still rejects genuinely malformed URLs client-side', () => {
+    expect(isValidApiBaseUrl('http://')).toBe(false);
+    expect(isValidApiBaseUrl('http:// /v1')).toBe(false);
   });
 });
 

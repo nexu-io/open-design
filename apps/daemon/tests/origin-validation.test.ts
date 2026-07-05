@@ -5,6 +5,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   allowedBrowserPorts,
+  configuredAllowedInternalHosts,
   configuredAllowedOrigins,
   isAllowedBrowserOrigin,
   isLocalSameOrigin,
@@ -772,5 +773,46 @@ describe('isLocalSameOrigin: Sec-Fetch-Site fallback for no-Origin same-origin G
       },
     };
     expect(isLocalSameOrigin(req, 7456, env)).toBe(false);
+  });
+});
+
+describe('configuredAllowedInternalHosts: OD_ALLOWED_INTERNAL_HOSTS parsing (issue #3225)', () => {
+  it('returns [] when the env var is unset or blank', () => {
+    expect(configuredAllowedInternalHosts({})).toEqual([]);
+    expect(configuredAllowedInternalHosts({ OD_ALLOWED_INTERNAL_HOSTS: '   ' })).toEqual([]);
+  });
+
+  it('splits on commas and whitespace and keeps only the hostname', () => {
+    const env = {
+      OD_ALLOWED_INTERNAL_HOSTS: '10.0.0.5, litellm.internal:4000  https://gw.corp/v1',
+    };
+    expect(configuredAllowedInternalHosts(env)).toEqual([
+      '10.0.0.5',
+      'litellm.internal',
+      'gw.corp',
+    ]);
+  });
+
+  it('lowercases and strips brackets from IPv6 literal entries', () => {
+    const env = { OD_ALLOWED_INTERNAL_HOSTS: '[FD00::1]:4000' };
+    expect(configuredAllowedInternalHosts(env)).toEqual(['fd00::1']);
+  });
+
+  it('warns and skips a malformed entry instead of silently trusting it', () => {
+    const warnings: string[] = [];
+    const env = { OD_ALLOWED_INTERNAL_HOSTS: '10.0.0.5, http://, good.internal' };
+    const hosts = configuredAllowedInternalHosts(env, (m) => warnings.push(m));
+    expect(hosts).toEqual(['10.0.0.5', 'good.internal']);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/OD_ALLOWED_INTERNAL_HOSTS/);
+  });
+
+  it('warns and skips a CIDR entry rather than silently narrowing it to one host', () => {
+    const warnings: string[] = [];
+    const env = { OD_ALLOWED_INTERNAL_HOSTS: '10.0.0.0/24, 10.0.0.5' };
+    const hosts = configuredAllowedInternalHosts(env, (m) => warnings.push(m));
+    expect(hosts).toEqual(['10.0.0.5']);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/CIDR/i);
   });
 });

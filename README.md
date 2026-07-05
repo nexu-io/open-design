@@ -389,6 +389,8 @@ od skill list --scenario marketing
 
 **Security model.** Read-only by default, the daemon binds to `127.0.0.1`, and SSRF is blocked at the proxy edge. LAN exposure requires an explicit `OD_BIND_HOST` plus `OD_ALLOWED_ORIGINS`. Connector credentials and live-artifact preview routes stay loopback-only regardless.
 
+**Internally-hosted model endpoints.** To prevent SSRF, the daemon blocks provider base URLs that resolve to private/internal address ranges (RFC1918, link-local, CGNAT, and cloud-metadata IPs) by default, surfacing `Internal IPs blocked`. If you run an internally-hosted gateway (e.g. LiteLLM or Ollama on a VPN-only `10.x`/`192.168.x` address), opt that host out with `OD_ALLOWED_INTERNAL_HOSTS=<host1>,<host2>,...` — a comma- or whitespace-separated list of bare hostnames or IPs (`10.0.0.5`, `litellm.internal.corp`; a `host:port` or full URL is accepted and reduced to its hostname; IPv6 must be bracketed, e.g. `[fd00::1]`). The allowlist is strict opt-in (empty by default), exact-host (no subdomain/substring matching), and applies **only** to provider endpoints you configure (connection test, model discovery, BYOK chat). It deliberately does **not** relax the guard on download URLs returned inside upstream responses, which stay blocked. A malformed entry — or CIDR notation, which is not supported — is dropped with a warning rather than silently trusted, so a typo never quietly widens (or fails to widen) the guard. Allowlisting a hostname trusts whatever it resolves to (like `OD_ALLOWED_ORIGINS`); allowlist the resolved IP instead if you want the DNS-resolved address re-checked.
+
 ---
 
 ## Skills

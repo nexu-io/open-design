@@ -865,8 +865,11 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
+    // A non-http scheme is still rejected client-side. (An internal-IP URL is
+    // no longer rejected here — it is syntactically valid and the daemon owns
+    // the allowlist decision; see #3225.)
     fireEvent.change(screen.getByLabelText('Base URL'), {
-      target: { value: 'http://10.0.0.5:11434/v1' },
+      target: { value: 'ftp://api.example.com' },
     });
     expect(screen.getByRole('alert').textContent).toContain(
       'Use a public http:// or https:// URL.',

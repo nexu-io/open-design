@@ -32,7 +32,7 @@ import {
 } from '../integrations/aihubmix.js';
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
-import { proxyDispatcherRequestInit, validateBaseUrlResolved } from '../connectionTest.js';
+import { proxyDispatcherRequestInit, validateUserProviderBaseUrl } from '../connectionTest.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
@@ -408,10 +408,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   // DNS-aware wrapper. The sync `validateBaseUrl` only inspects the literal
   // hostname string, so a public DNS name pointing at an internal address
   // (`internal.example.com → 10.0.0.5`) still passes. We delegate to
-  // `validateBaseUrlResolved` here so every proxy/stream handler runs the
+  // `validateUserProviderBaseUrl` here so every proxy/stream handler runs the
   // same resolved-IP check before issuing the upstream request.
   const validateExternalApiBaseUrl = (baseUrl: string) => {
-    return validateBaseUrlResolved(baseUrl);
+    return validateUserProviderBaseUrl(baseUrl);
   };
 
   const proxyErrorCode = (status: number) => {

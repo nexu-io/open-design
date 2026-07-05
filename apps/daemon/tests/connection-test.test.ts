@@ -20,6 +20,7 @@ import {
   testAgentConnection,
   testProviderConnection,
   validateBaseUrlResolved,
+  validateUserProviderBaseUrl,
   type DnsLookupAddress,
 } from '../src/connectionTest.js';
 import { listProviderModels } from '../src/integrations/provider-models.js';
@@ -524,6 +525,37 @@ describe('POST /api/provider/models', () => {
       ).toBe(false);
     } finally {
       dnsSpy.mockRestore();
+    }
+  });
+
+  it('lets an operator-allowlisted internal endpoint reach the upstream model fetch (#3225)', async () => {
+    // The exact symptom in #3225 — "Could not fetch models: Internal IPs
+    // blocked". With the host opted in via OD_ALLOWED_INTERNAL_HOSTS, model
+    // discovery must reach the internal gateway instead of returning forbidden.
+    vi.stubEnv('OD_ALLOWED_INTERNAL_HOSTS', '10.0.0.5');
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({ data: [{ id: 'gpt-4o-internal' }] }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const res = await realFetch(`${baseUrl}/api/provider/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          baseUrl: 'http://10.0.0.5:11434/v1',
+          apiKey: 'sk-good',
+        }),
+      });
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).not.toMatchObject({ kind: 'forbidden' });
+      expect(
+        fetchMock.mock.calls.some(([input]) =>
+          String(input).includes('10.0.0.5'),
+        ),
+      ).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
     }
   });
 
@@ -4155,5 +4187,72 @@ describe('validateBaseUrlResolved (DNS-aware base URL validation)', () => {
     const result = await validateBaseUrlResolved('https://offline.example.com/v1', failingLookup);
     expect(result.error).toBeUndefined();
     expect(failingLookup).toHaveBeenCalledOnce();
+  });
+
+  it('exempts a literal internal IP passed via allowedInternalHosts without resolving DNS (#3225)', async () => {
+    const lookup = lookupReturning([]);
+    const result = await validateBaseUrlResolved('http://10.0.0.5:4000/v1', lookup, {
+      allowedInternalHosts: ['10.0.0.5'],
+    });
+    expect(result.error).toBeUndefined();
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('exempts an allowlisted hostname even though it resolves into private space (#3225)', async () => {
+    const result = await validateBaseUrlResolved(
+      'https://litellm.internal:4000/v1',
+      lookupReturning([{ address: '10.0.0.5', family: 4 }]),
+      { allowedInternalHosts: ['litellm.internal'] },
+    );
+    expect(result.error).toBeUndefined();
+  });
+
+  it('exempts a non-allowlisted hostname whose resolved address is itself allowlisted (#3225)', async () => {
+    const result = await validateBaseUrlResolved(
+      'https://gateway.example.com/v1',
+      lookupReturning([{ address: '10.0.0.5', family: 4 }]),
+      { allowedInternalHosts: ['10.0.0.5'] },
+    );
+    expect(result.error).toBeUndefined();
+  });
+
+  it('still blocks a resolved private address that is NOT on the allowlist (#3225)', async () => {
+    const result = await validateBaseUrlResolved(
+      'https://other.example.com/v1',
+      lookupReturning([{ address: '192.168.1.5', family: 4 }]),
+      { allowedInternalHosts: ['10.0.0.5'] },
+    );
+    expect(result).toMatchObject({ error: 'Internal IPs blocked', forbidden: true });
+  });
+});
+
+describe('validateUserProviderBaseUrl: OD_ALLOWED_INTERNAL_HOSTS opt-in (issue #3225)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('exempts an operator-allowlisted literal internal IP for user-configured endpoints', async () => {
+    vi.stubEnv('OD_ALLOWED_INTERNAL_HOSTS', '10.0.0.5');
+    const result = await validateUserProviderBaseUrl('http://10.0.0.5:4000/v1');
+    expect(result.error).toBeUndefined();
+  });
+
+  it('exempts a hostname that resolves into private space when that hostname is allowlisted', async () => {
+    vi.stubEnv('OD_ALLOWED_INTERNAL_HOSTS', 'litellm.internal');
+    const lookup = vi.fn(async () => [{ address: '10.0.0.5', family: 4 }]);
+    const result = await validateUserProviderBaseUrl('http://litellm.internal:4000/v1', lookup);
+    expect(result.error).toBeUndefined();
+  });
+
+  it('still blocks a private endpoint that is not on the allowlist', async () => {
+    vi.stubEnv('OD_ALLOWED_INTERNAL_HOSTS', '10.0.0.5');
+    const result = await validateUserProviderBaseUrl('http://192.168.1.5:4000/v1');
+    expect(result).toMatchObject({ error: 'Internal IPs blocked', forbidden: true });
+  });
+
+  it('keeps the attacker-controllable asset guard strict — the plain resolver never consults the allowlist', async () => {
+    vi.stubEnv('OD_ALLOWED_INTERNAL_HOSTS', '10.0.0.5');
+    const result = await validateBaseUrlResolved('http://10.0.0.5:4000/v1');
+    expect(result).toMatchObject({ error: 'Internal IPs blocked', forbidden: true });
   });
 });

@@ -32,6 +32,63 @@ export function configuredAllowedHosts(origins = configuredAllowedOrigins()): st
   return origins.map((origin) => new URL(origin).host);
 }
 
+// Issue #3225 — operator-declared allowlist of internal hosts that are exempt
+// from the default-deny SSRF guard for USER-CONFIGURED provider endpoints (an
+// internally-hosted LiteLLM/Ollama on an RFC1918 address reachable only over
+// VPN). Comma- or whitespace-separated; each entry may be a bare host
+// (`10.0.0.5`), `host:port`, or a full URL — only the hostname is retained,
+// since the SSRF block is host-based. IPv6 literals must be bracketed
+// (`[fd00::1]` or `[fd00::1]:4000`) so the port is unambiguous; the brackets
+// are stripped here so the result compares directly against a resolved
+// address. An empty/unset value yields `[]`, preserving the strict default
+// for every deployment that does not opt in.
+//
+// A malformed entry — or CIDR notation, which the host-based matcher cannot
+// honor — is dropped with a warning rather than silently trusted, so a typo
+// can never quietly widen (or quietly fail to widen) the guard. This list is
+// threaded ONLY into the user-configured-endpoint validators, never the
+// attacker-controllable asset-download guard (`assertExternalAssetUrl`).
+export function configuredAllowedInternalHosts(
+  env: NodeJS.ProcessEnv = process.env,
+  warn: (message: string) => void = (message) => console.warn(message),
+): string[] {
+  const raw = env.OD_ALLOWED_INTERNAL_HOSTS || '';
+  if (!raw.trim()) return [];
+  const hosts: string[] = [];
+  for (const part of raw.split(/[,\s]+/)) {
+    const entry = part.trim();
+    if (!entry) continue;
+    // A bare `10.0.0.0/24` parses as host `10.0.0.0` + path `/24`, so keeping
+    // it would silently trust a single network address the operator never
+    // meant. Reject loudly. (A full URL whose path happens to look numeric
+    // still carries a scheme, so exclude those from the CIDR heuristic.)
+    if (!entry.includes('://') && /^[^/]+\/\d{1,3}$/.test(entry)) {
+      warn(
+        `[ssrf] ignoring CIDR entry in OD_ALLOWED_INTERNAL_HOSTS: ${JSON.stringify(entry)} — list individual hosts instead`,
+      );
+      continue;
+    }
+    let hostname = '';
+    try {
+      const url = new URL(entry.includes('://') ? entry : `http://${entry}`);
+      hostname = url.hostname.toLowerCase();
+      if (hostname.startsWith('[') && hostname.endsWith(']')) {
+        hostname = hostname.slice(1, -1);
+      }
+    } catch {
+      hostname = '';
+    }
+    if (!hostname) {
+      warn(
+        `[ssrf] ignoring malformed OD_ALLOWED_INTERNAL_HOSTS entry: ${JSON.stringify(entry)}`,
+      );
+      continue;
+    }
+    hosts.push(hostname);
+  }
+  return hosts;
+}
+
 export function allowedBrowserPorts(
   port: number | string | null | undefined,
   env: NodeJS.ProcessEnv = process.env,

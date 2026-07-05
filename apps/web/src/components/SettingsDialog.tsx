@@ -996,6 +996,15 @@ export function isValidApiBaseUrl(value: string): boolean {
   const trimmed = value.trim();
   if (!/^https?:\/\//i.test(trimmed)) return false;
   const result = validateBaseUrl(trimmed);
+  // The internal-IP / SSRF decision belongs to the daemon, which is the single
+  // source of truth and honors the operator's OD_ALLOWED_INTERNAL_HOSTS
+  // allowlist — a value the browser cannot see (#3225). A `forbidden` result
+  // here is a syntactically-valid URL that points at an internal address; keep
+  // it UI-valid so the operator can run the connection test / model fetch and
+  // get the daemon's authoritative answer (allowed when listed, a clear
+  // "Internal IPs blocked" otherwise). Only genuinely malformed URLs stay
+  // invalid client-side.
+  if (result.forbidden) return true;
   return Boolean(result.parsed && !result.error);
 }
 
