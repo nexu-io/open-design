@@ -294,6 +294,39 @@ describe('chat run service shutdown', () => {
     });
   });
 
+  it('recomputes workspace from updated project metadata on status bodies', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'routine-pending-project',
+      conversationId: 'routine-pending-conversation',
+    });
+
+    expect(runs.statusBody(run).workspace).toEqual({
+      storage: {
+        kind: 'od-owned',
+        baseDir: null,
+      },
+      provenance: null,
+    });
+
+    run.projectId = 'real-project';
+    run.projectMetadata = {
+      importedFrom: 'folder',
+      baseDir: '/Users/alice/reused-project',
+    };
+
+    expect(runs.statusBody(run).workspace).toEqual({
+      storage: {
+        kind: 'folder-backed',
+        baseDir: '/Users/alice/reused-project',
+      },
+      provenance: {
+        kind: 'user-local',
+        writeback: 'in-place',
+      },
+    });
+  });
+
   it('summarizes orchestrator scratch workspace provenance on run status bodies', () => {
     const runs = createRuns();
     const run = runs.create({
