@@ -1,0 +1,67 @@
+/**
+ * @module analytics/events/event-payload
+ * Discriminated union of all analytics event payloads.
+ */
+import type { DesignSystemApplyResultProps, DesignSystemCreateResultProps, DesignSystemEnrichResultProps, DesignSystemReviewResultProps, DesignSystemSourceIngestResultProps, DesignSystemStatusResultProps } from './design-systems.js';
+import type { OnboardingCompleteResultProps, OnboardingRuntimeScanResultProps } from './onboarding.js';
+import type { PageViewProps } from './page-view.js';
+import type { ArtifactDeployResultProps, ArtifactExportResultProps, AssistantFeedbackClickProps, AssistantFeedbackReasonClickProps, AssistantFeedbackReasonSubmitProps, AssistantFeedbackReasonViewProps, ContextLinkResultProps, FeedbackSubmitResultProps, FileUploadResultProps, FileVersionRestoreResultProps, LangfuseReportResultProps, PackagedRuntimeFailedProps, PluginImportResultProps, PluginReplacementResultProps, ProjectCreateResultProps, RunCreatedProps, RunFinishedProps, RunRetryAttemptedProps, RunRetryFinishedProps, SettingsByokModelsFetchResultProps, SettingsByokTestResultProps, SettingsCliTestResultProps, SettingsConnectorAuthResultProps, SettingsViewProps, UpdateApplyObservedProps, UpdateInstallResultProps } from './result-events.js';
+import type { SurfaceViewProps } from './surface-view.js';
+import type { AmrAuthResultProps, UiClickProps } from './ui-click.js';
+// ---- Discriminated union of all event payloads ---------------------------
+
+export type AnalyticsEventPayload =
+  | { event: 'packaged_runtime_failed'; props: PackagedRuntimeFailedProps }
+  | { event: 'page_view'; props: PageViewProps }
+  | { event: 'ui_click'; props: UiClickProps }
+  | { event: 'surface_view'; props: SurfaceViewProps }
+  | { event: 'project_create_result'; props: ProjectCreateResultProps }
+  | { event: 'plugin_replacement_result'; props: PluginReplacementResultProps }
+  | { event: 'plugin_import_result'; props: PluginImportResultProps }
+  | { event: 'run_created'; props: RunCreatedProps }
+  | { event: 'run_finished'; props: RunFinishedProps }
+  | { event: 'langfuse_report_result'; props: LangfuseReportResultProps }
+  | { event: 'run_retry_attempted'; props: RunRetryAttemptedProps }
+  | { event: 'run_retry_finished'; props: RunRetryFinishedProps }
+  | { event: 'update_install_result'; props: UpdateInstallResultProps }
+  | { event: 'update_apply_observed'; props: UpdateApplyObservedProps }
+  | { event: 'file_upload_result'; props: FileUploadResultProps }
+  | { event: 'context_link_result'; props: ContextLinkResultProps }
+  | { event: 'artifact_export_result'; props: ArtifactExportResultProps }
+  | { event: 'artifact_deploy_result'; props: ArtifactDeployResultProps }
+  | { event: 'file_version_restore_result'; props: FileVersionRestoreResultProps }
+  | { event: 'feedback_submit_result'; props: FeedbackSubmitResultProps }
+  | { event: 'assistant_feedback_click'; props: AssistantFeedbackClickProps }
+  | {
+      event: 'assistant_feedback_reason_view';
+      props: AssistantFeedbackReasonViewProps;
+    }
+  | {
+      event: 'assistant_feedback_reason_click';
+      props: AssistantFeedbackReasonClickProps;
+    }
+  | {
+      event: 'assistant_feedback_reason_submit';
+      props: AssistantFeedbackReasonSubmitProps;
+    }
+  | { event: 'settings_view'; props: SettingsViewProps }
+  | { event: 'settings_cli_test_result'; props: SettingsCliTestResultProps }
+  | { event: 'settings_byok_test_result'; props: SettingsByokTestResultProps }
+  | {
+      event: 'settings_byok_models_fetch_result';
+      props: SettingsByokModelsFetchResultProps;
+    }
+  | { event: 'settings_connector_auth_result'; props: SettingsConnectorAuthResultProps }
+  | { event: 'amr_auth_result'; props: AmrAuthResultProps }
+  | { event: 'onboarding_runtime_scan_result'; props: OnboardingRuntimeScanResultProps }
+  | { event: 'onboarding_complete_result'; props: OnboardingCompleteResultProps }
+  | {
+      event: 'design_system_source_ingest_result';
+      props: DesignSystemSourceIngestResultProps;
+    }
+  | { event: 'design_system_create_result'; props: DesignSystemCreateResultProps }
+  | { event: 'design_system_review_result'; props: DesignSystemReviewResultProps }
+  | { event: 'design_system_status_result'; props: DesignSystemStatusResultProps }
+  | { event: 'design_system_apply_result'; props: DesignSystemApplyResultProps }
+  | { event: 'design_system_enrich_result'; props: DesignSystemEnrichResultProps };
+
