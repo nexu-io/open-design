@@ -32,7 +32,7 @@ import {
 } from '../src/server.js';
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { getAgentDef } from '../src/agents.js';
-import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
+import { readMemoryConfig, writeMemoryConfig } from '../src/memory/index.js';
 import { upsertMessage } from '../src/db.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
 

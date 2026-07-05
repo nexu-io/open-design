@@ -9,7 +9,7 @@
 // regression points at the right helper.
 
 import { describe, expect, it } from 'vitest';
-import { renderDesignSystemPreview } from '../src/design-systems/preview.js';
+import { renderDesignSystemPreview } from '../src/design-systems/index.js';
 
 // Pull every `background:<hex>;` chip style out of the palette block. Order is
 // preserved, which lets us check the extractColors output ordering.

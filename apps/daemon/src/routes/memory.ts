@@ -18,22 +18,22 @@ import {
   upsertMemoryEntry,
   writeMemoryConfig,
   writeMemoryIndex,
-} from '../memory.js';
+} from '../memory/index.js';
 import {
   clearExtractions as clearMemoryExtractions,
   listExtractions as listMemoryExtractions,
   removeExtraction as removeMemoryExtraction,
-} from '../memory-extractions.js';
+} from '../memory/index.js';
 import {
   clearVerifications as clearMemoryVerifications,
   listVerifications as listMemoryVerifications,
   removeVerification as removeMemoryVerification,
-} from '../memory-verify.js';
-import { distillRulesFromAnnotations } from '../memory-rules.js';
+} from '../memory/index.js';
+import { distillRulesFromAnnotations } from '../memory/index.js';
 import {
   extractMemoryFromConnectors,
   suggestMemoryFromConnectors,
-} from '../memory-connectors.js';
+} from '../memory/index.js';
 
 export interface RegisterMemoryRoutesDeps extends RouteDeps<'http' | 'paths' | 'appConfig'> {}
 
@@ -591,7 +591,7 @@ export function registerMemoryRoutes(app: Express, ctx: RegisterMemoryRoutesDeps
       let attemptedLLM = false;
       if (userMessage.trim().length > 0 && hasAssistant) {
         attemptedLLM = true;
-        void import('../memory-llm.js')
+        void import('../memory/index.js')
           .then(({ extractWithLLM }) =>
             extractWithLLM(
               RUNTIME_DATA_DIR,

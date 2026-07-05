@@ -8,7 +8,7 @@ import {
   type RoutineRunHandlerStart,
   validateSchedule,
   validateTarget,
-} from '../src/routines.js';
+} from '../src/automation/index.js';
 
 function partsIn(timezone: string, at: Date): Record<string, string> {
   const dtf = new Intl.DateTimeFormat('en-US', {

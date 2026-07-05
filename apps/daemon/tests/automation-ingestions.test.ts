@@ -4,15 +4,13 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  applyAutomationProposal,
   getAutomationSourcePacket,
   ingestAutomationSource,
-  listAutomationSourcePackets,
-} from '../src/automation-ingestions.js';
-import {
-  applyAutomationProposal,
   listAutomationProposals,
-} from '../src/automation-proposals.js';
-import { buildMemoryTree, readMemoryEntry } from '../src/memory.js';
+  listAutomationSourcePackets,
+} from '../src/automation/index.js';
+import { buildMemoryTree, readMemoryEntry } from '../src/memory/index.js';
 
 let dataDir = '';
 

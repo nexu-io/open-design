@@ -2,8 +2,12 @@ import type { Express } from 'express';
 import { randomUUID } from 'node:crypto';
 import {
   getAnyAutomationTemplate,
+  ingestAutomationSource,
   listAllAutomationTemplates,
-} from '../automation-templates.js';
+  validateSchedule as validateRoutineSchedule,
+  validateTarget as validateRoutineTarget,
+  type RoutineService,
+} from '../automation/index.js';
 import {
   deleteRoutine as dbDeleteRoutine,
   getLatestRoutineRun,
@@ -15,12 +19,6 @@ import {
   listRoutines,
   updateRoutine,
 } from '../db.js';
-import { ingestAutomationSource } from '../automation-ingestions.js';
-import {
-  validateSchedule as validateRoutineSchedule,
-  validateTarget as validateRoutineTarget,
-  type RoutineService,
-} from '../routines.js';
 import type { PathDeps, RouteDeps } from '../server-context.js';
 
 export interface RegisterRoutineRoutesDeps extends RouteDeps<'db' | 'routines'> {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeRepoName, GITHUB_URL_RE, SAFE_NAME_RE } from '../src/library-install.js';
+import { sanitizeRepoName, GITHUB_URL_RE, SAFE_NAME_RE } from '../src/library/index.js';
 
 describe('sanitizeRepoName', () => {
   it('extracts repo name from a github URL', () => {

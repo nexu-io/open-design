@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { prepareDesignTokenContractRebuild } from '../../src/design-systems/token-contract-rebuild.js';
+import { prepareDesignTokenContractRebuild } from '../../src/design-systems/tokens/token-contract-rebuild.js';
 
 describe('prepareDesignTokenContractRebuild', () => {
   let root: string;

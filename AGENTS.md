@@ -15,6 +15,7 @@ This file is the single source of truth for agents entering this repository. Rea
 
 - Workspace packages come from `pnpm-workspace.yaml`: `apps/*`, `packages/*`, `tools/*`, and `e2e`.
 - Top-level content directories: `skills/` (functional skills the agent invokes mid-task — utilities, briefs, packagers; see `skills/AGENTS.md`), `design-templates/` (rendering catalogue: decks, prototypes, image/video/audio templates; see `design-templates/AGENTS.md` and `specs/current/skills-and-design-templates.md`), `design-systems/` (brand `DESIGN.md` files), `craft/` (universal brand-agnostic craft rules a skill can opt into via `od.craft.requires`), `mocks/` (replay-based mock CLIs for `opencode`/`claude`/`codex`/`gemini`/`cursor-agent`/`deepseek`/`qwen`/`grok`, the ACP family `devin`/`hermes`/`kilo`/`kimi`/`kiro`/`vibe`, and the AMR `vela` CLI (login + models + ACP), built from anonymized Langfuse traces — PATH-overlay drop-in for tests and self-validation; see `mocks/README.md`).
+- Contributor/dev skills: `dev-skills/` (agent-agnostic `SKILL.md` refactoring/maintenance workflows any code agent — Claude Code, Codex, Gemini, Cursor — can load; e.g. `fixing-open-design`; see `dev-skills/AGENTS.md`). These are **not** product skills: they are not surfaced in the OD UI or `/api/skills`, unlike `skills/`.
 - `apps/web` is the Next.js 16 App Router + React 18 web runtime; do not restore `apps/nextjs`.
 - `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
 - `apps/desktop` is the Electron shell; it discovers the web URL through sidecar IPC.
@@ -290,6 +291,14 @@ The following is a working playbook for routine bug follow-ups, distilled from r
 - **Stage human verification for visible bugs.** When the symptom needs an eye to confirm — UI, platform-native behavior, animations, race conditions a unit test can't see — green specs alone aren't acceptance. Stand up a buggy-vs-fix comparison the reviewer can drive themselves (typical shape: two namespaced runtimes, one on `main`, one on the fix branch), and seed any required data only through production HTTP APIs; source-level test backdoors invalidate the verification because they prove a fake flow rather than the real one.
 
 For a worked example of one full loop (red e2e spec → fix → green), see `e2e/tests/dialog/stop-reconciles-message.test.ts` (issue #135).
+
+## Refactoring workflow
+
+When the work is a **structural refactor of a backend/daemon module** — splitting a god-file or a flat directory of many files into modules, applying the capability-barrel pattern, breaking dependency cycles, or reorganizing `apps/daemon/src/**` into `core/` + concern subdirectories — **load `dev-skills/fixing-open-design/SKILL.md` before touching code and follow its phases.** It is the repository's canonical, machine-enforced refactor template (reference implementation: `apps/daemon/src/design-systems/`; guard: `scripts/check-barrel-imports.ts`).
+
+- Triggers: "refactor this subsystem", "split this god-file", "capability-barrel this module", "apply the design-systems pattern", "organize these files into a subfolder", or any task that moves/regroups daemon modules for maintainability.
+- The skill is agent-agnostic (Claude Code, Codex, Gemini, Cursor). Do not hand-roll a barrel split or invent a variant layout — the guard enforces the exact shape, and an unregistered split rots immediately.
+- One subsystem per PR; public export surface stays identical; every file gets a `@module` docblock and every export JSDoc; register the domain in `CAPABILITY_BARREL_DOMAINS` and keep `pnpm guard` green. See `dev-skills/AGENTS.md` for the dev-skill roster.
 
 # Common commands
 

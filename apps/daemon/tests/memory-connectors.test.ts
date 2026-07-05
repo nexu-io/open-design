@@ -8,12 +8,12 @@ import type { ConnectorService } from '../src/connectors/service.js';
 import {
   extractMemoryFromConnectors,
   suggestMemoryFromConnectors,
-} from '../src/memory-connectors.js';
-import { memoryDir, readMemoryEntry, writeMemoryConfig } from '../src/memory.js';
+} from '../src/memory/index.js';
+import { memoryDir, readMemoryEntry, writeMemoryConfig } from '../src/memory/index.js';
 import {
   __resetExtractionsForTests,
   listExtractions,
-} from '../src/memory-extractions.js';
+} from '../src/memory/index.js';
 
 const dataDir = path.join(process.env.OD_DATA_DIR ?? process.cwd(), 'memory-connectors-test');
 const originalFetch = globalThis.fetch;

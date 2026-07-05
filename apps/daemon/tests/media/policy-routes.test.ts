@@ -6,7 +6,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../../src/server.js';
-import { memoryDir, writeMemoryConfig } from '../../src/memory.js';
+import { memoryDir, writeMemoryConfig } from '../../src/memory/index.js';
 import { resolveLegacyMediaRouteGrant } from '../../src/routes/media.js';
 
 type FakeMediaEndpoint = 'tool' | 'legacy';

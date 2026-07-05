@@ -197,7 +197,7 @@ import {
   splitDerivedSkillId,
 } from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
-import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
+import { installFromTarget, uninstallById, sanitizeRepoName } from './library/index.js';
 import {
   buildWindowsFolderDialogCommand,
   parseFolderDialogStdout,
@@ -234,9 +234,9 @@ import {
   updateUserDesignSystem,
   updateUserDesignSystemRevisionStatus,
 } from './design-systems/index.js';
-import { createDesignSystemGenerationJobStore } from './design-systems/generation-jobs.js';
+import { createDesignSystemGenerationJobStore } from './design-systems/index.js';
 import { createDesignSystemServerServices } from './design-systems/server-services.js';
-import { prepareDesignTokenContractRebuild } from './design-systems/token-contract-rebuild.js';
+import { prepareDesignTokenContractRebuild } from './design-systems/index.js';
 import { registerBrandRoutes } from './brand-routes.js';
 import {
   applyDiffReviewDecisionToCwd,
@@ -280,11 +280,10 @@ import {
   extractFromMessage,
   listActiveRuleEntries,
   readMemoryConfig,
-} from './memory.js';
+} from './memory/index.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
-import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { createAgentTitleMarkerStripper } from './title-marker.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
@@ -317,8 +316,8 @@ import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { importFigmaFromBytes } from './figma/figma-import.js';
-import { renderDesignSystemPreview } from './design-systems/preview.js';
-import { renderDesignSystemShowcase } from './design-systems/showcase.js';
+import { renderDesignSystemPreview } from './design-systems/index.js';
+import { renderDesignSystemShowcase } from './design-systems/index.js';
 import { createChatRunService } from './runtimes/runs.js';
 import {
   createRunLifecycleTracer,
@@ -427,10 +426,11 @@ import { agentCliEnvForAgent, readAppConfig, readPluginEnvKnobs, writeAppConfig 
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
 import { buildOrbitNoLiveArtifactSummary } from './orbit-agent-summary.js';
 import {
+  ingestRoutineConnectorEvolution,
   RoutineService,
   validateSchedule as validateRoutineSchedule,
   validateTarget as validateRoutineTarget,
-} from './routines.js';
+} from './automation/index.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
 import { createDiagnosticsExportHandler } from './diagnostics-export.js';
 import { DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
@@ -614,8 +614,8 @@ import { registerLibraryRoutes } from './routes/library.js';
 import {
   libraryExtensionAllowedOrigins,
   seedLibraryExtensionOrigins,
-} from './library-tokens.js';
-import { listLibraryTokenOrigins } from './library-store.js';
+  listLibraryTokenOrigins,
+} from './library/index.js';
 import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 
@@ -7483,7 +7483,7 @@ export async function startServer({
         chatAgentId: typeof agentId === 'string' ? agentId : null,
         chatModel: typeof safeModel === 'string' ? safeModel : null,
       };
-      void import('./memory-llm.js')
+      void import('./memory/index.js')
         .then(({ extractWithLLM, distillAnnotationsToMemory }) => {
           const generalPass = extractWithLLM(
             RUNTIME_DATA_DIR,
