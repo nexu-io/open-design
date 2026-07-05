@@ -54,8 +54,8 @@ const systemsCount = systems.length;
 const craftCount = craft.length;
 const totalCount = templatesCount + skillsCount + systemsCount + craftCount;
 
-const title = `${pcopy.hubLabel} · Open Design`;
-const description = pcopy.hubLead;
+const title = pcopy.hubMetaTitle(totalCount);
+const description = pcopy.hubMetaDescription;
 
 const jsonLd = {
   '@context': 'https://schema.org',

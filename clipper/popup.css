@@ -1,0 +1,658 @@
+/* ============================================================
+   Open Design — Web Clipper popup
+   Brand-aligned with the Open Design product design system
+   (warm neutral surfaces, ember accent, near-black brand ink).
+   ============================================================ */
+:root {
+  color-scheme: light dark;
+
+  --bg: #faf9f7;
+  --panel: #fdfcfa;
+  --subtle: #f4f5f7;
+  --muted: #eef1f5;
+  --fill: rgba(0, 0, 0, 0.04);
+  --fill-hover: rgba(0, 0, 0, 0.06);
+  --border: #e1e5eb;
+  --border-soft: #edf0f4;
+
+  --text: #1a1916;
+  --text-strong: #0d0c0a;
+  --text-muted: #74716b;
+  --text-soft: #989590;
+
+  /* Brand ink — the Open Design mark. */
+  --brand-ink: #202020;
+  --on-brand: #ffffff;
+
+  /* Ember accent — Open Design primary action color. */
+  --accent: #c96442;
+  --accent-strong: #b45a3b;
+  --on-accent: #ffffff;
+
+  --green: #1f7a3a;
+  --green-bg: #e8f7ee;
+  --green-border: #c6ead2;
+  --red: #9c2a25;
+
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --dur-quick: 120ms;
+  --dur-enter: 200ms;
+
+  --shadow-sm: 0 1px 2px rgba(28, 27, 26, 0.05), 0 1px 3px rgba(28, 27, 26, 0.04);
+  --shadow-md: 0 6px 24px rgba(28, 27, 26, 0.08), 0 2px 6px rgba(28, 27, 26, 0.04);
+
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1917;
+    --panel: #222120;
+    --subtle: #252321;
+    --muted: #2e2c29;
+    --fill: rgba(255, 255, 255, 0.06);
+    --fill-hover: rgba(255, 255, 255, 0.1);
+    --border: #333128;
+    --border-soft: #2a2825;
+
+    --text: #e8e4dc;
+    --text-strong: #f2ede4;
+    --text-muted: #9a9690;
+    --text-soft: #6e6b65;
+
+    --brand-ink: #f2ede4;
+    --on-brand: #1a1917;
+
+    --accent: #d97a56;
+    --accent-strong: #e8896a;
+
+    --green: #4caf72;
+    --green-bg: #0f2a18;
+    --green-border: #1a4028;
+    --red: #e06b65;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 340px;
+  margin: 0;
+  padding: 0;
+  font-family: var(--sans);
+  color: var(--text);
+  background: var(--bg);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Flush content — no outer frame; Chrome rounds the popup window itself. */
+.app {
+  background: transparent;
+}
+
+/* ---- Brand header ---- */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 15px 16px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  background:
+    radial-gradient(120% 140% at 0% 0%, var(--fill), transparent 60%),
+    var(--panel);
+}
+.brand-mark {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: block;
+  filter: drop-shadow(0 2px 5px rgba(28, 27, 26, 0.18));
+}
+.brand-mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.brand-name {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.05;
+  margin-right: auto;
+}
+.brand-eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+.brand-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+.status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px 0 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--subtle);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.status::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-soft);
+  box-shadow: 0 0 0 0 transparent;
+}
+.status[data-paired='true'] {
+  color: var(--green);
+  border-color: var(--green-border);
+  background: var(--green-bg);
+}
+.status[data-paired='true']::before {
+  background: var(--green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent);
+}
+
+/* Info icon + hover/focus tooltip — keeps the chrome minimal while the long
+   "what gets captured" explanation stays one hover away. */
+.info {
+  flex: none;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-pill);
+  color: var(--text-soft);
+  cursor: help;
+  transition: color var(--dur-quick) var(--ease-out), background var(--dur-quick) var(--ease-out);
+}
+.info svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+.info:hover,
+.info:focus-visible {
+  color: var(--accent);
+  background: var(--fill);
+  outline: none;
+}
+.tooltip {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: -2px;
+  width: 244px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.55;
+  text-align: left;
+  letter-spacing: normal;
+  text-transform: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition:
+    opacity var(--dur-enter) var(--ease-out),
+    transform var(--dur-enter) var(--ease-out),
+    visibility var(--dur-enter);
+  z-index: 5;
+  pointer-events: none;
+}
+.info:hover .tooltip,
+.info:focus-visible .tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* ---- Body ---- */
+.body {
+  padding: 14px 16px 12px;
+}
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Shared action surface */
+.action {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition:
+    background var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out),
+    transform var(--dur-quick) var(--ease-out),
+    box-shadow var(--dur-quick) var(--ease-out);
+}
+.action:hover {
+  background: var(--subtle);
+  border-color: var(--border);
+}
+.action:active {
+  transform: translateY(1px);
+}
+.action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.action-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+.action-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+.action-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+/* Primary capture CTA */
+.action-primary {
+  padding: 13px 14px;
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--on-accent);
+  box-shadow: var(--shadow-sm);
+}
+.action-primary:hover {
+  background: var(--accent-strong);
+}
+.action-primary .action-icon,
+.action-primary .action-title {
+  color: var(--on-accent);
+}
+.action-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-right: auto;
+}
+.action-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--on-accent) 78%, transparent);
+}
+.action-go {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--on-accent) 70%, transparent);
+  transition: transform var(--dur-enter) var(--ease-out);
+}
+.action-go svg {
+  width: 18px;
+  height: 18px;
+}
+.action-primary:hover .action-go {
+  transform: translateX(2px);
+  color: var(--on-accent);
+}
+
+/* Secondary 2×2 grid */
+.action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.action-grid .action {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px 12px 11px;
+  min-height: 70px;
+}
+.action-grid .action:hover .action-icon {
+  color: var(--accent);
+}
+/* A lone trailing action (odd count — e.g. Figma as the 5th) spans the full
+   width so the grid never leaves a ragged half-empty last row. */
+.action-grid .action:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+/* ---- States ---- */
+.hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: var(--subtle);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin: 12px 0 0;
+}
+.hint strong {
+  color: var(--text-strong);
+}
+
+/* ---- Advanced ---- */
+.advanced {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 12px;
+}
+.advanced > summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-soft);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: color var(--dur-quick) var(--ease-out);
+}
+.advanced > summary::-webkit-details-marker {
+  display: none;
+}
+.advanced > summary::before {
+  content: '›';
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform var(--dur-enter) var(--ease-out);
+}
+.advanced[open] > summary::before {
+  transform: rotate(90deg);
+}
+.advanced > summary:hover {
+  color: var(--text-muted);
+}
+.advanced[open] > summary {
+  margin-bottom: 12px;
+}
+
+/* On-page bar — compact switch row. The bar stays an opt-in power feature,
+   so it lives in Advanced as a small toggle rather than a full action row. */
+.adv-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.adv-switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-right: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+}
+.adv-switch-text em {
+  font-style: normal;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+/* Track + thumb switch — accent fill when on. */
+.switch {
+  flex: none;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--muted);
+  cursor: pointer;
+  transition:
+    background var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out);
+}
+.switch:hover {
+  border-color: var(--text-soft);
+}
+.switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.switch-thumb {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-50%);
+  transition: transform var(--dur-enter) var(--ease-out);
+}
+.switch[aria-checked='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.switch[aria-checked='true'] .switch-thumb {
+  transform: translate(16px, -50%);
+  background: var(--on-accent);
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 12px;
+  color: var(--text);
+  margin-bottom: 12px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.check input {
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+}
+.check em {
+  font-style: normal;
+  color: var(--text-soft);
+}
+.label-field {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.row {
+  display: flex;
+  gap: 8px;
+}
+.row input {
+  flex: 1;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out);
+}
+.row input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.btn-save {
+  flex: none;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out);
+}
+.btn-save:hover {
+  background: var(--subtle);
+}
+
+/* ---- Status message ---- */
+.msg {
+  font-size: 12px;
+  font-weight: 500;
+  margin: 0;
+  color: var(--text-muted);
+}
+.msg:not(:empty) {
+  margin-top: 12px;
+}
+.msg[data-kind='ok'] {
+  color: var(--green);
+}
+.msg[data-kind='err'] {
+  color: var(--red);
+}
+/* In-flight capture state: an inline spinner ahead of the status text. */
+.msg[data-kind='loading'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+.msg[data-kind='loading']::before {
+  content: '';
+  flex: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  border-top-color: var(--accent);
+  animation: msg-spin 0.7s linear infinite;
+}
+@keyframes msg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* While a capture is in flight, dim + lock the capture buttons so the spinner
+   message reads as the active state and double-fires are impossible. */
+.actions {
+  transition: opacity var(--dur-enter) var(--ease-out);
+}
+body.busy .actions {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ---- Inline "refresh page" recovery affordance ----
+   Shown only when an on-page surface (image/element picker, on-page bar) can't
+   be reached because the content script never loaded into this already-open tab
+   — the usual case right after the extension is installed or updated. */
+.refresh-page {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 9px;
+  padding: 6px 12px 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  color: var(--text-strong);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition:
+    background var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out),
+    color var(--dur-quick) var(--ease-out),
+    transform var(--dur-quick) var(--ease-out);
+}
+.refresh-page[hidden] {
+  display: none;
+}
+.refresh-page:hover {
+  background: var(--subtle);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.refresh-page:active {
+  transform: translateY(1px);
+}
+.refresh-page:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.refresh-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  transition: color var(--dur-quick) var(--ease-out);
+}
+.refresh-page:hover .refresh-icon {
+  color: var(--accent);
+}
+.refresh-icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.refresh-page.spinning {
+  pointer-events: none;
+  opacity: 0.9;
+}
+.refresh-page.spinning .refresh-icon {
+  color: var(--accent);
+}
+.refresh-page.spinning .refresh-icon svg {
+  animation: refresh-spin 0.7s linear infinite;
+}
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -1,6 +1,7 @@
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
-import type { Page, Request, Response } from '@playwright/test';
+import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
+import { runErrorCard } from '@/playwright/chat';
+import type { Locator, Page, Request, Response } from '@playwright/test';
 import {
   createFakeAgentRuntimes,
   FAKE_AGENT_RUNTIME_IDS,
@@ -36,7 +37,7 @@ test.beforeAll(async () => {
 });
 
 test.beforeEach(async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(T.xlong);
 
   await resetDaemonAppConfig(page);
 
@@ -118,8 +119,8 @@ test('[P0] real daemon run surfaces process/parser errors in chat', async ({ pag
 
   await sendPrompt(page, 'Return an intentional daemon smoke failure');
 
-  await expect(page.locator('.msg.error')).toContainText('intentional fake codex failure', { timeout: 15_000 });
-  await expect(page.locator('.msg.error')).toContainText('intentional fake codex failure');
+  await expect(runErrorCard(page)).toContainText('intentional fake codex failure', { timeout: 15_000 });
+  await expect(runErrorCard(page)).toContainText('intentional fake codex failure');
 });
 
 test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retryable connection error', async ({ page }) => {
@@ -133,7 +134,7 @@ test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retry
   // classified as AGENT_CONNECTION_DROPPED and the error card shows the
   // localized chat.connectionDropped copy (en locale here) instead of echoing
   // the raw SDK string verbatim.
-  await expect(page.locator('.msg.error')).toContainText('connection to the model service dropped', {
+  await expect(runErrorCard(page)).toContainText('connection to the model service dropped', {
     timeout: 15_000,
   });
 });
@@ -156,6 +157,34 @@ test('[P0] real daemon run supports a follow-up turn in the same project', async
   expect(files.map((file) => file.name)).toEqual(expect.arrayContaining([GENERATED_FILE, FOLLOW_UP_FILE]));
 
   await expectProjectFileToContain(page, projectId, FOLLOW_UP_FILE, 'Generated after an earlier daemon turn.');
+});
+
+test('[P1] Plan mode daemon run creates, opens, and restores an editable markdown plan', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Plan mode markdown smoke');
+  await expectWorkspaceReady(page);
+
+  await selectComposerSessionMode(page, 'Plan mode');
+  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
+  await sendPrompt(page, 'Create a deterministic plan document');
+  const runRequest = await runRequestPromise;
+  expect((runRequest.postDataJSON() as { sessionMode?: string }).sessionMode).toBe('plan');
+
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, ['plan.md']);
+  await expectProjectFileToContain(page, projectId, 'plan.md', '# Deterministic Plan');
+  await expect(page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Deterministic Plan/);
+  await expect(page.getByLabel(/markdown preview/i)).toContainText('Scope');
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
+  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await expect(page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Deterministic Plan/);
+  await expect(page.getByLabel(/markdown preview/i)).toContainText('Keep the plan editable');
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
 });
 
 test('[P0] real daemon run restores a delayed artifact turn after reload', async ({ page }) => {
@@ -244,7 +273,7 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
 
   const expectedError = 'Agent completed without producing any output.';
   await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator('.msg.error')).toContainText(expectedError);
+  await expect(runErrorCard(page)).toContainText(expectedError);
 
   const { projectId, conversationId } = await currentProjectContext(page);
   await expect.poll(async () => {
@@ -256,7 +285,7 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible();
-  await expect(page.locator('.msg.error')).toContainText(expectedError);
+  await expect(runErrorCard(page)).toContainText(expectedError);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 
@@ -397,10 +426,7 @@ async function createProject(page: Page, name: string, agentId: FakeAgentId = 'c
   await configureFakeAgent(page, agentId);
   await expectBrowserAgentConfig(page, agentId);
   await dismissPrivacyDialog(page);
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModalFromProjects(page);
   await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill(name);
   await page.getByTestId('create-project').click();
@@ -446,6 +472,20 @@ async function expectWorkspaceReady(page: Page) {
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
+}
+
+async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
+  const trigger = page.getByTestId('chat-composer').getByTestId('session-mode-trigger');
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+
+  const menu = page.locator('.session-mode-toggle__menu[role="menu"]');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitemradio', { name: 'Ask mode' })).toBeVisible();
+  await expect(menu.getByRole('menuitemradio', { name: 'Plan mode' })).toBeVisible();
+  await expect(menu.getByRole('menuitemradio', { name: 'Design mode' })).toBeVisible();
+  await menu.getByRole('menuitemradio', { name: modeTitle }).click();
+  await expect(trigger).toHaveAttribute('aria-label', modeTitle);
 }
 
 async function sendPrompt(page: Page, prompt: string) {
@@ -505,10 +545,7 @@ async function openNewProjectModal(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   await dismissPrivacyDialog(page);
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModalFromProjects(page);
 }
 
 async function dismissPrivacyDialog(page: Page) {
@@ -520,7 +557,12 @@ async function dismissPrivacyDialog(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 30_000 });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+}
+
+async function clickVisible(locator: Locator) {
+  await expect(locator).toBeVisible({ timeout: T.medium });
+  await locator.evaluate((element: HTMLElement) => element.click());
 }
 
 async function configureFakeAgent(page: Page, agentId: FakeAgentId) {

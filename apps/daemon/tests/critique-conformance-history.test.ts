@@ -1,6 +1,6 @@
 /**
  * Conformance history persistence (Phase 16). Pins the read-merge-write
- * shape the nightly cron and the /api/critique/conformance route share:
+ * shape the prerelease cron and the /api/critique/conformance route share:
  * one JSON-line per adapter per day, with malformed lines silently
  * dropped and the last entry per (adapter, date) winning so a
  * retry-after-failure cron writes the right answer.

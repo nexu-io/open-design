@@ -1,15 +1,15 @@
 # GitHub automation guide
 
-This directory is still only partially standardized. Several historical workflows and helper locations do not yet follow one uniform shape. Do not copy old patterns blindly. For new work, bug fixes, and cleanup, use the `ci.yml` + `comment.yml` + `autofix.yml` + `report.yml` + `.github/scripts/handoff.py` system as the reference topology unless a maintainer explicitly chooses a different boundary.
+This directory is still only partially standardized. Several historical workflows and helper locations do not yet follow one uniform shape. Do not copy old patterns blindly. For new work, bug fixes, and cleanup, use the `ci.yml` + `comment.atom.yml` + `autofix.atom.yml` + `report.atom.yml` + `.github/scripts/handoff.py` system as the reference topology unless a maintainer explicitly chooses a different boundary.
 
 ## Required reading
 
 Before changing GitHub automation, read the current versions of:
 
 - `.github/workflows/ci.yml`
-- `.github/workflows/comment.yml`
-- `.github/workflows/autofix.yml`
-- `.github/workflows/report.yml`
+- `.github/workflows/comment.atom.yml`
+- `.github/workflows/autofix.atom.yml`
+- `.github/workflows/report.atom.yml`
 - `.github/scripts/handoff.py`
 - `scripts/scopes.ts`
 - `e2e/tests/packaged-smoke-workflow.test.ts`
@@ -31,12 +31,12 @@ Business layer:
 Atomic capability layer:
 
 - Capability workflows perform reusable trusted operations from well-defined inputs.
-- `comment.yml` consumes `handoff-comment-*` artifacts and upserts pure text PR comments.
-- `autofix.yml` consumes `handoff-autofix-*` artifacts and applies same-repository patches.
-- `report.yml` consumes `handoff-report-*` artifacts and handles advanced comments that need trusted materialization, such as dependency install, R2 access, artifact processing, or report generation before upsert.
+- `comment.atom.yml` consumes `handoff-comment-*` artifacts and upserts pure text PR comments.
+- `autofix.atom.yml` consumes `handoff-autofix-*` artifacts and applies same-repository patches.
+- `report.atom.yml` consumes `handoff-report-*` artifacts and handles advanced comments that need trusted materialization, such as dependency install, R2 access, artifact processing, or report generation before upsert.
 - `.github/scripts/handoff.py` owns artifact names, directory layout, discovery, and contract validation for `comment`, `autofix`, and `report` handoffs.
 
-Default rule: do not add a new domain-specific follow-on workflow such as `foo-comment.yml`, `foo-autofix.yml`, or `foo-report.yml` until the flow has been tested against these existing atomic capabilities.
+Default rule: do not add a new domain-specific follow-on workflow such as `foo.comment.atom.yml`, `foo.autofix.atom.yml`, or `foo.report.atom.yml` until the flow has been tested against these existing atomic capabilities.
 
 ## Directory conventions
 
@@ -64,9 +64,9 @@ Do not hand-roll artifact name prefixes, alternate directory layouts, or one-off
 
 ## Capability rules
 
-### `comment.yml`
+### `comment.atom.yml`
 
-Use `comment.yml` for pure text PR comments only.
+Use `comment.atom.yml` for pure text PR comments only.
 
 - Input is an already-final `body.md`.
 - The body must contain a stable marker.
@@ -74,9 +74,9 @@ Use `comment.yml` for pure text PR comments only.
 - It writes the GitHub API payload through `jq -n --rawfile body ...` and `gh api --input`.
 - It must not install dependencies, access R2, execute report scripts, understand Nix, understand visual diffs, or checkout PR code.
 
-### `autofix.yml`
+### `autofix.atom.yml`
 
-Use `autofix.yml` for same-repository patch application.
+Use `autofix.atom.yml` for same-repository patch application.
 
 - Input is `patch.diff` plus metadata including `allowed_paths` and `commit_message`.
 - Fork PRs must skip, not fail.
@@ -86,9 +86,9 @@ Use `autofix.yml` for same-repository patch application.
 - Prefer the configured bot app token for pushes so follow-up CI is triggered as expected.
 - Do not use this workflow for arbitrary commands, generated scripts, or PR-head code execution.
 
-### `report.yml`
+### `report.atom.yml`
 
-Use `report.yml` for advanced comments, meaning comment bodies that are not pure text inputs.
+Use `report.atom.yml` for advanced comments, meaning comment bodies that are not pure text inputs.
 
 Examples include reports that need:
 
@@ -98,12 +98,12 @@ Examples include reports that need:
 - rendering media or diffs,
 - generating a rich markdown body from trusted base code.
 
-`report.yml` is a trusted writer and materializer. It may upsert comments directly because that is part of the advanced comment capability, but it must do so with the same file-backed payload hygiene as `comment.yml`.
+`report.atom.yml` is a trusted writer and materializer. It may upsert comments directly because that is part of the advanced comment capability, but it must do so with the same file-backed payload hygiene as `comment.atom.yml`.
 
 Rules:
 
 - Treat all PR-produced artifacts as untrusted data.
-- Do not checkout or execute PR-head code in `report.yml`.
+- Do not checkout or execute PR-head code in `report.atom.yml`.
 - Checkout trusted base/default code before running repository scripts.
 - Validate PR state, draft state, head SHA, and base SHA before secret use and again before comment upsert when practical.
 - Keep report type dispatch explicit. If multiple report types grow, add a clear handler boundary instead of burying branching in shell fragments.
@@ -112,15 +112,15 @@ Rules:
 
 `fork-pr-workflow-approval.yml` and `scripts/approve-fork-pr-workflows.ts` are a separate security boundary. They may approve low-risk fork PR `pull_request` runs, but must not approve trusted `workflow_run` capability workflows.
 
-Keep `.github/workflows/ci.yml` as the only approved workflow path unless a maintainer explicitly expands the allowlist. `comment.yml`, `autofix.yml`, `report.yml`, release workflows, deployment workflows, and any workflow with trusted secrets or write permissions must stay outside fork auto-approval.
+Keep `.github/workflows/ci.yml` as the only approved workflow path unless a maintainer explicitly expands the allowlist. `comment.atom.yml`, `autofix.atom.yml`, `report.atom.yml`, release workflows, deployment workflows, and any workflow with trusted secrets or write permissions must stay outside fork auto-approval.
 
 ## Common iteration flow
 
 1. Classify the change.
    - Validation or business decision: start in `ci.yml`.
-   - Pure text PR comment: produce `handoff/comment` and let `comment.yml` consume it.
-   - Same-repo patch: produce `handoff/autofix` and let `autofix.yml` consume it.
-   - Rich/generated comment: produce `handoff/report` and let `report.yml` materialize and upsert it.
+   - Pure text PR comment: produce `handoff/comment` and let `comment.atom.yml` consume it.
+   - Same-repo patch: produce `handoff/autofix` and let `autofix.atom.yml` consume it.
+   - Rich/generated comment: produce `handoff/report` and let `report.atom.yml` materialize and upsert it.
    - New naming, paths, or metadata: update `.github/scripts/handoff.py`.
 2. Update scope routing in `scripts/scopes.ts` when a workflow/script should trigger a validation lane.
 3. Update topology coverage in `e2e/tests/packaged-smoke-workflow.test.ts` or the relevant script test.
@@ -136,19 +136,19 @@ Use `git diff --check` before finishing workflow edits.
 
 ## FAQ
 
-### Should I add a new `*-comment.yml` workflow?
+### Should I add a new `*.comment.atom.yml` workflow?
 
-Usually no. If the body is already final markdown, produce `handoff/comment` and use `comment.yml`. If the body must be generated from artifacts, secrets, or report code, produce `handoff/report` and use `report.yml`.
+Usually no. If the body is already final markdown, produce `handoff/comment` and use `comment.atom.yml`. If the body must be generated from artifacts, secrets, or report code, produce `handoff/report` and use `report.atom.yml`.
 
-### Why not put rich visual report generation in `comment.yml`?
+### Why not put rich visual report generation in `comment.atom.yml`?
 
-Because `comment.yml` is the pure text comment shell. Installing dependencies, using R2 secrets, downloading screenshots, and generating diffs are advanced comment materialization, which belongs in `report.yml`.
+Because `comment.atom.yml` is the pure text comment shell. Installing dependencies, using R2 secrets, downloading screenshots, and generating diffs are advanced comment materialization, which belongs in `report.atom.yml`.
 
-### Why can `report.yml` upsert comments directly?
+### Why can `report.atom.yml` upsert comments directly?
 
-`report.yml` is not a pure producer. It is the auditable advanced comment capability: materialize a non-pure text comment and publish it. The key boundary is that this power is explicit in one workflow with trusted inputs, stale checks, and file-backed payload hygiene.
+`report.atom.yml` is not a pure producer. It is the auditable advanced comment capability: materialize a non-pure text comment and publish it. The key boundary is that this power is explicit in one workflow with trusted inputs, stale checks, and file-backed payload hygiene.
 
-### Why does `autofix.yml` skip fork PRs?
+### Why does `autofix.atom.yml` skip fork PRs?
 
 Fork PR branches are not writable by the base repository in the same trust model, and pushing generated changes to forks would require a different permission and ownership design. Skip fork PRs and use comments or report output for contributor guidance.
 

@@ -14,18 +14,18 @@ import {
   inferLegacyManifest,
   parsePersistedManifest,
   validateArtifactManifestInput,
-} from './artifact-manifest.js';
+} from './artifacts/manifest.js';
 import {
   ArtifactRegressionError,
   STUB_GUARDED_MANIFEST_KINDS,
   evaluateArtifactStubGuard,
   readArtifactStubGuardConfigFromEnv,
-} from './artifact-stub-guard.js';
+} from './artifacts/stub-guard.js';
 import {
   assertArtifactPublicationAllowed,
   isPublicationGuardedArtifactKind,
-} from './artifact-publication-guard.js';
-import { normalizeArtifactRuntimeImports } from './artifact-runtime-compat.js';
+} from './artifacts/publication-guard.js';
+import { normalizeArtifactRuntimeImports } from './artifacts/runtime-compat.js';
 import { isIgnoredProjectDirName } from './project-ignored-dirs.js';
 import {
   isSandboxImportedProjectRootAllowed,
@@ -35,12 +35,15 @@ import {
 import { isOrchestratorScratchWorkspace } from './workspace-contract.js';
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
-const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
+const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.file-versions', '.live-artifacts']);
 const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
 const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';
 export const RUN_ARTIFACT_RECONCILE_MTIME_GRACE_MS = 1000;
 export const projectFileRenameTestHooks = {
   beforeCommit: null as null | ((paths: { source: string; target: string }) => Promise<void> | void),
+};
+export const projectFileWriteTestHooks = {
+  afterCommit: null as null | ((write: { safeName: string; target: string; body: Buffer | string }) => Promise<void> | void),
 };
 
 export function isRunTouchedProjectFile(fileMtimeMs, runStartTimeMs) {
@@ -265,6 +268,7 @@ async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => 
     out.push({
       name: rel,
       path: rel,
+      localPath: path.resolve(full),
       type: 'file',
       size: st.size,
       mtime: st.mtimeMs,
@@ -833,6 +837,7 @@ export async function writeProjectFile(
     }
   }
   await writeFile(target, body);
+  await projectFileWriteTestHooks.afterCommit?.({ safeName, target, body });
   if (validatedManifest) {
     const manifestFileName = artifactManifestNameFor(safeName);
     const manifestTarget = await resolveSafeReal(dir, manifestFileName);

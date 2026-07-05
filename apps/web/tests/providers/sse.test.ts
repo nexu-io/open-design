@@ -318,6 +318,26 @@ describe('streamViaDaemon', () => {
     expect(transcript).toContain('second gemini request');
   });
 
+  it('keeps legacy API-mode assistant context when routing through BYOK OpenCode', () => {
+    const transcript = buildDaemonTranscript(
+      [
+        { id: '1', role: 'user', content: 'draft the registration flow' },
+        {
+          id: '2',
+          role: 'assistant',
+          content: 'openai api response with design decisions',
+          agentId: 'openai-api',
+        },
+        { id: '3', role: 'user', content: 'make the second step clearer' },
+      ],
+      'byok-opencode',
+    );
+
+    expect(transcript).toContain('draft the registration flow');
+    expect(transcript).toContain('openai api response with design decisions');
+    expect(transcript).toContain('make the second step clearer');
+  });
+
   it('extracts only the latest user prompt for telemetry', () => {
     expect(
       latestUserPromptFromHistory([
@@ -963,7 +983,7 @@ describe('streamViaDaemon', () => {
       }),
     );
     const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
-    expect(message).toContain('AMR Link URL or model route');
+    expect(message).toContain('Open Design link URL or model route');
     expect(message).not.toContain('json-rpc id 4');
     expect(message).not.toContain('https://example.invalid');
     expect(handlers.onDone).not.toHaveBeenCalled();
@@ -1321,7 +1341,7 @@ describe('streamViaDaemon', () => {
 
     expect(handlers.onError).toHaveBeenCalledWith(expect.any(Error));
     const message = (handlers.onError.mock.calls[0]?.[0] as Error).message;
-    expect(message).toContain('AMR/OpenCode started, but the run did not complete');
+    expect(message).toContain('Open Design started, but the run did not complete');
     expect(message).not.toContain('sqlite-migration');
     expect(message).not.toContain('OPENCODE_SERVER_PASSWORD');
     expect(message).not.toContain('opencode server listening');

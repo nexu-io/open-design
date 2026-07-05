@@ -1,6 +1,993 @@
 import type { SolutionLocaleCopy } from './types';
 
 export const KO: SolutionLocaleCopy = {
+  aiWireframeGenerator: {
+    title: 'AI 와이어프레임 생성기 — Open Design으로 프롬프트에서 와이어프레임까지',
+    description:
+      '프롬프트를 편집 가능한 멀티 스크린 와이어프레임으로 바꾸고, 나아가 출시할 수 있는 코드까지 끌고 가는 무료 오픈소스 AI 와이어프레임 생성기입니다. Open Design은 이미 사용 중인 코딩 에이전트 안에서 실행되므로 와이어프레임과 실제 제품이 하나의 원천을 공유합니다.',
+    breadcrumb: 'AI 와이어프레임 생성기',
+    label: '도구 · AI 와이어프레임 생성기',
+    heading: '프롬프트의 속도로 와이어프레임',
+    lead: '화면이나 플로우를 설명하면 에이전트가 깔끔하고 편집 가능한 와이어프레임을 생성합니다 — 일관된 레이아웃, 진짜 컴포넌트, 여러 화면. 그리고 멈추지 않습니다: 같은 산출물이 스타일이 잡힌 프로토타입과 출시 코드가 되며, 이미 실행 중인 에이전트 안에서 이루어집니다.',
+    heroImageAlt:
+      '프롬프트가 편집 가능한 와이어프레임으로, 다시 완성된 UI로 바뀌고 초록색 선택 상자로 둘러싸인 에디토리얼 일러스트',
+    tldrTitle: '한 줄로 말하면',
+    tldrBody:
+      '대부분의 AI 와이어프레임 생성기는 나중에 다시 만들어야 할 그림 하나를 건넵니다. Open Design은 코딩 에이전트 안에서 와이어프레임을 생성하고 프롬프트에서 출시 코드까지 그대로 끌고 갑니다 — 내보내기 단계도, 인계의 단절도, 좌석당 과금도 없이.',
+    stepsTitle: 'AI 와이어프레임 생성기가 작동하는 방식',
+    steps: [
+      {
+        title: '화면을 설명한다',
+        body: '무엇을 와이어프레임으로 만들지 평범한 언어로 에이전트에게 말합니다 — "사이드바, 통계 행, 최근 활동 테이블이 있는 대시보드"처럼. Open Design이 와이어프레임 기술을 불러와 에이전트가 단일 정적 이미지가 아니라 구조와 위계를 배치하게 합니다.',
+        imageAlt: '평범한 언어로 된 화면 설명을 터미널에 입력하는 일러스트',
+      },
+      {
+        title: '편집 가능한 와이어프레임을 생성한다',
+        body: '에이전트는 재사용 가능한 디자인 시스템에서 가져온 레이아웃 패턴과 컴포넌트를 적용하므로 모든 화면이 여백, 그리드, 구조를 공유합니다. 동떨어진 박스가 아니라 한 세트로 묶인 여러 화면 — 편집 가능하고 일관된 와이어프레임을 얻습니다.',
+        imageAlt: '여러 와이어프레임 화면이 하나의 일관된 레이아웃 그리드로 나타나는 일러스트',
+      },
+      {
+        title: '완성도를 높인다',
+        body: '에이전트에게 와이어프레임을 스타일이 잡히고 클릭 가능한 프로토타입으로 끌어올려 달라고 합니다 — 타이포그래피, 색상, 진짜 인터랙션. 같은 산출물이 다시 그려지는 대신 완성도를 더해 가므로 로파이와 하이파이 사이에서 버려지는 것이 없습니다.',
+        imageAlt: '로파이 와이어프레임이 정교한 하이파이 화면으로 바뀌는 일러스트',
+      },
+      {
+        title: '내가 소유한 코드를 출시한다',
+        body: '산출물이 프로젝트 안에 있기 때문에 와이어프레임과 최종 코드가 하나의 진실 공급원을 공유합니다. 에이전트와 대화하며 반복하세요; 출력은 내가 소유하고 출시할 수 있는 HTML/코드입니다 — 벤더 종속 없이.',
+        imageAlt: '와이어프레임이 초록색 선택 프레임에 담긴 출시 코드로 흘러 들어가는 일러스트',
+      },
+    ],
+    tableTitle: 'Open Design vs 일반적인 AI 와이어프레임 생성기',
+    tableColCapability: '필요한 것',
+    tableColWithOd: 'Open Design이라면',
+    tableColWithout: '일반적인 AI 와이어프레임 생성기',
+    tableRows: [
+      {
+        capability: '프롬프트에서 생성',
+        withOd: '이미 열어 둔 에이전트에 프롬프트 하나',
+        without: '별도 웹 도구에 가입하고 그들의 클라우드에서 생성',
+      },
+      {
+        capability: '연결된 여러 화면',
+        withOd: '공유 레이아웃과 컴포넌트를 갖춘 한 세트로 생성',
+        without: '대개 한 번에 한 화면',
+      },
+      {
+        capability: '로파이에서 하이파이로',
+        withOd: '같은 산출물이 완성도를 더함 — 와이어프레임 → 프로토타입 → 코드',
+        without: '와이어프레임은 막다른 길; 하이파이와 코드를 위해 다시 제작',
+      },
+      {
+        capability: '결과물을 소유',
+        withOd: '리포지토리 안의 평범한 파일과 코드, 온전히 내 것',
+        without: '그들의 앱 안에서만 편집 가능; 내보내기 제한',
+      },
+      {
+        capability: '비용과 종속',
+        withOd: '오픈소스, 자신의 키를 가져와 로컬에서 실행',
+        without: '좌석당 또는 크레딧당 구독, 벤더 호스팅',
+      },
+    ],
+    featuresTitle: '와이어프레임으로 만들 수 있는 것',
+    features: [
+      {
+        title: '웹 앱 화면',
+        body: '대시보드, 설정, 멀티 스크린 플로우 — 일관된 한 세트로 와이어프레임을 만들고 코드로 이어 갑니다.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: '모바일 앱 플로우',
+        body: '일관된 구조와 상태를 갖춘 화면별 모바일 여정.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'SaaS 랜딩 페이지',
+        body: '와이어프레임을 만들고, 스타일을 입히고, 출시할 수 있는 마케팅·SaaS 랜딩 레이아웃.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: '온보딩과 폼',
+        body: '명확한 위계로 배치된 다단계 온보딩, 가입, 폼 플로우.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: '어떤 비주얼 취향이든',
+        body: '로파이로 시작해 처음부터 끝까지 일관된 스타일을 이어 갑니다 — 에디토리얼, 소프트, 볼드.',
+        thumb: 'example-gamified-app',
+      },
+      {
+        title: '랜딩과 전환',
+        body: '히어로, 요금, 대기자 명단 레이아웃이 첫 시도부터 연결되고 브랜드에 맞게.',
+        thumb: 'example-kami-landing',
+      },
+    ],
+    galleryTitle: 'Open Design으로 만든 와이어프레임',
+    galleryLead:
+      '모두가 프롬프트로 시작해 편집 가능하고 클릭 가능한 산출물로 렌더링되었습니다. 아이디어에 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 적응시킵니다 — 와이어프레임에서 출시 코드까지.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: '데이팅 웹 앱 — 멀티 스크린 와이어프레임' },
+      { thumb: 'example-hr-onboarding', caption: '인사 온보딩 플로우' },
+      { thumb: 'example-kami-landing', caption: '제품 랜딩 레이아웃' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '소프트 스타일 웹 와이어프레임' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '템플릿 둘러보기',
+    faqTitle: 'AI 와이어프레임 생성기 FAQ',
+    faq: [
+      {
+        q: 'AI 와이어프레임 생성기는 무료인가요?',
+        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 와이어프레임 생성기 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
+      },
+      {
+        q: '와이어프레임은 편집 가능한가요, 아니면 그냥 이미지인가요?',
+        a: '편집 가능합니다. 출력이 진짜 HTML과 코드이므로 에이전트와 대화하며 레이아웃, 컴포넌트, 콘텐츠를 다듬을 수 있습니다 — 다시 만들어야 할 그림에 박힌 픽셀이 아니라.',
+      },
+      {
+        q: '와이어프레임이 하이파이 프로토타입과 실제 코드가 될 수 있나요?',
+        a: '바로 그게 핵심입니다. 같은 산출물이 완성도를 더해 갑니다 — 와이어프레임에서 스타일이 잡힌 프로토타입, 출시 코드까지 — 단계마다 다시 그려지는 대신 프로젝트 안에 살아 있기 때문입니다.',
+      },
+      {
+        q: '어떤 에이전트와 함께 작동하나요?',
+        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+      },
+    ],
+    ctaTitle: '오늘 밤 첫 와이어프레임을 생성하세요',
+    ctaBody:
+      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 다음 화면 아이디어를 편집 가능한 와이어프레임으로 — 그리고 출시 코드로 — 이미 사용 중인 에이전트 안에서 바꿔 보세요.',
+    relatedTitle: '관련 도구와 가이드',
+    related: [
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
+      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/blog/design-to-code-tools/', label: '최고의 디자인-투-코드 도구' },
+      { href: '/solutions/prototype/', label: 'Open Design으로 프로토타이핑' },
+    ],
+  },
+  aiUiGenerator: {
+    title: 'AI UI 생성기 — Open Design으로 프롬프트에서 프로덕션 UI까지',
+    description:
+      '프롬프트를 진짜 컴포넌트 기반 인터페이스로 바꾸고, 나아가 출시할 수 있는 코드까지 끌고 가는 무료 오픈소스 AI UI 생성기입니다. Open Design은 이미 사용 중인 코딩 에이전트 안에서 실행되므로 생성된 UI와 프로덕션 코드가 같은 산출물입니다.',
+    breadcrumb: 'AI UI 생성기',
+    label: '도구 · AI UI 생성기',
+    heading: '진짜로 출시할 수 있는 UI를 생성하세요',
+    lead: '인터페이스를 설명하면 에이전트가 진짜 컴포넌트 기반 UI를 생성합니다 — 일관된 디자인 시스템, 반응형 레이아웃, 작동하는 상태. 그리고 멈추지 않습니다: 같은 산출물이 출시 코드가 되며, 이미 실행 중인 에이전트 안에서 이루어집니다.',
+    heroImageAlt:
+      '프롬프트가 컴포넌트 기반 UI로, 다시 프로덕션 코드로 바뀌고 초록색 선택 상자로 둘러싸인 에디토리얼 일러스트',
+    tldrTitle: '한 줄로 말하면',
+    tldrBody:
+      '대부분의 AI UI 생성기는 목업이나 한 번 쓰고 버릴 React 스니펫을 줍니다. Open Design은 코딩 에이전트 안에서 UI를 생성하고 프롬프트에서 출시 코드까지 그대로 끌고 갑니다 — 진짜 컴포넌트, 내 디자인 시스템, 내보내기 단계도 좌석당 과금도 없이.',
+    stepsTitle: 'AI UI 생성기가 작동하는 방식',
+    steps: [
+      {
+        title: '인터페이스를 설명한다',
+        body: '무엇을 만들지 평범한 언어로 에이전트에게 말합니다 — "사이드바, 탭으로 나뉜 섹션, 저장 바가 있는 설정 페이지"처럼. Open Design이 UI 기술을 불러와 에이전트가 일회성 화면이 아니라 진짜 컴포넌트와 디자인 시스템을 끌어옵니다.',
+        imageAlt: '평범한 언어로 된 UI 설명을 터미널에 입력하는 일러스트',
+      },
+      {
+        title: '컴포넌트 기반 UI를 생성한다',
+        body: '에이전트는 재사용 가능한 컴포넌트와 디자인 토큰으로 인터페이스를 조립하므로 여백, 타입 스케일, 색상이 모든 화면에서 일관되게 유지됩니다. 풀어내야 할 인라인 스타일 더미가 아니라 일관된 UI를 얻습니다.',
+        imageAlt: '재사용 가능한 컴포넌트 블록으로 UI가 그리드 위에서 조립되는 일러스트',
+      },
+      {
+        title: '대화하며 다듬는다',
+        body: '레이아웃, 상태, 테마를 대화로 조정합니다 — "여백을 좁혀줘", "빈 상태를 추가해줘", "기본을 다크로 만들어줘"처럼. 산출물은 처음부터 다시 생성되는 대신 그 자리에서 갱신됩니다.',
+        imageAlt: '채팅으로 UI가 다듬어지고 미묘한 전후 상태를 보여주는 일러스트',
+      },
+      {
+        title: '내가 소유한 코드를 출시한다',
+        body: 'UI가 프로젝트 안에 있기 때문에 디자인과 프로덕션 코드가 하나의 진실 공급원을 공유합니다. 출력은 내가 소유하고 출시할 수 있는 HTML/코드입니다 — 벤더 종속도, 디자인과 빌드 사이의 재작성도 없이.',
+        imageAlt: '생성된 UI가 초록색 선택 프레임에 담긴 출시 코드로 흘러 들어가는 일러스트',
+      },
+    ],
+    tableTitle: 'Open Design vs 일반적인 AI UI 생성기',
+    tableColCapability: '필요한 것',
+    tableColWithOd: 'Open Design이라면',
+    tableColWithout: '일반적인 AI UI 생성기',
+    tableRows: [
+      {
+        capability: '프롬프트에서 생성',
+        withOd: '이미 열어 둔 에이전트에 프롬프트 하나',
+        without: '별도 웹 도구에 가입하고 그들의 클라우드에서 생성',
+      },
+      {
+        capability: '진짜 컴포넌트',
+        withOd: '재사용 가능한 디자인 시스템에서 만들어지고 화면 전반에 일관됨',
+        without: '나중에 리팩터링할 일회성 마크업이나 인라인 스타일',
+      },
+      {
+        capability: '디자인에서 코드로',
+        withOd: '같은 산출물이 출시 코드가 됨 — 재작성 없이',
+        without: 'UI 목업은 막다른 길; 프로덕션을 위해 다시 제작',
+      },
+      {
+        capability: '결과물을 소유',
+        withOd: '리포지토리 안의 평범한 파일과 코드, 온전히 내 것',
+        without: '그들의 앱 안에서만 편집 가능; 내보내기 제한',
+      },
+      {
+        capability: '비용과 종속',
+        withOd: '오픈소스, 자신의 키를 가져와 로컬에서 실행',
+        without: '좌석당 또는 크레딧당 구독, 벤더 호스팅',
+      },
+    ],
+    featuresTitle: '생성할 수 있는 것',
+    features: [
+      {
+        title: '웹 앱 인터페이스',
+        body: '대시보드, 설정, 데이터 테이블 — 일관된 컴포넌트 세트로 생성하고 코드로 이어 갑니다.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: '모바일 앱 UI',
+        body: '일관된 컴포넌트와 상태를 갖춘 화면별 모바일 인터페이스.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'SaaS와 마케팅 페이지',
+        body: '생성하고, 테마를 입히고, 출시할 수 있는 랜딩·요금·마케팅 UI.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: '폼과 플로우',
+        body: '명확한 위계와 상태를 갖춘 다단계 폼, 온보딩, 인증 플로우.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: '디자인 시스템',
+        body: '공유 디자인 시스템을 따르는 UI를 생성합니다 — 토큰, 컴포넌트, 여백.',
+        thumb: 'example-gamified-app',
+      },
+      {
+        title: '어떤 비주얼 취향이든',
+        body: '에디토리얼, 소프트, 볼드 — 처음부터 끝까지 하나의 일관된 스타일을 이어 갑니다.',
+        thumb: 'example-kami-landing',
+      },
+    ],
+    galleryTitle: 'Open Design으로 만든 UI',
+    galleryLead:
+      '모두가 프롬프트로 시작해 진짜 컴포넌트 기반 산출물로 렌더링되었습니다. 아이디어에 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 적응시킵니다 — UI에서 출시 코드까지.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: '데이팅 웹 앱 — 컴포넌트 기반 UI' },
+      { thumb: 'example-hr-onboarding', caption: '인사 온보딩 플로우' },
+      { thumb: 'example-kami-landing', caption: '제품 랜딩 UI' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '소프트 스타일 웹 UI' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '템플릿 둘러보기',
+    faqTitle: 'AI UI 생성기 FAQ',
+    faq: [
+      {
+        q: 'AI UI 생성기는 무료인가요?',
+        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — UI 생성기 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
+      },
+      {
+        q: '진짜 컴포넌트를 생성하나요, 아니면 그냥 목업인가요?',
+        a: '진짜 컴포넌트입니다. 출력은 재사용 가능한 디자인 시스템에서 만들어진 HTML과 코드이므로 평면적인 목업을 다시 만드는 대신 에이전트와 대화하며 레이아웃, 상태, 테마를 다듬습니다.',
+      },
+      {
+        q: '생성된 UI가 프로덕션 코드가 될 수 있나요?',
+        a: '바로 그게 핵심입니다. 같은 산출물이 출시 코드가 됩니다, 프로젝트 안에 살아 있기 때문입니다 — 생성된 UI와 배포하는 것 사이에 재작성이나 인계의 단절이 없습니다.',
+      },
+      {
+        q: '어떤 에이전트와 함께 작동하나요?',
+        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+      },
+    ],
+    ctaTitle: '오늘 밤 첫 UI를 생성하세요',
+    ctaBody:
+      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 다음 인터페이스 아이디어를 진짜 컴포넌트 기반 UI로 — 그리고 출시 코드로 — 이미 사용 중인 에이전트 안에서 바꿔 보세요.',
+    relatedTitle: '관련 도구와 가이드',
+    related: [
+      { href: '/solutions/ai-wireframe-generator/', label: 'AI 와이어프레임 생성기' },
+      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/blog/best-ai-design-tools/', label: '최고의 AI 디자인 도구' },
+      { href: '/solutions/designer/', label: '디자이너를 위한 Open Design' },
+    ],
+  },
+  designToCode: {
+    title: '디자인에서 코드로 — Open Design으로 디자인을 출시 코드로 바꾸기',
+    description:
+      '프롬프트나 디자인을 진짜 편집 가능한 코드로 바꾸는 무료 오픈소스 디자인-투-코드 워크플로우입니다 — 이미 사용 중인 코딩 에이전트 안에서. 내보내기도, 인계도 없이: 디자인과 프로덕션 코드가 내가 소유하고 출시하는 하나의 산출물입니다.',
+    breadcrumb: '디자인에서 코드로',
+    label: '도구 · 디자인에서 코드로',
+    heading: '인계 없는 디자인에서 코드로',
+    lead: '화면을 설명하거나 디자인을 가져오면 에이전트가 그것을 깔끔한 컴포넌트 기반 코드로 바꿉니다 — 반응형 레이아웃, 진짜 상태, 내 스택. 디자인과 코드가 같은 산출물이므로 옮기는 과정에서 잃는 것이 없습니다.',
+    heroImageAlt:
+      '디자인이 깔끔한 프로덕션 코드로 바뀌고 초록색 선택 상자로 둘러싸인 에디토리얼 일러스트',
+    tldrTitle: '한 줄로 말하면',
+    tldrBody:
+      '대부분의 디자인-투-코드 도구는 그 뒤로 계속 손봐야 할 일회성 스냅샷을 내보냅니다. Open Design은 디자인과 코드를 에이전트 안의 하나의 살아있는 산출물로 유지합니다 — 대화하며 반복하고, 내가 소유한 코드를 출시하며, 좌석당 과금이 없습니다.',
+    stepsTitle: '디자인에서 코드로가 작동하는 방식',
+    steps: [
+      {
+        title: '프롬프트나 디자인에서 시작한다',
+        body: '화면을 평범한 언어로 설명하거나 에이전트에게 디자인 방향을 가리킵니다. Open Design이 알맞은 기술을 불러와 에이전트가 부서지기 쉬운 일회성 변환이 아니라 구조와 컴포넌트를 만듭니다.',
+        imageAlt: '디자인과 프롬프트가 터미널로 들어가는 일러스트',
+      },
+      {
+        title: '컴포넌트 기반 코드를 생성한다',
+        body: '에이전트는 재사용 가능한 컴포넌트와 디자인 토큰으로 만들어진 깔끔하고 읽기 쉬운 코드를 만듭니다 — 일관된 여백, 타입, 색상 — 리팩터링으로 걷어낼 생성 마크업의 벽 대신.',
+        imageAlt: '디자인이 구조화된 컴포넌트 기반 코드로 변환되는 일러스트',
+      },
+      {
+        title: '대화로 반복한다',
+        body: '레이아웃, 상태, 동작을 대화로 다듬습니다 — "반응형으로 만들어줘", "폼을 연결해줘", "우리 토큰에 맞춰줘"처럼. 코드는 그 자리에서 갱신되고, 디자인은 하나의 산출물이기 때문에 동기 상태를 유지합니다.',
+        imageAlt: '디자인이 동기 상태를 유지하는 동안 채팅으로 코드가 다듬어지는 일러스트',
+      },
+      {
+        title: '내가 소유한 코드를 출시한다',
+        body: '출력은 리포지토리 안의 HTML/코드로, 온전히 내 것입니다 — 내보내기 단계도, 벤더에 종속된 에디터도, 디자인과 빌드 사이의 재작성도 없이. 출시하고, 에이전트 안에서 계속 발전시키세요.',
+        imageAlt: '초록색 선택 프레임에 담겨 출시 준비가 된 완성 코드의 일러스트',
+      },
+    ],
+    tableTitle: 'Open Design vs 일반적인 디자인-투-코드 도구',
+    tableColCapability: '필요한 것',
+    tableColWithOd: 'Open Design이라면',
+    tableColWithout: '일반적인 디자인-투-코드 도구',
+    tableRows: [
+      {
+        capability: '변환을 시작',
+        withOd: '이미 열어 둔 에이전트에 프롬프트 하나',
+        without: '플러그인을 설치하거나 별도 웹 도구에 업로드',
+      },
+      {
+        capability: '코드 품질',
+        withOd: '디자인 시스템에서 나온 깔끔한 컴포넌트 기반 코드',
+        without: '다시 작성할 절대 위치 지정 또는 일회성 마크업',
+      },
+      {
+        capability: '디자인 ↔ 코드 동기화',
+        withOd: '하나의 산출물 — 디자인과 코드가 결코 어긋나지 않음',
+        without: '첫 편집 후 낡아 버리는 일회성 내보내기',
+      },
+      {
+        capability: '결과물을 소유',
+        withOd: '리포지토리 안의 평범한 파일과 코드, 온전히 내 것',
+        without: '그들의 에디터나 컴포넌트 라이브러리에 종속',
+      },
+      {
+        capability: '비용과 종속',
+        withOd: '오픈소스, 자신의 키를 가져와 로컬에서 실행',
+        without: '좌석당 또는 크레딧당 구독, 벤더 호스팅',
+      },
+    ],
+    featuresTitle: '변환할 수 있는 것',
+    features: [
+      {
+        title: '프롬프트에서 코드로',
+        body: '화면을 설명하면 내 스택에 맞는 깔끔한 컴포넌트 기반 코드를 얻습니다.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: '와이어프레임에서 코드로',
+        body: '생성된 와이어프레임을 출시 코드까지 끌고 갑니다 — 같은 산출물.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: 'UI에서 프로덕션으로',
+        body: '생성된 UI를 반응형이고 진짜 상태를 갖춘 프로덕션 코드로 바꿉니다.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: '랜딩 페이지',
+        body: '히어로, 요금, 대기자 명단 섹션을 깔끔하고 브랜드에 맞는 코드로 변환.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: '폼과 플로우',
+        body: '진짜 유효성 검사와 상태로 연결된 다단계 폼과 온보딩.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: '어떤 비주얼 취향이든',
+        body: '에디토리얼, 소프트, 볼드 — 코드가 처음부터 끝까지 하나의 일관된 스타일을 담습니다.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Open Design으로 디자인에서 출시까지',
+    galleryLead:
+      '모두가 프롬프트나 디자인으로 시작해 출시할 수 있는 코드가 되었습니다. 아이디어에 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 변환합니다 — 인계 없는 디자인에서 코드로.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: '데이팅 웹 앱 — 디자인에서 코드로' },
+      { thumb: 'example-hr-onboarding', caption: '인사 온보딩 플로우' },
+      { thumb: 'example-kami-landing', caption: '코드로 만든 제품 랜딩' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '소프트 스타일 웹 빌드' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '템플릿 둘러보기',
+    faqTitle: '디자인에서 코드로 FAQ',
+    faq: [
+      {
+        q: '디자인-투-코드 워크플로우는 무료인가요?',
+        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 디자인-투-코드 워크플로우 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
+      },
+      {
+        q: '어떤 종류의 코드를 만들어 내나요?',
+        a: '재사용 가능한 디자인 시스템에서 만들어진 깔끔한 컴포넌트 기반 HTML과 코드이므로 읽고, 다듬고, 출시할 수 있습니다 — 다시 작성해야 할 절대 위치 지정 마크업이 아니라.',
+      },
+      {
+        q: '디자인과 코드가 동기 상태를 유지하나요?',
+        a: '네 — 하나의 산출물입니다. 디자인과 코드가 프로젝트 안에 함께 살아 있기 때문에 첫 편집 후 낡아 버리는 일회성 내보내기가 없습니다.',
+      },
+      {
+        q: '어떤 에이전트와 함께 작동하나요?',
+        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+      },
+    ],
+    ctaTitle: '오늘 밤 다음 디자인을 코드로 바꾸세요',
+    ctaBody:
+      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 다음 화면을 — 프롬프트, 와이어프레임, 또는 디자인을 — 이미 사용 중인 에이전트 안에서 깔끔하고 출시 가능한 코드로 바꿔 보세요.',
+    relatedTitle: '관련 도구와 가이드',
+    related: [
+      { href: '/solutions/ai-wireframe-generator/', label: 'AI 와이어프레임 생성기' },
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
+      { href: '/blog/design-to-code-tools/', label: '최고의 디자인-투-코드 도구' },
+      { href: '/solutions/engineering/', label: '엔지니어링을 위한 Open Design' },
+    ],
+  },
+  aiLandingPageGenerator: {
+    title: 'AI 랜딩 페이지 생성기 — 프롬프트에서 출시하는 랜딩 페이지까지',
+    description:
+      '프롬프트를 진짜 반응형 랜딩 페이지로 바꾸고, 나아가 출시할 수 있는 코드까지 끌고 가는 무료 오픈소스 AI 랜딩 페이지 생성기입니다. Open Design은 이미 사용 중인 코딩 에이전트 안에서 실행되므로 생성된 페이지와 배포된 페이지가 내가 소유한 같은 산출물입니다.',
+    breadcrumb: 'AI 랜딩 페이지 생성기',
+    label: '도구 · AI 랜딩 페이지 생성기',
+    heading: '출시할 수 있는 랜딩 페이지를 생성하세요',
+    lead: '제안을 설명하면 에이전트가 진짜 반응형 랜딩 페이지를 생성합니다 — 히어로, 기능, 요금, 대기자 명단까지 브랜드에 맞게. 그리고 계속 나아갑니다: 같은 산출물이 배포하는 출시 코드가 됩니다, 이미 실행 중인 에이전트 안에서.',
+    heroImageAlt:
+      '프롬프트가 반응형 랜딩 페이지로, 다시 프로덕션 코드로 바뀌고 초록색 선택 상자로 둘러싸인 에디토리얼 일러스트',
+    tldrTitle: '한 줄로 말하면',
+    tldrBody:
+      '대부분의 AI 랜딩 페이지 빌더는 페이지를 자기네 에디터 안에 가두고 좌석당 과금합니다. Open Design은 코딩 에이전트 안에서 랜딩 페이지를 생성하고 프롬프트에서 출시 코드까지 그대로 끌고 갑니다 — 진짜 섹션, 내 브랜드, 내보내기 단계도 좌석당 과금도 없이.',
+    stepsTitle: 'AI 랜딩 페이지 생성기가 작동하는 방식',
+    steps: [
+      {
+        title: '페이지를 설명한다',
+        body: '무엇을 만들지 평범한 언어로 에이전트에게 알려 줍니다 — "메모 앱을 위한 출시 페이지: 히어로, 기능 세 개, 요금, 대기자 명단 폼"처럼. Open Design이 랜딩 페이지 기술을 불러와 에이전트가 명확한 위계를 갖춘 진짜 섹션을 배치합니다.',
+        imageAlt: '평범한 언어로 된 랜딩 페이지 브리프가 터미널에 입력되는 일러스트',
+      },
+      {
+        title: '반응형 페이지를 생성한다',
+        body: '에이전트는 재사용 가능한 섹션과 디자인 토큰으로 페이지를 조립하므로 여백, 타입, 색상이 일관되게 유지되고 어떤 화면에서도 제대로 보입니다. 커스터마이즈하려고 씨름해야 할 템플릿이 아니라, 일관되고 브랜드에 맞는 랜딩 페이지를 얻습니다.',
+        imageAlt: '랜딩 페이지가 그리드 위에서 히어로, 기능, 요금 섹션으로 조립되는 일러스트',
+      },
+      {
+        title: '다듬고 전환 요소를 더한다',
+        body: '카피, 섹션, 콜 투 액션을 대화로 조정합니다 — "히어로를 조여줘", "사회적 증거를 추가해줘", "대기자 명단 폼을 연결해줘"처럼. 산출물은 처음부터 다시 생성되는 대신 그 자리에서 갱신됩니다.',
+        imageAlt: '채팅으로 랜딩 페이지가 다듬어지며 후기와 폼이 추가되는 일러스트',
+      },
+      {
+        title: '내가 소유한 코드를 출시한다',
+        body: '페이지가 프로젝트 안에 살아 있으므로 디자인과 배포된 페이지가 하나의 진실 원천을 공유합니다. 출력은 어디에나 호스팅할 수 있는, 내가 소유한 HTML/코드입니다 — 벤더 종속도, 디자인과 출시 사이의 재작성도 없이.',
+        imageAlt: '랜딩 페이지가 초록색 선택 프레임에 담긴 출시 코드로 흘러 들어가는 일러스트',
+      },
+    ],
+    tableTitle: 'Open Design vs 일반적인 AI 랜딩 페이지 빌더',
+    tableColCapability: '필요한 것',
+    tableColWithOd: 'Open Design이라면',
+    tableColWithout: '일반적인 AI 랜딩 페이지 빌더',
+    tableRows: [
+      {
+        capability: '프롬프트에서 생성',
+        withOd: '이미 열어 둔 에이전트에 프롬프트 하나',
+        without: '별도 웹사이트 빌더에 가입하고 그들의 클라우드에서 생성',
+      },
+      {
+        capability: '진짜 반응형 섹션',
+        withOd: '재사용 가능한 디자인 시스템에서 만들어져 브레이크포인트 전반에서 일관',
+        without: '그들의 에디터 안에서 커스터마이즈하는 잠긴 템플릿',
+      },
+      {
+        capability: '디자인에서 코드로',
+        withOd: '같은 산출물이 출시 코드가 됨 — 어디에나 호스팅',
+        without: '페이지가 그들의 플랫폼에 머무름; 내보내기가 제한되거나 유료',
+      },
+      {
+        capability: '결과물을 소유',
+        withOd: '리포지토리 안의 평범한 파일과 코드, 온전히 내 것',
+        without: '대신 호스팅됨; 페이지를 소유가 아니라 임대',
+      },
+      {
+        capability: '비용과 종속',
+        withOd: '오픈소스, 자신의 키를 가져와 로컬에서 실행',
+        without: '좌석당 또는 페이지당 구독, 벤더 호스팅',
+      },
+    ],
+    featuresTitle: '생성할 수 있는 것',
+    features: [
+      {
+        title: '제품 출시 페이지',
+        body: '히어로, 기능, 요금, 대기자 명단을 — 일관된 페이지로 생성한 뒤 코드까지 끌고 갑니다.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: 'SaaS 마케팅 페이지',
+        body: '자신의 도메인에서 생성하고, 테마를 입히고, 출시할 수 있는 기능과 요금 레이아웃.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: '대기자 명단과 출시 예정',
+        body: '작동하는 폼과 명확한 콜 투 액션을 갖춘 단일 목적의 수집 페이지.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: '이벤트와 캠페인 페이지',
+        body: '처음부터 연결되고 브랜드에 맞춘, 기간이 정해진 캠페인 레이아웃.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: '앱 다운로드 페이지',
+        body: '제품을 보여 주고 설치를 유도하는 모바일 우선 페이지.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: '어떤 비주얼 취향이든',
+        body: '에디토리얼, 소프트, 볼드 — 처음부터 끝까지 하나의 일관된 스타일을 담습니다.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Open Design으로 만든 랜딩 페이지',
+    galleryLead:
+      '모두가 프롬프트로 시작해 진짜 반응형 산출물로 렌더링되었습니다. 아이디어에 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 맞춥니다 — 랜딩 페이지에서 출시 코드까지.',
+    gallery: [
+      { thumb: 'example-kami-landing', caption: '제품 출시 페이지' },
+      { thumb: 'example-saas-landing', caption: 'SaaS 마케팅 페이지' },
+      { thumb: 'example-hr-onboarding', caption: '대기자 명단 수집 플로우' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '소프트 스타일 랜딩 레이아웃' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '템플릿 둘러보기',
+    faqTitle: 'AI 랜딩 페이지 생성기 FAQ',
+    faq: [
+      {
+        q: 'AI 랜딩 페이지 생성기는 무료인가요?',
+        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 랜딩 페이지 생성기 자체에는 좌석당이나 페이지당 과금이 없습니다.',
+      },
+      {
+        q: '페이지를 어디에나 호스팅할 수 있나요?',
+        a: '네. 출력은 프로젝트 안의 진짜 HTML과 코드이므로 어떤 호스트에든 배포할 수 있습니다 — 플랫폼 종속도 없고, 결제를 멈추면 사라지는 임대 페이지도 없습니다.',
+      },
+      {
+        q: '페이지가 반응형이고 브랜드에 맞나요?',
+        a: '네. 에이전트가 재사용 가능한 디자인 시스템에서 만들기 때문에 페이지가 브레이크포인트 전반에서 일관되게 유지되고 브랜드와 일치합니다 — 그리고 템플릿과 씨름하는 대신 대화하며 다듬습니다.',
+      },
+      {
+        q: '어떤 에이전트와 함께 작동하나요?',
+        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+      },
+    ],
+    ctaTitle: '오늘 밤 첫 랜딩 페이지를 생성하세요',
+    ctaBody:
+      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 다음 출시 아이디어를 진짜 반응형 랜딩 페이지로 — 그리고 다시 출시 코드로 — 이미 사용 중인 에이전트 안에서 바꿔 보세요.',
+    relatedTitle: '관련 도구와 가이드',
+    related: [
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
+      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/solutions/marketing/', label: '마케팅을 위한 Open Design' },
+      { href: '/blog/best-ai-design-tools/', label: '최고의 AI 디자인 도구' },
+    ],
+  },
+  figmaToCode: {
+    title: 'Figma에서 코드로 — Open Design으로 Figma 디자인을 출시 코드로 바꾸기',
+    description:
+      'Figma 디자인을 깔끔한 컴포넌트 기반 코드로 바꾸는 무료 오픈소스 Figma-투-코드 워크플로우입니다 — 이미 사용 중인 코딩 에이전트 안에서, Claude Code부터 Codex까지. Figma MCP를 통해 디자인을 끌어오면 에이전트가 잠금 없는 내보내기로 내가 소유하고 출시하는 진짜 코드를 만듭니다.',
+    breadcrumb: 'Figma에서 코드로',
+    label: '도구 · Figma에서 코드로',
+    heading: 'Figma에서 코드로, 내 에이전트 안에서',
+    lead: '코딩 에이전트를 Figma 디자인에 가리키면 프레임을 깔끔한 컴포넌트 기반 코드로 바꿉니다 — 반응형 레이아웃, 진짜 상태, 내 스택. Figma MCP를 통해 Claude Code와 다른 에이전트가 디자인을 직접 읽으므로 일회성 내보내기에서 잃는 것이 없습니다.',
+    heroImageAlt:
+      'Figma 디자인이 코딩 에이전트 안에서 깔끔한 프로덕션 코드로 바뀌고 초록색 선택 상자로 둘러싸인 에디토리얼 일러스트',
+    tldrTitle: '한 줄로 말하면',
+    tldrBody:
+      '대부분의 Figma-투-코드 플러그인은 그 뒤로 다시 작성해야 할 절대 위치 지정 마크업의 일회성 스냅샷을 내보냅니다. Open Design은 디자인과 코드를 에이전트 안의 하나의 살아있는 산출물로 유지합니다 — Figma MCP를 통해 프레임을 끌어오고, 대화하며 반복하고, 내가 소유한 코드를 출시합니다.',
+    stepsTitle: 'Figma에서 코드로가 작동하는 방식',
+    steps: [
+      {
+        title: 'Figma를 에이전트에 연결한다',
+        body: 'Figma MCP를 설정해 두면 코딩 에이전트가 — Claude Code, Codex, Cursor Agent가 — Figma 파일이나 선택한 프레임을 직접 읽을 수 있습니다. Open Design이 알맞은 기술을 불러와 에이전트가 부서지기 쉬운 픽셀 복사가 아니라 디자인 의도를 구조로 바꿉니다.',
+        imageAlt: 'Figma 프레임이 MCP 링크를 통해 터미널에 연결되는 일러스트',
+      },
+      {
+        title: '컴포넌트 기반 코드를 생성한다',
+        body: '에이전트는 프레임을 재사용 가능한 컴포넌트와 디자인 토큰에 매핑하고 — 일관된 여백, 타입, 색상 — 리팩터링으로 걷어낼 절대 위치 지정 div의 벽 대신 깔끔하고 읽기 쉬운 코드를 만듭니다.',
+        imageAlt: 'Figma 프레임이 구조화된 컴포넌트 기반 코드로 변환되는 일러스트',
+      },
+      {
+        title: '대화로 반복한다',
+        body: '레이아웃, 상태, 동작을 대화로 다듬습니다 — "반응형으로 만들어줘", "폼을 연결해줘", "우리 토큰에 맞춰줘"처럼. 코드는 그 자리에서 갱신되고, 에이전트가 Figma를 실시간으로 읽기 때문에 다시 내보내는 대신 최신 디자인을 다시 끌어올 수 있습니다.',
+        imageAlt: 'Figma 프레임이 동기 상태를 유지하는 동안 채팅으로 코드가 다듬어지는 일러스트',
+      },
+      {
+        title: '내가 소유한 코드를 출시한다',
+        body: '출력은 리포지토리 안의 HTML/코드로, 온전히 내 것입니다 — 벤더에 종속된 에디터도, 낡아 버리는 내보내기도, 디자인과 빌드 사이의 재작성도 없이. 출시하고, 에이전트 안에서 계속 발전시키세요.',
+        imageAlt: '초록색 선택 프레임에 담겨 출시 준비가 된 완성 코드의 일러스트',
+      },
+    ],
+    tableTitle: 'Open Design vs 일반적인 Figma-투-코드 도구',
+    tableColCapability: '필요한 것',
+    tableColWithOd: 'Open Design이라면',
+    tableColWithout: '일반적인 Figma-투-코드 도구',
+    tableRows: [
+      {
+        capability: 'Figma 디자인을 읽기',
+        withOd: '에이전트가 MCP를 통해 Figma를 실시간으로 읽음',
+        without: '플러그인이 일회성 스냅샷을 내보냄',
+      },
+      {
+        capability: '코드 품질',
+        withOd: '디자인 시스템에서 나온 깔끔한 컴포넌트 기반 코드',
+        without: '손으로 다시 작성할 절대 위치 지정 마크업',
+      },
+      {
+        capability: '디자인 ↔ 코드 동기화',
+        withOd: '최신 프레임을 다시 끌어오고 대화하며 반복',
+        without: '첫 Figma 편집 후 낡아 버리는 내보내기',
+      },
+      {
+        capability: '결과물을 소유',
+        withOd: '리포지토리 안의 평범한 파일과 코드, 온전히 내 것',
+        without: '그들의 에디터나 컴포넌트 라이브러리에 종속',
+      },
+      {
+        capability: '비용과 종속',
+        withOd: '오픈소스, 자신의 키를 가져와 로컬에서 실행',
+        without: '좌석당 또는 내보내기당 구독, 벤더 호스팅',
+      },
+    ],
+    featuresTitle: '변환할 수 있는 것',
+    features: [
+      {
+        title: 'Figma에서 Claude Code로',
+        body: 'MCP를 통해 Figma 프레임을 Claude Code로 끌어와 깔끔한 컴포넌트 기반 코드를 얻습니다.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'Figma에서 React / HTML로',
+        body: '프레임을 이미 사용 중인 스택에서 반응형이고 진짜 상태를 갖춘 코드로 바꿉니다.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: '전체 화면과 플로우',
+        body: '공유 컴포넌트와 일관된 구조로 멀티 스크린 플로우를 하나의 세트로 변환합니다.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: '랜딩 페이지',
+        body: '히어로, 요금, 대기자 명단 프레임을 깔끔하고 브랜드에 맞는 코드로 변환.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: '폼과 플로우',
+        body: '진짜 유효성 검사와 상태로 연결된 다단계 폼과 온보딩.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: '어떤 비주얼 취향이든',
+        body: '에디토리얼, 소프트, 볼드 — 코드가 처음부터 끝까지 디자인의 스타일을 담습니다.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Open Design으로 Figma에서 출시까지',
+    galleryLead:
+      '모두가 Figma 프레임으로 시작해 출시할 수 있는 코드가 되었습니다. 디자인에 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 변환합니다 — 잠금 없는 내보내기로 Figma에서 코드로.',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: '웹 앱 프레임 — Figma에서 코드로' },
+      { thumb: 'example-mobile-app', caption: '모바일 플로우를 코드로' },
+      { thumb: 'example-kami-landing', caption: '코드로 만든 랜딩 프레임' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '소프트 스타일 웹 빌드' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '템플릿 둘러보기',
+    faqTitle: 'Figma에서 코드로 FAQ',
+    faq: [
+      {
+        q: 'Open Design은 Figma를 어떻게 코드로 바꾸나요?',
+        a: 'Figma MCP를 통해 코딩 에이전트가 — Claude Code, Codex, Cursor Agent가 — Figma 파일이나 선택한 프레임을 직접 읽고, 플러그인에서 일회성 스냅샷을 내보내는 대신 깔끔한 컴포넌트 기반 코드를 생성합니다.',
+      },
+      {
+        q: '어떤 종류의 코드를 만들어 내나요?',
+        a: '재사용 가능한 디자인 시스템에서 만들어진 깔끔한 컴포넌트 기반 HTML과 코드이므로 읽고, 다듬고, 출시할 수 있습니다 — 대부분의 Figma-투-코드 변환기가 내놓는 절대 위치 지정 마크업이 아니라.',
+      },
+      {
+        q: '무료인가요?',
+        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — Figma-투-코드 워크플로우 자체에는 좌석당이나 내보내기당 과금이 없습니다.',
+      },
+      {
+        q: '어떤 에이전트와 함께 작동하나요?',
+        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키와 자신의 Figma MCP 설정을 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+      },
+    ],
+    ctaTitle: '오늘 밤 다음 Figma 프레임을 코드로 바꾸세요',
+    ctaBody:
+      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, Figma MCP를 연결하고, 다음 Figma 디자인을 이미 사용 중인 에이전트 안에서 깔끔하고 출시 가능한 코드로 바꿔 보세요.',
+    relatedTitle: '관련 도구와 가이드',
+    related: [
+      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
+      { href: '/agents/claude-code-design/', label: 'Claude Code를 위한 Open Design' },
+      { href: '/solutions/engineering/', label: '엔지니어링을 위한 Open Design' },
+    ],
+  },
+  screenshotToCode: {
+    title: '스크린샷을 코드로 — Open Design으로 스크린샷을 코드로 바꾸기',
+    description:
+      '어떤 UI의 스크린샷이든 이미 사용 중인 코딩 에이전트 안에서 깔끔한 컴포넌트 기반 코드로 바꿔 주는 무료 오픈소스 스크린샷-투-코드 워크플로우입니다. 이미지를 넣고 원하는 것을 설명하면, 에이전트가 그것을 당신이 소유하고 출시할 수 있는 진짜 코드로 다시 만들어 줍니다 — 잠긴 내보내기는 없습니다.',
+    breadcrumb: '스크린샷을 코드로',
+    label: '도구 · 스크린샷을 코드로',
+    heading: '당신의 에이전트 안에서 스크린샷을 코드로',
+    lead: '마음에 드는 UI 스크린샷이 있나요? 코딩 에이전트에게 넘겨서 그 화면을 깔끔한 컴포넌트 기반 코드로 다시 만들게 하세요 — 반응형 레이아웃, 진짜 상태, 당신의 스택으로. 스크린샷이 곧 요구사항서이며, 결과물은 일회용 스냅샷이 아니라 당신이 소유하는 코드입니다.',
+    heroImageAlt:
+      'UI 스크린샷이 코딩 에이전트 안에서 깔끔한 프로덕션 코드로 바뀌고 초록색 선택 박스로 둘러싸인 모습을 그린 에디토리얼 일러스트',
+    tldrTitle: '한 줄로 말하면',
+    tldrBody:
+      '대부분의 스크린샷-투-코드 도구는 이후에 다시 작성해야 하는 일회성 절대 위치 지정 마크업을 뱉어냅니다. Open Design은 당신의 코딩 에이전트 안에서 스크린샷을 깔끔한 컴포넌트 기반 코드로 다시 만듭니다 — 진짜 구조, 당신의 디자인 시스템, 내보내기 단계 없음, 좌석당 과금 없음.',
+    stepsTitle: '스크린샷을 코드로 바꾸는 방식',
+    steps: [
+      {
+        title: '스크린샷을 넣기',
+        body: '원하는 화면의 이미지를 에이전트에게 주세요 — 앱, 웹사이트, 또는 디자인의 스크린샷. Open Design이 알맞은 스킬을 불러와 에이전트가 픽셀만이 아니라 레이아웃과 의도를 읽게 합니다.',
+        imageAlt: 'UI 스크린샷을 터미널에 넣는 모습을 그린 일러스트',
+      },
+      {
+        title: '컴포넌트 기반 코드로 다시 만들기',
+        body: '에이전트가 스크린샷을 재사용 가능한 컴포넌트와 디자인 토큰에 매핑하여 — 일관된 간격, 서체, 색상으로 — 절대 위치 지정 div의 벽 대신 깔끔하고 읽기 쉬운 코드를 만들어 냅니다.',
+        imageAlt: '스크린샷이 구조화된 컴포넌트 기반 코드로 변환되는 모습을 그린 일러스트',
+      },
+      {
+        title: '대화로 다듬기',
+        body: '"반응형으로 만들어줘", "폼을 연결해줘", "우리 토큰에 맞춰줘"처럼 말로 레이아웃, 상태, 동작을 조정하세요. 코드는 제자리에서 갱신됩니다; 얼어붙은 일회성 변환에 갇히지 않습니다.',
+        imageAlt: '원본 스크린샷 옆에서 채팅으로 코드가 다듬어지는 모습을 그린 일러스트',
+      },
+      {
+        title: '당신이 소유하는 코드를 출시하기',
+        body: '결과물은 당신의 리포지토리 안에 있는 HTML/코드이며 온전히 당신 것입니다 — 벤더에 잠긴 에디터도, 일회용 내보내기도, 스크린샷과 빌드 사이의 다시 그리기도 없습니다. 출시한 뒤 에이전트 안에서 계속 발전시키세요.',
+        imageAlt: '초록색 선택 프레임에 담겨 출시 준비가 된 완성된 코드를 그린 일러스트',
+      },
+    ],
+    tableTitle: 'Open Design vs. 일반적인 스크린샷-투-코드 도구',
+    tableColCapability: '필요한 것',
+    tableColWithOd: 'Open Design과 함께',
+    tableColWithout: '일반적인 스크린샷-투-코드 도구',
+    tableRows: [
+      {
+        capability: '이미지에서 시작',
+        withOd: '이미 열려 있는 에이전트에 스크린샷을 넣기',
+        without: '별도 웹 도구에 업로드하고 그들의 클라우드에서 변환',
+      },
+      {
+        capability: '코드 품질',
+        withOd: '디자인 시스템에서 나온 깔끔한 컴포넌트 기반 코드',
+        without: '손으로 다시 작성하는 절대 위치 지정 마크업',
+      },
+      {
+        capability: '변환 후 반복',
+        withOd: '말로 다듬기; 코드가 프로젝트 안에서 살아 있음',
+        without: '수동으로 편집하는 얼어붙은 일회성 스냅샷',
+      },
+      {
+        capability: '결과물 소유',
+        withOd: '당신의 리포지토리 안 평범한 파일과 코드, 온전히 당신 것',
+        without: '그들의 에디터나 내보내기 형식에 잠김',
+      },
+      {
+        capability: '비용과 종속',
+        withOd: '오픈소스, 자신의 키 사용, 로컬 실행',
+        without: '좌석당 또는 크레딧당 구독, 벤더 호스팅',
+      },
+    ],
+    featuresTitle: '무엇을 변환할 수 있나',
+    features: [
+      {
+        title: '스크린샷을 코드로',
+        body: '어떤 화면의 이미지든 당신의 스택에서 깔끔한 컴포넌트 기반 코드로 바꾸세요.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: '앱 스크린샷',
+        body: '스크린샷에서 모바일 또는 웹 앱 화면을 진짜 상태와 함께 다시 만드세요.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: '웹사이트 스크린샷',
+        body: '스크린샷 찍은 랜딩 또는 마케팅 페이지를 반응형 코드로 재현하세요.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: '디자인 스크린샷',
+        body: '디자인이나 목업의 스크린샷을 넘기고 출시 가능한 코드를 돌려받으세요.',
+        thumb: 'example-kami-landing',
+      },
+      {
+        title: '폼과 플로우',
+        body: '스크린샷에서 폼이나 다단계 플로우를 진짜 검증과 함께 다시 만드세요.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: '어떤 비주얼 취향이든',
+        body: '에디토리얼, 부드럽게, 대담하게 — 코드가 스크린샷의 스타일을 처음부터 끝까지 담아냅니다.',
+        thumb: 'example-gamified-app',
+      },
+    ],
+    galleryTitle: 'Open Design으로 스크린샷에서 다시 만든 것들',
+    galleryLead:
+      '모두 이미지에서 시작해 출시할 수 있는 코드가 되었습니다. 당신의 스크린샷과 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 다시 만들어 줍니다 — 스크린샷을 코드로, 잠긴 내보내기 없이.',
+    gallery: [
+      { thumb: 'example-web-prototype', caption: '웹 앱 화면 — 스크린샷을 코드로' },
+      { thumb: 'example-mobile-app', caption: '모바일 화면을 코드로' },
+      { thumb: 'example-kami-landing', caption: '랜딩 스크린샷을 코드로' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '부드러운 스타일의 웹 빌드' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '템플릿 둘러보기',
+    faqTitle: '스크린샷을 코드로 FAQ',
+    faq: [
+      {
+        q: 'Open Design은 스크린샷을 어떻게 코드로 바꾸나요?',
+        a: '코딩 에이전트에게 화면 이미지를 주면 Open Design이 알맞은 스킬을 불러와 에이전트가 그것을 깔끔한 컴포넌트 기반 코드로 다시 만듭니다 — 픽셀을 단순히 따라 그리는 게 아니라 레이아웃과 의도를 읽습니다.',
+      },
+      {
+        q: '어떤 종류의 코드를 만들어 내나요?',
+        a: '재사용 가능한 디자인 시스템에서 만들어진 깔끔한 컴포넌트 기반 HTML과 코드라서 읽고, 다듬고, 출시할 수 있습니다 — 대부분의 스크린샷-투-코드 도구가 내놓는 절대 위치 지정 마크업이 아닙니다.',
+      },
+      {
+        q: '무료인가요?',
+        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 스크린샷-투-코드 워크플로우 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
+      },
+      {
+        q: '어떤 에이전트와 함께 작동하나요?',
+        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+      },
+    ],
+    ctaTitle: '오늘 밤 다음 스크린샷을 코드로 바꾸세요',
+    ctaBody:
+      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 원하는 화면의 스크린샷을 이미 사용 중인 에이전트 안에서 깔끔하고 출시 가능한 코드로 바꿔 보세요.',
+    relatedTitle: '관련 도구와 가이드',
+    related: [
+      { href: '/solutions/figma-to-code/', label: 'Open Design으로 Figma에서 코드로' },
+      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
+      { href: '/solutions/engineering/', label: '엔지니어링을 위한 Open Design' },
+    ],
+  },
+  aiPrototypeGenerator: {
+    title: 'AI 프로토타입 생성기 — 프롬프트에서 클릭 가능한 프로토타입으로, 그리고 코드로',
+    description:
+      '프롬프트를 진짜 클릭 가능한 프로토타입으로 — 여러 화면, 공유된 스타일, 살아있는 인터랙션으로 — 바꾸고 그것을 출시된 코드까지 이어 주는 무료 오픈소스 AI 프로토타입 생성기입니다. 이미 사용 중인 코딩 에이전트 안에서 실행되는, Figma, Cursor, Penpot 프로토타입 생성기의 오픈 대안입니다.',
+    breadcrumb: 'AI 프로토타입 생성기',
+    label: '도구 · AI 프로토타입 생성기',
+    heading: '코드를 출시하는 AI 프로토타입 생성기',
+    lead: '플로우를 설명하면 에이전트가 진짜 클릭 가능한 프로토타입을 만들어 냅니다 — 연결된 화면, 일관된 스타일, 작동하는 인터랙션. 목업에서 멈추는 프로토타입 생성기와 달리, Open Design은 이미 실행 중인 에이전트 안에서 같은 산출물을 출시된 코드까지 이어 갑니다.',
+    heroImageAlt:
+      '프롬프트가 클릭 가능한 멀티 스크린 프로토타입으로, 그다음 프로덕션 코드로 바뀌고 초록색 선택 박스로 둘러싸인 모습을 그린 에디토리얼 일러스트',
+    tldrTitle: '한 줄로 말하면',
+    tldrBody:
+      '대부분의 AI 프로토타입 생성기(Figma, Cursor, Penpot)는 이후에 다시 만들어야 하는 클릭 가능한 목업에서 멈춥니다. Open Design은 당신의 코딩 에이전트 안에서 프로토타입을 만들고 프롬프트에서 출시된 코드까지 이어 갑니다 — 내보내기 단계 없음, 핸드오프 간극 없음, 좌석당 과금 없음.',
+    stepsTitle: 'AI 프로토타입 생성기가 작동하는 방식',
+    steps: [
+      {
+        title: '플로우를 설명하기',
+        body: '"온보딩 플로우: 가입, 요금제 선택, 그리고 대시보드"처럼 여정을 평범한 말로 에이전트에게 알려 주세요. Open Design이 프로토타입 스킬을 불러와 에이전트가 하나의 정적 프레임이 아니라 연결된 화면들을 배치합니다.',
+        imageAlt: '평범한 말로 된 플로우 설명을 터미널에 입력하는 모습을 그린 일러스트',
+      },
+      {
+        title: '클릭 가능한 프로토타입 만들기',
+        body: '에이전트가 재사용 가능한 컴포넌트와 디자인 토큰으로 연결된 화면들을 진짜 인터랙션 — 내비게이션, 상태, 전환 — 과 함께 조립합니다. 흩어진 프레임이 아니라 하나의 세트로서 일관되고 클릭 가능한 프로토타입을 얻습니다.',
+        imageAlt: '그리드 위에서 내비게이션 화살표로 연결된 프로토타입 화면들을 그린 일러스트',
+      },
+      {
+        title: '말로 다듬기',
+        body: '"빈 상태를 추가해줘", "이 버튼을 대시보드에 연결해줘", "더 경쾌하게 느껴지게 해줘"처럼 대화로 플로우, 상태, 스타일을 조정하세요. 프로토타입은 다시 그려지는 대신 제자리에서 갱신됩니다.',
+        imageAlt: '채팅으로 프로토타입을 다듬으며 화면과 전환을 추가하는 모습을 그린 일러스트',
+      },
+      {
+        title: '당신이 소유하는 코드를 출시하기',
+        body: '프로토타입이 당신의 프로젝트 안에 있기 때문에, 그것과 최종 코드가 하나의 진실 원천을 공유합니다. 결과물은 당신이 소유하고 출시할 수 있는 HTML/코드입니다 — 벤더 종속 없음, 프로토타입과 빌드 사이의 다시 그리기 없음.',
+        imageAlt: '프로토타입이 초록색 선택 프레임에 담긴 출시된 코드로 흘러 들어가는 모습을 그린 일러스트',
+      },
+    ],
+    tableTitle: 'Open Design vs. 일반적인 AI 프로토타입 생성기',
+    tableColCapability: '필요한 것',
+    tableColWithOd: 'Open Design과 함께',
+    tableColWithout: 'Figma / Cursor / Penpot 프로토타입 생성기',
+    tableRows: [
+      {
+        capability: '프롬프트에서 생성',
+        withOd: '이미 열려 있는 에이전트에서 프롬프트 하나',
+        without: '그들의 앱이나 별도 웹 도구 안에서 생성',
+      },
+      {
+        capability: '클릭 가능한 멀티 스크린',
+        withOd: '진짜 인터랙션을 갖춘 연결된 화면들, 하나의 세트로',
+        without: '클릭은 되지만 종종 그들의 에디터에 갇힘',
+      },
+      {
+        capability: '프로토타입에서 코드로',
+        withOd: '같은 산출물이 출시된 코드가 됨 — 다시 그리기 없음',
+        without: '프로토타입은 막다른 길; 프로덕션을 위해 다시 만들어야 함',
+      },
+      {
+        capability: '결과물 소유',
+        withOd: '당신의 리포지토리 안 평범한 파일과 코드, 온전히 당신 것',
+        without: '그들의 앱 안에서만 편집 가능; 내보내기 제한',
+      },
+      {
+        capability: '비용과 종속',
+        withOd: '오픈소스, 자신의 키 사용, 로컬 실행',
+        without: '좌석당 또는 크레딧당 구독, 벤더 호스팅',
+      },
+    ],
+    featuresTitle: '무엇을 프로토타이핑할 수 있나',
+    features: [
+      {
+        title: '앱 플로우',
+        body: '온보딩, 설정, 멀티 스크린 여정을 클릭 가능한 세트로 생성하세요.',
+        thumb: 'example-mobile-app',
+      },
+      {
+        title: '웹 앱 프로토타입',
+        body: '진짜 내비게이션과 상태를 갖춘 대시보드와 도구를 만들고 코드로 이어 가세요.',
+        thumb: 'example-web-prototype',
+      },
+      {
+        title: 'SaaS와 랜딩 플로우',
+        body: '프로토타이핑하고, 스타일을 입히고, 출시할 수 있는 마케팅-투-가입 플로우.',
+        thumb: 'example-saas-landing',
+      },
+      {
+        title: '온보딩과 폼',
+        body: '명확한 위계와 상태를 갖춘 다단계 온보딩과 폼 플로우.',
+        thumb: 'example-hr-onboarding',
+      },
+      {
+        title: '인터랙티브 콘셉트',
+        body: '클릭 가능한 콘셉트를 빠르게 제안하고, 같은 산출물을 프로덕션까지 유지하세요.',
+        thumb: 'example-gamified-app',
+      },
+      {
+        title: '어떤 비주얼 취향이든',
+        body: '에디토리얼, 부드럽게, 대담하게 — 모든 화면에 하나의 일관된 스타일을 담아내세요.',
+        thumb: 'example-kami-landing',
+      },
+    ],
+    galleryTitle: 'Open Design으로 만든 프로토타입',
+    galleryLead:
+      '모두 프롬프트에서 시작해 클릭 가능하고 편집 가능한 산출물로 렌더링되었습니다. 당신의 아이디어와 가까운 템플릿을 고르고 변형을 설명하면 에이전트가 그것을 맞춰 줍니다 — 프로토타입에서 출시된 코드까지.',
+    gallery: [
+      { thumb: 'example-dating-web', caption: '데이팅 웹 앱 — 클릭 가능한 프로토타입' },
+      { thumb: 'example-hr-onboarding', caption: 'HR 온보딩 플로우' },
+      { thumb: 'example-mobile-app', caption: '모바일 앱 프로토타입' },
+      { thumb: 'example-web-prototype-taste-soft', caption: '부드러운 스타일의 웹 프로토타입' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '템플릿 둘러보기',
+    faqTitle: 'AI 프로토타입 생성기 FAQ',
+    faq: [
+      {
+        q: 'AI 프로토타입 생성기는 무료인가요?',
+        a: '네. Open Design은 오픈소스이며 자신의 프로바이더 키로 이미 사용 중인 코딩 에이전트 안에서 실행됩니다 — 프로토타입 생성기 자체에는 좌석당이나 크레딧당 과금이 없습니다.',
+      },
+      {
+        q: 'Figma, Cursor, Penpot 프로토타입 생성기와 어떻게 다른가요?',
+        a: '그것들은 자신의 앱 안에서 클릭 가능한 목업에서 멈춥니다. Open Design은 당신의 코딩 에이전트 안에서 프로토타입을 만들고 같은 산출물을 당신이 소유하는 출시된 코드까지 이어 갑니다 — 내보내기 없음, 프로덕션을 위한 재작성 없음.',
+      },
+      {
+        q: '프로토타입은 클릭 가능하고 멀티 스크린인가요?',
+        a: '네. 에이전트가 진짜 인터랙션 — 내비게이션, 상태, 전환 — 을 갖춘 연결된 화면들을 하나의 일관된 세트로 생성하고, 그다음 당신이 말로 다듬습니다.',
+      },
+      {
+        q: '어떤 에이전트와 함께 작동하나요?',
+        a: 'Open Design은 Claude Code, Codex, Cursor Agent, Gemini CLI 및 12종 이상의 퍼스트파티 어댑터와 함께 작동합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+      },
+    ],
+    ctaTitle: '오늘 밤 첫 프로토타입을 생성하세요',
+    ctaBody:
+      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 다음 플로우를 클릭 가능한 프로토타입으로 — 그리고 출시된 코드로 — 이미 사용 중인 에이전트 안에서 바꿔 보세요.',
+    relatedTitle: '관련 도구와 가이드',
+    related: [
+      { href: '/solutions/prototype/', label: 'Open Design으로 프로토타이핑' },
+      { href: '/solutions/ai-wireframe-generator/', label: 'AI 와이어프레임 생성기' },
+      { href: '/solutions/ai-ui-generator/', label: 'AI UI 생성기' },
+      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+    ],
+  },
   prototype: {
     title: 'Open Design + Claude Code로 인터랙티브 프로토타입 만들기',
     description:

@@ -22,6 +22,7 @@ describe('defaultScenarioPluginIdForKind', () => {
       prototype: 'example-web-prototype',
       deck:      'example-simple-deck',
       template:  'od-new-generation',
+      brand:     'od-new-generation',
       image:     'od-media-generation',
       video:     'od-media-generation',
       audio:     'od-media-generation',

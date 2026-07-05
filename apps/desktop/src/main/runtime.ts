@@ -11,13 +11,19 @@ import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
   DESKTOP_UPDATE_STATES,
+  type DesktopExportArtifactInput,
+  type DesktopExportArtifactResult,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
+  type DesktopRenderSlidesInput,
+  type DesktopRenderSlidesResult,
   type DesktopUpdateStatusSnapshot,
 } from "@open-design/sidecar-proto";
 import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
 
+import { renderDeckSlides } from "./deck-capture.js";
 import { openValidatedDirectory } from "./open-path.js";
+import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
@@ -237,6 +243,10 @@ const WEB_MOUNT_POLL_MS = 80;
 const WEB_MOUNT_REVEAL_TIMEOUT_MS = 15000;
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const summarizeExpression = (expression: string): Record<string, unknown> => ({
+  expressionLength: expression.length,
+  expressionPreview: expression.length > 120 ? `${expression.slice(0, 120)}...` : expression,
+});
 const MAX_CONSOLE_ENTRIES = 200;
 const DESKTOP_PET_WINDOW_WIDTH = 360;
 const DESKTOP_PET_WINDOW_HEIGHT = 300;
@@ -312,7 +322,9 @@ export type DesktopRuntime = {
   click(input: DesktopClickInput): Promise<DesktopClickResult>;
   console(): DesktopConsoleResult;
   eval(input: DesktopEvalInput): Promise<DesktopEvalResult>;
+  exportArtifact(input: DesktopExportArtifactInput): Promise<DesktopExportArtifactResult>;
   exportPdf(input: DesktopExportPdfInput): Promise<DesktopExportPdfResult>;
+  renderSlides(input: DesktopRenderSlidesInput): Promise<DesktopRenderSlidesResult>;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
   show(): void;
   status(): DesktopStatusSnapshot;
@@ -349,6 +361,12 @@ export type DesktopRuntimeOptions = {
    */
   osLocale?: string;
   preloadPath?: string;
+  /**
+   * User-visible app/window name. Packaged release channels pass their
+   * channel-specific product name here so concurrent installs remain
+   * distinguishable in the OS window switcher.
+   */
+  windowTitle?: string;
   /**
    * Round-5 (lefarcen P1, mrcfps): lazy re-handshake hook. The runtime
    * calls this when the daemon answers `503 DESKTOP_AUTH_PENDING` so a
@@ -1380,33 +1398,50 @@ export function hideWindowExitingFullscreen(window: WindowFullscreenSurface): vo
   window.hide();
 }
 
-// Some exports reach the renderer through a normal `<a download>` link
-// (server-written PPTX, browser-generated image blobs). Without this hook
-// Electron writes the bytes straight to the OS Downloads folder, so the user
-// never gets to pick a destination. setSaveDialogOptions makes Electron show
-// the native Save As panel before the download starts.
+// Some image exports reach the renderer through a normal `<a download>` link.
+// Without this hook Electron writes the bytes straight to the OS Downloads
+// folder, so the user never gets to pick a destination. setSaveDialogOptions
+// makes Electron show the native Save As panel before the download starts.
 const IMAGE_SAVE_AS_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
-const SAVE_AS_EXTENSIONS = new Set([".pptx", ...IMAGE_SAVE_AS_EXTENSIONS]);
+// Every programmatic export that streams a download must prompt Save As, incl.
+// the screenshot PDF (the default Export PDF flow) — otherwise it silently lands
+// in the OS Downloads folder while PPTX/images prompt correctly.
+const SAVE_AS_EXTENSIONS = new Set([".pptx", ".pdf", ...IMAGE_SAVE_AS_EXTENSIONS]);
+
+interface SaveAsDialogOptions {
+  title: string;
+  defaultPath: string;
+  filters: Array<{ name: string; extensions: string[] }>;
+}
+
+// Pure: the Save As dialog options for a downloaded filename, or null when the
+// extension isn't one we intercept. Exported for tests.
+export function saveAsDialogOptionsForFilename(filename: string): SaveAsDialogOptions | null {
+  const dot = filename.lastIndexOf(".");
+  const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : "";
+  if (!SAVE_AS_EXTENSIONS.has(ext)) return null;
+  const filters = IMAGE_SAVE_AS_EXTENSIONS.has(ext)
+    ? [
+        { name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] },
+        { name: "All Files", extensions: ["*"] },
+      ]
+    : ext === ".pdf"
+      ? [
+          { name: "PDF Document", extensions: ["pdf"] },
+          { name: "All Files", extensions: ["*"] },
+        ]
+      : [
+          { name: "PowerPoint Presentation", extensions: ["pptx"] },
+          { name: "All Files", extensions: ["*"] },
+        ];
+  return { title: "Save As", defaultPath: filename, filters };
+}
 
 function attachDownloadSaveAsDialog(window: BrowserWindow): void {
   window.webContents.session.on("will-download", (_event, item) => {
-    const filename = item.getFilename();
-    const dot = filename.lastIndexOf(".");
-    const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : "";
-    if (!SAVE_AS_EXTENSIONS.has(ext)) return;
-    item.setSaveDialogOptions({
-      title: "Save As",
-      defaultPath: filename,
-      filters: IMAGE_SAVE_AS_EXTENSIONS.has(ext)
-        ? [
-            { name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] },
-            { name: "All Files", extensions: ["*"] },
-          ]
-        : [
-            { name: "PowerPoint Presentation", extensions: ["pptx"] },
-            { name: "All Files", extensions: ["*"] },
-          ],
-    });
+    const options = saveAsDialogOptionsForFilename(item.getFilename());
+    if (!options) return;
+    item.setSaveDialogOptions(options);
   });
 }
 
@@ -1733,8 +1768,21 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     }
   });
 
+  let currentUrl: string | null = null;
+  let currentPetUrl: string | null = null;
+  let pendingUrl: string | null = null;
+  let stopped = false;
+  let timer: NodeJS.Timeout | null = null;
+  // Set when the main-frame load fails or the renderer process is gone. The
+  // poll loop reloads the current URL to recover instead of leaving a blank app.
+  let rendererFailed = false;
+  // True while a `tick()` is mid-flight, so load failures do not schedule two
+  // independent polling loops.
+  let ticking = false;
+
   const consoleEntries: DesktopConsoleEntry[] = [];
   const petWindow = createDesktopPetWindow(preloadPath, options.osLocale);
+  const windowTitle = options.windowTitle ?? "Open Design";
   const window = new BrowserWindow({
     height: 900,
     icon: resolveDesktopIconPath(),
@@ -1749,7 +1797,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // mounted (see `revealWhenReady` below), so there is never a flash of the
     // web's own "Loading Open Design…" shell.
     show: false,
-    title: "Open Design",
+    title: windowTitle,
     autoHideMenuBar: true,
     ...MAC_WINDOW_CHROME,
     webPreferences: {
@@ -1766,6 +1814,50 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
+  window.on("page-title-updated", (event) => {
+    event.preventDefault();
+    window.setTitle(windowTitle);
+  });
+  window.webContents.on("did-start-loading", () => {
+    console.info("[open-design desktop] main window did-start-loading", {
+      pendingUrl,
+      url: window.webContents.getURL(),
+    });
+  });
+  window.webContents.on("dom-ready", () => {
+    console.info("[open-design desktop] main window dom-ready", {
+      title: window.getTitle(),
+      url: window.webContents.getURL(),
+    });
+  });
+  window.webContents.on("did-finish-load", () => {
+    console.info("[open-design desktop] main window did-finish-load", {
+      title: window.getTitle(),
+      url: window.webContents.getURL(),
+    });
+  });
+  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    console.error("[open-design desktop] main window did-fail-load", {
+      errorCode,
+      errorDescription,
+      isMainFrame,
+      pendingUrl,
+      validatedURL,
+      url: window.webContents.getURL(),
+    });
+  });
+  window.on("unresponsive", () => {
+    console.error("[open-design desktop] main window unresponsive", {
+      pendingUrl,
+      url: window.webContents.getURL(),
+    });
+  });
+  window.on("responsive", () => {
+    console.info("[open-design desktop] main window responsive", {
+      pendingUrl,
+      url: window.webContents.getURL(),
+    });
+  });
 
   // Renderer-process crashes are completely invisible to the web bundle's
   // own analytics surface (the renderer is dead — no JS can run, no
@@ -1775,6 +1867,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // PostHog with `device_id = installationId`. Best-effort: a failure to
   // reach the daemon must not block the crash recovery flow.
   window.webContents.on("render-process-gone", (_event, details) => {
+    console.error("[open-design desktop] main window render-process-gone", {
+      exitCode: details.exitCode,
+      reason: details.reason,
+      url: window.webContents.getURL(),
+    });
     void reportRendererCrash(options, {
       reason: details.reason,
       exit_code: typeof details.exitCode === "number" ? details.exitCode : null,
@@ -1947,23 +2044,6 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return { ok: false, reason: error instanceof Error ? error.message : String(error) };
     }
   });
-
-  let currentUrl: string | null = null;
-  let currentPetUrl: string | null = null;
-  let pendingUrl: string | null = null;
-  let stopped = false;
-  let timer: NodeJS.Timeout | null = null;
-  // Set when the main-frame load fails (renderer parks on chrome-error://, blank
-  // white) or the renderer process is gone. The poll loop reloads the current URL
-  // to recover instead of leaving the window blank, e.g. after a long-minimized
-  // window is restored and its connection to the web server has dropped.
-  let rendererFailed = false;
-  // True while a `tick()` is mid-flight. A failed `loadURL` inside a tick fires
-  // `did-fail-load` AND rejects into the tick's `catch`; without this guard both
-  // would queue a poll timer, leaving two independent loops (multiplying on each
-  // repeat failure). When set, `markRendererFailed` only flips the flag and lets
-  // the running tick own the next reschedule.
-  let ticking = false;
 
   window.on("focus", () => showWindowButtons(window));
   window.on("blur", () => showWindowButtons(window));
@@ -2162,7 +2242,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         pendingUrl = url;
         // Load the web app into the still-hidden main window as soon as it is
         // discovered; it mounts behind the splash so the swap is instant.
+        console.info("[open-design desktop] main window loadURL start", { currentUrl, url });
         await window.loadURL(url);
+        console.info("[open-design desktop] main window loadURL success", { url });
         currentUrl = url;
         rendererFailed = false;
         pendingUrl = null;
@@ -2226,15 +2308,39 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     async eval(input) {
       if (window.isDestroyed()) return { error: "desktop window is destroyed", ok: false };
+      const startedAt = Date.now();
+      console.info("[open-design desktop] eval executeJavaScript start", {
+        ...summarizeExpression(input.expression),
+        statusUrl: resolveDesktopStatusUrl(currentUrl, pendingUrl),
+        webContentsUrl: window.webContents.getURL(),
+      });
       try {
         const value = await window.webContents.executeJavaScript(input.expression, true);
+        console.info("[open-design desktop] eval executeJavaScript success", {
+          durationMs: Date.now() - startedAt,
+          statusUrl: resolveDesktopStatusUrl(currentUrl, pendingUrl),
+          valueType: typeof value,
+          webContentsUrl: window.webContents.getURL(),
+        });
         return { ok: true, value };
       } catch (error) {
+        console.error("[open-design desktop] eval executeJavaScript failed", {
+          durationMs: Date.now() - startedAt,
+          error: error instanceof Error ? error.message : String(error),
+          statusUrl: resolveDesktopStatusUrl(currentUrl, pendingUrl),
+          webContentsUrl: window.webContents.getURL(),
+        });
         return { error: error instanceof Error ? error.message : String(error), ok: false };
       }
     },
+    exportArtifact(input) {
+      return exportArtifactFromHtml(input);
+    },
     exportPdf(input) {
       return exportPdfFromHtml(input);
+    },
+    renderSlides(input) {
+      return renderDeckSlides(input);
     },
     async screenshot(input) {
       if (window.isDestroyed()) throw new Error("desktop window is destroyed");

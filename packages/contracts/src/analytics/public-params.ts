@@ -48,10 +48,31 @@ export type TrackingConfigureAvailability =
   | 'unavailable'
   | 'unknown';
 
+// The single execution runtime the user is set up to run with right now.
+// Unlike `configure_type` — a capability cascade that can report `both` when
+// a user configured more than one path — a runtime is mutually exclusive per
+// run, so there is no `both`. This is the field dashboards segment the
+// behavioural funnel by (AMR / BYOK / CLI). `amr_cloud` is AMR sign-in,
+// `byok` is the user's own key (web-only visibility — see the daemon note in
+// `AnalyticsConfigureGlobals`), `local_cli` is a detected local coding CLI.
+export type TrackingRuntimeType =
+  | 'amr_cloud'
+  | 'byok'
+  | 'local_cli'
+  | 'none';
+
 export interface AnalyticsConfigureGlobals {
   has_available_configure_cli: boolean;
   configure_type: TrackingConfigureType;
   configure_availability: TrackingConfigureAvailability;
+  // Active execution runtime (see TrackingRuntimeType). Registered globally
+  // like the rest of this triplet so client-side events (page_view/ui_click/
+  // *_result emitted from the web) inherit it. Daemon-side run_created/
+  // run_finished cannot see a saved BYOK key, so they derive a best-effort
+  // value here and let the web client override it via the run request's
+  // analytics hints (`ChatAnalyticsHints.runtimeType`) — the client is the
+  // only layer that knows BYOK vs amr_cloud for the run it launched.
+  runtime_type: TrackingRuntimeType;
   // Per-path "reached a runnable/usable state" flags. Unlike `configure_type`
   // — a single priority cascade (both > local_cli > byok > amr) where a value
   // masks the lower-priority paths — these three are INDEPENDENT booleans, so

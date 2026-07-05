@@ -50,9 +50,17 @@ Each entry in the top-level `questions` array uses:
 
 - `id`: stable answer key, for example `audience`.
 - `label`: user-facing question copy.
-- `type`: one of `radio`, `checkbox`, `select`, `text`, or `textarea`.
+- `type`: one of `radio`, `checkbox`, `select`, `text`, `textarea`,
+  `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`,
+  `email`, `tel`, `file`, `switch`, or `direction-cards`.
 - `options`: required for choice controls; strings are allowed, or objects with
   localized `label` and stable `value`.
+- `allowCustom`: leave unset or set to `true` for finite-choice controls so
+  users can type their own answer instead of accepting only generated options.
+  Set `allowCustom: false` only when the downstream system needs an exact
+  machine id.
+- `customLabel` / `customPlaceholder`: optional localized copy for that custom
+  answer input.
 - `maxSelections`: include this for checkbox controls with a limited selection
   count.
 - `required`: set to `true` only when the answer is needed before work can

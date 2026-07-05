@@ -1,0 +1,292 @@
+/* Intro band for the standalone /design-systems/create page: a confident
+ * split hero — left column sets expectations (steps · time · what you get),
+ * right column shows an abstract preview of a generated system (palette,
+ * type scale, components). Pure CSS, brand-agnostic. Light-first. */
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+  gap: 34px;
+  align-items: center;
+  margin: 4px 0 38px;
+}
+@media (max-width: 680px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 26px;
+  }
+}
+
+/* Stacked variant — used when the hero is pinned in the narrow left column of
+   the create page, where the wide copy + showcase split would be cramped. */
+.heroStacked {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 22px;
+  align-items: stretch;
+  margin: 0;
+}
+.heroStacked .title {
+  font-size: clamp(30px, 3vw, 38px);
+}
+
+.copy {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.eyebrow {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-subtle));
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.title {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(34px, 4.4vw, 46px);
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  color: var(--text-strong);
+}
+
+.lede {
+  margin: 0;
+  max-width: 46ch;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.metaPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.metaPill strong {
+  color: var(--text-strong);
+  font-weight: 750;
+}
+.metaDot {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 60%, transparent);
+}
+
+.steps {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.stepNo {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-subtle));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 750;
+}
+.stepText {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.stepText strong {
+  color: var(--text-strong);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.stepText em {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+/* --- abstract showcase --------------------------------------------------- */
+.showcase {
+  position: relative;
+  min-width: 0;
+}
+.showcaseGlow {
+  position: absolute;
+  inset: -14% -8% -22%;
+  z-index: 0;
+  border-radius: 30px;
+  background:
+    radial-gradient(60% 60% at 30% 20%, color-mix(in srgb, var(--accent) 24%, transparent), transparent 70%),
+    radial-gradient(50% 50% at 85% 90%, color-mix(in srgb, #14b8a6 22%, transparent), transparent 70%);
+  filter: blur(20px);
+  opacity: 0.7;
+  pointer-events: none;
+}
+.showcaseCard {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-panel);
+  box-shadow:
+    0 24px 60px color-mix(in srgb, var(--shadow-color, #000) 12%, transparent),
+    var(--shadow-xs);
+}
+.showcaseHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 32%, transparent);
+}
+.dot:nth-child(1) {
+  background: #f43f5e;
+}
+.dot:nth-child(2) {
+  background: #f59e0b;
+}
+.dot:nth-child(3) {
+  background: #14b8a6;
+}
+.showcaseTitle {
+  margin-left: 8px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.section {
+  display: grid;
+  gap: 8px;
+}
+.sectionLabel {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.swatch {
+  height: 34px;
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #000 8%, transparent);
+}
+
+.typeScale {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  color: var(--text-strong);
+  font-family: Georgia, "Times New Roman", serif;
+}
+.typeLg {
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 600;
+}
+.typeMd {
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--text-strong) 82%, var(--text-muted));
+}
+.typeSm {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.components {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.fauxBtn {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font-size: 12px;
+  font-weight: 650;
+}
+.fauxBtnGhost {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+.fauxCard {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+}
+.fauxBar {
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 30%, transparent);
+}
+.fauxBarShort {
+  height: 7px;
+  width: 58%;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+}

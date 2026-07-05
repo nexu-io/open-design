@@ -27,6 +27,7 @@ import {
   setAnalyticsUserId,
   setConfigureGlobals,
 } from './client';
+import { patchExceptionTrackingAppVersion } from './error-tracking';
 import type { AnalyticsConfigureGlobals } from '@open-design/contracts/analytics';
 import {
   detectClientType,
@@ -178,6 +179,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     void (async () => {
       const resolvedAppVersion = await resolveAppVersionForCapture(appVersion);
+      patchExceptionTrackingAppVersion(resolvedAppVersion);
       // Bridge the always-on error tracker to /api/analytics/config so any
       // exceptions buffered since module load (see client-app.tsx) can flush
       // to PostHog. This runs regardless of the user's analytics consent

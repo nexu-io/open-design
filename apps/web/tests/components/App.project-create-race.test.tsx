@@ -52,7 +52,7 @@ vi.mock('../../src/components/EntryView', () => ({
       ok: true;
       projectId: string;
     }) => Promise<void> | void;
-    onOpenProject: (id: string) => void;
+    onOpenProject: (id: string) => Promise<boolean> | boolean | void;
     onRefreshAgents: () => void | Promise<void>;
     agents: AgentInfo[];
     projects: Project[];
@@ -92,6 +92,20 @@ vi.mock('../../src/components/EntryView', () => ({
       <button
         type="button"
         onClick={() =>
+          onCreateProject({
+            name: 'Context dir project',
+            skillId: null,
+            designSystemId: null,
+            metadata: { kind: 'prototype', linkedDirs: ['/Users/me/existing'] },
+            linkedDirs: ['/Users/me/reference', ' /Users/me/reference ', '/Users/me/local-code'],
+          })
+        }
+      >
+        Create project with context dirs
+      </button>
+      <button
+        type="button"
+        onClick={() =>
           void onImportFolderResponse?.({
             conversationId: 'conv-import',
             entryFile: null,
@@ -104,6 +118,9 @@ vi.mock('../../src/components/EntryView', () => ({
       </button>
       <button type="button" onClick={() => void onRefreshAgents()}>
         Refresh agents
+      </button>
+      <button type="button" onClick={() => void onOpenProject('project-missing')}>
+        Open missing project
       </button>
       <div data-testid="entry-agent-list">
         {agents.map((agent) => (
@@ -130,20 +147,31 @@ vi.mock('../../src/components/EntryView', () => ({
 vi.mock('../../src/components/ProjectView', () => ({
   ProjectView: ({
     onBack,
+    onCreateProjectFromDesignSystem,
     onProjectsRefresh,
     project,
+    routeConversationId,
   }: {
     onBack: () => void;
+    onCreateProjectFromDesignSystem?: (designSystemId: string, title: string) => Promise<void> | void;
     onProjectsRefresh: () => Promise<void>;
     project: Project;
+    routeConversationId?: string | null;
   }) => (
     <main data-testid="project-view">
       <span data-testid="project-title">{project.name}</span>
+      <span data-testid="project-route-conversation">{routeConversationId ?? 'none'}</span>
       <button type="button" onClick={onBack}>
         Back to projects
       </button>
       <button type="button" onClick={() => void onProjectsRefresh()}>
         Refresh projects
+      </button>
+      <button
+        type="button"
+        onClick={() => void onCreateProjectFromDesignSystem?.('slack', 'Slack')}
+      >
+        Create design from design system
       </button>
     </main>
   ),
@@ -559,6 +587,45 @@ describe('App project creation routing', () => {
     expect(window.location.pathname).toBe('/projects/project-new');
   });
 
+  it('routes "create with this design system" through the default design router, not a prototype', async () => {
+    mockedListProjects.mockResolvedValue([existingProject]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Existing project' }));
+    await screen.findByTestId('project-view');
+    fireEvent.click(screen.getByRole('button', { name: 'Create design from design system' }));
+
+    await waitFor(() => {
+      expect(mockedCreateProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Untitled',
+          skillId: null,
+          designSystemId: 'slack',
+          // No prototype assumption: the click binds the hidden default
+          // router so the agent asks (via the task-type question-form) what
+          // to build, then auto-sends a preset prompt that names the system.
+          pluginId: 'od-default',
+          conversationMode: 'design',
+          pendingPrompt: expect.stringContaining('Slack'),
+          pluginInputs: expect.objectContaining({
+            prompt: expect.stringContaining('Slack'),
+          }),
+          metadata: expect.objectContaining({
+            kind: 'other',
+          }),
+        }),
+      );
+    });
+
+    // The web-prototype scenario and prototype kind must NOT leak in.
+    const call = mockedCreateProject.mock.calls.at(-1)?.[0] as
+      | { pluginId?: string; metadata?: { kind?: string } }
+      | undefined;
+    expect(call?.pluginId).not.toBe('example-web-prototype');
+    expect(call?.metadata?.kind).not.toBe('prototype');
+  });
+
   it('keeps a newly created project open when a post-create refresh resolves stale', async () => {
     const bootstrapProjects = deferred<Project[]>();
     const staleRefreshProjects = deferred<Project[]>();
@@ -866,6 +933,31 @@ describe('App project creation routing', () => {
     expect(replaceOrder).toBeLessThan(uploadOrder);
   });
 
+  it('persists Home context linked dirs into the project create metadata', async () => {
+    mockedListProjects.mockResolvedValue([]);
+
+    render(<App />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Create project with context dirs' }),
+    );
+
+    await waitFor(() => {
+      expect(mockedCreateProject).toHaveBeenCalled();
+    });
+    expect(mockedCreateProject.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          linkedDirs: [
+            '/Users/me/existing',
+            '/Users/me/reference',
+            '/Users/me/local-code',
+          ],
+        }),
+      }),
+    );
+  });
+
   it('short-circuits the upload + auto-send when the working-dir handoff fails', async () => {
     // Regression for the swallowed-failure case: the desktop working-dir token
     // has a ~60s TTL, so a slow user (or any rejected POST) makes
@@ -893,5 +985,68 @@ describe('App project creation routing', () => {
     // The handoff failed, so the staged attachments must NOT be uploaded into
     // the managed `.od/projects/<id>` root the user did not pick.
     expect(mockedUploadProjectFiles).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a toast instead of silently bouncing when opening a missing project', async () => {
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockResolvedValue(null);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open missing project' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain(
+        'This project has been deleted or no longer exists.',
+      );
+    });
+    expect(window.location.pathname).toBe('/');
+    expect(screen.queryByTestId('project-view')).toBeNull();
+  });
+
+  it('opens the seeded brand extraction conversation after creating a design system', async () => {
+    const brandProject: Project = {
+      id: 'brand-acme',
+      name: 'acme.com Design System',
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1778244000000,
+      updatedAt: 1778244000000,
+      metadata: { kind: 'brand', importedFrom: 'brand-extraction', brandId: 'acme' },
+    };
+    window.history.replaceState(null, '', '/design-systems/create');
+    mockedListProjects.mockResolvedValue([]);
+    mockedGetProject.mockResolvedValue(brandProject);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown, _init?: unknown) => {
+        if (typeof input === 'string' && input === '/api/brands') {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              id: 'acme',
+              projectId: brandProject.id,
+              conversationId: 'conv-brand-acme',
+              sourceUrl: 'https://acme.com/',
+              status: 'extracting',
+            }),
+          } as unknown as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }),
+    );
+
+    render(<App />);
+
+    fireEvent.change(await screen.findByPlaceholderText('https://github.com/org/repo'), {
+      target: { value: 'https://acme.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /continue to generation/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-route-conversation').textContent).toBe('conv-brand-acme');
+    });
+    expect(window.location.pathname).toBe(`/projects/${brandProject.id}/conversations/conv-brand-acme`);
   });
 });

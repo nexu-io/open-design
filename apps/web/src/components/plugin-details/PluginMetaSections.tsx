@@ -36,6 +36,12 @@ import { TrustBadge } from '../TrustBadge';
 import { authorInitials, derivePluginSourceLinks } from '../../runtime/plugin-source';
 import { resolvePluginQueryFallback } from '../../state/projects';
 import { useI18n } from '../../i18n';
+import {
+  localizePluginChrome,
+  localizePluginDisplayValue,
+  localizePluginInputLabel,
+  localizePluginPlaceholder,
+} from '../../i18n/plugin-content';
 import { localizePluginDescription } from '../plugins-home/localization';
 
 export interface PluginMetaOmit {
@@ -124,10 +130,14 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
 
   function formattedInstalledAt(): string {
     try {
-      return new Date(record.installedAt).toLocaleString();
+      return new Date(record.installedAt).toLocaleString(locale);
     } catch {
       return String(record.installedAt);
     }
+  }
+
+  function label(key: Parameters<typeof localizePluginChrome>[1], vars?: Record<string, string | number>): string {
+    return localizePluginChrome(locale, key, vars);
   }
 
   const installedLabel = formattedInstalledAt();
@@ -161,7 +171,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
         </header>
       ) : null}
       {!omit?.byline && hasAuthorBlock ? (
-        <Section title="Author">
+        <Section title={label('author')}>
           <div
             className="plugin-details-modal__byline"
             data-testid="plugin-details-author"
@@ -173,7 +183,9 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
             <div className="plugin-details-modal__byline-meta">
               {links.authorName ? (
                 <div className="plugin-details-modal__byline-name">
-                  <span className="plugin-details-modal__byline-prefix">by</span>
+                  <span className="plugin-details-modal__byline-prefix">
+                    {label('by')}
+                  </span>
                   <span className="plugin-details-modal__author-name">
                     {links.authorName}
                   </span>
@@ -195,7 +207,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
                     icon="external-link"
                     testId="plugin-details-author-homepage"
                   >
-                    Homepage
+                    {label('homepage')}
                   </ExternalLink>
                 ) : null}
               </div>
@@ -205,15 +217,15 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
       ) : null}
 
       {showDescription ? (
-        <Section title="About">
+        <Section title={label('about')}>
           <p className="plugin-details-modal__description">{description}</p>
         </Section>
       ) : null}
 
       {showQuery ? (
         <Section
-          title="Example query"
-          hint="Inserted into the prompt textarea when you apply this plugin."
+          title={label('exampleQuery')}
+          hint={label('exampleQueryHint')}
           action={
             <button
               type="button"
@@ -221,7 +233,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
               onClick={copyQuery}
             >
               <Icon name="copy" size={12} />
-              {copied ? 'Copied' : 'Copy'}
+              {copied ? label('copied') : label('copy')}
             </button>
           }
         >
@@ -236,7 +248,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
             data-testid="plugin-meta-advanced"
           >
             <summary className="plugin-meta-sections__advanced-summary">
-              Developer details
+              {label('developerDetails')}
             </summary>
             {advanced}
           </details>
@@ -246,9 +258,9 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
         <>
       {showInputs ? (
         <Section
-          title="Inputs"
+          title={label('inputs')}
           count={inputs.length}
-          hint="Variables substituted into the example query at apply time."
+          hint={label('inputsHint')}
         >
           <ul className="plugin-details-modal__inputs">
             {inputs.map((field) => (
@@ -257,7 +269,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
                   <code>{field.name}</code>
                   {field.required ? (
                     <span className="plugin-details-modal__badge is-required">
-                      required
+                      {label('required')}
                     </span>
                   ) : null}
                   {field.type ? (
@@ -267,18 +279,21 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
                   ) : null}
                 </div>
                 {field.label ? (
-                  <div className="plugin-details-modal__muted">{field.label}</div>
+                  <div className="plugin-details-modal__muted">
+                    {localizePluginInputLabel(locale, field)}
+                  </div>
                 ) : null}
                 {field.placeholder ? (
                   <div className="plugin-details-modal__muted plugin-details-modal__small">
-                    e.g. {field.placeholder}
+                    {label('examplePrefix')}{' '}
+                    {localizePluginPlaceholder(locale, field.placeholder)}
                   </div>
                 ) : null}
                 {field.options && field.options.length > 0 ? (
                   <div className="plugin-details-modal__chips plugin-details-modal__chips--inline">
                     {field.options.map((opt) => (
                       <span key={opt} className="plugin-details-modal__chip">
-                        {opt}
+                        {localizePluginDisplayValue(locale, opt)}
                       </span>
                     ))}
                   </div>
@@ -287,7 +302,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
                 field.default !== null &&
                 String(field.default).length > 0 ? (
                   <div className="plugin-details-modal__muted plugin-details-modal__small">
-                    default: <code>{String(field.default)}</code>
+                    {label('defaultPrefix')} <code>{localizePluginDisplayValue(locale, field.default)}</code>
                   </div>
                 ) : null}
               </li>
@@ -298,12 +313,12 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
 
       {hasContext ? (
         <Section
-          title="Context bundles"
-          hint="Skills, design systems, MCP servers and other refs the plugin will pull in at apply time."
+          title={label('contextBundles')}
+          hint={label('contextBundlesHint')}
         >
           <div className="plugin-details-modal__context">
             {ctx.skills && ctx.skills.length > 0 ? (
-              <ContextGroup label="Skills" count={ctx.skills.length}>
+              <ContextGroup label={label('skills')} count={ctx.skills.length}>
                 {ctx.skills.map((s, i) => (
                   <span key={`skill-${i}`} className="plugin-details-modal__chip">
                     {refLabel(s as ContextRef)}
@@ -312,19 +327,19 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
               </ContextGroup>
             ) : null}
             {ctx.designSystem ? (
-              <ContextGroup label="Design system">
+              <ContextGroup label={label('designSystem')}>
                 <span className="plugin-details-modal__chip">
                   {refLabel(ctx.designSystem as ContextRef)}
                   {(ctx.designSystem as ContextRef).primary ? (
                     <span className="plugin-details-modal__badge is-primary">
-                      primary
+                      {label('primary')}
                     </span>
                   ) : null}
                 </span>
               </ContextGroup>
             ) : null}
             {ctx.craft && ctx.craft.length > 0 ? (
-              <ContextGroup label="Craft" count={ctx.craft.length}>
+              <ContextGroup label={label('craft')} count={ctx.craft.length}>
                 {ctx.craft.map((c) => (
                   <span key={`craft-${c}`} className="plugin-details-modal__chip">
                     {c}
@@ -333,7 +348,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
               </ContextGroup>
             ) : null}
             {ctx.atoms && ctx.atoms.length > 0 ? (
-              <ContextGroup label="Atoms" count={ctx.atoms.length}>
+              <ContextGroup label={label('atoms')} count={ctx.atoms.length}>
                 {ctx.atoms.map((a) => (
                   <span key={`atom-${a}`} className="plugin-details-modal__chip">
                     {a}
@@ -342,7 +357,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
               </ContextGroup>
             ) : null}
             {ctx.assets && ctx.assets.length > 0 ? (
-              <ContextGroup label="Assets" count={ctx.assets.length}>
+              <ContextGroup label={label('assets')} count={ctx.assets.length}>
                 {ctx.assets.map((a) => (
                   <span
                     key={`asset-${a}`}
@@ -354,7 +369,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
               </ContextGroup>
             ) : null}
             {ctx.mcp && ctx.mcp.length > 0 ? (
-              <ContextGroup label="MCP servers" count={ctx.mcp.length}>
+              <ContextGroup label={label('mcpServers')} count={ctx.mcp.length}>
                 {(ctx.mcp as McpServerSpec[]).map((m) => (
                   <span key={`mcp-${m.name}`} className="plugin-details-modal__chip">
                     {m.name}
@@ -364,7 +379,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
             ) : null}
             {ctx.claudePlugins && ctx.claudePlugins.length > 0 ? (
               <ContextGroup
-                label="Claude plugins"
+                label={label('claudePlugins')}
                 count={ctx.claudePlugins.length}
               >
                 {ctx.claudePlugins.map((p, i) => (
@@ -380,9 +395,9 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
 
       {stages.length > 0 ? (
         <Section
-          title="Workflow"
+          title={label('workflow')}
           count={stages.length}
-          hint="Pipeline stages run in order. Atoms inside a stage run sequentially unless the stage repeats."
+          hint={label('workflowHint')}
         >
           <ol className="plugin-details-modal__stages">
             {stages.map((stage, idx) => (
@@ -392,12 +407,12 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
                   <code className="plugin-details-modal__stage-id">{stage.id}</code>
                   {stage.repeat ? (
                     <span className="plugin-details-modal__badge is-repeat">
-                      repeat
+                      {label('repeat')}
                     </span>
                   ) : null}
                   {stage.onFailure ? (
                     <span className="plugin-details-modal__badge is-failure">
-                      on failure: {stage.onFailure}
+                      {label('onFailurePrefix')} {stage.onFailure}
                     </span>
                   ) : null}
                 </div>
@@ -415,7 +430,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
                 ) : null}
                 {stage.until ? (
                   <div className="plugin-details-modal__muted plugin-details-modal__small">
-                    until: <code>{stage.until}</code>
+                    {label('untilPrefix')} <code>{stage.until}</code>
                   </div>
                 ) : null}
               </li>
@@ -426,9 +441,9 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
 
       {surfaces.length > 0 ? (
         <Section
-          title="GenUI surfaces"
+          title={label('genuiSurfaces')}
           count={surfaces.length}
-          hint="Interactive prompts the plugin may surface during a run."
+          hint={label('genuiSurfacesHint')}
         >
           <ul className="plugin-details-modal__surfaces">
             {surfaces.map((s) => (
@@ -440,7 +455,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
                   </span>
                   {s.persist ? (
                     <span className="plugin-details-modal__muted plugin-details-modal__small">
-                      persists at <code>{s.persist}</code>
+                      {label('persistsAt')} <code>{s.persist}</code>
                     </span>
                   ) : null}
                 </div>
@@ -456,21 +471,21 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
       ) : null}
 
       {required.length > 0 || optional.length > 0 ? (
-        <Section title="Connectors">
+        <Section title={label('connectors')}>
           {required.length > 0 ? (
-            <ConnectorList label="Required" items={required} variant="required" />
+            <ConnectorList label={label('required')} items={required} variant="required" />
           ) : null}
           {optional.length > 0 ? (
-            <ConnectorList label="Optional" items={optional} variant="optional" />
+            <ConnectorList label={label('optional')} items={optional} variant="optional" />
           ) : null}
         </Section>
       ) : null}
 
       {capabilities.length > 0 ? (
         <Section
-          title="Capabilities"
+          title={label('capabilities')}
           count={capabilities.length}
-          hint="Permissions the plugin requests when applied."
+          hint={label('capabilitiesHint')}
         >
           <div className="plugin-details-modal__caps">
             {capabilities.map((c) => (
@@ -483,7 +498,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
       ) : null}
 
       <Section
-        title="Source"
+        title={label('source')}
         action={
           links.contributeUrl ? (
             <a
@@ -494,22 +509,22 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
               data-testid="plugin-details-contribute"
               title={
                 links.contributeOnGithub
-                  ? 'Open an issue on GitHub'
-                  : 'Open the contribute page'
+                  ? label('openIssueOnGithub')
+                  : label('openContributePage')
               }
             >
               <Icon
                 name={links.contributeOnGithub ? 'github' : 'external-link'}
                 size={12}
               />
-              Contribute
+              {label('contribute')}
             </a>
           ) : undefined
         }
       >
         <dl className="plugin-details-modal__source">
           <div>
-            <dt>Origin</dt>
+            <dt>{label('origin')}</dt>
             <dd>
               <span className="plugin-details-modal__source-kind">
                 {links.sourceKindLabel}
@@ -530,34 +545,34 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
             </dd>
           </div>
           <div>
-            <dt>Path</dt>
+            <dt>{label('path')}</dt>
             <dd>
               <code>{record.fsPath}</code>
             </dd>
           </div>
           <div>
-            <dt>Version</dt>
+            <dt>{label('version')}</dt>
             <dd>
               <code>v{record.version}</code>
             </dd>
           </div>
           {specVersion ? (
             <div>
-              <dt>Spec</dt>
+              <dt>{label('spec')}</dt>
               <dd>
                 <code>v{specVersion}</code>
               </dd>
             </div>
           ) : null}
           <div>
-            <dt>Trust</dt>
+            <dt>{label('trust')}</dt>
             <dd>
               <TrustBadge trust={record.trust} />
             </dd>
           </div>
           {record.pinnedRef ? (
             <div>
-              <dt>Pinned ref</dt>
+              <dt>{label('pinnedRef')}</dt>
               <dd>
                 <code>{record.pinnedRef}</code>
               </dd>
@@ -565,7 +580,7 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
           ) : null}
           {record.sourceMarketplaceId ? (
             <div>
-              <dt>Marketplace ID</dt>
+              <dt>{label('marketplaceId')}</dt>
               <dd>
                 <code>{record.sourceMarketplaceId}</code>
               </dd>
@@ -573,14 +588,14 @@ export function PluginMetaSections({ record, omit, compact, heading, variant = '
           ) : null}
           {manifest.license ? (
             <div>
-              <dt>License</dt>
+              <dt>{label('license')}</dt>
               <dd>
                 <code>{manifest.license}</code>
               </dd>
             </div>
           ) : null}
           <div>
-            <dt>Installed</dt>
+            <dt>{label('installed')}</dt>
             <dd>{installedLabel}</dd>
           </div>
         </dl>

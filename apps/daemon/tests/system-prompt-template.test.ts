@@ -48,6 +48,24 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toMatch(/do NOT emit `<question-form id="discovery">`/);
   });
 
+  it('pins Plan mode above default artifact discovery and suppresses artifact brief forms', () => {
+    const out = composeSystemPrompt({
+      sessionMode: 'plan',
+      metadata: { kind: 'prototype' },
+    });
+
+    const overrideIdx = out.indexOf('# Plan mode — editable document first');
+    const discoveryIdx = out.indexOf('# OD core directives');
+    expect(overrideIdx).toBeGreaterThanOrEqual(0);
+    expect(discoveryIdx).toBeGreaterThanOrEqual(0);
+    expect(overrideIdx).toBeLessThan(discoveryIdx);
+    expect(out).toContain('do NOT emit `<question-form id="discovery">`');
+    expect(out).toContain('`<question-form id="task-type">`');
+    expect(out).toContain('Quick brief — 30 seconds');
+    expect(out).toContain('<question-form id="plan-brief">');
+    expect(out).toContain('plan-document-specific questions');
+  });
+
   it('does not instruct agents to ask for a second visual-direction picker', () => {
     const out = composeSystemPrompt({
       metadata: { kind: 'prototype' },
@@ -261,6 +279,10 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
       /actual\s+output path returned by the built-in imagegen result/,
     );
     expect(out).toContain('${CODEX_HOME:-$HOME/.codex}/generated_images/.../ig_*.png');
+    expect(out).toContain('When the user asked for one image, produce exactly one final project image');
+    expect(out).toContain('If Codex built-in imagegen returns multiple candidate files, previews, or');
+    expect(out).toContain('select the single best match and import only that file into');
+    expect(out).toContain('Do not copy every generated variant');
     expect(out).toContain('verify the exact destination file exists under');
     expect(out).toMatch(
       /report the exact source path, destination path, and access\/copy\s+error/,
@@ -390,6 +412,46 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).not.toContain('Open Design-owned media execution is **disabled for this run**');
   });
 
+  it('renders BYOK media defaults in the media contract', () => {
+    const out = composeSystemPrompt({
+      metadata: {
+        kind: 'image',
+        imageModel: 'gpt-image-2',
+        imageAspect: '1:1',
+        promptTemplate: { ...baseSummary },
+      },
+      byokMediaDefaults: {
+        imageModel: 'aihubmix-qwen-image-2.0-pro',
+        videoModel: 'aihubmix-doubao-seedance-2-0-260128',
+        speechModel: 'aihubmix-gpt-4o-mini-tts',
+        speechVoice: 'nova',
+      },
+    });
+
+    expect(out).toContain('### Run-scoped BYOK media defaults');
+    expect(out).toContain('- Image model: `aihubmix-qwen-image-2.0-pro`');
+    expect(out).toContain('- Video model: `aihubmix-doubao-seedance-2-0-260128`');
+    expect(out).toContain('- Speech model: `aihubmix-gpt-4o-mini-tts`');
+    expect(out).toContain('- Speech voice: `nova`');
+    expect(out).toContain('### Allowed model IDs (per surface)');
+  });
+
+  it('renders BYOK media defaults in the non-media dispatch hint', () => {
+    const out = composeSystemPrompt({
+      metadata: {
+        kind: 'prototype',
+        platform: 'responsive',
+      },
+      byokMediaDefaults: {
+        imageModel: 'senseaudio-image-1.0-260319',
+      },
+    });
+
+    expect(out).toContain('## Media generation (if asked)');
+    expect(out).toContain('### Run-scoped BYOK media defaults');
+    expect(out).toContain('- Image model: `senseaudio-image-1.0-260319`');
+  });
+
   it('keeps unrestricted enabled media contract unchanged', () => {
     const out = composeSystemPrompt({
       metadata: {
@@ -480,6 +542,7 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('ElevenLabs voice options');
     expect(out).toContain('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
     expect(out).toContain('"type": "select"');
+    expect(out).toContain('"allowCustom": false');
     expect(out).toContain('"label": "Rachel — american · female"');
     expect(out).toContain('"value": "21m00Tcm4TlvDq8ikWAM"');
     expect(out).toContain('"label": "Adam — american · male"');

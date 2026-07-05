@@ -1,6 +1,7 @@
 export type UiPlaywrightGroup = {
   files: readonly string[];
   grep: string;
+  workers?: number;
 };
 
 export type UiP0CiMatrixEntry = {
@@ -34,14 +35,21 @@ export const uiP0Groups = {
       "ui/settings-connectors-auth-recovery.test.ts",
     ],
   },
-  "project-runtime": {
+  "project-workspace": {
     grep: String.raw`\[P0\]`,
+    workers: 1,
     files: [
       "ui/app.test.ts",
       "ui/app-design-files.test.ts",
       "ui/app-manual-edit.test.ts",
       "ui/project-management-flows.test.ts",
       "ui/workspace-keyboard-flows.test.ts",
+    ],
+  },
+  "project-runtime": {
+    grep: String.raw`\[P0\]`,
+    workers: 1,
+    files: [
       "ui/real-daemon-run.test.ts",
       "ui/amr-run-failure-recovery.test.ts",
       "ui/amr-logout-requires-relogin.test.ts",
@@ -54,6 +62,7 @@ export type UiP0GroupName = keyof typeof uiP0Groups;
 
 export const uiP0CiMatrix = [
   { name: "entry-settings", shard: "entry-settings" },
+  { name: "project-workspace", shard: "project-workspace" },
   { name: "project-runtime", shard: "project-runtime" },
   { name: "workspace-restoration", shard: "workspace-restoration" },
 ] as const satisfies readonly UiP0CiMatrixEntry[];

@@ -35,6 +35,7 @@ const voiceForm: QuestionForm = {
       label: 'Voice',
       type: 'select',
       required: true,
+      allowCustom: false,
       placeholder: 'Choose a voice',
       help: 'Select a voice description; the answer submits the matching Voice ID.',
       options: [
@@ -141,6 +142,7 @@ describe('QuestionFormView', () => {
     expect(container.querySelector('option[value="21m00Tcm4TlvDq8ikWAM"]')?.textContent).toBe(
       'Rachel — american · female',
     );
+    expect(screen.queryByLabelText('Custom answer')).toBeNull();
 
     fireEvent.change(select, { target: { value: '21m00Tcm4TlvDq8ikWAM' } });
     fireEvent.click(screen.getByRole('button', { name: 'Use voice' }));
@@ -193,6 +195,50 @@ describe('QuestionFormView', () => {
       '- Primary surface: Mobile (iOS/Android) [value: mobile]',
     );
     expect(onSubmit.mock.calls[0]?.[1]).toEqual({ platform: 'mobile' });
+  });
+
+  it('lets users override generated radio options with a custom answer', () => {
+    const onSubmit = vi.fn();
+    render(<QuestionFormView form={richForm} interactive onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByLabelText('Custom answer'), {
+      target: { value: 'Wearable kiosk' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.stringContaining('- Primary surface: Wearable kiosk'),
+      { platform: 'Wearable kiosk' },
+    );
+  });
+
+  it('combines checkbox presets with custom user entries', () => {
+    const onSubmit = vi.fn();
+    render(<QuestionFormView form={checkboxObjectForm} interactive onSubmit={onSubmit} />);
+
+    fireEvent.click(screen.getByLabelText('Editorial / magazine'));
+    fireEvent.change(screen.getByLabelText('Custom answer'), {
+      target: { value: 'Neo-museum, Field notebook' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+
+    expect(onSubmit.mock.calls[0]?.[0]).toContain('Editorial / magazine [value: editorial]');
+    expect(onSubmit.mock.calls[0]?.[0]).toContain('Neo-museum');
+    expect(onSubmit.mock.calls[0]?.[0]).toContain('Field notebook');
+    expect(onSubmit.mock.calls[0]?.[1]).toEqual({
+      tone: ['editorial', 'Neo-museum', 'Field notebook'],
+    });
+  });
+
+  it('can hide custom choice input for exact machine-id pickers', () => {
+    const exactForm = {
+      ...selectObjectForm,
+      questions: [{ ...selectObjectForm.questions[0], allowCustom: false }],
+    } as QuestionForm;
+
+    render(<QuestionFormView form={exactForm} interactive onSubmit={vi.fn()} />);
+
+    expect(screen.queryByLabelText('Custom answer')).toBeNull();
   });
 
   it('submits required checkbox object options with stable values', () => {
@@ -271,5 +317,32 @@ describe('QuestionFormView', () => {
       '- Primary surface: Mobile (iOS/Android) [value: mobile]',
     );
     expect(onSubmit.mock.calls[0]?.[1]).toEqual({ platform: 'mobile' });
+  });
+
+  it('submits native defaults for required color and defaultless range controls', () => {
+    const nativeDefaultsForm = {
+      id: 'native-defaults',
+      title: 'Native defaults',
+      questions: [
+        { id: 'accent', label: 'Accent color', type: 'color', required: true },
+        { id: 'weight', label: 'Weight', type: 'range', required: true, max: 10 },
+      ],
+    } as QuestionForm;
+    const onSubmit = vi.fn();
+    render(<QuestionFormView form={nativeDefaultsForm} interactive onSubmit={onSubmit} />);
+
+    const submit = screen.getByRole('button', { name: 'Send answers' }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+
+    fireEvent.click(submit);
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      [
+        '[form answers — native-defaults]',
+        '- Accent color: #000000',
+        '- Weight: 0',
+      ].join('\n'),
+      { accent: '#000000', weight: '0' },
+    );
   });
 });

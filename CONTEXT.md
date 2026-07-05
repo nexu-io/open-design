@@ -94,7 +94,7 @@ _Avoid_: continue, finish setup, passive close
 - The **AMR CLI Distribution Contract** is owned separately from Open Design; Open Design release packaging consumes it instead of defining the native CLI release itself.
 - The first **AMR CLI Distribution Slice** is mac arm64 only.
 - **AMR Account Status** describes account readiness for **AMR Cloud**, not the environment profile or CLI installation state.
-- An **AMR Environment Profile** is independent from release channel identity; a beta, preview, nightly, or stable package can target different AMR service environments when explicitly configured.
+- An **AMR Environment Profile** is independent from release channel identity; a beta, preview, prerelease, or stable package can target different AMR service environments when explicitly configured.
 - **Onboarding Skip** bypasses setup completion requirements that belong to the normal onboarding continue path.
 
 ## Example dialogue

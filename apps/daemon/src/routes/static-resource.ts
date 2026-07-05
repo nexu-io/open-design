@@ -15,15 +15,15 @@ import {
 } from '../skills.js';
 import { listCodexPets, readCodexPetSpritesheet } from '../codex-pets.js';
 import { syncCommunityPets } from '../community-pets-sync.js';
-import { readDesignSystem } from '../design-systems.js';
+import { readDesignSystem } from '../design-systems/index.js';
 import {
   LocalDesignSystemImportError,
   importLocalDesignSystemProject,
-} from '../design-system-import.js';
-import { importGitHubDesignSystemProject } from '../design-system-github-import.js';
-import { importShadcnDesignSystemProject } from '../design-system-shadcn-import.js';
-import { renderDesignSystemPreview } from '../design-system-preview.js';
-import { renderDesignSystemShowcase } from '../design-system-showcase.js';
+} from '../design-systems/import.js';
+import { importGitHubDesignSystemProject } from '../design-systems/github-import.js';
+import { importShadcnDesignSystemProject } from '../design-systems/shadcn-import.js';
+import { renderDesignSystemPreview } from '../design-systems/preview.js';
+import { renderDesignSystemShowcase } from '../design-systems/showcase.js';
 import { listPromptTemplates, readPromptTemplate } from '../prompt-templates.js';
 import { readAppConfig } from '../app-config.js';
 import { installFromTarget, uninstallById } from '../library-install.js';
@@ -879,13 +879,13 @@ function normalizeDesignSystemCraftApplies(value: unknown): string[] | undefined
   return out;
 }
 
-function assembleExample(templateHtml: string, slidesHtml: string, title: string) {
+export function assembleExample(templateHtml: string, slidesHtml: string, title: string) {
   return templateHtml
     .replace('<!-- SLIDES_HERE -->', slidesHtml)
     .replace(/<title>.*?<\/title>/, `<title>${title} | Open Design Example</title>`);
 }
 
-function rewriteSkillAssetUrls(html: string, skillId: string) {
+export function rewriteSkillAssetUrls(html: string, skillId: string) {
   if (typeof html !== 'string' || html.length === 0) return html;
   return html.replace(
     /(\s(?:src|href)\s*=\s*)(['"])((?:\.\.\/([^/'"#?]+)\/)?(?:\.\/)?assets\/([^'"#?]+))(\2)/gi,

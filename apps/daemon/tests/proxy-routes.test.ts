@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
 import * as platform from '@open-design/platform';
 import { startServer } from '../src/server.js';
-import { AIHUBMIX_APP_CODE } from '../src/aihubmix.js';
+import { AIHUBMIX_APP_CODE } from '../src/integrations/aihubmix.js';
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
@@ -387,8 +387,8 @@ describe('API proxy routes', () => {
       'https://api.deepseek.com/anthropic/v1/messages',
     ],
     [
-      'https://api.minimaxi.com/anthropic',
-      'https://api.minimaxi.com/anthropic/v1/messages',
+      'https://api.minimax.io/anthropic',
+      'https://api.minimax.io/anthropic/v1/messages',
     ],
     [
       'https://token-plan-cn.xiaomimimo.com/anthropic',

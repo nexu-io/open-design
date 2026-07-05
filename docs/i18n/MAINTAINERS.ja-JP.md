@@ -1,7 +1,7 @@
 <!-- Machine-translated draft. Native-speaker review and corrections welcome via PR. -->
 # Maintainers
 
-<p align="center"><a href="../../MAINTAINERS.md">English</a> · <a href="MAINTAINERS.pt-BR.md">Português (Brasil)</a> · <a href="MAINTAINERS.de.md">Deutsch</a> · <a href="MAINTAINERS.fr.md">Français</a> · <a href="MAINTAINERS.zh-CN.md">简体中文</a> · <b>日本語</b></p>
+<p align="center"><a href="../../MAINTAINERS.md">English</a> · <a href="MAINTAINERS.pt-BR.md">Português (Brasil)</a> · <a href="MAINTAINERS.de.md">Deutsch</a> · <a href="MAINTAINERS.fr.md">Français</a> · <a href="MAINTAINERS.zh-CN.md">简体中文</a> · <b>日本語</b> · <a href="MAINTAINERS.ko.md">한국어</a> · <a href="MAINTAINERS.th.md">ภาษาไทย</a></p>
 
 このドキュメントは、`nexu-io/open-design` の Maintainer になるため、その役割を務めるため、そして退任するためのルールを定めるものです。Core Team の個別のメンバー一覧は内部で管理されており、ここには列挙していません。公に重要なのは、全員が従うルールそのものです。
 

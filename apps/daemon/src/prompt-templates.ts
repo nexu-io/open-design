@@ -72,7 +72,11 @@ export async function listPromptTemplates(root: string): Promise<PromptTemplate[
 
 export async function readPromptTemplate(root: string, surface: string, id: string): Promise<PromptTemplate | null> {
   if (!isPromptTemplateSurface(surface)) return null;
-  const filePath = path.join(root, surface, `${id}.json`);
+  const dir = path.join(root, surface);
+  const filePath = path.join(dir, `${id}.json`);
+  // `id` comes straight from the request path; a value like `../secret` would
+  // resolve outside the surface directory. Only read a direct child of it.
+  if (path.dirname(filePath) !== dir) return null;
   try {
     const raw = await readFile(filePath, 'utf8');
     const parsed = JSON.parse(raw);
@@ -106,6 +110,14 @@ function validateTemplate(raw: unknown, expectedSurface: PromptTemplateSurface, 
   const source = isRecord(raw.source) ? raw.source : null;
   if (!source || typeof source.repo !== 'string' || typeof source.license !== 'string') {
     console.warn(`prompt-templates: ${fileName} missing source.repo / license`);
+    return null;
+  }
+  // The list exposes `id` and readPromptTemplate() resolves `${id}.json`, so an
+  // id that drifts from its filename would advertise a template the detail
+  // endpoint can't open. Reject the mismatch during scan/read.
+  const expectedId = fileName.replace(/\.json$/, '');
+  if (raw.id !== expectedId) {
+    console.warn(`prompt-templates: ${fileName} id=${raw.id} ≠ filename`);
     return null;
   }
   const template: PromptTemplate = {
