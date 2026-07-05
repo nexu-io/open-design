@@ -35,6 +35,7 @@ const saveMessage = vi.fn();
 const createConversation = vi.fn();
 const patchConversation = vi.fn();
 const patchProject = vi.fn();
+const patchPreviewCommentStatus = vi.fn();
 const saveTabs = vi.fn();
 const writeProjectTextFile = vi.fn();
 const cancelBrandExtraction = vi.fn();
@@ -85,6 +86,18 @@ function projectFile(
   };
 }
 
+async function createGenericDisconnectError() {
+  const { createGenericDaemonDisconnectError } = await import('../../src/providers/daemon');
+  return createGenericDaemonDisconnectError();
+}
+
+async function createCodeOnlyGenericDisconnectError(message = 'code-only generic disconnect') {
+  const { GENERIC_DAEMON_DISCONNECT_CODE } = await import('../../src/providers/daemon');
+  const error = new Error(message) as Error & { code?: string };
+  error.code = GENERIC_DAEMON_DISCONNECT_CODE;
+  return error;
+}
+
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
     locale: 'en',
@@ -98,13 +111,19 @@ vi.mock('../../src/providers/anthropic', () => ({
   streamMessage: vi.fn(),
 }));
 
-vi.mock('../../src/providers/daemon', () => ({
+vi.mock('../../src/providers/daemon', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/daemon')>(
+    '../../src/providers/daemon',
+  );
+  return {
+    ...actual,
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
-}));
+  };
+});
 
 vi.mock('../../src/providers/registry', () => ({
   deletePreviewComment: vi.fn(),
@@ -114,7 +133,7 @@ vi.mock('../../src/providers/registry', () => ({
   fetchLiveArtifacts: (...args: unknown[]) => fetchLiveArtifacts(...args),
   fetchProjectFiles: (...args: unknown[]) => fetchProjectFiles(...args),
   fetchSkill: (...args: unknown[]) => fetchSkill(...args),
-  patchPreviewCommentStatus: vi.fn(),
+  patchPreviewCommentStatus: (...args: unknown[]) => patchPreviewCommentStatus(...args),
   upsertPreviewComment: vi.fn(),
   writeProjectTextFile: (...args: unknown[]) => writeProjectTextFile(...args),
 }));
@@ -347,11 +366,12 @@ describe('ProjectView daemon cleanup', () => {
     cancelBrandExtraction.mockResolvedValue({ ok: true, status: 'failed' });
   });
 
-  afterEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-    window.sessionStorage.clear();
-  });
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+  vi.useRealTimers();
+  window.sessionStorage.clear();
+});
 
   it('does not abort daemon cancel reattach controllers during unmount cleanup', async () => {
     let seenCancelSignal: { aborted: boolean } | null = null;
@@ -1944,6 +1964,1745 @@ describe('ProjectView daemon cleanup', () => {
     expect(writeProjectTextFile).not.toHaveBeenCalled();
   });
 
+  it('preserves authoritative failed status while replaying a stale succeeded row', async () => {
+    const runCreatedAt = Date.now();
+    const artifactEvent = {
+      kind: 'text',
+      text:
+        '<artifact identifier="real-daemon-smoke" type="text/html" title="Real Daemon Smoke"><h1>Real Daemon Smoke</h1></artifact>',
+    };
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-stale-succeeded-failed-status',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        events: [artifactEvent],
+        runId: 'run-stale-succeeded-failed-status',
+        runStatus: 'succeeded',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-stale-succeeded-failed-status',
+      status: 'failed',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 1,
+      signal: null,
+      resumable: true,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    render(
+      <ProjectView
+        project={{ id: 'project-stale-succeeded-failed-status', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-stale-succeeded-failed-status',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-stale-succeeded-failed-status',
+          content: artifactEvent.text,
+          runStatus: 'failed',
+          resumable: true,
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('keeps reattaching after two generic disconnects while daemon status stays running, but backs off before the next retry', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-flaky-reattach',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-flaky-reattach',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-flaky-reattach',
+      status: 'running',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: { onError: (error: Error) => void };
+    }) => {
+      options.handlers.onError(genericDisconnect);
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-flaky-reattach', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(2), {
+      timeout: 2_000,
+    });
+    expect(reattachDaemonRun.mock.calls.length).toBe(2);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(reattachDaemonRun.mock.calls.length).toBe(2);
+    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(3), {
+      timeout: 4_500,
+    });
+  }, 12_000);
+
+  it('clears streaming after a slow retry-cap status probe on reattach generic disconnects', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError();
+    type RunningStatusProbe = {
+      id: string;
+      status: 'running';
+      createdAt: number;
+      updatedAt: number;
+      exitCode: null;
+      signal: null;
+    };
+    let resolveStatusProbe!: (value: RunningStatusProbe) => void;
+    const statusProbe = new Promise<RunningStatusProbe>((resolve) => {
+      resolveStatusProbe = resolve;
+    });
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-slow-status-probe',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reattach-slow-status-probe',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    let statusChecks = 0;
+    fetchChatRunStatus.mockImplementation(async () => {
+      statusChecks += 1;
+      if (statusChecks === 3) return statusProbe;
+      return {
+        id: 'run-reattach-slow-status-probe',
+        status: 'running' as const,
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + statusChecks,
+        exitCode: null,
+        signal: null,
+      };
+    });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: { onError: (error: Error) => Promise<void> };
+    }) => {
+      void options.handlers.onError(genericDisconnect);
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reattach-slow-status-probe', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(reattachDaemonRun).toHaveBeenCalledTimes(2);
+      expect(fetchChatRunStatus).toHaveBeenCalledTimes(3);
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.streaming).toBe(false);
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
+    });
+
+    resolveStatusProbe({
+      id: 'run-reattach-slow-status-probe',
+      status: 'running',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 3,
+      exitCode: null,
+      signal: null,
+    });
+
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.streaming).toBe(false);
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
+    });
+  });
+
+  it('keeps live-stream recovery retryable after two generic disconnects while daemon status stays running, but backs off before the next retry', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-live-flaky',
+      status: 'running',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: null,
+      signal: null,
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => void };
+    }) => {
+      options.onRunCreated?.('run-live-flaky');
+      options.handlers.onError(genericDisconnect);
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-live-flaky', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('flaky stream', [], []);
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(1), {
+      timeout: 2_000,
+    });
+    expect(reattachDaemonRun.mock.calls.length).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(reattachDaemonRun.mock.calls.length).toBe(1);
+    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(2), {
+      timeout: 4_500,
+    });
+  }, 12_000);
+
+  it('keeps a partial live generic disconnect recoverable after the first failure', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-live-partial-recoverable',
+      status: 'running',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: null,
+      signal: null,
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: {
+        onDelta: (delta: string) => void;
+        onError: (error: Error) => Promise<void>;
+      };
+    }) => {
+      options.onRunCreated?.('run-live-partial-recoverable');
+      options.handlers.onDelta('partial output');
+      await options.handlers.onError(genericDisconnect);
+    });
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-live-partial-recoverable', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('recover partial live disconnect', [], []);
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1), {
+      timeout: 2_000,
+    });
+  });
+
+  it('installs live generic-disconnect backoff before a slow retry-cap status probe can trigger reattach', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError();
+    type RunningStatusProbe = {
+      id: string;
+      status: 'running';
+      createdAt: number;
+      updatedAt: number;
+      exitCode: null;
+      signal: null;
+    };
+    let resolveStatusProbe!: (value: RunningStatusProbe) => void;
+    const statusProbe = new Promise<RunningStatusProbe>((resolve) => {
+      resolveStatusProbe = resolve;
+    });
+    let statusChecks = 0;
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockImplementation(async () => {
+      statusChecks += 1;
+      if (statusChecks === 1) return statusProbe;
+      return {
+        id: 'run-live-slow-status-probe',
+        status: 'running' as const,
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + statusChecks,
+        exitCode: null,
+        signal: null,
+      };
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: {
+        onError: (error: Error) => Promise<void>;
+      };
+    }) => {
+      options.onRunCreated?.('run-live-slow-status-probe');
+      await options.handlers.onError(genericDisconnect);
+      void options.handlers.onError(genericDisconnect);
+    });
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-live-slow-status-probe', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('slow live status probe', [], []);
+
+    await waitFor(() => {
+      expect(fetchChatRunStatus).toHaveBeenCalledTimes(1);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+
+    resolveStatusProbe({
+      id: 'run-live-slow-status-probe',
+      status: 'running',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: null,
+      signal: null,
+    });
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1), {
+      timeout: 4_000,
+    });
+  });
+
+  it('keeps generic-disconnect cap retryable when the follow-up status probe returns null, but backs off before retrying', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-null-status-retry',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-null-status-retry',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-null-status-retry',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 1,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-null-status-retry',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 2,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({
+        id: 'run-null-status-retry',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 3,
+        exitCode: null,
+        signal: null,
+      });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: { onError: (error: Error) => void };
+    }) => {
+      options.handlers.onError(genericDisconnect);
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-null-status-retry', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(2), {
+      timeout: 2_000,
+    });
+    expect(reattachDaemonRun.mock.calls.length).toBe(2);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(reattachDaemonRun.mock.calls.length).toBe(2);
+    await waitFor(() => expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(3), {
+      timeout: 4_500,
+    });
+  }, 12_000);
+
+  it('finalizes a reattach generic disconnect as succeeded when the next status poll turns terminal', async () => {
+    const runCreatedAt = Date.now();
+    const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-terminal-success',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reattach-terminal-success',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-reattach-terminal-success',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 1,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reattach-terminal-success',
+        status: 'succeeded',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 2,
+        exitCode: 0,
+        signal: null,
+      });
+    let reattachAttempts = 0;
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onError: (error: Error) => Promise<void>;
+        onDone: () => void;
+      };
+    }) => {
+      reattachAttempts += 1;
+      if (reattachAttempts === 1) {
+        await options.handlers.onError(genericDisconnect);
+        return;
+      }
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reattach-terminal-success', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-reattach-terminal-success',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-reattach-terminal-success',
+          runStatus: 'succeeded',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+    const recoveredSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-reattach-terminal-success' &&
+        call[2]?.id === 'msg-reattach-terminal-success' &&
+        call[2]?.runStatus === 'succeeded',
+    );
+    expect(
+      recoveredSave?.[2]?.events?.some(
+        (event: { kind?: string; label?: string; detail?: string }) =>
+          event.kind === 'status' &&
+          event.label === 'error' &&
+          event.detail === GENERIC_DAEMON_DISCONNECT_MESSAGE,
+      ),
+    ).toBe(false);
+  });
+
+  it('treats a code-only generic disconnect as retryable even when the message differs', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createCodeOnlyGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-code-only-generic-disconnect',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reattach-code-only-generic-disconnect',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-reattach-code-only-generic-disconnect',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 1,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reattach-code-only-generic-disconnect',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 2,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reattach-code-only-generic-disconnect',
+        status: 'succeeded',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 3,
+        exitCode: 0,
+        signal: null,
+      });
+    let reattachAttempts = 0;
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onError: (error: Error) => Promise<void>;
+        onDone: () => void;
+      };
+    }) => {
+      reattachAttempts += 1;
+      if (reattachAttempts < 3) {
+        await options.handlers.onError(genericDisconnect);
+        return;
+      }
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reattach-code-only-generic-disconnect', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-reattach-code-only-generic-disconnect',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-reattach-code-only-generic-disconnect',
+          runStatus: 'succeeded',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+  });
+
+  it('patches terminal metadata when a reattach generic disconnect later proves failed', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError() as Error & {
+      resumable?: boolean;
+    };
+    genericDisconnect.resumable = false;
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-terminal-failed',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reattach-terminal-failed',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-reattach-terminal-failed',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 1,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reattach-terminal-failed',
+        status: 'failed',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 2,
+        exitCode: 1,
+        signal: null,
+        resumable: true,
+      });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onError: (error: Error) => Promise<void>;
+      };
+    }) => {
+      await options.handlers.onError(genericDisconnect);
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reattach-terminal-failed', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      const failedSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-reattach-terminal-failed' &&
+          call[2]?.id === 'msg-reattach-terminal-failed' &&
+          call[2]?.runStatus === 'failed' &&
+          call[2]?.resumable === true,
+      );
+      expect(failedSave).toBeTruthy();
+    });
+  });
+
+  it('replays a terminally-succeeded reattach run again when the previous retry only restored partial content', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-terminal-partial-success',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reattach-terminal-partial-success',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-reattach-terminal-partial-success',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 1,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reattach-terminal-partial-success',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 2,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reattach-terminal-partial-success',
+        status: 'succeeded',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 3,
+        exitCode: 0,
+        signal: null,
+      })
+      .mockResolvedValue({
+        id: 'run-reattach-terminal-partial-success',
+        status: 'succeeded',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 4,
+        exitCode: 0,
+        signal: null,
+      });
+    let reattachAttempts = 0;
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onDelta: (delta: string) => void;
+        onError: (error: Error) => Promise<void>;
+        onDone: () => void;
+      };
+    }) => {
+      reattachAttempts += 1;
+      if (reattachAttempts === 1) {
+        await options.handlers.onError(genericDisconnect);
+        return;
+      }
+      if (reattachAttempts === 2) {
+        options.handlers.onDelta('partial output');
+        await options.handlers.onError(genericDisconnect);
+        return;
+      }
+      options.handlers.onDelta('full recovered output');
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reattach-terminal-partial-success', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(reattachDaemonRun.mock.calls.length).toBeGreaterThanOrEqual(3);
+      const succeededSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-reattach-terminal-partial-success' &&
+          call[2]?.id === 'msg-reattach-terminal-partial-success' &&
+          call[2]?.runStatus === 'succeeded' &&
+          call[2]?.content === 'full recovered output',
+      );
+      expect(succeededSave).toBeTruthy();
+    });
+
+    const truncatedSucceededSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-reattach-terminal-partial-success' &&
+        call[2]?.id === 'msg-reattach-terminal-partial-success' &&
+        call[2]?.runStatus === 'succeeded' &&
+        call[2]?.content === 'partial output',
+    );
+    expect(truncatedSucceededSave).toBeFalsy();
+  });
+
+  it('finalizes a live generic disconnect as succeeded when the next status poll turns terminal', async () => {
+    const runCreatedAt = Date.now();
+    const { GENERIC_DAEMON_DISCONNECT_MESSAGE } = await import('../../src/providers/daemon');
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-live-terminal-success',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => Promise<void> };
+    }) => {
+      options.onRunCreated?.('run-live-terminal-success');
+      await options.handlers.onError(genericDisconnect);
+      await options.handlers.onError(genericDisconnect);
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-live-terminal-success', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('terminal success after disconnect', [], []);
+
+    await waitFor(() => {
+      const succeededSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-live-terminal-success' &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-live-terminal-success' &&
+          call[2]?.runStatus === 'succeeded',
+      );
+      expect(succeededSave).toBeTruthy();
+    });
+    const succeededSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-live-terminal-success' &&
+        call[2]?.role === 'assistant' &&
+        call[2]?.runId === 'run-live-terminal-success' &&
+        call[2]?.runStatus === 'succeeded',
+    );
+    expect(
+      succeededSave?.[2]?.events?.some(
+        (event: { kind?: string; label?: string; detail?: string }) =>
+          event.kind === 'status' &&
+          event.label === 'error' &&
+          event.detail === GENERIC_DAEMON_DISCONNECT_MESSAGE,
+      ),
+    ).toBe(false);
+    expect(patchPreviewCommentStatus).not.toHaveBeenCalled();
+  });
+
+  it('does not persist a live generic disconnect as succeeded with partial streamed text', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-live-terminal-partial-success',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: {
+        onDelta: (delta: string) => void;
+        onError: (error: Error) => Promise<void>;
+      };
+    }) => {
+      options.onRunCreated?.('run-live-terminal-partial-success');
+      options.handlers.onDelta('partial output');
+      await options.handlers.onError(genericDisconnect);
+      await options.handlers.onError(genericDisconnect);
+    });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onDelta: (delta: string) => void;
+        onDone: () => void;
+      };
+    }) => {
+      options.handlers.onDelta('full recovered output');
+      options.handlers.onDone();
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-live-terminal-partial-success', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('terminal success after partial disconnect', [], []);
+
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalled();
+    });
+
+    const truncatedSucceededSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-live-terminal-partial-success' &&
+        call[2]?.role === 'assistant' &&
+        call[2]?.runId === 'run-live-terminal-partial-success' &&
+        call[2]?.runStatus === 'succeeded' &&
+        call[2]?.content === 'partial output',
+    );
+    expect(truncatedSucceededSave).toBeFalsy();
+
+    await waitFor(() => {
+      const recoveredSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-live-terminal-partial-success' &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-live-terminal-partial-success' &&
+          call[2]?.runStatus === 'succeeded' &&
+          call[2]?.content === 'full recovered output',
+      );
+      expect(recoveredSave).toBeTruthy();
+    });
+  });
+
+  it('preserves canceled status when a reattached run reports canceled before onDone', async () => {
+    const runCreatedAt = Date.now();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-canceled',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reattach-canceled',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-reattach-canceled',
+      status: 'running',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: null,
+      signal: null,
+    });
+    reattachDaemonRun.mockImplementation(async (options: {
+      onRunStatus?: (runStatus: 'canceled') => void;
+      handlers: {
+        onDone: () => void;
+      };
+    }) => {
+      options.onRunStatus?.('canceled');
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reattach-canceled', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-reattach-canceled',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-reattach-canceled',
+          runStatus: 'canceled',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+    expect(saveMessage).not.toHaveBeenCalledWith(
+      'project-reattach-canceled',
+      'conv-1',
+      expect.objectContaining({
+        id: 'msg-reattach-canceled',
+        runStatus: 'succeeded',
+      }),
+      expect.objectContaining({ telemetryFinalized: true }),
+    );
+  });
+
+  it('patches live generic-disconnect terminal metadata from a failed daemon status', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError() as Error & {
+      resumable?: boolean;
+    };
+    genericDisconnect.resumable = false;
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-live-terminal-failed',
+        status: 'failed',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 1,
+        exitCode: 1,
+        signal: null,
+        resumable: true,
+      })
+      .mockResolvedValue({
+        id: 'run-live-terminal-failed',
+        status: 'failed',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 1,
+        exitCode: 1,
+        signal: null,
+        resumable: true,
+      });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => Promise<void> };
+    }) => {
+      options.onRunCreated?.('run-live-terminal-failed');
+      await options.handlers.onError(genericDisconnect);
+      await options.handlers.onError(genericDisconnect);
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-live-terminal-failed', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('terminal failed after disconnect', [], []);
+
+    await waitFor(() => {
+      const failedSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-live-terminal-failed' &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-live-terminal-failed' &&
+          call[2]?.runStatus === 'failed' &&
+          call[2]?.resumable === true,
+      );
+      expect(failedSave).toBeTruthy();
+    });
+  });
+
+  it('restores attached comment statuses when a live generic disconnect later proves succeeded', async () => {
+    const runCreatedAt = Date.now();
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-live-success-comments',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => Promise<void> };
+    }) => {
+      options.onRunCreated?.('run-live-success-comments');
+      await options.handlers.onError(genericDisconnect);
+      await options.handlers.onError(genericDisconnect);
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-live-success-comments', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!(
+      'terminal success after disconnect with comments',
+      [],
+      [
+        {
+          id: 'comment-1',
+          comment: 'Tighten spacing',
+          commentContext: 'query',
+          filePath: 'preview.html',
+          source: 'query',
+        },
+      ] as never,
+    );
+
+    await waitFor(() => {
+      expect(patchPreviewCommentStatus).toHaveBeenCalledWith(
+        'project-live-success-comments',
+        'conv-1',
+        'comment-1',
+        'needs_review',
+      );
+    });
+  });
+
+  it('replays a spuriously failed empty row when daemon status is already succeeded', async () => {
+    const runCreatedAt = Date.now();
+    const recoveredArtifact = artifactProjectFile('real-daemon-smoke.html', runCreatedAt + 2);
+    const artifactContent =
+      '<artifact identifier="real-daemon-smoke" type="text/html" title="Real Daemon Smoke">' +
+      '<!doctype html><html><body><h1>Real Daemon Smoke</h1></body></html>' +
+      '</artifact>';
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-spurious-succeeded',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-spurious-succeeded',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([recoveredArtifact]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-spurious-succeeded',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+    });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onDelta: (delta: string) => void;
+        onDone: () => void;
+      };
+    }) => {
+      options.handlers.onDelta(artifactContent);
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-spurious-succeeded', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-spurious-succeeded',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-spurious-succeeded',
+          content: artifactContent,
+          producedFiles: [recoveredArtifact],
+          runStatus: 'succeeded',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+  });
+
+  it('preserves a spuriously failed empty row when daemon status is already canceled', async () => {
+    const runCreatedAt = Date.now();
+    const preservedEvents = [
+      {
+        kind: 'status',
+        label: 'warning',
+        detail: 'Canceled after reload.',
+        timestamp: runCreatedAt + 1,
+      },
+    ];
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-spurious-canceled',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-spurious-canceled',
+        runStatus: 'failed',
+        producedFiles: [],
+        events: preservedEvents,
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-spurious-canceled',
+      status: 'canceled',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 130,
+      signal: null,
+      resumable: true,
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-spurious-canceled', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(reattachDaemonRun).not.toHaveBeenCalled();
+      const canceledSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-spurious-canceled' &&
+          call[1] === 'conv-1' &&
+          call[2]?.id === 'msg-spurious-canceled' &&
+          call[2]?.runStatus === 'canceled' &&
+          call[2]?.resumable === true &&
+          call[2]?.events === preservedEvents &&
+          call[3] === undefined,
+      );
+      expect(canceledSave).toBeTruthy();
+    });
+  });
+
+  // Regression (#4607): messages persisted BEFORE this PR started tagging
+  // disconnects with a structured `code` recorded the generic disconnect as
+  // a legacy status/error event — `detail` matches the generic-disconnect
+  // message but there is no `code` field. `hasGenericDisconnectFailureEvent`
+  // must still recognize that legacy shape so a spuriously-failed row
+  // recovers on reload once the daemon reports the run actually succeeded.
+  // The row is seeded with non-empty partial content (rather than empty
+  // content) specifically to prove the plain empty-content spurious-fail
+  // heuristic is NOT what catches this row — only the legacy-detail
+  // predicate does. Recovery replaces that local content with the daemon's
+  // authoritative replayed transcript (`attachRecoverableRuns` wipes and
+  // re-drives `reattachDaemonRun`), so the persisted content must match the
+  // REPLAYED content, not the originally-seeded partial content.
+  it('recovers a legacy message-only generic-disconnect failure (partial content, no code) when the daemon reports succeeded', async () => {
+    const runCreatedAt = Date.now();
+    const partialContent = 'Partial output captured before the browser SSE reconnect loop gave up.';
+    const replayedContent =
+      '<artifact identifier="real-daemon-smoke" type="text/html" title="Real Daemon Smoke">' +
+      '<!doctype html><html><body><h1>Real Daemon Smoke</h1></body></html>' +
+      '</artifact>';
+    const legacyDisconnectEvents = [
+      {
+        kind: 'status',
+        label: 'error',
+        detail: 'daemon stream disconnected before run completed',
+      },
+    ];
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-legacy-disconnect-partial',
+        role: 'assistant',
+        content: partialContent,
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-legacy-disconnect-partial',
+        runStatus: 'failed',
+        events: legacyDisconnectEvents,
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-legacy-disconnect-partial',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+    });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onDelta: (delta: string) => void;
+        onDone: () => void;
+      };
+    }) => {
+      options.handlers.onDelta(replayedContent);
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-legacy-disconnect-partial', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    // The daemon reattach must actually be entered — this is what proves the
+    // legacy no-code event was recognized as recoverable in the first place.
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-legacy-disconnect-partial',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-legacy-disconnect-partial',
+          content: replayedContent,
+          runStatus: 'succeeded',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+  });
+
   it('keeps reload artifact recovery retryable after a transient persistence miss', async () => {
     const runCreatedAt = Date.now();
     const recoveredArtifact = artifactProjectFile('real-daemon-smoke.html', runCreatedAt + 2);
@@ -2124,5 +3883,709 @@ describe('ProjectView daemon cleanup', () => {
       }),
     );
     expect(saveTabs).not.toHaveBeenCalledWith('project-1', expect.objectContaining({ active: 'index.html' }));
+  });
+
+  it('advances endedAt to the daemon terminal time when a reattach generic disconnect probe turns succeeded', async () => {
+    const runCreatedAt = Date.now();
+    // Far enough past any plausible disconnect-time Date.now() stamp taken during
+    // this test run that the two timestamps can never coincide by accident.
+    const daemonTerminalUpdatedAt = runCreatedAt + 10_000_000;
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-endedat-succeeded',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reattach-endedat-succeeded',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-reattach-endedat-succeeded',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 1,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reattach-endedat-succeeded',
+        status: 'succeeded',
+        createdAt: runCreatedAt,
+        updatedAt: daemonTerminalUpdatedAt,
+        exitCode: 0,
+        signal: null,
+      });
+    let reattachAttempts = 0;
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onError: (error: Error) => Promise<void>;
+        onDone: () => void;
+      };
+    }) => {
+      reattachAttempts += 1;
+      if (reattachAttempts === 1) {
+        await options.handlers.onError(genericDisconnect);
+        return;
+      }
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reattach-endedat-succeeded', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-reattach-endedat-succeeded',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-reattach-endedat-succeeded',
+          runStatus: 'succeeded',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+    const recoveredSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-reattach-endedat-succeeded' &&
+        call[2]?.id === 'msg-reattach-endedat-succeeded' &&
+        call[2]?.runStatus === 'succeeded',
+    );
+    // The daemon's authoritative terminal timestamp must win over the stale
+    // disconnect-time stamp recorded when the generic disconnect first fired.
+    expect(recoveredSave?.[2]?.endedAt).toBe(daemonTerminalUpdatedAt);
+  });
+
+  it('advances endedAt to the daemon terminal time when a reattach generic disconnect probe turns canceled', async () => {
+    const runCreatedAt = Date.now();
+    const daemonTerminalUpdatedAt = runCreatedAt + 10_000_000;
+    const genericDisconnect = await createGenericDisconnectError() as Error & {
+      resumable?: boolean;
+    };
+    genericDisconnect.resumable = false;
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-endedat-canceled',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reattach-endedat-canceled',
+        runStatus: 'failed',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-reattach-endedat-canceled',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: runCreatedAt + 1,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reattach-endedat-canceled',
+        status: 'canceled',
+        createdAt: runCreatedAt,
+        updatedAt: daemonTerminalUpdatedAt,
+        exitCode: null,
+        signal: null,
+      });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onError: (error: Error) => Promise<void>;
+      };
+    }) => {
+      await options.handlers.onError(genericDisconnect);
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reattach-endedat-canceled', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      const canceledSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-reattach-endedat-canceled' &&
+          call[2]?.id === 'msg-reattach-endedat-canceled' &&
+          call[2]?.runStatus === 'canceled',
+      );
+      expect(canceledSave).toBeTruthy();
+    });
+    const canceledSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-reattach-endedat-canceled' &&
+        call[2]?.id === 'msg-reattach-endedat-canceled' &&
+        call[2]?.runStatus === 'canceled',
+    );
+    expect(canceledSave?.[2]?.endedAt).toBe(daemonTerminalUpdatedAt);
+  });
+
+  it('advances endedAt to the daemon terminal time when a live generic disconnect probe turns succeeded', async () => {
+    const runCreatedAt = Date.now();
+    const daemonTerminalUpdatedAt = runCreatedAt + 10_000_000;
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-live-endedat-succeeded',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: daemonTerminalUpdatedAt,
+      exitCode: 0,
+      signal: null,
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => Promise<void> };
+    }) => {
+      options.onRunCreated?.('run-live-endedat-succeeded');
+      await options.handlers.onError(genericDisconnect);
+      await options.handlers.onError(genericDisconnect);
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-live-endedat-succeeded', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('terminal success after disconnect (endedAt check)', [], []);
+
+    await waitFor(() => {
+      const succeededSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-live-endedat-succeeded' &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-live-endedat-succeeded' &&
+          call[2]?.runStatus === 'succeeded',
+      );
+      expect(succeededSave).toBeTruthy();
+    });
+    const succeededSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-live-endedat-succeeded' &&
+        call[2]?.role === 'assistant' &&
+        call[2]?.runId === 'run-live-endedat-succeeded' &&
+        call[2]?.runStatus === 'succeeded',
+    );
+    expect(succeededSave?.[2]?.endedAt).toBe(daemonTerminalUpdatedAt);
+  });
+
+  // Regression (#4607): a reload while a run is still active fetches the
+  // daemon status exactly once, before reattachDaemonRun starts. For the
+  // ordinary reload-while-running path (no generic disconnect in the mix)
+  // that one snapshot is still 'running' — a near-run-start heartbeat, not
+  // a terminal completion time. The reattach onDone handler must not stamp
+  // that heartbeat as endedAt; it must observe an authoritative terminal
+  // status before finalizing, so endedAt advances past the initial running
+  // snapshot instead of freezing at it.
+  it('advances the recovered endedAt past the initial running snapshot when a reload reattaches an active run', async () => {
+    const runCreatedAt = Date.now();
+    const initialRunningUpdatedAt = runCreatedAt + 1;
+    // Far enough past the pre-reattach heartbeat that the two timestamps can
+    // never coincide by accident.
+    const daemonTerminalUpdatedAt = runCreatedAt + 10_000_000;
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reload-active-run',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-reload-active',
+        runStatus: 'running',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-reload-active',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: initialRunningUpdatedAt,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-reload-active',
+        status: 'succeeded',
+        createdAt: runCreatedAt,
+        updatedAt: daemonTerminalUpdatedAt,
+        exitCode: 0,
+        signal: null,
+      });
+    // A plain, error-free reattach: the daemon stream simply finishes.
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: { onDone: () => void };
+    }) => {
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-reload-active-endedat', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(saveMessage).toHaveBeenCalledWith(
+        'project-reload-active-endedat',
+        'conv-1',
+        expect.objectContaining({
+          id: 'msg-reload-active-run',
+          runStatus: 'succeeded',
+        }),
+        expect.objectContaining({ telemetryFinalized: true }),
+      );
+    });
+    const recoveredSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-reload-active-endedat' &&
+        call[2]?.id === 'msg-reload-active-run' &&
+        call[2]?.runStatus === 'succeeded',
+    );
+    // Must land on the daemon's authoritative terminal time, not the
+    // pre-reattach 'running' heartbeat fetched before recovery started.
+    expect(recoveredSave?.[2]?.endedAt).toBe(daemonTerminalUpdatedAt);
+    expect(recoveredSave?.[2]?.endedAt).not.toBe(initialRunningUpdatedAt);
+  });
+
+  // Regression (#4607): updateConversationLatestRun() drives the sidebar/
+  // dropdown's conversation.updatedAt, latestRun.endedAt, and durationMs.
+  // The live generic-disconnect onError handler already patches the
+  // assistant MESSAGE row with the daemon's authoritative terminal
+  // timestamp once the retry-cap status probe turns terminal, but the
+  // `endedAt` threaded into updateConversationLatestRun() is still the
+  // stale disconnect-time stamp captured at the top of onError. This
+  // regression asserts the conversation-level metadata advances too.
+  it('threads the daemon terminal timestamp into the conversation latestRun after a live generic disconnect recovers as succeeded', async () => {
+    const runCreatedAt = Date.now();
+    const daemonTerminalUpdatedAt = runCreatedAt + 10_000_000;
+    const genericDisconnect = await createGenericDisconnectError();
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-conv-endedat-succeeded',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: daemonTerminalUpdatedAt,
+      exitCode: 0,
+      signal: null,
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => Promise<void> };
+    }) => {
+      options.onRunCreated?.('run-conv-endedat-succeeded');
+      await options.handlers.onError(genericDisconnect);
+      await options.handlers.onError(genericDisconnect);
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-conv-endedat-succeeded', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('terminal success after disconnect (conversation endedAt check)', [], []);
+
+    await waitFor(() => {
+      const succeededSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-conv-endedat-succeeded' &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-conv-endedat-succeeded' &&
+          call[2]?.runStatus === 'succeeded',
+      );
+      expect(succeededSave).toBeTruthy();
+    });
+
+    const conversations = chatPaneSpy.mock.calls.at(-1)?.[0]?.conversations as
+      | Array<{ id: string; latestRun?: { endedAt?: number; durationMs?: number } }>
+      | undefined;
+    const conversation = conversations?.find((c) => c.id === 'conv-1');
+    // The conversation-level metadata must adopt the same daemon terminal
+    // timestamp as the message row, not the stale disconnect-time stamp
+    // captured before the terminal probe resolved.
+    expect(conversation?.latestRun?.endedAt).toBe(daemonTerminalUpdatedAt);
+  });
+
+  // Regression (#4607): proves neither surface — the assistant message row
+  // nor the conversation's latestRun metadata — keeps the stale
+  // disconnect-time stamp after a generic-disconnect recovery. Uses a
+  // terminal 'failed' probe (rather than 'succeeded') to cover the sibling
+  // branch of the same onError handler.
+  it('advances both the message row and the conversation latestRun to the daemon terminal time when a live generic disconnect probe turns failed', async () => {
+    const runCreatedAt = Date.now();
+    const daemonTerminalUpdatedAt = runCreatedAt + 10_000_000;
+    const genericDisconnect = await createGenericDisconnectError() as Error & {
+      resumable?: boolean;
+    };
+    genericDisconnect.resumable = false;
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-both-endedat-failed',
+      status: 'failed',
+      createdAt: runCreatedAt,
+      updatedAt: daemonTerminalUpdatedAt,
+      exitCode: 1,
+      signal: null,
+      resumable: true,
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      onRunCreated?: (runId: string) => void;
+      handlers: { onError: (error: Error) => Promise<void> };
+    }) => {
+      options.onRunCreated?.('run-both-endedat-failed');
+      await options.handlers.onError(genericDisconnect);
+      await options.handlers.onError(genericDisconnect);
+    });
+
+    chatPaneSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{ id: 'project-both-endedat-failed', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps!.onSend!('terminal failed after disconnect (both surfaces check)', [], []);
+
+    // Match on `resumable === true` (the daemon-probed terminal value) to
+    // land on the FINAL save, not the interim 'failed' save the first
+    // onError call persists before the retry-cap probe ever fires (that
+    // interim save carries `resumable: false` from the disconnect error
+    // itself, per the same disambiguation the pre-existing "patches live
+    // generic-disconnect terminal metadata from a failed daemon status"
+    // test above uses).
+    await waitFor(() => {
+      const failedSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-both-endedat-failed' &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-both-endedat-failed' &&
+          call[2]?.runStatus === 'failed' &&
+          call[2]?.resumable === true,
+      );
+      expect(failedSave).toBeTruthy();
+    });
+    const failedSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-both-endedat-failed' &&
+        call[2]?.role === 'assistant' &&
+        call[2]?.runId === 'run-both-endedat-failed' &&
+        call[2]?.runStatus === 'failed' &&
+        call[2]?.resumable === true,
+    );
+    // Message row surface: already threads the daemon terminal timestamp.
+    expect(failedSave?.[2]?.endedAt).toBe(daemonTerminalUpdatedAt);
+
+    const conversations = chatPaneSpy.mock.calls.at(-1)?.[0]?.conversations as
+      | Array<{ id: string; latestRun?: { endedAt?: number; durationMs?: number } }>
+      | undefined;
+    const conversation = conversations?.find((c) => c.id === 'conv-1');
+    // Conversation-metadata surface: must not keep the stale disconnect-time
+    // stamp while the message row has already moved on.
+    expect(conversation?.latestRun?.endedAt).toBe(daemonTerminalUpdatedAt);
+  });
+
+  // Regression (#4607): the reattach onError handler's recoverable-artifact
+  // branch (entered when a non-generic-disconnect error still carries
+  // artifact-shaped replayed content) first stamps the message with the
+  // disconnect-time endedAt synchronously, then later fetches the daemon's
+  // authoritative terminal status to recover the artifact. The final
+  // updateMessageById call must adopt that authoritative terminal time —
+  // not fall back to the disconnect-time stamp `prev.endedAt` already
+  // carries by the time it runs.
+  it('adopts the daemon terminal time instead of the disconnect stamp when a reattach recovers an artifact after a non-generic error', async () => {
+    const runCreatedAt = Date.now();
+    const initialRunningUpdatedAt = runCreatedAt + 1;
+    // Far enough past any disconnect-time Date.now() stamp taken during this
+    // test run that the two timestamps can never coincide by accident.
+    const daemonTerminalUpdatedAt = runCreatedAt + 10_000_000;
+    const artifactContent =
+      '<artifact identifier="recoverable-artifact" type="text/html" title="Recoverable Artifact">' +
+      '<!doctype html><html><body><h1>Recovered</h1></body></html>' +
+      '</artifact>';
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-recoverable-artifact-endedat',
+        role: 'assistant',
+        content: '',
+        createdAt: runCreatedAt,
+        startedAt: runCreatedAt,
+        runId: 'run-recoverable-artifact-endedat',
+        runStatus: 'running',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-recoverable-artifact-endedat',
+        status: 'running',
+        createdAt: runCreatedAt,
+        updatedAt: initialRunningUpdatedAt,
+        exitCode: null,
+        signal: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'run-recoverable-artifact-endedat',
+        status: 'succeeded',
+        createdAt: runCreatedAt,
+        updatedAt: daemonTerminalUpdatedAt,
+        exitCode: 0,
+        signal: null,
+      });
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onDelta: (delta: string) => void;
+        onError: (error: Error) => Promise<void>;
+      };
+    }) => {
+      options.handlers.onDelta(artifactContent);
+      // A genuine (non-generic-disconnect) failure — the daemon stream
+      // really dropped mid-turn, not a browser SSE reconnect-budget
+      // exhaustion, so the generic-disconnect retry/backoff machinery must
+      // not apply here.
+      await options.handlers.onError(new Error('some real non-generic failure'));
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-recoverable-artifact-endedat', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      const recoveredSave = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-recoverable-artifact-endedat' &&
+          call[2]?.id === 'msg-recoverable-artifact-endedat' &&
+          call[2]?.runStatus === 'succeeded',
+      );
+      expect(recoveredSave).toBeTruthy();
+    });
+    const recoveredSave = saveMessage.mock.calls.find(
+      (call) =>
+        call[0] === 'project-recoverable-artifact-endedat' &&
+        call[2]?.id === 'msg-recoverable-artifact-endedat' &&
+        call[2]?.runStatus === 'succeeded',
+    );
+    // Must land on the daemon's authoritative terminal time, not the
+    // disconnect-time stamp the synchronous onError handler wrote onto
+    // `prev.endedAt` moments earlier.
+    expect(recoveredSave?.[2]?.endedAt).toBe(daemonTerminalUpdatedAt);
   });
 });

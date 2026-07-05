@@ -243,6 +243,81 @@ test('[P1] real daemon run reconnects after reload while the run is still active
   });
 });
 
+// Regression spec for #4607: when the page is reloaded while a real daemon
+// run is still active and then reattaches, the artifact write must complete and
+// be recorded on the assistant message.  The bug manifests as producedFiles
+// being empty even after runStatus reaches succeeded.
+test('[P1] artifact persistence survives page reload during an active real daemon run', async ({ page }) => {
+  test.setTimeout(120_000);
+
+  await page.goto('/');
+  await createProject(page, 'Running daemon reload smoke');
+  await expectWorkspaceReady(page);
+
+  // Send a prompt that makes the fake agent delay 15 s before emitting the
+  // artifact, giving us a reliable window to reload mid-run.
+  const runResponse = await sendPrompt(page, 'Create a slow reload deterministic smoke artifact');
+  const { runId } = (await runResponse.json()) as { runId: string };
+
+  // Wait until the run is actually in-flight before reloading.
+  await expect
+    .poll(async () => {
+      const status = await page.request.get(`/api/runs/${runId}`);
+      if (!status.ok()) return `http-${status.status()}`;
+      return ((await status.json()) as { status: string }).status;
+    }, { timeout: 10_000 })
+    .toBe('running');
+
+  // Capture the conversation identity BEFORE reload so the post-reload poll
+  // asserts against the *same* conversation.  Picking by updatedAt after reload
+  // would pass even if reattach regressed by switching or recreating the
+  // conversation, masking the real failure.
+  const { projectId, conversationId } = await currentProjectContext(page);
+
+  // Reload while the run is still active — this is the reattach trigger.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+
+  // Criterion 1 + 2: run reaches succeeded and the assistant message is still
+  // attached to the original conversation (asserting assistantMessages === 1).
+  await expect
+    .poll(async () => {
+      const messages = await listConversationMessages(page, projectId, conversationId);
+      const assistant = messages.find((m) => m.role === 'assistant');
+      return {
+        runStatus: assistant?.runStatus ?? null,
+        assistantMessages: messages.filter((m) => m.role === 'assistant').length,
+      };
+    }, { timeout: 50_000 })
+    .toEqual({ runStatus: 'succeeded', assistantMessages: 1 });
+
+  // Criterion 3: the generated file is written to project storage.
+  await expectProjectFileToContain(page, projectId, SLOW_RELOAD_FILE, SLOW_RELOAD_HEADING);
+
+  // Criterion 4: producedFiles on the assistant message records the artifact
+  // AND the message retains its runId (proves it was reattached in-place,
+  // not recreated).  This is the primary regression assertion — the bug
+  // leaves producedFiles empty.
+  await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
+    requireRunId: true,
+    producedFiles: [SLOW_RELOAD_FILE],
+    expectedThinking: false,
+  });
+  // Criterion 4b: the runId must equal the *original* runId captured before
+  // reload — requireRunId:true above only proves *some* runId is present, not
+  // that the message was reattached in-place rather than recreated with a new id.
+  await expect
+    .poll(async () => {
+      const messages = await listConversationMessages(page, projectId, conversationId);
+      const assistant = messages.find((m) => m.role === 'assistant');
+      return assistant?.runId ?? null;
+    }, { timeout: 5_000 })
+    .toBe(runId);
+
+  // Criterion 5: the artifact preview restores and renders the artifact heading.
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: SLOW_RELOAD_HEADING })).toBeVisible({ timeout: 15_000 });
+});
+
 test('[P1] real daemon run survives reload before the create response reaches the browser', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Delayed daemon create-response reload smoke');
