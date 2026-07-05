@@ -51,9 +51,9 @@ const FOOTER_AGENTS = [
 // Legal / company labels — small inline map (en/zh/zh-tw, fallback en) so
 // this stays out of the larger footer i18n surface.
 const L = {
-  en: { company: 'Company', about: 'About', faq: 'FAQ', privacy: 'Privacy Policy', terms: 'Terms', allAgents: 'All agents', allSolutions: 'All use cases' },
-  zh: { company: '公司', about: '关于', faq: '常见问题', privacy: '隐私政策', terms: '服务条款', allAgents: '全部 Agent', allSolutions: '全部场景' },
-  'zh-tw': { company: '公司', about: '關於', faq: '常見問題', privacy: '隱私政策', terms: '服務條款', allAgents: '全部 Agent', allSolutions: '全部場景' },
+  en: { company: 'Company', about: 'About', careers: 'Careers', faq: 'FAQ', privacy: 'Privacy Policy', terms: 'Terms', allAgents: 'All agents', allSolutions: 'All use cases' },
+  zh: { company: '公司', about: '关于', careers: '招聘', faq: '常见问题', privacy: '隐私政策', terms: '服务条款', allAgents: '全部 Agent', allSolutions: '全部场景' },
+  'zh-tw': { company: '公司', about: '關於', careers: '招聘', faq: '常見問題', privacy: '隱私政策', terms: '服務條款', allAgents: '全部 Agent', allSolutions: '全部場景' },
 } satisfies Record<string, Record<string, string>>;
 const l = L[locale as keyof typeof L] ?? L.en;
 ---
@@ -139,6 +139,7 @@ const l = L[locale as keyof typeof L] ?? L.en;
         <h5>{l.company}</h5>
         <ul>
           <li><a href={href('/about/')}>{l.about}</a></li>
+          <li><a href={href('/careers/')}>{l.careers}</a></li>
           <li><a href={href('/faq/')}>{l.faq}</a></li>
           <li><a href={href('/privacy/')}>{l.privacy}</a></li>
           <li><a href={href('/terms/')}>{l.terms}</a></li>
