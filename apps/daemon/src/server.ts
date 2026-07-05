@@ -168,7 +168,7 @@ import {
   fetchVelaPresetModels,
   fetchVelaRemoteModelsWithRetry,
 } from './runtimes/defs/amr.js';
-import { migrateLegacyDataDirSync } from './legacy-data-migrator.js';
+import { migrateLegacyDataDirSync } from './migration/index.js';
 import {
   consumedImportNonces,
   getDesktopAuthSecret,
