@@ -1229,8 +1229,8 @@
   color: var(--accent-strong);
 }
 .prose-block .md-link-bare {
-  word-break: break-all;
-  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 .prose-block .md-hr {
   border: none;

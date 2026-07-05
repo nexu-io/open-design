@@ -35,7 +35,11 @@ import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import type { ConnectionTestProtocol } from '@open-design/contracts/api/connectionTest';
 import type { ProxyStreamRequest } from '@open-design/contracts';
-import { proxyDispatcherRequestInit, validateBaseUrlResolved } from '../connectionTest.js';
+import {
+  proxyDispatcherRequestInit,
+  validateBaseUrlResolved,
+  validateUserProviderBaseUrl,
+} from '../connectionTest.js';
 import {
   deploymentProviderConfig,
   resolveDeploymentProviderProfile,
@@ -548,14 +552,16 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   // DNS-aware wrapper. The sync `validateBaseUrl` only inspects the literal
   // hostname string, so a public DNS name pointing at an internal address
   // (`internal.example.com → 10.0.0.5`) still passes. We delegate to
-  // `validateBaseUrlResolved` here so every proxy/stream handler runs the
-  // same resolved-IP check before issuing the upstream request. Deployment
-  // provider routes may pass a narrower administrator-configured allowance.
+  // the user-provider validator for normal BYOK URLs and the deployment
+  // private-network allowance only for administrator-configured endpoints.
   const validateExternalApiBaseUrl = (
     baseUrl: string,
     options: { allowPrivateNetwork?: boolean } = {},
   ) => {
-    return validateBaseUrlResolved(baseUrl, undefined, options);
+    if (options.allowPrivateNetwork) {
+      return validateBaseUrlResolved(baseUrl, undefined, { allowPrivateNetwork: true });
+    }
+    return validateUserProviderBaseUrl(baseUrl);
   };
 
   const proxyErrorCode = (status: number) => {

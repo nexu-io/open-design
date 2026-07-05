@@ -33,6 +33,12 @@ export type SrcdocOptions = {
   paletteBridge?: boolean;
   initialPalette?: string | null;
   previewFocusGuard?: boolean;
+  /** Monotonically-increasing reload counter. When provided, it is embedded as
+   * a `data-od-reload-key` attribute on `<html>` so that the srcdoc string
+   * differs across reloads even when the underlying HTML bytes are identical.
+   * This guarantees that the iframe's `srcdoc` attribute is updated in the DOM
+   * and the browser re-parses the document (issue #4650). */
+  reloadKey?: number;
 };
 
 /**
@@ -285,9 +291,15 @@ export function buildSrcdoc(
   // it to a per-call option would force iframe srcdoc regeneration (and a
   // visible flash) every time the host toggle flips.
   const withTweaks = injectTweaksBridge(withEdit);
-  return injectSrcdocTransportActivationBridge(
+  const withTransport = injectSrcdocTransportActivationBridge(
     injectExportCaptureBridge(injectSnapshotBridge(withTweaks)),
   );
+  // Embed the reload counter so the srcdoc string differs across reloads even
+  // when the underlying HTML bytes are identical.  This ensures the browser
+  // sees a changed `srcdoc` attribute and re-parses the document (issue #4650).
+  return options.reloadKey !== undefined
+    ? withTransport.replace(/(<html\b)([^>]*>)/i, `$1 data-od-reload-key="${options.reloadKey}"$2`)
+    : withTransport;
 }
 
 /**

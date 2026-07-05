@@ -8,7 +8,11 @@ import type {
   ProviderModelsResponse,
 } from '@open-design/contracts/api/providerModels';
 import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
-import { redactSecrets, validateBaseUrlResolved } from '../connectionTest.js';
+import {
+  redactSecrets,
+  validateBaseUrlResolved,
+  validateUserProviderBaseUrl,
+} from '../connectionTest.js';
 import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
 import { aihubmixHeaders, aihubmixCatalogUrl, parseAIHubMixCatalog } from './aihubmix.js';
 
@@ -259,11 +263,12 @@ export async function listProviderModels(
     };
   }
 
-  const validated = await validateBaseUrlResolved(
-    input.baseUrl,
-    undefined,
-    { allowPrivateNetwork: input.allowPrivateNetworkBaseUrl === true },
-  );
+  const validated =
+    input.allowPrivateNetworkBaseUrl === true
+      ? await validateBaseUrlResolved(input.baseUrl, undefined, {
+          allowPrivateNetwork: true,
+        })
+      : await validateUserProviderBaseUrl(input.baseUrl);
   if (validated.error || !validated.parsed) {
     return {
       ok: false,

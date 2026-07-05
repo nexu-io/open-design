@@ -1,4 +1,5 @@
 import { execAgentFile } from './invocation.js';
+import { readCodexProviderEnvKey } from '../codex-config-normalize.js';
 import type { RuntimeAgentDef, RuntimeEnv } from './types.js';
 
 export type AgentAuthProbeResult = {
@@ -319,14 +320,11 @@ function hasNonEmptyEnv(env: RuntimeEnv, keys: string[]): boolean {
   });
 }
 
-function hasProbeSatisfyingApiKey(
-  def: Pick<RuntimeAgentDef, 'id'>,
-  env: RuntimeEnv,
-): boolean {
-  if (def.id === 'codex') {
+function hasProbeSatisfyingApiKey(agentId: string, env: RuntimeEnv): boolean {
+  if (agentId === 'codex') {
     return hasNonEmptyEnv(env, ['CODEX_API_KEY', 'OPENAI_API_KEY']);
   }
-  if (def.id === 'claude') {
+  if (agentId === 'claude') {
     return hasNonEmptyEnv(env, ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']);
   }
   return false;
@@ -339,14 +337,15 @@ function hasProbeSatisfyingApiKey(
 // HTTP/text classifier so it still gets a usable signal without bespoke
 // regexes.
 function classifyProbedAuthFailure(
-  def: Pick<RuntimeAgentDef, 'id' | 'name'>,
+  classifierId: string,
+  agentName: string,
   text: string,
 ): AgentAuthProbeResult | null {
-  if (TAILORED_AUTH_AGENTS.has(def.id)) {
-    return classifyAgentAuthFailure(def.id, text);
+  if (TAILORED_AUTH_AGENTS.has(classifierId)) {
+    return classifyAgentAuthFailure(classifierId, text);
   }
   if (classifyAgentServiceFailure(text) === 'AGENT_AUTH_REQUIRED') {
-    return { status: 'missing', message: genericAuthGuidance(def.name || def.id) };
+    return { status: 'missing', message: genericAuthGuidance(agentName) };
   }
   return null;
 }
@@ -362,7 +361,23 @@ export async function probeAgentAuthStatus(
 ): Promise<AgentAuthProbeResult | null> {
   const probe = def.authProbe;
   if (!probe) return null;
-  if (hasProbeSatisfyingApiKey(def, env)) return { status: 'ok' };
+  // Local profiles inherit a base adapter's authProbe but run under the profile
+  // id; use the base adapter's classifier identity when present so its tailored
+  // auth parsing / API-key short-circuit is preserved instead of falling
+  // through to the generic classifier (#4456).
+  const classifierId = probe.classifierAgentId ?? def.id;
+  const agentName = def.name || def.id;
+  if (hasProbeSatisfyingApiKey(classifierId, env)) return { status: 'ok' };
+  // Codex custom providers authenticate via a provider-specific `env_key` (e.g.
+  // AZURE_OPENAI_API_KEY) declared in config.toml, even when `codex login
+  // status` (a ChatGPT/OpenAI-login check) exits non-zero. Honor that key so a
+  // working custom-provider install isn't misreported as missing auth (#4456).
+  if (classifierId === 'codex') {
+    const providerEnvKey = await readCodexProviderEnvKey(env);
+    if (providerEnvKey && hasNonEmptyEnv(env, [providerEnvKey])) {
+      return { status: 'ok' };
+    }
+  }
   try {
     const { stdout, stderr } = await execAgentFile(resolvedBin, probe.args, {
       env,
@@ -372,7 +387,7 @@ export async function probeAgentAuthStatus(
     const stdoutText = typeof stdout === 'string' ? stdout : '';
     const stderrText = typeof stderr === 'string' ? stderr : '';
     const output = `${stdoutText}\n${stderrText}`;
-    const failure = classifyProbedAuthFailure(def, output);
+    const failure = classifyProbedAuthFailure(classifierId, agentName, output);
     if (failure) {
       return withProbeTails(
         { ...failure, exitCode: 0, signal: null },
@@ -397,7 +412,7 @@ export async function probeAgentAuthStatus(
     // is meaningful as an exit code.
     const numericExit = typeof err.code === 'number' ? err.code : null;
     const childSignal = typeof err.signal === 'string' ? err.signal : null;
-    const failure = classifyProbedAuthFailure(def, output);
+    const failure = classifyProbedAuthFailure(classifierId, agentName, output);
     if (failure) {
       return withProbeTails(
         { ...failure, exitCode: numericExit, signal: childSignal },
