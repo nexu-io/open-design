@@ -1,19 +1,21 @@
-<h1 align="center">Open Design: The open-source Claude Design alternative</h1>
+<h1 align="center">Open Design: The Vibe Design Workspace &amp; the open-source Claude Design alternative</h1>
 
-> 🔥 **Open Design 0.10.0 is here: the all-in-one Agentic design workspace.** The whole craft now lives in one window — go from a vague idea to discovering references, gathering material, editing interactively, queuing comments, polishing motion, and handing off to an editor or a Code Agent — without leaving the app. With parallel sessions, it stops feeling like one assistant and starts feeling like a local design team working for you. [Download 0.10.0](https://github.com/nexu-io/open-design/releases) · [Join the discussion](https://github.com/nexu-io/open-design/discussions/4153)
+<p align="center">Your coding agent becomes the design engine.</p>
+
+> 🔥 **Open Design 0.13.0 — _Stay in Flow_ is here.** Long design sessions used to break on every interruption — a run lost its place, a model picker made you guess, an export needed one more detour. 0.13.0 keeps the session alive: resume Codex / OpenCode / Pi / Open Design Cloud runs across turns, pick the right model faster, and hand off screenshot-backed PPTX / PDF without leaving the app. [Download 0.13.0](https://github.com/nexu-io/open-design/releases) · [Release notes](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — the official model service.** One recharge to use GPT, Claude, Gemini, and DeepSeek inside Open Design: 20+ flagship models, zero config, billed by real token usage. [Try AMR](https://open-design.ai/amr/?utm_source=github&utm_medium=referral&utm_content=readme_try_amr)
+> ⚡ **Open Design Cloud — the official model service.** One recharge to use GPT, Claude, Gemini, and DeepSeek inside Open Design: 20+ flagship models, zero config, billed by real token usage. [Try Open Design Cloud](https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_try_cloud)
 >
 > 🏅 **The Open Design Fellow program is now open.** If you also believe design should be open — become an Open Design Fellow, shape the product alongside the core team, and help more people take part in defining the future of design. Details → [`MAINTAINERS.md`](MAINTAINERS.md) and [Discord](https://discord.gg/mHAjSMV6gz).
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design — The open-source Claude Design alternative · 150 Design Systems · 261 Plugins · 21 Coding Agents · 14 Media Providers" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner — the headline &quot;The open-source Claude Design alternative&quot; over a classical scene of columns and robed figures on a digital-code backdrop, with stat cards for design systems, plugins, coding agents, and media providers" width="100%" />
 </p>
 
 <p align="center">
   <a href="https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_website">Website</a> ·
   <a href="https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download">Download</a> ·
-  <a href="https://open-design.ai/amr/?utm_source=github&utm_medium=referral&utm_content=readme_model_router">Model Router</a> ·
+  <a href="https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_cloud">Open Design Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">Follow @OpenDesignHQ</a>
 </p>
@@ -31,13 +33,12 @@
 
 ## What is Open Design
 
-🎨 **The local-first, open-source [Claude Design][cd] alternative.** &nbsp;🖥️ **Native desktop app for macOS and Windows.** &nbsp;⚡ **100+ skills** · ✨ **150 brand-grade `DESIGN.md` systems** · 📦 **261 ready-to-use plugins.** &nbsp;🖼️ Generates **web · desktop · mobile prototypes**, **live dashboards / artifacts**, **decks**, **images**, **video**, plus **HyperFrames** motion graphics. 🔒 Sandboxed iframe preview · HTML / PDF / PPTX / MP4 export. &nbsp;🤖 **Runs on Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity and 22 local CLIs**, or any OpenAI-compatible endpoint via BYOK.
+🎨 **The open-source vibe design workspace — and a Claude Design alternative.** &nbsp;🖥️ **Local-first native desktop app for macOS and Windows.** &nbsp;⚡ **Composable skills, brand-grade `DESIGN.md` design systems, and ready-to-use plugins.** &nbsp;🖼️ Generates **web · desktop · mobile prototypes**, **live dashboards / artifacts**, **decks**, **images**, **video**, plus **HyperFrames** motion graphics. 🔒 Sandboxed iframe preview · HTML / PDF / PPTX / MP4 export. &nbsp;🤖 **Runs on Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity and 22 local CLIs**, or any OpenAI-compatible endpoint via BYOK.
 
 Open Design is what you get when the **agent-native** loop Anthropic shipped with Claude Design — discover the brief, lock the direction, stream the artifact, critique, deliver — stops being closed and becomes a **filesystem of skills, design systems, and plugins** that the coding agents already on your laptop can read, write, and remix. Your CLI becomes the design engine, your laptop becomes the studio, and your team's `DESIGN.md` becomes the brand contract.
 
 It's also the **Figma alternative for the agent era** — instead of pushing pixels on a canvas, it delivers single-page artifacts in real CSS, real fonts, real components, exported straight to HTML / PDF / PPTX / MP4 — already shaped by your design system, already runnable inside the agent you use every day.
 
-[cd]: https://x.com/claudeai/status/2045156267690213649
 
 ---
 
@@ -258,7 +259,7 @@ Every deck exports to **HTML** (single file, inlined assets), **PDF** (browser p
 
 ## Why Open Design
 
-> **In April 2026, Anthropic released [Claude Design][cd] — the first time an LLM stopped writing prose and started delivering design artifacts directly.** It went viral. But it stayed closed-source, paid-only, cloud-only, locked to Anthropic's model, Anthropic's skills, Anthropic's surface. No checkout, no self-host, no Vercel deploy, no swap-in-your-own-agent.
+> **In April 2026, Anthropic released Claude Design — the first time an LLM stopped writing prose and started delivering design artifacts directly.** It went viral. But it stayed closed-source, paid-only, cloud-only, locked to Anthropic's model, Anthropic's skills, Anthropic's surface. No checkout, no self-host, no Vercel deploy, no swap-in-your-own-agent.
 
 Open Design (OD) is the open-source alternative. Same loop, same artifact-first mental model, none of the lock-in:
 
@@ -271,7 +272,7 @@ Open Design (OD) is the open-source alternative. Same loop, same artifact-first 
 
 ### Comparison
 
-| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
 |---|---|---|---|---|
 | Open source | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Self-host / desktop | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
@@ -590,7 +591,7 @@ Full architecture → [`docs/architecture.md`](docs/architecture.md). Skill prot
 - [x] Sidecar protocol + Electron desktop + IPC automation
 - [x] Artifact lint API + 5-dim self-critique pre-emit gate
 - [x] **0.8.0** — plugin marketplace infrastructure (261 official plugins, manifest spec, per-agent install scripts)
-- [x] **0.9.0** — Open Design AMR (official Model Router built into the app: zero config, one-click sign-in)
+- [x] **0.9.0** — Open Design Cloud (official model service built into the app: zero config, one-click sign-in)
 - [x] Packaged Electron builds — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (optional lane)
 - [ ] Comment-mode surgical edits — partially shipped; reliable targeted patching in progress
 - [ ] AI-emitted tweaks panel UX — not yet implemented
@@ -735,7 +736,7 @@ If this saved you thirty minutes, give it a ★. Stars don't pay rent — but th
 
 | Project | Role |
 |---|---|
-| [Claude Design][cd] | The closed-source product this repo is the open-source alternative to. |
+| Claude Design | The closed-source product this repo is the open-source alternative to. |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | The design-philosophy compass — junior-designer workflow, brand-asset protocol, anti-AI-slop checklist, five-dimensional critique. |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | The magazine-style web PPT skill, bundled verbatim under [`design-templates/guizang-ppt/`](design-templates/guizang-ppt/). Default for deck mode. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | The HTML PPT Studio family — 15 deck templates, 36 themes, 31 page layouts, animation runtime, magnetic-card presenter mode. |

@@ -1,8 +1,8 @@
 <h1 align="center">Open Design: ทางเลือกโอเพนซอร์สแทน Claude Design</h1>
 
-> 🔥 **Open Design 0.10.0 มาแล้ว: workspace สำหรับ Agentic design แบบครบวงจร.** งานคราฟต์ทั้งหมดมาอยู่ในหน้าต่างเดียว ตั้งแต่ไอเดียคร่าว ๆ ไปจนถึงการค้นหา reference, รวบรวม material, แก้ไขแบบ interactive, จัดคิว comment, ขัดเกลา motion และส่งต่อให้ editor หรือ Code Agent โดยไม่ต้องออกจากแอป. เมื่อใช้ parallel sessions ประสบการณ์จะไม่เหมือนผู้ช่วยคนเดียวอีกต่อไป แต่เหมือนมีทีมออกแบบ local ทำงานอยู่กับคุณ. [ดาวน์โหลด 0.10.0](https://github.com/nexu-io/open-design/releases) · [เข้าร่วม discussion](https://github.com/nexu-io/open-design/discussions/4153)
+> 🔥 **Open Design 0.13.0 — _Stay in Flow_ มาแล้ว.** เซสชันออกแบบยาว ๆ เคยสะดุดทุกครั้งที่ถูกขัดจังหวะ — การรันหลุดตำแหน่ง ตัวเลือกโมเดลทำให้ต้องเดา และการส่งออกต้องอ้อมอีกขั้น 0.13.0 ทำให้เซสชันยังคงอยู่ต่อได้: กลับมารันต่อของ Codex / OpenCode / Pi / Open Design Cloud ข้ามเทิร์น เลือกโมเดลที่ใช่ได้เร็วขึ้น และส่งมอบ PPTX / PDF ที่มีภาพหน้าจอรองรับได้โดยไม่ต้องออกจากแอป [ดาวน์โหลด 0.13.0](https://github.com/nexu-io/open-design/releases) · [บันทึกการอัปเดต](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
 >
-> ⚡ **Open Design AMR (Agentic Model Router) — บริการโมเดลอย่างเป็นทางการ.** เติมเงินครั้งเดียวเพื่อใช้ GPT, Claude, Gemini และ DeepSeek ใน Open Design: โมเดลระดับ flagship กว่า 20 ตัว, ไม่ต้องตั้งค่า, คิดเงินตาม token ที่ใช้จริง. [ลองใช้ AMR](https://open-design.ai/amr/)
+> ⚡ **Open Design Cloud — บริการโมเดลอย่างเป็นทางการ.** เติมเงินครั้งเดียวเพื่อใช้ GPT, Claude, Gemini และ DeepSeek ใน Open Design: โมเดลระดับ flagship กว่า 20 ตัว, ไม่ต้องตั้งค่า, คิดเงินตาม token ที่ใช้จริง. [ลองใช้ Open Design Cloud](https://open-design.ai/cloud/)
 >
 > 🏅 **Open Design Fellow program เปิดรับแล้ว.** ถ้าคุณเชื่อเหมือนกันว่า design ควรเปิดกว้าง มาเป็น Open Design Fellow, ร่วม shape ผลิตภัณฑ์กับ core team และช่วยให้คนมากขึ้นมีส่วนร่วมกำหนดอนาคตของ design. รายละเอียด → [`MAINTAINERS.th.md`](MAINTAINERS.th.md) และ [Discord](https://discord.gg/qhbcCH8Am4).
 
@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://open-design.ai/">เว็บไซต์</a> ·
   <a href="https://open-design.ai/">ดาวน์โหลด</a> ·
-  <a href="https://open-design.ai/amr/">Model Router</a> ·
+  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
   <a href="https://discord.gg/qhbcCH8Am4">Discord</a> ·
   <a href="https://x.com/nexudotio">ติดตาม @nexudotio</a>
 </p>
@@ -31,13 +31,12 @@
 
 ## Open Design คืออะไร
 
-🎨 **ทางเลือก [Claude Design][cd] แบบ local-first และโอเพนซอร์ส.** &nbsp;🖥️ **แอป desktop native สำหรับ macOS และ Windows.** &nbsp;⚡ **100+ skills** · ✨ **ระบบ `DESIGN.md` ระดับแบรนด์ 150 ชุด** · 📦 **plugin พร้อมใช้ 261 ตัว.** &nbsp;🖼️ สร้าง **prototype สำหรับ web · desktop · mobile**, **live dashboard / artifact**, **deck**, **image**, **video** และ motion graphics ด้วย **HyperFrames**. 🔒 preview ผ่าน sandboxed iframe · export เป็น HTML / PDF / PPTX / MP4. &nbsp;🤖 **รันบน Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity และ local CLI 22 ตัว**, หรือ endpoint ที่เข้ากันได้กับ OpenAI ผ่าน BYOK.
+🎨 **ทางเลือก Claude Design แบบ local-first และโอเพนซอร์ส.** &nbsp;🖥️ **แอป desktop native สำหรับ macOS และ Windows.** &nbsp;⚡ **100+ skills** · ✨ **ระบบ `DESIGN.md` ระดับแบรนด์ 150 ชุด** · 📦 **plugin พร้อมใช้ 261 ตัว.** &nbsp;🖼️ สร้าง **prototype สำหรับ web · desktop · mobile**, **live dashboard / artifact**, **deck**, **image**, **video** และ motion graphics ด้วย **HyperFrames**. 🔒 preview ผ่าน sandboxed iframe · export เป็น HTML / PDF / PPTX / MP4. &nbsp;🤖 **รันบน Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity และ local CLI 22 ตัว**, หรือ endpoint ที่เข้ากันได้กับ OpenAI ผ่าน BYOK.
 
 Open Design คือสิ่งที่เกิดขึ้นเมื่อ loop แบบ **agent-native** ที่ Anthropic เปิดตัวกับ Claude Design — ค้นหา brief, ล็อก direction, stream artifact, critique, deliver — เลิกเป็นระบบปิด แล้วกลายเป็น **filesystem ของ skills, design systems และ plugins** ที่ coding agent บน laptop ของคุณอ่าน เขียน และ remix ได้. CLI ของคุณกลายเป็น design engine, laptop ของคุณกลายเป็น studio, และ `DESIGN.md` ของทีมกลายเป็น brand contract.
 
 มันยังเป็น **ทางเลือกแทน Figma สำหรับยุค agent** ด้วย แทนที่จะขยับ pixel บน canvas ระบบจะส่งมอบ artifact หน้าเดียวที่เป็น CSS จริง, font จริง, component จริง และ export ตรงเป็น HTML / PDF / PPTX / MP4 โดยถูก shape ด้วย design system ของคุณแล้ว และรันได้ใน agent ที่คุณใช้ทุกวัน.
 
-[cd]: https://x.com/claudeai/status/2045156267690213649
 
 ---
 
@@ -258,7 +257,7 @@ Live dashboard, decision room, KPI wall — artifact หน้าเดียว
 
 ## ทำไมต้อง Open Design
 
-> **ในเดือนเมษายน 2026, Anthropic เปิดตัว [Claude Design][cd] — ครั้งแรกที่ LLM หยุดแค่เขียนข้อความ และเริ่มส่งมอบ design artifacts โดยตรง.** มัน viral มาก แต่ยังเป็น closed-source, paid-only, cloud-only, ผูกกับโมเดลของ Anthropic, skills ของ Anthropic และ surface ของ Anthropic. ไม่มี checkout, ไม่มี self-host, ไม่มี Vercel deploy, ไม่มีการสลับ agent ของคุณเอง.
+> **ในเดือนเมษายน 2026, Anthropic เปิดตัว Claude Design — ครั้งแรกที่ LLM หยุดแค่เขียนข้อความ และเริ่มส่งมอบ design artifacts โดยตรง.** มัน viral มาก แต่ยังเป็น closed-source, paid-only, cloud-only, ผูกกับโมเดลของ Anthropic, skills ของ Anthropic และ surface ของ Anthropic. ไม่มี checkout, ไม่มี self-host, ไม่มี Vercel deploy, ไม่มีการสลับ agent ของคุณเอง.
 
 Open Design (OD) คือทางเลือกโอเพนซอร์ส. Loop เดียวกัน, mental model แบบ artifact-first เดียวกัน, แต่ไม่มี lock-in:
 
@@ -271,7 +270,7 @@ Open Design (OD) คือทางเลือกโอเพนซอร์ส
 
 ### เปรียบเทียบ
 
-| | [Claude Design][cd] | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
 |---|---|---|---|---|
 | Open source | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Self-host / desktop | ❌ | ❌ | ❌ | **✅ macOS + Windows + Vercel** |
@@ -573,7 +572,7 @@ Architecture เต็ม → [`docs/architecture.md`](../../docs/architecture.m
 - [x] Sidecar protocol + Electron desktop + IPC automation
 - [x] Artifact lint API + 5-dim self-critique pre-emit gate
 - [x] **0.8.0** — plugin marketplace infrastructure (official plugins 261 ตัว, manifest spec, per-agent install scripts)
-- [x] **0.9.0** — Open Design AMR (official Model Router ในตัวแอป: zero config, one-click sign-in)
+- [x] **0.9.0** — Open Design Cloud (official Model Router ในตัวแอป: zero config, one-click sign-in)
 - [x] Packaged Electron builds — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (optional lane)
 - [ ] Comment-mode surgical edits — ship บางส่วนแล้ว; reliable targeted patching กำลังทำอยู่
 - [ ] AI-emitted tweaks panel UX — ยังไม่ implement
@@ -718,7 +717,7 @@ SVG ด้านบน regenerate ทุกวันโดย [`.github/workflow
 
 | Project | Role |
 |---|---|
-| [Claude Design][cd] | ผลิตภัณฑ์ closed-source ที่ repo นี้เป็นทางเลือกโอเพนซอร์สแทน. |
+| Claude Design | ผลิตภัณฑ์ closed-source ที่ repo นี้เป็นทางเลือกโอเพนซอร์สแทน. |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | เข็มทิศด้าน design philosophy — workflow ของ junior designer, brand-asset protocol, anti-AI-slop checklist, critique 5 มิติ. |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | Skill web PPT สไตล์ magazine ที่ bundle ตรงไว้ใต้ [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/). เป็นค่าเริ่มต้นของ deck mode. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | ตระกูล HTML PPT Studio — 15 deck templates, 36 themes, 31 page layouts, animation runtime, magnetic-card presenter mode. |
