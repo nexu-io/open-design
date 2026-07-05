@@ -4,18 +4,18 @@ team:
   name: "智能迭代团队"
   mode: cycle
   auto_assign: true
-  
+
   agents:
     - id: generator
       name: "创意生成器"
       role: "创意文案"
       skills: ["brand-copywriting", "creative-writing"]
-      
+
     - id: reviewer
       name: "品牌审查"
       role: "文案评审"
       skills: ["copy-review", "critique"]
-      
+
   cycle:
     generator_id: generator
     reviewer_id: reviewer

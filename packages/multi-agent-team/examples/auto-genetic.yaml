@@ -4,7 +4,7 @@ team:
   name: "智能进化团队"
   mode: genetic
   auto_assign: true
-  
+
   agents:
     - id: evolution_engine
       name: "设计进化引擎"

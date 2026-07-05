@@ -71,7 +71,7 @@ export const MODE_LABELS: Record<string, string> = {
   hybrid: '混合模式',
   complementary: '互补模式',
   cycle: '循环模式',
-};
+} as const;
 
 export const MODE_DESCRIPTIONS: Record<string, string> = {
   parallel: '同层级 Agent 并行执行不同维度，适用多视角设计',
@@ -81,7 +81,7 @@ export const MODE_DESCRIPTIONS: Record<string, string> = {
   hybrid: '串行主干 + 阶段内并行，适用复杂项目',
   complementary: '多专家视角链式协作，覆盖全生命周期',
   cycle: '生成器与评审者循环求精，直到达标',
-};
+} as const;
 
 /** Mode → icon name for team cards */
 export const MODE_ICONS: Record<string, string> = {
