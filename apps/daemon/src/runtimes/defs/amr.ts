@@ -10,9 +10,7 @@ export type VelaModelJsonSource = 'preset' | 'remote';
 
 const PREFERRED_AMR_CHAT_MODEL_ORDER = [
   'deepseek-v4-flash',
-  'deepseek-v3.2',
-  'glm-5.1',
-  'gemini-2.5-flash',
+  'deepseek-v4-pro',
 ] as const;
 
 const PREFERRED_AMR_CHAT_MODEL_RANK: ReadonlyMap<string, number> = new Map(
@@ -400,7 +398,9 @@ function orderAmrChatModels(
         PREFERRED_AMR_CHAT_MODEL_RANK.get(a.model.id) ?? Number.MAX_SAFE_INTEGER;
       const bRank =
         PREFERRED_AMR_CHAT_MODEL_RANK.get(b.model.id) ?? Number.MAX_SAFE_INTEGER;
-      return aRank - bRank || a.index - b.index;
+      if (aRank !== bRank) return aRank - bRank;
+      if (aRank !== Number.MAX_SAFE_INTEGER) return a.index - b.index;
+      return a.model.id.localeCompare(b.model.id) || a.index - b.index;
     })
     .map(({ model }) => model);
 }
