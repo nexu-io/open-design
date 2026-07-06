@@ -154,6 +154,16 @@ export function resolveWebuiConfig(input: {
     cfg.daemonPort ??
     (Number.isInteger(envDaemonPort) ? (envDaemonPort as number) : undefined) ??
     DEFAULT_DAEMON_PORT;
+  // Only an explicit 0 means "dynamic loopback port" (the documented escape
+  // hatch); a negative daemonPort is a typo/misconfig, not a valid value.
+  // Reject it with a clear error instead of folding it into the same null path
+  // as 0 — otherwise `--daemon-port -1` would silently launch the daemon on a
+  // random port the operator never asked for.
+  if (!Number.isInteger(daemonPortRaw) || daemonPortRaw < 0) {
+    throw new Error(
+      `--daemon-port must be 0 (dynamic loopback port) or a positive port; got ${String(daemonPortRaw)}`,
+    );
+  }
   const daemonPort = daemonPortRaw > 0 ? daemonPortRaw : null;
 
   const host = flags.host ?? cfg.host ?? env.OD_BIND_HOST ?? DEFAULT_HOST;

@@ -117,6 +117,18 @@ describe("resolveWebuiConfig precedence", () => {
     expect(resolveWebuiConfig({ flags: {}, configFile: { daemonPort: 0 }, env: {} }).daemonPort).toBeNull();
   });
 
+  it("rejects a negative daemonPort (only 0 keeps the dynamic-loopback meaning)", () => {
+    // `0` is the one documented dynamic-loopback escape hatch; a negative value
+    // (typo like `--daemon-port -1`) must fail fast, not silently fold into the
+    // same null/dynamic path and launch the daemon on a random port.
+    expect(() => resolveWebuiConfig({ flags: { daemonPort: -1 }, configFile: null, env: {} })).toThrow(/daemon-port/i);
+    expect(() => resolveWebuiConfig({ flags: {}, configFile: { daemonPort: -5 }, env: {} })).toThrow(/daemon-port/i);
+    expect(() => resolveWebuiConfig({ flags: {}, configFile: null, env: { OD_PORT: "-1" } })).toThrow(/daemon-port/i);
+    // 0 still resolves to null (dynamic), positive still honored.
+    expect(resolveWebuiConfig({ flags: { daemonPort: 0 }, configFile: null, env: {} }).daemonPort).toBeNull();
+    expect(resolveWebuiConfig({ flags: { daemonPort: 9999 }, configFile: null, env: {} }).daemonPort).toBe(9999);
+  });
+
   it("rejects an ephemeral browser-facing port 0 (unlike the internal daemon port)", () => {
     // The daemon is spawned before the web child binds and allow-lists the
     // browser-facing port up front (via OD_WEB_PORT) for cross-origin /api
