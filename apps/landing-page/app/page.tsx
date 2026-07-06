@@ -322,6 +322,10 @@ export default function Page({
   const tt = (zh: string, en: string) => (locale === 'zh' ? zh : en);
   const skills = fmt(counts.skills);
   const systems = fmt(counts.systems);
+  // Design Systems stat card: derive from the raw count so a missing count
+  // keeps the neutral "—" fallback (never "—+" / a non-finite countup target).
+  const systemsCardNum = counts.systems > 0 ? `${counts.systems}+` : '—';
+  const systemsCardTo = counts.systems > 0 ? String(counts.systems) : '—';
   const deckCount = pad2(counts.byMode?.deck);
   const prototypeCount = pad2(counts.byMode?.prototype);
   const mobileCount = pad2(counts.byPlatform?.mobile);
@@ -989,7 +993,7 @@ export default function Page({
                   { src: 'card-1.webp', num: '74K+', to: '74', suffix: 'K+', alt: 'GitHub Stars', href: REPO, live: 'stars' as const },
                   { src: 'card-2.webp', num: '340+', to: '340', suffix: '+', alt: tt('贡献者', 'Contributors'), href: `${REPO}/graphs/contributors`, live: 'contributors' as const },
                   { src: 'card-3.webp', num: '217+', to: '217', suffix: '+', alt: 'Plugins', href: href('/plugins/') },
-                  { src: 'card-4.webp', num: `${systems}+`, to: systems, suffix: '+', alt: 'Design Systems', href: href('/plugins/systems/') },
+                  { src: 'card-4.webp', num: systemsCardNum, to: systemsCardTo, suffix: '+', alt: 'Design Systems', href: href('/plugins/systems/') },
                   { src: 'card-5.webp', num: '21', to: '21', suffix: '', alt: tt('Coding Agent 支持', 'Coding Agents'), href: href('/agents/') },
                   { src: 'card-6.webp', num: null, to: null, suffix: '', alt: 'Star us', href: REPO, cta: true },
                 ] as ReadonlyArray<{ src: string; num: string | null; to: string | null; suffix: string; alt: string; href: string; live?: 'stars' | 'contributors'; cta?: boolean }>).map((item, index) => (
