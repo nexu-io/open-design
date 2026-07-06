@@ -22,6 +22,7 @@ import type {
 import { amrEntryPageForSource } from './amr-attribution';
 import { setAnalyticsUserId } from './client';
 import { trackAmrAuthResult } from './events';
+import { bindSignedInUserAttributionPersonProperties } from './source-attribution';
 
 type Track = (
   event: string,
@@ -76,6 +77,7 @@ export function resolveAmrAuthTracking(
 ): void {
   if (options && 'signedInUserId' in options) {
     setAnalyticsUserId(options.signedInUserId ?? null);
+    bindSignedInUserAttributionPersonProperties(options.signedInUserId ?? null);
   }
   if (!active) return;
   const attempt = active;
