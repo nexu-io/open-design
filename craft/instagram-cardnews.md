@@ -51,10 +51,17 @@ reference image — identical proportions, face, eyes, mouth, colors. Do not
 redesign, restyle, or reinterpret the character."). Character drift across
 cards is a fail.
 
+Character scale/framing (character brands): the character is the dominant
+subject — roughly 50–70% of frame height, near-center, full body, close-to-mid
+shot (no distant long shot), fully inside the central 4:5 crop safe area (the
+top/bottom ~8.3% bands of a 2:3 render are cropped away). A tiny, distant,
+corner-pushed, or crop-clipped character is a fail.
+
 **Checklist item (fails lint):** a body background generated without the
 cover anchor reference; visibly mismatched styles across cards; a character
 brand run missing the character reference attachment; character shape drift
-(proportions/face/colors) between cards.
+(proportions/face/colors) between cards; a character rendered tiny/distant
+or clipped by the 4:5 crop.
 
 ## 4. Text = 100% Pillow overlay
 

@@ -59,13 +59,20 @@ Composition: portrait orientation. Keep the [텍스트 영역 — cover: lower-l
   body: lower half calm, low-contrast] simple and uncluttered.
 Character: [브랜드 캐릭터 있을 때만] Use the exact same character as in the reference
   image — identical proportions, face, eyes, mouth, colors. Do not redesign,
-  restyle, or reinterpret the character.
+  restyle, or reinterpret the character. The character is the dominant subject:
+  roughly 50-70% of frame height, near-center, full body, close-to-mid shot
+  (no distant long shot), interacting with props that match the card's message.
+  Keep the character fully inside the central 4:5 crop region — the top and
+  bottom ~8.3% of the frame are cropped away.
 Constraints: no text, no letters, no numbers, no watermark, no logo,
   no flat illustration, no abstract graphic background.
 ```
 
 - **기본형(basic) 배경 = 실사 환경 고정** — 플랫/그래픽 일러스트 배경은 craft 룰 2
   위반. 자유형(free)은 후속 트랙에서 별도 정의.
+- **캐릭터 스케일**: Composition의 "하반부 calm"은 캐릭터 축소·원경화 지시가
+  아니다 — 캐릭터가 하반부로 내려와도 된다(가독은 하단 그라디언트 + 배경
+  단순화가 담당). 원경 롱숏·상단 구석 배치·크롭 잘림이 도그푸딩 실패 패턴.
 - **표지**: 브랜드 레퍼런스 이미지(DESIGN.md 비주얼 무드 섹션 등재)가 있으면
   view_image 참조로 캐릭터·구도를 잇는다.
 - **본문**: 반드시 표지 산출물(`bg-01.png`) + (캐릭터 브랜드면) 캐릭터 레퍼런스
