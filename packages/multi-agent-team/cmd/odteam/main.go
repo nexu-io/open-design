@@ -259,6 +259,32 @@ func buildExecutionPlan(cfg *config.TeamConfig, prompt string) *scheduler.Execut
 		plan.Tasks = append(plan.Tasks, task)
 	}
 
+	// 互补模式：专家链配置
+	if len(cfg.Team.Experts) > 0 {
+		for i, e := range cfg.Team.Experts {
+			plan.Experts = append(plan.Experts, &scheduler.ExpertTask{
+				ExpertID:  e.AgentID,
+				Role:      e.Role,
+				Specialty: e.Specialty,
+				Skills:    e.Skills,
+				Designs:   e.Designs,
+				Order:     i,
+				Prompt:    prompt,
+			})
+		}
+	}
+
+	// 循环模式配置
+	if cfg.Team.Cycle != nil {
+		plan.Cycle = &scheduler.CycleConfig{
+			GeneratorID:    cfg.Team.Cycle.GeneratorID,
+			ReviewerID:     cfg.Team.Cycle.ReviewerID,
+			MaxIterations:  cfg.Team.Cycle.MaxIterations,
+			ScoreThreshold: cfg.Team.Cycle.ScoreThreshold,
+			Topic:          prompt,
+		}
+	}
+
 	return plan
 }
 

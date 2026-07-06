@@ -138,6 +138,7 @@ export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths):
     workspaceRoot: config.workspaceRoot,
     resourceRoot: paths.resourceRoot,
   });
+  await mkdir(join(paths.resourceRoot, "bin"), { recursive: true });
   await copyOptionalVelaCliBinary({
     platform: "mac",
     requireBundled: config.requireVelaCli,
