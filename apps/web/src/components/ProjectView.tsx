@@ -1239,6 +1239,7 @@ function byokOpenCodeProviderFromConfig(
     protocol: config.apiProtocol,
     apiKey: config.apiKey.trim(),
     baseUrl: config.baseUrl,
+    model: config.model,
     ...(selectedProvider?.requiresApiKey === false ? { requiresApiKey: false } : {}),
     apiVersion:
       config.apiProtocol === 'azure'
