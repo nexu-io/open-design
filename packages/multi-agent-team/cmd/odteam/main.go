@@ -173,6 +173,9 @@ func main() {
 }
 
 // buildTeamConfig 从 teamRequest 构建 TeamConfig
+// 根据协作模式从 assignments 推导 cycle / complementary 专属配置。
+// daemon 传来的请求只包含 assignments（不含 cycle/experts），
+// 因此由 odteam 根据 mode 和 role 自行组装。
 func buildTeamConfig(req *teamRequest) *config.TeamConfig {
 	cfg := &config.TeamConfig{
 		Team: config.Team{
@@ -192,6 +195,38 @@ func buildTeamConfig(req *teamRequest) *config.TeamConfig {
 			Role: a.Role,
 			Type: a.AgentType,
 		})
+	}
+
+	// 循环模式：从 assignments 中提取 generator / reviewer
+	// role 为 "generator" 或 "reviewer" 的 assignment 映射到 CycleSpec
+	if req.Team.Mode == "cycle" {
+		cycle := &config.CycleSpec{
+			MaxIterations:  5,
+			ScoreThreshold: 8.0,
+		}
+		for _, a := range req.Team.Assignments {
+			switch a.Role {
+			case "generator":
+				cycle.GeneratorID = a.AgentId
+			case "reviewer":
+				cycle.ReviewerID = a.AgentId
+			}
+		}
+		cfg.Team.Cycle = cycle
+	}
+
+	// 互补模式：每个 assignment 映射为一个 ExpertSpec
+	if req.Team.Mode == "complementary" && len(req.Team.Assignments) > 0 {
+		experts := make([]config.ExpertSpec, 0, len(req.Team.Assignments))
+		for i, a := range req.Team.Assignments {
+			experts = append(experts, config.ExpertSpec{
+				AgentID:   a.AgentId,
+				Role:      a.Role,
+				Specialty: a.Role,
+				Order:     i,
+			})
+		}
+		cfg.Team.Experts = experts
 	}
 
 	return cfg
