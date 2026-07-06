@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
+import { localizePluginChrome } from '../../i18n/plugin-content';
 import { localizePluginDescription, localizePluginTitle } from '../plugins-home/localization';
 import {
   fetchPluginExampleHtml,
@@ -45,6 +46,7 @@ export function PluginExampleDetail({
 }: Props) {
   const { t, locale } = useI18n();
   const localizedTitle = localizePluginTitle(locale, record);
+  const pluginInfoLabel = localizePluginChrome(locale, 'pluginInfo');
   const [html, setHtml] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [unavailableKind, setUnavailableKind] = useState<string | null>(null);
@@ -133,7 +135,7 @@ export function PluginExampleDetail({
         // developer manifest detail tucked behind a "Developer details"
         // disclosure (variant="minimal"). Fullscreen still gives an
         // immersive view when needed.
-        label: 'Plugin info',
+        label: pluginInfoLabel,
         defaultOpen: false,
         contentKey: record.id,
         content: (
@@ -142,7 +144,7 @@ export function PluginExampleDetail({
               record={record}
               omit={{ description: true }}
               compact
-              heading="Plugin info"
+              heading={pluginInfoLabel}
               variant="minimal"
             />
           </div>
@@ -154,7 +156,7 @@ export function PluginExampleDetail({
             label: pluginUsePrimaryAction(record, t).label,
             onClick: () => onUse(record, pluginUsePrimaryAction(record, t).action),
             busy: !!isApplying,
-            busyLabel: 'Applying…',
+            busyLabel: localizePluginChrome(locale, 'applying'),
             testId: `plugin-details-use-${record.id}`,
             menu: buildPluginUseMenu(record, onUse, t, onDuplicate),
           }}

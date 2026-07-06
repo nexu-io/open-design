@@ -652,6 +652,15 @@
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
 }
+.entry-nav-rail__btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.entry-nav-rail__btn:disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: transparent;
+}
 .entry-nav-rail__btn.is-active {
   background: var(--accent-tint);
   color: var(--accent);

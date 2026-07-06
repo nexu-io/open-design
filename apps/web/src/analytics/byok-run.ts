@@ -13,6 +13,7 @@
 
 import {
   modelIdForTracking,
+  sessionModeToTracking,
   type RunCreatedProps,
   type RunFinishedProps,
   type TrackingByokProviderId,
@@ -21,6 +22,7 @@ import {
   type TrackingRunResult,
   type TrackingSessionMode,
 } from '@open-design/contracts/analytics';
+import type { ChatSessionMode } from '@open-design/contracts';
 import type { ApiProtocol } from '../types';
 
 // Map the BYOK transport protocol to the tracking provider id. `aihubmix` is
@@ -60,6 +62,12 @@ export interface ByokRunBaseInput {
   apiProtocol: ApiProtocol | undefined;
   skillId: string | null;
   sessionMode?: TrackingSessionMode;
+}
+
+export function byokSessionModeForTracking(
+  mode: ChatSessionMode | null | undefined,
+): TrackingSessionMode {
+  return sessionModeToTracking(mode);
 }
 
 function baseRunProps(input: ByokRunBaseInput) {

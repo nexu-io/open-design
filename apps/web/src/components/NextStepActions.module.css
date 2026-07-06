@@ -270,17 +270,17 @@
   width: 200px;
 }
 .flyoutToolbox {
-  width: 300px;
+  width: 286px;
   max-height: min(70vh, 500px);
-  padding: 10px;
+  padding: 8px;
 }
 
 .toolboxFlyoutTitle {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 2px 4px 8px;
-  font-size: 14px;
+  gap: 7px;
+  padding: 1px 4px 6px;
+  font-size: 13px;
   font-weight: 650;
   color: var(--text-default);
 }
@@ -292,11 +292,12 @@
 .flyoutSearch {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 9px;
-  margin-bottom: 8px;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 7px;
+  margin-bottom: 6px;
   border: 1px solid var(--border-strong, var(--border));
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--text-muted);
   background: var(--bg-default);
 }
@@ -305,7 +306,8 @@
   min-width: 0;
   border: 0;
   background: transparent;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 18px;
   color: var(--text-default);
   outline: none;
 }

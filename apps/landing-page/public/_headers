@@ -33,6 +33,13 @@
 /_astro/*
   Cache-Control: public, max-age=31536000, immutable
 
+# On-demand enhancement runtimes (matter-js / cobe), vendored by
+# `scripts/vendor-enhancers.ts` and version-busted via a `?v=` query, so the
+# bytes are immutable per URL and safe to cache forever at the edge and in the
+# browser.
+/enhancers/*
+  Cache-Control: public, max-age=31536000, immutable
+
 # RSS / sitemap / robots — small, refresh on deploy.
 /blog/rss.xml
   Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate

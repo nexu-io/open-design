@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { useI18n } from '../../i18n';
+import { localizePluginChrome } from '../../i18n/plugin-content';
 import { localizePluginDescription, localizePluginTitle } from '../plugins-home/localization';
 import {
   fetchDesignSystemPreview,
@@ -81,6 +82,7 @@ export function PluginDesignSystemDetail({
   const { t, locale } = useI18n();
   const localizedTitle = localizePluginTitle(locale, record);
   const localizedDescription = localizePluginDescription(locale, record);
+  const pluginInfoLabel = localizePluginChrome(locale, 'pluginInfo');
   const dsRef = designSystemRef(record);
   const assetPath = specAssetPath(record);
 
@@ -134,8 +136,8 @@ export function PluginDesignSystemDetail({
     : [
         {
           id: 'spec',
-          label: 'Spec',
-          html: '<!doctype html><meta charset="utf-8"><body style="font:14px system-ui;color:#666;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:0 24px;margin:0;">This plugin ships only the design spec — open Plugin info to read DESIGN.md.</body>',
+          label: localizePluginChrome(locale, 'spec'),
+          html: `<!doctype html><meta charset="utf-8"><body style="font:14px system-ui;color:#666;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:0 24px;margin:0;">${localizePluginChrome(locale, 'designSpecOnly')}</body>`,
         },
       ];
 
@@ -154,7 +156,7 @@ export function PluginDesignSystemDetail({
       }}
       onClose={onClose}
       sidebar={{
-        label: 'Plugin info',
+        label: pluginInfoLabel,
         defaultOpen: true,
         onToggle: handleSidebarToggle,
         contentKey: record.id,
@@ -168,7 +170,7 @@ export function PluginDesignSystemDetail({
                 record={record}
                 omit={{ description: true }}
                 compact
-                heading="Plugin info"
+                heading={pluginInfoLabel}
               />
             </div>
             <section className="plugin-design-sidebar__spec">
@@ -190,7 +192,7 @@ export function PluginDesignSystemDetail({
             label: pluginUsePrimaryAction(record, t).label,
             onClick: () => onUse(record, pluginUsePrimaryAction(record, t).action),
             busy: !!isApplying,
-            busyLabel: 'Applying…',
+            busyLabel: localizePluginChrome(locale, 'applying'),
             testId: `plugin-details-use-${record.id}`,
             menu: buildPluginUseMenu(record, onUse, t, onDuplicate),
           }}

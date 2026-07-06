@@ -288,7 +288,10 @@ test('[P0] BYOK save stays disabled until required fields are valid', async ({ p
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({ apiKey: 'sk-openai-test' });
 
   const baseUrlInput = dialog.getByLabel('Base URL');
-  await baseUrlInput.fill('http://10.0.0.5:11434/v1');
+  // A non-http scheme is still rejected client-side. (An internal-IP URL is no
+  // longer rejected here — it is syntactically valid and the daemon owns the
+  // OD_ALLOWED_INTERNAL_HOSTS decision; see #3225.)
+  await baseUrlInput.fill('ftp://api.example.com');
   await expect(dialog.locator('#settings-base-url-error')).toContainText(/public http:\/\/ or https:\/\//i);
 
   await baseUrlInput.fill('http://localhost:11434/v1');
@@ -296,6 +299,58 @@ test('[P0] BYOK save stays disabled until required fields are valid', async ({ p
     apiKey: 'sk-openai-test',
     baseUrl: 'http://localhost:11434/v1',
   });
+});
+
+test('[P1] BYOK file-tools limitation notice is reachable from Settings', async ({ page }) => {
+  await openExecutionSettingsWithAgents(
+    page,
+    {
+      mode: 'api',
+      apiKey: 'sk-test',
+      apiProtocol: 'openai',
+      apiVersion: '',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+      agentId: 'mock-agent',
+      skillId: null,
+      designSystemId: null,
+      onboardingCompleted: true,
+      mediaProviders: {},
+      agentModels: {},
+      agentCliEnv: {},
+    },
+    [
+      {
+        id: 'mock-agent',
+        name: 'Mock Agent',
+        bin: 'mock-agent',
+        available: true,
+        version: 'test',
+        models: [{ id: 'default', label: 'Default' }],
+      },
+    ],
+  );
+
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
+
+  const trigger = dialog.getByTestId('settings-byok-no-file-tools-trigger');
+  const notice = dialog.getByTestId('settings-byok-no-file-tools-notice');
+  await expect(trigger).toBeVisible();
+  await expect(trigger).toHaveAccessibleName(/BYOK can't read, write, or edit project files/i);
+
+  await trigger.hover();
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("BYOK can't read, write, or edit project files");
+  await expect(notice).toContainText('Local CLI');
+
+  await dialog.getByRole('tab', { name: /Google Gemini/i }).click();
+  await expect(dialog.getByTestId('settings-byok-no-file-tools-trigger')).toBeVisible();
+
+  await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
+  await expect(dialog.getByTestId('settings-byok-no-file-tools-trigger')).toHaveCount(0);
+  await expect(dialog.getByTestId('settings-byok-no-file-tools-notice')).toHaveCount(0);
 });
 
 test('[P0] BYOK auto-loads provider models and reuses cached results for the same config', async ({ page }) => {

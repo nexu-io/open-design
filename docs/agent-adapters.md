@@ -205,6 +205,7 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 ### 5.8 OpenCode / OpenClaw
 
 - Less-matured CLIs. Targeting P2. Expect bumps; adapter implementations will likely be the thinnest possible "shell out, parse output, synthesize events" approach.
+- OpenCode runs as `opencode run --format json` with the prompt on stdin. Newer OpenCode builds that advertise `--dangerously-skip-permissions` from `opencode run --help` receive that flag so headless runs do not stop on edit approval prompts; older builds keep the 1.3-compatible argv.
 
 ### 5.9 GitHub Copilot CLI
 

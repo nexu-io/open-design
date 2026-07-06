@@ -103,16 +103,44 @@ function normalizeMaxAttempts(maxAttempts: number | undefined): number {
   return Math.floor(maxAttempts);
 }
 
-function isTransientRetryCategory(
+function transientSuppressedReason(
   category: TrackingRunFailureCategory | undefined,
   detail: TrackingRunFailureDetail | undefined,
   stage: TrackingRunFailureStage | undefined,
-): boolean {
-  if (category === 'rate_limit') return detail !== 'hard_quota';
-  if (category === 'upstream_unavailable') return true;
-  if (category === 'empty_output') return stage === undefined || stage === 'first_token_wait';
-  if (category === 'timeout') return stage === 'first_token_wait';
-  return false;
+): TrackingRunRetrySuppressedReason | null {
+  if (category === undefined) return 'missing_failure_signal';
+  if (category === 'rate_limit') {
+    return detail === 'rate_limit_429' ? null : 'non_retryable_category';
+  }
+  if (category === 'upstream_unavailable') {
+    return detail === 'stream_disconnected' ||
+      detail === 'upstream_5xx' ||
+      detail === 'provider_high_demand' ||
+      detail === 'provider_routing_error' ||
+      detail === 'network_error'
+      ? null
+      : 'non_retryable_category';
+  }
+  if (category === 'empty_output') {
+    return stage === undefined || stage === 'first_token_wait'
+      ? null
+      : 'unsafe_failure_stage';
+  }
+  if (category === 'timeout') {
+    return stage === 'first_token_wait'
+      ? null
+      : 'unsafe_failure_stage';
+  }
+  if (category === 'process_exit') {
+    return detail === 'agent_protocol_error' ||
+      detail === 'qoder_stop_sequence' ||
+      detail === 'session_resume_expired' ||
+      detail === 'stream_error' ||
+      detail === 'fatal_rpc_error'
+      ? null
+      : 'non_retryable_category';
+  }
+  return 'non_retryable_category';
 }
 
 export function decideSafeRunRetry(
@@ -140,27 +168,16 @@ export function decideSafeRunRetry(
   if (sideEffects.cancelRequested) return suppress('cancel_requested');
 
   const failure = input.failure;
+  if (!failure) return suppress('missing_failure_signal');
   if (failure?.failure_detail === 'hard_quota') return suppress('hard_quota');
-  if (
-    failure?.failure_category !== undefined &&
-    !isTransientRetryCategory(
-      failure.failure_category,
-      failure.failure_detail,
-      failure.failure_stage,
-    )
-  ) {
-    return suppress('unsupported_category');
-  }
+  const transientReason = transientSuppressedReason(
+    failure.failure_category,
+    failure.failure_detail,
+    failure.failure_stage,
+  );
+  if (transientReason === 'non_retryable_category') return suppress(transientReason);
   if (!failure?.retryable) return suppress('not_retryable');
-  if (
-    !isTransientRetryCategory(
-      failure.failure_category,
-      failure.failure_detail,
-      failure.failure_stage,
-    )
-  ) {
-    return suppress('unsupported_category');
-  }
+  if (transientReason) return suppress(transientReason);
   if (attemptCount >= retryMaxAttempts) return suppress('attempt_limit_reached');
   if (sideEffects.userVisibleOutputSeen) return suppress('user_visible_output_seen');
   if (sideEffects.toolCallSeen) return suppress('tool_call_seen');

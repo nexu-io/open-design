@@ -98,7 +98,7 @@ describe('run failure telemetry smoke', () => {
         expectedCode: 'AGENT_AUTH_REQUIRED',
         expectedCodes: ['AGENT_AUTH_REQUIRED', 'AGENT_EXECUTION_FAILED'],
         expectedCategory: 'auth',
-        expectedDetail: 'auth_required',
+        expectedDetail: 'invalid_api_key',
         expectedDiagnosticSource: 'error_event',
         expectStderr: true,
       },

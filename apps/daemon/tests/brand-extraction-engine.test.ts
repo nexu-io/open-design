@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs, { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,16 +7,21 @@ import type { Brand } from '@open-design/contracts';
 
 import {
   closeDatabase,
+  deleteConversation,
   getProject,
+  listConversations,
   listMessages,
+  listProjects,
   listTabs,
   openDatabase,
   upsertMessage,
 } from '../src/db.js';
 import {
   backfillBrandExtractionTranscriptForProject,
+  continueBrandExtraction,
   finalizeBrand,
   readBrandDetail,
+  reconcileProgrammaticExtractionTranscript,
   renderBrandPreviewIntoProject,
   startBrandExtraction,
 } from '../src/brands/index.js';
@@ -399,6 +404,93 @@ describe('agent-driven brand extraction engine', () => {
     expect(html).toContain('"brandReady":"设计体系已就绪"');
   });
 
+  it('rolls back the reserved draft design system when brand startup fails', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    closeDatabase();
+
+    await expect(startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    })).rejects.toThrow();
+
+    const systems = await listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    });
+    expect(systems).toHaveLength(0);
+  });
+
+  it('rolls back brand startup state when setup fails after project insert', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+
+    await expect(startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      randomId: () => {
+        throw new Error('conversation id failed');
+      },
+    })).rejects.toThrow('conversation id failed');
+
+    expect(listProjects(db)).toHaveLength(0);
+    expect(readdirSync(projectsRoot)).toEqual([]);
+    expect(readdirSync(brandsRoot)).toEqual([]);
+    const systems = await listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    });
+    expect(systems).toHaveLength(0);
+  });
+
+  it('rolls back brand startup state when design-md staging fails before draft reservation', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const mkdirSyncOriginal = fs.mkdirSync.bind(fs);
+    const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementation(((target, options) => {
+      if (String(target).endsWith(`${path.sep}context`)) {
+        throw new Error('design-md staging failed');
+      }
+      return mkdirSyncOriginal(target, options as fs.MakeDirectoryOptions);
+    }) as typeof fs.mkdirSync);
+
+    try {
+      await expect(startOfflineBrandExtraction({
+        designMd: DESIGN_MD_INPUT,
+        brandsRoot,
+        projectsRoot,
+        userDesignSystemsRoot,
+        skillsRoot: SKILLS_ROOT,
+        db,
+        logoFallback: NO_LOGO_FALLBACK,
+      })).rejects.toThrow('design-md staging failed');
+    } finally {
+      mkdirSpy.mockRestore();
+    }
+
+    expect(listProjects(db)).toHaveLength(0);
+    expect(readdirSync(projectsRoot)).toEqual([]);
+    expect(readdirSync(brandsRoot)).toEqual([]);
+    const systems = await listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    });
+    expect(systems).toHaveLength(0);
+  });
+
   it('seeds a running chat transcript immediately and completes it when the programmatic pass returns ready', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     const startedBeforeRequest = Date.now();
@@ -420,7 +512,7 @@ describe('agent-driven brand extraction engine', () => {
     const returnedAfterRequest = Date.now();
 
     expect(result.status).toBe('extracting');
-    expect(result.designSystemId).toBeUndefined();
+    expect(result.designSystemId).toMatch(/^user:/);
     if (!backgroundExtraction) throw new Error('expected background extraction promise');
     const initialMessages = listMessages(db, result.conversationId);
     expect(initialMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
@@ -563,12 +655,427 @@ describe('agent-driven brand extraction engine', () => {
 
     const detail = readBrandDetail(brandsRoot, result.id);
     expect(detail?.meta.status).toBe('extracting');
-    expect(detail?.meta.designSystemId).toBeUndefined();
+    // Entity-first: the user:<id> design system exists as a DRAFT from the start
+    // (so it shows under "Your systems" and stays editable), but the brand is
+    // not finalized — the draft was never promoted to published.
+    expect(detail?.meta.designSystemId).toMatch(/^user:/);
+    const stoppedSystems = await listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    });
+    expect(stoppedSystems.find((s) => s.id === detail?.meta.designSystemId)?.status).toBe('draft');
     expect(getProject(db, result.projectId)?.pendingPrompt).toBeUndefined();
     const messages = listMessages(db, result.conversationId);
     expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
     expect(messages[1]?.runStatus).toBe('running');
     expect(messages[1]?.content).toContain('Programmatic design-system extraction started');
+  });
+
+  // Regression for the "Spotify" P1: a blocked / give-up origin used to leave the
+  // synthetic "AMR · Working" row counting up forever while the brand stayed
+  // `extracting`. The give-up now retires the row into the actionable terminal so
+  // the user sees a next step instead of an infinite clock.
+  it('retires the synthetic row into an actionable terminal when the programmatic pass gives up', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
+    const result = await startOfflineBrandExtraction({
+      url: 'blocked.example',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async () => null,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
+
+    const messages = listMessages(db, result.conversationId);
+    expect(messages[1]?.runStatus).toBe('failed');
+    expect(messages[1]?.endedAt).toBeGreaterThan(0);
+    expect(messages[1]?.content).toContain('needs a hand');
+    // The agent fallback still takes over from the scaffold.
+    expect(getProject(db, result.projectId)?.pendingPrompt).toContain('DESIGN SYSTEM EXTRACTION');
+    // The automatic pass is terminal; the user can restart it explicitly or use
+    // the Browser/agent fallback from the saved draft.
+    expect(readBrandDetail(brandsRoot, result.id)?.meta.status).toBe('failed');
+  });
+
+  it('continues an incomplete programmatic extraction in the same project and design system', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let firstBackground: Promise<unknown> | null = null;
+    const result = await startOfflineBrandExtraction({
+      url: 'blocked.example',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async () => null,
+      onBackgroundExtraction: (settled) => {
+        firstBackground = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    if (!firstBackground) throw new Error('expected background extraction promise');
+    await firstBackground;
+
+    const draftDesignSystemId = readBrandDetail(brandsRoot, result.id)?.meta.designSystemId;
+    expect(draftDesignSystemId).toMatch(/^user:/);
+    expect(listMessages(db, result.conversationId).map((message) => message.role)).toEqual(['user', 'assistant']);
+
+    let retryBackground: Promise<unknown> | null = null;
+    const retry = await continueBrandExtraction({
+      id: result.id,
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+      prefetch: async (url) => programmaticPrefetchResult(url),
+      onBackgroundExtraction: (settled) => {
+        retryBackground = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+
+    expect(retry.projectId).toBe(result.projectId);
+    expect(retry.conversationId).toBe(result.conversationId);
+    expect(retry.designSystemId).toBe(draftDesignSystemId);
+    expect(retry.status).toBe('extracting');
+    const retryStartedMessages = listMessages(db, result.conversationId);
+    expect(retryStartedMessages.map((message) => message.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+    expect(retryStartedMessages[3]?.runStatus).toBe('running');
+    expect(retryStartedMessages[3]?.content).toContain('Programmatic design-system extraction started');
+
+    if (!retryBackground) throw new Error('expected retry background extraction promise');
+    await retryBackground;
+    for (let i = 0; i < 20; i += 1) {
+      const messages = listMessages(db, result.conversationId);
+      if (messages.some((message) => message.content.includes('Programmatic extraction finished'))) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    const completed = readBrandDetail(brandsRoot, result.id);
+    expect(completed?.meta.status).toBe('ready');
+    expect(completed?.meta.designSystemId).toBe(draftDesignSystemId);
+    const systems = await listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    });
+    expect(systems.filter((system) => system.id === draftDesignSystemId)).toHaveLength(1);
+    const messages = listMessages(db, result.conversationId);
+    expect(messages[3]?.runStatus).toBe('succeeded');
+  });
+
+  it('ignores a stale programmatic attempt that resumes after a newer retry finalizes', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let releaseFirstPrefetch!: () => void;
+    const firstPrefetchGate = new Promise<void>((resolve) => {
+      releaseFirstPrefetch = resolve;
+    });
+    let firstBackground: Promise<unknown> | null = null;
+    const staleMaterial = (url: string): PrefetchResult => ({
+      ...programmaticPrefetchResult(url),
+      siteName: 'Staleco',
+      title: 'Staleco',
+      description: 'Staleco should never overwrite the retry.',
+      headings: ['Staleco stale attempt'],
+      paragraphs: ['Staleco resumed after a newer retry completed.'],
+      materialMd: '# Staleco\n\nStale attempt',
+    });
+    const retryMaterial = (url: string): PrefetchResult => ({
+      ...programmaticPrefetchResult(url),
+      siteName: 'Retryco',
+      title: 'Retryco',
+      description: 'Retryco is the newer successful retry.',
+      headings: ['Retryco retry attempt'],
+      paragraphs: ['Retryco completed before the original attempt resumed.'],
+      materialMd: '# Retryco\n\nNewer retry attempt',
+    });
+
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async (url) => {
+        await firstPrefetchGate;
+        return staleMaterial(url);
+      },
+      onBackgroundExtraction: (settled) => {
+        firstBackground = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    const firstAttemptId = readBrandDetail(brandsRoot, result.id)?.meta.extractionAttemptId;
+    expect(firstAttemptId).toBeTruthy();
+
+    let retryBackground: Promise<unknown> | null = null;
+    await continueBrandExtraction({
+      id: result.id,
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+      prefetch: async (url) => retryMaterial(url),
+      onBackgroundExtraction: (settled) => {
+        retryBackground = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    const retryAttemptId = readBrandDetail(brandsRoot, result.id)?.meta.extractionAttemptId;
+    expect(retryAttemptId).toBeTruthy();
+    expect(retryAttemptId).not.toBe(firstAttemptId);
+
+    if (!retryBackground) throw new Error('expected retry background extraction promise');
+    await retryBackground;
+    expect(readBrandDetail(brandsRoot, result.id)?.brand?.name).toBe('Retryco');
+
+    releaseFirstPrefetch();
+    if (!firstBackground) throw new Error('expected first background extraction promise');
+    await firstBackground;
+
+    const completed = readBrandDetail(brandsRoot, result.id);
+    expect(completed?.meta.status).toBe('ready');
+    expect(completed?.meta.extractionAttemptId).toBe(retryAttemptId);
+    expect(completed?.brand?.name).toBe('Retryco');
+    expect(getProject(db, result.projectId)?.name).toBe('Retryco Design System');
+  });
+
+  it('continues a brand extraction with a fresh conversation when the recorded one was deleted', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let firstBackground: Promise<unknown> | null = null;
+    const result = await startOfflineBrandExtraction({
+      url: 'blocked.example',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async () => null,
+      onBackgroundExtraction: (settled) => {
+        firstBackground = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    if (!firstBackground) throw new Error('expected background extraction promise');
+    await firstBackground;
+
+    const draftDesignSystemId = readBrandDetail(brandsRoot, result.id)?.meta.designSystemId;
+    deleteConversation(db, result.conversationId);
+    expect(listConversations(db, result.projectId).some((conversation) => (
+      conversation.id === result.conversationId
+    ))).toBe(false);
+
+    const ids = ['retry-conversation', 'retry-user-message', 'retry-assistant-message'];
+    let idIndex = 0;
+    let retryBackground: Promise<unknown> | null = null;
+    const retry = await continueBrandExtraction({
+      id: result.id,
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      randomId: () => ids[idIndex++] ?? `retry-extra-${idIndex}`,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+      prefetch: async (url) => programmaticPrefetchResult(url),
+      onBackgroundExtraction: (settled) => {
+        retryBackground = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+
+    expect(retry.projectId).toBe(result.projectId);
+    expect(retry.conversationId).toBe('retry-conversation');
+    expect(retry.conversationId).not.toBe(result.conversationId);
+    expect(retry.designSystemId).toBe(draftDesignSystemId);
+    expect(readBrandDetail(brandsRoot, result.id)?.meta.conversationId).toBe('retry-conversation');
+    const retryStartedMessages = listMessages(db, retry.conversationId);
+    expect(retryStartedMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
+    expect(retryStartedMessages[1]?.runStatus).toBe('running');
+
+    if (!retryBackground) throw new Error('expected retry background extraction promise');
+    await retryBackground;
+
+    const completed = readBrandDetail(brandsRoot, result.id);
+    expect(completed?.meta.status).toBe('ready');
+    expect(completed?.meta.designSystemId).toBe(draftDesignSystemId);
+    expect(listMessages(db, retry.conversationId)[1]?.runStatus).toBe('succeeded');
+  });
+
+  // Regression for the "Whole Foods" P1: a brand that finalizes AFTER the stall
+  // checkpoint already posted the "needs a hand" card used to leave the row stuck
+  // `running`. A finalize now authoritatively overwrites whatever the row showed
+  // with `succeeded`, and that success is never downgraded afterwards.
+  it('overwrites a stalled row with success on finalize and never downgrades it', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async () => null,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
+    expect(listMessages(db, result.conversationId)[1]?.runStatus).toBe('failed');
+
+    // Simulate the brand finalizing `ready` later (heavy site / agent finished).
+    patchMeta(brandsRoot, result.id, { status: 'ready', designSystemId: 'user:acme-late' });
+    await reconcileProgrammaticExtractionTranscript({
+      db,
+      brandsRoot,
+      projectsRoot,
+      brandId: result.id,
+      outcome: 'succeeded',
+    });
+    const afterSuccess = listMessages(db, result.conversationId)[1];
+    expect(afterSuccess?.runStatus).toBe('succeeded');
+    expect(afterSuccess?.content).toContain('user:acme-late');
+
+    // A later stall/give-up reconcile must NOT downgrade a recorded success.
+    await reconcileProgrammaticExtractionTranscript({
+      db,
+      brandsRoot,
+      projectsRoot,
+      brandId: result.id,
+      outcome: 'needs_attention',
+    });
+    expect(listMessages(db, result.conversationId)[1]?.runStatus).toBe('succeeded');
+  });
+
+  // Models the HTTP cancel route: a deliberate Stop on a still-running pass
+  // retires the row into the `canceled` terminal so Stop visibly works.
+  it('reconciles a still-running row to canceled on user stop', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const controller = new AbortController();
+    let releasePrefetch!: () => void;
+    const prefetchGate = new Promise<void>((resolve) => {
+      releasePrefetch = resolve;
+    });
+    let backgroundExtraction: Promise<unknown> | null = null;
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async (url) => {
+        await prefetchGate;
+        return programmaticPrefetchResult(url);
+      },
+      programmaticAbortSignal: controller.signal,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+    expect(listMessages(db, result.conversationId)[1]?.runStatus).toBe('running');
+
+    controller.abort();
+    releasePrefetch();
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
+    // The engine abort path leaves the row running; the cancel route owns the flip.
+    await reconcileProgrammaticExtractionTranscript({
+      db,
+      brandsRoot,
+      projectsRoot,
+      brandId: result.id,
+      outcome: 'stopped',
+    });
+    const stopped = listMessages(db, result.conversationId)[1];
+    expect(stopped?.runStatus).toBe('canceled');
+    expect(stopped?.content).toContain('stopped');
+  });
+
+  it('lets user stop overwrite an earlier stalled programmatic transcript row', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const controller = new AbortController();
+    let releasePrefetch!: () => void;
+    const prefetchGate = new Promise<void>((resolve) => {
+      releasePrefetch = resolve;
+    });
+    let backgroundExtraction: Promise<unknown> | null = null;
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      prefetch: async (url) => {
+        await prefetchGate;
+        return programmaticPrefetchResult(url);
+      },
+      programmaticAbortSignal: controller.signal,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
+      transcriptAgent: { agentId: 'claude', agentName: 'Claude' },
+    });
+
+    await reconcileProgrammaticExtractionTranscript({
+      db,
+      brandsRoot,
+      projectsRoot,
+      brandId: result.id,
+      outcome: 'needs_attention',
+    });
+    const stalled = listMessages(db, result.conversationId)[1];
+    expect(stalled?.runStatus).toBe('failed');
+    expect(stalled?.content).toContain('needs a hand');
+    expect(stalled?.content).toContain('<od-card type="brand-browser-assist">');
+    expect(stalled?.content).toContain('"browserTabId":"__browser__:1"');
+
+    controller.abort();
+    releasePrefetch();
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
+    await reconcileProgrammaticExtractionTranscript({
+      db,
+      brandsRoot,
+      projectsRoot,
+      brandId: result.id,
+      outcome: 'stopped',
+    });
+
+    const stopped = listMessages(db, result.conversationId)[1];
+    expect(stopped?.runStatus).toBe('canceled');
+    expect(stopped?.content).toContain('stopped');
   });
 
   it('backfills a programmatic transcript for empty legacy brand conversations', async () => {
@@ -733,6 +1240,10 @@ describe('agent-driven brand extraction engine', () => {
     expect(html).toContain('data-od-id="brand-name"');
     expect(html).toContain('data-od-id="brand-color-hex-');
     expect(html).toContain('data-od-id="brand-palette"');
+    expect(html).toContain("e.key === 'ArrowLeft'");
+    expect(html).toContain('showLight(lightIdx - 1)');
+    expect(html).toContain("e.key === 'ArrowRight'");
+    expect(html).toContain('showLight(lightIdx + 1)');
   });
 
   it('finalizeBrand registers the kit, marks it ready, and lights up the assets', async () => {
@@ -1350,7 +1861,7 @@ describe('agent-driven brand extraction engine', () => {
     // The project and transcript are available immediately while the
     // deterministic harvest continues in the background.
     expect(result.status).toBe('extracting');
-    expect(result.designSystemId).toBeUndefined();
+    expect(result.designSystemId).toMatch(/^user:/);
     if (!backgroundExtraction) throw new Error('expected background extraction promise');
     const initialMessages = listMessages(db, result.conversationId);
     expect(initialMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
@@ -1424,7 +1935,7 @@ describe('agent-driven brand extraction engine', () => {
     });
 
     expect(result.status).toBe('extracting');
-    expect(result.designSystemId).toBeUndefined();
+    expect(result.designSystemId).toMatch(/^user:/);
     if (!backgroundExtraction) throw new Error('expected background extraction promise');
     const initialMessages = listMessages(db, result.conversationId);
     expect(initialMessages.map((message) => message.role)).toEqual(['user', 'assistant']);
@@ -1463,11 +1974,13 @@ describe('agent-driven brand extraction engine', () => {
     expect('browserTabs' in tabs ? tabs.browserTabs ?? [] : []).toHaveLength(0);
   });
 
-  it('startBrandExtraction stays in extracting when the programmatic harvest fails', async () => {
+  it('startBrandExtraction renders a failed preview when the programmatic harvest fails', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
+    let backgroundExtraction: Promise<unknown> | null = null;
 
     // Prefetch returns null (fully blocked / unreachable origin) → no design
-    // system is built and the agent takes over from the scaffold.
+    // system is built; once the background pass settles, the draft becomes
+    // editable and the agent/browser fallback can continue from it.
     const result = await startOfflineBrandExtraction({
       url: 'acme.com',
       brandsRoot,
@@ -1478,22 +1991,99 @@ describe('agent-driven brand extraction engine', () => {
       prefetch: async () => null,
       logoFallback: NO_LOGO_FALLBACK,
       imageryFallback: NO_IMAGERY_FALLBACK,
+      onBackgroundExtraction: (settled) => {
+        backgroundExtraction = settled;
+      },
     });
+    if (!backgroundExtraction) throw new Error('expected background extraction promise');
+    await backgroundExtraction;
 
     const detail = readBrandDetail(brandsRoot, result.id);
-    expect(detail?.meta.status).toBe('extracting');
-    expect(detail?.meta.designSystemId).toBeUndefined();
+    expect(detail?.meta.status).toBe('failed');
+    // Entity-first: the draft design system exists, but was not finalized.
+    expect(detail?.meta.designSystemId).toMatch(/^user:/);
+    const draftSystems = await listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    });
+    expect(draftSystems.find((s) => s.id === detail?.meta.designSystemId)?.status).toBe('draft');
 
     const html = readFileSync(path.join(projectsRoot, result.projectId, 'brand.html'), 'utf8');
-    expect(html).toContain('"status":"extracting"');
+    expect(html).toContain('"status":"failed"');
+    expect(html).toContain('"extractionFailed":"Extraction failed"');
+  });
+
+  it('renders stopped programmatic extraction previews as a saved draft', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+    });
+
+    patchMeta(brandsRoot, result.id, { status: 'failed', error: 'Stopped by user' });
+    await renderBrandPreviewIntoProject({
+      id: result.id,
+      brandsRoot,
+      skillsRoot: SKILLS_ROOT,
+      projectsRoot,
+      projectId: result.projectId,
+      previewStatus: 'draft',
+    });
+
+    const html = readFileSync(path.join(projectsRoot, result.projectId, 'brand.html'), 'utf8');
+    expect(html).toContain('"status":"draft"');
+    expect(html).toContain('"draftSaved":"Draft saved"');
+    expect(html).not.toContain('"status":"extracting"');
+  });
+
+  it('renders genuinely failed extraction previews as failed', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+
+    const result = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+    });
+
+    patchMeta(brandsRoot, result.id, {
+      status: 'failed',
+      error: 'Daemon extraction failed',
+    });
+    await renderBrandPreviewIntoProject({
+      id: result.id,
+      brandsRoot,
+      skillsRoot: SKILLS_ROOT,
+      projectsRoot,
+      projectId: result.projectId,
+    });
+
+    const html = readFileSync(path.join(projectsRoot, result.projectId, 'brand.html'), 'utf8');
+    expect(html).toContain('"status":"failed"');
+    expect(html).toContain('"extractionFailed":"Extraction failed"');
   });
 
   it('does not finalize blocked or thin programmatic harvests as ready', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
 
-    for (const [host, flags] of [
-      ['blocked.example', { blocked: true, thin: true }],
-      ['thin.example', { blocked: false, thin: true }],
+    for (const [host, flags, expectedStatus, expectedKitStatus] of [
+      // A blocked origin is recoverable via the in-app Browser tab + Continue, so
+      // it parks in the calm `needs_input` state (kit shows the in-progress
+      // "extracting" view) rather than the red `failed` terminal.
+      ['blocked.example', { blocked: true, thin: true }, 'needs_input', 'extracting'],
+      // A genuinely thin, non-blocked harvest is unrecoverable and stays `failed`.
+      ['thin.example', { blocked: false, thin: true }, 'failed', 'failed'],
     ] as const) {
       let backgroundExtraction: Promise<unknown> | null = null;
       const result = await startOfflineBrandExtraction({
@@ -1536,10 +2126,11 @@ describe('agent-driven brand extraction engine', () => {
       await backgroundExtraction;
 
       const detail = readBrandDetail(brandsRoot, result.id);
-      expect(detail?.meta.status).toBe('extracting');
-      expect(detail?.meta.designSystemId).toBeUndefined();
+      expect(detail?.meta.status).toBe(expectedStatus);
+      // Entity-first: the draft exists after the give-up but is not promoted.
+      expect(detail?.meta.designSystemId).toMatch(/^user:/);
       const html = readFileSync(path.join(projectsRoot, result.projectId, 'brand.html'), 'utf8');
-      expect(html).toContain('"status":"extracting"');
+      expect(html).toContain(`"status":"${expectedKitStatus}"`);
 
       const project = getProject(db, result.projectId);
       expect(project?.pendingPrompt ?? '').toContain('DESIGN SYSTEM EXTRACTION');
@@ -1554,7 +2145,10 @@ describe('agent-driven brand extraction engine', () => {
       isEditable: true,
       defaultStatus: 'draft',
     });
-    expect(systems).toHaveLength(0);
+    // Entity-first: each blocked/thin extraction leaves a draft behind (editable),
+    // but NONE were finalized to published.
+    expect(systems).toHaveLength(2);
+    expect(systems.every((s) => s.status === 'draft')).toBe(true);
   });
 
   it('classifies EO_Bot_Ssid verification pages as anti-bot challenges', () => {
@@ -1642,7 +2236,7 @@ describe('agent-driven brand extraction engine', () => {
     // At return time the brand is still extracting (skeleton page), so the user
     // sees a progress state rather than waiting on the network.
     expect(result.status).toBe('extracting');
-    expect(result.designSystemId).toBeUndefined();
+    expect(result.designSystemId).toMatch(/^user:/);
     expect(readBrandDetail(brandsRoot, result.id)?.meta.status).toBe('extracting');
 
     // Once the background harvest settles, the brand finalizes to ready.

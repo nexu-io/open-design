@@ -33,6 +33,7 @@ import {
   applyInspectOverridesToSource,
   commentPreviewCanvasSize,
   effectivePreviewScale,
+  fileVersionPreviewOptions,
   parseInspectOverridesFromSource,
   previewOverlayTransform,
   serializeInspectOverrides,
@@ -785,6 +786,40 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
     expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection&amp;odPreviewBridge=snapshot"');
     expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
+  });
+
+  it('routes brand extraction stop requests from the preview iframe', async () => {
+    const file = baseFile({
+      name: 'brand.html',
+      path: 'brand.html',
+      mime: 'text/html',
+      kind: 'html',
+    });
+    const onBrandExtractionStopRequest = vi.fn();
+
+    render(
+      <FileViewer
+        projectId="project-brand-stop"
+        projectKind="prototype"
+        file={file}
+        liveHtml="<html><body>Brand</body></html>"
+        onBrandExtractionStopRequest={onBrandExtractionStopRequest}
+      />,
+    );
+
+    const frames = screen.getAllByTestId('artifact-preview-frame') as HTMLIFrameElement[];
+    await waitFor(() => expect(frames.some((frame) => !!frame.contentWindow)).toBe(true));
+    const frame = frames.find((candidate) => candidate.contentWindow) ?? frames[0];
+    if (!frame) throw new Error('expected artifact preview iframe');
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'od:brand-extraction-stop-request' },
+        source: frame.contentWindow,
+      }));
+    });
+
+    expect(onBrandExtractionStopRequest).toHaveBeenCalledTimes(1);
   });
 
   it('does not treat slide-prefixed helper classes as deck slides', () => {
@@ -2773,6 +2808,201 @@ describe('FileViewer SVG artifacts', () => {
     }
   });
 
+  it('uses the shared exportable-deck detector for version history preview options', () => {
+    const deckSource =
+      '<deck-stage><section data-screen-label="01 Cover">A</section>' +
+      '<section data-screen-label="02 Next">B</section></deck-stage>';
+    const options = fileVersionPreviewOptions('project-1', 'slides.html', deckSource);
+
+    expect(options.deck).toBe(true);
+    expect(options.baseHref).toBe('/api/projects/project-1/raw/');
+  });
+
+  it('closes the version modal and shows success feedback after switching versions', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const currentVersion = {
+      id: 'v2',
+      fileName: 'index.html',
+      version: 2,
+      label: 'Current checkpoint',
+      createdAt: 1_725_000_000_000,
+      source: 'manual',
+      prompt: 'Current prompt',
+      size: 42,
+      mime: 'text/html',
+      kind: 'html',
+      current: true,
+    };
+    const priorVersion = {
+      ...currentVersion,
+      id: 'v1',
+      version: 1,
+      label: 'Prior checkpoint',
+      prompt: 'Prior prompt',
+      current: false,
+    };
+    const restoredVersion = {
+      ...currentVersion,
+      id: 'v3',
+      version: 3,
+      label: 'Restored checkpoint',
+      source: 'restore',
+      prompt: 'Prior prompt',
+      restoreFromVersionId: 'v1',
+      current: true,
+    };
+    const onFileSaved = vi.fn();
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/api/projects/project-1/files/index.html/versions' && method === 'GET') {
+        return new Response(JSON.stringify({ file, versions: [currentVersion, priorVersion] }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/files/index.html/versions/v1' && method === 'GET') {
+        return new Response(JSON.stringify({
+          version: priorVersion,
+          content: '<html><body><h1>Prior</h1></body></html>',
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/files/index.html/versions/v1/restore' && method === 'POST') {
+        return new Response(JSON.stringify({ file, version: restoredVersion }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml="<html><body><h1>Current</h1></body></html>"
+        onFileSaved={onFileSaved}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Versions' }));
+    const versionDialog = await screen.findByRole('dialog', { name: 'Versions' });
+    fireEvent.click(within(versionDialog).getByRole('option', { name: /Prior prompt/ }));
+
+    const switchButton = within(versionDialog).getByRole('button', { name: 'Switch to this version' }) as HTMLButtonElement;
+    await waitFor(() => expect(switchButton.disabled).toBe(false));
+    fireEvent.click(switchButton);
+
+    const confirmDialog = await screen.findByRole('dialog', { name: 'Switch to this version?' });
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Switch' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Versions' })).toBeNull();
+    });
+    expect((await screen.findByRole('status')).textContent).toContain('Switched to this version.');
+    expect(onFileSaved).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/project-1/files/index.html/versions/v1/restore',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('disables version actions when the newly selected preview fails to load', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+    });
+    const currentVersion = {
+      id: 'v3',
+      fileName: 'index.html',
+      version: 3,
+      label: 'Current checkpoint',
+      createdAt: 1_725_000_000_000,
+      source: 'manual',
+      prompt: 'Current prompt',
+      size: 42,
+      mime: 'text/html',
+      kind: 'html',
+      current: true,
+    };
+    const priorVersion = {
+      ...currentVersion,
+      id: 'v2',
+      version: 2,
+      label: 'Prior checkpoint',
+      prompt: 'Prior prompt',
+      current: false,
+    };
+    const brokenVersion = {
+      ...currentVersion,
+      id: 'v1',
+      version: 1,
+      label: 'Broken checkpoint',
+      prompt: 'Broken prompt',
+      current: false,
+    };
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/api/projects/project-1/files/index.html/versions' && method === 'GET') {
+        return new Response(JSON.stringify({ file, versions: [currentVersion, priorVersion, brokenVersion] }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/files/index.html/versions/v2' && method === 'GET') {
+        return new Response(JSON.stringify({
+          version: priorVersion,
+          content: '<html><body><h1>Prior</h1></body></html>',
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/files/index.html/versions/v1' && method === 'GET') {
+        return new Response(JSON.stringify({ error: { code: 'VERSION_NOT_FOUND' } }), { status: 500 });
+      }
+      if (url.includes('/restore') && method === 'POST') {
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml="<html><body><h1>Current</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Versions' }));
+    const versionDialog = await screen.findByRole('dialog', { name: 'Versions' });
+    fireEvent.click(within(versionDialog).getByRole('option', { name: /Prior prompt/ }));
+    const switchButton = within(versionDialog).getByRole('button', { name: 'Switch to this version' }) as HTMLButtonElement;
+    const openButton = within(versionDialog).getByRole('button', { name: 'Open preview' }) as HTMLButtonElement;
+    await waitFor(() => expect(switchButton.disabled).toBe(false));
+    expect(openButton.disabled).toBe(false);
+
+    fireEvent.click(within(versionDialog).getByRole('option', { name: /Broken prompt/ }));
+    await waitFor(() => {
+      expect(within(versionDialog).getByRole('alert').textContent).toContain('Could not load this version preview.');
+    });
+    expect(switchButton.disabled).toBe(true);
+    expect(openButton.disabled).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/projects/project-1/files/index.html/versions/v1/restore',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
   it('does not show an export-started toast when desktop PDF export is canceled', async () => {
     const file = baseFile({
       name: 'index.html',
@@ -2898,11 +3128,133 @@ describe('FileViewer SVG artifacts', () => {
 
     render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
+    const editor = await screen.findByRole('textbox', { name: /markdown editor/i }) as HTMLTextAreaElement;
+    expect(editor.placeholder).toBe('Type notes, requirements, or instructions for this document...');
+    expect(document.querySelector('.markdown-pane-bar')).toBeNull();
     expect(screen.queryByRole('button', { name: /^deploy$/i })).toBeNull();
     fireEvent.click(await screen.findByRole('button', { name: /^download$/i }));
 
     expect(screen.getByRole('menuitem', { name: /Export as Markdown/i })).toBeTruthy();
     expect(screen.queryByRole('menuitem', { name: /Deploy to Vercel/i })).toBeNull();
+  });
+
+  it('coalesces markdown split-pane scroll sync to one animation frame', async () => {
+    const file = baseFile({
+      name: 'notes.md',
+      path: 'notes.md',
+      mime: 'text/markdown',
+      kind: 'text',
+      artifactManifest: {
+        version: 1,
+        kind: 'markdown-document',
+        title: 'Notes',
+        entry: 'notes.md',
+        renderer: 'markdown',
+        exports: ['md'],
+      },
+    });
+    const frameCallbacks = new Map<number, FrameRequestCallback>();
+    let nextFrameId = 0;
+    const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+      const id = ++nextFrameId;
+      frameCallbacks.set(id, callback);
+      return id;
+    });
+    vi.stubGlobal('requestAnimationFrame', requestAnimationFrameMock);
+    vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => {
+      frameCallbacks.delete(id);
+    }));
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/raw/notes.md') {
+        return new Response('# Notes\n\n' + Array.from({ length: 40 }, (_, index) => `Line ${index}`).join('\n\n'));
+      }
+      return new Response('', { status: 404 });
+    }));
+    const flushFrames = () => {
+      const callbacks = Array.from(frameCallbacks.entries());
+      frameCallbacks.clear();
+      for (const [, callback] of callbacks) callback(16);
+    };
+
+    render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
+
+    const editor = await screen.findByRole('textbox') as HTMLTextAreaElement;
+    const preview = screen.getByLabelText(/markdown preview/i) as HTMLElement;
+    let editorTop = 0;
+    let previewTop = 0;
+    let previewSetCount = 0;
+    Object.defineProperties(editor, {
+      scrollHeight: { configurable: true, value: 4000 },
+      clientHeight: { configurable: true, value: 1000 },
+      scrollTop: {
+        configurable: true,
+        get: () => editorTop,
+        set: (value: number) => {
+          editorTop = value;
+        },
+      },
+    });
+    Object.defineProperties(preview, {
+      scrollHeight: { configurable: true, value: 7000 },
+      clientHeight: { configurable: true, value: 1000 },
+      scrollTop: {
+        configurable: true,
+        get: () => previewTop,
+        set: (value: number) => {
+          previewSetCount += 1;
+          previewTop = value;
+        },
+      },
+    });
+
+    for (let i = 0; i < 3; i += 1) {
+      await act(async () => {
+        flushFrames();
+        await Promise.resolve();
+      });
+    }
+    expect(frameCallbacks.size).toBe(0);
+    requestAnimationFrameMock.mockClear();
+    previewSetCount = 0;
+    previewTop = 0;
+
+    editor.scrollTop = 1500;
+    const originalText = editor.value;
+    fireEvent.change(editor, { target: { value: `${originalText}\n\nDraft 1` } });
+    fireEvent.change(editor, { target: { value: `${originalText}\n\nDraft 2` } });
+    fireEvent.change(editor, { target: { value: `${originalText}\n\nDraft 3` } });
+
+    expect(editor.scrollTop).toBe(1500);
+    expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
+    expect(previewTop).toBe(0);
+    expect(previewSetCount).toBe(0);
+    expect(frameCallbacks.size).toBe(1);
+
+    await act(async () => {
+      flushFrames();
+    });
+
+    expect(previewTop).toBe(3000);
+    expect(previewSetCount).toBe(1);
+
+    previewTop = 2800;
+    fireEvent.scroll(preview);
+    await act(async () => {
+      flushFrames();
+      flushFrames();
+    });
+
+    expect(editorTop).toBe(1500);
+
+    previewTop = 3600;
+    fireEvent.wheel(preview);
+    fireEvent.scroll(preview);
+    await act(async () => {
+      flushFrames();
+    });
+
+    expect(editorTop).toBe(1800);
   });
 
   it('shows failed copy feedback when deployed link copying is blocked', async () => {
@@ -3362,7 +3714,9 @@ describe('FileViewer tweaks toolbar', () => {
     clickAgentTool('draw-overlay-toggle');
     const note = screen.getByPlaceholderText('Add a note for this mark');
     fireEvent.change(note, { target: { value: 'mark this' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Queue' }));
+    // Queue is a choice in the submit dropdown.
+    fireEvent.click(screen.getByRole('button', { name: 'Submit options' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Queue' }));
 
     expect(screen.getByPlaceholderText('Add a note for this mark')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Click' })).toBeNull();
@@ -3371,7 +3725,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByPlaceholderText('Add a note for this mark')).toBeNull();
   });
 
-  it('uses a materialized srcDoc bridge while the Draw bar is open', async () => {
+  it('uses a materialized srcDoc bridge when Draw opens before the URL preview bridge is ready', async () => {
     render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
         liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
@@ -3398,6 +3752,38 @@ describe('FileViewer tweaks toolbar', () => {
     expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc).toBe(frame.srcdoc);
   });
 
+  it('keeps the URL-loaded iframe active when opening Draw after the URL preview bridge is ready', async () => {
+    const { container } = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml='<html><body><button>Stateful tab</button><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const urlFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const srcDocFrame = screen.getByTestId('artifact-preview-frame-srcdoc') as HTMLIFrameElement;
+    expect(urlFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+    expect(urlFrame.getAttribute('src')).toContain('odPreviewBridge=snapshot');
+    expect(srcDocFrame.getAttribute('data-od-active')).toBe('false');
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: urlFrame.contentWindow,
+        data: { type: 'od:url-selection-bridge-ready' },
+      }));
+    });
+
+    clickAgentTool('draw-overlay-toggle');
+
+    await waitFor(() => {
+      const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(activeFrame).toBe(urlFrame);
+      expect(activeFrame.getAttribute('data-od-render-mode')).toBe('url-load');
+      expect(activeFrame.getAttribute('data-od-active')).toBe('true');
+      expect(srcDocFrame.getAttribute('data-od-active')).toBe('false');
+      expect(container.querySelector('canvas')).toBeTruthy();
+    });
+  });
+
   it('keeps the URL-load iframe warm while the Draw bar is open (no reload on close)', async () => {
     const { container } = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
@@ -3412,11 +3798,11 @@ describe('FileViewer tweaks toolbar', () => {
     expect(warmSrc).not.toBe('about:blank');
     expect(warmSrc).toContain('/raw/');
 
-    // Opening Draw flips the *visible* frame to the materialized srcDoc bridge
-    // (see the test above), but the URL-load iframe must stay warm rather than
-    // park at about:blank — otherwise closing the bar re-fetches the whole
-    // artifact and the user sees a black → loading → reload after every
-    // screenshot. Regression guard for the post-screenshot refresh.
+    // Opening Draw before bridge-ready flips the *visible* frame to the
+    // materialized srcDoc bridge (see the test above), but the URL-load iframe
+    // must stay warm rather than park at about:blank — otherwise closing the
+    // bar re-fetches the whole artifact and the user sees a black → loading →
+    // reload after every screenshot.
     clickAgentTool('draw-overlay-toggle');
 
     await waitFor(() => {
@@ -3805,7 +4191,9 @@ describe('FileViewer tweaks toolbar', () => {
     // so the annotation is staged for the next turn rather than sent mid-run.
     const send = screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
-    const queue = screen.getByRole('button', { name: 'Queue' }) as HTMLButtonElement;
+    // Queue now lives in the submit dropdown; open it to reach the fallback.
+    fireEvent.click(screen.getByRole('button', { name: 'Submit options' }));
+    const queue = screen.getByRole('menuitemradio', { name: 'Queue' }) as HTMLButtonElement;
     expect(queue.disabled).toBe(false);
 
     fireEvent.click(send);

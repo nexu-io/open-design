@@ -1,0 +1,8 @@
+# Extends the official image with libc6-compat so glibc-linked agent CLIs
+# (Claude Code, opencode, Codex, …) can run on Alpine musl.
+# See README.md "Linux: mounting host agent CLIs" for usage.
+FROM ghcr.io/nexu-io/od:latest
+
+USER root
+RUN apk add --no-cache libc6-compat
+USER open-design

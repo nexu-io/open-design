@@ -78,9 +78,14 @@ Tightly coupled with:
 - Must not depend on any non-Google web font.
 - Visible "X skills" / "Y systems" claims must read from
   `getCatalogCounts()` — never hardcode. The hero, capabilities cards,
-  labs pills, selected-work fractions, footer Library, and
-  `<meta name="description">` all derive from the same call so a
-  fresh content edit can never publish contradictory totals.
+  labs pills, selected-work fractions, and footer Library all derive
+  from the same call so a fresh content edit can never publish
+  contradictory totals. The homepage `<meta name="description">` is
+  intentionally scenario-focused and no longer states catalog totals, so
+  it is not a count-backed surface; `getHomeSeo()` still accepts the
+  counts and its `{skills}`/`{systems}` substitution stays as a no-op
+  hook, so if the description ever surfaces a count again it must route
+  through `getCatalogCounts()`.
 - When the canonical `design-templates/open-design-landing/example.html`
   changes, the corresponding section JSX in `app/page.tsx` and rules
   in `app/globals.css` must be updated to match. Those two files are

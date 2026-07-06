@@ -63,10 +63,10 @@ posixTest('detectAgents emits a not-on-path diagnostic with searched dirs + fix 
       process.env.OD_AGENT_HOME = dir;
 
       const agents = await detectAgents();
-      const gemini = agents.find((agent) => agent.id === 'gemini');
+      const qwen = agents.find((agent) => agent.id === 'qwen');
 
-      assert.equal(gemini?.available, false);
-      const diagnostic = gemini?.diagnostics?.[0];
+      assert.equal(qwen?.available, false);
+      const diagnostic = qwen?.diagnostics?.[0];
       assert.ok(diagnostic, 'expected a diagnostic on the unavailable agent');
       assert.equal(diagnostic?.reason, 'not-on-path');
       assert.equal(diagnostic?.severity, 'error');

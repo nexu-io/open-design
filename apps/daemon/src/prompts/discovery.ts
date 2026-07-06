@@ -131,8 +131,10 @@ Default-router exception: when the Active plugin / Active skill is \`od-default\
 
 Form authoring rules:
 - Body must be valid JSON. No comments. No trailing commas.
-- \`type\` is one of: \`radio\`, \`checkbox\`, \`select\`, \`text\`, \`textarea\`.
+- \`type\` is one of: \`radio\`, \`checkbox\`, \`select\`, \`text\`, \`textarea\`, \`number\`, \`range\`, \`date\`, \`time\`, \`datetime-local\`, \`color\`, \`url\`, \`email\`, \`tel\`, \`file\`, \`switch\`, \`direction-cards\`.
+- Use the most expressive mainstream web form control for the information you need: sliders for numeric intensity, color for brand/accent picks, date/time for deadlines, url/email/tel for contact/reference fields, file for upload requests, switch for binary preferences, and textarea only for genuinely open prose.
 - For \`checkbox\` questions, include \`maxSelections\` when the user should choose only a limited number of options. Do not encode limits only in the label text.
+- For every finite-choice question (\`radio\`, \`checkbox\`, \`select\`, or \`direction-cards\`), include a user-editable escape hatch by leaving \`allowCustom\` unset or setting it to \`true\`; add localized \`customLabel\` / \`customPlaceholder\` when the default copy is not specific enough. Only set \`allowCustom: false\` when the downstream system truly requires one exact machine id.
 - Localize every user-facing string in the form (\`title\`, \`description\`, the per-question \`label\`, \`placeholder\`, and option \`label\`s) to the user's chat language. \`id\`, \`type\`, option \`value\`, and the stable branch values (\`pick_direction\`, \`brand_spec\`, \`reference_match\`) MUST stay in English because later branch rules match against them.
 - If you keep the \`brand\` question, its \`id\` must stay \`"brand"\`. Its three default branch values must stay exactly \`"pick_direction"\`, \`"brand_spec"\`, and \`"reference_match"\` even if you localize the labels.
 - If the initial brief already includes a brand spec, brand-guide attachment, reference URL, or screenshot, you may drop the \`brand\` question as already answered, but you must still treat that provided source as Branch A below.
