@@ -51,6 +51,7 @@ import {
   beginAmrAuthTracking,
   resolveAmrAuthTracking,
 } from '../analytics/amr-auth';
+import { setOnboardingAttributionPersonProperties } from '../analytics/source-attribution';
 import {
   clearOnboardingSessionId,
   getOrCreateOnboardingSessionId,
@@ -1987,21 +1988,20 @@ function OnboardingView({
     if (!onboardingSessionId) return;
     aboutYouReportedRef.current = true;
     const snapshot = profileRef.current;
-    // Persist the survey so later AMR entries (outside onboarding) can forward
-    // the visitor's profile to AMR for paid-conversion segmentation.
-    saveOnboardingProfile({
+    const submittedAt = new Date();
+    const attributionProfile = {
       role: snapshot.role,
       orgSize: snapshot.orgSize,
       useCase: snapshot.useCase,
       source: snapshot.source,
-    });
+      completedAt: submittedAt.toISOString(),
+    };
+    // Persist the survey so later AMR entries (outside onboarding) can forward
+    // the visitor's profile to AMR for paid-conversion segmentation.
+    saveOnboardingProfile(attributionProfile, submittedAt);
+    setOnboardingAttributionPersonProperties(attributionProfile, submittedAt);
     syncAmrAttributionWithOnboardingProfile(
-      {
-        role: snapshot.role,
-        orgSize: snapshot.orgSize,
-        useCase: snapshot.useCase,
-        source: snapshot.source,
-      },
+      attributionProfile,
       {
         metricsConsent: config.telemetry?.metrics === true,
         odDeviceId: amrHandoffDeviceId({

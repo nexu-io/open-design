@@ -99,6 +99,7 @@ export function setConfigureGlobals(next: AnalyticsConfigureGlobals): void {
 // id as `app_user_id`), so it must survive reset()/identify() flows the
 // same way the configure globals do.
 let registeredUserId: string | null = null;
+let pendingPersonProperties: Record<string, unknown> | null = null;
 
 // Called from the AnalyticsProvider when the AMR login status resolves
 // (boot fetch or a login/logout mid-session). Passing null unregisters the
@@ -121,6 +122,44 @@ export function setAnalyticsUserId(userId: string | null): void {
     } else {
       client.unregister('user_id');
     }
+  } catch {
+    // best-effort — capture should never throw out of this path.
+  }
+}
+
+export function setAnalyticsPersonProperties(
+  properties: Record<string, unknown>,
+): void {
+  const compacted = compactPersonProperties(properties);
+  if (!compacted) return;
+  pendingPersonProperties = {
+    ...(pendingPersonProperties ?? {}),
+    ...compacted,
+  };
+  flushPersonProperties();
+}
+
+function flushPersonProperties(): void {
+  if (!client || !pendingPersonProperties) return;
+  try {
+    const properties = pendingPersonProperties;
+    const posthog = client as unknown as {
+      setPersonProperties?: (props: Record<string, unknown>) => void;
+      people?: { set?: (props: Record<string, unknown>) => void };
+      capture?: (event: string, props: Record<string, unknown>) => void;
+    };
+    if (typeof posthog.setPersonProperties === 'function') {
+      posthog.setPersonProperties(properties);
+      pendingPersonProperties = null;
+      return;
+    }
+    if (typeof posthog.people?.set === 'function') {
+      posthog.people.set(properties);
+      pendingPersonProperties = null;
+      return;
+    }
+    posthog.capture?.('$set', { $set: properties });
+    pendingPersonProperties = null;
   } catch {
     // best-effort — capture should never throw out of this path.
   }
@@ -307,6 +346,7 @@ export async function getAnalyticsClient(
             ...(registeredUserId ? { user_id: registeredUserId } : {}),
           };
           instance.register(lastRegisterPayload);
+          flushPersonProperties();
           // Re-bridge the error-tracking context once posthog-js is fully
           // initialized. `bootstrapExceptionTracking` may have already
           // wired this up at app boot via its own fetch; this duplicate
@@ -323,6 +363,7 @@ export async function getAnalyticsClient(
         },
       });
       client = posthog;
+      flushPersonProperties();
       return posthog;
     } catch {
       // Network failure, missing endpoint, third-party fork without keys —
@@ -411,9 +452,35 @@ function restoreSuperProperties(patch?: Record<string, unknown>): void {
   lastRegisterPayload = next;
   try {
     client.register(next);
+    flushPersonProperties();
   } catch {
     // best-effort.
   }
+}
+
+function compactPersonProperties(
+  properties: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(properties)) {
+    if (!key || value == null) continue;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed || trimmed === 'unknown') continue;
+      out[key] = trimmed;
+      continue;
+    }
+    if (Array.isArray(value)) {
+      const list = value
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry && entry !== 'unknown');
+      if (list.length > 0) out[key] = list;
+      continue;
+    }
+    out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 export function capture(
