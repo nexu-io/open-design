@@ -31,7 +31,7 @@ od:
 
 # cardnews-instagram — 인스타그램 카드뉴스 제작
 
-브랜드-범용 채널 워크플로. 채널 기술(카드 규격·이미지 파이프라인 13룰)은
+브랜드-범용 채널 워크플로. 채널 기술(카드 규격·이미지 파이프라인 12룰)은
 `craft/instagram-cardnews.md`, 브랜드 사실(팔레트·훅 공식·핸들·면책·로고 에셋)은 활성
 `design-systems/<brand>/DESIGN.md`에서 로드한다. **브랜드 사실 하드코딩 금지** — 이
 스킬은 채널 규약만 안다.
@@ -55,7 +55,7 @@ od:
    도착 후 그 주제로 2단계 합류(주제 축은 기확정 — 인터뷰에서 제외).
 2. **Interview** — `<question-form>` 아티팩트로만 (AskUserQuestion·인라인폼 금지).
    축: 주제(1.5 경유 시 제외)·타겟 독자·장수 힌트(기본 5~8, 사용자 조정)·타겟 키워드
-   (해시태그 후보 겸용)·톤·비주얼 무드(배경 스타일 방향 — 일러스트/그라디언트/실사풍).
+   (해시태그 후보 겸용)·톤·비주얼 무드(실사 장면 컨셉 방향 — 장소·분위기·소품. 기본형 배경은 실사 환경 고정이라 스타일 자체는 질문하지 않음).
    비율은 질문하지 않음 — craft 기본 4:5 고정(1:1은 사용자가 명시 요구할 때만).
 3. **Research(서브에이전트)** — dispatch 도구 있으면 **반드시** 분리:
    `references/research-subagent.md` Read 후 그 지시대로 위임(입력: 주제·키워드·독자·
@@ -81,23 +81,24 @@ od:
 5. **Produce** — `craft/instagram-cardnews.md` + 활성 DESIGN.md Read 후:
    - 5a. **cards.json Write** — 카드별 텍스트 확정 (스키마 정본
      `references/card-structure.md` — 줄바꿈은 여기서 확정, compose는 자동 줄바꿈 없음).
-     캡션은 8블록 템플릿, 해시태그는 별도 배열.
+     캡션은 8블록 템플릿, 해시태그는 별도 배열. 본문 레이아웃은 기본형(basic) 고정 — cards.json 최상위 body_layout 기본값. 자유형(free)은 후속 트랙(현재 compose가 명시 에러로 거부).
    - 5b. **표지 배경 생성** — `references/imagegen-pipeline.md` Read 후 그 지시대로
      imagegen 서브에이전트 1회 dispatch(순차 — 스타일 앵커). 프롬프트는 메인이 스캐폴드로
      전량 조립(브랜드 팔레트·비주얼 무드·portrait·no-text 필수·텍스트 영역 단순화).
      DESIGN.md에 브랜드 레퍼런스 이미지가 등재돼 있으면 view_image 참조 필수.
      `bg-01.png` 확인 후 진행.
    - 5c. **본문 배경 생성** — imagegen 서브에이전트 N-2개 **한 턴에 병렬 dispatch**
-     (각각 `bg-01.png`를 view_image 앵커로 "same style, same palette"). 병렬 실패
+     (각각 `bg-01.png` + 브랜드 캐릭터 레퍼런스(DESIGN.md 등재 시)를 view_image 앵커 2장으로 — "same style, same palette" + 캐릭터 고정절). 병렬 실패
      (rate limit 등) 시 순차 폴백 — 실패 카드만 재시도. dispatch 불가 런타임은 인라인
      순차. CTA는 생성 없음(표지 재사용).
    - 5d. **합성(메인 직접)** — `python3 <스킬 폴더>/scripts/compose_cards.py --spec
      {cwd}/cards.json --out-dir {cwd} [--logo <DESIGN.md 로고 에셋>]` → 4:5 중앙 크롭 →
      1080×1350 → 역할별 레이아웃 오버레이(고정 계약) → `<slug>-01.png` … `<slug>-NN.png`.
    - 5e. **갤러리 Write(메인 직접)** — `<slug>-preview.html`: 순수 정적 HTML — 카드
-     `<img src="<slug>-NN.png">`를 index 순서로 나열 + `.caption` 블록 1개(캡션 전문 +
-     해시태그 줄, 복사용 텍스트). 웹 런타임 코드 변경 없음. 슬러그 정규식
-     `[^a-z0-9가-힣]+`(가-힣 보존).
+     `<img src="<slug>-NN.png">`를 index 순서로 나열, **각 카드 푸터에 라벨(`NN · 역할`) +
+     개별 다운로드 앵커 `<a href="<slug>-NN.png" download>다운로드</a>`** + `.caption`
+     블록 1개(캡션 전문 + 해시태그 줄, 복사용 텍스트). JS 없음. 웹 런타임 코드 변경
+     없음. 슬러그 정규식 `[^a-z0-9가-힣]+`(가-힣 보존).
 6. **Review(서브에이전트 검수)** — dispatch 도구 있으면 **반드시** 신선한 컨텍스트
    검수자에게 위임: `references/review-subagent.md` Read 후 지시대로(검수자가 craft·
    DESIGN.md·brief·research·cards.json·갤러리·**카드 PNG 전장을 직접 Read — 비전 검토**).
