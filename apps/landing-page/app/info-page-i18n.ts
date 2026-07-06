@@ -997,6 +997,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           ],
           tocLabel: 'On this page',
           toc: [
+            { id: 'best-alternatives', label: 'Best alternatives' },
+            { id: 'free-oss', label: 'Free & open-source' },
             { id: 'what-is-figma', label: 'What Figma is' },
             { id: 'why-switch', label: 'Why switch' },
             { id: 'local-byok', label: 'Local-first + BYOK' },
@@ -1005,6 +1007,36 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
             { id: 'migrate', label: 'Migration' },
           ],
           sections: [
+            {
+              id: 'best-alternatives',
+              heading: 'Best free & open-source Figma alternatives in 2026',
+              blocks: [
+                { kind: 'p', text: 'The best Figma alternatives are Penpot, Open Design, Lunacy, Pixso, and OpenPencil — with Penpot and Open Design leading on the open-source, free-to-use angle. Here is how they compare and where each fits.' },
+                { kind: 'table', columns: ['Tool', 'License', 'Pricing', 'Best for', 'Open source'], rows: [
+                  ['Penpot', 'Open source (MPL-2.0)', 'Free, self-host', 'Open-source design & prototyping canvas', 'Yes'],
+                  ['Open Design', 'Apache-2.0', 'Free app · BYOK (pay your own API)', 'Agent-native design artifacts you own as files', 'Yes'],
+                  ['Lunacy (Icons8)', 'Proprietary (free)', 'Free', 'Free Sketch-compatible desktop UI design', 'No'],
+                  ['Pixso', 'Proprietary', 'Free tier + paid', 'Figma-style collaborative UI design', 'No'],
+                  ['OpenPencil', 'Open source (MIT)', 'Free, self-host', 'Local, AI-native, reads .fig', 'Yes'],
+                  ['Figma', 'Proprietary', 'Free tier + paid', 'The incumbent collaborative design tool', 'No'],
+                ] },
+                { kind: 'steps', items: [
+                  { label: 'Penpot', body: 'The closest open-source canvas replacement for Figma (MPL-2.0). A real-time, self-hostable vector and prototyping canvas. Best for teams who want a hands-on Figma-style tool that is free and open source.' },
+                  { label: 'Open Design', body: 'The agent-native, local-first pick — for people who want design artifacts as version-controlled files driven by the coding agent they already use, not a Figma-canvas clone. Apache-2.0, BYOK. Best for owning your design output as files in your own repo.' },
+                  { label: 'Lunacy (Icons8)', body: 'A free, proprietary desktop UI design app that reads Sketch files, with built-in assets. Best for a free Sketch-compatible editor on your desktop.' },
+                  { label: 'Pixso', body: 'A proprietary, Figma-style collaborative design tool with a real-time canvas. Best for teams who want a familiar multiplayer canvas with a free tier.' },
+                  { label: 'OpenPencil', body: 'A local, AI-native open-source design tool (MIT) that can read .fig files. Best for people who want an AI-native, self-hostable editor that opens existing Figma files.' },
+                ] },
+                { kind: 'p', text: 'Where Open Design fits honestly: it is a design layer around the coding agent you already use — BYOK, Apache-2.0 — a different job from a canvas editor. It is for owning your design output as files, not pixel-pushing on a shared canvas. If you specifically want an open-source Figma-style canvas, Penpot is the closest replacement.' },
+              ],
+            },
+            {
+              id: 'free-oss',
+              heading: 'Is Figma open source? Free & open-source alternatives',
+              blocks: [
+                { kind: 'p', text: 'Figma is proprietary and closed-source. If you want an open-source alternative you can self-host, Penpot (MPL-2.0) is the closest canvas replacement and Open Design (Apache-2.0) is the agent-native, local-first option; both are free to use.' },
+              ],
+            },
             {
               id: 'what-is-figma',
               heading: 'What Figma is',
@@ -1094,6 +1126,9 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           faqTitle: 'FAQ',
           faq: [
             { name: 'Is Open Design a drop-in replacement for Figma?', text: 'No. Figma is a hands-on collaborative canvas; Open Design is an agent-driven, local-first design layer. They overlap on producing interfaces, not on real-time canvas editing.' },
+            { name: 'What are the best free Figma alternatives?', text: 'Penpot and Open Design are free and open-source; Lunacy is a free proprietary option.' },
+            { name: 'Is Figma open source?', text: 'No, Figma is proprietary/closed-source; Penpot and Open Design are open-source alternatives.' },
+            { name: 'Is there an open-source Figma alternative?', text: 'Yes — Penpot (MPL-2.0) as a canvas replacement, Open Design (Apache-2.0) as an agent-native design layer, OpenPencil (MIT) as an AI-native .fig-reading option.' },
             { name: 'Can I still use Figma alongside Open Design?', text: 'Yes. Many teams design in Figma and use Open Design to generate and iterate from a portable brand; migration is manual today.' },
             { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. Credentials are never proxied through us.' },
             { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
@@ -1198,6 +1233,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           ],
           tocLabel: 'On this page',
           toc: [
+            { id: 'best-alternatives', label: 'Best alternatives' },
+            { id: 'free-oss', label: 'Free & open-source' },
             { id: 'what-is-bolt', label: 'What Bolt is' },
             { id: 'why-switch', label: 'Why switch' },
             { id: 'local-byok', label: 'Local-first + BYOK' },
@@ -1206,6 +1243,37 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
             { id: 'migrate', label: 'Migration' },
           ],
           sections: [
+            {
+              id: 'best-alternatives',
+              heading: 'The best bolt.new alternatives in 2026',
+              blocks: [
+                { kind: 'p', text: 'The best bolt.new alternatives are Open Design (open-source, local-first), Lovable, v0, Cursor, Replit, and the community fork OpenBolt — here is how they compare and where each one fits. Open Design is the pick if you want to own your design artifacts as version-controlled files instead of state inside a hosted app-builder.' },
+                { kind: 'table', columns: ['Tool', 'License', 'Pricing', 'Best for', 'Open source'], rows: [
+                  ['Open Design', 'Apache-2.0', 'Free app · BYOK (pay your own API)', 'Design-first artifacts you own as files', 'Yes'],
+                  ['Lovable', 'Proprietary', 'Paid subscription + credits', 'Non-technical full-app builds from a prompt', 'No'],
+                  ['v0 (Vercel)', 'Proprietary', 'Free tier + paid', 'React / Next.js component & UI prototyping', 'No'],
+                  ['Cursor', 'Proprietary', 'Free tier + paid', 'Agentic coding inside an IDE', 'No'],
+                  ['Replit (Agent)', 'Proprietary', 'Free tier + paid', 'Cloud IDE with build-and-deploy', 'No'],
+                  ['OpenBolt / bolt.diy', 'MIT (OSS)', 'Free, self-host', 'Self-hosting the bolt.new experience', 'Yes'],
+                ] },
+                { kind: 'steps', items: [
+                  { label: 'Open Design', body: 'The open-source, local-first, design-first pick — #1 for people who want to own their design artifacts as files, not a bolt.new clone. Apache-2.0, BYOK, drives the coding agent you already use. Best for design artifacts and a portable brand you keep in your own repo.' },
+                  { label: 'Lovable', body: 'Hosted, proprietary app builder that turns a prompt into a working full app. Best for non-technical makers who want a running product without touching files.' },
+                  { label: 'v0 (Vercel)', body: 'Generates React / Next.js components and UI from a prompt, tuned for the Vercel stack. Best for front-end UI and component prototyping.' },
+                  { label: 'Cursor', body: 'Agentic AI coding inside a full IDE. Best for developers who want the agent embedded in their editor and codebase.' },
+                  { label: 'Replit (Agent)', body: 'Cloud IDE where the agent builds and deploys from one place. Best for going from idea to a deployed app in the browser.' },
+                  { label: 'OpenBolt / bolt.diy', body: 'The community open-source fork of bolt.new itself (MIT). Best for self-hosting the bolt.new experience with your own keys and models.' },
+                ] },
+                { kind: 'p', text: 'Where Open Design fits honestly: it is a design layer around the coding agent you already use — BYOK, Apache-2.0 — so it is the bolt.new alternative for people who want design artifacts as version-controlled files rather than a hosted app-builder. If you specifically want a hosted prompt-to-app builder, Lovable, Replit, or bolt.new itself fit better.' },
+              ],
+            },
+            {
+              id: 'free-oss',
+              heading: 'Is there a free, open-source bolt.new alternative?',
+              blocks: [
+                { kind: 'p', text: 'Yes. Open Design is free and open-source — Apache-2.0, BYOK, so the app costs nothing and you pay only your own provider API spend. For the bolt.new experience itself as open source, OpenBolt (bolt.diy) is the community OSS fork of bolt.new you can self-host. Between them they cover the two high-intent needs behind "free open-source bolt.new alternative": design-first artifact ownership (Open Design) and a self-hostable app builder (OpenBolt).' },
+              ],
+            },
             {
               id: 'what-is-bolt',
               heading: 'What Bolt is',
@@ -1295,6 +1363,9 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           faqTitle: 'FAQ',
           faq: [
             { name: 'Is Open Design a drop-in replacement for Bolt?', text: 'No. Bolt ships running full-stack apps; Open Design is design-first and produces artifacts you own. They overlap on prompt-to-UI, not on running a backend.' },
+            { name: 'What is the best free bolt.new alternative?', text: 'Open Design — it is free and open-source (Apache-2.0, BYOK, so you pay only your own API spend) and is the strongest pick for design-first work. If you specifically want the bolt.new experience itself as open source, OpenBolt (bolt.diy) lets you self-host it for free.' },
+            { name: 'Is there an open-source bolt.new?', text: 'bolt.new itself is proprietary, but OpenBolt (bolt.diy) is the community open-source fork you can self-host. Open Design is a separate open-source, local-first alternative focused on design artifacts rather than a hosted app builder.' },
+            { name: 'bolt.new vs Lovable vs v0 — which should I use?', text: 'bolt.new builds a full-stack app in the browser from a prompt; Lovable is aimed at non-technical makers building full apps; v0 (Vercel) generates React/Next.js UI and components. Pick Open Design when you want to own your design artifacts as version-controlled files rather than state inside a hosted builder.' },
             { name: 'Can Open Design build a full app like Bolt?', text: 'Open Design focuses on design artifacts, prototypes, and brand systems. For an instant in-browser full-stack app, Bolt is the better fit.' },
             { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. API spend bills to your account and credentials are never proxied through us.' },
             { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
