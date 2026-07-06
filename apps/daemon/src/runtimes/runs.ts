@@ -202,6 +202,16 @@ export function createChatRunService({
     run.exitCode = code;
     run.signal = signal;
     run.updatedAt = Date.now();
+    // Release run-scoped resources the starter registered (e.g. the minted
+    // tool-token grant + agent event-sink entries). This runs on EVERY
+    // terminal path — including a startup throw that never reached the child
+    // lifecycle cleanup — so a failed run can never leave its capability token
+    // live for the token TTL. Best-effort + one-shot.
+    if (typeof run.onFinalize === 'function') {
+      const finalize = run.onFinalize;
+      run.onFinalize = null;
+      try { finalize(); } catch { /* best-effort */ }
+    }
     emit(run, 'end', { code, signal, status, resumable: run.resumable ?? false });
     for (const sse of run.clients) sse.end();
     run.clients.clear();
@@ -437,6 +447,11 @@ export function createChatRunService({
   const drop = (run) => {
     if (!run) return;
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+    if (typeof run.onFinalize === 'function') {
+      const finalize = run.onFinalize;
+      run.onFinalize = null;
+      try { finalize(); } catch { /* best-effort */ }
+    }
     runs.delete(run.id);
     for (const sse of run.clients) {
       try { sse.end(); } catch { /* best-effort detach */ }
