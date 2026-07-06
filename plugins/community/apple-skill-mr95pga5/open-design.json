@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "apple-skill-mr95pga5",
+  "title": "Apple 设计系统 Skill",
+  "version": "0.1.0",
+  "description": "--- name: apple-design-system description: 使用这个本地指南，从已补强的 Apple 品牌包生成 Apple 风格 HTML 资产。 ---",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

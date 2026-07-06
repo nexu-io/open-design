@@ -1,0 +1,19 @@
+{
+  "candidateId": "db0dc485-6721-42a6-a41b-541a0b7173eb",
+  "projectId": "brand-apple-7a815d",
+  "runId": "dd4fb988-b067-46b1-a4c0-3fbafc21402c",
+  "conversationId": "f247a2bc-76a2-49d4-ae85-b18fe3e1519d",
+  "provenance": {
+    "summary": "Detected from SKILL.md after a successful run.",
+    "detectedAt": 1783337627775
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 899,
+      "copied": true
+    }
+  ]
+}
