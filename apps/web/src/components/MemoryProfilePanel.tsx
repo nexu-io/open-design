@@ -48,8 +48,10 @@ function parseProfileBody(body: string): Record<string, string> {
   for (const line of lines) {
     const m = /^\s*-\s*([^:]+):\s*(.*)$/.exec(line);
     if (!m) continue;
-    const rawLabel = (m[1] ?? '').trim().toLowerCase();
-    const value = (m[2] ?? '').trim();
+    // Both groups are guaranteed present once `.exec` matches (`[^:]+` requires
+    // ≥1 char; `.*` always yields a string), so the captures are non-null here.
+    const rawLabel = m[1]!.trim().toLowerCase();
+    const value = m[2]!.trim();
     const field = PROFILE_FIELDS.find((f) => f.label.toLowerCase() === rawLabel);
     if (field) out[field.label] = value;
   }
