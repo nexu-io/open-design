@@ -26,8 +26,8 @@ export function localizedAgentGuidesPartA(en: Guides): Partial<Record<LandingLoc
       },
       'codex': {
         ...en['codex']!,
-        title: "デザインのための Codex — Open Design",
-        description: "人々が UI と Web デザインに OpenAI Codex をどう使うか — Product Design プラグイン、Figma 連携、フロントエンドの skills — そして Open Design が Codex をローカルファーストでオープンソースのデザインエージェントへと変える方法。",
+        title: "Codex でデザイン：OpenAI Codex で UI を作る — Open Design",
+        description: "OpenAI Codex で UI とフロントエンドをデザインする実践ガイド —— セットアップ、Figma 連携、skills、そしてありがちな「AI っぽさ」を避ける方法。Open Design は Codex を無料でローカルファーストなオープンソースのデザインエージェントに変えます。",
         breadcrumb: "Codex",
         label: "エージェント · Codex",
         heading: "デザインのための Codex。",
@@ -46,8 +46,8 @@ export function localizedAgentGuidesPartA(en: Guides): Partial<Record<LandingLoc
       },
       'opencode': {
         ...en['opencode']!,
-        title: "デザインのための OpenCode — Open Design",
-        description: "人々が UI と Web デザインに OpenCode をどう使うか — design.md ファイル、UI/UX の skills、Figma MCP — そして Open Design が OpenCode をローカルファーストでオープンソースのデザインエージェントへと変える方法。",
+        title: "OpenCode でデザイン — オープンソースエージェントで UI を作る",
+        description: "OpenCode で UI とフロントエンドをデザインする方法 —— design.md ファイル、UI/UX の skills、Figma MCP —— そして Open Design が OpenCode を無料でローカルファーストなオープンソースのデザインエージェントに変える方法。",
         breadcrumb: "OpenCode",
         label: "エージェント · OpenCode",
         heading: "デザインのための OpenCode。",
