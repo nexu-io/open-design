@@ -17,6 +17,7 @@ import {
   type TrackingDeployProvider,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
+import { exportErrorCode } from '../analytics/export-error-code';
 import { trackIframeLoad } from '../observability/iframe-error';
 import {
   trackArtifactExportResult,
@@ -5532,7 +5533,7 @@ function HtmlViewer({
             if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
           },
           (err) => {
-            finish('failed', err instanceof Error ? err.name : 'UNKNOWN');
+            finish('failed', exportErrorCode(err));
             failToast(err);
           },
         );
@@ -5547,7 +5548,7 @@ function HtmlViewer({
         if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
       }
     } catch (err) {
-      finish('failed', err instanceof Error ? err.name : 'UNKNOWN');
+      finish('failed', exportErrorCode(err));
       failToast(err);
     }
   };
@@ -9271,7 +9272,7 @@ function HtmlViewer({
       console.warn('[exportAsImage] failed to save snapshot:', err);
       const message = err instanceof Error && err.message ? err.message : t('fileViewer.exportImageFailed');
       setExportToast({ message, tone: 'error' });
-      fireImageExportResult('failed', err instanceof Error ? err.name : 'UNKNOWN');
+      fireImageExportResult('failed', exportErrorCode(err));
     } finally {
       imageExportInFlightRef.current = false;
     }
