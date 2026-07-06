@@ -29,6 +29,8 @@ BODY_TEXT_SIZE = 43          # body 본문 (레퍼런스 잉크 34px 실측)
 BODY_PITCH = 62              # body 타이틀·본문 공통 줄 피치 (실측 균일)
 BODY_TITLE_INK_TOP = 648     # 타이틀 첫 줄 잉크 상단 (실측 646~650)
 BODY_TEXT_INK_TOP = 794      # 본문 첫 줄 잉크 상단 (실측 793~794 — 타이틀 줄수 무관 고정)
+BODY_MAX_INK = W - 2 * LEFT  # 912 — 본문 잉크 폭 한계 (좌우 대칭 84px, 우측 한계 x=996)
+BODY_MIN_FILL = 0.8          # body 최장 줄 하한 비율 — 미달 = 좁은 컬럼 경고 (레퍼런스 실측 98%)
 
 # 폰트 자동 탐색 후보 — Pretendard variable 우선, 나눔 폴백 (craft 룰 4: 텍스트 = 100% Pillow)
 VARIABLE_CANDIDATES = [
@@ -138,6 +140,28 @@ def compose_cover(img, card, fonts):
         y += hook_lh
 
 
+def body_width_report(card, fonts):
+    """body 카드 줄폭 검사 — (errors, warnings). 자동 재줄바꿈 없음(결정성 계약).
+    초과는 프레임 밖 잘림이라 에러, 좁은 컬럼(절반 폭 줄바꿈)은 계약 위반 신호라 경고."""
+    draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    title_font = fonts.get(BODY_TITLE_SIZE, 800)
+    body_font = fonts.get(BODY_TEXT_SIZE, 500)
+    errors, warnings = [], []
+    for label, lines, font in (("title", card["title_lines"][:2], title_font),
+                               ("body", card["body_lines"], body_font)):
+        for line in lines:
+            ink = draw.textlength(line, font=font)
+            if ink > BODY_MAX_INK:
+                errors.append(
+                    f"index {card['index']} {label} 줄 잉크 {ink:.0f}px > 한계 {BODY_MAX_INK}px: {line!r}")
+    longest = max((draw.textlength(l, font=body_font) for l in card["body_lines"]), default=0)
+    if card["body_lines"] and longest < BODY_MAX_INK * BODY_MIN_FILL:
+        warnings.append(
+            f"index {card['index']} 본문 최장 줄 {longest:.0f}px < 가용폭 80%"
+            f"({BODY_MAX_INK * BODY_MIN_FILL:.0f}px) — 좁은 컬럼: 한 줄 19~21자로 재줄바꿈 권장")
+    return errors, warnings
+
+
 def compose_body(img, card, fonts):
     # 박스·스크림 밴드 절대 금지 — v2: 하단 페더 그라디언트만 (전면 균일 다크닝 폐기,
     # 레퍼런스 실측 2026-07-06). 가독 1차 책임은 여전히 배경 프롬프트(하반부 단순화).
@@ -183,6 +207,12 @@ def compose(spec, out_dir, bg_dir, fonts, logo):
         idx, role = card["index"], card["role"]
         if role not in COMPOSERS:
             sys.exit(f"알 수 없는 role: {role} (index {idx}) — cover|body|cta 만 허용")
+        if role == "body":
+            errors, warnings = body_width_report(card, fonts)
+            if errors:
+                sys.exit("본문 줄폭 한계 초과 — " + " / ".join(errors))
+            for wmsg in warnings:
+                print(f"경고: {wmsg}", file=sys.stderr)
         # CTA는 표지 배경 재사용 — 생성 호출 N-1회 계약 (craft 룰 9)
         bg_path = bg_dir / ("bg-01.png" if role == "cta" else f"bg-{idx:02d}.png")
         if not bg_path.exists():
@@ -226,8 +256,9 @@ def self_test():
             "cards": [
                 {"index": 1, "role": "cover", "sub": "자가 테스트 서브타이틀", "hook_lines": ["첫 줄 훅 문구", "둘째 줄 훅"]},
                 {"index": 2, "role": "body", "title_lines": ["본문 카드 타이틀", "둘째 줄 타이틀"],
-                 "body_lines": [f"본문 {n}번째 줄이에요." for n in range(1, 8)]},
-                {"index": 3, "role": "body", "title_lines": ["둘째 본문 타이틀"], "body_lines": ["문장 하나."]},
+                 "body_lines": [f"본문 {n}번째 줄 문장을 스무 자 안팎 폭으로 채워요." for n in range(1, 8)]},
+                {"index": 3, "role": "body", "title_lines": ["둘째 본문 타이틀"],
+                 "body_lines": ["한 줄짜리 본문도 폭 규칙에 맞춰 길게 채웁니다."]},
                 {"index": 4, "role": "cta", "handle": "@self_test", "sub": "저장하고 팔로우하세요"},
             ],
             "caption": "",
@@ -255,6 +286,24 @@ def self_test():
             # 하단 그라디언트 실효 — 텍스트 없는 좌하단이 좌상단보다 어두움 (균일 다크닝 폐기 확인)
             g = im.convert("L").load()
             assert g[10, H - 10] < g[10, 10], (g[10, H - 10], g[10, 10])
+
+        # 줄폭 가드 — 초과 = 에러, 좁은 컬럼 = 경고 (핫픽스 2026-07-07: 줄폭 계약)
+        wide_card = {"index": 9, "role": "body", "title_lines": ["타이틀"],
+                     "body_lines": ["가" * 30]}
+        errs, _ = body_width_report(wide_card, fonts)
+        assert errs, "912px 초과 줄이 에러로 잡히지 않음"
+        narrow_card = {"index": 9, "role": "body", "title_lines": ["타이틀"],
+                       "body_lines": ["짧은 줄"]}
+        errs2, warns = body_width_report(narrow_card, fonts)
+        assert not errs2 and warns, (errs2, warns)
+        # compose 경로에서도 초과가 에러로 끊기는지
+        overflow = dict(spec)
+        overflow["cards"] = [dict(spec["cards"][1], body_lines=["가" * 30])]
+        try:
+            compose(overflow, td, td, fonts, None)
+            raise AssertionError("잉크 폭 초과가 에러 없이 통과")
+        except SystemExit as e:
+            assert "한계" in str(e.code), e.code
 
         # body_layout 분기 예약 — basic 외 값은 명시 에러
         bad = dict(spec)
