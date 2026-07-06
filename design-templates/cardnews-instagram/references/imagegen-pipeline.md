@@ -24,7 +24,9 @@
 - `{out_name}` — 산출 파일명: 표지 `bg-01.png`, 본문 `bg-NN.png` (cards.json index와 일치)
 - `{prompt}` — 아래 스캐폴드로 조립한 생성 프롬프트 전문
 - `{anchor_paths}` — view_image 참조 이미지 절대 경로 목록. 표지: DESIGN.md 비주얼 무드
-  섹션의 브랜드 레퍼런스 이미지(있으면 필수). 본문: 반드시 `{cwd}/bg-01.png` 포함.
+  섹션의 브랜드 레퍼런스 이미지(있으면 필수). 본문: 반드시 `{cwd}/bg-01.png` 포함 +
+  브랜드 캐릭터가 있으면 DESIGN.md 등재 **캐릭터 레퍼런스 이미지도 함께**(앵커 2장 —
+  스타일·팔레트는 bg-01이, 캐릭터 정체성은 캐릭터 레퍼런스가 담당. 세대 드리프트 방지).
   없으면 "없음".
 
 ## 서브에이전트 임무 (dispatch 프롬프트 본문)
@@ -49,19 +51,26 @@
 ## 프롬프트 스캐폴드 (메인이 조립)
 
 ```
-Use case: illustration-story (또는 stylized-concept)
-Subject: [카드 내용에 맞는 장면·모티프 — DESIGN.md 비주얼 무드 키워드 반영]
-Style: [브랜드 무드 — 예: soft flat illustration, calm and trustworthy]
+Use case: photorealistic scene
+Subject: [카드 내용에 맞는 실사 장면 — 현실 장소·상황 + DESIGN.md 비주얼 무드 키워드 반영]
+Style: photorealistic real-world environment, cinematic natural lighting[, 브랜드 무드 키워드]
 Palette: [DESIGN.md 팔레트 토큰 색상 명시]
 Composition: portrait orientation. Keep the [텍스트 영역 — cover: lower-left third /
-  body: overall calm, low-contrast] simple and uncluttered.
-Constraints: no text, no letters, no numbers, no watermark, no logo.
+  body: lower half calm, low-contrast] simple and uncluttered.
+Character: [브랜드 캐릭터 있을 때만] Use the exact same character as in the reference
+  image — identical proportions, face, eyes, mouth, colors. Do not redesign,
+  restyle, or reinterpret the character.
+Constraints: no text, no letters, no numbers, no watermark, no logo,
+  no flat illustration, no abstract graphic background.
 ```
 
+- **기본형(basic) 배경 = 실사 환경 고정** — 플랫/그래픽 일러스트 배경은 craft 룰 2
+  위반. 자유형(free)은 후속 트랙에서 별도 정의.
 - **표지**: 브랜드 레퍼런스 이미지(DESIGN.md 비주얼 무드 섹션 등재)가 있으면
   view_image 참조로 캐릭터·구도를 잇는다.
-- **본문**: 반드시 표지 산출물(`bg-01.png`)을 view_image 참조 — "same style, same
-  palette, same character(캐릭터가 있으면)". 표정·소품 등 카드별 델타만 추가 지시한다.
+- **본문**: 반드시 표지 산출물(`bg-01.png`) + (캐릭터 브랜드면) 캐릭터 레퍼런스
+  **2장을 view_image 참조** — "same style, same palette" + Character 고정절.
+  표정·소품 등 카드별 델타만 추가 지시한다.
 - **CTA**: 생성 호출 없음 — compose가 `bg-01.png`를 재사용한다(craft 룰 9).
 
 ## 순서 계약
