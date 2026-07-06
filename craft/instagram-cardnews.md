@@ -110,6 +110,10 @@ text + background only.
   full-frame darkening** (v2: uniform darkening is retired; a hard-edge scrim
   band remains a user-rejected pattern). Legibility is primarily the
   background prompt's job (rule 2's calm lower half).
+  Body lines are prose-style paragraph lines that fill the column — width-based
+  breaks (roughly 25–31 chars/line incl. spaces at the 43px body size, mid-word breaks allowed), longest body line ≥80% of
+  the 912px usable width (symmetric 84px margins, right ink limit x=996). A
+  half-width narrow column or clipped summary fragments are a fail.
 - **cta** — reuse of the COVER background (no extra generation: N-1 calls
   total) + **uniform full-frame dim (~45%) by contract — never a gradient**
   (user-confirmed 2026-07-06) + centered account handle (~112px) + sub line
@@ -119,7 +123,8 @@ text + background only.
 
 **Checklist item (fails lint):** box/band/uniform darkening behind text; a
 font-rendered logo; a CTA card with its own generated background; a CTA card
-with a gradient instead of the uniform dim.
+with a gradient instead of the uniform dim; a body card whose longest line
+fills <80% of the usable width (narrow column).
 
 ## 10. Color discipline
 
