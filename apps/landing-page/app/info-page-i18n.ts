@@ -2999,9 +2999,9 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
     },
     agentGuides: EN_AGENT_GUIDES,
     download: {
-      title: 'Download Open Design — desktop app for macOS, Windows & Linux',
+      title: 'Download Open Design — Free Desktop App (macOS, Windows, Linux)',
       description:
-        'Download the latest Open Design desktop build. Install and create — sign in once, pick a model, start designing. macOS (Apple Silicon & Intel), Windows, and Linux.',
+        'Download the latest Open Design desktop app — free and open-source (Apache-2.0). Install, pick a model with your own keys, and start designing. macOS (Apple Silicon & Intel), Windows, and Linux.',
       breadcrumb: 'Download',
       label: 'Download',
       heading: 'Download Open Design.',
@@ -3054,9 +3054,9 @@ type DownloadCopy = InfoPageCopy['download'];
 const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = {
   ja: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Open Design をダウンロード — macOS / Windows / Linux デスクトップアプリ',
+    title: 'Open Design をダウンロード — 無料のオープンソース デスクトップアプリ（macOS / Windows / Linux）',
     description:
-      '最新の Open Design デスクトップ版をダウンロード。入れたらすぐ作れます——一度サインインし、モデルを選んで、デザインを開始。macOS（Apple Silicon と Intel）、Windows、Linux に対応。',
+      '最新の Open Design デスクトップアプリをダウンロード——無料でオープンソース（Apache-2.0）。インストールして、自分のキーでモデルを選び、デザインを開始。macOS（Apple Silicon と Intel）、Windows、Linux に対応。',
     breadcrumb: 'ダウンロード',
     label: 'ダウンロード',
     heading: 'Open Design をダウンロード。',
@@ -3089,9 +3089,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   ko: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Open Design 다운로드 — macOS / Windows / Linux 데스크톱 앱',
+    title: 'Open Design 다운로드 — 무료 오픈소스 데스크톱 앱 (macOS, Windows, Linux)',
     description:
-      '최신 Open Design 데스크톱 빌드를 다운로드하세요. 설치하면 바로 제작——한 번 로그인하고 모델을 고른 뒤 디자인을 시작하세요. macOS(Apple Silicon 및 Intel), Windows, Linux 지원.',
+      '최신 Open Design 데스크톱 앱을 다운로드하세요 — 무료 오픈소스(Apache-2.0). 설치하고, 자신의 키로 모델을 고른 뒤 디자인을 시작하세요. macOS(Apple Silicon 및 Intel), Windows, Linux 지원.',
     breadcrumb: '다운로드',
     label: '다운로드',
     heading: 'Open Design 다운로드.',
@@ -3124,9 +3124,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   de: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Open Design herunterladen — Desktop-App für macOS, Windows & Linux',
+    title: 'Open Design herunterladen — kostenlose Open-Source-Desktop-App (macOS, Windows, Linux)',
     description:
-      'Lade den neuesten Open-Design-Desktop-Build herunter. Installieren und loslegen — einmal anmelden, Modell wählen, designen. macOS (Apple Silicon & Intel), Windows und Linux.',
+      'Lade die neueste Open-Design-Desktop-App herunter — kostenlos und Open Source (Apache-2.0). Installieren, ein Modell mit deinen eigenen Schlüsseln wählen und loslegen. macOS (Apple Silicon & Intel), Windows und Linux.',
     breadcrumb: 'Download',
     label: 'Download',
     heading: 'Open Design herunterladen.',
@@ -3159,9 +3159,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   fr: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Télécharger Open Design — application de bureau pour macOS, Windows et Linux',
+    title: 'Télécharger Open Design — application de bureau gratuite et open source (macOS, Windows, Linux)',
     description:
-      'Téléchargez la dernière version bureau d’Open Design. Installez et créez — connectez-vous une fois, choisissez un modèle, commencez à concevoir. macOS (Apple Silicon et Intel), Windows et Linux.',
+      'Téléchargez la dernière application de bureau Open Design — gratuite et open source (Apache-2.0). Installez, choisissez un modèle avec vos propres clés et commencez à concevoir. macOS (Apple Silicon et Intel), Windows et Linux.',
     breadcrumb: 'Télécharger',
     label: 'Télécharger',
     heading: 'Télécharger Open Design.',
@@ -3194,9 +3194,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   ru: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Скачать Open Design — десктопное приложение для macOS, Windows и Linux',
+    title: 'Скачать Open Design — бесплатное десктопное приложение с открытым исходным кодом (macOS, Windows, Linux)',
     description:
-      'Скачайте последнюю десктопную сборку Open Design. Установите и создавайте — войдите один раз, выберите модель, начните проектировать. macOS (Apple Silicon и Intel), Windows и Linux.',
+      'Скачайте последнее десктопное приложение Open Design — бесплатное и с открытым исходным кодом (Apache-2.0). Установите, выберите модель со своими ключами и начните проектировать. macOS (Apple Silicon и Intel), Windows и Linux.',
     breadcrumb: 'Скачать',
     label: 'Скачать',
     heading: 'Скачать Open Design.',
@@ -3229,9 +3229,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   es: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Descargar Open Design — app de escritorio para macOS, Windows y Linux',
+    title: 'Descargar Open Design — app de escritorio gratuita y de código abierto (macOS, Windows, Linux)',
     description:
-      'Descarga la última versión de escritorio de Open Design. Instala y crea: inicia sesión una vez, elige un modelo y empieza a diseñar. macOS (Apple Silicon e Intel), Windows y Linux.',
+      'Descarga la última app de escritorio de Open Design: gratis y de código abierto (Apache-2.0). Instala, elige un modelo con tus propias claves y empieza a diseñar. macOS (Apple Silicon e Intel), Windows y Linux.',
     breadcrumb: 'Descargar',
     label: 'Descargar',
     heading: 'Descargar Open Design.',
@@ -3264,9 +3264,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   'pt-br': {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Baixar Open Design — app de desktop para macOS, Windows e Linux',
+    title: 'Baixar Open Design — app de desktop gratuito e open source (macOS, Windows, Linux)',
     description:
-      'Baixe a versão de desktop mais recente do Open Design. Instale e crie: faça login uma vez, escolha um modelo e comece a projetar. macOS (Apple Silicon e Intel), Windows e Linux.',
+      'Baixe o app de desktop mais recente do Open Design — gratuito e open source (Apache-2.0). Instale, escolha um modelo com suas próprias chaves e comece a projetar. macOS (Apple Silicon e Intel), Windows e Linux.',
     breadcrumb: 'Baixar',
     label: 'Baixar',
     heading: 'Baixar Open Design.',
@@ -3299,9 +3299,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   it: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Scarica Open Design — app desktop per macOS, Windows e Linux',
+    title: 'Scarica Open Design — app desktop gratuita e open source (macOS, Windows, Linux)',
     description:
-      'Scarica l’ultima build desktop di Open Design. Installa e crea: accedi una volta, scegli un modello e inizia a progettare. macOS (Apple Silicon e Intel), Windows e Linux.',
+      'Scarica l’ultima app desktop di Open Design — gratuita e open source (Apache-2.0). Installa, scegli un modello con le tue chiavi e inizia a progettare. macOS (Apple Silicon e Intel), Windows e Linux.',
     breadcrumb: 'Scarica',
     label: 'Scarica',
     heading: 'Scarica Open Design.',
@@ -3509,9 +3509,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   tr: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Open Design’i indir — macOS, Windows ve Linux için masaüstü uygulaması',
+    title: 'Open Design’i indir — ücretsiz ve açık kaynak masaüstü uygulaması (macOS, Windows, Linux)',
     description:
-      'En son Open Design masaüstü sürümünü indirin. Kurun ve üretmeye başlayın — bir kez giriş yapın, bir model seçin, tasarlamaya başlayın. macOS (Apple Silicon ve Intel), Windows ve Linux.',
+      'En son Open Design masaüstü uygulamasını indirin — ücretsiz ve açık kaynak (Apache-2.0). Kurun, kendi anahtarlarınızla bir model seçin ve tasarlamaya başlayın. macOS (Apple Silicon ve Intel), Windows ve Linux.',
     breadcrumb: 'İndir',
     label: 'İndir',
     heading: 'Open Design’i indir.',
@@ -3833,9 +3833,9 @@ INFO_PAGE_COPY.zh = {
   agentGuides: ZH_AGENT_GUIDES,
   download: {
     ...INFO_PAGE_COPY.en!.download,
-    title: '下载 Open Design —— macOS / Windows / Linux 桌面客户端',
+    title: '下载 Open Design —— 免费开源桌面客户端（macOS / Windows / Linux）',
     description:
-      '下载最新版 Open Design 桌面客户端。装上就能创作——登录一次、选个模型、开始设计。支持 macOS（Apple Silicon 与 Intel）、Windows、Linux。',
+      '下载最新版 Open Design 桌面客户端——免费、开源（Apache-2.0）。装上、用自己的密钥选个模型，就能开始设计。支持 macOS（Apple Silicon 与 Intel）、Windows、Linux。',
     breadcrumb: '下载',
     label: '下载',
     heading: '下载 Open Design。',

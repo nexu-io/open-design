@@ -26,8 +26,8 @@ export function localizedAgentGuidesPartN(en: Guides): Partial<Record<LandingLoc
       },
       'codex': {
         ...en['codex']!,
-        title: "Tasarım için Codex — Open Design",
-        description: "İnsanlar OpenAI Codex'i UI ve web tasarımı için nasıl kullanır — Product Design eklentisi, Figma entegrasyonu, frontend skill'leri — ve Open Design Codex'i nasıl yerel öncelikli, açık kaynaklı bir tasarım ajanına dönüştürür.",
+        title: "Tasarım için Codex: OpenAI Codex ile UI oluşturun — Open Design",
+        description: "OpenAI Codex ile UI ve frontend tasarlamanın pratik rehberi — kurulum, Figma entegrasyonu, skill’ler ve tektip «yapay zeka klişeliğinden» kaçınmanın yolu. Open Design, Codex’i ücretsiz, yerel öncelikli ve açık kaynaklı bir tasarım ajanına dönüştürür.",
         breadcrumb: "Codex",
         label: "Ajan · Codex",
         heading: "Tasarım için Codex.",
@@ -46,8 +46,8 @@ export function localizedAgentGuidesPartN(en: Guides): Partial<Record<LandingLoc
       },
       'opencode': {
         ...en['opencode']!,
-        title: "Tasarım için OpenCode — Open Design",
-        description: "İnsanlar OpenCode'u UI ve web tasarımı için nasıl kullanır — design.md dosyaları, UI/UX skill'leri, Figma MCP — ve Open Design OpenCode'u nasıl yerel öncelikli, açık kaynaklı bir tasarım ajanına dönüştürür.",
+        title: "Tasarım için OpenCode — açık kaynaklı ajanla UI oluşturun",
+        description: "OpenCode ile UI ve frontend nasıl tasarlanır — design.md dosyaları, UI/UX skill’leri, Figma MCP — ve Open Design OpenCode’u nasıl ücretsiz, yerel öncelikli ve açık kaynaklı bir tasarım ajanına dönüştürür.",
         breadcrumb: "OpenCode",
         label: "Ajan · OpenCode",
         heading: "Tasarım için OpenCode.",

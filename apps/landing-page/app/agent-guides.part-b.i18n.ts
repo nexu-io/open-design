@@ -26,8 +26,8 @@ export function localizedAgentGuidesPartB(en: Guides): Partial<Record<LandingLoc
       },
       'codex': {
         ...en['codex']!,
-        title: "디자인을 위한 Codex — Open Design",
-        description: "사람들이 UI와 웹 디자인에 OpenAI Codex를 활용하는 방법 — Product Design 플러그인, Figma 통합, 프런트엔드 skill — 그리고 Open Design이 Codex를 로컬 우선의 오픈소스 디자인 에이전트로 바꾸는 방식.",
+        title: "Codex로 디자인하기: OpenAI Codex로 UI 만들기 — Open Design",
+        description: "OpenAI Codex로 UI와 프런트엔드를 디자인하는 실전 가이드 — 설정, Figma 통합, skill, 그리고 뻔한 ‘AI 티’를 피하는 방법. Open Design은 Codex를 무료이면서 로컬 우선의 오픈소스 디자인 에이전트로 바꿔 줍니다.",
         breadcrumb: "Codex",
         label: "에이전트 · Codex",
         heading: "디자인을 위한 Codex.",
@@ -46,8 +46,8 @@ export function localizedAgentGuidesPartB(en: Guides): Partial<Record<LandingLoc
       },
       'opencode': {
         ...en['opencode']!,
-        title: "디자인을 위한 OpenCode — Open Design",
-        description: "사람들이 UI와 웹 디자인에 OpenCode를 활용하는 방법 — design.md 파일, UI/UX skill, Figma MCP — 그리고 Open Design이 OpenCode를 로컬 우선의 오픈소스 디자인 에이전트로 바꾸는 방식.",
+        title: "OpenCode로 디자인하기 — 오픈소스 에이전트로 UI 만들기",
+        description: "OpenCode로 UI와 프런트엔드를 디자인하는 방법 — design.md 파일, UI/UX skill, Figma MCP — 그리고 Open Design이 OpenCode를 무료이면서 로컬 우선의 오픈소스 디자인 에이전트로 바꾸는 방식.",
         breadcrumb: "OpenCode",
         label: "에이전트 · OpenCode",
         heading: "디자인을 위한 OpenCode.",
