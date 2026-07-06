@@ -11,10 +11,17 @@ import { toolTokenRegistry } from '../src/tool-tokens.js';
 // Force a deterministic failure in the run startup phase, AFTER the tool token
 // is minted but BEFORE the child process is spawned. `preparePromptFileForAgent`
 // is awaited at that point in `startChatRun`, so rejecting it reproduces "any
-// startup exception" without needing an unwritable filesystem.
+// startup exception" without needing an unwritable filesystem. The test-body
+// probe runs synchronously at the injection point so the spec can prove the
+// token was minted and live BEFORE the failure (guarding against a vacuous
+// pass where no token existed in the first place).
+const injection = vi.hoisted(() => ({ probe: null as null | (() => void) }));
+
 vi.mock('../src/runtimes/prompt-file.js', () => ({
-  preparePromptFileForAgent: () =>
-    Promise.reject(new Error('injected startup failure')),
+  preparePromptFileForAgent: () => {
+    injection.probe?.();
+    return Promise.reject(new Error('injected startup failure'));
+  },
 }));
 
 type StartedServer = { url: string; server: Server; shutdown?: () => Promise<void> | void };
@@ -23,6 +30,8 @@ let started: StartedServer | null = null;
 let binDir: string | null = null;
 
 afterEach(async () => {
+  injection.probe = null;
+  vi.restoreAllMocks();
   await Promise.resolve(started?.shutdown?.());
   if (started?.server) {
     await new Promise<void>((resolve) => started?.server.close(() => resolve()));
@@ -77,6 +86,22 @@ it('revokes the run tool token when startup fails before spawn', async () => {
   expect(projectRes.status).toBe(200);
   const { conversationId } = (await projectRes.json()) as { conversationId: string };
 
+  // Record every grant minted through the registry, and snapshot the live
+  // per-run token counts at the exact injection point. The probe fires inside
+  // the mocked `preparePromptFileForAgent`, i.e. synchronously BEFORE the
+  // startup failure propagates, so the snapshot proves the run's token existed
+  // and was still live when startup blew up.
+  const mintSpy = vi.spyOn(toolTokenRegistry, 'mint');
+  let liveAtFailure: Array<{ runId: string; count: number }> | null = null;
+  injection.probe = () => {
+    liveAtFailure = mintSpy.mock.results
+      .map((r) => r.value as { runId: string })
+      .map((grant) => ({
+        runId: grant.runId,
+        count: toolTokenRegistry.activeRunTokenCount(grant.runId),
+      }));
+  };
+
   const runRes = await fetch(`${started.url}/api/runs`, {
     method: 'POST',
     headers: {
@@ -110,6 +135,15 @@ it('revokes the run tool token when startup fails before spawn', async () => {
     await new Promise((r) => setTimeout(r, 20));
   }
   expect(status).toBe('failed');
+
+  // Non-vacuity guard: at the injected failure point this run had already
+  // minted its tool token and the grant was still live. Without this, the
+  // final zero-count assertion could pass trivially on a refactor that stops
+  // minting (or mints after prompt-file preparation).
+  expect(liveAtFailure).not.toBeNull();
+  const mintedForRun = liveAtFailure!.filter((entry) => entry.runId === runId);
+  expect(mintedForRun.length).toBeGreaterThan(0);
+  for (const entry of mintedForRun) expect(entry.count).toBeGreaterThan(0);
 
   // The failed run's minted tool token must be revoked. On the buggy path the
   // startup throw skips revocation and the capability stays live for its TTL.
