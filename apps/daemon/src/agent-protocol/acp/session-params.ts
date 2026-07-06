@@ -1,5 +1,16 @@
+/** @module agent-protocol/acp/session-params
+ * Builds the `session/new` parameter object and prompt blocks sent to an ACP
+ * agent subprocess at session start. Handles MCP server descriptor normalisation
+ * and env-format conversion (array vs map). Consumed by acp/session.ts and
+ * acp/models.ts; depends only on Node path.
+ */
 import path from 'node:path';
 
+/**
+ * Loose descriptor for a single MCP server entry as supplied by a caller.
+ * All fields are typed `unknown` so the builder can safely normalise them
+ * without trusting the caller's type discipline.
+ */
 export interface AcpMcpServerInput {
   type?: unknown;
   name?: unknown;
@@ -7,6 +18,10 @@ export interface AcpMcpServerInput {
   args?: unknown;
   env?: unknown;
 }
+/**
+ * Options accepted by `buildAcpSessionNewParams` controlling optional MCP
+ * server injection and the env-field wire format used by the target agent.
+ */
 export interface AcpSessionOptions {
   mcpServers?: AcpMcpServerInput[];
   // How the `env` field of each mcpServer entry is shaped.
@@ -14,6 +29,19 @@ export interface AcpSessionOptions {
   // `'map'`   → `{"KEY": "val"}` (reasonix 1.x Go, standard MCP).
   envFormat?: 'array' | 'map';
 }
+/**
+ * Builds the params object for an ACP `session/new` JSON-RPC call. Resolves
+ * `cwd` to an absolute path and normalises each MCP server entry's `env` field
+ * between `'array'` format (`[{name, value}]`, default, used by Hermes/Kimi)
+ * and `'map'` format (`{"KEY": "val"}`, used by reasonix and standard MCP).
+ *
+ * MCP is optional — omit `mcpServers` to run without it. Never auto-installs
+ * or mutates user/global MCP config.
+ *
+ * @param cwd - The working directory to pass to the ACP agent subprocess.
+ * @param options - Optional MCP server list and env-format selector.
+ * @returns The `session/new` params object ready for JSON-RPC serialisation.
+ */
 export function buildAcpSessionNewParams(cwd: string, { mcpServers, envFormat = 'array' }: AcpSessionOptions = {}) {
   const servers = Array.isArray(mcpServers) ? mcpServers : [];
   const wantsMap = envFormat === 'map';
@@ -58,6 +86,16 @@ export function buildAcpSessionNewParams(cwd: string, { mcpServers, envFormat = 
     }),
   };
 }
+/**
+ * Assembles the `prompt` array for a `session/prompt` ACP call. Always
+ * includes a leading `{ type: 'text', text: prompt }` block, followed by
+ * one `{ type: 'resource_link', uri: imagePath }` block per non-empty image
+ * path. Empty or non-string paths are silently skipped.
+ *
+ * @param prompt - The text prompt to send as the first block.
+ * @param imagePaths - Optional image attachment paths to append.
+ * @returns An array of prompt blocks ready for inclusion in `session/prompt` params.
+ */
 export function buildPromptBlocks(prompt: string, imagePaths: string[]): Array<Record<string, string>> {
   const blocks: Array<Record<string, string>> = [{ type: 'text', text: prompt }];
   for (const imagePath of imagePaths) {

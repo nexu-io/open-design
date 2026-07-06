@@ -1,3 +1,11 @@
+/** @module agent-protocol/acp/session
+ * ACP session orchestrator: performs the full initialize → session/new (or
+ * session/load) → session/prompt handshake with an already-spawned ACP
+ * subprocess, streams updates to the daemon event bus, handles permission
+ * replies, artifact-write mirroring, DSML text suppression, and clean abort.
+ * Depends on every other acp/ file and the core JSON-line stream. Consumed by
+ * connectionTest.ts and server.ts (via the acp/ barrel).
+ */
 import path from 'node:path';
 import type { ExecutionProfile } from '@open-design/contracts';
 import {
@@ -44,6 +52,10 @@ import {
 } from './models.js';
 import { buildAcpSessionNewParams, buildPromptBlocks, type AcpMcpServerInput } from './session-params.js';
 
+/**
+ * Options for `attachAcpSession`. All fields except `child`, `prompt`, and
+ * `send` are optional and carry sensible defaults.
+ */
 export interface AttachAcpSessionOptions {
   child: AcpChildProcess;
   prompt: string;
@@ -73,6 +85,30 @@ export interface AttachAcpSessionOptions {
   onCliReady?: () => void;
   onSessionInit?: () => void;
 }
+/**
+ * Attaches an ACP protocol session to an already-spawned child process and
+ * drives the full JSON-RPC conversation from handshake to prompt completion.
+ *
+ * Sequence:
+ * 1. Sends `initialize` to confirm the protocol version.
+ * 2. Sends `session/new` (or `session/load` when `resumeSessionId` is set).
+ * 3. Optionally sends `session/set_model` when a non-default model is requested.
+ * 4. Sends `session/prompt` with the user's prompt and any image attachments.
+ * 5. Streams `session/update` events to the `send` callback, translating:
+ *    - `agent_thought_chunk` → `thinking_start` / `thinking_delta`
+ *    - `agent_message_chunk` → `text_delta` (with DSML and tool-call text suppression)
+ *    - `tool_call` / `tool_call_update` → deferred `tool_use` / `tool_result` pairs
+ *    - status updates → `agent.status` events
+ * 6. Handles `session/request_permission` calls by auto-approving.
+ * 7. On prompt completion, flushes suppression buffers, emits usage, and closes stdin.
+ *
+ * Returns a controller object that the caller may use to query session state
+ * and to abort the in-progress turn.
+ *
+ * @param options - See `AttachAcpSessionOptions` for all fields.
+ * @returns A controller with `hasFatalError`, `getDurableSessionId`,
+ *   `completedSuccessfully`, and `abort` methods.
+ */
 export function attachAcpSession({
   child,
   prompt,
@@ -782,15 +818,18 @@ export function attachAcpSession({
   }, 'initialize');
 
   return {
+    /** Returns `true` when the session ended with a fatal protocol or transport error, allowing the caller to surface the failure. */
     hasFatalError() {
       return fatal;
     },
     // The durable upstream session handle to persist for resume, or null when
     // none was reported (older agents, or a handshake that never established a
     // session). Mirrors pi-rpc's getLastSessionPath().
+    /** Returns the durable upstream session id (e.g. vela's `openCodeSessionId`) to persist for next-turn resume, or `null` when the agent did not report one. */
     getDurableSessionId() {
       return durableSessionId;
     },
+    /** Returns `true` when the prompt request resolved cleanly without a fatal error and without an abort, even if the child process later exited via SIGTERM. */
     completedSuccessfully() {
       // Returns true when the prompt request resolved without a fatal error
       // and was not aborted. The chat consumer treats this as a successful
@@ -798,6 +837,12 @@ export function attachAcpSession({
       // (which is expected for agents that don't shut down on stdin.end()).
       return finished && !fatal && !aborted;
     },
+    /**
+     * Aborts an in-progress ACP session. Sends `session/cancel` when a session
+     * id has already been established, then always closes stdin so the agent
+     * receives EOF and can tear down its own runtime (e.g. vela's private
+     * OpenCode server). Idempotent — subsequent calls are no-ops.
+     */
     abort() {
       if (aborted || finished) return;
       aborted = true;
