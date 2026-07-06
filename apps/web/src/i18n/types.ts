@@ -1208,6 +1208,9 @@ export interface Dict {
   'pluginsHome.searchPlaceholder': string;
   'pluginsHome.searchAria': string;
   'pluginsHome.clearSearch': string;
+  'pluginsHome.sortAria': string;
+  'pluginsHome.sortHot': string;
+  'pluginsHome.sortNewest': string;
   'pluginsHome.facet.import': string;
   'pluginsHome.facet.create': string;
   'pluginsHome.facet.export': string;
