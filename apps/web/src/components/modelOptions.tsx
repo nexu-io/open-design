@@ -1,6 +1,13 @@
 import { createPortal } from 'react-dom';
 import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { AgentModelOption } from '../types';
+import { useT } from '../i18n';
+import {
+  getModelCostTier,
+  getModelCapabilityTag,
+  MODEL_COST_TIER_LABEL_KEYS,
+  MODEL_CAPABILITY_TAG_LABEL_KEYS,
+} from './modelCapabilityTags';
 
 export function renderModelOptions(models: AgentModelOption[]) {
   const groups = new Map<string, AgentModelOption[]>();
@@ -89,6 +96,7 @@ export const SearchableModelSelect = forwardRef<
   },
   ref,
 ) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [popoverStyle, setPopoverStyle] = useState<({ left: number; width: number; maxHeight: number } & ({ top: number; bottom?: never } | { bottom: number; top?: never })) | null>(null);
@@ -113,6 +121,12 @@ export const SearchableModelSelect = forwardRef<
   const selectedOption =
     allOptions.find((option) => option.id === value) ??
     (value ? { id: value, label: value } : allOptions[0] ?? null);
+  const selectedTag = selectedOption
+    ? getModelCapabilityTag(selectedOption)
+    : null;
+  const selectedTagLabel = selectedTag
+    ? t(MODEL_CAPABILITY_TAG_LABEL_KEYS[selectedTag])
+    : null;
   const normalizedQuery = query.trim().toLowerCase();
   const filteredOptions = useMemo(() => {
     if (!normalizedQuery) return allOptions;
@@ -225,7 +239,19 @@ export const SearchableModelSelect = forwardRef<
           if (!event.defaultPrevented) setOpen((prev) => !prev);
         }}
       >
-        {selectedOption?.label ?? ''}
+        <span className="model-select-searchable__value">
+          <span className="model-select-searchable__value-label">
+            {selectedOption?.label ?? ''}
+          </span>
+          {selectedTagLabel ? (
+            <span
+              className="model-select-searchable__value-badge"
+              data-tag={selectedTag}
+              data-label={selectedTagLabel}
+              aria-hidden="true"
+            />
+          ) : null}
+        </span>
       </button>
       {open && popoverStyle
         ? createPortal(
@@ -270,6 +296,14 @@ export const SearchableModelSelect = forwardRef<
               >
                 {filteredOptions.map((option) => {
                   const active = option.id === value;
+                  const tag = getModelCapabilityTag(option);
+                  const tagLabel = tag
+                    ? t(MODEL_CAPABILITY_TAG_LABEL_KEYS[tag])
+                    : null;
+                  const costTier = getModelCostTier(option);
+                  const costLabel = costTier
+                    ? t(MODEL_COST_TIER_LABEL_KEYS[costTier])
+                    : null;
                   return (
                     <button
                       key={option.id}
@@ -283,7 +317,28 @@ export const SearchableModelSelect = forwardRef<
                         setOpen(false);
                       }}
                     >
-                      <span className="model-select-searchable__option-label">{option.label}</span>
+                      <span className="model-select-searchable__option-content">
+                        <span className="model-select-searchable__option-copy">
+                          <span className="model-select-searchable__option-label">
+                            {option.label}
+                          </span>
+                          {costLabel ? (
+                            <span
+                              className="model-select-searchable__option-meta"
+                              data-description={costLabel}
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                        </span>
+                        {tagLabel ? (
+                          <span
+                            className="model-select-searchable__option-badge"
+                            data-tag={tag}
+                            data-label={tagLabel}
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                      </span>
                     </button>
                   );
                 })}
