@@ -1,0 +1,74 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-cardnews-instagram",
+  "title": "Instagram Card News",
+  "title_i18n": {
+    "zh-CN": "Instagram 卡片新闻", "zh-TW": "Instagram 卡片新聞", "ja": "Instagram カードニュース", "ko": "인스타 카드뉴스",
+    "de": "Instagram Card News", "fr": "Instagram Card News", "ru": "Instagram Card News", "es": "Instagram Card News",
+    "pt-BR": "Instagram Card News", "it": "Instagram Card News", "vi": "Instagram Card News", "pl": "Instagram Card News",
+    "id": "Instagram Card News", "nl": "Instagram Card News", "ar": "Instagram Card News", "tr": "Instagram Card News",
+    "uk": "Instagram Card News", "en": "Instagram Card News"
+  },
+  "version": "0.1.0",
+  "description": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+  "description_i18n": {
+    "zh-CN": "Instagram 轮播卡片新闻生成器，直接产出成品 PNG 卡片（1080×1350）。品牌无关的 7 步工作流：采访用户、在未给定主题时推荐主题、收集一手来源、起草卡片地图方案、进入确认门控、以封面为风格锚生成 AI 背景并用 Pillow 叠加文字，最后按 5 个维度（含基于视觉的设计检查）自检。适用于任何 '카드뉴스'、'card news'、'인스타 카드뉴스'、'인스타그램 캐러셀' 或 'instagram carousel' 请求。",
+    "zh-TW": "Instagram 輪播卡片新聞產生器，直接產出成品 PNG 卡片（1080×1350）。品牌無關的 7 步工作流：訪談使用者、未給定主題時推薦主題、蒐集第一手來源、草擬卡片地圖方案、進入確認關卡、以封面為風格錨生成 AI 背景並用 Pillow 疊加文字，最後按 5 個維度（含視覺化設計檢查）自我檢查。適用於任何 '카드뉴스'、'card news'、'인스타 카드뉴스'、'인스타그램 캐러셀' 或 'instagram carousel' 請求。",
+    "ja": "Instagram カルーセル用カードニュース生成器 — 完成 PNG カード（1080×1350）を直接出力。ブランド非依存の 7 ステップワークフロー：ユーザーにインタビューし、主題未指定なら候補を推薦し、一次情報を集め、カードマップ案を起草し、確認ゲートを通し、表紙をスタイルアンカーに AI 背景を生成して Pillow でテキストを合成し、視覚ベースのデザイン検査を含む 5 軸で自己レビューします。'카드뉴스'、'card news'、'인스타 카드뉴스'、'인스타그램 캐러셀'、'instagram carousel' のリクエストに使用します。",
+    "ko": "인스타그램 캐러셀 카드뉴스 제작기 — 완성 PNG 카드(1080×1350)를 직접 산출한다. 브랜드 무관 7단계 워크플로우: 사용자를 인터뷰하고, 주제가 없으면 추천하고, 1차 출처를 수집하고, 카드맵 기획안을 작성해 컨펌 게이트를 거친 뒤, 표지를 스타일 앵커로 AI 배경을 생성하고 Pillow로 텍스트를 합성하며, 비전 기반 디자인 축을 포함한 5축으로 자가검수한다. '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', 'instagram carousel' 요청 어디에나 사용한다.",
+    "de": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+    "fr": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+    "ru": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+    "es": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+    "pt-BR": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+    "it": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+    "vi": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+    "pl": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+    "id": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+    "nl": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+    "ar": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+    "tr": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+    "uk": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request.",
+    "en": "Instagram carousel card-news producer that ships final PNG cards (1080×1350). Brand-agnostic 7-step workflow: interviews the user, recommends topics when none is given, gathers primary sources, drafts a card-map plan, gates confirmation, generates AI backgrounds (cover as style anchor) with Pillow text overlay, and self-reviews on 5 axes including a vision-based design check. Use for any '카드뉴스', 'card news', '인스타 카드뉴스', '인스타그램 캐러셀', or 'instagram carousel' request."
+  },
+  "license": "MIT",
+  "author": { "name": "Open Design", "url": "https://github.com/nexu-io" },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/cardnews-instagram",
+  "tags": ["example", "first-party", "prototype", "marketing", "instagram", "cardnews", "carousel", "korea", "png"],
+  "compat": { "agentSkills": [{ "path": "./SKILL.md" }] },
+  "od": {
+    "kind": "scenario",
+    "routing": {
+      "triggers": ["카드뉴스", "카드 뉴스", "card news", "cardnews", "인스타 카드뉴스", "인스타그램 카드뉴스", "인스타그램 캐러셀", "instagram carousel"]
+    },
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "marketing",
+    "badge": { "label": "카드뉴스", "tone": "green" },
+    "surface": "web",
+    "preview": { "type": "html", "entry": "./example.html" },
+    "useCase": {
+      "query": {
+        "en": "Produce an Instagram carousel card-news set about {{topic}} for {{audience}}. Run the cardnews-instagram interview to capture topic, audience, card count, target keyword, tone and visual mood; gather primary sources; draft a card-map plan; gate it for confirmation; then generate anchored AI backgrounds and compose final 1080×1350 PNG cards with a caption gallery.",
+        "ko": "{{audience}} 대상으로 {{topic}}에 관한 인스타그램 카드뉴스를 제작한다. cardnews-instagram 인터뷰로 주제·독자·장수·타겟 키워드·톤·비주얼 무드를 받고, 1차 출처를 수집해 카드맵 기획안을 작성하고 컨펌 게이트를 거친 뒤, 스타일 앵커 기반 AI 배경을 생성하고 1080×1350 PNG 카드와 캡션 갤러리를 산출한다."
+      },
+      "exampleOutputs": [{ "path": "./example.html", "title": "Instagram Card News" }]
+    },
+    "inputs": [
+      { "name": "topic", "label": "Topic", "type": "string", "required": true, "placeholder": "환절기 비염 실비 청구", "default": "card news topic" },
+      { "name": "keyword", "label": "Target keyword", "type": "string", "required": false, "placeholder": "비염 실비 청구" }
+    ],
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "designSystem": { "ref": "bodoc" },
+      "assets": [
+        "./example.html",
+        "./references/card-structure.md"
+      ]
+    },
+    "pipeline": { "stages": [{ "id": "generate", "atoms": ["file-write", "live-artifact"] }] },
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}
