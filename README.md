@@ -299,6 +299,12 @@ After install: the app auto-detects every coding-agent CLI on your `PATH`, loads
 
 You can use Open Design without ever opening the GUI — call it as a skill, plugin, or MCP server inside Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi, and more.
 
+If you installed the macOS desktop app via the DMG or Homebrew cask, your shell
+may still resolve `od` to Apple's built-in `/usr/bin/od` octal-dump utility. In
+that case, open **Settings → MCP server** in the desktop app and copy the
+client-specific snippet; it uses absolute paths and does not rely on the bare
+`od` command.
+
 ```bash
 # One-line install into the agent you're using:
 od mcp install <agent>
@@ -313,9 +319,10 @@ curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 hosted URL returns shell instead of the landing-page HTML fallback and fails
 fast if your shell resolves a non-Open-Design `od` binary.
 
-> **WSL2 users:** If your coding-agent CLIs run inside WSL2, follow the
-> [`WSL2 setup guide`](docs/wsl-setup.md) first. Linux's `/usr/bin/od` can
-> shadow Open Design's `od` command.
+> **macOS / WSL2 users:** `/usr/bin/od` is a system octal-dump command and can
+> shadow Open Design's `od` command. Desktop-app users should prefer the
+> **Settings → MCP server** snippet; WSL2 users should follow the
+> [`WSL2 setup guide`](docs/wsl-setup.md) first.
 
 Then, inside the agent:
 
@@ -385,7 +392,7 @@ od skill list --scenario marketing
 
 **Why MCP?** Exporting and re-attaching a zip every iteration breaks flow. MCP exposes the design source directly — the agent always sees the live file.
 
-**For an agent starting from scratch,** the installer places `~/.config/<agent>/open-design.json` (or the platform equivalent) plus a copy-paste MCP snippet. Cursor gets a one-click deeplink; Claude Code gets a `claude mcp add-json` one-liner; every other agent gets JSON in the schema its config expects. Full per-agent flow → **Settings → MCP server** in the desktop app, or [`docs/agent-adapters.md`](docs/agent-adapters.md).
+**For an agent starting from scratch,** the installer places `~/.config/<agent>/open-design.json` (or the platform equivalent) plus a copy-paste MCP snippet. Cursor gets a one-click deeplink; Claude Code gets a `claude mcp add-json` one-liner; every other agent gets JSON in the schema its config expects. On macOS desktop installs, prefer that Settings snippet over typing bare `od mcp install <agent>` in Terminal, because `/usr/bin/od` may win on PATH. Full per-agent flow → **Settings → MCP server** in the desktop app, or [`docs/agent-adapters.md`](docs/agent-adapters.md).
 
 **Security model.** Read-only by default, the daemon binds to `127.0.0.1`, and SSRF is blocked at the proxy edge. LAN exposure requires an explicit `OD_BIND_HOST` plus `OD_ALLOWED_ORIGINS`. Connector credentials and live-artifact preview routes stay loopback-only regardless.
 

@@ -60,9 +60,14 @@ if [ "${od_probe}" != "open-design-cli:mcp-install:v1" ]; then
   cat >&2 <<EOF
 Open Design install.sh: '${od_path}' does not look like the Open Design CLI.
 
-On Linux and WSL2, /usr/bin/od is usually the coreutils octal-dump command and
-can shadow Open Design's CLI. Put the Open Design CLI earlier on PATH, then
-re-run this command.
+On macOS, Linux, and WSL2, /usr/bin/od is the system octal-dump command and can
+shadow Open Design's CLI. Put the Open Design CLI earlier on PATH, then re-run
+this command.
+
+If you installed the macOS desktop app via the DMG or Homebrew cask, the app
+bundle does not add an 'od' shim to your shell PATH. Launch Open Design and use
+Settings -> MCP server to copy the client-specific install snippet instead;
+that snippet uses absolute paths and avoids the system 'od' collision.
 EOF
   exit 1
 fi
