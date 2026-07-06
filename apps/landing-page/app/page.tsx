@@ -323,9 +323,10 @@ export default function Page({
   const skills = fmt(counts.skills);
   const systems = fmt(counts.systems);
   // Design Systems stat card: derive from the raw count so a missing count
-  // keeps the neutral "—" fallback (never "—+" / a non-finite countup target).
+  // keeps the neutral "—" fallback with no countup metadata (never "—+" nor a
+  // non-finite data-countup-to). `to: null` makes the renderer skip countup.
   const systemsCardNum = counts.systems > 0 ? `${counts.systems}+` : '—';
-  const systemsCardTo = counts.systems > 0 ? String(counts.systems) : '—';
+  const systemsCardTo: string | null = counts.systems > 0 ? String(counts.systems) : null;
   const deckCount = pad2(counts.byMode?.deck);
   const prototypeCount = pad2(counts.byMode?.prototype);
   const mobileCount = pad2(counts.byPlatform?.mobile);
@@ -1013,7 +1014,7 @@ export default function Page({
                         <span data-github-stars>{item.num}</span>
                       ) : item.live === 'contributors' ? (
                         <span data-github-contributors>{item.num}</span>
-                      ) : item.num ? (
+                      ) : item.num && item.to ? (
                         <span
                           data-countup
                           data-countup-to={item.to}
@@ -1021,6 +1022,8 @@ export default function Page({
                         >
                           {item.num}
                         </span>
+                      ) : item.num ? (
+                        <span>{item.num}</span>
                       ) : null}
                       {item.num ? ' ' : ''}<em>{item.alt}</em>
                     </h3>
