@@ -40,6 +40,7 @@ import type {
   MemoryExtractionProvider,
   MemoryListResponse,
 } from '@open-design/contracts';
+import { patchMemoryExtractionConfig } from '../providers/memory';
 import type { AgentModelOption, ApiProtocol, ExecMode } from '../types';
 import {
   SUGGESTED_MODELS_BY_PROTOCOL,
@@ -170,22 +171,6 @@ async function fetchMemoryExtraction(): Promise<MemoryExtractionMaskedConfig | n
   }
 }
 
-async function saveMemoryExtraction(
-  extraction: MemoryExtractionConfigShape | null,
-): Promise<MemoryExtractionMaskedConfig | null | undefined> {
-  const resp = await fetch('/api/memory/config', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ extraction }),
-  });
-  if (!resp.ok) return undefined;
-  const json = (await resp.json()) as {
-    enabled: boolean;
-    extraction: MemoryExtractionMaskedConfig | null;
-  };
-  return json.extraction ?? null;
-}
-
 export function MemoryModelInline({
   mode,
   apiProtocol,
@@ -313,7 +298,7 @@ export function MemoryModelInline({
     ) => {
       setBusy(true);
       try {
-        const result = await saveMemoryExtraction(next);
+        const result = await patchMemoryExtractionConfig(next);
         if (result !== undefined) {
           setConfig(result);
           // Skip the "Saved!" flash on background re-syncs (provider

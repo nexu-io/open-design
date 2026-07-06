@@ -2309,4 +2309,103 @@ describe('MemorySection', () => {
     await waitFor(() => expect(toggle.checked).toBe(false));
     expect(patchBodies).toEqual([{ chatExtractionEnabled: false }]);
   });
+
+  // Minimal fetch stub: an enabled memory root with no entries/extractions, so
+  // the shell renders and the header/modal affordances are reachable.
+  function stubEmptyMemoryFetch() {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions') {
+        return new Response(JSON.stringify({ extractions: [] }), {
+          status: 200, headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+  }
+
+  it('copies the storage path and flashes when the info button is clicked', async () => {
+    stubEmptyMemoryFetch();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+
+    renderMemorySection();
+
+    const infoBtn = await screen.findByLabelText('Memory storage path — click to copy');
+    fireEvent.click(infoBtn);
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('/tmp/memory'));
+    expect(await screen.findByText('✓ Path copied')).toBeTruthy();
+  });
+
+  it('switches back to the Memories top tab after visiting How it works', async () => {
+    stubEmptyMemoryFetch();
+    renderMemorySection();
+
+    fireEvent.click(await screen.findByRole('tab', howItWorksTopTab));
+    // Re-selecting the Memories tab drives the setTopTab('memories') handler.
+    fireEvent.click(screen.getByRole('tab', { name: 'Memories' }));
+    expect(screen.getByRole('tab', { name: 'Memories' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('opens the add modal and closes it via the close button and the backdrop', async () => {
+    stubEmptyMemoryFetch();
+    renderMemorySection();
+
+    const openAdd = await screen.findByRole('button', { name: 'Add or import memories' });
+    fireEvent.click(openAdd);
+
+    const dialog = await screen.findByRole('dialog');
+    // Mousedown on the dialog must NOT close it (stopPropagation guard).
+    fireEvent.mouseDown(dialog);
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+    // The close button dismisses it.
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // Reopen, then click the backdrop surface to close.
+    fireEvent.click(screen.getByRole('button', { name: 'Add or import memories' }));
+    await screen.findByRole('dialog');
+    const backdrop = document.querySelector('.memory-action-modal-backdrop') as HTMLElement;
+    fireEvent.mouseDown(backdrop);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('opens the advanced modal and closes it', async () => {
+    stubEmptyMemoryFetch();
+    renderMemorySection();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Advanced' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Advanced')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('ignores an SSE change ping that carries no kind', async () => {
+    stubEmptyMemoryFetch();
+    renderMemorySection();
+    await screen.findByRole('tab', { name: 'Memories' });
+
+    const es = StubEventSource.instances[0]!;
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    const before = fetchMock.mock.calls.length;
+    // A connection ping (no `kind`) must not trigger a list re-fetch.
+    es.emit('change', {});
+    await Promise.resolve();
+    const listRefetches = fetchMock.mock.calls
+      .slice(before)
+      .filter(([url]) => String(url) === '/api/memory');
+    expect(listRefetches).toHaveLength(0);
+  });
 });

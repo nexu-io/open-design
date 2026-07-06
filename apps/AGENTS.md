@@ -9,6 +9,12 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `apps/desktop`: Electron shell. Desktop does not guess the web port; it reads runtime status through sidecar IPC and opens the reported web URL.
 - `apps/packaged`: Thin packaged Electron runtime entry. It starts packaged daemon/web sidecars, registers the `od://` entry protocol, and delegates desktop host behavior to `apps/desktop`.
 
+## apps/web frontend refactors (vertical slices)
+
+Before decomposing a large `apps/web` component (a "god-component" like `SettingsDialog`, `MemorySection`, or `ChatComposer`), read `docs/adr/0002-frontend-vertical-slice-decomposition.md` first. It is the canonical design for this work and covers: the layer split (wire DTOs → `packages/contracts`, transport adapters → `apps/web/src/providers/`, in-slice `features/<slice>/` owning ports + rules + hooks + dumb components + barrel), the injected-port hook paradigm, and the **Testing & coverage strategy for a slice** subsection (how to reach ≥95% honestly — classify each "unreachable" branch and apply the matching fix instead of `/* v8 ignore */`).
+
+The `MemorySection` slice (`apps/web/src/features/memory/`) is the worked canary; mirror its structure. A detailed session working-log for that canary lives in the branch's `ADS-project-knowledge/reports/*-memory-slice-*handoff.md` when present.
+
 ## Daemon layout
 
 - `apps/daemon/src/` contains only daemon app source.

@@ -21,6 +21,7 @@ import {
   checkDesignSystemUnknownTokens,
 } from "./check-tokens-fixture-sync.ts";
 import { checkCraftReferences } from "./lint-craft-references.ts";
+import { checkWebSliceBoundaries } from "./check-web-slice-boundaries.ts";
 import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
@@ -1309,6 +1310,7 @@ const checks: GuardCheck[] = [
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
   { name: "web import isolation", run: checkWebImportIsolation },
+  { name: "web slice boundaries", run: checkWebSliceBoundaries },
   { name: "tools layout", run: checkToolsLayout },
   { name: "style policy", run: checkStylePolicy },
   { name: "CI topology", run: checkCiTopology },
