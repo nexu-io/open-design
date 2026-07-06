@@ -9272,7 +9272,7 @@ function HtmlViewer({
       console.warn('[exportAsImage] failed to save snapshot:', err);
       const message = err instanceof Error && err.message ? err.message : t('fileViewer.exportImageFailed');
       setExportToast({ message, tone: 'error' });
-      fireImageExportResult('failed', err instanceof Error ? err.name : 'UNKNOWN');
+      fireImageExportResult('failed', exportErrorCode(err));
     } finally {
       imageExportInFlightRef.current = false;
     }
