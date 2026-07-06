@@ -152,7 +152,7 @@ export type RuntimeAgentDef = {
   //                            under MiMo's env namespace.
   //
   // Leave undefined for adapters that have no native MCP transport
-  // wired yet (codex, gemini, cursor-agent, copilot, qoder, pi). The
+  // wired yet (codex, cursor-agent, copilot, qoder, pi). The
   // settings UI reads this field to surface an explicit "external MCP
   // is not forwarded to <agent>; configure servers in <agent>'s own
   // config file instead" hint, replacing the previous silent-failure
@@ -227,6 +227,13 @@ export type RuntimeAgentDef = {
   authProbe?: {
     args: string[];
     timeoutMs?: number;
+    // Agent id whose tailored auth classifier + API-key short-circuit should
+    // be used for this probe when it differs from the runtime agent id. Local
+    // profiles (local-profiles.ts) inherit a base adapter's `authProbe` but run
+    // under the profile id; carrying the base id here keeps the base adapter's
+    // auth semantics (e.g. Claude's JSON-aware parser) instead of falling
+    // through to the generic classifier. Defaults to the def id when unset.
+    classifierAgentId?: string;
   };
   // Format for the `env` field in ACP `session/new` → `mcpServers[].env`.
   // `'array'` (default) emits `[{name, value}]` — used by Hermes, Kimi,

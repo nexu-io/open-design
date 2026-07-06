@@ -67,6 +67,12 @@ export async function streamMessage(
   if (cfg.apiProtocol === 'aihubmix') {
     return streamMessageAIHubMix(cfg, system, history, signal, handlers, context);
   }
+  if (cfg.apiProtocol === 'bedrock') {
+    handlers.onError(
+      new Error('AWS Bedrock BYOK chat requires AWS credential signing and is not supported by the current API-key proxy.'),
+    );
+    return;
+  }
   if (cfg.apiProtocol === 'openai' || (!cfg.apiProtocol && isOpenAICompatible(cfg.model, cfg.baseUrl))) {
     return streamMessageOpenAI(cfg, system, history, signal, handlers);
   }

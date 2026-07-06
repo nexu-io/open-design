@@ -124,6 +124,7 @@ const blog = defineCollection({
       readingTime: z.number().int().positive(),
       summary: z.string(),
       author: z.string().optional(),
+      socialImage: z.string().optional(),
       ctaKind: z.enum(['download-app', 'event-register']).optional(),
       ctaHref: z.string().url().optional(),
       ctaTitle: z.string().min(1).optional(),
@@ -139,6 +140,12 @@ const blog = defineCollection({
               category: z.string().optional(),
               body: z.string().optional(),
               bodyHtml: z.string().optional(),
+              // Optional per-locale reading time. Set this when a localized
+              // `bodyHtml` differs in length from the English Markdown (e.g. a
+              // translation that hasn't caught up to an expanded English body)
+              // so non-English readers see an accurate estimate instead of the
+              // shared English `readingTime`.
+              readingTime: z.number().int().positive().optional(),
             })
             .passthrough(),
         )

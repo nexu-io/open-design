@@ -23,13 +23,13 @@ const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['cursor-agent', 'CURSOR_AGENT_BIN'],
   ['deepseek', 'DEEPSEEK_BIN'],
   ['devin', 'DEVIN_BIN'],
-  ['gemini', 'GEMINI_BIN'],
   ['hermes', 'HERMES_BIN'],
   ['kimi', 'KIMI_BIN'],
   ['kiro', 'KIRO_BIN'],
   ['kilo', 'KILO_BIN'],
   ['mimo', 'MIMO_BIN'],
   ['opencode', 'OPENCODE_BIN'],
+  ['byok-opencode', 'OPENCODE_BIN'],
   ['pi', 'PI_BIN'],
   ['qoder', 'QODER_BIN'],
   ['qwen', 'QWEN_BIN'],
@@ -240,6 +240,9 @@ function packagedBuiltInExecutable(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
 ): string | null {
+  if (def.id === 'byok-opencode') {
+    return resolveAmrOpenCodeExecutable({ ...process.env, ...configuredEnv });
+  }
   if (def.id !== 'amr') return null;
   const resourceRoot = process.env.OD_RESOURCE_ROOT?.trim();
   if (!resourceRoot) return null;

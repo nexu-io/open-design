@@ -29,12 +29,14 @@ const bakePreviewsAutomergeWorkflowPath = join(
   "bake-plugin-previews-automerge.yml",
 );
 const bakePreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
+const finalizeReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "finalize-release.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
 const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta-s.yml");
 const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
 const releasePrereleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-prerelease.yml");
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
+const releaseStableNotesScriptPath = join(workspaceRoot, ".github", "scripts", "release", "github", "stable-notes.sh");
 const releasePreviewScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-preview.ts");
 const releaseStableScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-stable.ts");
 const releaseBetaScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-beta.ts");
@@ -70,6 +72,35 @@ function sectionBetween(content: string, start: string, end: string): string {
   const endIndex = content.indexOf(end, startIndex + start.length);
   expect(endIndex).toBeGreaterThan(startIndex);
   return content.slice(startIndex, endIndex);
+}
+
+function extractWorkflowRunScript(workflow: string, stepName: string): string {
+  const marker = `      - name: ${stepName}`;
+  const start = workflow.indexOf(marker);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const next = workflow.indexOf("\n      - ", start + marker.length);
+  const step = workflow.slice(start, next === -1 ? workflow.length : next);
+  const runStart = step.indexOf("        run: |\n");
+  expect(runStart).toBeGreaterThanOrEqual(0);
+  return step
+    .slice(runStart + "        run: |\n".length)
+    .split("\n")
+    .map((line) => line.replace(/^          /, ""))
+    .join("\n")
+    .trimEnd();
+}
+
+function parseGithubOutput(raw: string): Record<string, string> {
+  return Object.fromEntries(
+    raw
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => {
+        const sep = line.indexOf("=");
+        expect(sep).toBeGreaterThan(0);
+        return [line.slice(0, sep), line.slice(sep + 1)];
+      }),
+  );
 }
 
 async function gitPatchId(mode: "--stable" | "--verbatim", diff: string): Promise<string> {
@@ -386,6 +417,251 @@ describe("packaged smoke workflow", () => {
     expect(feishuStep).not.toContain("'cancelled'");
   });
 
+  it("[P2] gates the finalize-release follow-up as a trusted workflow_run consumer", async () => {
+    const workflow = await readFile(finalizeReleaseWorkflowPath, "utf8");
+
+    // Reacts to release-stable completing (not release: published — release-stable promotes its
+    // own draft with GITHUB_TOKEN, which cannot trigger workflows), plus a manual backfill.
+    expect(workflow).toContain('workflows: ["release-stable"]');
+    expect(workflow).toContain("types: [completed]");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("github.event_name == 'workflow_dispatch'");
+    expect(workflow).toContain("github.event.workflow_run.conclusion == 'success'");
+    expect(workflow).toContain("github.repository == 'nexu-io/open-design'");
+    expect(workflow).not.toContain("github.event.workflow_run.conclusion != 'cancelled'");
+
+    // It mints the privileged release App token for label deletion, branch push, PR + merge-queue.
+    expect(workflow).toContain("actions/create-github-app-token");
+    expect(workflow).toContain("secrets.RELEASE_BOT_APP_ID");
+
+    // The shipped version is resolved from the LATEST published release (release-stable marks it
+    // --latest) or the dispatch tag — NEVER from workflow_run.head_branch, which can be the
+    // dispatch ref rather than the built release branch when release-stable runs with a `ref` input.
+    expect(workflow).toContain("gh release view --repo nexu-io/open-design --json tagName,isDraft,isPrerelease");
+    expect(workflow).not.toContain("github.event.workflow_run.head_branch");
+    expect(workflow).not.toContain("HEAD_BRANCH");
+
+    // Only a published (draft=false), non-prerelease, open-design-vX.Y.Z release finalizes; a
+    // dry-run completion (latest stays the previous, already-finalized stable) must no-op.
+    expect(workflow).toContain("isDraft");
+    expect(workflow).toContain("isPrerelease");
+    expect(workflow).toContain("^[0-9]+\\.[0-9]+\\.[0-9]+$");
+    expect(workflow).toContain('echo "skip=true"');
+    expect(workflow).toContain("steps.ver.outputs.skip != 'true'");
+
+    // Idempotent forward-only bump of the synchronized manifests (patch, not the next minor that
+    // cut-release owns); independently-versioned packages are skipped via npm pkg set version.
+    expect(workflow).toContain("sort -V");
+    expect(workflow).toContain("npm pkg set version");
+    expect(workflow).toContain("changed=true");
+
+    // The bump PR needs one core-maintainer approval (code-owned manifests + require_code_owner_review
+    // on main), so finalize requests that review and arms the merge queue pinned to the pushed SHA.
+    expect(workflow).toContain("--add-reviewer nexu-io/core-maintainers");
+    expect(workflow).toContain("--squash --auto --match-head-commit");
+    expect(workflow).toContain("head_sha=$(git rev-parse HEAD)");
+    expect(workflow).toContain("git ls-remote --exit-code --heads origin \"$BRANCH\"");
+
+    // The shipped release's backport label is cleaned up (tolerant of an already-deleted label).
+    expect(workflow).toContain('label="backport release/v$VERSION"');
+    expect(workflow).toContain("gh label delete");
+  });
+
+  it("[P2] resolves finalize-release shipped versions from the real workflow shell step", async () => {
+    const workflow = await readFile(finalizeReleaseWorkflowPath, "utf8");
+    const script = extractWorkflowRunScript(
+      workflow,
+      "Resolve the shipped version (latest published stable, or the dispatch tag)",
+    );
+
+    async function runResolve(args: {
+      event: "workflow_dispatch" | "workflow_run";
+      inputTag?: string;
+      state?: string;
+      ghExit?: boolean;
+    }): Promise<{ output: Record<string, string>; ghArgs: string[] }> {
+      const dir = await mkdtemp(join(tmpdir(), "od-finalize-resolve-"));
+      const ghPath = join(dir, "gh");
+      const jqPath = join(dir, "jq");
+      const outputPath = join(dir, "github-output");
+      const ghLogPath = join(dir, "gh-args.log");
+      await writeFile(
+        ghPath,
+        `#!/usr/bin/env node
+const fs = require("node:fs");
+fs.appendFileSync(process.env.FAKE_GH_LOG, process.argv.slice(2).join(" ") + "\\n");
+if (process.env.FAKE_GH_EXIT === "1") process.exit(1);
+process.stdout.write(process.env.FAKE_GH_STATE || "");
+`,
+      );
+      await chmod(ghPath, 0o755);
+      await writeFile(
+        jqPath,
+        `#!/usr/bin/env node
+const selector = process.argv[process.argv.length - 1];
+let input = "";
+process.stdin.on("data", (chunk) => { input += chunk; });
+process.stdin.on("end", () => {
+  const data = JSON.parse(input);
+  const key = selector.startsWith(".") ? selector.slice(1) : selector;
+  process.stdout.write(String(data[key]) + "\\n");
+});
+`,
+      );
+      await chmod(jqPath, 0o755);
+
+      try {
+        await execFileAsync("bash", ["-c", script], {
+          cwd: dir,
+          env: {
+            ...process.env,
+            EVENT: args.event,
+            INPUT_TAG: args.inputTag ?? "",
+            GITHUB_OUTPUT: outputPath,
+            PATH: `${dir}${delimiter}${process.env.PATH ?? ""}`,
+            FAKE_GH_LOG: ghLogPath,
+            FAKE_GH_STATE: args.state ?? "",
+            FAKE_GH_EXIT: args.ghExit ? "1" : "0",
+          },
+        });
+        const [rawOutput, rawGhArgs] = await Promise.all([
+          readFile(outputPath, "utf8").catch(() => ""),
+          readFile(ghLogPath, "utf8").catch(() => ""),
+        ]);
+        return {
+          output: parseGithubOutput(rawOutput),
+          ghArgs: rawGhArgs.split(/\r?\n/).filter(Boolean),
+        };
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    }
+
+    await expect(
+      runResolve({
+        event: "workflow_dispatch",
+        inputTag: "0.12.0",
+        state: JSON.stringify({ tagName: "open-design-v0.12.0", isDraft: false, isPrerelease: false }),
+      }),
+    ).resolves.toMatchObject({
+      output: {
+        skip: "false",
+        version: "0.12.0",
+        next: "0.12.1",
+        branch: "release-bot/bump-main-v0.12.1",
+      },
+      ghArgs: [expect.stringContaining("release view open-design-v0.12.0")],
+    });
+
+    await expect(
+      runResolve({
+        event: "workflow_dispatch",
+        inputTag: "open-design-v1.2.3",
+        state: JSON.stringify({ tagName: "open-design-v1.2.3", isDraft: false, isPrerelease: false }),
+      }),
+    ).resolves.toMatchObject({
+      output: { skip: "false", version: "1.2.3", next: "1.2.4" },
+      ghArgs: [expect.stringContaining("release view open-design-v1.2.3")],
+    });
+
+    for (const state of [
+      { tagName: "open-design-v0.12.0", isDraft: true, isPrerelease: false },
+      { tagName: "open-design-v0.12.0", isDraft: false, isPrerelease: true },
+      { tagName: "open-design-v0.12.0-beta.1", isDraft: false, isPrerelease: false },
+    ]) {
+      await expect(runResolve({ event: "workflow_run", state: JSON.stringify(state) })).resolves.toMatchObject({
+        output: { skip: "true" },
+      });
+    }
+
+    await expect(runResolve({ event: "workflow_run", ghExit: true })).resolves.toMatchObject({
+      output: { skip: "true" },
+    });
+  });
+
+  it("[P2] bumps only synchronized workspace manifests in finalize-release", async () => {
+    const workflow = await readFile(finalizeReleaseWorkflowPath, "utf8");
+    const script = extractWorkflowRunScript(workflow, "Bump main's synchronized workspace versions");
+    const dir = await mkdtemp(join(tmpdir(), "od-finalize-bump-"));
+    const outputPath = join(dir, "github-output");
+    const writeJson = (relativePath: string, value: unknown) =>
+      writeFile(join(dir, relativePath), `${JSON.stringify(value, null, 2)}\n`);
+
+    try {
+      await Promise.all([
+        mkdir(join(dir, "apps", "web"), { recursive: true }),
+        mkdir(join(dir, "apps", "telemetry-worker"), { recursive: true }),
+        mkdir(join(dir, "packages", "platform"), { recursive: true }),
+        mkdir(join(dir, "packages", "components"), { recursive: true }),
+        mkdir(join(dir, "tools", "dev"), { recursive: true }),
+        mkdir(join(dir, "e2e"), { recursive: true }),
+      ]);
+      await Promise.all([
+        writeJson("package.json", { name: "root", version: "0.12.0", dependencies: { untouched: "0.12.0" } }),
+        writeJson("apps/web/package.json", { name: "@open-design/web", version: "0.12.0" }),
+        writeJson("apps/telemetry-worker/package.json", { name: "telemetry-worker", version: "0.1.0" }),
+        writeJson("packages/platform/package.json", { name: "@open-design/platform", version: "0.12.0" }),
+        writeJson("packages/components/package.json", { name: "@open-design/components", version: "0.5.0" }),
+        writeJson("tools/dev/package.json", { name: "@open-design/dev", version: "0.12.0" }),
+        writeJson("e2e/package.json", { name: "@open-design/e2e", version: "0.12.0" }),
+      ]);
+
+      await execFileAsync("bash", ["-c", script], {
+        cwd: dir,
+        env: { ...process.env, NEXT: "0.12.1", GITHUB_OUTPUT: outputPath },
+      });
+
+      await expect(readFile(outputPath, "utf8")).resolves.toContain("changed=true");
+      await expect(readFile(join(dir, "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.12.1",
+        dependencies: { untouched: "0.12.0" },
+      });
+      await expect(readFile(join(dir, "apps", "web", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.12.1",
+      });
+      await expect(readFile(join(dir, "packages", "platform", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.12.1",
+      });
+      await expect(readFile(join(dir, "tools", "dev", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.12.1",
+      });
+      await expect(readFile(join(dir, "e2e", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.12.1",
+      });
+      await expect(readFile(join(dir, "apps", "telemetry-worker", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.1.0",
+      });
+      await expect(readFile(join(dir, "packages", "components", "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.5.0",
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("[P2] keeps finalize-release version bumps forward-only", async () => {
+    const workflow = await readFile(finalizeReleaseWorkflowPath, "utf8");
+    const script = extractWorkflowRunScript(workflow, "Bump main's synchronized workspace versions");
+    const dir = await mkdtemp(join(tmpdir(), "od-finalize-bump-noop-"));
+    const outputPath = join(dir, "github-output");
+
+    try {
+      await writeFile(join(dir, "package.json"), `${JSON.stringify({ name: "root", version: "0.12.2" }, null, 2)}\n`);
+
+      await execFileAsync("bash", ["-c", script], {
+        cwd: dir,
+        env: { ...process.env, NEXT: "0.12.1", GITHUB_OUTPUT: outputPath },
+      });
+
+      await expect(readFile(outputPath, "utf8")).resolves.toContain("changed=false");
+      await expect(readFile(join(dir, "package.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+        version: "0.12.2",
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("[P2] keeps the backport patch-equivalence gate whitespace-sensitive", async () => {
     const compactDiff = [
       "diff --git a/script.py b/script.py",
@@ -661,6 +937,7 @@ describe("packaged smoke workflow", () => {
       "ui/project-management-flows.test.ts",
       "ui/workspace-keyboard-flows.test.ts",
     ]);
+    expect(uiP0Groups["project-workspace"].workers).toBe(1);
     expect(visual).toContain("fromJSON(needs.runners.outputs.runs_on).visual_hot");
     expect(visual).toContain("toJSON(fromJSON(needs.runners.outputs.runs_on).visual_hot)");
     expect(workflow).not.toContain("needs.runners.outputs.contabo_control");
@@ -904,6 +1181,37 @@ describe("packaged smoke workflow", () => {
     expectWindowsUpdaterSmokeContract(releaseStableWorkflow, "stable");
   });
 
+  it("[P2] prerelease publishes github.commit so its changelog has a baseline", async () => {
+    // The Feishu release card computes its changelog as `git log <previous>..<current>`,
+    // where <previous> is read from prerelease/latest/metadata.json's `.github.commit`
+    // (notify-release-feishu.yml). That field is written by githubInfo() from the
+    // RELEASE_COMMIT env. release-beta sets RELEASE_COMMIT on every build + publish job,
+    // but release-prerelease historically set it on none, so every prerelease published an
+    // empty github.commit and the card could never diff against the prior prerelease
+    // ("首个 Prerelease 包"). Require RELEASE_COMMIT on the prerelease build + publish jobs
+    // so the per-platform manifests and the final metadata.json carry the built commit and
+    // stay mutually consistent (publish-metadata rejects a manifest whose commit disagrees).
+    const [prereleaseWorkflow, betaWorkflow] = await Promise.all([
+      readFile(releasePrereleaseWorkflowPath, "utf8"),
+      readFile(releaseBetaWorkflowPath, "utf8"),
+    ]);
+
+    const releaseCommitEnv = "RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}";
+    // Beta is the working reference that already populates the commit.
+    expect(betaWorkflow).toContain(releaseCommitEnv);
+
+    const jobBounds: Array<[string, string]> = [
+      ["  build_mac:", "  build_mac_intel:"],
+      ["  build_mac_intel:", "  build_win:"],
+      ["  build_win:", "  build_linux:"],
+      ["  build_linux:", "  publish:"],
+      ["  publish:", "  cleanup_partial_release_assets:"],
+    ];
+    for (const [start, end] of jobBounds) {
+      expect(sectionBetween(prereleaseWorkflow, start, end)).toContain(releaseCommitEnv);
+    }
+  });
+
   it("[P2] keeps counted release workflow calls on a consistent ref and output contract", async () => {
     const [previewWorkflow, prereleaseWorkflow, previewScript] = await Promise.all([
       readFile(releasePreviewWorkflowPath, "utf8"),
@@ -1082,21 +1390,26 @@ describe("packaged smoke workflow", () => {
     expect(script).toContain(".github/workflows/landing-page-staging.yml");
   });
 
-  it("[P2] supports stable dry-run metadata and prepublish boundaries", async () => {
+  it("[P2] supports stable metadata, prepublish, and publish dispatch modes", async () => {
     const [workflow, script] = await Promise.all([
       readFile(releaseStableWorkflowPath, "utf8"),
       readFile(releaseStableScriptPath, "utf8"),
     ]);
 
     expect(workflow).toContain("dry_run:");
-    expect(workflow).toContain("Dry-run boundary to validate. metadata stops after promotion metadata; prepublish runs build/smoke/report/plan without publishing.");
+    expect(workflow).toContain(
+      "Release mode. metadata stops after promotion metadata; prepublish runs build/smoke/report/plan without publishing; publish performs the stable release.",
+    );
     expect(workflow).toContain("group: open-design-release-stable-${{ inputs.dry_run }}");
     expect(workflow).toContain("type: choice");
     expect(workflow).toContain("- metadata");
     expect(workflow).toContain("- prepublish");
+    expect(workflow).toContain("- publish");
     expect(workflow).toContain("default: metadata");
     expect(workflow).not.toContain("inputs.channel");
-    expect(workflow).toContain("OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run }}");
+    expect(workflow).toContain("OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run == 'publish' && 'false' || inputs.dry_run }}");
+    expect(workflow).toContain("RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}");
+    expect(workflow).toContain("run: bash .github/scripts/release/github/stable-notes.sh");
     expect(workflow).toContain("dry_run: ${{ steps.stable.outputs.dry_run }}");
     expect(workflow).toContain("dry_run_mode: ${{ steps.stable.outputs.dry_run_mode }}");
     expect(workflow).toContain("if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}");
@@ -1108,6 +1421,43 @@ describe("packaged smoke workflow", () => {
     expect(script).toContain('setOutput("dry_run_mode", stableDryRunMode);');
     expect(script).toContain('setOutput("run_prepublish_jobs", runPrepublishJobs ? "true" : "false");');
     expect(script).toContain('setOutput("publish_side_effects_enabled", publishSideEffectsEnabled ? "true" : "false");');
+  });
+
+  it("[P2] writes stable release notes from the release public origin variable", async () => {
+    for (const [envName, origin] of [
+      ["RELEASE_PUBLIC_ORIGIN", "https://releases.open-design.ai/current/"],
+      ["CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN", "https://releases.open-design.ai/legacy/"],
+    ] as const) {
+      const runnerTemp = await mkdtemp(join(tmpdir(), "od-stable-notes-"));
+      const outputPath = join(runnerTemp, "github-output.txt");
+
+      try {
+        await execFileAsync("bash", [releaseStableNotesScriptPath], {
+          cwd: workspaceRoot,
+          env: {
+            ...process.env,
+            BRANCH_NAME: "release/v0.13.0",
+            CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: envName === "CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN" ? origin : "",
+            GITHUB_OUTPUT: outputPath,
+            GITHUB_REPOSITORY: "nexu-io/open-design",
+            GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
+            RELEASE_CHANNEL: "stable",
+            RELEASE_PUBLIC_ORIGIN: envName === "RELEASE_PUBLIC_ORIGIN" ? origin : "",
+            RELEASE_SIGNED: "true",
+            RELEASE_VERSION: "0.13.0",
+            RUNNER_TEMP: runnerTemp,
+            VERSION_TAG: "open-design-v0.13.0",
+          },
+        });
+
+        const outputs = parseGithubOutput(await readFile(outputPath, "utf8"));
+        const notes = await readFile(outputs.notes_file ?? "", "utf8");
+        expect(notes).toContain(`R2 metadata: ${origin.replace(/\/+$/, "")}/stable/latest/metadata.json`);
+        expect(notes).toContain(`E2E report: ${origin.replace(/\/+$/, "")}/stable/versions/0.13.0/report.zip`);
+      } finally {
+        await rm(runnerTemp, { force: true, recursive: true });
+      }
+    }
   });
 
   it("[P2] validates stable dry-run prerelease metadata from a release branch", async () => {

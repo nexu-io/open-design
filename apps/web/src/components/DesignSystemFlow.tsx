@@ -86,6 +86,7 @@ import { connectorAuthSnapshotChanged } from './connectors-state';
 import { FileWorkspace } from './FileWorkspace';
 import { Icon, type IconName } from './Icon';
 import { Spinner } from './Loading';
+import { Toast } from './Toast';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackDesignSystemCreateResult,
@@ -349,6 +350,8 @@ export function DesignSystemCreationFlow({
     };
   });
   const [error, setError] = useState<string | null>(null);
+  const [errorToast, setErrorToast] = useState<{ id: number; message: string } | null>(null);
+  const errorToastIdRef = useRef(0);
   const [generationStarting, setGenerationStarting] = useState(false);
   const [sourceProcessingCount, setSourceProcessingCount] = useState(0);
   const [libraryPickerOpen, setLibraryPickerOpen] = useState(false);
@@ -380,6 +383,18 @@ export function DesignSystemCreationFlow({
   const githubConnectorRef = useRef<ConnectorDetail | null>(null);
   const githubConnectorLoadedRef = useRef(false);
   const embedded = chrome === 'embedded';
+
+  function setVisibleError(message: string | null) {
+    setError(message);
+    if (!message) {
+      setErrorToast(null);
+      return;
+    }
+    setErrorToast({
+      id: (errorToastIdRef.current += 1),
+      message,
+    });
+  }
 
   // DS create page_view (v2 doc). Only fires for the standalone
   // /design-systems/create route — the embedded variant lives inside
@@ -682,7 +697,7 @@ export function DesignSystemCreationFlow({
   function handlePickBrandReference(domain: string) {
     const nextUrl = normalizeSourceUrl(`https://${domain}`);
     if (!nextUrl) return;
-    setError(null);
+    setVisibleError(null);
     setBrandPickerOpen(false);
     emitCreateFormClick('source_url_add');
     setState((curr) => ({
@@ -695,10 +710,10 @@ export function DesignSystemCreationFlow({
   function handleAddFigmaUrl() {
     const nextUrl = normalizeFigmaUrl(state.figmaUrl);
     if (!nextUrl) {
-      setError('Enter a Figma file URL (https://figma.com/file/… or /design/…).');
+      setVisibleError('Enter a Figma file URL (https://figma.com/file/… or /design/…).');
       return;
     }
-    setError(null);
+    setVisibleError(null);
     emitCreateFormClick('figma_url_add');
     setState((curr) => ({
       ...curr,
@@ -771,7 +786,7 @@ export function DesignSystemCreationFlow({
   function mergeAssetFiles(rawFiles: File[]): File[] {
     const stagedFiles = selectAssetFiles(rawFiles);
     if (stagedFiles.length === 0) return stagedFiles;
-    setError(null);
+    setVisibleError(null);
     setState((curr) => {
       const nextObjects = dedupeResourceFiles([...curr.assetFileObjects, ...stagedFiles]);
       return {
@@ -791,7 +806,7 @@ export function DesignSystemCreationFlow({
   }
 
   async function handleAssetDrop(dataTransfer: DataTransfer) {
-    setError(null);
+    setVisibleError(null);
     const finish = beginSourceProcessing();
     try {
       const dropped = await filesFromDataTransfer(dataTransfer);
@@ -799,7 +814,7 @@ export function DesignSystemCreationFlow({
       emitDsFileUpload('assets', dropped, staged);
     } catch (dropError) {
       if (!isFileSystemReadError(dropError)) throw dropError;
-      setError(FILE_SYSTEM_READ_ERROR_MESSAGE);
+      setVisibleError(FILE_SYSTEM_READ_ERROR_MESSAGE);
     } finally {
       finish();
     }
@@ -817,7 +832,7 @@ export function DesignSystemCreationFlow({
       const files = fetched.filter((file): file is File => file !== null);
       mergeAssetFiles(files);
       if (files.length < assets.length) {
-        setError(`Added ${files.length} of ${assets.length} item(s) from the library.`);
+        setVisibleError(`Added ${files.length} of ${assets.length} item(s) from the library.`);
       }
     } finally {
       finish();
@@ -854,7 +869,7 @@ export function DesignSystemCreationFlow({
     };
     onBeforeGenerate?.(snapshot);
     setGenerationStarting(true);
-    setError(null);
+    setVisibleError(null);
     const generateStartedAt = performance.now();
     const onboardingSessionId = peekOnboardingSessionId();
     const createEntryFrom: TrackingDesignSystemCreateEntryFrom = embedded
@@ -904,7 +919,7 @@ export function DesignSystemCreationFlow({
         : '';
       const designMdForExtraction = hasDesignMd ? state.designMd : fallbackDesignMd;
       if (!extractUrl && !designMdForExtraction) {
-        setError(t('dsCreate.missingSourceError'));
+        setVisibleError(t('dsCreate.missingSourceError'));
         setStep('setup');
         emitCreateResult('failed', undefined, 'DS_EXTRACT_NO_SOURCE', undefined);
         onGenerateSettled?.(snapshot, { result: 'failed', errorCode: 'DS_EXTRACT_NO_SOURCE' });
@@ -913,9 +928,10 @@ export function DesignSystemCreationFlow({
       const result = await brandExtract.run(extractUrl, {
         description: [state.company.trim(), state.notes.trim()].filter(Boolean).join('\n\n'),
         designMd: designMdForExtraction,
+        throwOnError: true,
       });
       if (!result) {
-        setError('Could not start the extraction. Check the link and try again.');
+        setVisibleError('Extraction is already starting. Please wait for the current request to finish.');
         setStep('setup');
         emitCreateResult('failed', undefined, 'DS_EXTRACT_START_FAILED', undefined);
         onGenerateSettled?.(snapshot, { result: 'failed', errorCode: 'DS_EXTRACT_START_FAILED' });
@@ -925,7 +941,20 @@ export function DesignSystemCreationFlow({
       // `projects` list yet — hydrate it so onCreated can prepend it before
       // navigating into the live extraction.
       const project = (await getProject(result.projectId).catch(() => undefined)) ?? undefined;
-      let projectForCreated = project;
+      let projectForCreated = project && result.designSystemId
+        ? {
+            ...project,
+            designSystemId: project.designSystemId ?? result.designSystemId,
+            metadata: {
+              ...(project.metadata ?? {}),
+              kind: 'brand' as const,
+              importedFrom: 'brand-extraction' as const,
+              brandId: result.id,
+              brandSourceUrl: result.sourceUrl,
+              brandDesignSystemId: result.designSystemId,
+            } satisfies ProjectMetadata,
+          }
+        : project;
       if (project && hasProjectStagingSources(state)) {
         await prepareCreatedDesignSystemProject({
           project,
@@ -955,7 +984,7 @@ export function DesignSystemCreationFlow({
       emitCreateResult('success', result.designSystemId, undefined, result.projectId);
       onGenerateSettled?.(snapshot, { result: 'success' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not prepare the design system project.');
+      setVisibleError(err instanceof Error ? err.message : 'Could not prepare the design system project.');
       setStep('setup');
       const errorCode = err instanceof Error
         ? `DS_GENERATE_THREW:${err.message.slice(0, 80)}`
@@ -996,6 +1025,17 @@ export function DesignSystemCreationFlow({
     <div
       className={`ds-setup-shell${embedded ? ' ds-setup-shell--embedded' : ''}`}
     >
+      {errorToast ? (
+        <Toast
+          key={errorToast.id}
+          message={errorToast.message}
+          tone="error"
+          role="alert"
+          placement="top"
+          ttlMs={6000}
+          onDismiss={() => setErrorToast(null)}
+        />
+      ) : null}
       {sourceProcessingCount > 0 ? (
         <div
           className="ds-source-upload-loading"
@@ -1031,11 +1071,7 @@ export function DesignSystemCreationFlow({
             disabled={!hasCreationSource(state)}
             onClick={() => {
               emitCreateFormClick('continue_to_generation');
-              if (!hasCreationSource(state)) {
-                setError(t('dsCreate.missingSourceError'));
-                return;
-              }
-              setStep('confirm');
+              void generate();
             }}
           >
             {t('dsCreate.continueToGeneration')}
@@ -1286,7 +1322,7 @@ export function DesignSystemCreationFlow({
                     onZoneClick={() => emitCreateFormClick('browse_folder')}
                     onBrowseFolder={() => void handlePickCodeFolder()}
                     onRemoveName={handleRemoveCodeFolder}
-                    onError={setError}
+                    onError={setVisibleError}
                     onProcessingStart={beginSourceProcessing}
                     onFiles={(_names, files) => {
                       const stagedFiles = selectLocalCodeFiles(files);
@@ -1306,7 +1342,7 @@ export function DesignSystemCreationFlow({
                     accept=".fig"
                     names={state.figFiles}
                     onZoneClick={() => emitCreateFormClick('upload_fig')}
-                    onError={setError}
+                    onError={setVisibleError}
                     onProcessingStart={beginSourceProcessing}
                     onFiles={(_names, files) => {
                       const stagedFiles = selectFigmaFiles(files);
@@ -1403,11 +1439,7 @@ export function DesignSystemCreationFlow({
               disabled={!hasCreationSource(state)}
               onClick={() => {
                 emitCreateFormClick('continue_to_generation');
-                if (!hasCreationSource(state)) {
-                  setError(t('dsCreate.missingSourceError'));
-                  return;
-                }
-                setStep('confirm');
+                void generate();
               }}
             >
               {t('dsCreate.generate')}
@@ -4342,6 +4374,8 @@ function figmaUrlLabel(url: string): string {
 function normalizeSourceUrl(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return '';
+  const href = sourceUrlHref(trimmed);
+  if (href) return href.replace(/\/$/, '');
   const withProtocol = shouldAssumeHttps(trimmed) ? `https://${trimmed}` : trimmed;
   try {
     const url = new URL(withProtocol);
@@ -4375,7 +4409,9 @@ function sourceUrlHref(url: string): string | null {
   const sshGithub = /^git@github\.com:([^/\s]+)\/([^/\s#?]+?)(?:\.git)?(?:[?#].*)?$/iu.exec(trimmed);
   if (sshGithub) return `https://github.com/${sshGithub[1]}/${sshGithub[2]}`;
   const shorthandGithub = /^([^/\s]+)\/([^/\s#?]+?)(?:\.git)?$/u.exec(trimmed);
-  if (shorthandGithub) return `https://github.com/${shorthandGithub[1]}/${shorthandGithub[2]}`;
+  if (shorthandGithub && isGithubOwnerShorthand(shorthandGithub[1]!)) {
+    return `https://github.com/${shorthandGithub[1]}/${shorthandGithub[2]}`;
+  }
   const withProtocol = shouldAssumeHttps(trimmed) ? `https://${trimmed}` : trimmed;
   try {
     const parsed = new URL(withProtocol);
@@ -4384,6 +4420,10 @@ function sourceUrlHref(url: string): string | null {
   } catch {
     return null;
   }
+}
+
+function isGithubOwnerShorthand(value: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/iu.test(value);
 }
 
 function sourceUrlIcon(url: string): IconName {

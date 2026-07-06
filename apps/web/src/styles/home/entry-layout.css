@@ -652,6 +652,15 @@
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
 }
+.entry-nav-rail__btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.entry-nav-rail__btn:disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: transparent;
+}
 .entry-nav-rail__btn.is-active {
   background: var(--accent-tint);
   color: var(--accent);
@@ -1345,9 +1354,8 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-  /* Open Design (the account card) is pinned to the top of the 代理 group;
-     the third-party CLI grid follows it. The card sits before this grid in the
-     flex column source order, so this order keeps it on top. */
+  /* Open Design renders as `.inline-switcher__account`; keep the third-party
+     CLI grid after that account row even though their source order differs. */
   order: 1;
 }
 .inline-switcher__agent-row {
@@ -1469,6 +1477,7 @@
 /* Account row: Open Design login/plan, lifted out of the agent card so the
    agent name is never truncated. */
 .inline-switcher__account {
+  order: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1489,7 +1498,11 @@
 }
 .inline-switcher__account.is-active {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
-  background: var(--accent-tint);
+  background: color-mix(in srgb, var(--bg-subtle) 82%, var(--accent-tint));
+}
+.inline-switcher__account.is-active:has(.inline-switcher__account-select:hover) {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--bg-panel) 74%, var(--accent-tint));
 }
 .inline-switcher__account-id {
   display: inline-flex;

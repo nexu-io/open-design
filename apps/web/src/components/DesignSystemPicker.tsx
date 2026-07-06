@@ -18,11 +18,10 @@ import {
   localizeDesignSystemCategory,
   localizeDesignSystemSummary,
 } from '../i18n/content';
-import { fetchDesignSystemPreview } from '../providers/registry';
 import { navigate } from '../router';
 import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import { useBrandsByDesignSystemId } from '../runtime/brands';
-import { BrandPreviewCard } from './BrandPreviewCard';
+import { DesignSystemKitPreview } from './DesignSystemKitPreview';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { Icon } from './Icon';
 
@@ -83,8 +82,6 @@ export function DesignSystemPicker({
   // Tracks whether the "不指定 / No design system" row is the active preview
   // target (hovered), so its right-pane blurb shows instead of a system preview.
   const [hoveredNone, setHoveredNone] = useState(false);
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
   const [previewModalSystem, setPreviewModalSystem] = useState<DesignSystemSummary | null>(null);
 
   const selected = useMemo(
@@ -124,7 +121,7 @@ export function DesignSystemPicker({
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
       const viewport = window.innerWidth;
-      const popoverWidth = Math.min(440, Math.max(280, viewport - 24));
+      const popoverWidth = Math.min(640, Math.max(320, viewport - 24));
       const left = Math.max(8, Math.min(viewport - popoverWidth - 8, rect.left));
       const gap = 6;
       const margin = 12;
@@ -179,32 +176,6 @@ export function DesignSystemPicker({
     else if (selectedId != null) previewSystem = selected;
     else previewNone = true;
   }
-
-  useEffect(() => {
-    if (!previewSystem) {
-      setPreviewHtml(null);
-      setPreviewLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setPreviewLoading(true);
-    void fetchDesignSystemPreview(previewSystem.id)
-      .then((html) => {
-        if (cancelled) return;
-        setPreviewHtml(html);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setPreviewHtml(null);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setPreviewLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [previewSystem?.id]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -414,14 +385,18 @@ export function DesignSystemPicker({
                       {t('designSystemPicker.noneSummary')}
                     </p>
                   </div>
-                ) : previewSystem && brandsByDesignSystem.get(previewSystem.id) ? (
+                ) : previewSystem ? (
                   <div
-                    className="project-ds-picker-preview-brand"
-                    data-testid="project-ds-picker-preview-brand"
+                    className="project-ds-picker-preview-kit-wrap"
+                    data-testid="project-ds-picker-preview-kit-wrap"
                   >
-                    <BrandPreviewCard
+                    <DesignSystemKitPreview
+                      system={previewSystem}
+                      brandSummary={brandsByDesignSystem.get(previewSystem.id) ?? null}
                       variant="compact"
-                      summary={brandsByDesignSystem.get(previewSystem.id)!}
+                      showCover={false}
+                      className="project-ds-picker-preview-kit"
+                      dataTestId="project-ds-picker-preview-kit"
                     />
                     <button
                       type="button"
@@ -433,64 +408,6 @@ export function DesignSystemPicker({
                       <span>{t('designSystemPicker.openPreview')}</span>
                     </button>
                   </div>
-                ) : previewSystem ? (
-                  <>
-                    <div className="project-ds-picker-preview-head">
-                      <strong>{previewSystem.title}</strong>
-                    </div>
-                    {previewSystem.summary ? (
-                      <p className="project-ds-picker-preview-summary">
-                        {localizeDesignSystemSummary(locale, previewSystem)}
-                      </p>
-                    ) : null}
-                    {previewSystem.swatches && previewSystem.swatches.length > 0 ? (
-                      <div className="project-ds-picker-preview-swatches">
-                        {previewSystem.swatches.slice(0, 12).map((sw, i) => (
-                          <span
-                            key={`${previewSystem.id}-pv-sw-${i}`}
-                            className="project-ds-picker-preview-swatch"
-                            style={{ background: sw }}
-                            title={sw}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-                    {previewLoading ? (
-                      <div className="project-ds-picker-preview-stage">
-                        <div className="project-ds-picker-preview-loading">
-                          {t('designSystemPicker.loadingPreview')}
-                        </div>
-                      </div>
-                    ) : previewHtml ? (
-                      <div className="project-ds-picker-preview-stage">
-                        <iframe
-                          className="project-ds-picker-preview-frame"
-                          data-testid="project-ds-picker-preview-frame"
-                          srcDoc={previewHtml}
-                          sandbox="allow-scripts"
-                          scrolling="no"
-                          title={t('designSystemPicker.previewFrameTitle', { title: previewSystem.title })}
-                        />
-                        <button
-                          type="button"
-                          className="project-ds-picker-preview-expand"
-                          data-testid="project-ds-picker-preview-expand"
-                          onClick={() => openSystemPreview(previewSystem)}
-                          title={t('designSystemPicker.openPreview')}
-                          aria-label={t('designSystemPicker.openPreview')}
-                        >
-                          <Icon name="eye" size={13} strokeWidth={1.9} />
-                          <span>{t('designSystemPicker.openPreview')}</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="project-ds-picker-preview-stage">
-                        <div className="project-ds-picker-preview-empty">
-                          {t('designSystemPicker.noPreview')}
-                        </div>
-                      </div>
-                    )}
-                  </>
                 ) : (
                   <div className="project-ds-picker-preview-stage">
                     <div className="project-ds-picker-preview-empty">
@@ -587,6 +504,8 @@ export function DesignSystemPicker({
         type="button"
         className={`project-ds-picker-trigger${selected ? ' picked' : ''}`}
         data-testid="project-ds-picker-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         disabled={loading}
         title={selected?.title ?? t('designSystemPicker.select')}

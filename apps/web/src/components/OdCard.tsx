@@ -11,7 +11,7 @@
 //
 // The parser + payload types live in '@open-design/contracts' (od-card.ts) so
 // web and daemon share one source of truth. This file only renders.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type {
   OdCard,
   OdCardTaskBrief,
@@ -31,8 +31,14 @@ const RULE_PROPOSAL_DECISION_PREFIX = 'od:rule-proposal-decision:';
 
 type RuleProposalDecision =
   | { status: 'idle' }
-  | { status: 'saved'; name: string }
+  | { status: 'saved'; name: string; id?: string }
   | { status: 'discarded' };
+
+type MemoryEntrySummaryLike = {
+  id?: unknown;
+  name?: unknown;
+  type?: unknown;
+};
 
 function hashRuleProposalKey(input: string): string {
   let hash = 5381;
@@ -66,12 +72,22 @@ function readRuleProposalDecision(key: string): RuleProposalDecision {
       return {
         status: 'saved',
         name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name : '',
+        ...(typeof parsed.id === 'string' && parsed.id.trim() ? { id: parsed.id } : {}),
       };
     }
   } catch {
     // Storage can be unavailable in hardened contexts; fall back to per-mount state.
   }
   return { status: 'idle' };
+}
+
+function clearRuleProposalDecision(key: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Best effort only: storage can be unavailable in hardened contexts.
+  }
 }
 
 function writeRuleProposalDecision(key: string, decision: Exclude<RuleProposalDecision, { status: 'idle' }>) {
@@ -84,9 +100,12 @@ function writeRuleProposalDecision(key: string, decision: Exclude<RuleProposalDe
 }
 
 /** Outcome a brand-browser-assist confirm handler reports back to the card so it
- *  can show a done / error state. */
+ *  can show a completed / error state. */
 export interface BrandBrowserAssistResult {
   ok: boolean;
+  /** `opened` means the Browser tab was focused/navigated; extraction still
+   * continues from the next-step action after the user clears verification. */
+  action?: 'opened' | 'confirmed';
   /** Failure reason to show inline (e.g. "needs the desktop app"). */
   message?: string;
 }
@@ -94,6 +113,28 @@ export interface BrandBrowserAssistResult {
 export type BrandBrowserAssistConfirm = (
   card: OdCardBrandBrowserAssist,
 ) => Promise<BrandBrowserAssistResult | void> | BrandBrowserAssistResult | void;
+
+function isMatchingRuleEntry(decision: Extract<RuleProposalDecision, { status: 'saved' }>, entry: MemoryEntrySummaryLike) {
+  if (entry.type !== 'rule') return false;
+  if (decision.id && entry.id === decision.id) return true;
+  return typeof entry.name === 'string' && entry.name === decision.name;
+}
+
+async function validateCachedRuleProposalDecision(
+  decision: RuleProposalDecision,
+): Promise<RuleProposalDecision | null> {
+  if (decision.status === 'idle') return decision;
+
+  const resp = await fetch('/api/memory');
+  if (!resp.ok) return null;
+  if (decision.status === 'discarded') return decision;
+
+  const body = await resp.json().catch(() => null) as { entries?: unknown } | null;
+  if (!Array.isArray(body?.entries)) return null;
+
+  const entries = body.entries as MemoryEntrySummaryLike[];
+  return entries.some((entry) => isMatchingRuleEntry(decision, entry)) ? decision : { status: 'idle' };
+}
 
 export function OdCardView({
   card,
@@ -296,6 +337,27 @@ function RuleProposalCard({
   const [editing, setEditing] = useState(false);
   const [status, setStatus] = useState<'idle' | 'saving' | 'error'>('idle');
 
+  useEffect(() => {
+    const cachedDecision = readRuleProposalDecision(storageKey);
+    if (cachedDecision.status === 'idle') return;
+
+    let cancelled = false;
+    void validateCachedRuleProposalDecision(cachedDecision)
+      .then((validated) => {
+        if (cancelled || !validated) return;
+        if (validated.status === 'idle') {
+          clearRuleProposalDecision(storageKey);
+          setDecision({ status: 'idle' });
+        }
+      })
+      .catch(() => {
+        // Keep the cached state on transient validation failures.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey]);
+
   if (decision.status === 'discarded') return null;
 
   if (decision.status === 'saved') {
@@ -341,7 +403,12 @@ function RuleProposalCard({
         setStatus('error');
         return;
       }
-      const savedDecision = { status: 'saved', name: name.trim() } as const;
+      const body = await resp.json().catch(() => null) as { entry?: { id?: unknown } } | null;
+      const savedDecision = {
+        status: 'saved',
+        name: name.trim(),
+        ...(typeof body?.entry?.id === 'string' ? { id: body.entry.id } : {}),
+      } as const;
       writeRuleProposalDecision(storageKey, savedDecision);
       setDecision(savedDecision);
       setStatus('idle');
@@ -486,15 +553,16 @@ function writeBrandAssistDone(key: string): void {
   try {
     window.localStorage.setItem(key, 'done');
   } catch {
-    // Best effort — the in-memory `done` state still hides the button this mount.
+    // Best effort — the in-memory `done` state still shows the opened marker.
   }
 }
 
-// Brand extraction hit an anti-bot wall. This card asks the user to clear it in
-// the in-app browser tab, then its Confirm button runs a CLIENT-side handler
-// (read the unblocked DOM → re-extract) — it does NOT round-trip to the agent.
-// A localStorage latch keyed off the brand id keeps a resolved card from
-// re-prompting on reload.
+// Brand extraction hit an anti-bot wall. This card opens/focuses the in-app
+// browser tab so the user can clear verification, then the normal next-step
+// action continues extraction from that live page.
+// A localStorage marker keyed off the brand id remembers that the browser was
+// opened, but the action remains available because users may need to re-open the
+// Browser tab or re-trigger the Download Page highlight.
 function BrandBrowserAssistCard({
   card,
   onConfirm,
@@ -508,25 +576,15 @@ function BrandBrowserAssistCard({
   const [status, setStatus] = useState<'idle' | 'working' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  if (done) {
-    return (
-      <div className={`${styles.card} ${styles.ruleSaved}`} data-od-card="brand-browser-assist">
-        <span className={styles.ruleSavedIcon} aria-hidden>
-          <Icon name="check" size={14} />
-        </span>
-        <span className={styles.ruleSavedLabel}>{t('artifact.odCardBrandAssistDone')}</span>
-      </div>
-    );
-  }
-
   const confirm = async () => {
     if (!onConfirm) return;
     setStatus('working');
     setErrorMsg(null);
     try {
-      // The handler reports `{ ok: true }` only once the brand actually
-      // finalized; anything else (a desktop-only refusal, a thin harvest, a
-      // missing handler) keeps the button so the user can retry.
+      // `{ ok: true, action: "opened" }` means the Browser tab was focused and
+      // the user should clear verification before using the Continue next step.
+      // Plain `{ ok: true }` is kept for older handlers. Either successful
+      // outcome resolves this prompt so the card does not look unclicked.
       const result = await onConfirm(card);
       if (!result || result.ok !== true) {
         setStatus('error');
@@ -549,12 +607,20 @@ function BrandBrowserAssistCard({
           <Icon name="globe" size={13} />
         </span>
         <span className={styles.ruleKicker}>
-          {t('artifact.odCardBrandAssistKicker', { reason: card.reason || 'Cloudflare' })}
+          {t('artifact.odCardBrandAssistKicker', { reason: card.reason || 'Browser' })}
         </span>
       </div>
       <div className={styles.ruleSummary}>
         <p className={styles.ruleDescription}>{t('artifact.odCardBrandAssistBody')}</p>
         {card.url ? <p className={styles.ruleName}>{card.url}</p> : null}
+        {done ? (
+          <div className={styles.ruleSaved} role="status">
+            <span className={styles.ruleSavedIcon} aria-hidden>
+              <Icon name="check" size={14} />
+            </span>
+            <span className={styles.ruleSavedLabel}>{t('artifact.odCardBrandAssistDone')}</span>
+          </div>
+        ) : null}
       </div>
       {status === 'error' ? (
         <p className={styles.ruleError} role="status">

@@ -1,0 +1,50 @@
+/* Minimal hover card for composer context chips: on hover, surface the item's
+   type and its primary locator (path / id / url). Light, elevated, and pinned
+   above the chip so it escapes the chip row without shifting layout. */
+.host {
+  position: relative;
+}
+
+.card {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 140px;
+  max-width: 320px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+  animation: contextChipCardIn var(--dur-quick, 160ms) var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+
+.type {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-strong);
+}
+
+.detail {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+@keyframes contextChipCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

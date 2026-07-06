@@ -1,5 +1,6 @@
 import { expect, test } from '@/playwright/suite';
-import { ensureRailOpen } from '@/playwright/rail';
+import { openNewProjectModal } from '@/playwright/rail';
+import { T } from '@/timeouts';
 import {
   captureVisual,
   captureVisualTarget,
@@ -13,6 +14,8 @@ import {
 } from '@/playwright/visual';
 
 test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
+  test.setTimeout(T.xlong);
+
   await configureVisualPage(page, {
     projects: [],
     agents: [VISUAL_AMR_AGENT, ...VISUAL_CLI_AGENTS],
@@ -22,11 +25,12 @@ test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
   });
 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
   // The connect step opens on the cloud sign-in landing. Local CLI and BYOK
   // remain available as secondary paths from the same first screen.
   await expect(
     page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: T.medium });
   await expect(
     page.getByRole('button', { name: /Sign in to Open Design|登录 Open Design/i }),
   ).toBeVisible();
@@ -196,10 +200,7 @@ test('[P2] captures the new project modal surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
-  await ensureRailOpen(page);
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModal(page);
   await expect(page.getByTestId('new-project-name')).toBeVisible();
 
   await captureVisual(page, 'visual-new-project-modal');

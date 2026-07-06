@@ -189,6 +189,10 @@ export interface ProjectMetadata {
   brandId?: string;
   brandSourceUrl?: string;
   brandDesignSystemId?: string;
+  // Stored on design-system projects created from an existing project so the
+  // generated workspace can point back to the source evidence it duplicated.
+  sourceProjectId?: string;
+  sourceProjectName?: string;
   // AI-optimize (deep enrichment) state for a programmatically-extracted DS.
   // `programmatic` (or unset) = fast pass only; `ai_refined` = a user-triggered
   // enrichment run completed successfully. Lets analytics compare the two
@@ -308,6 +312,26 @@ export interface ProjectDetailResponse extends ProjectResponse {
 export interface CreateProjectResponse extends ProjectResponse {
   conversationId?: string;
   appliedPluginSnapshotId?: string;
+}
+
+export interface CreateDesignSystemProjectFromProjectRequest {
+  name?: string;
+  pendingPrompt?: string;
+}
+
+export interface CreateDesignSystemProjectFromProjectResponse extends ProjectResponse {
+  conversationId: string;
+  designSystemId: string;
+  copiedFiles: string[];
+}
+
+export interface DuplicateProjectRequest {
+  name?: string;
+}
+
+export interface DuplicateProjectResponse extends ProjectResponse {
+  conversationId: string;
+  copiedFiles: string[];
 }
 
 export interface ProjectLocation {

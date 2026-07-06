@@ -33,6 +33,13 @@
 /_astro/*
   Cache-Control: public, max-age=31536000, immutable
 
+# On-demand enhancement runtimes (matter-js / cobe), vendored by
+# `scripts/vendor-enhancers.ts` and version-busted via a `?v=` query, so the
+# bytes are immutable per URL and safe to cache forever at the edge and in the
+# browser.
+/enhancers/*
+  Cache-Control: public, max-age=31536000, immutable
+
 # RSS / sitemap / robots — small, refresh on deploy.
 /blog/rss.xml
   Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
@@ -48,6 +55,11 @@
 
 /llms.txt
   Cache-Control: public, max-age=3600
+
+# Public pricing contract consumed by /pricing/ client-side reconciliation.
+/pricing/plans.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
 
 # Static assets in public/. Filenames don't carry a content hash, so we use
 # a moderate browser TTL and rely on edge purge from CF Pages on deploy.

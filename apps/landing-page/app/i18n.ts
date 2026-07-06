@@ -226,6 +226,14 @@ export interface HeaderCopy {
   starAria: string;
   starTitle: string;
   starPrefix: string;
+  /** Open Design Cloud account entry — see header-enhancer.astro. */
+  signIn: string;
+  /** aria-label for the signed-in avatar / account menu trigger. */
+  accountAria: string;
+  /** Avatar dropdown: open the Cloud console. */
+  menuConsole: string;
+  /** Avatar dropdown: sign out of the Cloud session. */
+  menuSignOut: string;
 }
 
 export interface HeaderProductMenuCopy {
@@ -251,9 +259,14 @@ export interface HeaderProductMenuCopy {
   useCaseItems: [string, string, string, string, string, string];
   roles: string;
   roleItems: [string, string, string, string, string];
+  // Tool / generator pages (`/solutions/ai-<x>-generator/`). Group label plus
+  // the three tool names, in the same Wireframe → UI → Design-to-code order
+  // the hub and the dropdown render.
+  tools: string;
   agent: string;
   plugins: string;
   pluginItems: { templates: string; skills: string; systems: string };
+  pricing: string;
   resources: string;
   resourceItems: {
     blog: string;
@@ -287,6 +300,7 @@ export interface CommonCopy {
 
 const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy> = {
   en: {
+    pricing: "Pricing",
     toggleNavigationMenu: 'Toggle navigation menu',
     product: 'Product',
     openDesignName: 'Open Design',
@@ -295,7 +309,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / data to ship-ready HTML, by your local agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'A prompt, article, or repo to a real MP4 — by your local agent.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Design Agent',
     amrBlurb: 'Professional design Agent, zero-config use, built-in SOTA models & Harness',
     tutorialsName: 'Tutorials',
@@ -305,6 +319,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototype', 'Dashboard', 'Slides', 'Image', 'Video', 'Design System'],
     roles: 'Roles',
     roleItems: ['Solo Builder', 'Designer', 'Engineering', 'Product Managers', 'Marketing'],
+    tools: 'Tools',
     agent: 'Agent',
     plugins: 'Plugins',
     pluginItems: { templates: 'Templates', skills: 'Skills', systems: 'Systems' },
@@ -326,6 +341,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   zh: {
+    pricing: "价格",
     toggleNavigationMenu: '切换导航菜单',
     product: '产品',
     openDesignName: 'Open Design',
@@ -334,7 +350,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / 数据变成可交付 HTML，由本地 Agent 完成。',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: '一个 prompt、文章或仓库，变成真实 MP4——由你的本地 Agent 完成。',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: '设计 Agent',
     amrBlurb: '专业设计Agent、零配置使用、自带SOTA模型与Harness',
     tutorialsName: '教程',
@@ -344,6 +360,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['原型', '看板', '幻灯片', '图片', '视频', '设计系统'],
     roles: '角色',
     roleItems: ['独立开发者', '设计师', '工程', '产品经理', '市场'],
+    tools: '工具',
     agent: 'Agent',
     plugins: '插件',
     pluginItems: { templates: '模板', skills: '技能', systems: '设计系统' },
@@ -365,6 +382,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   'zh-tw': {
+    pricing: "價格",
     toggleNavigationMenu: '切換導覽選單',
     product: '產品',
     openDesignName: 'Open Design',
@@ -373,7 +391,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / 資料變成可交付 HTML，由本地 Agent 完成。',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: '一個 prompt、文章或倉庫，變成真實 MP4——由你的本地 Agent 完成。',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: '設計 Agent',
     amrBlurb: '專業設計 Agent、零配置使用、內建 SOTA 模型與 Harness',
     tutorialsName: '教學',
@@ -383,6 +401,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['原型', '儀表板', '投影片', '圖片', '影片', '設計系統'],
     roles: '角色',
     roleItems: ['獨立開發者', '設計師', '工程', '產品經理', '行銷'],
+    tools: '工具',
     agent: 'Agent',
     plugins: '外掛',
     pluginItems: { templates: '模板', skills: '技能', systems: '設計系統' },
@@ -404,6 +423,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ja: {
+    pricing: "料金",
     toggleNavigationMenu: 'ナビゲーションメニューを切り替え',
     product: 'プロダクト',
     openDesignName: 'Open Design',
@@ -412,7 +432,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / データをローカル Agent で納品可能な HTML へ。',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'プロンプト、記事、リポジトリを本物のMP4に — あなたのローカルエージェントで。',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'デザイン Agent',
     amrBlurb: 'プロ向けデザイン Agent、ゼロ設定で利用、SOTA モデルと Harness 内蔵',
     tutorialsName: 'チュートリアル',
@@ -422,6 +442,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['プロトタイプ', 'ダッシュボード', 'スライド', '画像', '動画', 'デザインシステム'],
     roles: 'ロール',
     roleItems: ['ソロビルダー', 'デザイナー', 'エンジニアリング', 'プロダクトマネージャー', 'マーケティング'],
+    tools: 'ツール',
     agent: 'エージェント',
     plugins: 'プラグイン',
     pluginItems: { templates: 'テンプレート', skills: 'スキル', systems: 'システム' },
@@ -443,6 +464,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ko: {
+    pricing: "요금제",
     toggleNavigationMenu: '내비게이션 메뉴 전환',
     product: '제품',
     openDesignName: 'Open Design',
@@ -451,7 +473,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / 데이터를 로컬 Agent로 배포 가능한 HTML로 변환.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: '프롬프트, 글, 레포만 있으면 — 로컬 에이전트가 진짜 MP4로.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: '디자인 Agent',
     amrBlurb: '전문 디자인 Agent, 무설정 사용, SOTA 모델과 Harness 내장',
     tutorialsName: '튜토리얼',
@@ -461,6 +483,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['프로토타입', '대시보드', '슬라이드', '이미지', '영상', '디자인 시스템'],
     roles: '역할',
     roleItems: ['솔로 빌더', '디자이너', '엔지니어링', '프로덕트 매니저', '마케팅'],
+    tools: '도구',
     agent: '에이전트',
     plugins: '플러그인',
     pluginItems: { templates: '템플릿', skills: '스킬', systems: '시스템' },
@@ -482,6 +505,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   de: {
+    pricing: "Preise",
     toggleNavigationMenu: 'Navigationsmenu umschalten',
     product: 'Produkt',
     openDesignName: 'Open Design',
@@ -490,7 +514,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / Daten werden durch deinen lokalen Agent zu fertigem HTML.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Eine Idee, ein Artikel oder ein Repo – per lokalem Agent zu einem echten MP4.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Design-Agent',
     amrBlurb: 'Professioneller Design-Agent, null Konfiguration, integrierte SOTA-Modelle & Harness',
     tutorialsName: 'Tutorials',
@@ -500,6 +524,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototyp', 'Dashboard', 'Slides', 'Bild', 'Video', 'Designsystem'],
     roles: 'Rollen',
     roleItems: ['Solo-Builder', 'Designer', 'Engineering', 'Produktmanager', 'Marketing'],
+    tools: 'Tools',
     agent: 'Agent',
     plugins: 'Plugins',
     pluginItems: { templates: 'Vorlagen', skills: 'Skills', systems: 'Systeme' },
@@ -521,6 +546,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   fr: {
+    pricing: "Tarifs",
     toggleNavigationMenu: 'Basculer le menu de navigation',
     product: 'Produit',
     openDesignName: 'Open Design',
@@ -529,7 +555,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / données vers du HTML prêt à livrer via votre agent local.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Une consigne, un article ou un repo vers une vraie vidéo MP4 — par votre agent local.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent de design professionnel, zéro configuration, modèles SOTA et Harness intégrés',
     tutorialsName: 'Tutoriels',
@@ -539,6 +565,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototype', 'Tableau de bord', 'Diapositives', 'Image', 'Vidéo', 'Système de design'],
     roles: 'Rôles',
     roleItems: ['Créateur solo', 'Designer', 'Ingénierie', 'Product managers', 'Marketing'],
+    tools: 'Outils',
     agent: 'Agent',
     plugins: 'Plugins',
     pluginItems: { templates: 'Modèles', skills: 'Skills', systems: 'Systèmes' },
@@ -560,6 +587,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ru: {
+    pricing: "Цены",
     toggleNavigationMenu: 'Переключить меню навигации',
     product: 'Продукт',
     openDesignName: 'Open Design',
@@ -568,7 +596,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / данные в готовый HTML через локального Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Промпт, статья или репозиторий — в настоящий MP4 с помощью локального агента.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Дизайн-Agent',
     amrBlurb: 'Профессиональный дизайн-Agent, без настройки, со встроенными SOTA-моделями и Harness',
     tutorialsName: 'Руководства',
@@ -578,6 +606,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Прототип', 'Дашборд', 'Слайды', 'Изображение', 'Видео', 'Дизайн-система'],
     roles: 'Роли',
     roleItems: ['Соло-разработчик', 'Дизайнер', 'Инженерия', 'Продакт-менеджеры', 'Маркетинг'],
+    tools: 'Инструменты',
     agent: 'Агенты',
     plugins: 'Плагины',
     pluginItems: { templates: 'Шаблоны', skills: 'Skills', systems: 'Системы' },
@@ -599,6 +628,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   es: {
+    pricing: "Precios",
     toggleNavigationMenu: 'Alternar menú de navegación',
     product: 'Producto',
     openDesignName: 'Open Design',
@@ -607,7 +637,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / datos a HTML listo para entregar con tu Agent local.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Una idea, artículo o repo a un MP4 real — con tu agente local.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent diseño',
     amrBlurb: 'Agent de diseño profesional, uso sin configuración, modelos SOTA y Harness integrados',
     tutorialsName: 'Tutoriales',
@@ -617,6 +647,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototipo', 'Panel', 'Diapositivas', 'Imagen', 'Vídeo', 'Sistema de diseño'],
     roles: 'Roles',
     roleItems: ['Creador en solitario', 'Diseñador', 'Ingeniería', 'Product Managers', 'Marketing'],
+    tools: 'Herramientas',
     agent: 'Agente',
     plugins: 'Plugins',
     pluginItems: { templates: 'Plantillas', skills: 'Skills', systems: 'Sistemas' },
@@ -638,6 +669,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   'pt-br': {
+    pricing: "Preços",
     toggleNavigationMenu: 'Alternar menu de navegação',
     product: 'Produto',
     openDesignName: 'Open Design',
@@ -646,7 +678,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / dados viram HTML pronto com seu Agent local.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Uma ideia, artigo ou repo vira um MP4 de verdade — pelo seu agente local.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent de design profissional, uso sem configuração, modelos SOTA e Harness integrados',
     tutorialsName: 'Tutoriais',
@@ -656,6 +688,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Protótipo', 'Painel', 'Slides', 'Imagem', 'Vídeo', 'Sistema de design'],
     roles: 'Funções',
     roleItems: ['Criador solo', 'Designer', 'Engenharia', 'Product Managers', 'Marketing'],
+    tools: 'Ferramentas',
     agent: 'Agente',
     plugins: 'Plugins',
     pluginItems: { templates: 'Modelos', skills: 'Skills', systems: 'Sistemas' },
@@ -677,6 +710,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   it: {
+    pricing: "Prezzi",
     toggleNavigationMenu: 'Apri o chiudi il menu di navigazione',
     product: 'Prodotto',
     openDesignName: 'Open Design',
@@ -685,7 +719,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / dati in HTML pronto alla consegna con il tuo Agent locale.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Una richiesta, un articolo o un repo in un vero MP4 — dal tuo agente locale.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent design',
     amrBlurb: 'Agent di design professionale, uso senza configurazione, modelli SOTA e Harness integrati',
     tutorialsName: 'Tutorial',
@@ -695,6 +729,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototipo', 'Dashboard', 'Slide', 'Immagine', 'Video', 'Design system'],
     roles: 'Ruoli',
     roleItems: ['Solo builder', 'Designer', 'Ingegneria', 'Product Manager', 'Marketing'],
+    tools: 'Strumenti',
     agent: 'Agente',
     plugins: 'Plugin',
     pluginItems: { templates: 'Template', skills: 'Skill', systems: 'Sistemi' },
@@ -716,6 +751,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   vi: {
+    pricing: "Giá",
     toggleNavigationMenu: 'Chuyển menu điều hướng',
     product: 'Sản phẩm',
     openDesignName: 'Open Design',
@@ -724,7 +760,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / dữ liệu thành HTML sẵn sàng giao bằng Agent cục bộ.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Một prompt, bài viết hay repo thành video MP4 thật — bằng agent của bạn.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent thiết kế',
     amrBlurb: 'Agent thiết kế chuyên nghiệp, dùng không cần cấu hình, tích hợp mô hình SOTA và Harness',
     tutorialsName: 'Hướng dẫn',
@@ -734,6 +770,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Nguyên mẫu', 'Dashboard', 'Slide', 'Hình ảnh', 'Video', 'Hệ thống thiết kế'],
     roles: 'Vai trò',
     roleItems: ['Nhà phát triển độc lập', 'Nhà thiết kế', 'Kỹ thuật', 'Quản lý sản phẩm', 'Tiếp thị'],
+    tools: 'Công cụ',
     agent: 'Agent',
     plugins: 'Plugin',
     pluginItems: { templates: 'Mẫu', skills: 'Skill', systems: 'Hệ thống' },
@@ -755,6 +792,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   pl: {
+    pricing: "Cennik",
     toggleNavigationMenu: 'Przełącz menu nawigacji',
     product: 'Produkt',
     openDesignName: 'Open Design',
@@ -763,7 +801,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / dane do gotowego HTML przez lokalnego Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Prompt, artykuł lub repo w prawdziwe MP4 — dzięki Twojemu lokalnemu agentowi.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent designu',
     amrBlurb: 'Profesjonalny Agent do projektowania, zero konfiguracji, wbudowane modele SOTA i Harness',
     tutorialsName: 'Poradniki',
@@ -773,6 +811,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototyp', 'Dashboard', 'Slajdy', 'Grafika', 'Wideo', 'System projektowy'],
     roles: 'Role',
     roleItems: ['Samodzielny twórca', 'Projektant', 'Inżynieria', 'Menedżerowie produktu', 'Marketing'],
+    tools: 'Narzędzia',
     agent: 'Agent',
     plugins: 'Wtyczki',
     pluginItems: { templates: 'Szablony', skills: 'Skills', systems: 'Systemy' },
@@ -794,6 +833,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   id: {
+    pricing: "Harga",
     toggleNavigationMenu: 'Alihkan menu navigasi',
     product: 'Produk',
     openDesignName: 'Open Design',
@@ -802,7 +842,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / data menjadi HTML siap kirim lewat Agent lokal.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Prompt, artikel, atau repo jadi MP4 sungguhan — lewat agent lokalmu.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent desain',
     amrBlurb: 'Agent desain profesional, tanpa konfigurasi, model SOTA dan Harness bawaan',
     tutorialsName: 'Tutorial',
@@ -812,6 +852,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototipe', 'Dashboard', 'Slide', 'Gambar', 'Video', 'Sistem Desain'],
     roles: 'Peran',
     roleItems: ['Solo Builder', 'Desainer', 'Teknik', 'Product Manager', 'Pemasaran'],
+    tools: 'Alat',
     agent: 'Agent',
     plugins: 'Plugin',
     pluginItems: { templates: 'Templat', skills: 'Skill', systems: 'Sistem' },
@@ -833,6 +874,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   nl: {
+    pricing: "Prijzen",
     toggleNavigationMenu: 'Navigatiemenu wisselen',
     product: 'Product',
     openDesignName: 'Open Design',
@@ -841,7 +883,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / data naar opleverklare HTML via je lokale Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Een prompt, artikel of repo naar een echte MP4 — door je lokale agent.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Design-Agent',
     amrBlurb: 'Professionele design-Agent, nul configuratie, ingebouwde SOTA-modellen en Harness',
     tutorialsName: 'Tutorials',
@@ -851,6 +893,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototype', 'Dashboard', 'Slides', 'Afbeelding', 'Video', 'Designsysteem'],
     roles: 'Rollen',
     roleItems: ['Solobouwer', 'Ontwerper', 'Engineering', 'Productmanagers', 'Marketing'],
+    tools: 'Tools',
     agent: 'Agent',
     plugins: 'Plug-ins',
     pluginItems: { templates: 'Sjablonen', skills: 'Skills', systems: 'Systemen' },
@@ -872,6 +915,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   ar: {
+    pricing: "الأسعار",
     toggleNavigationMenu: 'تبديل قائمة التنقل',
     product: 'المنتج',
     openDesignName: 'Open Design',
@@ -880,7 +924,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / البيانات إلى HTML جاهز عبر Agent المحلي.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'موجِّه أو مقال أو مستودع إلى فيديو MP4 حقيقي — بواسطة وكيلك المحلي.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Agent تصميم',
     amrBlurb: 'Agent تصميم احترافي، استخدام بلا إعداد، نماذج SOTA و Harness مدمجة',
     tutorialsName: 'الدروس',
@@ -890,6 +934,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['نموذج أولي', 'لوحة بيانات', 'شرائح', 'صورة', 'فيديو', 'نظام التصميم'],
     roles: 'الأدوار',
     roleItems: ['مطوّر فردي', 'مصمّم', 'الهندسة', 'مديرو المنتجات', 'التسويق'],
+    tools: 'الأدوات',
     agent: 'الوكلاء',
     plugins: 'الإضافات',
     pluginItems: { templates: 'قوالب', skills: 'Skills', systems: 'أنظمة' },
@@ -911,6 +956,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   tr: {
+    pricing: "Fiyatlandırma",
     toggleNavigationMenu: 'Gezinme menüsünü aç/kapat',
     product: 'Ürün',
     openDesignName: 'Open Design',
@@ -919,7 +965,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / veriler yerel Agent ile teslim edilebilir HTML olur.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Bir prompt, makale ya da repo\'dan gerçek bir MP4\'e — yerel ajanınla.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Tasarım Agent',
     amrBlurb: 'Profesyonel tasarım Agent, sıfır yapılandırma, yerleşik SOTA modelleri ve Harness',
     tutorialsName: 'Eğitimler',
@@ -929,6 +975,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Prototip', 'Pano', 'Slaytlar', 'Görsel', 'Video', 'Tasarım Sistemi'],
     roles: 'Roller',
     roleItems: ['Tek Kişilik Geliştirici', 'Tasarımcı', 'Mühendislik', 'Ürün Yöneticileri', 'Pazarlama'],
+    tools: 'Araçlar',
     agent: 'Agent',
     plugins: 'Eklentiler',
     pluginItems: { templates: 'Şablonlar', skills: 'Skill', systems: 'Sistemler' },
@@ -950,6 +997,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     },
   },
   uk: {
+    pricing: "Ціни",
     toggleNavigationMenu: 'Перемкнути меню навігації',
     product: 'Продукт',
     openDesignName: 'Open Design',
@@ -958,7 +1006,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     htmlAnythingBlurb: 'Markdown / дані у готовий HTML через локального Agent.',
     htmlVideoName: 'HTML Video',
     htmlVideoBlurb: 'Підказка, стаття чи репозиторій — у справжнє MP4 від вашого локального агента.',
-    amrName: 'Open Design AMR',
+    amrName: 'Open Design',
     amrKicker: 'Дизайн-Agent',
     amrBlurb: 'Професійний дизайн-Agent, без налаштувань, із вбудованими SOTA-моделями та Harness',
     tutorialsName: 'Навчальні матеріали',
@@ -968,6 +1016,7 @@ const HEADER_PRODUCT_MENU_COPY: Record<LandingLocaleCode, HeaderProductMenuCopy>
     useCaseItems: ['Прототип', 'Панель', 'Слайди', 'Зображення', 'Відео', 'Дизайн-система'],
     roles: 'Ролі',
     roleItems: ['Соло-розробник', 'Дизайнер', 'Інженерія', 'Продакт-менеджери', 'Маркетинг'],
+    tools: 'Інструменти',
     agent: 'Агенти',
     plugins: 'Плагіни',
     pluginItems: { templates: 'Шаблони', skills: 'Skills', systems: 'Системи' },
@@ -998,6 +1047,8 @@ export interface HomeSeoCopy {
 export interface HomeFaqEntry {
   q: string;
   a: string;
+  /** Optional hub link to the page that explains this answer in depth. */
+  href?: string;
 }
 
 export interface HomePageCopy {
@@ -1551,6 +1602,8 @@ type HomeFaqTemplate = {
   q: string;
   a: string;
   official?: boolean;
+  /** Optional hub link to the page that explains this answer in depth. */
+  href?: string;
 };
 
 const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
@@ -1594,6 +1647,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Star Open Design on GitHub',
       starTitle: 'Click to star us on GitHub',
       starPrefix: 'Star',
+      signIn: 'Sign in',
+      accountAria: 'Account menu',
+      menuConsole: 'Console',
+      menuSignOut: 'Sign out',
     },
   },
   zh: {
@@ -1636,6 +1693,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: '在 GitHub 为 Open Design 点 Star',
       starTitle: '去 GitHub 点 Star',
       starPrefix: 'Star',
+      signIn: '登录',
+      accountAria: '账户菜单',
+      menuConsole: '控制台',
+      menuSignOut: '退出登录',
     },
   },
   'zh-tw': {
@@ -1678,6 +1739,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: '在 GitHub 為 Open Design 按 Star',
       starTitle: '去 GitHub 按 Star',
       starPrefix: '點星',
+      signIn: '登入',
+      accountAria: '帳戶選單',
+      menuConsole: '控制台',
+      menuSignOut: '登出',
     },
   },
   ja: {
@@ -1720,6 +1785,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'GitHub で Open Design にスター',
       starTitle: 'GitHub でスターする',
       starPrefix: 'スター',
+      signIn: 'ログイン',
+      accountAria: 'アカウントメニュー',
+      menuConsole: 'コンソール',
+      menuSignOut: 'ログアウト',
     },
   },
   ko: {
@@ -1762,6 +1831,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'GitHub에서 Open Design에 스타 주기',
       starTitle: 'GitHub에서 스타 주기',
       starPrefix: '스타',
+      signIn: '로그인',
+      accountAria: '계정 메뉴',
+      menuConsole: '콘솔',
+      menuSignOut: '로그아웃',
     },
   },
   de: {
@@ -1804,6 +1877,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Open Design auf GitHub mit Stern markieren',
       starTitle: 'Auf GitHub sternen',
       starPrefix: 'Stern',
+      signIn: 'Anmelden',
+      accountAria: 'Kontomenü',
+      menuConsole: 'Konsole',
+      menuSignOut: 'Abmelden',
     },
   },
   fr: {
@@ -1846,6 +1923,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Ajouter une étoile à Open Design sur GitHub',
       starTitle: 'Mettre une étoile sur GitHub',
       starPrefix: 'Étoile',
+      signIn: 'Se connecter',
+      accountAria: 'Menu du compte',
+      menuConsole: 'Console',
+      menuSignOut: 'Se déconnecter',
     },
   },
   ru: {
@@ -1888,6 +1969,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Поставить звезду Open Design на GitHub',
       starTitle: 'Поставить звезду на GitHub',
       starPrefix: 'Звезда',
+      signIn: 'Войти',
+      accountAria: 'Меню аккаунта',
+      menuConsole: 'Консоль',
+      menuSignOut: 'Выйти',
     },
   },
   es: {
@@ -1930,6 +2015,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Dar Star a Open Design en GitHub',
       starTitle: 'Dar Star en GitHub',
       starPrefix: 'Estrella',
+      signIn: 'Iniciar sesión',
+      accountAria: 'Menú de cuenta',
+      menuConsole: 'Consola',
+      menuSignOut: 'Cerrar sesión',
     },
   },
   'pt-br': {
@@ -1972,6 +2061,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Dar Star no Open Design no GitHub',
       starTitle: 'Dar Star no GitHub',
       starPrefix: 'Estrela',
+      signIn: 'Entrar',
+      accountAria: 'Menu da conta',
+      menuConsole: 'Console',
+      menuSignOut: 'Sair',
     },
   },
   it: {
@@ -2014,6 +2107,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Metti una Star a Open Design su GitHub',
       starTitle: 'Metti una Star su GitHub',
       starPrefix: 'Stella',
+      signIn: 'Accedi',
+      accountAria: 'Menu account',
+      menuConsole: 'Console',
+      menuSignOut: 'Esci',
     },
   },
   vi: {
@@ -2056,6 +2153,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Star Open Design trên GitHub',
       starTitle: 'Star trên GitHub',
       starPrefix: 'Sao',
+      signIn: 'Đăng nhập',
+      accountAria: 'Menu tài khoản',
+      menuConsole: 'Bảng điều khiển',
+      menuSignOut: 'Đăng xuất',
     },
   },
   pl: {
@@ -2098,6 +2199,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Daj gwiazdkę Open Design na GitHubie',
       starTitle: 'Daj gwiazdkę na GitHubie',
       starPrefix: 'Gwiazdka',
+      signIn: 'Zaloguj się',
+      accountAria: 'Menu konta',
+      menuConsole: 'Konsola',
+      menuSignOut: 'Wyloguj się',
     },
   },
   id: {
@@ -2140,6 +2245,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Beri Star Open Design di GitHub',
       starTitle: 'Beri Star di GitHub',
       starPrefix: 'Bintang',
+      signIn: 'Masuk',
+      accountAria: 'Menu akun',
+      menuConsole: 'Konsol',
+      menuSignOut: 'Keluar',
     },
   },
   nl: {
@@ -2182,6 +2291,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Geef Open Design een Star op GitHub',
       starTitle: 'Star op GitHub',
       starPrefix: 'Ster',
+      signIn: 'Inloggen',
+      accountAria: 'Accountmenu',
+      menuConsole: 'Console',
+      menuSignOut: 'Uitloggen',
     },
   },
   ar: {
@@ -2224,6 +2337,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'ضع نجمة لـ Open Design على GitHub',
       starTitle: 'ضع نجمة على GitHub',
       starPrefix: 'نجمة',
+      signIn: 'تسجيل الدخول',
+      accountAria: 'قائمة الحساب',
+      menuConsole: 'لوحة التحكم',
+      menuSignOut: 'تسجيل الخروج',
     },
   },
   tr: {
@@ -2266,6 +2383,10 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: "GitHub'da Open Design'a Star ver",
       starTitle: "GitHub'da Star ver",
       starPrefix: 'Yıldız',
+      signIn: 'Giriş yap',
+      accountAria: 'Hesap menüsü',
+      menuConsole: 'Konsol',
+      menuSignOut: 'Çıkış yap',
     },
   },
   uk: {
@@ -2308,20 +2429,24 @@ const COMMON_COPY: Record<LandingLocaleCode, CommonCopy> = {
       starAria: 'Поставити зірку Open Design на GitHub',
       starTitle: 'Поставити зірку на GitHub',
       starPrefix: 'Зірка',
+      signIn: 'Увійти',
+      accountAria: 'Меню облікового запису',
+      menuConsole: 'Консоль',
+      menuSignOut: 'Вийти',
     },
   },
 };
 
 const HOME_SEO_COPY: Record<LandingLocaleCode, HomeSeoCopy> = {
   en: {
-    title: 'Open Design — Best open-source Claude Design alternative',
+    title: 'Open Design — Best Open Source Claude Design Alternative',
     description:
-      'Open Design is the best open-source, local-first Claude Design alternative. Generate decks, landing pages, dashboards, and brand systems with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen — driven by {skills} composable skills and {systems} portable DESIGN.md systems.',
+      'Open-source vibe design workspace & Claude Design alternative — build prototypes, landing pages, dashboards, slides & HTML video with your own coding agent.',
   },
   zh: {
     title: 'Open Design —— 最佳 Claude Design 开源替代',
     description:
-      'Open Design 是最佳的开源、本地优先 Claude Design 替代方案。用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 生成演示文稿、落地页和仪表盘，背后由 {skills} 个可组合 SKILL.md 工作流驱动。',
+      'Open Design 是开源的 vibe design workspace，也是 Claude Design 的开源替代——用你自己的 coding agent 做原型、落地页、仪表盘、Slides 和 HTML 视频。',
   },
   'zh-tw': {
     title: 'Open Design —— 最佳 Claude Design 開源替代',
@@ -2331,42 +2456,42 @@ const HOME_SEO_COPY: Record<LandingLocaleCode, HomeSeoCopy> = {
   ja: {
     title: 'Open Design — 最高のオープンソース Claude Design 代替',
     description:
-      'Open Design は最高のオープンソースかつローカル優先の Claude Design 代替です。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen と {skills} 個のスキル、{systems} 個の DESIGN.md システムでデッキ、ランディングページ、ダッシュボード、ブランドシステムを生成します。',
+      'オープンソースの vibe design workspace であり Claude Design の代替。自分の coding agent でプロトタイプ、ランディングページ、ダッシュボード、スライド、HTML 動画を作成。',
   },
   ko: {
     title: 'Open Design — 최고의 오픈소스 Claude Design 대안',
     description:
-      'Open Design은 최고의 오픈소스, 로컬 우선 Claude Design 대안입니다. Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen과 {skills}개의 조합형 스킬, {systems}개의 DESIGN.md 시스템으로 덱, 랜딩 페이지, 대시보드, 브랜드 시스템을 만듭니다.',
+      '오픈소스 vibe design workspace이자 Claude Design 대안. 내 coding agent로 프로토타입, 랜딩 페이지, 대시보드, 슬라이드, HTML 비디오를 만드세요.',
   },
   de: {
     title: 'Open Design — beste Open-Source-Alternative zu Claude Design',
     description:
-      'Open Design ist die beste Open-Source- und Local-first-Alternative zu Claude Design. Erzeuge Decks, Landingpages, Dashboards und Brand-Systeme mit Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen — mit {skills} kombinierbaren Skills und {systems} portablen DESIGN.md-Systemen.',
+      'Open-Source Vibe Design Workspace und Claude-Design-Alternative – Prototypen, Landingpages, Dashboards, Slides & HTML-Video mit deinem eigenen Coding-Agent.',
   },
   fr: {
     title: "Open Design — la meilleure alternative open source à Claude Design",
     description:
-      "Open Design est la meilleure alternative open source et local-first à Claude Design. Générez des decks, landing pages, dashboards et systèmes de marque avec Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen — grâce à {skills} skills composables et {systems} systèmes DESIGN.md portables.",
+      'Vibe design workspace open source et alternative à Claude Design — créez prototypes, landing pages, dashboards, slides et vidéo HTML avec votre agent de code.',
   },
   ru: {
     title: 'Open Design — лучшая open-source альтернатива Claude Design',
     description:
-      'Open Design — лучшая open-source и local-first альтернатива Claude Design. Создавайте презентации, лендинги, дашборды и бренд-системы через Claude Code, Codex, Cursor, Gemini, OpenCode или Qwen на базе {skills} skills и {systems} DESIGN.md-систем.',
+      'Open-source vibe design workspace и альтернатива Claude Design — прототипы, лендинги, дашборды, слайды и HTML-видео с вашим кодинг-агентом.',
   },
   es: {
     title: 'Open Design — la mejor alternativa open source a Claude Design',
     description:
-      'Open Design es la mejor alternativa open source y local-first a Claude Design. Genera decks, landing pages, dashboards y sistemas de marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, impulsado por {skills} skills componibles y {systems} sistemas DESIGN.md portables.',
+      'Vibe design workspace open source y alternativa a Claude Design: crea prototipos, landing pages, dashboards, slides y vídeo HTML con tu agente de código.',
   },
   'pt-br': {
     title: 'Open Design — a melhor alternativa open source ao Claude Design',
     description:
-      'Open Design é a melhor alternativa open source e local-first ao Claude Design. Gere decks, landing pages, dashboards e sistemas de marca com Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen, usando {skills} skills combináveis e {systems} sistemas DESIGN.md portáteis.',
+      'Vibe design workspace open source e alternativa ao Claude Design — crie protótipos, landing pages, dashboards, slides e vídeo HTML com seu coding agent.',
   },
   it: {
     title: "Open Design — la migliore alternativa open source a Claude Design",
     description:
-      "Open Design è la migliore alternativa open source e local-first a Claude Design. Genera deck, landing page, dashboard e sistemi di marca con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen, usando {skills} skill componibili e {systems} sistemi DESIGN.md portabili.",
+      'Vibe design workspace open source e alternativa a Claude Design: crea prototipi, landing page, dashboard, slide e video HTML con il tuo coding agent.',
   },
   vi: {
     title: 'Open Design — lựa chọn mã nguồn mở tốt nhất thay Claude Design',
@@ -2396,7 +2521,7 @@ const HOME_SEO_COPY: Record<LandingLocaleCode, HomeSeoCopy> = {
   tr: {
     title: "Open Design — Claude Design'ın en iyi açık kaynak alternatifi",
     description:
-      "Open Design, Claude Design'ın en iyi, açık kaynak ve local-first alternatifidir. Claude Code, Codex, Cursor, Gemini, OpenCode veya Qwen ile deck, landing page, dashboard ve marka sistemleri üretin; {skills} birleştirilebilir skill ve {systems} taşınabilir DESIGN.md sistemiyle çalışır.",
+      'Açık kaynaklı vibe design workspace ve Claude Design alternatifi — kendi kodlama ajanınla prototip, açılış sayfası, dashboard, slayt ve HTML video oluştur.',
   },
   uk: {
     title: 'Open Design — найкраща open-source альтернатива Claude Design',
@@ -2419,6 +2544,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     {
       q: 'How is Open Design different from Claude Design?',
       a: 'Claude Design is a hosted product tied to a single vendor. Open Design is local-first, open source under Apache-2.0, and BYOK: you bring your own agent, credentials, and DESIGN.md system.',
+    },
+    {
+      q: 'Is Open Design an open-source Claude Design alternative?',
+      a: 'Yes — Open Design is the open-source, local-first Claude Design alternative. Where Claude Design is closed, hosted, and locked to Anthropic models, Open Design is Apache-2.0, runs on your own machine, and is BYOK, so you drive it with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen and keep every artifact as files you own.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'What is a vibe design workspace?',
+      a: 'A vibe design workspace is where you design by describing intent to an AI agent — from prompt to prototype, web page, slides, or HTML video — instead of hand-placing every element. Open Design is an open-source, agent-native vibe design workspace: it wires the coding agent you already run into a full design workflow, so one tool takes you from a rough idea to production-ready output you own.',
+      href: '/blog/what-is-vibe-design/',
     },
     {
       q: 'Does Open Design run locally?',
@@ -2466,6 +2601,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
   ],
   zh: [
+    {
+      q: 'Open Design 是开源的 Claude Design 替代品吗？',
+      a: '是的——Open Design 是开源、本地优先的 Claude Design 替代方案。Claude Design 闭源、托管、锁定 Anthropic 模型；Open Design 是 Apache-2.0，跑在你自己的机器上，且 BYOK，你可以用 Claude Code、Codex、Cursor、Gemini、OpenCode 或 Qwen 驱动它，产出的每个文件都归你所有。',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: '什么是 vibe design workspace？',
+      a: 'vibe design workspace 是通过向 AI agent 描述意图来做设计——从 prompt 到原型、网页、slides、HTML 视频——而不是手动摆放每个元素。Open Design 是一个开源、agent-native 的 vibe design workspace：把你已经在用的 coding agent 接进完整设计工作流，一个工具就把你从粗略想法带到可交付、归你所有的成品。',
+      href: '/blog/what-is-vibe-design/',
+    },
     {
       q: 'Open Design 是什么？',
       a: 'Open Design 是 nexu-io/open-design 项目的官方开源 AI 设计工作台。它把本地编码 Agent（Claude Code、Codex、Cursor、Gemini CLI、OpenCode 或 Qwen）变成设计引擎，并由可组合 SKILL.md 工作流驱动。',
@@ -2577,6 +2722,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
   ],
   ja: [
     {
+      q: 'Open Design はオープンソースの Claude Design 代替ですか？',
+      a: 'はい——Open Design はオープンソースかつローカル優先の Claude Design 代替です。Claude Design はクローズドでホスト型、Anthropic モデルに固定されていますが、Open Design は Apache-2.0 で自分のマシン上で動き、BYOK。Claude Code、Codex、Cursor、Gemini、OpenCode、Qwen で駆動でき、生成物はすべて自分のファイルとして手元に残ります。',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'vibe design workspace とは？',
+      a: 'vibe design workspace とは、要素を一つずつ手で配置する代わりに、AI エージェントに意図を伝えて設計する場です——prompt からプロトタイプ、Web ページ、スライド、HTML 動画まで。Open Design はオープンソースで agent-native な vibe design workspace で、すでに使っているコーディングエージェントを完全な設計ワークフローに組み込み、ひとつのツールでラフなアイデアから自分のものになる完成物まで導きます。',
+      href: '/blog/what-is-vibe-design/',
+    },
+    {
       q: 'Open Design とは何ですか？',
       a: 'Open Design は nexu-io/open-design プロジェクト公式のオープンソース AI デザインワークスペースです。Claude Code、Codex、Cursor、Gemini CLI、OpenCode、Qwen などのローカル coding agent を、スキルと DESIGN.md システムで動くデザインエンジンにします。',
     },
@@ -2631,6 +2786,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
   ],
   ko: [
+    {
+      q: 'Open Design은 오픈소스 Claude Design 대안인가요?',
+      a: '네——Open Design은 오픈소스, 로컬 우선 Claude Design 대안입니다. Claude Design은 폐쇄형·호스팅형이며 Anthropic 모델에 묶여 있지만, Open Design은 Apache-2.0이고 내 컴퓨터에서 실행되며 BYOK입니다. Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen으로 구동할 수 있고 생성된 모든 산출물은 내 파일로 남습니다.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'vibe design workspace란 무엇인가요?',
+      a: 'vibe design workspace는 모든 요소를 손으로 배치하는 대신 AI 에이전트에 의도를 설명해 디자인하는 공간입니다 — prompt에서 프로토타입, 웹 페이지, 슬라이드, HTML 비디오까지. Open Design은 오픈소스이자 agent-native한 vibe design workspace로, 이미 쓰는 코딩 에이전트를 완전한 디자인 워크플로에 연결해 하나의 도구로 거친 아이디어에서 내 것이 되는 완성물까지 이끕니다.',
+      href: '/blog/what-is-vibe-design/',
+    },
     {
       q: 'Open Design은 무엇인가요?',
       a: 'Open Design은 nexu-io/open-design 프로젝트의 공식 오픈소스 AI 디자인 워크스페이스입니다. Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Qwen 같은 로컬 coding agent를 조합형 skill과 DESIGN.md 시스템으로 구동되는 디자인 엔진으로 바꿉니다.',
@@ -2687,6 +2852,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
   ],
   de: [
     {
+      q: 'Ist Open Design eine quelloffene Claude-Design-Alternative?',
+      a: 'Ja — Open Design ist die quelloffene, lokale Claude-Design-Alternative. Wo Claude Design geschlossen, gehostet und an Anthropic-Modelle gebunden ist, ist Open Design Apache-2.0, läuft auf deinem eigenen Rechner und ist BYOK: Du steuerst es mit Claude Code, Codex, Cursor, Gemini, OpenCode oder Qwen und behältst jedes Ergebnis als eigene Dateien.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'Was ist ein Vibe Design Workspace?',
+      a: 'Ein Vibe Design Workspace ist ein Ort, an dem du gestaltest, indem du einem KI-Agent deine Absicht beschreibst — vom Prompt zu Prototyp, Webseite, Slides oder HTML-Video — statt jedes Element von Hand zu platzieren. Open Design ist ein quelloffener, agent-nativer Vibe Design Workspace: Er bindet den Coding-Agent, den du bereits nutzt, in einen vollständigen Design-Workflow ein, sodass ein Werkzeug dich von der groben Idee zum fertigen, dir gehörenden Ergebnis bringt.',
+      href: '/blog/what-is-vibe-design/',
+    },
+    {
       q: 'Was ist Open Design?',
       a: 'Open Design ist der offizielle Open-Source-AI-Design-Workspace des Projekts nexu-io/open-design. Es macht lokale Coding-Agents wie Claude Code, Codex, Cursor, Gemini CLI, OpenCode oder Qwen zu einer Design-Engine auf Basis von Skills und DESIGN.md-Systemen.',
     },
@@ -2741,6 +2916,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
   ],
   fr: [
+    {
+      q: 'Open Design est-il une alternative open source à Claude Design ?',
+      a: 'Oui — Open Design est l’alternative open source et locale à Claude Design. Là où Claude Design est fermé, hébergé et verrouillé aux modèles Anthropic, Open Design est en Apache-2.0, s’exécute sur votre propre machine et fonctionne en BYOK : pilotez-le avec Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen et gardez chaque livrable sous forme de fichiers qui vous appartiennent.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'Qu’est-ce qu’un vibe design workspace ?',
+      a: 'Un vibe design workspace est un espace où l’on conçoit en décrivant son intention à un agent IA — du prompt au prototype, page web, slides ou vidéo HTML — plutôt qu’en plaçant chaque élément à la main. Open Design est un vibe design workspace open source et agent-native : il intègre l’agent de code que vous utilisez déjà dans un flux de design complet, pour passer d’une idée brute à un résultat livrable et bien à vous.',
+      href: '/blog/what-is-vibe-design/',
+    },
     {
       q: "Qu'est-ce qu'Open Design ?",
       a: "Open Design est l'espace de travail officiel et open source du projet nexu-io/open-design. Il transforme un agent local — Claude Code, Codex, Cursor, Gemini CLI, OpenCode ou Qwen — en moteur de design piloté par des skills composables et des systèmes DESIGN.md portables.",
@@ -2797,6 +2982,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
   ],
   ru: [
     {
+      q: 'Open Design — это open-source альтернатива Claude Design?',
+      a: 'Да — Open Design это открытая, локальная альтернатива Claude Design. Claude Design закрыт, работает в облаке и привязан к моделям Anthropic, а Open Design — Apache-2.0, запускается на вашей машине и работает по BYOK: управляйте им через Claude Code, Codex, Cursor, Gemini, OpenCode или Qwen и храните каждый результат как свои файлы.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'Что такое vibe design workspace?',
+      a: 'Vibe design workspace — это среда, где вы проектируете, описывая замысел ИИ-агенту — от промпта до прототипа, веб-страницы, слайдов или HTML-видео — вместо расстановки каждого элемента вручную. Open Design это открытый, agent-native vibe design workspace: он встраивает кодинг-агента, которым вы уже пользуетесь, в полный дизайн-процесс, и один инструмент ведёт вас от черновой идеи к готовому результату, который принадлежит вам.',
+      href: '/blog/what-is-vibe-design/',
+    },
+    {
       q: 'Что такое Open Design?',
       a: 'Open Design — официальный open-source AI design workspace проекта nexu-io/open-design. Он превращает локальный coding agent — Claude Code, Codex, Cursor, Gemini CLI, OpenCode или Qwen — в design-движок на базе composable skills и переносимых DESIGN.md-систем.',
     },
@@ -2851,6 +3046,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
   ],
   es: [
+    {
+      q: '¿Open Design es una alternativa open source a Claude Design?',
+      a: 'Sí — Open Design es la alternativa open source y local a Claude Design. Donde Claude Design es cerrado, alojado y atado a los modelos de Anthropic, Open Design es Apache-2.0, se ejecuta en tu propia máquina y es BYOK: contrólalo con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen y conserva cada resultado como archivos que son tuyos.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: '¿Qué es un vibe design workspace?',
+      a: 'Un vibe design workspace es un espacio donde diseñas describiendo tu intención a un agente de IA — del prompt al prototipo, página web, slides o vídeo HTML — en lugar de colocar cada elemento a mano. Open Design es un vibe design workspace open source y agent-native: conecta el agente de código que ya usas a un flujo de diseño completo, de modo que una sola herramienta te lleva de una idea en bruto a un resultado listo y tuyo.',
+      href: '/blog/what-is-vibe-design/',
+    },
     {
       q: '¿Qué es Open Design?',
       a: 'Open Design es el workspace oficial y open source de IA de diseño del proyecto nexu-io/open-design. Convierte un coding agent local — Claude Code, Codex, Cursor, Gemini CLI, OpenCode o Qwen — en un motor de diseño con skills componibles y sistemas DESIGN.md portables.',
@@ -2907,6 +3112,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
   ],
   'pt-br': [
     {
+      q: 'O Open Design é uma alternativa open source ao Claude Design?',
+      a: 'Sim — o Open Design é a alternativa open source e local ao Claude Design. Enquanto o Claude Design é fechado, hospedado e preso aos modelos da Anthropic, o Open Design é Apache-2.0, roda na sua própria máquina e é BYOK: use Claude Code, Codex, Cursor, Gemini, OpenCode ou Qwen para conduzi-lo e mantenha cada entrega como arquivos que são seus.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'O que é um vibe design workspace?',
+      a: 'Um vibe design workspace é onde você projeta descrevendo a intenção a um agente de IA — do prompt ao protótipo, página web, slides ou vídeo HTML — em vez de posicionar cada elemento à mão. O Open Design é um vibe design workspace open source e agent-native: integra o coding agent que você já usa a um fluxo de design completo, então uma ferramenta leva você de uma ideia bruta a um resultado pronto e seu.',
+      href: '/blog/what-is-vibe-design/',
+    },
+    {
       q: 'O que é Open Design?',
       a: 'Open Design é o workspace oficial, open source, de design com IA do projeto nexu-io/open-design. Ele transforma um coding agent local — Claude Code, Codex, Cursor, Gemini CLI, OpenCode ou Qwen — em um motor de design movido por skills componíveis e sistemas DESIGN.md portáteis.',
     },
@@ -2961,6 +3176,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
   ],
   it: [
+    {
+      q: 'Open Design è un’alternativa open source a Claude Design?',
+      a: 'Sì — Open Design è l’alternativa open source e locale a Claude Design. Dove Claude Design è chiuso, ospitato e legato ai modelli Anthropic, Open Design è Apache-2.0, gira sulla tua macchina ed è BYOK: guidalo con Claude Code, Codex, Cursor, Gemini, OpenCode o Qwen e conserva ogni risultato come file tuoi.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'Che cos’è un vibe design workspace?',
+      a: 'Un vibe design workspace è uno spazio in cui progetti descrivendo l’intento a un agente IA — dal prompt al prototipo, pagina web, slide o video HTML — invece di posizionare ogni elemento a mano. Open Design è un vibe design workspace open source e agent-native: collega il coding agent che già usi a un flusso di design completo, così un solo strumento ti porta da un’idea grezza a un risultato pronto e tuo.',
+      href: '/blog/what-is-vibe-design/',
+    },
     {
       q: "Cos'è Open Design?",
       a: 'Open Design è il workspace ufficiale e open source di AI design del progetto nexu-io/open-design. Trasforma un coding agent locale — Claude Code, Codex, Cursor, Gemini CLI, OpenCode o Qwen — in un motore di design guidato da skill componibili e sistemi DESIGN.md portabili.',
@@ -3291,6 +3516,16 @@ const HOME_FAQ_COPY: Record<LandingLocaleCode, HomeFaqTemplate[]> = {
     },
   ],
   tr: [
+    {
+      q: 'Open Design açık kaynaklı bir Claude Design alternatifi mi?',
+      a: 'Evet — Open Design açık kaynaklı, yerel çalışan Claude Design alternatifidir. Claude Design kapalı, barındırılan ve Anthropic modellerine kilitliyken; Open Design Apache-2.0’dır, kendi makinende çalışır ve BYOK’tur: Claude Code, Codex, Cursor, Gemini, OpenCode veya Qwen ile çalıştır, her çıktıyı sana ait dosyalar olarak sakla.',
+      href: '/alternatives/claude-design/',
+    },
+    {
+      q: 'Vibe design workspace nedir?',
+      a: 'Vibe design workspace, her öğeyi elle yerleştirmek yerine bir yapay zeka ajanına niyetini anlatarak tasarım yaptığın yerdir — prompttan prototipe, web sayfasına, slaytlara veya HTML videoya. Open Design açık kaynaklı, agent-native bir vibe design workspace’tir: hâlihazırda kullandığın kodlama ajanını eksiksiz bir tasarım akışına bağlar; tek bir araç seni kaba bir fikirden sana ait, teslime hazır bir sonuca götürür.',
+      href: '/blog/what-is-vibe-design/',
+    },
     {
       q: 'Open Design nedir?',
       a: "Open Design, nexu-io/open-design projesinin resmi açık kaynak AI design workspace'idir. Claude Code, Codex, Cursor, Gemini CLI, OpenCode veya Qwen gibi yerel coding agent'ları, birleştirilebilir skill'ler ve taşınabilir DESIGN.md sistemleriyle çalışan bir tasarım motoruna dönüştürür.",
@@ -4300,7 +4535,7 @@ const LANDING_UI_COPY: LandingUiCopy = {
   },
   tutorials: {
     title: 'Open Design Tutorials',
-    seoTitle: 'Open Design Tutorials — How to Use Open Design',
+    seoTitle: 'Open Design Tutorials — Free Video Guides & How-Tos',
     description:
       'Learn how to use Open Design with step-by-step video tutorials — getting started, plugins, design systems, and real workflows. Every guide plays right on the page.',
     categoriesLabel: 'Tutorial categories',
@@ -6776,6 +7011,7 @@ export function getHomeFaq(
     a: entry.a
       .replaceAll('{origin}', replacements.origin)
       .replaceAll('{repo}', replacements.repo),
+    ...(entry.href ? { href: entry.href } : {}),
   }));
 }
 

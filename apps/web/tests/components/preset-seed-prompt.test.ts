@@ -1,5 +1,5 @@
 // Seed contract for the Home example-prompt cards and the plugin detail
-// modal's "Replicate this content" action (issue: the composer was seeded with
+// modal's prompt-loading "Use" action (issue: the composer was seeded with
 // the en query's leading paragraph, which for many example plugins is a
 // generator-facing build spec — stack/file-layout instructions, raw HTML, or a
 // dangling "as described below" — instead of the curated natural-language

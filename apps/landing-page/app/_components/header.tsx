@@ -16,15 +16,29 @@ import {
   type HeaderCopy,
   type LandingLocaleCode,
 } from '../i18n';
+import { getSolutionPageCopy } from '../solution-pages-i18n';
+import type { SolutionPageKey } from '../solution-pages-i18n/types';
 
 const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_DISCUSSIONS = `${REPO}/discussions`;
 const DISCORD = 'https://discord.gg/mHAjSMV6gz';
 const X_PROFILE = 'https://x.com/OpenDesignHQ';
-// AMR product page on the production site (this repo has no /amr/ route).
-// Single destination for every AMR surface: the nav logo, the Agent
-// dropdown entry, and the footer Partners column.
-const AMR_URL = 'https://open-design.ai/amr/';
+
+// Open Design Cloud endpoints for the header sign-in module.
+// Production defaults; overridable at build time via PUBLIC_* env so a
+// preview/staging build can point at a non-prod cloud. These are surfaced to
+// the runtime via `data-*` on `.nav-account` because the auth logic lives in
+// `header-enhancer.astro`'s `<script is:inline>` (NOT processed by Vite, so it
+// cannot read `import.meta.env` itself).
+const env = import.meta.env as Record<string, string | undefined>;
+const CLOUD_API_BASE =
+  env.PUBLIC_CLOUD_API_BASE ?? env.PUBLIC_AMR_API_BASE ?? 'https://amr-api.open-design.ai';
+const CLOUD_LOGIN_URL =
+  env.PUBLIC_CLOUD_LOGIN_URL ?? env.PUBLIC_AMR_LOGIN_URL ?? 'https://open-design.ai/cloud/login';
+const CLOUD_CONSOLE_URL =
+  env.PUBLIC_CLOUD_CONSOLE_URL ??
+  env.PUBLIC_AMR_CONSOLE_URL ??
+  'https://open-design.ai/cloud/wallet?source=open_design';
 
 // Solution → Use cases / Roles. Hrefs mirror upstream main's header 1:1 and
 // pair positionally with the localized `useCaseItems` / `roleItems` tuples.
@@ -45,8 +59,20 @@ const ROLE_HREFS = [
   '/solutions/marketing/',
 ] as const;
 
-// Agent column — AMR (the design Agent) heads the dropdown in the markup,
-// followed by the coding agents with a dedicated long-form design page
+// Solution → Tools. AI generator pages. Labels come from the solution-page
+// copy (the page breadcrumb) so the dropdown and the hub cards share one
+// translation source and cannot drift apart.
+const TOOL_ENTRIES: ReadonlyArray<{ href: string; key: SolutionPageKey }> = [
+  { href: '/solutions/ai-wireframe-generator/', key: 'aiWireframeGenerator' },
+  { href: '/solutions/ai-ui-generator/', key: 'aiUiGenerator' },
+  { href: '/solutions/ai-prototype-generator/', key: 'aiPrototypeGenerator' },
+  { href: '/solutions/ai-landing-page-generator/', key: 'aiLandingPageGenerator' },
+  { href: '/solutions/design-to-code/', key: 'designToCode' },
+  { href: '/solutions/figma-to-code/', key: 'figmaToCode' },
+  { href: '/solutions/screenshot-to-code/', key: 'screenshotToCode' },
+];
+
+// Agent column — the coding agents with a dedicated long-form design page
 // upstream. Routes stay in lockstep with main's /agents/ hub.
 const AGENTS: ReadonlyArray<{ name: string; route: string }> = [
   { name: 'Codex', route: 'codex-design' },
@@ -87,6 +113,7 @@ export interface HeaderProps {
     | 'solution'
     | 'agent'
     | 'plugins'
+    | 'pricing'
     | 'library'
     | 'skills'
     | 'systems'
@@ -244,6 +271,20 @@ export function Header({
               >
                 <li className='nav-dropdown-group'>
                   <span className='nav-dropdown-group-label'>
+                    {productMenuCopy.tools}
+                  </span>
+                </li>
+                {TOOL_ENTRIES.map(({ href: toolHref, key }) => (
+                  <li key={key}>
+                    <a href={href(toolHref)}>
+                      <span className='dropdown-name'>
+                        {getSolutionPageCopy(locale, key).breadcrumb}
+                      </span>
+                    </a>
+                  </li>
+                ))}
+                <li className='nav-dropdown-group'>
+                  <span className='nav-dropdown-group-label'>
                     {productMenuCopy.useCases}
                   </span>
                 </li>
@@ -269,8 +310,8 @@ export function Header({
               </ul>
             </li>
 
-            {/* Agent — AMR plus the coding agents with a dedicated design
-                page. The top-level link goes to the /agents/ hub. */}
+            {/* Agent — the coding agents with a dedicated design page. The
+                top-level link goes to the /agents/ hub. */}
             <li className='has-dropdown'>
               <a
                 href={href('/agents/')}
@@ -279,19 +320,12 @@ export function Header({
                 {productMenuCopy.agent}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
-              {/* 22 rows (AMR + 21 coding agents) — reuse the tall-dropdown
-                  height cap so the panel scrolls instead of running off
-                  short viewports. */}
+              {/* 21 coding-agent rows — reuse the tall-dropdown height cap so
+                  the panel scrolls instead of running off short viewports. */}
               <ul
                 className='nav-dropdown nav-dropdown-solution'
                 aria-label={productMenuCopy.agent}
               >
-                <li>
-                  <a href={AMR_URL}>
-                    <span className='dropdown-name'>{productMenuCopy.amrName}</span>
-                    <span className='dropdown-blurb'>{productMenuCopy.amrBlurb}</span>
-                  </a>
-                </li>
                 {AGENTS.map((agent) => (
                   <li key={agent.route}>
                     <a href={href(`/agents/${agent.route}/`)}>
@@ -343,6 +377,19 @@ export function Header({
                   </a>
                 </li>
               </ul>
+            </li>
+
+            {/* Pricing — localized page. The plan numbers it renders stay in
+                sync with the vela commerce app at runtime (see
+                app/_lib/pricing.ts); the card copy mirrors vela's subscription
+                modal (see app/_lib/pricing-content.ts). */}
+            <li>
+              <a
+                href={href('/pricing/')}
+                className={active === 'pricing' ? 'is-active' : undefined}
+              >
+                {productMenuCopy.pricing}
+              </a>
             </li>
 
             {/* Resources — a category label (Blog / Tutorials / Compare), not
@@ -411,14 +458,12 @@ export function Header({
               </ul>
             </li>
 
-            {/* Community — Contributors / Ambassadors / Moderators anchor
-                into the `/community/` hub's sections (same destinations as
-                upstream main's header), not the standalone static pages.
-                The community pages are non-locale-aware, so no `href()`
-                localization here. */}
+            {/* Community — Contributors / Ambassadors / Moderators. These
+                pages are now localized Astro routes, so link through `href()`
+                to keep visitors on their language variant. */}
             <li className='has-dropdown'>
               <a
-                href='/community/'
+                href={href('/community/')}
                 className={active === 'community' ? 'is-active' : undefined}
               >
                 {productMenuCopy.community}
@@ -426,21 +471,21 @@ export function Header({
               </a>
               <ul className='nav-dropdown' aria-label={productMenuCopy.community}>
                 <li>
-                  <a href='/community/contributors/'>
+                  <a href={href('/community/contributors/')}>
                     <span className='dropdown-name'>
                       {productMenuCopy.communityItems.contributors}
                     </span>
                   </a>
                 </li>
                 <li>
-                  <a href='/community/ambassadors/'>
+                  <a href={href('/community/ambassadors/')}>
                     <span className='dropdown-name'>
                       {productMenuCopy.communityItems.ambassadors}
                     </span>
                   </a>
                 </li>
                 <li>
-                  <a href='/community/moderators/'>
+                  <a href={href('/community/moderators/')}>
                     <span className='dropdown-name'>
                       {productMenuCopy.communityItems.moderators}
                     </span>
@@ -466,20 +511,6 @@ export function Header({
               </ul>
             </li>
 
-            {/* AMR partner logo at the tail of the nav links. */}
-            <li className='nav-amr'>
-              <a href={AMR_URL} aria-label='AMR' {...ext}>
-                <img
-                  className='nav-amr-logo'
-                  src='/amr-lockup.svg'
-                  alt='AMR'
-                  width={700}
-                  height={272}
-                  loading='lazy'
-                  decoding='async'
-                />
-              </a>
-            </li>
           </ul>
         </nav>
         <div className='nav-side'>
@@ -533,6 +564,65 @@ export function Header({
           >
             {headerCopy.download}
           </a>
+          {/*
+            Open Design Cloud account entry. Renders BOTH states up front
+            and lets `header-enhancer.astro` toggle them at runtime: the
+            signed-out "Sign in" link is visible by default (so no-JS / pre-hydration
+            shows a working login link), and the signed-in avatar menu stays
+            `hidden` until the enhancer confirms a live cloud session via
+            `GET {api}/api/auth/get-session`. Config flows through `data-*`
+            because the enhancer script cannot read `import.meta.env`.
+          */}
+          <div
+            className='nav-account'
+            data-amr-account
+            data-amr-api={CLOUD_API_BASE}
+            data-amr-login={CLOUD_LOGIN_URL}
+            data-amr-console={CLOUD_CONSOLE_URL}
+            data-amr-home={href('/')}
+          >
+            <a className='nav-signin' href={CLOUD_LOGIN_URL} data-amr-signin>
+              {headerCopy.signIn}
+            </a>
+            <details className='nav-account-menu' data-amr-menu hidden>
+              <summary
+                className='nav-account-trigger'
+                aria-label={headerCopy.accountAria}
+                title={headerCopy.accountAria}
+              >
+                <img className='nav-avatar' alt='' data-amr-avatar />
+                <span
+                  className='nav-avatar-fallback'
+                  data-amr-avatar-fallback
+                  aria-hidden='true'
+                />
+              </summary>
+              <div className='nav-account-dropdown' role='menu'>
+                <div className='nav-account-id'>
+                  <span className='nav-account-name' data-amr-name />
+                  <span className='nav-account-email' data-amr-email />
+                </div>
+                <a
+                  className='nav-account-item'
+                  role='menuitem'
+                  href={CLOUD_CONSOLE_URL}
+                  target='_blank'
+                  rel='noreferrer noopener'
+                  data-amr-console-link
+                >
+                  {headerCopy.menuConsole}
+                </a>
+                <button
+                  type='button'
+                  className='nav-account-item nav-account-signout'
+                  role='menuitem'
+                  data-amr-signout
+                >
+                  {headerCopy.menuSignOut}
+                </button>
+              </div>
+            </details>
+          </div>
         </div>
       </div>
       {/*

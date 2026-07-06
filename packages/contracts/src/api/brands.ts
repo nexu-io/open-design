@@ -143,6 +143,23 @@ export interface BrandMeta {
   /** Human-readable label for the wall that blocked extraction (e.g.
    *  "Cloudflare"). Set alongside `blocked`. */
   blockedReason?: string;
+  /** Seeded conversation that carries the programmatic-extraction transcript.
+   *  Persisted so any completion point (finalize success, soft-fail/blocked,
+   *  user stop, timeout) can reconcile the synthetic assistant message's run
+   *  status to a terminal state regardless of the racy background timer. */
+  conversationId?: string;
+  /** The seeded assistant message id whose run status the lifecycle reconciles
+   *  out of the perpetual `running` state once extraction terminates. */
+  extractionTranscriptMessageId?: string;
+  /** The seeded user message id paired with the assistant message above. */
+  extractionTranscriptUserMessageId?: string;
+  /** When the programmatic pass started (ms epoch), so a terminal reconcile can
+   *  stamp an accurate elapsed window on the synthetic message. */
+  extractionStartedAt?: number;
+  /** Current programmatic extraction generation. Background passes must match
+   *  this before committing terminal writes, so stale retries cannot overwrite a
+   *  newer Browser/manual retry. */
+  extractionAttemptId?: string;
 }
 
 /** A brand as surfaced to the library list + detail page. */
@@ -196,11 +213,18 @@ export interface BrandExtractStartResponse {
   sourceUrl: string;
   /** Current lifecycle at project creation time; normally `extracting`. */
   status: BrandStatus;
-  /** Present only for legacy callers/edge paths that already have a registered system. */
+  /** Draft/ready `user:<id>` design system reserved for this brand when available. */
   designSystemId?: string;
   /** Display name when already available. */
   brandName?: string;
 }
+
+/**
+ * POST /api/brands/:id/continue-extraction response. Reuses the existing
+ * brand/project/design-system, appends a fresh programmatic transcript turn,
+ * and restarts the deterministic extraction pass in the background.
+ */
+export interface BrandContinueExtractionResponse extends BrandExtractStartResponse {}
 
 /**
  * POST /api/brands/:id/finalize request. The extraction agent calls this (or

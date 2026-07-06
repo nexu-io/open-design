@@ -141,6 +141,47 @@ describe('AvatarMenu', () => {
     expect(onOpenSettings).toHaveBeenCalledWith('execution');
   });
 
+  it('pins Open Design to the top of the CLI picker', async () => {
+    const amrAgent: AgentInfo = {
+      id: 'amr',
+      name: 'Open Design AMR',
+      bin: 'vela',
+      available: true,
+      models: [{ id: 'default', label: 'Default (CLI config)' }],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: false,
+            profile: 'test',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response('{}', { status: 200 });
+    }));
+
+    renderMenu({ agents: [codexAgent, claudeAgent, amrAgent] });
+    const menu = openMenu();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('avatar-agent-option-amr')).toBeTruthy();
+    });
+    expect(
+      Array.from(menu.querySelectorAll('[data-testid^="avatar-agent-option-"]'))
+        .map((row) => row.getAttribute('data-testid')),
+    ).toEqual([
+      'avatar-agent-option-amr',
+      'avatar-agent-option-codex',
+      'avatar-agent-option-claude',
+    ]);
+  });
+
   it('rescans agents and re-renders newly available CLI entries', async () => {
     function Harness() {
       const [agents, setAgents] = useState<AgentInfo[]>([
@@ -262,18 +303,7 @@ describe('AvatarMenu', () => {
       '$247.51',
     );
 
-    const consoleLink = screen.getByRole('link', {
-      name: 'avatar.amrConsole',
-    }) as HTMLAnchorElement;
-    fireEvent.click(consoleLink);
-    const consoleUrl = new URL(consoleLink.href);
-    expect(consoleUrl.searchParams.get('view')).toBeNull();
-    expect(consoleUrl.searchParams.get('od_entry_source')).toBe('avatar_amr_console');
-    expect(consoleUrl.searchParams.get('source')).toBe('open_design');
-    expect(consoleUrl.searchParams.get('od_device_id')).toBe('od-install-abc');
-
-    openMenu();
-    expect(await screen.findByText('Plus')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'avatar.amrConsole' })).toBeNull();
     const upgrade = screen.getByRole('link', {
       name: 'settings.amrUpgrade',
     }) as HTMLAnchorElement;
@@ -285,7 +315,7 @@ describe('AvatarMenu', () => {
     expect(url.searchParams.get('od_device_id')).toBe('od-install-abc');
   });
 
-  it('keeps the avatar AMR console link for non-upgradeable plans', async () => {
+  it('omits wallet and upgrade links for non-upgradeable plans', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
       if (url === '/api/integrations/vela/status') {
@@ -327,16 +357,7 @@ describe('AvatarMenu', () => {
     openMenu();
     expect(await screen.findByText('Max')).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'settings.amrUpgrade' })).toBeNull();
-
-    const consoleLink = screen.getByRole('link', {
-      name: 'avatar.amrConsole',
-    }) as HTMLAnchorElement;
-    fireEvent.click(consoleLink);
-    const url = new URL(consoleLink.href);
-    expect(url.searchParams.get('view')).toBeNull();
-    expect(url.searchParams.get('od_entry_source')).toBe('avatar_amr_console');
-    expect(url.searchParams.get('source')).toBe('open_design');
-    expect(url.searchParams.get('od_device_id')).toBe('od-install-abc');
+    expect(screen.queryByRole('link', { name: 'avatar.amrConsole' })).toBeNull();
   });
 
   it('falls back to the wallet snapshot when signed-in status has no account balance', async () => {
@@ -437,14 +458,7 @@ describe('AvatarMenu', () => {
     openMenu();
     expect(await screen.findByText('Plus')).toBeTruthy();
 
-    const consoleLink = screen.getByRole('link', {
-      name: 'avatar.amrConsole',
-    }) as HTMLAnchorElement;
-    fireEvent.click(consoleLink);
-    expect(new URL(consoleLink.href).origin).toBe('https://vela.powerformer.net');
-
-    openMenu();
-    expect(await screen.findByText('Plus')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'avatar.amrConsole' })).toBeNull();
     const upgrade = screen.getByRole('link', {
       name: 'settings.amrUpgrade',
     }) as HTMLAnchorElement;

@@ -40,6 +40,10 @@ type ContactLead = {
   budget: string;
   useCases: string[];
   role: string;
+  /** User-entered country / region (distinct from the Cloudflare geo below). */
+  location: string;
+  /** Expected seat count (free text, e.g. "20"). */
+  seats: string;
   message: string;
   source: string;
   locale: string;
@@ -64,7 +68,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_SHORT = 200;
 const MAX_MESSAGE = 4000;
-const ALLOWED_SOURCES = new Set(["enterprise", "client"]);
+// `enterprise` = the /enterprise page (full lead form, strict contract).
+// `pricing_team` = the lightweight /pricing "Request Team" modal (name + email
+// required, everything else optional). `client` = in-app.
+const ALLOWED_SOURCES = new Set(["enterprise", "pricing_team", "client"]);
 const ALLOWED_TEAM_SIZES = new Set(["1-10", "11-50", "51-200", "200+"]);
 const ALLOWED_BUDGETS = new Set([
   "lt_50",
@@ -74,21 +81,65 @@ const ALLOWED_BUDGETS = new Set([
   "usd_5k_plus",
   "unsure",
 ]);
+// Both the /enterprise page and the pricing modal submit canonical budget enum
+// codes (different buckets); the card maps a known code to a readable label and
+// otherwise shows the raw value.
 const BUDGET_LABELS: Record<string, string> = {
+  // /enterprise buckets
   lt_50: "每月 $50 以下",
   usd_50_200: "每月 $50 – $200",
   usd_200_1k: "每月 $200 – $1,000",
   usd_1k_5k: "每月 $1,000 – $5,000",
   usd_5k_plus: "每月 $5,000 以上",
+  // pricing "Request Team" buckets
+  lt_1k: "每月 $1,000 以下",
+  usd_5k_20k: "每月 $5,000 – $20,000",
+  usd_20k_plus: "每月 $20,000 以上",
   unsure: "还不确定",
+};
+// Canonical team-size enum → readable label (shared by both surfaces).
+const TEAM_SIZE_LABELS: Record<string, string> = {
+  "1-10": "1–10 人",
+  "11-50": "11–50 人",
+  "51-200": "51–200 人",
+  "200+": "200 人以上",
+};
+// /enterprise submits expected seats as one of these range codes; the pricing
+// modal still sends free numeric text, so the card falls back to the raw value.
+const ALLOWED_SEATS = new Set([
+  "1-5",
+  "5-10",
+  "10-20",
+  "20-50",
+  "50-100",
+  "100-200",
+  "200-500",
+  "500+",
+]);
+const SEAT_LABELS: Record<string, string> = {
+  "1-5": "1–5 个",
+  "5-10": "5–10 个",
+  "10-20": "10–20 个",
+  "20-50": "20–50 个",
+  "50-100": "50–100 个",
+  "100-200": "100–200 个",
+  "200-500": "200–500 个",
+  "500+": "500 个以上",
 };
 const ALLOWED_USE_CASES = new Set([
   "product_design",
   "design_system",
   "prototype",
   "marketing",
+  "brand",
+  "social_media",
+  "poster_print",
   "deck",
+  "video_motion",
+  "illustration",
   "dashboards",
+  "education",
+  "game_assets",
   "other",
 ]);
 const USE_CASE_LABELS: Record<string, string> = {
@@ -96,8 +147,15 @@ const USE_CASE_LABELS: Record<string, string> = {
   design_system: "设计系统",
   prototype: "原型 / 应用 UI",
   marketing: "营销与落地页",
+  brand: "品牌视觉 / VI",
+  social_media: "社媒内容 / 电商素材",
+  poster_print: "海报 / 印刷物料",
   deck: "演示文稿 / Deck",
+  video_motion: "视频 / 动效",
+  illustration: "插画 / 图像生成",
   dashboards: "仪表盘 / 内部工具",
+  education: "教学 / 课件",
+  game_assets: "游戏素材",
   other: "其他",
 };
 
@@ -188,7 +246,9 @@ function buildFeishuCard(lead: ContactLead): Record<string, unknown> {
           fieldRow("姓名", lead.name),
           fieldRow("企业邮箱", lead.email),
           fieldRow("公司", lead.company),
-          fieldRow("团队规模", lead.teamSize),
+          fieldRow("团队规模", TEAM_SIZE_LABELS[lead.teamSize] ?? lead.teamSize),
+          fieldRow("国家 / 地区", lead.location),
+          fieldRow("预计席位数", SEAT_LABELS[lead.seats] ?? lead.seats),
           fieldRow("预算", BUDGET_LABELS[lead.budget] ?? lead.budget),
           fieldRow("使用场景", lead.useCases.map((v) => USE_CASE_LABELS[v] ?? v).join("、")),
           fieldRow("职位", lead.role),
@@ -300,25 +360,43 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return json({ ok: false, error: "invalid_email" }, 400, origin);
   }
 
-  const name = readString(payload.name, MAX_SHORT);
-  const company = readString(payload.company, MAX_SHORT);
-  const teamSize = readString(payload.teamSize, MAX_SHORT);
-  const budget = readString(payload.budget, MAX_SHORT);
-  const useCases = readUseCases(payload.useCases);
-  if (
-    !name ||
-    !company ||
-    !ALLOWED_TEAM_SIZES.has(teamSize) ||
-    !ALLOWED_BUDGETS.has(budget) ||
-    useCases.length === 0
-  ) {
-    return json({ ok: false, error: "missing_fields" }, 400, origin);
-  }
-
+  // Reject unrecognized sources up front. This is a public write endpoint, so a
+  // typoed/unknown source must return 400 rather than silently falling through
+  // to the relaxed path and persisting arbitrary leads.
   const source =
     typeof payload.source === "string" && ALLOWED_SOURCES.has(payload.source)
       ? payload.source
-      : "unknown";
+      : null;
+  if (!source) {
+    return json({ ok: false, error: "invalid_source" }, 400, origin);
+  }
+
+  // The /enterprise form no longer asks for a name (email is the contact
+  // handle); every other source still requires one.
+  const name = readString(payload.name, MAX_SHORT);
+  if (!name && source !== "enterprise") {
+    return json({ ok: false, error: "missing_fields" }, 400, origin);
+  }
+
+  const company = readString(payload.company, MAX_SHORT);
+  const teamSize = readString(payload.teamSize, MAX_SHORT);
+  const budget = readString(payload.budget, MAX_SHORT);
+  const seats = readString(payload.seats, MAX_SHORT);
+  const useCases = readUseCases(payload.useCases);
+
+  // `pricing_team` (the lightweight /pricing modal) is the only relaxed caller —
+  // name + email only, with team size/budget as free display strings. Every
+  // other allowlisted source keeps the full contact-form contract: known
+  // team-size/seat-range/budget enums + a use case (company is optional).
+  if (
+    source !== "pricing_team" &&
+    (!ALLOWED_TEAM_SIZES.has(teamSize) ||
+      !ALLOWED_SEATS.has(seats) ||
+      !ALLOWED_BUDGETS.has(budget) ||
+      useCases.length === 0)
+  ) {
+    return json({ ok: false, error: "missing_fields" }, 400, origin);
+  }
 
   const cf = request.cf || {};
   const lead: ContactLead = {
@@ -329,6 +407,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     budget,
     useCases,
     role: readString(payload.role, MAX_SHORT),
+    location: readString(payload.location, MAX_SHORT),
+    seats,
     message: readString(payload.message, MAX_MESSAGE),
     source,
     locale: readString(payload.locale, 16) || "en",
