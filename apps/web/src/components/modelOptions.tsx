@@ -247,9 +247,9 @@ export const SearchableModelSelect = forwardRef<
             <span
               className="model-select-searchable__value-badge"
               data-tag={selectedTag}
-              data-label={selectedTagLabel}
-              aria-hidden="true"
-            />
+            >
+              {selectedTagLabel}
+            </span>
           ) : null}
         </span>
       </button>
@@ -325,18 +325,18 @@ export const SearchableModelSelect = forwardRef<
                           {costLabel ? (
                             <span
                               className="model-select-searchable__option-meta"
-                              data-description={costLabel}
-                              aria-hidden="true"
-                            />
+                            >
+                              {costLabel}
+                            </span>
                           ) : null}
                         </span>
                         {tagLabel ? (
                           <span
                             className="model-select-searchable__option-badge"
                             data-tag={tag}
-                            data-label={tagLabel}
-                            aria-hidden="true"
-                          />
+                          >
+                            {tagLabel}
+                          </span>
                         ) : null}
                       </span>
                     </button>

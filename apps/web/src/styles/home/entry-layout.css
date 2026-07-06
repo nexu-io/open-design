@@ -1818,13 +1818,6 @@
   opacity: 0.88;
   flex: 0 0 auto;
 }
-.model-select-searchable__value-badge::after,
-.model-select-searchable__option-badge::after {
-  content: attr(data-label);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .model-select-searchable__option-meta {
   font-size: 11px;
   line-height: 1.3;
@@ -1833,9 +1826,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.model-select-searchable__option-meta::before {
-  content: attr(data-description);
 }
 .model-select-searchable__option-badge {
   margin-top: 1px;
@@ -3705,9 +3695,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.onboarding-view__select-option-meta::before {
-  content: attr(data-description);
-}
 .onboarding-view__select-badge {
   --model-tag-color: var(--text-muted);
   --model-tag-bg: color-mix(in srgb, var(--model-tag-color) 10%, var(--bg-panel));
@@ -3740,12 +3727,6 @@
   background: currentColor;
   opacity: 0.88;
   flex: 0 0 auto;
-}
-.onboarding-view__select-badge::after {
-  content: attr(data-label);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .onboarding-view__select-badge[data-tag='fast'] {
   --model-tag-color: #39a9a2;

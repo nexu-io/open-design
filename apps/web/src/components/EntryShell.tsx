@@ -3493,9 +3493,9 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
             <span
               className="onboarding-view__select-badge"
               data-tag={selectedTagKind}
-              data-label={selectedTag}
-              aria-hidden="true"
-            />
+            >
+              {selectedTag}
+            </span>
           ) : null}
         </span>
         <Icon name="chevron-down" size={16} />
@@ -3561,18 +3561,18 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
                       {option.meta ? (
                         <span
                           className="onboarding-view__select-option-meta"
-                          data-description={option.meta}
-                          aria-hidden="true"
-                        />
+                        >
+                          {option.meta}
+                        </span>
                       ) : null}
                     </span>
                     {option.tag ? (
                       <span
                         className="onboarding-view__select-badge"
                         data-tag={option.tagKind}
-                        data-label={option.tag}
-                        aria-hidden="true"
-                      />
+                      >
+                        {option.tag}
+                      </span>
                     ) : null}
                   </span>
                   {selected ? <Icon name="check" size={15} /> : null}

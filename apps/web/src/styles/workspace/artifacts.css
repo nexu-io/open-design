@@ -2232,13 +2232,6 @@
   opacity: 0.88;
   flex: 0 0 auto;
 }
-.model-select-searchable__value-badge::after,
-.model-select-searchable__option-badge::after {
-  content: attr(data-label);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .model-select-searchable__option-meta {
   font-size: 11px;
   line-height: 1.3;
@@ -2247,9 +2240,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.model-select-searchable__option-meta::before {
-  content: attr(data-description);
 }
 .model-select-searchable__option-badge {
   margin-top: 1px;
