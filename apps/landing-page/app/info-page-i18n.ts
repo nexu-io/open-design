@@ -794,6 +794,8 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           ],
           tocLabel: 'On this page',
           toc: [
+            { id: 'best-alternatives', label: 'Best alternatives' },
+            { id: 'free-oss', label: 'Free & open-source' },
             { id: 'what-is-lovable', label: 'What Lovable is' },
             { id: 'why-switch', label: 'Why switch' },
             { id: 'local-byok', label: 'Local-first + BYOK' },
@@ -802,6 +804,37 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
             { id: 'migrate', label: 'Migration' },
           ],
           sections: [
+            {
+              id: 'best-alternatives',
+              heading: 'Best Lovable alternatives in 2026',
+              blocks: [
+                { kind: 'p', text: 'Looking for a Lovable alternative? The best Lovable alternatives are Open Design (open-source, local-first), Bolt, v0, Cursor, Replit, and Dyad — here is how they compare and where each one fits. Open Design is the pick if you want to own your design artifacts as version-controlled files instead of state inside a hosted app-builder.' },
+                { kind: 'table', columns: ['Tool', 'License', 'Pricing', 'Best for', 'Open source'], rows: [
+                  ['Open Design', 'Apache-2.0', 'Free app · BYOK (pay your own API)', 'Design-first artifacts you own as files', 'Yes'],
+                  ['Bolt (bolt.new)', 'Proprietary', 'Free tier + paid', 'In-browser full-stack app prototyping', 'No'],
+                  ['v0 (Vercel)', 'Proprietary', 'Free tier + paid', 'React / Next.js UI generation', 'No'],
+                  ['Cursor', 'Proprietary', 'Free tier + paid', 'Agentic coding inside an IDE', 'No'],
+                  ['Replit (Agent)', 'Proprietary', 'Free tier + paid', 'Cloud IDE with build-and-deploy', 'No'],
+                  ['Dyad', 'Open source (Apache-2.0)', 'Free, local', 'Local open-source app builder', 'Yes'],
+                ] },
+                { kind: 'steps', items: [
+                  { label: 'Open Design', body: 'The open-source, local-first, design-first pick — #1 for people who want to own their design artifacts as files, not a Lovable clone. Apache-2.0, BYOK, drives the coding agent you already use. Best for design artifacts and a portable brand you keep in your own repo.' },
+                  { label: 'Bolt (bolt.new)', body: 'Hosted, proprietary app builder that runs the dev environment in the browser. Best for quickly prototyping a running full-stack app from a prompt.' },
+                  { label: 'v0 (Vercel)', body: 'Generates React / Next.js components and UI from a prompt, tuned for the Vercel stack. Best for front-end UI and component prototyping.' },
+                  { label: 'Cursor', body: 'Agentic AI coding inside a full IDE. Best for developers who want the agent embedded in their editor and codebase.' },
+                  { label: 'Replit (Agent)', body: 'Cloud IDE where the agent builds and deploys from one place. Best for going from idea to a deployed app in the browser.' },
+                  { label: 'Dyad', body: 'The other open-source, local option — a free, local app builder (Apache-2.0). Best for self-hosting a prompt-to-app builder with your own keys.' },
+                ] },
+                { kind: 'p', text: 'Where Open Design fits honestly: it is a design layer around the coding agent you already use — BYOK, Apache-2.0 — so it is the Lovable alternative for people who want design artifacts as version-controlled files rather than a hosted app-builder. If you specifically want a hosted prompt-to-app builder, Lovable, Bolt, or Replit fit better.' },
+              ],
+            },
+            {
+              id: 'free-oss',
+              heading: 'Is there a free, open-source Lovable alternative?',
+              blocks: [
+                { kind: 'p', text: 'Yes. Open Design is free and open-source — Apache-2.0, BYOK, so the app costs nothing and you pay only your own provider API spend — and is the design-first option. Dyad (Apache-2.0) is the other open-source option: a local app builder you can run for free. Both are free to run, and between them they cover the two high-intent needs behind "free open-source Lovable alternative": design-first artifact ownership (Open Design) and a self-hostable app builder (Dyad).' },
+              ],
+            },
             {
               id: 'what-is-lovable',
               heading: 'What Lovable is',
@@ -892,6 +925,9 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           faqTitle: 'FAQ',
           faq: [
             { name: 'Is Open Design a drop-in replacement for Lovable?', text: 'No. Lovable ships deployed full-stack apps; Open Design is design-first and produces artifacts you own. They overlap on prompt-to-UI, not on hosting a backend.' },
+            { name: 'What is the best free Lovable alternative?', text: 'Open Design — it is free and open-source (Apache-2.0, BYOK, so you pay only your own API spend) and is the strongest pick for design-first work. If you specifically want a local open-source app builder instead, Dyad (Apache-2.0) is free to run.' },
+            { name: 'Is there an open-source Lovable alternative?', text: 'Yes — Open Design is an open-source, local-first alternative focused on design artifacts (Apache-2.0, agent-native), and Dyad is an open-source local app builder (Apache-2.0). Both are free to run.' },
+            { name: 'Lovable vs Bolt vs v0 — which should I use?', text: 'Lovable is aimed at non-technical makers building full apps from a prompt; Bolt (bolt.new) builds a full-stack app in the browser; v0 (Vercel) generates React/Next.js UI and components. Pick Open Design when you want to own your design artifacts as version-controlled files rather than state inside a hosted builder.' },
             { name: 'Can Open Design build a full app like Lovable?', text: 'Open Design focuses on design artifacts, prototypes, and brand systems. For production backends and one-click hosting, Lovable is the better fit.' },
             { name: 'Which agent does Open Design use?', text: 'Your choice — BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen. API spend bills to your account and credentials are never proxied through us.' },
             { name: 'Is Open Design really open source?', text: 'Yes. It lives at github.com/nexu-io/open-design under Apache-2.0 and is self-hostable.' },
