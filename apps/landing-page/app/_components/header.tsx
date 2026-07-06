@@ -94,7 +94,7 @@ const AGENTS: ReadonlyArray<{ name: string; route: string }> = [
   { name: 'Pi', route: 'pi-design' },
   { name: 'Kiro CLI', route: 'kiro-design' },
   { name: 'Kilo', route: 'kilo-design' },
-  { name: 'Mistral Vibe CLI', route: 'vibe-design' },
+  { name: 'Mistral Vibe CLI', route: 'vibe-cli-design' },
   { name: 'Qoder CLI', route: 'qoder-design' },
 ];
 

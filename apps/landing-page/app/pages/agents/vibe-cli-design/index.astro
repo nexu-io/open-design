@@ -1,9 +1,12 @@
 ---
 /*
- * /agents/vibe-design/ — agent detail page (industrial long-form).
+ * /agents/vibe-cli-design/ — Mistral Vibe CLI agent detail page (long-form).
  *
- * Captures "vibe design" intent and drives to Open Design. Renders the
- * rich how-to layout from copy.agentGuides['vibe'].rich. Linked from /agents/.
+ * This is the Mistral Vibe CLI agent guide. It lives at /agents/vibe-cli-design/
+ * (not /agents/vibe-design/) so it does not squat the informational "vibe design"
+ * concept query — that intent is served by /blog/what-is-vibe-design/, which the
+ * old /agents/vibe-design/ URL now 301-redirects to (see public/_redirects).
+ * Renders the rich how-to layout from copy.agentGuides['vibe'].rich. Linked from /agents/.
  * Never fabricate URLs or facts here.
  */
 import Layout from '../../../_components/sub-page-layout.astro';
@@ -11,7 +14,7 @@ import { getInfoPageCopy } from '../../../info-page-i18n';
 import { localeFromPath, localizedHref } from '../../../i18n';
 
 const SLUG = 'vibe';
-const ROUTE = 'vibe-design';
+const ROUTE = 'vibe-cli-design';
 const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
 const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_RELEASES = `${REPO}/releases`;
