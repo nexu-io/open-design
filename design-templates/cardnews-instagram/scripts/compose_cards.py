@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 # Role: 인스타 카드뉴스 합성 CLI — cards.json + bg-NN.png → <slug>-NN.png (1080×1350)
-# Key Features: 4:5 중앙 크롭·LANCZOS 리사이즈, 역할별(cover/body/cta) 텍스트 오버레이,
-#               로고 합성(폭 99px 고정), 인덱스 badge(N/총), --self-test 회귀 모드
+# Key Features: 역할별(cover/body/cta) 텍스트 오버레이, 로고 합성(폭 99px 고정), --self-test 지오메트리 회귀 모드
 # Dependencies: Pillow만 (시스템 python3 3.9+). 폰트는 Pretendard variable 우선 자동 탐색, 나눔 폴백.
-# Notes: body 카드는 박스·스크림 밴드 절대 금지(사용자 반려 이력) — 전면 균일 다크닝(0.78)만.
+# Notes: body 카드는 박스·스크림 밴드·전면 균일 다크닝 금지 — 하단 페더 그라디언트만(v2 레퍼런스 실측).
 #        결정성 계약: 같은 cards.json + 같은 배경 → 같은 출력 (텍스트 수정 시 배경 재생성 불필요).
 
 import argparse
@@ -13,17 +12,23 @@ import tempfile
 from pathlib import Path
 
 try:
-    from PIL import Image, ImageDraw, ImageEnhance, ImageFont
+    from PIL import Image, ImageDraw, ImageFont
 except ImportError:
     sys.exit("Pillow가 필요합니다. 설치: python3 -m pip install --user pillow")
 
 W, H = 1080, 1350            # 최종 규격 4:5 (craft 룰 1)
 LEFT = 84                    # 좌측 텍스트 여백 (craft 룰 6: 가장자리 ≥72px)
-BOTTOM = 96                  # 하단 텍스트 여백
+BOTTOM = 96                  # 하단 텍스트 여백 (cover)
 LOGO_W = 99                  # 로고 폭 고정 — 2026-07-06 사용자 확정
 LOGO_Y = 72                  # 로고 상단 y
-BODY_DARKEN = 0.78           # body 전면 균일 다크닝 계수 (스모크 실증)
-CTA_DIM_ALPHA = 115          # cta 전면 딤 ~45% (255×0.45)
+CTA_DIM_ALPHA = 115          # cta 전면 균일 딤 ~45% 고정 — 그라디언트 금지 (2026-07-06 재확인)
+COVER_GRAD_START, COVER_GRAD_PEAK = 0.45, 200  # cover 하단 그라디언트 (기존 유지)
+BODY_GRAD_START, BODY_GRAD_PEAK = 0.40, 230    # body 하단 그라디언트 (레퍼런스 실측 근사)
+BODY_TITLE_SIZE = 58         # body 타이틀 (레퍼런스 잉크 44~49px 실측)
+BODY_TEXT_SIZE = 43          # body 본문 (레퍼런스 잉크 34px 실측)
+BODY_PITCH = 62              # body 타이틀·본문 공통 줄 피치 (실측 균일)
+BODY_TITLE_INK_TOP = 648     # 타이틀 첫 줄 잉크 상단 (실측 646~650)
+BODY_TEXT_INK_TOP = 794      # 본문 첫 줄 잉크 상단 (실측 793~794 — 타이틀 줄수 무관 고정)
 
 # 폰트 자동 탐색 후보 — Pretendard variable 우선, 나눔 폴백 (craft 룰 4: 텍스트 = 100% Pillow)
 VARIABLE_CANDIDATES = [
@@ -108,21 +113,13 @@ def draw_logo(img, logo):
     img.paste(resized, ((W - LOGO_W) // 2, LOGO_Y), resized)
 
 
-def draw_badge(img, fonts, index, total):
-    # 카드 인덱스 N/총 — 우상단 (craft 룰 10)
-    draw = ImageDraw.Draw(img)
-    font = fonts.get(30, 600)
-    text = f"{index}/{total}"
-    tw = draw.textlength(text, font=font)
-    draw.text((W - 72 - tw, 76), text, font=font, fill=(255, 255, 255))
-
-
-def apply_bottom_gradient(img):
-    """표지 하단 가독 그라디언트 — 부드러운 페더, 경계선 금지 (스크림 밴드 사용자 반려 이력)."""
-    start = int(H * 0.45)
+def apply_bottom_gradient(img, start_ratio=COVER_GRAD_START, peak_alpha=COVER_GRAD_PEAK):
+    """하단 가독 페더 그라디언트 — 경계선 금지 (스크림 밴드 사용자 반려 이력).
+    cover(0.45H/α200)·body(0.40H/α230)가 파라미터만 달리해 공용."""
+    start = int(H * start_ratio)
     mask = Image.new("L", (1, H), 0)
     for y in range(start, H):
-        mask.putpixel((0, y), int(200 * (y - start) / (H - start)))
+        mask.putpixel((0, y), int(peak_alpha * (y - start) / (H - start)))
     img.paste(Image.new("RGB", (W, H), (0, 0, 0)), (0, 0), mask.resize((W, H)))
 
 
@@ -142,19 +139,22 @@ def compose_cover(img, card, fonts):
 
 
 def compose_body(img, card, fonts):
-    # 박스·밴드 금지 — 전면 균일 다크닝만. 가독 1차 책임은 배경 생성 프롬프트(텍스트 영역 단순화).
-    img.paste(ImageEnhance.Brightness(img).enhance(BODY_DARKEN), (0, 0))
+    # 박스·스크림 밴드 절대 금지 — v2: 하단 페더 그라디언트만 (전면 균일 다크닝 폐기,
+    # 레퍼런스 실측 2026-07-06). 가독 1차 책임은 여전히 배경 프롬프트(하반부 단순화).
+    apply_bottom_gradient(img, BODY_GRAD_START, BODY_GRAD_PEAK)
     draw = ImageDraw.Draw(img)
-    y = 260
-    title_font = fonts.get(64, 800)
+    title_font = fonts.get(BODY_TITLE_SIZE, 800)
+    # 잉크 상단 고정 앵커 — draw.text의 y는 라인박스 상단이라 대표 글리프("한")의
+    # 잉크 오프셋만큼 보정 (폰트 폴백이 바뀌어도 앵커 유지)
+    y = BODY_TITLE_INK_TOP - title_font.getbbox("한")[1]
     for line in card["title_lines"][:2]:
         draw.text((LEFT, y), line, font=title_font, fill=(255, 255, 255))
-        y += round(64 * 1.3)
-    y += 40
-    body_font = fonts.get(40, 500)
+        y += BODY_PITCH
+    body_font = fonts.get(BODY_TEXT_SIZE, 500)
+    y = BODY_TEXT_INK_TOP - body_font.getbbox("한")[1]
     for line in card["body_lines"]:
         draw.text((LEFT, y), line, font=body_font, fill=(240, 240, 240))
-        y += round(40 * 1.65)
+        y += BODY_PITCH
 
 
 def compose_cta(img, card, fonts):
@@ -173,6 +173,10 @@ COMPOSERS = {"cover": compose_cover, "body": compose_body, "cta": compose_cta}
 
 
 def compose(spec, out_dir, bg_dir, fonts, logo):
+    # 본문 레이아웃 분기 예약 — 현재 basic만 구현 (free = 자유형 후속 트랙)
+    layout = spec.get("body_layout", "basic")
+    if layout != "basic":
+        sys.exit(f"body_layout '{layout}'은 미구현 — 현재 basic만 지원 (free는 후속 트랙)")
     slug, cards = spec["slug"], spec["cards"]
     produced = []
     for card in cards:
@@ -186,15 +190,32 @@ def compose(spec, out_dir, bg_dir, fonts, logo):
         img = crop_resize(Image.open(bg_path).convert("RGB"))
         COMPOSERS[role](img, card, fonts)
         draw_logo(img, logo)
-        draw_badge(img, fonts, idx, len(cards))
         out = out_dir / f"{slug}-{idx:02d}.png"
         img.save(out)
         produced.append(out)
     return produced
 
 
+def _text_bands(im, y_from=560, y_to=H, x_from=60, x_to=1020):
+    """near-white(≥235) 행 밴드 검출 — 레퍼런스 실측과 동일 로직 (지오메트리 회귀 계약)."""
+    px = im.convert("L").load()
+    bands, cur = [], None
+    for y in range(y_from, y_to):
+        on = sum(1 for x in range(x_from, x_to, 3) if px[x, y] >= 235) >= 4
+        if on and cur is None:
+            cur = [y, y]
+        elif on:
+            cur[1] = y
+        elif cur is not None and y - cur[1] > 6:
+            bands.append(tuple(cur))
+            cur = None
+    if cur is not None:
+        bands.append(tuple(cur))
+    return bands
+
+
 def self_test():
-    """외부 의존 없는 회귀 확인 — 단색 배경 3장 → 4카드(cover/body×2/cta) 합성 → 치수·파일명 assert."""
+    """외부 의존 없는 회귀 확인 — 단색 배경 → 4카드 합성 → 치수·v2 지오메트리·badge 부재 assert."""
     fonts = find_fonts(None)
     with tempfile.TemporaryDirectory() as tmp:
         td = Path(tmp)
@@ -204,8 +225,9 @@ def self_test():
             "slug": "self-test",
             "cards": [
                 {"index": 1, "role": "cover", "sub": "자가 테스트 서브타이틀", "hook_lines": ["첫 줄 훅 문구", "둘째 줄 훅"]},
-                {"index": 2, "role": "body", "title_lines": ["본문 카드 타이틀"], "body_lines": ["본문 첫 문장이에요.", "본문 둘째 문장이에요."]},
-                {"index": 3, "role": "body", "title_lines": ["둘째 본문 타이틀", "두 줄째"], "body_lines": ["문장 하나."]},
+                {"index": 2, "role": "body", "title_lines": ["본문 카드 타이틀", "둘째 줄 타이틀"],
+                 "body_lines": [f"본문 {n}번째 줄이에요." for n in range(1, 8)]},
+                {"index": 3, "role": "body", "title_lines": ["둘째 본문 타이틀"], "body_lines": ["문장 하나."]},
                 {"index": 4, "role": "cta", "handle": "@self_test", "sub": "저장하고 팔로우하세요"},
             ],
             "caption": "",
@@ -217,6 +239,31 @@ def self_test():
             assert p.exists() and p.name.startswith("self-test-"), p
             with Image.open(p) as im:
                 assert im.size == (W, H), (p.name, im.size)
+                # badge 부재 — 우상단 영역 near-white 밴드 없음 (v2: badge 전면 제거)
+                assert _text_bands(im, y_from=40, y_to=170, x_from=W - 220, x_to=W - 40) == [], p.name
+
+        # v2 지오메트리 회귀 — 레퍼런스 실측 (타이틀 잉크 상단 648 / 본문 794 / 피치 62)
+        with Image.open(td / "self-test-02.png") as im:
+            bands = _text_bands(im)
+            assert len(bands) == 9, bands  # 타이틀 2 + 본문 7
+            assert abs(bands[0][0] - BODY_TITLE_INK_TOP) <= 6, bands[0]
+            assert abs(bands[1][0] - bands[0][0] - BODY_PITCH) <= 4, bands[:2]
+            assert abs(bands[2][0] - BODY_TEXT_INK_TOP) <= 6, bands[2]
+            for a, b in zip(bands[2:], bands[3:]):
+                assert abs(b[0] - a[0] - BODY_PITCH) <= 4, (a, b)
+            assert bands[-1][1] <= H - 72, bands[-1]  # 안전여백 (craft 룰 6)
+            # 하단 그라디언트 실효 — 텍스트 없는 좌하단이 좌상단보다 어두움 (균일 다크닝 폐기 확인)
+            g = im.convert("L").load()
+            assert g[10, H - 10] < g[10, 10], (g[10, H - 10], g[10, 10])
+
+        # body_layout 분기 예약 — basic 외 값은 명시 에러
+        bad = dict(spec)
+        bad["body_layout"] = "free"
+        try:
+            compose(bad, td, td, fonts, None)
+            raise AssertionError("body_layout=free가 에러 없이 통과")
+        except SystemExit as e:
+            assert "미구현" in str(e.code), e.code
     print("SELF-TEST OK")
 
 
