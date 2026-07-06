@@ -90,7 +90,7 @@ async function collectSourceFiles(directory: string): Promise<string[]> {
 function sliceOf(fullPath: string): string | null {
   const rel = path.relative(featuresDir, fullPath);
   const segments = rel.split(path.sep);
-  return segments.length > 1 ? segments[0] : null;
+  return segments.length > 1 ? (segments[0] ?? null) : null;
 }
 
 function moduleSpecifiersOf(source: ts.SourceFile): Array<{ specifier: string; node: ts.Node }> {
@@ -113,14 +113,15 @@ function moduleSpecifiersOf(source: ts.SourceFile): Array<{ specifier: string; n
 function fetchRouteLiteralsOf(source: ts.SourceFile): string[] {
   const routes: string[] = [];
   const visit = (node: ts.Node): void => {
+    const firstArg = ts.isCallExpression(node) ? node.arguments[0] : undefined;
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
       node.expression.text === "fetch" &&
-      node.arguments.length > 0 &&
-      ts.isStringLiteralLike(node.arguments[0])
+      firstArg &&
+      ts.isStringLiteralLike(firstArg)
     ) {
-      routes.push((node.arguments[0] as ts.StringLiteralLike).text);
+      routes.push(firstArg.text);
     }
     ts.forEachChild(node, visit);
   };
