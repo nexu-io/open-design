@@ -108,24 +108,13 @@ const Bubble = ({
   const opacity = interpolate(local, [0, 8], [0, 1], {extrapolateRight: "clamp"});
   const bubbleBg = isRight ? theme.bubbleRight : theme.bubbleLeft;
   const textColor = chatSpec.sceneConfig.container === "messenger" && isRight ? "#FFFFFF" : "#1F1F1F";
-  const displayText = React.useMemo(
-    () => wrapMessageText(message.text, maxTextWidthFor(chatSpec.sceneConfig.container)),
-    [chatSpec.sceneConfig.container, message.text]
-  );
-  const singleLineWidth = React.useMemo(() => measureTextWidth(message.text), [message.text]);
-  const fitsSingleLine = React.useMemo(
-    () =>
-      !message.text.includes("\n") &&
-      singleLineWidth + BUBBLE_WIDTH_SAFETY <= maxTextWidthFor(chatSpec.sceneConfig.container),
-    [chatSpec.sceneConfig.container, message.text, singleLineWidth]
-  );
-  const bubbleWidth = React.useMemo(
-    () =>
-      fitsSingleLine
-        ? singleLineWidth + BUBBLE_WIDTH_SAFETY + BUBBLE_HORIZONTAL_PADDING
-        : bubbleWidthFor(displayText, maxTextWidthFor(chatSpec.sceneConfig.container)),
-    [chatSpec.sceneConfig.container, displayText, fitsSingleLine, singleLineWidth]
-  );
+  const maxTextWidth = maxTextWidthFor(chatSpec.sceneConfig.container);
+  const displayText = wrapMessageText(message.text, maxTextWidth);
+  const singleLineWidth = measureTextWidth(message.text);
+  const fitsSingleLine = !message.text.includes("\n") && singleLineWidth + BUBBLE_WIDTH_SAFETY <= maxTextWidth;
+  const bubbleWidth = fitsSingleLine
+    ? singleLineWidth + BUBBLE_WIDTH_SAFETY + BUBBLE_HORIZONTAL_PADDING
+    : bubbleWidthFor(displayText, maxTextWidth);
   const showName =
     chatSpec.sceneConfig.nicknameMode === "always" ||
     (chatSpec.sceneConfig.nicknameMode === "first-message-only" && !seenBySpeaker);

@@ -102,6 +102,9 @@ Validated the new `$chat-motion-overlay` skill across:
 17. `container=none` could still be combined with `deviceFrame=iphone-dynamic-island`, which let a 1080x1920 bubble-only scene render into the smaller phone viewport and clip right-side content.
     - Fix: reject that unsupported combination during config validation, and document it in the config schema, visual rules, and matrix.
 
+18. Bubble wrapping logic introduced `useMemo` calls after a frame-based early return, which could change hook order when playback crossed a message `appearAt` frame.
+    - Fix: replace those `useMemo` calls with plain local calculations, and extend render coverage to include frames on both sides of the first message boundary.
+
 ## Verification Notes
 
 - Representative bundles were rendered to still images successfully.
@@ -120,6 +123,7 @@ Validated the new `$chat-motion-overlay` skill across:
 - Failed uploaded-avatar copies do not leave a generated `chatSpec.ts` containing local upload paths.
 - Shipped Remotion render scripts keep `src/index.ts` before the composition id.
 - `container=none + deviceFrame=iphone-dynamic-island` fails with a clear validation error before any bundle or render step.
+- Representative render coverage now crosses a message `appearAt` frame boundary instead of checking only a later still.
 
 ## References
 

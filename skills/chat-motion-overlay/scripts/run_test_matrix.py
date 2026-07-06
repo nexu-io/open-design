@@ -109,6 +109,7 @@ A?|right|第二个上传头像
             "name": "default_wechat_phone_preset_hidden",
             "config": base_config(),
             "render": True,
+            "render_frames": [14, 15, 120],
             "expect_fail": False,
         },
         {
@@ -497,13 +498,25 @@ A?|right|第二个上传头像
             continue
 
         if args.render and case["render"]:
-            preview_path = case_dir / "preview.png"
-            render_proc = run(
-                [str(remotion_bin), "still", "src/index.ts", "ChatMotionOverlay", str(preview_path), "--scale=0.15", "--frame=120"],
-                cwd=bundle_dir,
-            )
-            if render_proc.returncode != 0:
-                results.append({"case": case["name"], "status": "failed", "phase": "render", "details": render_proc.stderr.strip() or render_proc.stdout.strip()})
+            frames = case.get("render_frames", [120])
+            for frame in frames:
+                preview_path = case_dir / f"preview-frame-{frame}.png"
+                render_proc = run(
+                    [str(remotion_bin), "still", "src/index.ts", "ChatMotionOverlay", str(preview_path), "--scale=0.15", f"--frame={frame}"],
+                    cwd=bundle_dir,
+                )
+                if render_proc.returncode != 0:
+                    results.append(
+                        {
+                            "case": case["name"],
+                            "status": "failed",
+                            "phase": "render",
+                            "details": f"frame={frame}: " + (render_proc.stderr.strip() or render_proc.stdout.strip()),
+                        }
+                    )
+                    break
+            else:
+                results.append({"case": case["name"], "status": "passed", "phase": "complete", "details": ""})
                 continue
 
         results.append({"case": case["name"], "status": "passed", "phase": "complete", "details": ""})

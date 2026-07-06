@@ -18,6 +18,7 @@ This matrix covers the configurable surface of `$chat-motion-overlay`.
 - Validate config participant presets override transcript avatar hints
 - Validate `--force` rejects dangerous output directories instead of deleting them
 - Reject the unsupported bubble-only plus phone-frame combination before rendering
+- Validate rendered frames across a message `appearAt` boundary, not only a later still
 ## Covered Dimensions
 
 - `container`: `none`, `wechat`, `telegram`, `messenger`
@@ -34,6 +35,7 @@ This matrix covers the configurable surface of `$chat-motion-overlay`.
    - Device frame: `iphone-dynamic-island`
    - Nickname mode: `hidden`
    - Delivery: `MOV（透明背景，可直接导入剪映 / PR / FCP 叠加）`
+   - Render frames: `14`, `15`, `120` to cross the first message `appearAt`
 
 2. `plain_bubbles_no_frame_first_message`
    - Container: `none`
@@ -149,4 +151,5 @@ This matrix covers the configurable surface of `$chat-motion-overlay`.
 - `--force` rejects dangerous output directories before deleting anything
 - Advertised Remotion render scripts keep `src/index.ts` before the composition id
 - `container=none + deviceFrame=iphone-dynamic-island` fails with a clear validation error
+- Representative render coverage crosses at least one message `appearAt` frame boundary
 - Question policy is documented with defaults, triggers, and user-facing wording
