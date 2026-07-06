@@ -5,6 +5,28 @@ import { mapPiRpcEvent } from '../../src/pi-rpc.js';
 import { createToolLoopGuard } from '../../src/tool-loop-guard.js';
 
 describe('structured agent stream fixtures', () => {
+  it('surfaces an error event when a Claude result frame reports is_error', () => {
+    const events: Array<Record<string, unknown>> = [];
+    const handler = createClaudeStreamHandler((event: unknown) =>
+      events.push(event as Record<string, unknown>),
+    );
+    // Real transcript shape: a mid-turn connection drop makes the CLI print a
+    // result frame with is_error:true (subtype still "success") and exit 1.
+    // Without surfacing an error the run is misclassified as succeeded.
+    handler.feed(`${JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: true,
+      result: 'API Error: Unable to connect to API (ECONNRESET)',
+      stop_reason: 'stop_sequence',
+    })}\n`);
+    handler.flush();
+
+    const errorEvent = events.find((event) => event.type === 'error');
+    expect(errorEvent).toBeTruthy();
+    expect(String(errorEvent?.message)).toContain('ECONNRESET');
+  });
+
   it('emits TodoWrite tool_use from Claude Code stream JSON', () => {
     const events: unknown[] = [];
     const handler = createClaudeStreamHandler((event: unknown) => events.push(event));

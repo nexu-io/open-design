@@ -41,6 +41,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+// Extract a human-facing message from a Claude `result` frame that reported
+// `is_error`. Claude Code carries the error text in `result` (e.g. "API Error:
+// Unable to connect to API (ECONNRESET)"); fall back to nested error shapes
+// and finally the stop reason so the surfaced error is never empty.
+function messageFromClaudeResult(obj: Record<string, unknown>): string {
+  if (typeof obj.result === 'string' && obj.result.length > 0) return obj.result;
+  if (typeof obj.error === 'string' && obj.error.length > 0) return obj.error;
+  if (
+    isRecord(obj.error) &&
+    typeof obj.error.message === 'string' &&
+    obj.error.message.length > 0
+  ) {
+    return obj.error.message;
+  }
+  if (typeof obj.stop_reason === 'string' && obj.stop_reason.length > 0) {
+    return `Claude run failed: ${obj.stop_reason}`;
+  }
+  return 'Claude run failed';
+}
+
 interface ClaudeStreamHandlerOptions {
   suppressHtmlArtifactsAfterFileWrite?: boolean;
 }
@@ -357,7 +377,7 @@ export function createClaudeStreamHandler(
         onEvent({ type: 'raw', line });
         continue;
       }
-      handleObject(obj);
+      handleObject(obj, line);
     }
   }
 
@@ -366,7 +386,7 @@ export function createClaudeStreamHandler(
     buffer = '';
     if (rem) {
       try {
-        handleObject(JSON.parse(rem));
+        handleObject(JSON.parse(rem), rem);
       } catch {
         onEvent({ type: 'raw', line: rem });
       }
@@ -374,7 +394,7 @@ export function createClaudeStreamHandler(
     flushPendingArtifactText();
   }
 
-  function handleObject(obj: unknown) {
+  function handleObject(obj: unknown, rawLine?: string) {
     if (!isRecord(obj)) return;
 
     if (obj.type === 'system' && obj.subtype === 'init') {
@@ -494,6 +514,19 @@ export function createClaudeStreamHandler(
           (typeof obj.terminal_reason === 'string' && obj.terminal_reason) ||
           null,
       });
+      // A result frame can report `is_error` (e.g. a mid-turn connection drop
+      // prints `is_error:true` with subtype "success" and the CLI exits 1).
+      // The usage event above would otherwise mark the turn cleanly completed
+      // and the run would be misclassified as succeeded. Surface an error so
+      // the close handler routes it through the failure/retry path — mirrors
+      // qoder-stream's result handling.
+      if (obj.is_error === true) {
+        onEvent({
+          type: 'error',
+          message: messageFromClaudeResult(obj),
+          raw: rawLine,
+        });
+      }
       return;
     }
   }
