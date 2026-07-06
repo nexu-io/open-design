@@ -2779,6 +2779,7 @@ function homeHeroChipLabel(chipId: string, t: ReturnType<typeof useT>): string {
     case 'hyperframes': return t('homeHero.chip.hyperframes');
     case 'braze-iam': return t('homeHero.chip.brazeIam');
     case 'naver-blog': return t('homeHero.chip.naverBlog');
+    case 'cardnews-instagram': return t('homeHero.chip.cardnewsInstagram');
     case 'audio': return t('homeHero.chip.audio');
     case 'create-plugin': return t('homeHero.chip.createPlugin');
     case 'figma': return t('homeHero.chip.figma');
@@ -2793,6 +2794,7 @@ function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): stri
     case 'hyperframes': return t('homeHero.chip.hyperframesHint');
     case 'braze-iam': return t('homeHero.chip.brazeIamHint');
     case 'naver-blog': return t('homeHero.chip.naverBlogHint');
+    case 'cardnews-instagram': return t('homeHero.chip.cardnewsInstagramHint');
     case 'create-plugin': return t('homeHero.chip.createPluginHint');
     case 'figma': return t('homeHero.chip.figmaHint');
     case 'template': return t('homeHero.chip.templateHint');

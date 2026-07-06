@@ -35,7 +35,8 @@ export type ChipScenarioPluginId =
   | DefaultScenarioPluginId
   | 'example-hyperframes'
   | 'example-braze-iam'
-  | 'example-naver-blog';
+  | 'example-naver-blog'
+  | 'example-cardnews-instagram';
 
 export type ChipAction =
   | {
@@ -156,6 +157,23 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     // interview, so the manifest exposes only the editable `{{audience}}`
     // slot; Home renders that placeholder inline.
     action: { kind: 'apply-scenario', pluginId: 'example-braze-iam', projectKind: 'prototype' },
+  },
+  {
+    id: 'cardnews-instagram',
+    label: 'Card News',
+    icon: 'image',
+    group: 'create',
+    hint: 'Author an Instagram card-news set: topic recommendation → interview → research → plan confirm → 1080×1350 PNG cards + caption.',
+    // Card News binds to the bundled `example-cardnews-instagram` scenario
+    // plugin (ships SKILL.md, example.html, and the card-structure reference),
+    // activating the full interview → research → plan → confirm → produce
+    // workflow, same shape as Naver Blog. The explicit pluginId is required
+    // so the green "카드뉴스" badge stamps at create.
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'example-cardnews-instagram',
+      projectKind: 'prototype',
+    },
   },
   {
     id: 'naver-blog',

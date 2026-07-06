@@ -888,6 +888,7 @@ export interface Dict {
   'homeHero.chip.hyperframes': string;
   'homeHero.chip.brazeIam': string;
   'homeHero.chip.naverBlog': string;
+  'homeHero.chip.cardnewsInstagram': string;
   'homeHero.chip.audio': string;
   'homeHero.chip.createPlugin': string;
   'homeHero.chip.figma': string;
@@ -897,6 +898,7 @@ export interface Dict {
   'homeHero.chip.hyperframesHint': string;
   'homeHero.chip.brazeIamHint': string;
   'homeHero.chip.naverBlogHint': string;
+  'homeHero.chip.cardnewsInstagramHint': string;
   'homeHero.chip.createPluginHint': string;
   'homeHero.chip.figmaHint': string;
   'homeHero.chip.folderHint': string;

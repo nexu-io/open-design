@@ -436,4 +436,12 @@ describe('HomeHero intent rail', () => {
       },
     });
   });
+
+  it('card news chip routes to the bundled cardnews-instagram scenario plugin with a green create-time badge', () => {
+    expect(findChip('cardnews-instagram')?.action).toMatchObject({
+      kind: 'apply-scenario',
+      pluginId: 'example-cardnews-instagram',
+      projectKind: 'prototype',
+    });
+  });
 });
