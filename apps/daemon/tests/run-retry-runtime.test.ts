@@ -260,6 +260,7 @@ function snapshotEnv(): Record<string, string | undefined> {
     POSTHOG_KEY: process.env.POSTHOG_KEY,
     POSTHOG_HOST: process.env.POSTHOG_HOST,
     OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS: process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS,
+    OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS: process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS,
   };
 }
 
