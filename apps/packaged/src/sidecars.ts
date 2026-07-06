@@ -453,6 +453,16 @@ export function buildPackagedDaemonSpawnEnv(
     ...(options.network?.apiToken == null || options.network.apiToken.length === 0
       ? {}
       : { OD_API_TOKEN: options.network.apiToken }),
+    // WebUI split-port origin validation: the browser loads the web sidecar on
+    // its own (browser-facing) port and its /api requests are proxied to the
+    // daemon carrying `Origin: http://<host>:<webPort>`. The daemon only
+    // allow-lists that origin when it knows the browser-facing port, so forward
+    // it here as OD_WEB_PORT (origin-validation.ts:allowedBrowserPorts reads it).
+    // Desktop packaged mode passes no network → webPort omitted, unchanged; an
+    // ephemeral 0 is rejected upstream in resolveWebuiConfig, so guard it too.
+    ...(options.network?.webPort == null || options.network.webPort <= 0
+      ? {}
+      : { [SIDECAR_ENV.WEB_PORT]: String(options.network.webPort) }),
   };
 }
 

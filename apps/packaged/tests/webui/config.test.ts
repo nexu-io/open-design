@@ -117,6 +117,17 @@ describe("resolveWebuiConfig precedence", () => {
     expect(resolveWebuiConfig({ flags: {}, configFile: { daemonPort: 0 }, env: {} }).daemonPort).toBeNull();
   });
 
+  it("rejects an ephemeral browser-facing port 0 (unlike the internal daemon port)", () => {
+    // The daemon is spawned before the web child binds and allow-lists the
+    // browser-facing port up front (via OD_WEB_PORT) for cross-origin /api
+    // validation; there is no runtime channel to teach it an ephemeral port
+    // afterwards, so `--port 0` would 403 legitimate browser traffic. The
+    // internal daemonPort 0 stays valid — the browser never sees that port.
+    expect(() => resolveWebuiConfig({ flags: { port: 0 }, configFile: null, env: {} })).toThrow(/port/i);
+    expect(() => resolveWebuiConfig({ flags: {}, configFile: { port: 0 }, env: {} })).toThrow(/port/i);
+    expect(() => resolveWebuiConfig({ flags: {}, configFile: null, env: { OD_WEB_PORT: "0" } })).toThrow(/port/i);
+  });
+
   it("resolves daemonPort with flag > config > env precedence", () => {
     expect(
       resolveWebuiConfig({ flags: { daemonPort: 11111 }, configFile: { daemonPort: 22222 }, env: { OD_PORT: "33333" } })

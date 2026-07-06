@@ -130,6 +130,20 @@ export function resolveWebuiConfig(input: {
   const port =
     flags.port ?? cfg.port ?? (Number.isInteger(envPort) ? (envPort as number) : undefined) ?? DEFAULT_PORT;
 
+  // The browser-facing web port must be a fixed, concrete port. The daemon is
+  // spawned before the web child binds and allow-lists this exact port up front
+  // (forwarded as OD_WEB_PORT) for cross-origin /api validation; there is no
+  // runtime channel to teach it an ephemeral port afterwards, so a `--port 0`
+  // (or config/OD_WEB_PORT 0) would make the daemon 403 legitimate browser
+  // traffic. Reject it with an actionable message. Note the internal daemonPort
+  // 0 stays valid below — that loopback port is never a browser origin.
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error(
+      `--port must be a fixed browser-facing port greater than 0 (default ${DEFAULT_PORT}); ` +
+        "an ephemeral port 0 is not supported because the daemon validates cross-origin /api requests against this exact port",
+    );
+  }
+
   // daemonPort defaults to the fixed DEFAULT_DAEMON_PORT so the internal daemon
   // address is deterministic across restarts. An explicit 0 (flag/config/env)
   // opts back into a random loopback port chosen by the daemon (OD_PORT=0),

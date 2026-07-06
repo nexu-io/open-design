@@ -482,6 +482,37 @@ describe("buildPackagedDaemonSpawnEnv network injection", () => {
     });
     expect(env.OD_PORT).toBe("7777");
   });
+
+  it("forwards the browser-facing web port as OD_WEB_PORT for split-port origin validation", () => {
+    const env = buildPackagedDaemonSpawnEnv(paths, {
+      appVersion: null,
+      daemonCliEntry: null,
+      requireDesktopAuth: false,
+      network: { webPort: 7456, daemonPort: 7457, bindHost: null, apiToken: null },
+    });
+    // The web sidecar serves the browser on 7456 and its /api requests reach the
+    // daemon (7457) carrying `Origin: http://...:7456`; the daemon only allow-lists
+    // that origin when OD_WEB_PORT tells it the browser-facing port.
+    expect(env.OD_WEB_PORT).toBe("7456");
+    expect(env.OD_PORT).toBe("7457");
+  });
+
+  it("omits OD_WEB_PORT when no concrete browser web port is provided", () => {
+    const withoutNetwork = buildPackagedDaemonSpawnEnv(paths, {
+      appVersion: null,
+      daemonCliEntry: null,
+      requireDesktopAuth: false,
+    });
+    expect(withoutNetwork.OD_WEB_PORT).toBeUndefined();
+
+    const ephemeral = buildPackagedDaemonSpawnEnv(paths, {
+      appVersion: null,
+      daemonCliEntry: null,
+      requireDesktopAuth: false,
+      network: { webPort: 0, daemonPort: 7457, bindHost: null, apiToken: null },
+    });
+    expect(ephemeral.OD_WEB_PORT).toBeUndefined();
+  });
 });
 
 describe('waitForStatus child-exit fast-fail', () => {
