@@ -340,9 +340,10 @@ describe('InlineModelSwitcher AMR row', () => {
 
     fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
 
-    const tierSelect = screen.getByTestId(
-      'inline-model-switcher-service-tier',
-    ) as HTMLSelectElement;
+    const tierSelect = screen.getByRole('combobox', {
+      name: 'Service tier',
+    }) as HTMLSelectElement;
+    expect(tierSelect).toBe(screen.getByTestId('inline-model-switcher-service-tier'));
     expect(
       Array.from(tierSelect.options).map((option) => option.textContent),
     ).toEqual(['Default', 'Fast']);

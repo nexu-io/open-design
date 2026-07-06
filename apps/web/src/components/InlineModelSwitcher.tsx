@@ -1068,6 +1068,7 @@ export function InlineModelSwitcher({
                     {t('avatar.serviceTierLabel')}
                   </span>
                   <select
+                    aria-label={t('avatar.serviceTierLabel')}
                     className="inline-switcher__select"
                     data-testid="inline-model-switcher-service-tier"
                     value={currentServiceTierId}

@@ -3905,7 +3905,7 @@ setInterval(() => {}, 1000);
     },
   );
 
-  it('launches Kimi connection tests without the legacy acp positional arg', async () => {
+  it('launches Kimi connection tests through the ACP transport', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-kimi-argv-'));
     const argvFile = path.join(markerDir, 'argv.json');
     try {
@@ -3914,21 +3914,11 @@ setInterval(() => {}, 1000);
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
-if (args.includes('acp')) {
-  console.error('error: too many arguments. Expected 0 arguments but got 1.');
+if (args.length !== 1 || args[0] !== 'acp') {
+  console.error('missing acp transport arg');
   process.exit(1);
 }
-const promptIndex = args.indexOf('-p');
-if (promptIndex === -1 || args[promptIndex + 1] !== 'Reply with only: ok') {
-  console.error('missing connection-test prompt');
-  process.exit(1);
-}
-const outputFormatIndex = args.indexOf('--output-format');
-if (outputFormatIndex === -1 || args[outputFormatIndex + 1] !== 'stream-json') {
-  console.error('missing --output-format stream-json');
-  process.exit(1);
-}
-console.log(JSON.stringify({ role: 'assistant', content: 'ok' }));
+console.log(JSON.stringify({ jsonrpc: '2.0', method: 'session/update', params: { update: { sessionUpdate: 'agent_message_chunk', content: { text: 'ok' } } } }));
 `,
         async () => {
           const res = await realFetch(`${baseUrl}/api/test/connection`, {
@@ -3950,14 +3940,7 @@ console.log(JSON.stringify({ role: 'assistant', content: 'ok' }));
           });
 
           await expect(fsp.readFile(argvFile, 'utf8')).resolves.toBe(
-            JSON.stringify([
-              '-p',
-              'Reply with only: ok',
-              '--output-format',
-              'stream-json',
-              '--model',
-              'moonshot-v1-32k',
-            ]),
+            JSON.stringify(['acp']),
           );
         },
       );
