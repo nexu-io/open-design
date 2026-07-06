@@ -15,6 +15,7 @@ function makePaths(root: string): Pick<WinPaths, "builtManifestPath"> {
 
 function makeConfig(overrides: Partial<ToolPackConfig> = {}): ToolPackConfig {
   return {
+    arch: "x64",
     containerized: false,
     electronBuilderCliPath: "/unused",
     electronDistPath: "/unused",

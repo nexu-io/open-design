@@ -10,6 +10,7 @@ import type { WinPaths } from "../src/win/types.js";
 
 function makeConfig(namespaceRoot: string): ToolPackConfig {
   return {
+    arch: "x64",
     containerized: false,
     electronBuilderCliPath: "/unused",
     electronDistPath: "/unused",
