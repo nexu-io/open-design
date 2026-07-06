@@ -2980,6 +2980,10 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           faqTitle: 'FAQ',
           faq: [
             { name: 'Is Open Design really a drop-in alternative to Claude Design?', text: 'Not literally, but they overlap on prompt-to-design-artifact use cases.' },
+            { name: 'Is Claude Design free?', text: 'Claude Design is a paid hosted product. Open Design is free and open source (Apache-2.0) — you only pay for your own agent API usage (BYOK), with nothing bundled into a subscription.' },
+            { name: 'Is there a free Claude Design alternative?', text: 'Yes — Open Design is a free, open-source (Apache-2.0) alternative. Download the desktop app, bring your own agent key, and design locally with no seat or subscription fee.' },
+            { name: 'Does Claude Design have templates — and does Open Design?', text: 'Open Design ships composable SKILL.md skills and portable DESIGN.md design systems you can fork, instead of fixed built-in templates — so a template becomes a file you own and version in your repo.' },
+            { name: 'Is Claude Design open source or on GitHub?', text: 'Claude Design is a closed-source hosted product. If you want an open-source design tool you can read, fork, self-host, or download, Open Design is on GitHub at github.com/nexu-io/open-design under Apache-2.0.' },
             { name: 'Can I use Claude as my agent in Open Design?', text: 'Yes. Open Design supports Claude Code and Anthropic API BYOK flows; credentials are never proxied through us.' },
             { name: 'What happens to my Claude Design designs?', text: 'You can keep using Claude Design alongside Open Design; migration is manual today.' },
             { name: 'Does Open Design generate the same artifact types?', text: 'Yes for common types: landing pages, decks, dashboards, social posts, brand systems, and prototypes.' },
