@@ -158,7 +158,7 @@ def body_width_report(card, fonts):
     if card["body_lines"] and longest < BODY_MAX_INK * BODY_MIN_FILL:
         warnings.append(
             f"index {card['index']} 본문 최장 줄 {longest:.0f}px < 가용폭 80%"
-            f"({BODY_MAX_INK * BODY_MIN_FILL:.0f}px) — 좁은 컬럼: 한 줄 19~21자로 재줄바꿈 권장")
+            f"({BODY_MAX_INK * BODY_MIN_FILL:.0f}px) — 좁은 컬럼: 한 줄 25~31자(공백 포함)로 재줄바꿈 권장")
     return errors, warnings
 
 
