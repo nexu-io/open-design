@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
@@ -176,6 +176,7 @@ function resolveChromeActionsHost(): HTMLElement | null {
 }
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
+const useBrowserLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 type SlideState = { active: number; count: number };
 type BoardTool = 'inspect' | 'pod';
 type StrokePoint = { x: number; y: number };
@@ -965,6 +966,76 @@ function PreviewScaleShell({
   return (
     <div style={sizerStyle}>
       <div style={shellStyle}>{children}</div>
+    </div>
+  );
+}
+
+function clampedPreviewScaleScrollOffset(
+  scrollOffset: number,
+  viewportSize: number,
+  scrollSize: number,
+  previousScale: number,
+  nextScale: number,
+) {
+  if (viewportSize <= 0 || scrollSize <= viewportSize || previousScale <= 0 || nextScale <= 0) return 0;
+  const nextOffset = ((scrollOffset + viewportSize / 2) * nextScale / previousScale) - viewportSize / 2;
+  return Math.max(0, Math.min(scrollSize - viewportSize, nextOffset));
+}
+
+function anchoredPreviewScaleScrollPosition(
+  frame: HTMLElement,
+  previousScale: number,
+  nextScale: number,
+) {
+  return {
+    scrollLeft: clampedPreviewScaleScrollOffset(
+      frame.scrollLeft,
+      frame.clientWidth,
+      frame.scrollWidth,
+      previousScale,
+      nextScale,
+    ),
+    scrollTop: clampedPreviewScaleScrollOffset(
+      frame.scrollTop,
+      frame.clientHeight,
+      frame.scrollHeight,
+      previousScale,
+      nextScale,
+    ),
+  };
+}
+
+function PreviewScaleScrollFrame({
+  viewport,
+  previewScale,
+  className,
+  style,
+  children,
+}: {
+  viewport: PreviewViewportId;
+  previewScale: number;
+  className?: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}) {
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const previousScaleRef = useRef(normalizedPreviewScale(previewScale));
+
+  useBrowserLayoutEffect(() => {
+    const frame = frameRef.current;
+    const previousScale = previousScaleRef.current;
+    const nextScale = normalizedPreviewScale(previewScale);
+    previousScaleRef.current = nextScale;
+    if (!frame || viewport !== 'desktop' || previousScale === nextScale) return;
+
+    const nextScroll = anchoredPreviewScaleScrollPosition(frame, previousScale, nextScale);
+    frame.scrollLeft = nextScroll.scrollLeft;
+    frame.scrollTop = nextScroll.scrollTop;
+  }, [previewScale, viewport]);
+
+  return (
+    <div ref={frameRef} className={className} style={style}>
+      {children}
     </div>
   );
 }
@@ -1821,7 +1892,12 @@ export function LiveArtifactViewer({
           aria-hidden={mode === 'preview' ? undefined : true}
           style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
         >
-          <div className="preview-frame-clip" style={previewScaleScrollStyle(previewViewport, previewScale)}>
+          <PreviewScaleScrollFrame
+            viewport={previewViewport}
+            previewScale={previewScale}
+            className="preview-frame-clip"
+            style={previewScaleScrollStyle(previewViewport, previewScale)}
+          >
             <PreviewScaleShell viewport={previewViewport} previewScale={previewScale}>
               <PreviewDrawOverlay>
                 <iframe
@@ -1833,7 +1909,7 @@ export function LiveArtifactViewer({
                 />
               </PreviewDrawOverlay>
             </PreviewScaleShell>
-          </div>
+          </PreviewScaleScrollFrame>
         </div>
         {mode !== 'preview' && loading ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
@@ -10682,7 +10758,9 @@ function HtmlViewer({
               className={manualEditMode ? 'manual-edit-canvas' : 'comment-preview-canvas'}
               data-testid={manualEditMode ? undefined : 'comment-preview-canvas'}
             >
-              <div
+              <PreviewScaleScrollFrame
+                viewport={previewViewport}
+                previewScale={previewScale}
                 className={manualEditMode ? undefined : 'comment-frame-clip'}
                 style={manualEditMode
                   ? { height: '100%', ...previewScaleScrollStyle(previewViewport, previewScale) }
@@ -10821,7 +10899,7 @@ function HtmlViewer({
                     </div>
                   </PreviewDrawOverlay>
                 </PreviewScaleShell>
-              </div>
+              </PreviewScaleScrollFrame>
               {boardMode ? (
                 <CommentPreviewOverlays
                   comments={commentCreateMode ? visibleSideComments : []}

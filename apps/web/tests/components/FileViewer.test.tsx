@@ -293,6 +293,62 @@ describe('FileViewer preview scale', () => {
     expect(clip!.contains(container.querySelector('.deck-nav'))).toBe(false);
   });
 
+  it('keeps the desktop deck viewport centered when zoom changes (#3177)', async () => {
+    const file = baseFile({
+      name: 'deck.html',
+      path: 'deck.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Deck',
+        entry: 'deck.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><section class="slide">One</section><section class="slide">Two</section></body></html>'
+      />,
+    );
+
+    const clip = container.querySelector<HTMLElement>('.comment-frame-clip');
+    expect(clip).toBeTruthy();
+    Object.defineProperties(clip!, {
+      clientWidth: { configurable: true, value: 500 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollWidth: {
+        configurable: true,
+        get() {
+          const sizer = clip!.firstElementChild as HTMLElement | null;
+          const scale = Number.parseFloat(sizer?.style.width ?? '100%') / 100 || 1;
+          return Math.round(1000 * scale);
+        },
+      },
+      scrollHeight: {
+        configurable: true,
+        get() {
+          const sizer = clip!.firstElementChild as HTMLElement | null;
+          const scale = Number.parseFloat(sizer?.style.height ?? '100%') / 100 || 1;
+          return Math.round(800 * scale);
+        },
+      },
+    });
+
+    fireEvent.click(screen.getByText('100%').closest('button')!);
+    fireEvent.click(screen.getByRole('menuitem', { name: '200%' }));
+
+    await waitFor(() => {
+      expect(clip!.scrollLeft).toBe(250);
+      expect(clip!.scrollTop).toBe(200);
+    });
+  });
+
   it('clamps mobile and tablet overlay scale to the iframe auto-fit scale', () => {
     expect(effectivePreviewScale('mobile', 1, { width: 390, height: 844 })).toBeLessThan(1);
     expect(effectivePreviewScale('tablet', 1.25, { width: 820, height: 700 })).toBeLessThan(1);
