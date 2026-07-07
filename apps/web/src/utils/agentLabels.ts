@@ -14,6 +14,7 @@ const AGENT_LABELS: Record<string, string> = {
   copilot: 'Copilot',
   deepseek: 'DeepSeek',
   antigravity: 'Antigravity',
+  kiro: 'Kiro',
   'anthropic-api': 'Anthropic API via OpenCode',
   'openai-api': 'OpenAI API via OpenCode',
   'azure-openai-api': 'Azure OpenAI via OpenCode',
@@ -40,6 +41,8 @@ const AGENT_ALIASES: Record<string, string> = {
   'aider cli': 'aider',
   'aider chat': 'aider',
   agy: 'antigravity',
+  'kiro cli': 'kiro',
+  'kiro-cli': 'kiro',
 };
 
 export function agentDisplayName(
