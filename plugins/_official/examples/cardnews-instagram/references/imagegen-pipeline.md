@@ -55,18 +55,38 @@ Use case: photorealistic scene
 Subject: [카드 내용에 맞는 실사 장면 — 현실 장소·상황 + DESIGN.md 비주얼 무드 키워드 반영]
 Style: photorealistic real-world environment, cinematic natural lighting[, 브랜드 무드 키워드]
 Palette: [DESIGN.md 팔레트 토큰 색상 명시]
-Composition: portrait orientation. Keep the [텍스트 영역 — cover: lower-left third /
-  body: lower half calm, low-contrast] simple and uncluttered.
+Composition: portrait orientation. [cover: (고정) dominant subject framing /
+  body: cards.json bg 필드 전개 — 아래 매핑 표의 shot·angle·placement 문구 나열]
+  Keep the [텍스트 영역 — cover: lower-left third / body: lower half calm,
+  low-contrast] simple and uncluttered.
 Character: [브랜드 캐릭터 있을 때만] Use the exact same character as in the reference
   image — identical proportions, face, eyes, mouth, colors. Do not redesign,
-  restyle, or reinterpret the character. The character is the dominant subject:
-  roughly 50-70% of frame height, near-center, full body, close-to-mid shot
-  (no distant long shot), interacting with props that match the card's message.
-  Keep the character fully inside the central 4:5 crop region — the top and
-  bottom ~8.3% of the frame are cropped away.
+  restyle, or reinterpret the character.
+  [cover 고정: The character is the dominant subject: roughly 50-70% of frame
+  height, near-center, full body, close-to-mid shot (no distant long shot).]
+  [body: bg 매핑 표의 shot 스케일 + view 문구. no distant long shot 상수.]
+  The character is interacting with props that match the card's message.
+  Keep the character (head included) fully inside the central 4:5 crop
+  region — the top and bottom ~8.3% of the frame are cropped away.
 Constraints: no text, no letters, no numbers, no watermark, no logo,
   no flat illustration, no abstract graphic background.
 ```
+
+### bg 필드 → 영어 전개 매핑 (본문 카드 — 스키마 정본은 card-structure.md)
+
+| 선언 | 전개 문구 |
+|---|---|
+| `shot: "mid"` | full body, roughly 50-70% of frame height |
+| `shot: "close-up"` | upper body from the waist up, roughly 70-90% of frame height |
+| `angle: "eye"` | camera at the character's eye level |
+| `angle: "low"` | camera slightly below the character's eye level, looking up |
+| `angle: "high"` | camera slightly above the character's eye level, looking down |
+| `placement: "left"` | character positioned in the left third of the frame |
+| `placement: "center"` | character positioned near the center of the frame |
+| `placement: "right"` | character positioned in the right third of the frame |
+| `view: "front"` | facing the camera |
+| `view: "three-quarter"` | three-quarter view, both eyes and mouth clearly visible |
+| `locale` | Subject 라인의 장소·상황으로 영어 번역 반영 |
 
 - **기본형(basic) 배경 = 실사 환경 고정** — 플랫/그래픽 일러스트 배경은 craft 룰 2
   위반. 자유형(free)은 후속 트랙에서 별도 정의.
@@ -76,8 +96,13 @@ Constraints: no text, no letters, no numbers, no watermark, no logo,
 - **표지**: 브랜드 레퍼런스 이미지(DESIGN.md 비주얼 무드 섹션 등재)가 있으면
   view_image 참조로 캐릭터·구도를 잇는다.
 - **본문**: 반드시 표지 산출물(`bg-01.png`) + (캐릭터 브랜드면) 캐릭터 레퍼런스
-  **2장을 view_image 참조** — "same style, same palette" + Character 고정절.
-  표정·소품 등 카드별 델타만 추가 지시한다.
+  **2장을 view_image 참조** — "same style, same palette" + Character 절 + **앵커
+  중력 해제 1줄(필수)**: "Match the style, palette, and character identity of
+  the reference images, but do NOT copy their composition — this card uses the
+  camera, framing, and placement specified above." 카드별 델타 = 표정·소품 +
+  **구도(cards.json `bg` 필드의 매핑 표 전개)**. 라이팅 무드는 앵커 유지
+  ("consistent bright natural daylight mood" 계열 1줄) — locale이 바뀌어도
+  세트 톤은 묶인다.
 - **CTA**: 생성 호출 없음 — compose가 `bg-01.png`를 재사용한다(craft 룰 9).
 
 ## 순서 계약
