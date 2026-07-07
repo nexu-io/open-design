@@ -55,8 +55,11 @@ import path from 'node:path';
 //   v5: validate the encoded output — reject blank (never-rendered) clips,
 //       record durationMs from the FILE (not the intended walk time), and
 //       clamp holdMs to the encoded duration so the gallery's idle loop never
-//       points past the end of the clip. Bumped so every entry's metadata is
-//       corrected in one sweep (23 entries carried holdMs > real duration).
+//       points past the end of the clip; encode static pages (screencast
+//       delivers <5 frames because nothing repaints) as a held still instead
+//       of skipping them forever. Bumped so every entry's metadata is
+//       corrected in one sweep (23 entries carried holdMs > real duration,
+//       5 static-page entries could never refresh at all).
 const BAKE_VERSION = 5;
 
 // ---- config ---------------------------------------------------------------
@@ -475,7 +478,7 @@ async function bakeOne(browser, id, hash, motion) {
   await client.send('Page.stopScreencast');
   await page.close();
 
-  if (frames.length < 5) { rmSync(frameDir, { recursive: true, force: true }); return { id, skipped: `frames ${frames.length}` }; }
+  if (frames.length === 0) { rmSync(frameDir, { recursive: true, force: true }); return { id, skipped: 'frames 0' }; }
 
   // VFR concat list (real per-frame durations) -> correct real-time speed.
   const lines = [];
@@ -485,6 +488,15 @@ async function bakeOne(browser, id, hash, motion) {
     if (i > 0) lines.push(`duration ${(frames[i].ts - frames[i - 1].ts).toFixed(4)}`);
     lines.push(`file '${fp}'`);
   }
+  // A static page repaints nothing after its first paint, so the screencast
+  // delivers only a frame or two. That is a still, not a failure: hold the
+  // last frame for the idle-loop span so the encode yields a real clip.
+  // (The old `frames < 5` guard skipped these pages on EVERY bake, so their
+  // manifest entries could never refresh — five entries on main were
+  // permanently stale because of it.) Half the hold here because the trailing
+  // repeated `file` below inherits the last `duration` directive, so the two
+  // sum to ~HOLD_MS.
+  if (frames.length < 5) lines.push(`duration ${(HOLD_MS / 2000).toFixed(4)}`);
   lines.push(`file '${path.join(frameDir, `f-${String(frames.length - 1).padStart(4, '0')}.jpg`)}'`);
   const listPath = path.join(frameDir, 'list.txt');
   writeFileSync(listPath, lines.join('\n'));
