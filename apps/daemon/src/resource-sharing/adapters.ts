@@ -18,15 +18,16 @@ export interface AdapterPaths {
 }
 
 export interface AdapterSources {
+  resolveSkillSourceDir?: (localId: string) => string | null | Promise<string | null>;
   resolvePluginSourceDir?: (localId: string) => string | null;
 }
 
 export interface ResourceKindAdapter {
   kind: string;
   /** Directory to pack when sharing a locally-owned resource; null if absent. */
-  resolveSourceDir(localId: string): string | null;
+  resolveSourceDir(localId: string): Promise<string | null>;
   /** Where a pulled team copy lands (read-only, distinct namespace). */
-  teamCopyDir(hubResourceId: string): string;
+  teamCopyDir(hubResourceId: string): Promise<string>;
 }
 
 export class ResourceAdapterError extends Error {
@@ -69,14 +70,14 @@ function createDirAdapter(
   const teamCopy = path.resolve(teamCopyRoot);
   return {
     kind,
-    resolveSourceDir(localId) {
+    async resolveSourceDir(localId) {
       const dir = resolveWithinRoot(
         source,
         validatePathSegment(localId, `local ${kind} id`),
       );
       return existsSync(dir) ? dir : null;
     },
-    teamCopyDir(hubResourceId) {
+    async teamCopyDir(hubResourceId) {
       return resolveWithinRoot(
         teamCopy,
         validatePathSegment(hubResourceId, 'hub resource id'),
@@ -85,24 +86,19 @@ function createDirAdapter(
   };
 }
 
-function createMultiRootDirAdapter(
-  kind: string,
-  sourceRoots: string[],
+function createSkillAdapter(
+  resolveSkillSourceDir: (localId: string) => string | null | Promise<string | null>,
   teamCopyRoot: string,
 ): ResourceKindAdapter {
-  const sources = sourceRoots.map((root) => path.resolve(root));
   const teamCopy = path.resolve(teamCopyRoot);
   return {
-    kind,
-    resolveSourceDir(localId) {
-      const segment = validatePathSegment(localId, `local ${kind} id`);
-      for (const source of sources) {
-        const dir = resolveWithinRoot(source, segment);
-        if (existsSync(dir)) return dir;
-      }
-      return null;
+    kind: 'skill',
+    async resolveSourceDir(localId) {
+      const skillId = validatePathSegment(localId, 'local skill id');
+      const dir = await resolveSkillSourceDir(skillId);
+      return dir && existsSync(dir) ? dir : null;
     },
-    teamCopyDir(hubResourceId) {
+    async teamCopyDir(hubResourceId) {
       return resolveWithinRoot(
         teamCopy,
         validatePathSegment(hubResourceId, 'hub resource id'),
@@ -118,12 +114,12 @@ function createRegistryBackedPluginAdapter(
   const teamCopy = path.resolve(teamCopyRoot);
   return {
     kind: 'plugin',
-    resolveSourceDir(localId) {
+    async resolveSourceDir(localId) {
       const pluginId = validatePathSegment(localId, 'local plugin id');
       const dir = resolvePluginSourceDir(pluginId);
       return dir && existsSync(dir) ? dir : null;
     },
-    teamCopyDir(hubResourceId) {
+    async teamCopyDir(hubResourceId) {
       return resolveWithinRoot(
         teamCopy,
         validatePathSegment(hubResourceId, 'hub resource id'),
@@ -137,6 +133,18 @@ export function createAdapterRegistry(
   sources: AdapterSources = {},
 ): Map<string, ResourceKindAdapter> {
   const teamShared = path.join(paths.RUNTIME_DATA_DIR, 'team-shared');
+  const resolveSkillSourceDir =
+    sources.resolveSkillSourceDir ??
+    ((localId: string) => {
+      for (const root of paths.SKILL_ROOTS) {
+        const dir = resolveWithinRoot(
+          path.resolve(root),
+          validatePathSegment(localId, 'local skill id'),
+        );
+        if (existsSync(dir)) return dir;
+      }
+      return null;
+    });
   const resolvePluginSourceDir =
     sources.resolvePluginSourceDir ??
     ((localId: string) => path.join(paths.RUNTIME_DATA_DIR, 'plugins', localId));
@@ -146,11 +154,7 @@ export function createAdapterRegistry(
       paths.USER_DESIGN_SYSTEMS_DIR,
       path.join(teamShared, 'design-systems'),
     ),
-    createMultiRootDirAdapter(
-      'skill',
-      paths.SKILL_ROOTS,
-      path.join(teamShared, 'skills'),
-    ),
+    createSkillAdapter(resolveSkillSourceDir, path.join(teamShared, 'skills')),
     createRegistryBackedPluginAdapter(
       resolvePluginSourceDir,
       path.join(teamShared, 'plugins'),

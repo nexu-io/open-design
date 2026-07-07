@@ -216,12 +216,15 @@ describe('resource-sharing orchestrator', () => {
     ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('shares a built-in skill from the daemon skill roots', async () => {
+  it('shares a skill whose public id comes from SKILL.md frontmatter', async () => {
     const userSkillRoot = path.join(tempDir, 'user-skills');
     const bundledSkillRoot = path.join(tempDir, 'bundled-skills');
-    const builtInSkillDir = path.join(bundledSkillRoot, 'built-in-skill');
+    const builtInSkillDir = path.join(bundledSkillRoot, 'taste-skill-v1');
     await fsp.mkdir(builtInSkillDir, { recursive: true });
-    await fsp.writeFile(path.join(builtInSkillDir, 'SKILL.md'), '# Built in\n');
+    await fsp.writeFile(
+      path.join(builtInSkillDir, 'SKILL.md'),
+      '---\nname: design-taste-frontend-v1\n---\n# Built in\n',
+    );
     const orchestrator = createSharingOrchestrator({
       db,
       paths: {
@@ -231,7 +234,9 @@ describe('resource-sharing orchestrator', () => {
       },
     });
 
-    await expect(orchestrator.share('skill', 'built-in-skill')).resolves.toEqual({
+    await expect(
+      orchestrator.share('skill', 'design-taste-frontend-v1'),
+    ).resolves.toEqual({
       hubResourceId: 'created_resource',
       version: 2,
     });

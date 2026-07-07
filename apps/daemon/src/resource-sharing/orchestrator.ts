@@ -12,6 +12,7 @@ import {
   readResourceHubPrincipal,
 } from '../integrations/resource-hub.js';
 import { materializeRef, packTree, pushTree } from '../resource-drive.js';
+import { findSkillById, listSkills } from '../skills.js';
 import {
   ResourceAdapterError,
   type AdapterPaths,
@@ -65,6 +66,8 @@ export async function readResourceDetail(
 
 export function createSharingOrchestrator(deps: SharingDeps) {
   const adapters = createAdapterRegistry(deps.paths, {
+    resolveSkillSourceDir: async (localId) =>
+      findSkillById(await listSkills(deps.paths.SKILL_ROOTS), localId)?.dir ?? null,
     resolvePluginSourceDir: (localId) =>
       getInstalledPlugin(deps.db, localId)?.fsPath ?? null,
   });
@@ -96,7 +99,7 @@ export function createSharingOrchestrator(deps: SharingDeps) {
     async share(kind: string, localId: string) {
       const principal = principalOrThrow();
       const adapter = adapterOrThrow(kind);
-      const dir = resolveAdapterPath(() => adapter.resolveSourceDir(localId));
+      const dir = await resolveAdapterPath(() => adapter.resolveSourceDir(localId));
       if (!dir) {
         throw new SharingError(404, 'local_resource_not_found', localId);
       }
@@ -150,7 +153,7 @@ export function createSharingOrchestrator(deps: SharingDeps) {
           alreadyOwned: true,
         };
       }
-      const dir = resolveAdapterPath(() => adapter.teamCopyDir(hubResourceId));
+      const dir = await resolveAdapterPath(() => adapter.teamCopyDir(hubResourceId));
       await replaceWithMaterializedRef(principal, hubResourceId, dir);
       const versions = await client.listVersions(principal, hubResourceId);
       const latest = versions[0]?.version ?? null;
@@ -231,9 +234,9 @@ export function createSharingOrchestrator(deps: SharingDeps) {
 
 export type SharingOrchestrator = ReturnType<typeof createSharingOrchestrator>;
 
-function resolveAdapterPath<T>(resolve: () => T): T {
+async function resolveAdapterPath<T>(resolve: () => T | Promise<T>): Promise<T> {
   try {
-    return resolve();
+    return await resolve();
   } catch (error) {
     if (error instanceof ResourceAdapterError) {
       throw new SharingError(error.status, error.code, error.message);
