@@ -8,6 +8,7 @@ import { useT } from '../i18n';
 import { AgentIcon } from './AgentIcon';
 import { PlanBadge } from './PlanBadge';
 import { RemixIcon } from './RemixIcon';
+import { AmrLoginPill } from './AmrLoginPill';
 import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
 import { SearchableModelSelect } from './modelOptions';
 import type { AgentInfo, AppConfig, ExecMode, ProviderModelOption } from '../types';
@@ -474,6 +475,11 @@ export function AvatarMenu({
                           {t('settings.amrUpgrade')}
                         </a>
                       ) : null}
+                      <AmrLoginPill
+                        hideSignedInStatus={true}
+                        amrEntrySourceDetail="avatar_amr_agent_card"
+                        metricsConsent={config.telemetry?.metrics === true}
+                      />
                     </div>
                   );
                 }
