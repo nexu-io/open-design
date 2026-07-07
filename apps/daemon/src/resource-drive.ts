@@ -167,7 +167,7 @@ export async function materializeRef(
   resourceId: string,
   ref: string,
   destDir: string,
-): Promise<void> {
+): Promise<VersionRecord> {
   const refRecord = await client.getRef(principal, resourceId, ref);
   const versions = await client.listVersions(principal, resourceId);
   const version = versions.find((candidate) => candidate.id === refRecord.versionId);
@@ -175,6 +175,7 @@ export async function materializeRef(
     throw new Error(`ref ${ref} points at unknown version ${refRecord.versionId}`);
   }
   await materializeTree(client, principal, version.manifestDigest, destDir);
+  return version;
 }
 
 function safeJoin(root: string, relPath: string): string {

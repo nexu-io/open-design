@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from 'express';
+import type { Express, Request, RequestHandler, Response } from 'express';
 import type {
   ResourceDetailResponse,
   ResourceListResponse,
@@ -37,9 +37,10 @@ function handleError(res: Response, error: unknown): void {
 
 export function registerResourceSharingRoutes(
   app: Express,
-  deps: SharingDeps,
+  deps: SharingDeps & { requireLocalDaemonRequest: RequestHandler },
 ): void {
   const orchestrator = createSharingOrchestrator(deps);
+  const { requireLocalDaemonRequest } = deps;
 
   // Readiness probe: hub URL configured + workspace principal resolvable.
   app.get('/api/resources/_status', (_req: Request, res: Response) => {
@@ -50,35 +51,49 @@ export function registerResourceSharingRoutes(
   });
 
   // Team resources joined with local mapping state (shared / pulled / stale).
-  app.get('/api/resources', async (_req: Request, res: Response) => {
-    try {
-      const response: ResourceListResponse = {
-        resources: await orchestrator.list(),
-      };
-      res.json(response);
-    } catch (error) {
-      handleError(res, error);
-    }
-  });
+  app.get(
+    '/api/resources',
+    requireLocalDaemonRequest,
+    async (_req: Request, res: Response) => {
+      try {
+        const response: ResourceListResponse = {
+          resources: await orchestrator.list(),
+        };
+        res.json(response);
+      } catch (error) {
+        handleError(res, error);
+      }
+    },
+  );
 
   // Inspect one resource: record + versions + latest manifest.
-  app.get('/api/resources/:id/detail', async (req: Request, res: Response) => {
-    try {
-      const response: ResourceDetailResponse = await orchestrator.detail(
-        paramStr(req.params.id),
-      );
-      res.json(response);
-    } catch (error) {
-      handleError(res, error);
-    }
-  });
+  app.get(
+    '/api/resources/:id/detail',
+    requireLocalDaemonRequest,
+    async (req: Request, res: Response) => {
+      try {
+        const response: ResourceDetailResponse = await orchestrator.detail(
+          paramStr(req.params.id),
+        );
+        res.json(response);
+      } catch (error) {
+        handleError(res, error);
+      }
+    },
+  );
 
   // Share a locally-owned resource to the team.
   app.post(
     '/api/resources/:kind/:id/share',
+    requireLocalDaemonRequest,
     async (req: Request, res: Response) => {
       try {
-        res.json(await orchestrator.share(paramStr(req.params.kind), paramStr(req.params.id)));
+        res.json(
+          await orchestrator.share(
+            paramStr(req.params.kind),
+            paramStr(req.params.id),
+          ),
+        );
       } catch (error) {
         handleError(res, error);
       }
@@ -88,9 +103,15 @@ export function registerResourceSharingRoutes(
   // Pull a shared team resource into a local read-only copy.
   app.post(
     '/api/resources/:kind/:id/pull',
+    requireLocalDaemonRequest,
     async (req: Request, res: Response) => {
       try {
-        res.json(await orchestrator.pull(paramStr(req.params.kind), paramStr(req.params.id)));
+        res.json(
+          await orchestrator.pull(
+            paramStr(req.params.kind),
+            paramStr(req.params.id),
+          ),
+        );
       } catch (error) {
         handleError(res, error);
       }

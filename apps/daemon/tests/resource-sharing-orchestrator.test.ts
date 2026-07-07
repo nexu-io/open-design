@@ -16,6 +16,7 @@ import {
 const mockState = vi.hoisted(() => ({
   materializations: [] as Array<Record<string, string>>,
   versions: [{ id: 'version_1', version: 1, manifestDigest: 'digest_1' }],
+  latestVersionId: 'version_1',
   createdResources: [] as string[],
   principalTeamId: 'team_1',
   resourceKind: 'design_system',
@@ -35,6 +36,15 @@ vi.mock('../src/integrations/resource-hub.js', () => ({
       deletedAt: null,
     })),
     listVersions: vi.fn(async () => mockState.versions),
+    getManifest: vi.fn(async (_principal, digest) => ({
+      digest,
+      entries: [],
+    })),
+    getRef: vi.fn(async () => ({
+      name: 'latest',
+      versionId: mockState.latestVersionId,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })),
   })),
   readResourceHubPrincipal: vi.fn(() => ({
     memberId: 'member_1',
@@ -53,6 +63,11 @@ vi.mock('../src/resource-drive.js', () => ({
       await fsp.mkdir(path.dirname(target), { recursive: true });
       await fsp.writeFile(target, contents);
     }
+    const version = mockState.versions.find(
+      (candidate) => candidate.id === mockState.latestVersionId,
+    );
+    if (!version) throw new Error('missing mock latest version');
+    return version;
   }),
   packTree: vi.fn(),
   pushTree: vi.fn(async () => ({
@@ -75,6 +90,7 @@ describe('resource-sharing orchestrator', () => {
     mockState.versions = [
       { id: 'version_1', version: 1, manifestDigest: 'digest_1' },
     ];
+    mockState.latestVersionId = 'version_1';
     mockState.createdResources = [];
     mockState.principalTeamId = 'team_1';
     mockState.resourceKind = 'design_system';
@@ -117,6 +133,7 @@ describe('resource-sharing orchestrator', () => {
     mockState.versions = [
       { id: 'version_2', version: 2, manifestDigest: 'digest_2' },
     ];
+    mockState.latestVersionId = 'version_2';
     const second = await orchestrator.pull('design_system', 'hub_design_system');
 
     await expect(
@@ -128,6 +145,55 @@ describe('resource-sharing orchestrator', () => {
     await expect(
       fsp.readFile(path.join(second.dir ?? '', 'tokens.json'), 'utf8'),
     ).resolves.toBe('{}\n');
+  });
+
+  it('reads detail from the latest ref instead of version list order', async () => {
+    const orchestrator = createSharingOrchestrator({
+      db,
+      paths: {
+        RUNTIME_DATA_DIR: tempDir,
+        USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+        SKILL_ROOTS: [path.join(tempDir, 'skills')],
+      },
+    });
+    mockState.versions = [
+      { id: 'version_1', version: 1, manifestDigest: 'digest_1' },
+      { id: 'version_2', version: 2, manifestDigest: 'digest_2' },
+    ];
+    mockState.latestVersionId = 'version_2';
+
+    await expect(orchestrator.detail('hub_design_system')).resolves.toMatchObject({
+      manifest: { digest: 'digest_2' },
+      versions: mockState.versions,
+    });
+  });
+
+  it('records pull sync state from the latest ref instead of version list order', async () => {
+    const orchestrator = createSharingOrchestrator({
+      db,
+      paths: {
+        RUNTIME_DATA_DIR: tempDir,
+        USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+        SKILL_ROOTS: [path.join(tempDir, 'skills')],
+      },
+    });
+    mockState.materializations.push({ 'DESIGN.md': 'latest\n' });
+    mockState.versions = [
+      { id: 'version_1', version: 1, manifestDigest: 'digest_1' },
+      { id: 'version_2', version: 2, manifestDigest: 'digest_2' },
+    ];
+    mockState.latestVersionId = 'version_2';
+
+    await expect(
+      orchestrator.pull('design_system', 'hub_design_system'),
+    ).resolves.toMatchObject({
+      version: 2,
+      alreadyOwned: false,
+    });
+    expect(
+      getSharedByLocal(db, 'team_1', 'design_system', 'hub_design_system')
+        ?.lastSyncedVersion,
+    ).toBe(2);
   });
 
   it('rejects traversal local ids before packing a shared design system', async () => {

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const routeState = vi.hoisted(() => ({
   listError: null as unknown,
+  allowLocalRequest: true,
 }));
 
 vi.mock('../src/integrations/resource-hub.js', () => {
@@ -62,9 +63,17 @@ describe('resource routes error handling', () => {
     () =>
       new Promise<void>((resolve) => {
         routeState.listError = null;
+        routeState.allowLocalRequest = true;
         const app = express();
         registerResourceSharingRoutes(app, {
           db: {} as never,
+          requireLocalDaemonRequest: (_req, res, next) => {
+            if (!routeState.allowLocalRequest) {
+              res.status(403).json({ error: 'local_origin_required' });
+              return;
+            }
+            next();
+          },
           paths: {
             RUNTIME_DATA_DIR: '',
             USER_DESIGN_SYSTEMS_DIR: '',
@@ -140,6 +149,17 @@ describe('resource routes error handling', () => {
     expect(res.status).toBe(500);
     await expect(res.json()).resolves.toEqual({
       error: 'SQLITE_CONSTRAINT: shared_resources',
+    });
+  });
+
+  it('applies the local daemon request guard before listing resources', async () => {
+    routeState.allowLocalRequest = false;
+
+    const res = await fetch(`${baseUrl}/api/resources`);
+
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toEqual({
+      error: 'local_origin_required',
     });
   });
 });

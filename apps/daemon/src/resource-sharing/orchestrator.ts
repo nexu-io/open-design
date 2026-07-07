@@ -8,6 +8,7 @@ import type { ResourceDetailResponse } from '@open-design/contracts';
 import {
   type ResourceHubClient,
   type ResourceHubPrincipal,
+  type VersionRecord,
   createResourceHubClient,
   readResourceHubPrincipal,
 } from '../integrations/resource-hub.js';
@@ -57,7 +58,12 @@ export async function readResourceDetail(
 ): Promise<ResourceDetailResponse> {
   const resource = await client.getResource(principal, hubResourceId);
   const versions = await client.listVersions(principal, hubResourceId);
-  const latest = versions[0];
+  const latest = await resolveLatestVersion(
+    client,
+    principal,
+    hubResourceId,
+    versions,
+  );
   const manifest = latest
     ? await client.getManifest(principal, latest.manifestDigest)
     : null;
@@ -154,9 +160,11 @@ export function createSharingOrchestrator(deps: SharingDeps) {
         };
       }
       const dir = await resolveAdapterPath(() => adapter.teamCopyDir(hubResourceId));
-      await replaceWithMaterializedRef(principal, hubResourceId, dir);
-      const versions = await client.listVersions(principal, hubResourceId);
-      const latest = versions[0]?.version ?? null;
+      const latest = await replaceWithMaterializedRef(
+        principal,
+        hubResourceId,
+        dir,
+      );
       // Idempotent: same PK (kind, hubResourceId) updates the consumer row on
       // re-pull, so the (hub_team_id, hub_resource_id) unique index never trips.
       upsertShared(deps.db, {
@@ -165,10 +173,10 @@ export function createSharingOrchestrator(deps: SharingDeps) {
         hubResourceId,
         hubTeamId: principal.teamId,
         role: 'consumer',
-        lastSyncedVersion: latest,
+        lastSyncedVersion: latest.version,
         updatedAt: new Date().toISOString(),
       });
-      return { dir, version: latest, alreadyOwned: false };
+      return { dir, version: latest.version, alreadyOwned: false };
     },
 
     // Full detail of one hub resource for inspection: the record, its version
@@ -197,7 +205,7 @@ export function createSharingOrchestrator(deps: SharingDeps) {
     principal: ResourceHubPrincipal,
     hubResourceId: string,
     dir: string,
-  ): Promise<void> {
+  ): Promise<VersionRecord> {
     const parent = path.dirname(dir);
     const basename = path.basename(dir);
     await fsp.mkdir(parent, { recursive: true });
@@ -206,7 +214,13 @@ export function createSharingOrchestrator(deps: SharingDeps) {
     let movedExisting = false;
     let installed = false;
     try {
-      await materializeRef(client, principal, hubResourceId, 'latest', tempDir);
+      const latest = await materializeRef(
+        client,
+        principal,
+        hubResourceId,
+        'latest',
+        tempDir,
+      );
       try {
         await fsp.rename(dir, backupDir);
         movedExisting = true;
@@ -218,6 +232,7 @@ export function createSharingOrchestrator(deps: SharingDeps) {
       if (movedExisting) {
         await fsp.rm(backupDir, { recursive: true, force: true });
       }
+      return latest;
     } catch (error) {
       await fsp.rm(tempDir, { recursive: true, force: true });
       if (movedExisting && !installed) {
@@ -252,4 +267,25 @@ function isNotFoundError(error: unknown): boolean {
     'code' in error &&
     error.code === 'ENOENT'
   );
+}
+
+async function resolveLatestVersion(
+  client: ResourceHubClient,
+  principal: ResourceHubPrincipal,
+  hubResourceId: string,
+  versions: VersionRecord[],
+): Promise<VersionRecord | null> {
+  if (versions.length === 0) {
+    return null;
+  }
+  const refRecord = await client.getRef(principal, hubResourceId, 'latest');
+  const latest = versions.find(
+    (candidate) => candidate.id === refRecord.versionId,
+  );
+  if (!latest) {
+    throw new Error(
+      `ref latest points at unknown version ${refRecord.versionId}`,
+    );
+  }
+  return latest;
 }
