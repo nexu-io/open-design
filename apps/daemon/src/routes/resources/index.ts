@@ -32,7 +32,7 @@ function handleError(res: Response, error: unknown): void {
     res.status(error.status).json({ error: error.code, detail: error.message });
     return;
   }
-  res.status(502).json({ error: 'resource_hub_unreachable' });
+  throw error;
 }
 
 export function registerResourceSharingRoutes(
