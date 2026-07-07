@@ -3,8 +3,10 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import type Database from 'better-sqlite3';
+import type { ResourceDetailResponse } from '@open-design/contracts';
 
 import {
+  type ResourceHubClient,
   type ResourceHubPrincipal,
   createResourceHubClient,
   readResourceHubPrincipal,
@@ -44,6 +46,20 @@ export class SharingError extends Error {
 export interface SharingDeps {
   db: SqliteDb;
   paths: AdapterPaths;
+}
+
+export async function readResourceDetail(
+  client: ResourceHubClient,
+  principal: ResourceHubPrincipal,
+  hubResourceId: string,
+): Promise<ResourceDetailResponse> {
+  const resource = await client.getResource(principal, hubResourceId);
+  const versions = await client.listVersions(principal, hubResourceId);
+  const latest = versions[0];
+  const manifest = latest
+    ? await client.getManifest(principal, latest.manifestDigest)
+    : null;
+  return { resource, versions, manifest };
 }
 
 export function createSharingOrchestrator(deps: SharingDeps) {
@@ -138,13 +154,7 @@ export function createSharingOrchestrator(deps: SharingDeps) {
     // the content-addressed core model visible.
     async detail(hubResourceId: string) {
       const principal = principalOrThrow();
-      const resource = await client.getResource(principal, hubResourceId);
-      const versions = await client.listVersions(principal, hubResourceId);
-      const latest = versions[0];
-      const manifest = latest
-        ? await client.getManifest(principal, latest.manifestDigest)
-        : null;
-      return { resource, versions, manifest };
+      return readResourceDetail(client, principal, hubResourceId);
     },
 
     // Team resources from the hub, joined with local mapping state (shared /

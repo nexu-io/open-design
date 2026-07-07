@@ -5,6 +5,7 @@ import {
 } from './integrations/resource-hub.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { materializeRef, packTree, pushTree } from './resource-drive.js';
+import { readResourceDetail } from './resource-sharing/orchestrator.js';
 
 // `od resource …` — neutral cloud-drive CLI over the resource hub. It moves
 // directory trees to/from the hub (put/get) and lists team resources; it is
@@ -21,6 +22,7 @@ const USAGE = `Usage:
                                                 Share a local resource through the daemon
   od resource pull <kind> <hub-resource-id> [--json] [--daemon-url <url>]
                                                 Pull a team resource through the daemon
+  od resource detail <resource-id> [--json]     Inspect versions and latest manifest
 
 Environment (dev/local, provisional until link B lands the member table):
   OD_RESOURCE_HUB_URL / OD_RESOURCE_HUB_TOKEN
@@ -239,6 +241,47 @@ async function runGet(args: string[]): Promise<void> {
   }
 }
 
+async function runDetail(args: string[]): Promise<void> {
+  const principal = requirePrincipalOrExit();
+  if (!principal) return;
+  const { positionals, flags } = parseFlags(args);
+  const resourceId = positionals[0];
+  if (!resourceId) {
+    console.error('usage: od resource detail <resource-id> [--json]');
+    process.exitCode = 1;
+    return;
+  }
+  try {
+    const detail = await readResourceDetail(
+      createResourceHubClient(),
+      principal,
+      resourceId,
+    );
+    if (flags.has('json')) {
+      console.log(JSON.stringify(detail, null, 2));
+      return;
+    }
+    console.log(
+      `${detail.resource.kind}\t${detail.resource.id}\t${detail.resource.ownerMemberId}`,
+    );
+    console.log(`versions\t${detail.versions.length}`);
+    for (const version of detail.versions) {
+      console.log(
+        `version\t${version.version}\t${version.id}\t${version.manifestDigest}\t${version.createdAt}`,
+      );
+    }
+    const entries = detail.manifest?.entries ?? [];
+    console.log(`manifest\t${detail.manifest?.digest ?? 'none'}\t${entries.length} entries`);
+    for (const entry of entries) {
+      console.log(
+        `entry\t${entry.type}\t${entry.path}\t${entry.blobDigest ?? entry.symlinkTarget ?? ''}`,
+      );
+    }
+  } catch (error) {
+    reportError(error);
+  }
+}
+
 export async function runResource(args: string[]): Promise<void> {
   const sub = args[0];
   const rest = args.slice(1);
@@ -257,6 +300,9 @@ export async function runResource(args: string[]): Promise<void> {
       return;
     case 'pull':
       await postDaemonResource('pull', rest);
+      return;
+    case 'detail':
+      await runDetail(rest);
       return;
     case undefined:
     case 'help':
