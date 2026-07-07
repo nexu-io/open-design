@@ -2,15 +2,12 @@
 /*
  * /privacy/ — Privacy Policy.
  *
- * Standard policy for the open-design.ai marketing site + the local-first
- * product. English single page (legal text). DRAFT — should be reviewed
- * by counsel before relying on it. Covers: who we are, what the website
- * collects (analytics/cookies), the local-first/BYOK product stance,
- * third parties, rights, contact.
+ * Unified policy for the open-design.ai marketing site, the local-first
+ * product, and Open Design Cloud.
  */
 import Layout from '../../_components/sub-page-layout.astro';
 
-const updated = 'June 16, 2026';
+const updated = 'July 6, 2026';
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'WebPage',
@@ -22,17 +19,18 @@ const jsonLd = {
 
 <Layout
   title="Privacy Policy — Open Design"
-  description="How Open Design (Powerformer, Inc.) handles data on open-design.ai and in the local-first Open Design app."
+  description="How Open Design (Powerformer, Inc.) handles data on open-design.ai, in the local-first Open Design app, and in Open Design Cloud."
   jsonLd={jsonLd}
 >
   <article class="legal">
     <h1 class="legal-h1">Privacy Policy</h1>
     <p class="legal-meta">Last updated: {updated}</p>
 
-    <p>This Privacy Policy explains how <strong>Powerformer, Inc.</strong> (“Open Design”, “we”, “us”) handles information in connection with the website <a href="https://open-design.ai">open-design.ai</a> and the Open Design application.</p>
+    <p>This Privacy Policy explains how <strong>Powerformer, Inc.</strong> (“Open Design”, “we”, “us”) handles information in connection with the website <a href="https://open-design.ai">open-design.ai</a>, the local-first Open Design application, and Open Design Cloud, including account access, wallet credits, API keys, CLI authorization, model routing, usage metering, and billing.</p>
 
     <h2>1. Open Design is local-first</h2>
-    <p>The Open Design application runs on your own machine. Your projects, prompts, designs, and the API keys you provide (BYOK — “bring your own key”) stay on your device and are sent directly to the model providers you configure. We do not proxy, collect, or store your design content or your keys on our servers.</p>
+    <p>The Open Design desktop application runs on your own machine. Your projects, prompts, designs, and the API keys you provide for local BYOK (“bring your own key”) workflows stay on your device and are sent directly to the model providers you configure. We do not proxy, collect, or store your local design content or local BYOK keys on our servers.</p>
+    <p>Open Design Cloud is different: it is a hosted model gateway and developer console. When you use Cloud accounts, wallet credits, API keys, CLI authorization, hosted model calls, routing, usage metering, or billing, we process the information needed to provide, secure, meter, and bill those hosted services.</p>
 
     <h2>2. Information the website collects</h2>
     <p>When you visit open-design.ai we collect limited, standard analytics to understand traffic and improve the site:</p>
@@ -42,23 +40,44 @@ const jsonLd = {
     </ul>
     <p>We do not sell your personal information.</p>
 
-    <h2>3. Third-party services</h2>
-    <p>The website may use third-party analytics and infrastructure providers (for example, web analytics and hosting/CDN). These providers process data on our behalf under their own terms. Outbound links (GitHub, Discord, YouTube, etc.) are governed by those services’ own privacy policies.</p>
+    <h2>3. Information Open Design Cloud collects</h2>
+    <p>When you register or sign in, we collect account and authentication information such as name, email, password hash, email verification records, password reset records, sessions, and basic profile information returned by third-party login providers. We do not receive your Google, GitHub, or other third-party account password.</p>
+    <p>When you use the Cloud console, wallet, CLI, or API, we may collect account IDs, API key metadata, key prefixes and hashes, key status, timestamps, CLI version, host name, request IDs, models, providers, routes, endpoints, token usage, charges, balance, payment status, recharge records, error codes, latency, IP address, browser, device, language, timezone, and product analytics events.</p>
+    <p>When you send hosted model requests through Open Design Cloud, request content is transmitted to the upstream model or infrastructure provider that processes the request. Open Design does not intentionally use your request content to train its own models. Upstream processing is governed by the applicable provider terms, privacy policies, and our agreements with them.</p>
 
-    <h2>4. Your choices and rights</h2>
+    <h2>4. How we use information</h2>
+    <p>We use information to create and maintain accounts, complete sign-in and email verification, secure accounts, prevent fraud and abuse, issue API keys, authorize CLI access, process wallet and billing activity, calculate model usage fees, route model requests, provide support, debug failures, improve product experience, perform contracts, and meet legal, tax, accounting, and security obligations.</p>
+    <p>With your consent, we may use your email to send product updates, onboarding guidance, re-engagement messages, and marketing or promotional communications about Open Design. You can opt out at any time by contacting us at <a href="mailto:privacy@open-design.ai">privacy@open-design.ai</a>, without affecting service-related and transactional emails such as sign-in codes, security alerts, and billing notices.</p>
+
+    <h2>5. Third-party services and sharing</h2>
+    <p>The website and Cloud services may use third-party analytics, hosting, infrastructure, database, email, security, fraud prevention, payment, login, and model providers. These may include Cloudflare Turnstile, Stripe payments, Google/GitHub login, cloud infrastructure providers, and upstream model providers. These providers process data on our behalf or under their own terms, depending on the service.</p>
+    <p>Model requests are handled through Open Design’s currently enabled platform-managed capacity; concrete routing configuration is not presented as user-facing information. Outbound links such as GitHub, Discord, and YouTube are governed by those services’ own privacy policies.</p>
+    <p>We do not sell personal information or share it for cross-context behavioral advertising. We may disclose information where required for legal compliance, regulatory inquiries, security incidents, disputes, mergers, restructuring, or asset transfers.</p>
+
+    <h2>6. Cookies, local storage, and security checks</h2>
+    <p>Open Design uses necessary cookies, session tokens, and local storage to maintain login state, remember language preferences, identify anonymous sessions, and protect the service. Cloudflare Turnstile may process device, network, and interaction signals to distinguish normal users from automated access.</p>
+
+    <h2>7. Data retention and security</h2>
+    <p>Email codes usually expire within 10 minutes, password reset links within 30 minutes, and CLI device authorization within 15 minutes. Product analytics events are usually retained for 90 days.</p>
+    <p>Account information is retained while the account remains active. After account closure, non-essential information will be deleted or anonymized within a reasonable period. Recharge, payment, invoice, ledger, API usage, fraud prevention, and audit records may be retained for legal, tax, accounting, security, and dispute needs.</p>
+    <p>We apply reasonable technical and organizational measures to protect data. No method of transmission or storage is completely secure.</p>
+
+    <h2>8. Your choices and rights</h2>
     <p>Depending on your location, you may have the right to access, correct, or delete personal data we hold, and to object to or restrict certain processing. You can also disable cookies in your browser. To exercise any of these, contact us (below).</p>
+    <p>Subject to applicable law, you may also request a copy, export, withdrawal of consent, restriction or objection to processing, account closure, or complaint review. We may verify your identity before acting on requests. Records required for billing, security, compliance, disputes, or legal obligations may not be deleted immediately.</p>
 
-    <h2>5. Data retention &amp; security</h2>
-    <p>We retain website analytics only as long as needed for the purposes above, and apply reasonable technical and organizational measures to protect data. No method of transmission or storage is completely secure.</p>
+    <h2>9. International processing</h2>
+    <p>Open Design uses global cloud, payment, login, security, and model services, so information may be transferred to or processed outside your country or region. Where law requires separate consent, standard contracts, assessments, data processing agreements, or other cross-border mechanisms, we will follow those requirements.</p>
 
-    <h2>6. Children</h2>
-    <p>Open Design is not directed to children under 13 (or the age required by your jurisdiction), and we do not knowingly collect their personal information.</p>
+    <h2>10. Minors</h2>
+    <p>The Open Design website and local application are not directed to children under 13 (or the age required by your jurisdiction), and we do not knowingly collect their personal information. Open Design Cloud is not intended for users under 18. Minors must not register or use Open Design Cloud without guardian consent. If we learn that we collected a minor’s information improperly, we will delete or restrict it as required by law.</p>
 
-    <h2>7. Changes</h2>
+    <h2>11. Changes</h2>
     <p>We may update this policy from time to time. Material changes will be reflected by the “Last updated” date above.</p>
 
-    <h2>8. Contact</h2>
-    <p>Questions about this policy? Reach us via the <a href="https://github.com/nexu-io/open-design">Open Design GitHub repository</a> or the community <a href="https://discord.gg/mHAjSMV6gz">Discord</a>.</p>
+    <h2>12. Contact</h2>
+    <p>For privacy-related inquiries, contact <a href="mailto:privacy@open-design.ai">privacy@open-design.ai</a>. You may also contact <a href="mailto:dpo@open-design.ai">dpo@open-design.ai</a> for data protection matters or <a href="mailto:eu-privacy@open-design.ai">eu-privacy@open-design.ai</a> for EU privacy inquiries. We aim to respond to privacy requests within 30 days and urgent security matters within 72 hours.</p>
+    <p>For product and community questions, you can also reach us via the <a href="https://github.com/nexu-io/open-design">Open Design GitHub repository</a> or the community <a href="https://discord.gg/mHAjSMV6gz">Discord</a>.</p>
   </article>
 
   <style>
