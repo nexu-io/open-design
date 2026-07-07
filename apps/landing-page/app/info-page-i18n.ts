@@ -2034,6 +2034,222 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
           hubLinkLabel: 'See all comparisons',
         },
       },
+      'pencil-dev': {
+        title: 'Best Pencil.dev alternative for design — Open Design',
+        description:
+          'Pencil (pencil.dev) is an a16z-backed, agent-driven design canvas that keeps .pen files in your repo — free in early access, but the app itself is closed-source and tuned for Claude. Open Design is the fully open-source (Apache-2.0), BYOK alternative: the whole app is yours, not just the file format.',
+        breadcrumb: 'Best Pencil.dev alternative',
+        label: 'Alternative · Pencil.dev',
+        heading: 'Best Pencil.dev alternative for design.',
+        lead:
+          'Pencil (pencil.dev) puts an AI design canvas inside your IDE and keeps its .pen design files in your repo under Git — genuinely close to how Open Design works. The difference: Pencil’s app is closed-source and free only while it is in early access, and it is tuned first for Claude. Open Design is fully open-source (Apache-2.0) and BYOK across every major coding agent — the whole tool is yours, not just the file format.',
+        tldrTitle: 'TL;DR',
+        tldrBody:
+          'Pencil (pencil.dev) is an a16z-backed, agent-driven design canvas that lives in your IDE and keeps .pen JSON files in your repo — a polished vector canvas, Figma paste, built-in UI kits, and free while in early access. But the app itself is closed-source (only the file format is documented), it is optimized for Claude Code, and “free” is early-access, not a business model. Open Design is the fully open-source (Apache-2.0), local-first alternative: BYOK with any major coding agent, output as files you own, and a portable DESIGN.md brand. These two are unusually close — this page is honest about where Pencil genuinely wins.',
+        toc: ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'],
+        whyTitle: 'Why people search for a Pencil.dev alternative',
+        whyLead: 'Pencil and Open Design overlap more than most tools on this page — both are agent-driven and keep design as files in your repo. The reasons people still look for an alternative are specific:',
+        reasons: [
+          { label: 'The app is closed-source; only the format is “open”.', body: 'Pencil markets “open design files,” and the .pen JSON format is documented — but the application itself is a closed-source, a16z-backed product with no public source, and the format docs reserve the right to introduce breaking changes. Open Design is Apache-2.0: the whole app, not just the file spec, is yours to read, fork, and self-host.' },
+          { label: '“Free” is early-access, not structural.', body: 'Pencil is free today but explicitly in early access — the founders say “Free is not a business model,” so paid plans and limits are on the way. Open Design is free because it is open source; there is no vendor that needs to meter you later, and you only ever pay your own model API spend.' },
+          { label: 'Optimized for Claude, weaker elsewhere.', body: 'Pencil connects several agents over MCP but is tuned first for Claude Code, and reviewers report a weaker experience with other models. Open Design is BYOK and provider-neutral — Claude, Codex, Cursor, Gemini, OpenCode, or Qwen, all first-class.' },
+          { label: 'UI-to-code, not a broader design surface.', body: 'Pencil is focused on turning UI into code. Open Design renders a wider range of artifacts from the same brand — UI, landing pages, decks, prototypes, and a portable DESIGN.md design system — all as files you own.' },
+        ],
+        localByokTitle: 'Local-first + BYOK, explained',
+        localByokBody: [
+          'Both Pencil and Open Design are local-first — that is genuinely common ground. Open Design runs a desktop app, a local daemon, and Markdown skill and design-system catalogs on your machine, and your brand lives in your repo as a portable DESIGN.md every skill respects. Output lands as real files in your project, not state in a vendor cloud.',
+          'The difference is ownership and neutrality. Open Design is Apache-2.0, so the whole application — not just a documented file format — is yours to fork, audit, and self-host. And you bring your own agent key: Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen, with credentials in local config and spend billed to your own provider.',
+        ],
+        featureTitle: 'Feature comparison',
+        features: [
+          { name: 'License', od: 'Apache-2.0 — the whole app is open source', cd: 'Closed-source app; only the .pen file format is documented' },
+          { name: 'Runtime', od: 'Local daemon + desktop app', cd: 'Local desktop app + IDE extension + local MCP server' },
+          { name: 'Design files', od: 'Files in your repo (Git): DESIGN.md, artifacts', cd: '.pen JSON files in your repo (Git)' },
+          { name: 'Account', od: 'None required; runs locally', cd: 'Account / sign-in (early access)' },
+          { name: 'Pricing', od: 'Free & open source; you pay your own model spend', cd: 'Free in early access; paid plans signaled ("Free is not a business model")' },
+          { name: 'Model', od: 'BYOK, provider-neutral — Claude, Codex, Cursor, Gemini, Qwen', cd: 'MCP with several agents, but optimized for Claude Code' },
+          { name: 'Primary surface', od: 'Agent-driven (prompt → artifacts) + web UI', cd: 'Figma-like vector canvas you edit directly; agent via MCP' },
+          { name: 'Output', od: 'UI, landing pages, decks, prototypes, design systems', cd: 'UI screens/components → code (framework matches your repo)' },
+          { name: 'Design system', od: 'Portable DESIGN.md every skill enforces', cd: 'Variables/Components/Libraries + built-in UI kits (Shadcn, Lunaris, Halo, Nitro)' },
+          { name: 'Figma import', od: 'Via agent (paste/screenshot → extract to DESIGN.md)', cd: 'Native copy-paste (preserves layers, auto-layout, styles)' },
+          { name: 'Collaboration', od: 'Single-user local; agent-driven', cd: 'No human multiplayer; "SWARM" = multiple AI agents' },
+          { name: 'Self-host / fork', od: 'Yes (Apache-2.0)', cd: 'No — app is closed-source' },
+          { name: 'Maturity', od: 'Stable releases', cd: 'Early access — reviewers report crashes and no autosave' },
+        ],
+        whoTitle: 'Who should pick which',
+        pickClaudeTitle: 'Pick Pencil if',
+        pickClaude: [
+          'You want a polished, Figma-like vector canvas you edit directly by hand — layers, properties, drag-and-drop, and prompt blocks placed right on the canvas.',
+          'Your workflow is Claude Code in Cursor or VS Code and you want the design surface to live inline in that exact IDE.',
+          'You lean on native Figma copy-paste and built-in UI kits (Shadcn, Lunaris, Halo, Nitro) to move fast, and closed-source plus early-access limits are fine for now.',
+        ],
+        pickOpenTitle: 'Pick Open Design if',
+        pickOpen: [
+          'You want the whole tool open source (Apache-2.0) — fork it, audit it, self-host it — not just a documented file format.',
+          'You want “free” that stays free because it is open source, with no vendor cap arriving after early access.',
+          'You want BYOK that is genuinely provider-neutral across Claude, Codex, Cursor, Gemini, OpenCode, and Qwen.',
+          'You want more than UI-to-code: landing pages, decks, prototypes, and a portable DESIGN.md design system, all as files you own.',
+        ],
+        migrateTitle: 'Migration / first run',
+        migrateLead: 'Pencil and Open Design both keep design as files in your repo, so moving over is design-first — extract your brand once and render against it:',
+        migrateSteps: [
+          'Install Open Design from the download page and bring your own agent key (Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen).',
+          'Point your agent at a Pencil export, a Figma paste, or a screenshot whose look you want to keep.',
+          'Ask the agent to extract the brand — colors, type, spacing — into a DESIGN.md file in your repo.',
+          'Pick a skill and render it against your new brand to confirm it matches.',
+        ],
+        migrateClosing:
+          'From then on, every skill renders in your brand — and the UI, code, and design system stay in your repo as files you own under version control.',
+        faqTitle: 'FAQ',
+        faq: [
+          { name: 'Is Pencil (pencil.dev) open source?', text: 'Not the app. Pencil is a closed-source, a16z-backed product; what is “open” is the .pen file format, which is documented but can change (the team reserves the right to make breaking changes). Open Design is fully open source under Apache-2.0 — the entire application, not just the file spec — and is self-hostable.' },
+          { name: 'Is Pencil.dev free?', text: 'It is free today, but explicitly in early access. The founders have said “Free is not a business model,” signaling future paid plans and limits. Open Design is free because it is open source; you bring your own agent key, so model spend bills to you with no vendor-set cap.' },
+          { name: 'What is the difference between Open Design and Pencil?', text: 'They are close — both are agent-driven and keep design as files in your repo under Git. The differences: Open Design is fully open source (Apache-2.0, not just an open format), provider-neutral BYOK (not tuned mainly for Claude), and renders a wider range of artifacts (UI, decks, prototypes, design systems). Pencil offers a more mature hands-on vector canvas and native Figma paste.' },
+          { name: 'Does Pencil work with agents other than Claude?', text: 'Yes — it connects several agents over MCP (Cursor, Windsurf, Codex, and others), but it is optimized for Claude Code and reviewers report a weaker experience with other models. Open Design treats Claude, Codex, Cursor, Gemini, OpenCode, and Qwen as first-class.' },
+          { name: 'Is Open Design affiliated with Pencil?', text: 'No. Open Design is an independent, open-source project (github.com/nexu-io/open-design, Apache-2.0). Pencil is a separate, a16z-backed product at pencil.dev; this is an unaffiliated comparison.' },
+        ],
+        ctaTitle: 'Own the whole tool, not just the file format.',
+        ctaBody:
+          'Star the repo, grab the desktop build, or run the install in your terminal. Open Design is open source end to end — your UI, code, and DESIGN.md system stay in your repo from the first render onward.',
+        rich: {
+          heroCtaLead:
+            'Open Design is the fully open-source, local-first alternative to Pencil — an agent-native design workspace you drive with the coding agent you already use, your key, your files, and a portable design system you keep in your repo.',
+          heroCtaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          ],
+          heroImage: {
+            src: '/alternatives/pencil-dev/pencil-dev-hero.webp',
+            alt: 'Open Design vs Pencil.dev — warm-paper editorial illustration of a design canvas converging into a repo of files you own',
+          },
+          intro: [
+            'Pencil (<a href="https://www.pencil.dev/" target="_blank" rel="noopener">pencil.dev</a>) is an agent-driven design tool from a16z Speedrun that puts a Figma-like vector canvas inside your IDE and keeps its design as <b>.pen JSON files in your repo</b>, versioned with Git. A local MCP server lets your coding agent read and write those files, so a prompt becomes an editable UI you can then hand to a coding agent for production code. It launched publicly in early 2026, crossed <b>100,000 users</b>, and is genuinely good — with the catch that the app itself is <b>closed-source</b>, tuned first for Claude, and <b>free only while it is in early access</b>.',
+            'Open Design is the <b>fully open-source, local-first</b> alternative: an agent-native design workspace you point <b>your own coding agent</b> at (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen) over BYOK. These two are unusually close — both agent-driven, both keeping design as files in your repo. The differences are ownership and range: with Open Design the <b>whole app</b> is Apache-2.0 (not just a documented format), BYOK is <b>provider-neutral</b>, and the output spans UI, decks, prototypes, and a portable <b>DESIGN.md</b>. This page is honest about where Pencil genuinely wins.',
+          ],
+          tocLabel: 'On this page',
+          toc: [
+            { id: 'what-is-pencil', label: 'What Pencil is' },
+            { id: 'compare', label: 'Feature comparison' },
+            { id: 'why-switch', label: 'Why switch' },
+            { id: 'local-byok', label: 'Open source + BYOK' },
+            { id: 'decision', label: 'Which to pick' },
+            { id: 'migrate', label: 'Migration' },
+          ],
+          sections: [
+            {
+              id: 'what-is-pencil',
+              heading: 'What Pencil is',
+              blocks: [
+                { kind: 'p', text: 'Pencil (<a href="https://www.pencil.dev/" target="_blank" rel="noopener">pencil.dev</a>) is “design on canvas, land in code” — an infinite vector design canvas that lives inside your IDE and codebase, built by Tom Krcha (previously behind Around, acquired by Miro) and backed by <b>a16z Speedrun</b>. Its design files use an open, documented <b>.pen JSON format</b> that sits in your repo under Git, and a <b>local MCP server</b> lets AI agents read and write them. You prompt or draw on the canvas, then hand the design to a coding agent (Claude Code and others) to generate production components that match your stack.' },
+                { kind: 'split', imageSide: 'right', image: { src: '/alternatives/pencil-dev/pencil-dev-product.webp', alt: 'Pencil (pencil.dev) — an AI design canvas inside the IDE that keeps .pen files in your repo', caption: 'Pencil: a Figma-like vector canvas in your IDE, with .pen design files versioned in your repo (screenshot: pencil.dev).' }, text: [
+                  'As a design surface, Pencil is polished: a real vector canvas with layers, a properties inspector, drag-and-drop components, <b>prompt blocks</b> you place directly on the canvas, native <b>Figma copy-paste</b> that preserves layers and auto-layout, and built-in UI kits (<b>Shadcn, Lunaris, Halo, Nitro</b>). Manual canvas edits do not consume agent tokens.',
+                  'What to know before you commit: the Pencil <b>application is closed-source</b> (only the .pen format is documented, and it can change), it is <b>optimized for Claude Code</b> with a weaker experience on other models, it is <b>free only in early access</b> (“Free is not a business model,” per the founders), and reviewers note it is still <b>early</b> — occasional crashes and no autosave.',
+                ] },
+                { kind: 'ul', items: [
+                  'Vendor: Pencil (pencil.dev), a16z Speedrun — closed-source app, ~100,000 users, launched early 2026',
+                  'Runtime: local desktop app + IDE extension (Cursor / VS Code / Windsurf) + local MCP server',
+                  'Design files: open .pen JSON format in your repo, Git-versioned',
+                  'Model: MCP with several agents, optimized for Claude Code; you bring your own agent subscription',
+                  'Pricing: free in early access, no published caps yet — paid plans signaled',
+                ] },
+              ],
+            },
+            {
+              id: 'compare',
+              heading: 'Open Design vs Pencil, feature by feature',
+              blocks: [
+                { kind: 'table', columns: ['Feature', 'Open Design', 'Pencil (pencil.dev)'], rows: [
+                  ['License', 'Apache-2.0 — the whole app is open source', 'Closed-source app; only the .pen format is documented'],
+                  ['Runtime', 'Local daemon + desktop app', 'Local desktop app + IDE extension + local MCP server'],
+                  ['Design files', 'Files in your repo (Git): DESIGN.md, artifacts', '.pen JSON files in your repo (Git)'],
+                  ['Account', 'None required; runs locally', 'Account / sign-in (early access)'],
+                  ['Pricing', 'Free & open source; your own model spend', 'Free in early access; paid plans signaled'],
+                  ['Model', 'BYOK, provider-neutral — Claude, Codex, Cursor, Gemini, Qwen', 'MCP with several agents, optimized for Claude Code'],
+                  ['Primary surface', 'Agent-driven (prompt → artifacts) + web UI', 'Figma-like vector canvas you edit directly; agent via MCP'],
+                  ['Output', 'UI, landing pages, decks, prototypes, design systems', 'UI screens/components → code (matches your repo)'],
+                  ['Design system', 'Portable DESIGN.md every skill enforces', 'Variables/Components + built-in UI kits (Shadcn, Lunaris…)'],
+                  ['Figma import', 'Via agent (paste/screenshot → DESIGN.md)', 'Native copy-paste (preserves layers, auto-layout)'],
+                  ['Collaboration', 'Single-user local; agent-driven', 'No human multiplayer; SWARM = multiple AI agents'],
+                  ['Self-host / fork', 'Yes (Apache-2.0)', 'No — app is closed-source'],
+                  ['Maturity', 'Stable releases', 'Early access — crashes, no autosave reported'],
+                ] },
+                { kind: 'p', text: 'Read it honestly: Pencil wins on the <b>hands-on canvas</b> — a mature, Figma-like surface you edit directly, with native Figma paste and built-in UI kits, right inside your IDE. Open Design wins on <b>ownership and range</b> — the whole app is open source (not just the file format), BYOK is provider-neutral instead of Claude-first, “free” stays free because there is no vendor to monetize you, and the output spans UI, decks, prototypes, and a portable design system as files you keep.' },
+              ],
+            },
+            {
+              id: 'why-switch',
+              heading: 'Why teams look for a Pencil alternative',
+              blocks: [
+                { kind: 'p', text: 'Pencil is a strong way to design inside your IDE, and for a lot of “developers who design” it is a great fit. The reasons people still look for an alternative cluster around what happens after the early-access honeymoon — ownership, provider lock-in, and scope.' },
+                { kind: 'steps', items: [
+                  { label: 'The app is closed, only the format is open', body: 'Pencil’s .pen format is documented, but the application is closed-source and a16z-backed, and the format spec reserves the right to change. Open Design is Apache-2.0 end to end — fork it, audit it, self-host it, and own every artifact it produces.' },
+                  { label: '“Free” has an expiry date', body: 'Pencil is free while it is in early access, but the founders are explicit that “Free is not a business model.” Paid plans and limits are coming. Open Design is free because it is open source; you only ever pay your own model spend.' },
+                  { label: 'It is Claude-first', body: 'Pencil connects several agents over MCP but is tuned for Claude Code, with a weaker experience elsewhere. Open Design is provider-neutral BYOK — Claude, Codex, Cursor, Gemini, OpenCode, and Qwen are all first-class.' },
+                  { label: 'You want more than UI-to-code', body: 'Pencil is focused on UI → code. Open Design renders UI, landing pages, decks, prototypes, and a portable DESIGN.md design system from the same brand, all as files in your repo.' },
+                ] },
+              ],
+            },
+            {
+              id: 'local-byok',
+              heading: 'Open source + BYOK, explained',
+              blocks: [
+                { kind: 'split', imageSide: 'left', image: { src: '/alternatives/pencil-dev/pencil-dev-design-systems.webp', alt: 'The Open Design design-system library — brands and tokens kept as files you own', caption: 'Your design system lives as files in Open Design — portable, versioned, rendered by every skill.' }, text: [
+                  'Both tools are local-first and keep design as files in your repo — that part is common ground. Where Open Design differs is that the <b>whole application</b> is Apache-2.0, not just a documented file format, so you can fork, audit, and self-host it. Your brand lives in your repo as a <b>portable DESIGN.md</b> every skill respects.',
+                  'You also <b>bring your own agent key</b>, provider-neutral. Credentials stay in local config or environment variables — Open Design never proxies them — and the API spend <b>bills directly to you</b>, at your provider’s rates, with no vendor cap after early access.',
+                ] },
+                { kind: 'p', text: 'New to the idea? Read <a href="/blog/what-is-vibe-design/">what vibe design is</a>, browse the <a href="/plugins/">plugin and design-system library</a>, see <a href="/compare/">all Open Design comparisons</a> — including <a href="/alternatives/figma/">Figma</a> and <a href="/alternatives/stitch/">Google Stitch</a> — or <a href="/download/">download Open Design</a> to try it.' },
+              ],
+            },
+            {
+              id: 'decision',
+              heading: 'Where Pencil genuinely wins — and which to pick',
+              blocks: [
+                { kind: 'p', text: 'Credit where it is due: as a <b>design surface</b>, Pencil is excellent. It is a real, Figma-like vector canvas you edit by hand — layers, a properties inspector, drag-and-drop components, and prompt blocks placed directly on the canvas — with native Figma copy-paste that keeps layers and auto-layout, plus built-in UI kits (Shadcn, Lunaris, Halo, Nitro). And it all lives right inside your IDE, so a developer who designs never leaves Cursor or VS Code. If what you want is a polished canvas to manipulate directly, Pencil’s surface is more mature than Open Design’s agent-first flow today. The trade-off is everything structural around it: closed-source app, Claude-first tuning, and a “free” that the founders have said will not last.' },
+                { kind: 'p', text: 'A quick way to decide by what you actually want to do — the two overlap, so the honest split matters:' },
+                { kind: 'table', compact: true, columns: ['If you want to…', 'Best pick'], rows: [
+                  ['Own the whole tool as open source you can fork/self-host', 'Open Design'],
+                  ['Keep “free” free with no vendor cap after early access', 'Open Design'],
+                  ['Use provider-neutral BYOK (not Claude-first)', 'Open Design'],
+                  ['Render UI + decks + prototypes + a design system', 'Open Design'],
+                  ['Edit a mature, Figma-like vector canvas by hand', 'Pencil'],
+                  ['Paste from Figma with layers and auto-layout intact', 'Pencil'],
+                  ['Design inline inside Cursor / VS Code', 'Pencil'],
+                ] },
+              ],
+            },
+            {
+              id: 'migrate',
+              heading: 'Moving a design from Pencil into Open Design',
+              blocks: [
+                { kind: 'p', text: 'Both tools keep design as files in your repo, so there is no lossy cloud export to fight — moving over is design-first. Extract your brand once and every render after inherits it.' },
+                { kind: 'ol', items: [
+                  'Install Open Design from the download page and bring your own agent key (Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen).',
+                  'Point your agent at a Pencil export, a Figma paste, or a screenshot whose look you want to keep.',
+                  'Ask the agent to extract the brand — colors, type, spacing — into a DESIGN.md file in your repo.',
+                  'Pick a skill and render it against your new brand to confirm it matches.',
+                ] },
+                { kind: 'p', text: 'From then on, every skill renders in your brand — and the <b>UI, code, and design system stay in your repo</b> as files you own under version control.' },
+              ],
+            },
+          ],
+          faqTitle: 'FAQ',
+          faq: [
+            { name: 'Is Pencil (pencil.dev) open source?', text: 'Not the app. Pencil is a closed-source, a16z-backed product; what is “open” is the .pen file format, which is documented but can change (the team reserves the right to make breaking changes). Open Design is fully open source under Apache-2.0 — the entire application, not just the file spec — and is self-hostable.' },
+            { name: 'Is Pencil.dev free?', text: 'It is free today, but explicitly in early access. The founders have said “Free is not a business model,” signaling future paid plans and limits. Open Design is free because it is open source; you bring your own agent key, so model spend bills to you with no vendor-set cap.' },
+            { name: 'What is the difference between Open Design and Pencil?', text: 'They are close — both are agent-driven and keep design as files in your repo under Git. The differences: Open Design is fully open source (Apache-2.0, not just an open format), provider-neutral BYOK (not tuned mainly for Claude), and renders a wider range of artifacts (UI, decks, prototypes, design systems). Pencil offers a more mature hands-on vector canvas and native Figma paste.' },
+            { name: 'Does Pencil work with agents other than Claude?', text: 'Yes — it connects several agents over MCP (Cursor, Windsurf, Codex, and others), but it is optimized for Claude Code and reviewers report a weaker experience with other models. Open Design treats Claude, Codex, Cursor, Gemini, OpenCode, and Qwen as first-class.' },
+            { name: 'Is Open Design affiliated with Pencil?', text: 'No. Open Design is an independent, open-source project (github.com/nexu-io/open-design, Apache-2.0). Pencil is a separate, a16z-backed product at pencil.dev; this is an unaffiliated comparison.' },
+          ],
+          ctaTitle: 'Own the whole tool, not just the file format.',
+          ctaBody:
+            'Star the repo, grab the desktop build, or run the install in your terminal. Open Design is open source end to end — your UI, code, and DESIGN.md system stay in your repo from the first render onward.',
+          ctaActions: [
+            { label: 'Download Open Design', href: '/download/', variant: 'primary' },
+            { label: 'Star on GitHub', href: 'https://github.com/nexu-io/open-design', variant: 'ghost', external: true },
+          ],
+          hubLinkLabel: 'See all comparisons',
+        },
+      },
       genspark: {
         title: 'Best Genspark AI Designer alternative for design — Open Design',
         description:
