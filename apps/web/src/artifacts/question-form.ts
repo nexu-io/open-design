@@ -33,6 +33,17 @@ export type QuestionType =
   | 'select'
   | 'text'
   | 'textarea'
+  | 'number'
+  | 'range'
+  | 'date'
+  | 'time'
+  | 'datetime-local'
+  | 'color'
+  | 'url'
+  | 'email'
+  | 'tel'
+  | 'file'
+  | 'switch'
   | 'direction-cards';
 
 /**
@@ -76,6 +87,20 @@ export interface FormQuestion {
   defaultValue?: string | string[];
   /** Only applies when `type === 'checkbox'`. Caps the number of selected options. */
   maxSelections?: number;
+  /**
+   * For finite-choice controls, show a free-form override beside the generated
+   * options so the user can take over a choice instead of being trapped by the
+   * model's presets.
+   */
+  allowCustom?: boolean;
+  customLabel?: string;
+  customPlaceholder?: string;
+  /** Numeric/range inputs only. */
+  min?: number;
+  max?: number;
+  step?: number;
+  /** File inputs only. The answer serializes selected file names, not bytes. */
+  multiple?: boolean;
   /** Only present when `type === 'direction-cards'`. Mapped to options by `id`. */
   cards?: DirectionCard[];
 }
@@ -262,6 +287,19 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
       : undefined;
   const cards = parseDirectionCards(qo.cards);
   const defaultValue = parseDefaultValue(qo, options);
+  const allowCustom =
+    qo.allowCustom === false
+      ? false
+      : qo.allowCustom === true || qo.custom === true
+        ? true
+        : undefined;
+  const customLabel = typeof qo.customLabel === 'string' ? qo.customLabel : undefined;
+  const customPlaceholder =
+    typeof qo.customPlaceholder === 'string' ? qo.customPlaceholder : undefined;
+  const min = parseNumberAttr(qo.min);
+  const max = parseNumberAttr(qo.max);
+  const step = parseNumberAttr(qo.step);
+  const multiple = qo.multiple === true;
   return {
     id,
     label,
@@ -272,6 +310,13 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
     ...(required ? { required } : {}),
     ...(defaultValue !== undefined ? { defaultValue } : {}),
     ...(maxSelections !== undefined && type === 'checkbox' ? { maxSelections } : {}),
+    ...(allowCustom !== undefined ? { allowCustom } : {}),
+    ...(customLabel ? { customLabel } : {}),
+    ...(customPlaceholder ? { customPlaceholder } : {}),
+    ...(min !== undefined ? { min } : {}),
+    ...(max !== undefined ? { max } : {}),
+    ...(step !== undefined ? { step } : {}),
+    ...(multiple && type === 'file' ? { multiple } : {}),
     ...(cards ? { cards } : {}),
   };
 }
@@ -518,6 +563,23 @@ function normalizeType(raw: unknown): QuestionType {
   if (lower === 'checkbox' || lower === 'multi' || lower === 'multiple') return 'checkbox';
   if (lower === 'select' || lower === 'dropdown') return 'select';
   if (lower === 'textarea' || lower === 'long' || lower === 'paragraph') return 'textarea';
+  if (lower === 'number' || lower === 'numeric') return 'number';
+  if (lower === 'range' || lower === 'slider') return 'range';
+  if (lower === 'date') return 'date';
+  if (lower === 'time') return 'time';
+  if (
+    lower === 'datetime-local' ||
+    lower === 'datetime' ||
+    lower === 'date-time' ||
+    lower === 'datetime_local'
+  )
+    return 'datetime-local';
+  if (lower === 'color' || lower === 'colour' || lower === 'color-picker') return 'color';
+  if (lower === 'url' || lower === 'link') return 'url';
+  if (lower === 'email') return 'email';
+  if (lower === 'tel' || lower === 'phone') return 'tel';
+  if (lower === 'file' || lower === 'upload' || lower === 'attachment') return 'file';
+  if (lower === 'switch' || lower === 'toggle' || lower === 'boolean') return 'switch';
   if (
     lower === 'direction-cards' ||
     lower === 'directions' ||
@@ -526,6 +588,13 @@ function normalizeType(raw: unknown): QuestionType {
   )
     return 'direction-cards';
   return 'text';
+}
+
+function parseNumberAttr(raw: unknown): number | undefined {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw !== 'string') return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 function parseOptions(raw: unknown): FormOption[] | undefined {
@@ -567,8 +636,12 @@ function parseDefaultValue(
   const raw =
     typeof question.defaultValue === 'string' || Array.isArray(question.defaultValue)
       ? question.defaultValue
+      : typeof question.defaultValue === 'number' || typeof question.defaultValue === 'boolean'
+        ? String(question.defaultValue)
       : typeof question.default === 'string'
         ? question.default
+        : typeof question.default === 'number' || typeof question.default === 'boolean'
+          ? String(question.default)
         : undefined;
   if (typeof raw === 'string') return formOptionValueForLabel({ options }, raw);
   if (Array.isArray(raw)) {

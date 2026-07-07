@@ -20,6 +20,7 @@ export interface OnboardingProfile {
   orgSize?: string;
   useCase?: string[];
   source?: string;
+  completedAt?: string;
 }
 
 function sanitize(value: unknown): string | undefined {
@@ -38,23 +39,40 @@ function sanitizeList(value: unknown): string[] | undefined {
   return cleaned.length > 0 ? cleaned : undefined;
 }
 
-function compact(profile: OnboardingProfile): OnboardingProfile | null {
+function sanitizeTimestamp(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return undefined;
+  return new Date(timestamp).toISOString();
+}
+
+function compact(
+  profile: OnboardingProfile,
+  options: { defaultCompletedAt?: Date } = {},
+): OnboardingProfile | null {
   const role = sanitize(profile.role);
   const orgSize = sanitize(profile.orgSize);
   const useCase = sanitizeList(profile.useCase);
   const source = sanitize(profile.source);
+  const completedAt =
+    sanitizeTimestamp(profile.completedAt) ??
+    options.defaultCompletedAt?.toISOString();
   if (!role && !orgSize && !useCase && !source) return null;
   return {
     ...(role ? { role } : {}),
     ...(orgSize ? { orgSize } : {}),
     ...(useCase ? { useCase } : {}),
     ...(source ? { source } : {}),
+    ...(completedAt ? { completedAt } : {}),
   };
 }
 
-export function saveOnboardingProfile(profile: OnboardingProfile): void {
+export function saveOnboardingProfile(
+  profile: OnboardingProfile,
+  completedAt: Date = new Date(),
+): void {
   if (typeof window === 'undefined') return;
-  const compacted = compact(profile);
+  const compacted = compact(profile, { defaultCompletedAt: completedAt });
   if (!compacted) return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(compacted));

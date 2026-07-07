@@ -7,6 +7,10 @@ import {
   createToolCallTextSuppressor,
   type ArtifactTextSuppressor,
 } from './artifacts/text-suppression.js';
+import {
+  amrAccountFailureDetails,
+  classifyAmrAccountFailure,
+} from './integrations/vela-errors.js';
 
 const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -31,6 +35,7 @@ const ACP_ARTIFACT_ECHO_START_RE = new RegExp(
   'i',
 );
 const ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT = 8;
+const AMR_STDERR_RETRY_TAIL_LIMIT = 16_000;
 
 type JsonRpcId = string | number;
 type JsonObject = Record<string, unknown>;
@@ -93,6 +98,12 @@ interface AttachAcpSessionOptions {
   stageTimeoutMs?: number;
   executionProfile?: ExecutionProfile;
   modelUnavailableErrorCode?: 'AMR_MODEL_UNAVAILABLE';
+  // When set, resume an existing upstream session instead of creating a new
+  // one: the handshake sends `session/load { sessionId }` (the durable handle
+  // captured from a prior run via `getDurableSessionId()`) rather than
+  // `session/new`. The agent verifies the session and, if it is gone, returns a
+  // structured `resume_failed` error the caller maps to its reseed path.
+  resumeSessionId?: string | null;
   // Subsegment timing markers for spawn->first-token attribution (#3408 §4).
   // `onCliReady` fires once on the first well-formed ACP JSON-RPC message
   // (the CLI is up and speaking the protocol); `onSessionInit` fires once when
@@ -476,6 +487,79 @@ function isAcpCompletedStatus(update: JsonObject): boolean {
 function isAcpTerminalFailureStatus(update: JsonObject): boolean {
   const status = acpUpdateStatus(update);
   return status === 'failed' || status === 'failure' || status === 'error' || status === 'cancelled' || status === 'canceled';
+}
+
+function isAcpRetryStatus(update: JsonObject): boolean {
+  return acpUpdateStatus(update) === 'retry';
+}
+
+function acpUpdateDiagnosticText(value: unknown, depth = 0): string[] {
+  if (depth > 4) return [];
+  if (typeof value === 'string') return value.trim() ? [value] : [];
+  if (typeof value === 'number' || typeof value === 'boolean') return [String(value)];
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => acpUpdateDiagnosticText(item, depth + 1));
+  }
+  const obj = asObject(value);
+  if (!obj) return [];
+  const parts: string[] = [];
+  for (const key of [
+    'type',
+    'status',
+    'code',
+    'message',
+    'detail',
+    'details',
+    'error',
+    'recovery',
+    'pauseReason',
+    'content',
+    'text',
+    'rawInput',
+  ]) {
+    if (key in obj) {
+      parts.push(...acpUpdateDiagnosticText(obj[key], depth + 1));
+    }
+  }
+  return parts;
+}
+
+function promotedAmrRetryStatusPayload(update: JsonObject) {
+  if (!isAcpRetryStatus(update)) return null;
+  const diagnosticText = acpUpdateDiagnosticText(update).join('\n');
+  const failure = classifyAmrAccountFailure(diagnosticText);
+  if (!failure) return null;
+  return {
+    message: failure.message,
+    error: {
+      code: failure.code,
+      message: failure.message,
+      retryable: false,
+      details: {
+        ...amrAccountFailureDetails(failure),
+        promoted_by: 'open_design_acp_retry_status',
+      },
+    },
+  };
+}
+
+function promotedAmrStderrPayload(chunk: string) {
+  if (!/opencode_event_stream_failure|session\.status/i.test(chunk)) return null;
+  if (!/\bretry\b/i.test(chunk)) return null;
+  const failure = classifyAmrAccountFailure(chunk);
+  if (!failure) return null;
+  return {
+    message: failure.message,
+    error: {
+      code: failure.code,
+      message: failure.message,
+      retryable: false,
+      details: {
+        ...amrAccountFailureDetails(failure),
+        promoted_by: 'open_design_acp_stderr_retry_status',
+      },
+    },
+  };
 }
 
 function acpToolCallId(update: JsonObject): string | null {
@@ -917,6 +1001,7 @@ export function attachAcpSession({
   stageTimeoutMs = DEFAULT_STAGE_TIMEOUT_MS,
   executionProfile = 'filesystem',
   modelUnavailableErrorCode,
+  resumeSessionId,
   onCliReady,
   onSessionInit,
 }: AttachAcpSessionOptions) {
@@ -932,6 +1017,11 @@ export function attachAcpSession({
   let promptRequestId: JsonRpcId | null = null;
   let setModelRequestId: JsonRpcId | null = null;
   let sessionId: string | null = null;
+  // The durable upstream session handle reported by the agent on session/new or
+  // session/load (vela's `openCodeSessionId`). The caller stores it per
+  // conversation to resume next turn. Distinct from `sessionId`, which is the
+  // ACP wrapper id ("vela-opencode-1").
+  let durableSessionId: string | null = null;
   let activeModel: string | null = null;
   let modelConfigId: string | null = null;
   let emittedThinkingStart = false;
@@ -943,6 +1033,7 @@ export function attachAcpSession({
   let emittedTextBuffer = '';
   let rawAcpShapeDiagnosticCount = 0;
   let artifactSuppressionDiagnosticCount = 0;
+  let amrStderrRetryTail = '';
   let finished = false;
   let fatal = false;
   let aborted = false;
@@ -1300,6 +1391,13 @@ export function attachAcpSession({
     }
     const update = asObject(params?.update);
     if (obj.method === 'session/update' && update) {
+      if (modelUnavailableErrorCode) {
+        const promotedPayload = promotedAmrRetryStatusPayload(update);
+        if (promotedPayload) {
+          failWithPayload(promotedPayload);
+          return;
+        }
+      }
       if (update.sessionUpdate !== 'agent_message_chunk' && update.sessionUpdate !== 'agent_thought_chunk') {
         send('agent', {
           type: 'status',
@@ -1477,20 +1575,33 @@ export function attachAcpSession({
     }
     if (expectedId === 1) {
       expectedId = nextId;
-      writeRpc(
-        nextId,
-        'session/new',
-        buildAcpSessionNewParams(
-          effectiveCwd,
-          mcpServers ? { mcpServers, envFormat } : { envFormat },
-        ),
-        'session/new',
-      );
+      if (resumeSessionId) {
+        // Resume the prior upstream session instead of creating a fresh one.
+        writeRpc(
+          nextId,
+          'session/load',
+          { sessionId: resumeSessionId, cwd: effectiveCwd },
+          'session/load',
+        );
+      } else {
+        writeRpc(
+          nextId,
+          'session/new',
+          buildAcpSessionNewParams(
+            effectiveCwd,
+            mcpServers ? { mcpServers, envFormat } : { envFormat },
+          ),
+          'session/new',
+        );
+      }
       nextId += 1;
       return;
     }
     if (expectedId === 2) {
       sessionId = typeof result.sessionId === 'string' ? result.sessionId : null;
+      // The durable handle for resuming this session on the next turn.
+      durableSessionId =
+        typeof result.openCodeSessionId === 'string' ? result.openCodeSessionId : null;
       // session/new acknowledged with a session id = handshake done (#3408 §4).
       if (sessionId) onSessionInit?.();
       const modelConfig = findModelConfigOption(result.configOptions);
@@ -1559,6 +1670,15 @@ export function attachAcpSession({
   });
 
   stdout.on('data', (chunk: string) => parser.feed(chunk));
+  child.stderr?.setEncoding('utf8');
+  child.stderr?.on('data', (chunk: string) => {
+    if (!modelUnavailableErrorCode || finished) return;
+    amrStderrRetryTail = `${amrStderrRetryTail}${String(chunk)}`.slice(
+      -AMR_STDERR_RETRY_TAIL_LIMIT,
+    );
+    const promotedPayload = promotedAmrStderrPayload(amrStderrRetryTail);
+    if (promotedPayload) failWithPayload(promotedPayload);
+  });
   child.on('close', (code, signal) => {
     clearStageTimer();
     parser.flush();
@@ -1578,6 +1698,12 @@ export function attachAcpSession({
   return {
     hasFatalError() {
       return fatal;
+    },
+    // The durable upstream session handle to persist for resume, or null when
+    // none was reported (older agents, or a handshake that never established a
+    // session). Mirrors pi-rpc's getLastSessionPath().
+    getDurableSessionId() {
+      return durableSessionId;
     },
     completedSuccessfully() {
       // Returns true when the prompt request resolved without a fatal error

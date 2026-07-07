@@ -10,22 +10,30 @@
 //   POST /api/brands/:id/finalize — register the agent's brand kit. JSON.
 
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 import type { Application, Request, Response } from 'express';
 
 import {
   getProject,
+  listFirstConversationRunStatuses,
+  listConversationsAwaitingInput,
+  listLatestConversationRunStatuses,
   listLatestProjectRunStatuses,
+  listLatestRunStatuses,
   listProjectsAwaitingInput,
   type insertProject,
 } from './db.js';
 import { resolveProjectDir } from './projects.js';
 import {
+  continueBrandExtraction,
   extractBrandFromHtml,
   finalizeBrand,
+  isProgrammaticExtractionAbortError,
   listBrandSummaries,
   readBrandDetail,
+  reconcileProgrammaticExtractionTranscript,
   removeBrand,
   renderBrandPreviewIntoProject,
   resolveBrandLogoPath,
@@ -54,9 +62,10 @@ export interface BrandRoutesDeps {
   /** In-memory run registry, when available, so brand status can reconcile with
    *  active/just-finished backing extraction runs before they age out. */
   runs?: {
-    list: (filter?: { projectId?: string }) => Array<{
+    list: (filter?: { projectId?: string; conversationId?: string }) => Array<{
       id: string;
       projectId?: string | null;
+      conversationId?: string | null;
       status: string;
       updatedAt?: number;
       error?: string | null;
@@ -65,16 +74,131 @@ export interface BrandRoutesDeps {
   };
   /** Optional id factory; defaults inside the brand engine when omitted. */
   randomId?: () => string;
+  /** Optional extraction overrides used by deterministic harnesses. */
+  prefetch?: Parameters<typeof startBrandExtraction>[0]['prefetch'];
+  logoFallback?: Parameters<typeof startBrandExtraction>[0]['logoFallback'];
+  imageryFallback?: Parameters<typeof startBrandExtraction>[0]['imageryFallback'];
   /** Selected agent identity for programmatic transcript rows. */
   resolveTranscriptAgent?: () => Promise<{ agentId?: string | null; agentName?: string | null } | null>;
 }
 
 const LOGO_EXT_PRIORITY = ['.svg', '.png', '.webp', '.jpg', '.jpeg', '.gif', '.ico'];
 const PROGRAMMATIC_CANCEL_ERROR = 'Programmatic extraction stopped by the user.';
+const BROWSER_HTML_EXTRACTION_ERROR = 'Could not extract a design system from the provided page.';
+const PROGRAMMATIC_ABORT_SETTLE_GRACE_MS = 250;
+
+type ActiveProgrammaticBrandExtraction = {
+  controller: AbortController;
+  settled: Promise<unknown>;
+};
+
+type ProgrammaticExtractionAbortResult = 'none' | 'settled' | 'timeout';
 
 export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): void {
   const { brandsRoot, userDesignSystemsRoot, projectsRoot, skillsRoot, dataDir, db, randomId } = deps;
-  const activeProgrammaticBrandExtractions = new Map<string, AbortController>();
+  const activeProgrammaticBrandExtractions = new Map<string, ActiveProgrammaticBrandExtraction>();
+
+  function trackProgrammaticBrandExtraction(
+    brandId: string,
+    controller: AbortController,
+    backgroundExtraction: Promise<unknown> | null,
+  ): void {
+    if (!backgroundExtraction) return;
+    const active: ActiveProgrammaticBrandExtraction = {
+      controller,
+      settled: backgroundExtraction,
+    };
+    activeProgrammaticBrandExtractions.set(brandId, active);
+    void backgroundExtraction
+      .finally(() => {
+        if (activeProgrammaticBrandExtractions.get(brandId) === active) {
+          activeProgrammaticBrandExtractions.delete(brandId);
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  async function abortActiveProgrammaticBrandExtraction(
+    brandId: string,
+    options: { settleTimeoutMs?: number } = {},
+  ): Promise<ProgrammaticExtractionAbortResult> {
+    const active = activeProgrammaticBrandExtractions.get(brandId);
+    if (!active) return 'none';
+    active.controller.abort();
+    activeProgrammaticBrandExtractions.delete(brandId);
+    return waitForProgrammaticExtractionSettlement(active, options.settleTimeoutMs);
+  }
+
+  async function waitForProgrammaticExtractionSettlement(
+    active: ActiveProgrammaticBrandExtraction,
+    settleTimeoutMs: number | undefined,
+  ): Promise<Exclude<ProgrammaticExtractionAbortResult, 'none'>> {
+    const settled = active.settled.then(
+      () => 'settled' as const,
+      () => 'settled' as const,
+    );
+    if (settleTimeoutMs === undefined) return settled;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        settled,
+        new Promise<'timeout'>((resolve) => {
+          timer = setTimeout(() => resolve('timeout'), settleTimeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  // A browser-assist re-extraction that couldn't synthesize yet is RECOVERABLE,
+  // not terminal: the read may have caught the page mid-load / still on the
+  // anti-bot wall, or the page was momentarily too sparse. The user clears the
+  // wall (or waits) and clicks Continue again, or hands off to the agent. Keep
+  // the brand in the calm, retryable `needs_input` state and render the kit as
+  // the in-progress "extracting" view rather than flashing the red
+  // "Extraction failed" terminal — the actionable transcript still offers
+  // Continue / agent. The route still answers 422 so the web surfaces a retry
+  // toast.
+  async function markBrowserHtmlExtractionUnresolved(brandId: string, previousMeta: BrandMeta): Promise<void> {
+    const nextMeta = patchMeta(brandsRoot, brandId, {
+      status: 'needs_input',
+      error: BROWSER_HTML_EXTRACTION_ERROR,
+      blocked: Boolean(previousMeta.blocked),
+      blockedReason: previousMeta.blockedReason,
+      extractionTerminalRunId: undefined,
+      extractionTerminalError: undefined,
+    }) ?? {
+      ...previousMeta,
+      status: 'needs_input',
+      error: BROWSER_HTML_EXTRACTION_ERROR,
+      blocked: Boolean(previousMeta.blocked),
+      extractionTerminalError: undefined,
+      updatedAt: Date.now(),
+    };
+    await renderBrandPreviewIntoProject({
+      id: brandId,
+      brandsRoot,
+      skillsRoot,
+      projectsRoot,
+      previewStatus: 'extracting',
+      ...(nextMeta.projectId ? { projectId: nextMeta.projectId } : {}),
+      ...(nextMeta.locale ? { locale: nextMeta.locale } : {}),
+    }).catch((err) => {
+      console.warn(`[brand] failed to render unresolved browser HTML preview for ${brandId}`, err);
+    });
+    await reconcileProgrammaticExtractionTranscript({
+      db,
+      brandsRoot,
+      projectsRoot,
+      brandId,
+      outcome: 'needs_attention',
+      ...(nextMeta.locale ? { locale: nextMeta.locale } : {}),
+    }).catch((err) => {
+      console.warn(`[brand] failed to reconcile browser HTML retry transcript for ${brandId}`, err);
+    });
+  }
 
   // GET /api/brands — list every stored brand as a summary.
   app.get('/api/brands', (_req: Request, res: Response) => {
@@ -126,22 +250,14 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
       if (designMd.trim()) startOptions.designMd = designMd;
       if (locale.trim()) startOptions.locale = locale;
       if (randomId) startOptions.randomId = randomId;
+      if (deps.prefetch) startOptions.prefetch = deps.prefetch;
+      if (deps.logoFallback) startOptions.logoFallback = deps.logoFallback;
+      if (deps.imageryFallback) startOptions.imageryFallback = deps.imageryFallback;
       const transcriptAgent = await deps.resolveTranscriptAgent?.().catch(() => null);
       if (transcriptAgent) startOptions.transcriptAgent = transcriptAgent;
       const result = await startBrandExtraction(startOptions);
       const backgroundExtraction = backgroundExtractionRef.current;
-      if (backgroundExtraction) {
-        activeProgrammaticBrandExtractions.set(result.id, programmaticAbortController);
-        void backgroundExtraction.finally(() => {
-          const latestStatus = readBrandDetail(brandsRoot, result.id)?.meta.status;
-          if (
-            latestStatus !== 'extracting'
-            && activeProgrammaticBrandExtractions.get(result.id) === programmaticAbortController
-          ) {
-            activeProgrammaticBrandExtractions.delete(result.id);
-          }
-        });
-      }
+      trackProgrammaticBrandExtraction(result.id, programmaticAbortController, backgroundExtraction);
       res.json(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -151,11 +267,49 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
     }
   });
 
+  // POST /api/brands/:id/continue-extraction — restart the deterministic
+  // programmatic pass against the existing brand/project/design-system. Unlike
+  // POST /api/brands, this never creates a duplicate design system item.
+  app.post('/api/brands/:id/continue-extraction', async (req: Request, res: Response) => {
+    const id = String(req.params.id);
+    try {
+      await abortActiveProgrammaticBrandExtraction(id, {
+        settleTimeoutMs: PROGRAMMATIC_ABORT_SETTLE_GRACE_MS,
+      });
+      const programmaticAbortController = new AbortController();
+      const backgroundExtractionRef: { current: Promise<unknown> | null } = { current: null };
+      const transcriptAgent = await deps.resolveTranscriptAgent?.().catch(() => null);
+      const result = await continueBrandExtraction({
+        id,
+        brandsRoot,
+        projectsRoot,
+        skillsRoot,
+        db,
+        userDesignSystemsRoot,
+        dataDir,
+        ...(randomId ? { randomId } : {}),
+        ...(transcriptAgent ? { transcriptAgent } : {}),
+        programmaticAbortSignal: programmaticAbortController.signal,
+        onBackgroundExtraction: (settled) => {
+          backgroundExtractionRef.current = settled;
+        },
+        ...(deps.prefetch ? { prefetch: deps.prefetch } : {}),
+        ...(deps.logoFallback ? { logoFallback: deps.logoFallback } : {}),
+        ...(deps.imageryFallback ? { imageryFallback: deps.imageryFallback } : {}),
+      });
+      trackProgrammaticBrandExtraction(id, programmaticAbortController, backgroundExtractionRef.current);
+      res.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(/not found/i.test(message) ? 404 : 500).json({ error: message });
+    }
+  });
+
   // POST /api/brands/:id/cancel-extraction — stop the daemon-owned
   // programmatic-first pass. This mirrors chat Stop for the synthetic transcript
   // row: the web marks the message canceled locally, while the daemon aborts
   // pending harvest/finalize work and moves the brand out of extracting.
-  app.post('/api/brands/:id/cancel-extraction', (req: Request, res: Response) => {
+  app.post('/api/brands/:id/cancel-extraction', async (req: Request, res: Response) => {
     const id = String(req.params.id);
     try {
       const detail = readBrandDetail(brandsRoot, id);
@@ -163,22 +317,46 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         res.status(404).json({ error: 'brand not found' });
         return;
       }
-      const active = activeProgrammaticBrandExtractions.get(id);
-      if (active) {
-        active.abort();
-        activeProgrammaticBrandExtractions.delete(id);
-      }
-      if (detail.meta.status !== 'ready') {
+      await abortActiveProgrammaticBrandExtraction(id, {
+        settleTimeoutMs: PROGRAMMATIC_ABORT_SETTLE_GRACE_MS,
+      });
+      const currentMeta = readBrandDetail(brandsRoot, id)?.meta ?? detail.meta;
+      if (currentMeta.status !== 'ready') {
         patchMeta(brandsRoot, id, {
           status: 'failed',
           error: PROGRAMMATIC_CANCEL_ERROR,
           blocked: false,
           blockedReason: undefined,
+          extractionAttemptId: randomUUID(),
           extractionTerminalRunId: undefined,
           extractionTerminalError: PROGRAMMATIC_CANCEL_ERROR,
         });
+        await renderBrandPreviewIntoProject({
+          id,
+          brandsRoot,
+          skillsRoot,
+          projectsRoot,
+          previewStatus: 'draft',
+          ...(currentMeta.projectId ? { projectId: currentMeta.projectId } : {}),
+          ...(currentMeta.locale ? { locale: currentMeta.locale } : {}),
+        }).catch((err) => {
+          console.warn(`[brand] failed to render stopped draft preview for ${id}`, err);
+        });
+        // Retire the synthetic "Working" row so Stop visibly terminates the
+        // fake conversation immediately, even if an in-flight fetch is still
+        // tearing down. No-ops when the brand already finalized (the row is
+        // `succeeded` and must not be downgraded). Best-effort.
+        await reconcileProgrammaticExtractionTranscript({
+          db,
+          brandsRoot,
+          projectsRoot,
+          brandId: id,
+          outcome: 'stopped',
+        }).catch((err) => {
+          console.warn(`[brand] failed to reconcile stopped transcript for ${id}`, err);
+        });
       }
-      const next = readBrandDetail(brandsRoot, id)?.meta ?? detail.meta;
+      const next = readBrandDetail(brandsRoot, id)?.meta ?? currentMeta;
       res.json({ ok: true, status: next.status });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -270,6 +448,9 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         res.status(404).json({ error: 'brand not found' });
         return;
       }
+      await abortActiveProgrammaticBrandExtraction(id, {
+        settleTimeoutMs: PROGRAMMATIC_ABORT_SETTLE_GRACE_MS,
+      });
       const result = await extractBrandFromHtml({
         id,
         meta,
@@ -283,15 +464,20 @@ export function registerBrandRoutes(app: Application, deps: BrandRoutesDeps): vo
         html,
         ...(css.trim() ? { css } : {}),
         ...(baseUrl.trim() ? { baseUrl } : {}),
+        ...(deps.logoFallback ? { logoFallback: deps.logoFallback } : {}),
+        ...(deps.imageryFallback ? { imageryFallback: deps.imageryFallback } : {}),
       });
       if (!result) {
-        res
-          .status(422)
-          .json({ error: 'Could not extract a design system from the provided page.' });
+        await markBrowserHtmlExtractionUnresolved(id, meta);
+        res.status(422).json({ error: BROWSER_HTML_EXTRACTION_ERROR });
         return;
       }
       res.json(result);
     } catch (err) {
+      if (isProgrammaticExtractionAbortError(err)) {
+        res.status(409).json({ error: PROGRAMMATIC_CANCEL_ERROR });
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       res.status(/not found/i.test(message) ? 404 : 500).json({ error: message });
     }
@@ -354,15 +540,31 @@ type BrandRunStatus = {
 
 interface BrandStatusContext {
   latestByProject: Map<string, BrandRunStatus>;
+  latestByConversation: Map<string, BrandRunStatus>;
+  firstByConversation: Map<string, BrandRunStatus>;
+  latestByRun: Map<string, BrandRunStatus>;
   /** Projects whose latest assistant turn is a still-unanswered question form
    *  (anti-bot wall / clarifying question). Drives the reversible needs_input. */
   awaitingInput: Set<string>;
+  awaitingInputByConversation: Set<string>;
 }
 
 function createBrandStatusContext(deps: BrandRoutesDeps): BrandStatusContext {
   const latestByProject = new Map<string, BrandRunStatus>();
   for (const [projectId, status] of listLatestProjectRunStatuses(deps.db) as Map<string, BrandRunStatus>) {
     latestByProject.set(projectId, status);
+  }
+  const latestByConversation = new Map<string, BrandRunStatus>();
+  for (const [conversationId, status] of listLatestConversationRunStatuses(deps.db) as Map<string, BrandRunStatus>) {
+    latestByConversation.set(conversationId, status);
+  }
+  const firstByConversation = new Map<string, BrandRunStatus>();
+  for (const [conversationId, status] of listFirstConversationRunStatuses(deps.db) as Map<string, BrandRunStatus>) {
+    firstByConversation.set(conversationId, status);
+  }
+  const latestByRun = new Map<string, BrandRunStatus>();
+  for (const [runId, status] of listLatestRunStatuses(deps.db) as Map<string, BrandRunStatus>) {
+    latestByRun.set(runId, status);
   }
   for (const run of deps.runs?.list() ?? []) {
     if (!run.projectId) continue;
@@ -377,7 +579,37 @@ function createBrandStatusContext(deps: BrandRoutesDeps): BrandStatusContext {
       errorCode: run.errorCode ?? null,
     });
   }
-  return { latestByProject, awaitingInput: listProjectsAwaitingInput(deps.db) };
+  for (const run of deps.runs?.list() ?? []) {
+    if (!run.conversationId) continue;
+    const existing = latestByConversation.get(run.conversationId);
+    const updatedAt = Number(run.updatedAt ?? 0);
+    if (existing && updatedAt <= Number(existing.updatedAt ?? 0)) continue;
+    latestByConversation.set(run.conversationId, {
+      value: normalizeBrandRunStatus(run.status),
+      updatedAt,
+      runId: run.id,
+      error: run.error ?? null,
+      errorCode: run.errorCode ?? null,
+    });
+    const existingByRun = latestByRun.get(run.id);
+    if (!existingByRun || updatedAt > Number(existingByRun.updatedAt ?? 0)) {
+      latestByRun.set(run.id, {
+        value: normalizeBrandRunStatus(run.status),
+        updatedAt,
+        runId: run.id,
+        error: run.error ?? null,
+        errorCode: run.errorCode ?? null,
+      });
+    }
+  }
+  return {
+    latestByProject,
+    latestByConversation,
+    firstByConversation,
+    latestByRun,
+    awaitingInput: listProjectsAwaitingInput(deps.db),
+    awaitingInputByConversation: listConversationsAwaitingInput(deps.db),
+  };
 }
 
 function reconcileBrandSummaryStatus(
@@ -408,33 +640,52 @@ function reconcileBrandMetaStatus(
   context: BrandStatusContext,
 ): BrandMeta {
   if (!meta.projectId) return meta;
-  const status = context.latestByProject.get(meta.projectId);
+  let nextMeta = meta;
+  const extractionRunId = resolveExtractionRunId(meta, context);
+  if (extractionRunId && !meta.extractionRunId) {
+    nextMeta = patchMeta(brandsRoot, meta.id, { extractionRunId }) ?? { ...meta, extractionRunId };
+  }
+  const status = extractionRunId
+    ? context.latestByRun.get(extractionRunId)
+    : meta.extractionConversationId
+      ? context.latestByConversation.get(meta.extractionConversationId)
+      : context.latestByProject.get(meta.projectId);
   if (status && (status.value === 'failed' || status.value === 'canceled')) {
-    const error = terminalBrandRunError(meta, status);
-    if (!shouldReconcileTerminalBrandRun(meta, status)) return meta;
-    if (meta.status === 'failed' && meta.error === error) return meta;
+    const error = terminalBrandRunError(nextMeta, status);
+    if (!shouldReconcileTerminalBrandRun(nextMeta, status)) return nextMeta;
     const terminalPatch: Parameters<typeof patchMeta>[2] = {
       status: 'failed',
       error,
       extractionTerminalError: error,
     };
     if (status.runId) terminalPatch.extractionTerminalRunId = status.runId;
+    if (extractionRunId) terminalPatch.extractionRunId = extractionRunId;
     return patchMeta(brandsRoot, meta.id, terminalPatch) ?? {
-      ...meta,
+      ...nextMeta,
       status: 'failed',
       error,
       extractionTerminalError: error,
       ...(status.runId ? { extractionTerminalRunId: status.runId } : {}),
+      ...(extractionRunId ? { extractionRunId } : {}),
     };
   }
-  if (meta.status !== 'extracting') return meta;
+  if (nextMeta.status !== 'extracting') return nextMeta;
   // The backing run paused on a question form (anti-bot wall / clarifying
   // question). Surface it as needs_input WITHOUT persisting — answering the
   // question resumes extraction, so the brand must be free to flip back.
-  if (context.awaitingInput.has(meta.projectId)) {
-    return { ...meta, status: 'needs_input' };
+  const isAwaitingInput = nextMeta.extractionConversationId
+    ? context.awaitingInputByConversation.has(nextMeta.extractionConversationId)
+    : context.awaitingInput.has(meta.projectId);
+  if (isAwaitingInput) {
+    return { ...nextMeta, status: 'needs_input' };
   }
-  return meta;
+  return nextMeta;
+}
+
+function resolveExtractionRunId(meta: BrandMeta, context: BrandStatusContext): string | undefined {
+  if (meta.extractionRunId) return meta.extractionRunId;
+  if (!meta.extractionConversationId) return undefined;
+  return context.firstByConversation.get(meta.extractionConversationId)?.runId;
 }
 
 function terminalBrandRunError(meta: BrandMeta, status: BrandRunStatus): string {

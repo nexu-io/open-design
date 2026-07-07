@@ -6,7 +6,7 @@ const AGENT_LABELS: Record<string, string> = {
   devin: 'Devin',
   gemini: 'Gemini',
   opencode: 'OpenCode',
-  amr: 'AMR',
+  amr: 'Open Design',
   'cursor-agent': 'Cursor',
   cursor: 'Cursor',
   qwen: 'Qwen',
@@ -14,10 +14,14 @@ const AGENT_LABELS: Record<string, string> = {
   copilot: 'Copilot',
   deepseek: 'DeepSeek',
   antigravity: 'Antigravity',
-  'anthropic-api': 'Anthropic API',
-  'openai-api': 'OpenAI API',
-  'azure-openai-api': 'Azure OpenAI',
-  'google-gemini-api': 'Google Gemini',
+  'anthropic-api': 'Anthropic API via OpenCode',
+  'openai-api': 'OpenAI API via OpenCode',
+  'azure-openai-api': 'Azure OpenAI via OpenCode',
+  'google-gemini-api': 'Google Gemini via OpenCode',
+  'ollama-cloud-api': 'Ollama Cloud API via OpenCode',
+  'senseaudio-api': 'SenseAudio API via OpenCode',
+  'aihubmix-api': 'AIHubMix API via OpenCode',
+  'bedrock-api': 'AWS Bedrock via OpenCode',
 };
 
 const AGENT_ALIASES: Record<string, string> = {

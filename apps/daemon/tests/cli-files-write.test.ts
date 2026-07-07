@@ -111,6 +111,23 @@ describe('od files write / upload (ESM require regression)', () => {
     stub.requests.length = 0;
   });
 
+  it('`files version-create` rejects an invalid --source before sending a request', async () => {
+    const result = await runCli([
+      'files',
+      'version-create',
+      'proj-1',
+      'index.html',
+      '--source',
+      'typo',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('Invalid --source "typo"');
+    expect(stub.requests).toHaveLength(0);
+  });
+
   it('`files write` streams stdin into POST /api/projects/:id/files as utf8', async () => {
     const result = await runCli(
       ['files', 'write', 'proj-1', 'notes/brief.md', '--daemon-url', stub.baseUrl],

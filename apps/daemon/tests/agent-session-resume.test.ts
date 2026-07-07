@@ -10,11 +10,16 @@ import {
   insertProject,
   openDatabase,
   upsertAgentSession,
+  upsertMessage,
 } from '../src/db.js';
 import {
   computeIncludeStable,
   hashStableInstructions,
+  isAgentResumeFailure,
+  isAmrResumeFailure,
   isClaudeResumeFailure,
+  isCodexResumeFailure,
+  isOpencodeResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
 } from '../src/agent-session-resume.js';
@@ -42,34 +47,172 @@ describe('resolveAgentResumeContext', () => {
     return db;
   }
 
+  // A completed turn stamps its assistant message run_status='succeeded' at
+  // finish (server.ts). The resume cursor only counts succeeded assistant turns,
+  // so completed turns default to 'succeeded'; pass runStatus=null for an
+  // in-flight placeholder (the current run's own not-yet-finished message).
+  function seedMessage(
+    db: ReturnType<typeof seed>,
+    id: string,
+    role: 'user' | 'assistant',
+    runStatus: string | null = role === 'assistant' ? 'succeeded' : null,
+  ) {
+    upsertMessage(db, 'conv-1', { id, role, content: `${role} ${id}`, runStatus });
+  }
+
+  // A session row whose identity (model/cwd/last assistant id) matches what the
+  // next resolve will present, so the guard allows the resume.
+  function storeInSyncSession(
+    db: ReturnType<typeof seed>,
+    over: { stablePromptHash?: string | null; model?: string | null; cwd?: string | null } = {},
+  ) {
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      sessionId: 'sess-A',
+      lastMessageId: 'asst-1',
+      model: over.model ?? null,
+      cwd: over.cwd ?? null,
+      stablePromptHash: over.stablePromptHash ?? null,
+    });
+  }
+
   it('creates a new session (minted uuid, not resuming) when none stored', () => {
     const db = seed();
     const ctx = resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'claude' });
     expect(ctx.isResuming).toBe(false);
     expect(ctx.resumeSessionId).toBeNull();
     expect(ctx.newSessionId).toMatch(UUID_RE);
+    expect(ctx.invalidationReason).toBeNull();
   });
 
-  it('resumes the stored session when one exists', () => {
+  it('resumes the stored session when the identity still matches', () => {
     const db = seed();
-    upsertAgentSession(db, { conversationId: 'conv-1', agentId: 'claude', sessionId: 'sess-A' });
+    seedMessage(db, 'asst-1', 'assistant');
+    storeInSyncSession(db);
     const ctx = resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'claude' });
+    expect(ctx.isResuming).toBe(true);
+    expect(ctx.resumeSessionId).toBe('sess-A');
+    expect(ctx.invalidationReason).toBeNull();
+  });
+
+  it('still resumes when only the current run placeholder is newer (normal follow-up)', () => {
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant');
+    storeInSyncSession(db);
+    // The next turn's user message + assistant placeholder are already inserted.
+    seedMessage(db, 'user-2', 'user');
+    seedMessage(db, 'asst-2', 'assistant', null); // in-flight placeholder
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      currentAssistantMessageId: 'asst-2',
+    });
     expect(ctx.isResuming).toBe(true);
     expect(ctx.resumeSessionId).toBe('sess-A');
   });
 
-  it('returns null storedStablePromptHash when none stored, and the value when present', () => {
+  it('returns the stored stable hash when resuming', () => {
     const db = seed();
-    const fresh = resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'claude' });
-    expect(fresh.storedStablePromptHash).toBeNull();
-
-    upsertAgentSession(db, {
-      conversationId: 'conv-1', agentId: 'claude', sessionId: 'sess-A', stablePromptHash: 'h-1',
-    });
+    seedMessage(db, 'asst-1', 'assistant');
+    storeInSyncSession(db, { stablePromptHash: 'h-1' });
     const resumed = resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'claude' });
     expect(resumed.isResuming).toBe(true);
-    expect(resumed.resumeSessionId).toBe('sess-A');
     expect(resumed.storedStablePromptHash).toBe('h-1');
+  });
+
+  it('reseeds (model_changed) when the model differs from the stored session', () => {
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant');
+    storeInSyncSession(db, { model: 'gpt-5.1' });
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1', agentId: 'claude', currentModel: 'gpt-5-codex',
+    });
+    expect(ctx.isResuming).toBe(false);
+    expect(ctx.resumeSessionId).toBeNull();
+    expect(ctx.invalidationReason).toBe('model_changed');
+  });
+
+  it('reseeds (cwd_changed) when the cwd differs from the stored session', () => {
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant');
+    storeInSyncSession(db, { cwd: '/work/a' });
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1', agentId: 'claude', currentCwd: '/work/b',
+    });
+    expect(ctx.isResuming).toBe(false);
+    expect(ctx.invalidationReason).toBe('cwd_changed');
+  });
+
+  it('reseeds (conversation_advanced) when another agent completed a turn in between', () => {
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant');
+    storeInSyncSession(db);
+    // A different agent ran: a newer completed assistant turn now exists.
+    seedMessage(db, 'user-2', 'user');
+    seedMessage(db, 'asst-other', 'assistant');
+    // This agent comes back; its placeholder is asst-3.
+    seedMessage(db, 'user-3', 'user');
+    seedMessage(db, 'asst-3', 'assistant', null); // in-flight placeholder
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1', agentId: 'claude', currentAssistantMessageId: 'asst-3',
+    });
+    expect(ctx.isResuming).toBe(false);
+    expect(ctx.resumeSessionId).toBeNull();
+    expect(ctx.invalidationReason).toBe('conversation_advanced');
+  });
+
+  it('still resumes when the stored cursor is the session own failed turn (resume-on-failure)', () => {
+    const db = seed();
+    // Turn 1 committed work then FAILED transiently; the resume-on-failure path
+    // persisted the session pointing at that failed assistant turn.
+    seedMessage(db, 'asst-1', 'assistant', 'failed');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      sessionId: 'sess-A',
+      lastMessageId: 'asst-1',
+      model: null,
+      cwd: null,
+      stablePromptHash: null,
+    });
+    // Turn 2 must continue the same session — the failed turn it owns is a valid
+    // resume cursor, not conversation advancement.
+    const ctx = resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'claude' });
+    expect(ctx.isResuming).toBe(true);
+    expect(ctx.resumeSessionId).toBe('sess-A');
+    expect(ctx.invalidationReason).toBeNull();
+  });
+
+  it('reseeds (conversation_advanced) when a later succeeded turn follows the stored failed turn', () => {
+    const db = seed();
+    // Stored session owns a failed turn (asst-1)...
+    seedMessage(db, 'asst-1', 'assistant', 'failed');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'claude',
+      sessionId: 'sess-A',
+      lastMessageId: 'asst-1',
+      model: null,
+      cwd: null,
+      stablePromptHash: null,
+    });
+    // ...but a different agent then COMPLETED a turn (asst-2 succeeded). That is
+    // genuine advancement the session never saw — must reseed, not resume.
+    seedMessage(db, 'asst-2', 'assistant'); // succeeded
+    const ctx = resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'claude' });
+    expect(ctx.isResuming).toBe(false);
+    expect(ctx.invalidationReason).toBe('conversation_advanced');
+  });
+
+  it('reseeds (missing_cursor) for a legacy row written without an identity', () => {
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant');
+    // Old-style upsert: no model/cwd/lastMessageId.
+    upsertAgentSession(db, { conversationId: 'conv-1', agentId: 'claude', sessionId: 'sess-A' });
+    const ctx = resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'claude' });
+    expect(ctx.isResuming).toBe(false);
+    expect(ctx.invalidationReason).toBe('missing_cursor');
   });
 });
 
@@ -118,7 +261,7 @@ describe('persistCapturedAgentSession', () => {
       stablePromptHash: 'hash-1',
     });
     expect(result).toBe('stored');
-    expect(getAgentSessionRecord(db, 'conv-1', 'pi')).toEqual({
+    expect(getAgentSessionRecord(db, 'conv-1', 'pi')).toMatchObject({
       sessionId: '/tmp/current.jsonl',
       stablePromptHash: 'hash-1',
     });
@@ -144,6 +287,36 @@ describe('persistCapturedAgentSession', () => {
     expect(getAgentSessionRecord(db, 'conv-1', 'pi')).toBeNull();
     expect(resolveAgentResumeContext(db, { conversationId: 'conv-1', agentId: 'pi' }).isResuming)
       .toBe(false);
+  });
+
+  // Regression for the resume identity guard: pi-rpc persists via this capture
+  // path, so it must store model/cwd/lastMessageId too — otherwise the next pi
+  // turn sees a null cursor (`missing_cursor`) and reseeds forever, silently
+  // disabling pi's existing follow-up-session path (reported by @nettee).
+  it('persists the resume identity so a successful pi turn still resumes next turn', () => {
+    const db = seed();
+    upsertMessage(db, 'conv-1', { id: 'asst-1', role: 'assistant', content: 'pi reply', runStatus: 'succeeded' });
+
+    const result = persistCapturedAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'pi',
+      sessionId: '/tmp/current.jsonl',
+      stablePromptHash: 'hash-1',
+      model: null,
+      cwd: '/work/proj',
+      lastMessageId: 'asst-1',
+    });
+    expect(result).toBe('stored');
+
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'pi',
+      currentModel: null,
+      currentCwd: '/work/proj',
+    });
+    expect(ctx.isResuming).toBe(true);
+    expect(ctx.resumeSessionId).toBe('/tmp/current.jsonl');
+    expect(ctx.invalidationReason).toBeNull();
   });
 });
 
@@ -210,7 +383,8 @@ describe('isClaudeResumeFailure', () => {
       session_id: '00000000-0000-0000-0000-000000000000',
       errors: [rewordedProse],
     });
-    expect(isClaudeResumeFailure(rewordedResult)).toBe(true);
+    // The structured result event arrives on stdout (the stream-json channel).
+    expect(isClaudeResumeFailure('', rewordedResult)).toBe(true);
   });
 
   // Guard against over-clearing: a transient in-turn failure (overload /
@@ -228,7 +402,7 @@ describe('isClaudeResumeFailure', () => {
       session_id: 'live-session',
       errors: ['Overloaded'],
     });
-    expect(isClaudeResumeFailure(inTurnApiError)).toBe(false);
+    expect(isClaudeResumeFailure('', inTurnApiError)).toBe(false);
 
     const success = JSON.stringify({
       type: 'result',
@@ -239,6 +413,112 @@ describe('isClaudeResumeFailure', () => {
       num_turns: 2,
       session_id: 'live-session',
     });
-    expect(isClaudeResumeFailure(success)).toBe(false);
+    expect(isClaudeResumeFailure('', success)).toBe(false);
+  });
+});
+
+describe('isCodexResumeFailure', () => {
+  it('matches the codex "no rollout found" resume error', () => {
+    expect(
+      isCodexResumeFailure(
+        'Error: thread/resume: thread/resume failed: no rollout found for thread id 019eef4f-7409-7c82-bebe-30504eed3959',
+      ),
+    ).toBe(true);
+  });
+
+  it('matches the generic thread/resume-failed signature', () => {
+    expect(isCodexResumeFailure('thread/resume failed: something else')).toBe(true);
+  });
+
+  it('ignores unrelated codex errors and empty input', () => {
+    expect(isCodexResumeFailure('stream disconnected before first event')).toBe(false);
+    expect(isCodexResumeFailure('rate limit exceeded')).toBe(false);
+    expect(isCodexResumeFailure('')).toBe(false);
+  });
+});
+
+describe('isOpencodeResumeFailure', () => {
+  it('matches the OpenCode "Session not found" resume error', () => {
+    expect(isOpencodeResumeFailure('Error: Session not found')).toBe(true);
+    expect(
+      isOpencodeResumeFailure('{"name":"NotFoundError","data":{"message":"Session not found: ses_x"}}'),
+    ).toBe(true);
+  });
+
+  it('ignores unrelated OpenCode errors and empty input', () => {
+    expect(isOpencodeResumeFailure('OpenCode auth failed: login required')).toBe(false);
+    expect(isOpencodeResumeFailure('rate limit exceeded')).toBe(false);
+    expect(isOpencodeResumeFailure('')).toBe(false);
+  });
+});
+
+describe('isAmrResumeFailure', () => {
+  it('matches vela\'s structured resume_failed ACP error on stdout', () => {
+    expect(
+      isAmrResumeFailure('{"jsonrpc":"2.0","id":4,"error":{"code":-32600,"message":"the resumed session could not be loaded","data":{"kind":"resume_failed","phase":"session_load","retryable":true}}}'),
+    ).toBe(true);
+  });
+
+  it('does not match a bare mention of resume_failed in assistant prose', () => {
+    expect(isAmrResumeFailure('The build step logged resume_failed as a warning.')).toBe(false);
+    expect(isAmrResumeFailure('')).toBe(false);
+  });
+});
+
+describe('isAgentResumeFailure dispatch', () => {
+  it('routes amr to the resume_failed structured detector on stdout', () => {
+    // AMR's signal arrives on stdout (the ACP JSON-RPC channel), not stderr.
+    expect(
+      isAgentResumeFailure('amr', '', '{"error":{"data":{"kind":"resume_failed"}}}'),
+    ).toBe(true);
+    expect(
+      isAgentResumeFailure('amr', '{"error":{"data":{"kind":"resume_failed"}}}', ''),
+    ).toBe(false);
+  });
+
+  it('routes codex to the rollout-not-found detector', () => {
+    expect(
+      isAgentResumeFailure('codex', 'no rollout found for thread id abc'),
+    ).toBe(true);
+    // A Claude-style signature must NOT count as a codex resume failure.
+    expect(
+      isAgentResumeFailure('codex', 'No conversation found with session ID: abc'),
+    ).toBe(false);
+  });
+
+  it('routes opencode to the session-not-found detector (on stderr only)', () => {
+    // The CLI prints the miss to stderr (2nd positional is stdout).
+    expect(isAgentResumeFailure('opencode', 'Error: Session not found', '')).toBe(true);
+    // codex prose is not an OpenCode resume failure.
+    expect(
+      isAgentResumeFailure('opencode', 'no rollout found for thread id abc'),
+    ).toBe(false);
+  });
+
+  it('does NOT treat a generic phrase in successful assistant stdout as a resume miss (#4629 nettee)', () => {
+    // A turn that SUCCEEDS but whose model output literally says "session not
+    // found" must not be failed + have its session cleared — the phrase is only
+    // a resume miss when it comes from the CLI's stderr failure channel.
+    expect(
+      isAgentResumeFailure('opencode', '', 'Sure — your previous session was not found in the list, here it is...'),
+    ).toBe(false);
+    expect(
+      isAgentResumeFailure('codex', '', 'The logs mention "no rollout found for thread id" as an example.'),
+    ).toBe(false);
+  });
+
+  it('routes claude (and unknown resume-capable agents) to the Claude detector', () => {
+    expect(
+      isAgentResumeFailure('claude', 'No conversation found with session ID: abc'),
+    ).toBe(true);
+    // codex prose is not a Claude resume failure.
+    expect(
+      isAgentResumeFailure('claude', 'no rollout found for thread id abc'),
+    ).toBe(false);
+  });
+
+  it('never reports a failure for empty output', () => {
+    expect(isAgentResumeFailure('codex', '')).toBe(false);
+    expect(isAgentResumeFailure('claude', '')).toBe(false);
   });
 });

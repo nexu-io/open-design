@@ -27,6 +27,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Textarea } from '@open-design/components';
+import type { DesignSystemEditClickProps } from '@open-design/contracts/analytics';
 import { useT } from '../i18n';
 import { openExternalUrl, projectRawUrl } from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
@@ -278,6 +279,10 @@ export interface DesignKitViewProps {
   onDownload?: () => void;
   onImport?: () => void;
   onReset?: () => void;
+  onEditClick?: (
+    element: DesignSystemEditClickProps['element'],
+    module: DesignSystemEditClickProps['module'],
+  ) => void;
   uploading?: KitUploadModule | null;
   actionBusy?: string | null;
   onActionFeedback?: (tone: DesignKitActionFeedbackTone, message: string) => void;
@@ -306,6 +311,7 @@ function DesignKitViewInner({
   onDownload,
   onImport,
   onReset,
+  onEditClick,
   uploading,
   actionBusy,
   onActionFeedback,
@@ -332,7 +338,8 @@ function DesignKitViewInner({
       return next;
     });
   }, []);
-  const [lightbox, setLightbox] = useState<{ src: string; caption: string } | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [logoLightbox, setLogoLightbox] = useState<{ src: string; caption: string } | null>(null);
   const [assetPreview, setAssetPreview] = useState<{ url: string; label: string } | null>(null);
   const [designMdOpen, setDesignMdOpen] = useState(false);
   const [designMdDraft, setDesignMdDraft] = useState('');
@@ -365,7 +372,8 @@ function DesignKitViewInner({
   useEffect(() => {
     setActiveLogo(0);
     setImagesExpanded(false);
-    setLightbox(null);
+    setLightboxIndex(null);
+    setLogoLightbox(null);
     setAssetPreview(null);
     setCoverPreviewOpen(false);
     setColorEditor(null);
@@ -375,22 +383,6 @@ function DesignKitViewInner({
   useEffect(() => {
     setColorOverrides({});
   }, [kit.designSystemId, kit.brandId, kit.projectId]);
-
-  useEffect(() => {
-    if (!lightbox && !assetPreview && !coverPreviewOpen && !designMdOpen && !colorEditor) return undefined;
-    function onKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      setLightbox(null);
-      setAssetPreview(null);
-      setCoverPreviewOpen(false);
-      setDesignMdOpen(false);
-      setColorEditor(null);
-      setColorError(null);
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [assetPreview, colorEditor, coverPreviewOpen, designMdOpen, lightbox]);
 
   useEffect(() => {
     if (!stickyHeader) {
@@ -495,6 +487,96 @@ function DesignKitViewInner({
   const imagery = kit.imagery;
   const layout = kit.layout;
   const samples = imagery?.samples ?? [];
+  const lightboxItems = useMemo(
+    () =>
+      samples
+        .map((sample, sampleIndex) => ({
+          src: sample.url,
+          caption: sample.caption || sample.kind || kit.name,
+          sample,
+          sampleIndex,
+        }))
+        .filter((item) => !brokenSrc.has(item.src)),
+    [brokenSrc, kit.name, samples],
+  );
+  const visibleLightboxItems = useMemo(
+    () => (imagesExpanded ? lightboxItems : lightboxItems.filter((item) => item.sampleIndex < IMAGE_CAP)),
+    [imagesExpanded, lightboxItems],
+  );
+  const lightboxItem = lightboxIndex === null ? null : lightboxItems[lightboxIndex] ?? null;
+  const activeLightboxItem = logoLightbox ?? lightboxItem;
+  const activeLightboxIsGallery = !logoLightbox && lightboxItem !== null && lightboxIndex !== null;
+  const hasLightboxNavigation = lightboxItems.length > 1;
+  const showPreviousLightboxImage = useCallback(() => {
+    setLightboxIndex((current) => {
+      if (current === null || lightboxItems.length === 0) return current;
+      return (current - 1 + lightboxItems.length) % lightboxItems.length;
+    });
+  }, [lightboxItems.length]);
+  const showNextLightboxImage = useCallback(() => {
+    setLightboxIndex((current) => {
+      if (current === null || lightboxItems.length === 0) return current;
+      return (current + 1) % lightboxItems.length;
+    });
+  }, [lightboxItems.length]);
+
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    if (lightboxItems.length === 0) {
+      setLightboxIndex(null);
+    } else if (lightboxIndex >= lightboxItems.length) {
+      setLightboxIndex(lightboxItems.length - 1);
+    }
+  }, [lightboxIndex, lightboxItems.length]);
+
+  useEffect(() => {
+    if (
+      lightboxIndex === null &&
+      !logoLightbox &&
+      !assetPreview &&
+      !coverPreviewOpen &&
+      !designMdOpen &&
+      !colorEditor
+    ) {
+      return undefined;
+    }
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        setLightboxIndex(null);
+        setLogoLightbox(null);
+        setAssetPreview(null);
+        setCoverPreviewOpen(false);
+        setDesignMdOpen(false);
+        setColorEditor(null);
+        setColorError(null);
+        return;
+      }
+      if (logoLightbox || lightboxIndex === null || lightboxItems.length <= 1) return;
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        showPreviousLightboxImage();
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        showNextLightboxImage();
+      }
+    }
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [
+    assetPreview,
+    colorEditor,
+    coverPreviewOpen,
+    designMdOpen,
+    lightboxIndex,
+    lightboxItems.length,
+    logoLightbox,
+    showNextLightboxImage,
+    showPreviousLightboxImage,
+  ]);
+
   const dsKitUrl = dsTheme === 'dark' ? kit.system?.kitDarkUrl ?? kit.system?.kitUrl : kit.system?.kitUrl;
   const canUpload = Boolean(kit.canUpload && onUploadModule);
   const canEditDesignMd = Boolean(designMd?.canEdit !== false && designMd?.onSave);
@@ -542,6 +624,22 @@ function DesignKitViewInner({
     [t],
   );
 
+  function uploadElementForModule(module: KitUploadModule): DesignSystemEditClickProps['element'] {
+    return module === 'logo' ? 'logo_upload' : module === 'font' ? 'font_upload' : 'image_upload';
+  }
+
+  function uploadTrackingModule(module: KitUploadModule): DesignSystemEditClickProps['module'] {
+    return module === 'logo' ? 'logo' : module === 'font' ? 'typography' : 'images';
+  }
+
+  function designMdTrackingModule(module: DesignMdModuleSpec): DesignSystemEditClickProps['module'] {
+    if (module.id === 'typography') return 'typography';
+    if (module.id === 'palette') return 'palette';
+    if (module.id === 'imageryLayout') return 'images';
+    if (module.id === 'designSystem') return 'kit';
+    return 'design_md';
+  }
+
   function handleFile(module: KitUploadModule, event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -574,7 +672,10 @@ function DesignKitViewInner({
         ? /\.(otf|ttf|woff2?)$/i.test(f.name)
         : f.type.startsWith('image/') || /\.svg$/i.test(f.name),
     );
-    if (file) onUploadModule(module, file);
+    if (file) {
+      onEditClick?.(uploadElementForModule(module), uploadTrackingModule(module));
+      onUploadModule(module, file);
+    }
   }
 
   async function pasteImage(module: Exclude<KitUploadModule, 'font'>) {
@@ -586,6 +687,7 @@ function DesignKitViewInner({
         if (!imageType) continue;
         const blob = await item.getType(imageType);
         const ext = imageType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+        onEditClick?.(uploadElementForModule(module), uploadTrackingModule(module));
         onActionFeedback?.('loading', t('ds.uploading'));
         onUploadModule(module, new File([blob], `clipboard-${module}-${Date.now()}.${ext}`, { type: imageType }));
         return;
@@ -597,6 +699,7 @@ function DesignKitViewInner({
 
   function openDesignMdEditor() {
     if (!designMd) return;
+    onEditClick?.('design_md_edit', 'design_md');
     setDesignMdTarget({ kind: 'all' });
     setDesignMdDraft(designMd.body);
     setDesignMdOpen(true);
@@ -604,6 +707,7 @@ function DesignKitViewInner({
 
   function openDesignMdModuleEditor(module: DesignMdModuleSpec) {
     if (!designMd) return;
+    onEditClick?.('design_md_edit', designMdTrackingModule(module));
     const slice = designMdModuleSlice(designMd.body, module);
     setDesignMdTarget({ kind: 'module', module });
     setDesignMdDraft(slice.text);
@@ -626,12 +730,14 @@ function DesignKitViewInner({
 
   async function copyDesignMd() {
     if (!designMd?.body) return;
+    onEditClick?.('design_md_copy', 'design_md');
     await copyDesignMdText(designMd.body);
   }
 
   async function copyDesignMdModule(module: DesignMdModuleSpec) {
     if (!designMd?.body) return;
     const slice = designMdModuleSlice(designMd.body, module);
+    onEditClick?.('design_md_copy', designMdTrackingModule(module));
     await copyDesignMdText(slice.text);
   }
 
@@ -644,7 +750,7 @@ function DesignKitViewInner({
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
     const target = event.target as HTMLElement;
     if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
-    if (designMdOpen || colorEditor || lightbox || assetPreview) return;
+    if (designMdOpen || colorEditor || lightboxIndex !== null || logoLightbox || assetPreview) return;
     const key = event.key.toLowerCase();
     if (key === 'e' && canEditDesignMd) {
       event.preventDefault();
@@ -654,9 +760,11 @@ function DesignKitViewInner({
       void copyDesignMd();
     } else if (key === 'u' && canUpload) {
       event.preventDefault();
+      onEditClick?.('logo_upload', 'logo');
       logoInputRef.current?.click();
     } else if (key === 'r' && onRefresh) {
       event.preventDefault();
+      onEditClick?.('kit_refresh', 'kit');
       onRefresh();
     } else if (
       (event.key === 'Delete' || event.key === 'Backspace') &&
@@ -665,6 +773,7 @@ function DesignKitViewInner({
       target.closest('[data-kit-logo-stage]')
     ) {
       event.preventDefault();
+      onEditClick?.('logo_delete', 'logo');
       void onDeleteLogo(activeLogo);
     }
   }
@@ -681,6 +790,7 @@ function DesignKitViewInner({
   function openColorEditor(index: number) {
     const color = colors[index];
     if (!color) return;
+    onEditClick?.('color_edit', 'palette');
     setColorEditor({
       index,
       label: color.name || color.role || `Color ${index + 1}`,
@@ -736,6 +846,7 @@ function DesignKitViewInner({
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    onEditClick?.('design_md_upload', 'design_md');
     const text = await file.text();
     setDesignMdTarget({ kind: 'all' });
     setDesignMdDraft(text);
@@ -816,7 +927,10 @@ function DesignKitViewInner({
     return moduleActionButton(
       label,
       'upload',
-      () => (module === 'logo' ? logoInputRef : module === 'font' ? fontInputRef : imageInputRef).current?.click(),
+      () => {
+        onEditClick?.(uploadElementForModule(module), uploadTrackingModule(module));
+        (module === 'logo' ? logoInputRef : module === 'font' ? fontInputRef : imageInputRef).current?.click();
+      },
       Boolean(uploading || anyActionBusy),
       busy,
     );
@@ -832,7 +946,10 @@ function DesignKitViewInner({
             className={styles.uploadBtn}
             disabled={uploading === module || anyActionBusy}
             aria-busy={(uploading === module || actionBusy === `upload:${module}`) || undefined}
-            onClick={() => (module === 'logo' ? logoInputRef : module === 'font' ? fontInputRef : imageInputRef).current?.click()}
+            onClick={() => {
+              onEditClick?.(uploadElementForModule(module), uploadTrackingModule(module));
+              (module === 'logo' ? logoInputRef : module === 'font' ? fontInputRef : imageInputRef).current?.click();
+            }}
           >
             {uploading === module || actionBusy === `upload:${module}`
               ? t('ds.uploading')
@@ -961,7 +1078,10 @@ function DesignKitViewInner({
           <button
             type="button"
             className={styles.coverImageButton}
-            onClick={() => setLightbox({ src: activeLogoSrc, caption: kit.name })}
+            onClick={() => {
+              setLightboxIndex(null);
+              setLogoLightbox({ src: activeLogoSrc, caption: kit.name });
+            }}
             aria-label={`${t('common.openPreview')}: ${kit.name}`}
           >
             <BrandLogo
@@ -1087,7 +1207,10 @@ function DesignKitViewInner({
                       ? moduleActionButton(
                           t('ds.deleteLogo'),
                           'trash',
-                          () => void onDeleteLogo(activeLogo),
+                          () => {
+                            onEditClick?.('logo_delete', 'logo');
+                            void onDeleteLogo(activeLogo);
+                          },
                           Boolean(uploading || anyActionBusy),
                           actionBusy === `delete-logo:${activeLogo}`,
                         )
@@ -1101,7 +1224,10 @@ function DesignKitViewInner({
                     type="button"
                     className={`${styles.logoStage} ${styles.logoStageButton}`}
                     data-kit-logo-stage
-                    onClick={() => setLightbox({ src: activeLogoSrc, caption: kit.name })}
+                    onClick={() => {
+                      setLightboxIndex(null);
+                      setLogoLightbox({ src: activeLogoSrc, caption: kit.name });
+                    }}
                     aria-label={`${t('common.openPreview')}: ${kit.name}`}
                   >
                     <img
@@ -1347,19 +1473,22 @@ function DesignKitViewInner({
               </div>
               {samples.length > 0 ? (
                 <div className={styles.gallery}>
-                  {(imagesExpanded ? samples : samples.slice(0, IMAGE_CAP)).map((s, i) => {
-                    const sampleIndex = imagesExpanded ? i : i;
-                    // Drop tiles whose source 404s/fails so the grid never shows
-                    // a broken-image glyph. Returning null keeps the remaining
-                    // tiles' indices aligned with the delete handler.
-                    if (brokenSrc.has(s.url)) return null;
-                    const cap = s.caption || s.kind || kit.name;
+                  {visibleLightboxItems.map((item) => {
+                    const s = item.sample;
+                    const sampleIndex = item.sampleIndex;
+                    const cap = item.caption;
                     return (
-                      <figure key={`${s.url}-${i}`} className={styles.shot}>
+                      <figure key={`${s.url}-${sampleIndex}`} className={styles.shot}>
                         <button
                           type="button"
                           className={styles.shotFrame}
-                          onClick={() => setLightbox({ src: s.url, caption: cap })}
+                          onClick={() => {
+                            setLogoLightbox(null);
+                            const nextLightboxIndex = lightboxItems.findIndex(
+                              (candidate) => candidate.sampleIndex === item.sampleIndex,
+                            );
+                            setLightboxIndex(nextLightboxIndex >= 0 ? nextLightboxIndex : null);
+                          }}
                           aria-label={cap}
                         >
                           <img src={s.url} alt={cap} loading="lazy" onError={() => markBroken(s.url)} />
@@ -1370,7 +1499,10 @@ function DesignKitViewInner({
                             className={`${styles.shotDelete} ${
                               actionBusy === `delete-image:${sampleIndex}` ? styles.shotDeleteLoading : ''
                             }`}
-                            onClick={() => void onDeleteImage(sampleIndex)}
+                            onClick={() => {
+                              onEditClick?.('image_delete', 'images');
+                              void onDeleteImage(sampleIndex);
+                            }}
                             disabled={Boolean(uploading || anyActionBusy)}
                             aria-busy={(actionBusy === `delete-image:${sampleIndex}`) || undefined}
                             aria-label={t('ds.deleteImage', { caption: cap })}
@@ -1402,10 +1534,30 @@ function DesignKitViewInner({
                 {moduleActions(
                   <>
                     {designMdModuleActionButtons(designMdModules.designSystem)}
-                    {!stickyHeader && onRefresh ? moduleActionButton(t('ds.refresh'), 'refresh', onRefresh, anyActionBusy, actionBusy === 'refresh') : null}
-                    {!stickyHeader && onDownload ? moduleActionButton(t('ds.download'), 'download', onDownload, anyActionBusy, actionBusy === 'download') : null}
-                    {!stickyHeader && onImport ? moduleActionButton(t('ds.importFolder'), 'import', onImport, anyActionBusy, actionBusy === 'import') : null}
-                    {!stickyHeader && onReset ? moduleActionButton(t('ds.reset'), 'reload', onReset, anyActionBusy, actionBusy === 'reset') : null}
+                    {!stickyHeader && onRefresh
+                      ? moduleActionButton(t('ds.refresh'), 'refresh', () => {
+                          onEditClick?.('kit_refresh', 'kit');
+                          onRefresh();
+                        }, anyActionBusy, actionBusy === 'refresh')
+                      : null}
+                    {!stickyHeader && onDownload
+                      ? moduleActionButton(t('ds.download'), 'download', () => {
+                          onEditClick?.('kit_download', 'kit');
+                          onDownload();
+                        }, anyActionBusy, actionBusy === 'download')
+                      : null}
+                    {!stickyHeader && onImport
+                      ? moduleActionButton(t('ds.importFolder'), 'import', () => {
+                          onEditClick?.('kit_import', 'kit');
+                          onImport();
+                        }, anyActionBusy, actionBusy === 'import')
+                      : null}
+                    {!stickyHeader && onReset
+                      ? moduleActionButton(t('ds.reset'), 'reload', () => {
+                          onEditClick?.('kit_reset', 'kit');
+                          onReset();
+                        }, anyActionBusy, actionBusy === 'reset')
+                      : null}
                   </>,
                 )}
               </div>
@@ -1506,28 +1658,73 @@ function DesignKitViewInner({
       {typeof document !== 'undefined'
         ? createPortal(
             <>
-              {lightbox ? (
+              {activeLightboxItem ? (
                 <div
                   className={styles.lightbox}
                   role="dialog"
                   aria-modal="true"
-                  aria-label={lightbox.caption}
-                  onClick={() => setLightbox(null)}
+                  aria-label={activeLightboxItem.caption}
+                  onClick={() => {
+                    setLightboxIndex(null);
+                    setLogoLightbox(null);
+                  }}
                 >
                   <button
                     type="button"
                     className={styles.lightboxClose}
-                    onClick={() => setLightbox(null)}
+                    onClick={() => {
+                      setLightboxIndex(null);
+                      setLogoLightbox(null);
+                    }}
                     aria-label={t('newBrand.close')}
                   >
                     <CloseGlyph />
                   </button>
-                  <img
-                    className={styles.lightboxImg}
-                    src={lightbox.src}
-                    alt={lightbox.caption}
-                    onClick={(e) => e.stopPropagation()}
-                  />
+                  {activeLightboxIsGallery && hasLightboxNavigation ? (
+                    <button
+                      type="button"
+                      className={`${styles.lightboxNav} ${styles.lightboxNavPrev}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        showPreviousLightboxImage();
+                      }}
+                      aria-label={t('designFiles.prev')}
+                      title={t('designFiles.prev')}
+                    >
+                      <Icon name="chevron-left" size={28} />
+                    </button>
+                  ) : null}
+                  <div className={styles.lightboxStage} onClick={(event) => event.stopPropagation()}>
+                    <img
+                      key={activeLightboxItem.src}
+                      className={styles.lightboxImg}
+                      src={activeLightboxItem.src}
+                      alt={activeLightboxItem.caption}
+                      onError={() => markBroken(activeLightboxItem.src)}
+                    />
+                    <div className={styles.lightboxInfo}>
+                      <span className={styles.lightboxCaption}>{activeLightboxItem.caption}</span>
+                      {activeLightboxIsGallery ? (
+                        <span className={styles.lightboxCount}>
+                          {(lightboxIndex ?? 0) + 1} / {lightboxItems.length}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  {activeLightboxIsGallery && hasLightboxNavigation ? (
+                    <button
+                      type="button"
+                      className={`${styles.lightboxNav} ${styles.lightboxNavNext}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        showNextLightboxImage();
+                      }}
+                      aria-label={t('designFiles.next')}
+                      title={t('designFiles.next')}
+                    >
+                      <Icon name="chevron-right" size={28} />
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
 

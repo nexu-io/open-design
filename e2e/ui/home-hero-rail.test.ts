@@ -5,6 +5,8 @@ import { routeAgents } from '@/playwright/mock-factory';
 test.describe.configure({ timeout: 30_000 });
 
 const STORAGE_KEY = 'open-design:config';
+const LOCALE_KEY = 'open-design:locale';
+const LOCALE_SOURCE_KEY = 'open-design:locale-source';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 
 const HOME_CONFIG = {
@@ -19,6 +21,67 @@ const HOME_CONFIG = {
   agentModels: { codex: { model: 'default', reasoning: 'default' } },
   privacyDecisionAt: 1,
   telemetry: { metrics: false, content: false, artifactManifest: false },
+};
+
+const HOME_DESIGN_SYSTEMS = [
+  {
+    id: 'agentic',
+    title: 'Agentic',
+    category: 'Productivity & SaaS',
+    summary: 'Conversational AI-first interface with minimal controls.',
+    surface: 'web',
+    swatches: ['#ff5a1f', '#111827'],
+  },
+  {
+    id: 'airbnb',
+    title: 'Airbnb',
+    category: 'E-Commerce & Retail',
+    summary: 'Travel marketplace with warm coral accents.',
+    surface: 'web',
+    swatches: ['#a3165b', '#ff385c'],
+  },
+];
+
+const BRAND_DESIGN_SYSTEM = {
+  id: 'user:brand-acme',
+  title: 'Acme Brand Kit',
+  category: 'Brand',
+  summary: 'Acme brand kit.',
+  source: 'user',
+  isEditable: true,
+  surface: 'web',
+  status: 'published',
+  swatches: ['#0b5fff', '#0a0a0a'],
+};
+
+const ACME_BRAND = {
+  meta: {
+    id: 'brand-acme',
+    sourceUrl: 'https://acme.example.com',
+    createdAt: 0,
+    updatedAt: 0,
+    status: 'ready',
+    designSystemId: BRAND_DESIGN_SYSTEM.id,
+    projectId: 'brand-project-acme',
+  },
+  brand: {
+    name: 'Acme',
+    tagline: 'Build the future, faster.',
+    description: 'Acme is a bold engineering brand for fast-moving teams.',
+    sourceUrl: 'https://acme.example.com',
+    logo: { primary: 'logos/acme.svg', alternates: [], notes: '' },
+    colors: [
+      { role: 'accent', hex: '#0b5fff', oklch: '', name: 'Signal Blue', usage: 'Primary actions' },
+      { role: 'background', hex: '#0a0a0a', oklch: '', name: 'Ink', usage: 'Surfaces' },
+    ],
+    typography: {
+      display: { family: 'Space Grotesk', fallbacks: ['sans-serif'], weights: [500, 700] },
+      body: { family: 'Inter', fallbacks: ['sans-serif'], weights: [400, 600] },
+    },
+    voice: { adjectives: [], tone: '', messagingPillars: [], vocabulary: { use: [], avoid: [] } },
+    imagery: { style: '', subjects: [], treatment: '', avoid: [], samples: [] },
+    layout: { radius: '', borderWeight: '', spacing: '', postureRules: [] },
+  },
 };
 
 const HOME_PLUGINS = [
@@ -41,6 +104,7 @@ const HOME_PLUGINS = [
       od: {
         kind: 'scenario',
         taskKind: 'new-generation',
+        preview: { entry: './example.html' },
         useCase: {
           query:
             'Build a {{fidelity}} {{artifactKind}} for {{audience}} using {{designSystem}} from {{template}}.',
@@ -275,6 +339,16 @@ async function seedBrowserConfig(page: Page, config: Record<string, unknown>) {
   );
 }
 
+async function seedBrowserLocale(page: Page, locale: string) {
+  await page.addInitScript(
+    ({ localeKey, sourceKey, value }) => {
+      window.localStorage.setItem(localeKey, value);
+      window.localStorage.setItem(sourceKey, 'manual');
+    },
+    { localeKey: LOCALE_KEY, sourceKey: LOCALE_SOURCE_KEY, value: locale },
+  );
+}
+
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
@@ -433,10 +507,15 @@ test('[P1] home composer plus menu exposes attachment, connector, plugin, and MC
   await expect(page.getByTestId('home-hero-staged-files')).toContainText('package.json');
 });
 
-test('[P2] home hero rail shows the current creation chips and More shortcuts', async ({ page }) => {
+test('[P2] home hero exposes the template picker, starter cards, blank project, and More shortcuts', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('entry-star-badge')).toContainText('51.6K');
+  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-design-system-picker')).toBeVisible();
+  await expect(page.getByTestId('working-dir-picker')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-section')).toBeVisible();
+  await expect(page.getByTestId('home-hero-blank-project')).toBeVisible();
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
   for (const id of ['prototype', 'live-artifact', 'deck', 'image', 'video', 'hyperframes', 'audio']) {
     await expect(page.getByTestId(`home-hero-rail-${id}`)).toBeVisible();
@@ -449,6 +528,291 @@ test('[P2] home hero rail shows the current creation chips and More shortcuts', 
   for (const id of ['create-plugin', 'figma', 'template']) {
     await expect(menu.getByTestId(`home-hero-rail-${id}`)).toBeVisible();
   }
+});
+
+test('[P0] empty home composer submits the active placeholder suggestion with template routing', async ({ page }) => {
+  await routeProjectCreates(page);
+  await routeRunsAccepted(page);
+  await gotoEntryHome(page);
+
+  await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
+  const createRequestPromise = page.waitForRequest((request) =>
+    request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
+  );
+  await page.getByTestId('home-hero-submit').click();
+  const createRequest = await createRequestPromise;
+  const body = createRequest.postDataJSON() as {
+    pendingPrompt?: string;
+    pluginId?: string | null;
+    metadata?: { kind?: string };
+  };
+
+  expect(body.pendingPrompt?.trim()).toBeTruthy();
+  expect(typeof body.pluginId).toBe('string');
+  expect(typeof body.metadata?.kind).toBe('string');
+  await expect(page).toHaveURL(/\/projects\//);
+});
+
+test('[P0] home design-system picker carries explicit and cleared selections into project creation', async ({ page }) => {
+  await routeHomeDesignSystems(page);
+  await routeProjectCreates(page);
+  await routeRunsAccepted(page);
+  await gotoEntryHome(page);
+
+  await selectHomeDesignSystem(page, 'agentic');
+  await page.getByTestId('home-hero-template-trigger').click();
+  await page.getByTestId('home-hero-template-card-deck').click();
+  await page.getByTestId('home-hero-input').fill('Create a design-system aware deck.');
+
+  const selectedRequestPromise = page.waitForRequest((request) =>
+    request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
+  );
+  await page.getByTestId('home-hero-submit').click();
+  const selectedBody = selectedRequestPromise.then((request) => request.postDataJSON() as { designSystemId?: string | null });
+  await expect.poll(async () => (await selectedBody).designSystemId).toBe('agentic');
+
+  await gotoEntryHome(page);
+  await selectHomeDesignSystem(page, 'agentic');
+  await selectHomeDesignSystem(page, null);
+  await page.getByTestId('home-hero-input').fill('Create without a design system.');
+
+  const clearedRequestPromise = page.waitForRequest((request) =>
+    request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
+  );
+  await page.getByTestId('home-hero-submit').click();
+  const clearedBody = await clearedRequestPromise.then((request) => request.postDataJSON() as { designSystemId?: string | null });
+  expect(clearedBody.designSystemId ?? null).toBeNull();
+});
+
+test('[P1] home Brand Kit chip opens design-system creation and starts brand extraction', async ({ page }) => {
+  const brandRequests: Array<{ url?: string; locale?: string }> = [];
+  await routeHomeDesignSystems(page);
+  await routeProjectCreates(page);
+  await routeRunsAccepted(page);
+  await routeBrandExtraction(page, brandRequests);
+
+  await gotoEntryHome(page);
+  await page.getByTestId('home-hero-rail-create-brand-kit').click();
+
+  await expect(page).toHaveURL(/\/design-systems\/create$/);
+  await expect(page.getByRole('heading', { name: /Design a system, in minutes/i })).toBeVisible();
+
+  await page.getByPlaceholder('https://github.com/org/repo').fill('https://acme.example.com');
+  await page.getByRole('button', { name: 'Add' }).first().click();
+  await page.getByRole('button', { name: /continue to generation/i }).click();
+
+  await expect
+    .poll(() => brandRequests.at(-1)?.url)
+    .toBe('https://acme.example.com');
+  await expect(page).toHaveURL(/\/projects\/brand-project-acme$/);
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
+  await expect(page.getByTestId('design-system-project-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('design-system-project-tab-panel')).toBeVisible();
+  await expect(page.getByTestId('design-system-extraction-status')).toContainText(/Extracting design system|正在提取|正在擷取/i);
+});
+
+test('[P1] brand-backed design system previews as a Brand Kit and carries into project creation', async ({ page }) => {
+  await routeHomeDesignSystems(page, { includeBrandKit: true });
+  await routeProjectCreates(page);
+  await routeRunsAccepted(page);
+  await gotoEntryHome(page);
+
+  await page.getByTestId('home-hero-design-system-trigger').click();
+  const popover = page.getByTestId('project-ds-picker-popover');
+  await expect(popover).toBeVisible();
+  await expect(popover.getByTestId(`project-ds-picker-option-${BRAND_DESIGN_SYSTEM.id}`)).toBeVisible();
+  await popover.getByTestId(`project-ds-picker-option-${BRAND_DESIGN_SYSTEM.id}`).hover();
+
+  const brandPreview = page.getByTestId('project-ds-picker-preview-brand');
+  await expect(brandPreview).toBeVisible();
+  await expect(brandPreview.getByTestId('brand-preview-card')).toBeVisible();
+  await expect(brandPreview).toContainText('Acme is a bold engineering brand for fast-moving teams.');
+  await expect(brandPreview).toContainText('Space Grotesk');
+
+  await popover.getByTestId(`project-ds-picker-option-${BRAND_DESIGN_SYSTEM.id}`).click();
+  await expect(popover).toHaveCount(0);
+
+  await page.getByTestId('home-hero-input').fill('Create a landing page with the Acme brand kit.');
+  const createRequestPromise = page.waitForRequest((request) =>
+    request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
+  );
+  await page.getByTestId('home-hero-submit').click();
+  const body = await createRequestPromise.then((request) => request.postDataJSON() as { designSystemId?: string | null });
+  expect(body.designSystemId).toBe(BRAND_DESIGN_SYSTEM.id);
+});
+
+test('[P1] home template carousel scrolls horizontally without page overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 920, height: 820 });
+  await gotoEntryHome(page);
+
+  const rail = page.locator('.home-hero__scenario-cards').first();
+  await expect(rail).toBeVisible();
+  const initial = await rail.evaluate((el) => ({
+    scrollLeft: el.scrollLeft,
+    scrollWidth: el.scrollWidth,
+    clientWidth: el.clientWidth,
+    pageOverflow: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+  }));
+  expect(initial.scrollWidth).toBeGreaterThan(initial.clientWidth);
+  expect(initial.pageOverflow).toBeLessThanOrEqual(2);
+
+  await page.locator('.home-hero__rail-edge--right').first().click({ force: true });
+  await expect
+    .poll(() => rail.evaluate((el) => el.scrollLeft), { timeout: 3_000 })
+    .toBeGreaterThan(initial.scrollLeft);
+});
+
+test('[P1] first-run home template reveal opens from wheel gesture', async ({ page }) => {
+  await gotoEntryHome(page);
+
+  const revealBody = page.locator('.home-templates-reveal__body');
+  await expect(page.getByTestId('home-templates-hint')).toBeVisible();
+  await expect(revealBody).toHaveAttribute('aria-hidden', 'true');
+
+  await page.mouse.wheel(0, 500);
+
+  await expect(revealBody).toHaveAttribute('aria-hidden', 'false');
+  await expect(page.getByTestId('entry-view-home').getByTestId('plugins-home-section')).toBeVisible();
+});
+
+test('[P1] blank project entry surfaces create failures and remains retryable', async ({ page }) => {
+  await routeProjectCreates(page, { failFirstCreate: true });
+  await gotoEntryHome(page);
+
+  await page.getByTestId('home-hero-blank-project').click();
+  await expect(page.locator('.home-hero__error')).toContainText(/blank project|空白项目|空白專案|create/i);
+
+  const retryRequestPromise = page.waitForRequest((request) =>
+    request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
+  );
+  await page.getByTestId('home-hero-blank-project').click();
+  await retryRequestPromise;
+  await expect(page.locator('.home-hero__error')).toHaveCount(0);
+});
+
+test('[P2] home template picker supports no-results, clear, Escape, and outside dismissal', async ({ page }) => {
+  await gotoEntryHome(page);
+
+  await page.getByTestId('home-hero-template-trigger').click();
+  await page.getByTestId('home-hero-template-card-deck').click();
+  await expect(page.getByTestId('home-hero-template-reset')).toBeVisible();
+
+  await page.getByTestId('home-hero-template-trigger').click();
+  await page.getByTestId('home-hero-template-search').fill('zzzz-no-template');
+  await expect(page.getByTestId('home-hero-template-menu')).toContainText(/No matches|没有匹配|沒有相符/i);
+  await page.getByTestId('home-hero-template-clear').click();
+  await expect(page.getByTestId('home-hero-active-type-chip')).toHaveCount(0);
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('home-hero-template-menu')).toHaveCount(0);
+
+  await page.getByTestId('home-hero-template-trigger').click();
+  await expect(page.getByTestId('home-hero-template-menu')).toBeVisible();
+  await page.getByTestId('home-hero-input').click();
+  await expect(page.getByTestId('home-hero-template-menu')).toHaveCount(0);
+});
+
+test('[P2] zh-CN home smoke exposes the localized template, design system, working directory, and send entries', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('open-design:locale', 'zh-CN');
+    window.localStorage.setItem('open-design:locale-source', 'manual');
+  });
+  await seedBrowserLocale(page, 'zh-CN');
+  await routeHomeDesignSystems(page);
+  await gotoEntryHome(page);
+
+  await expect(page.getByRole('heading', { name: '你今天要设计什么？' })).toBeVisible();
+  await expect(page.getByText('从模板开始…')).toBeVisible();
+  await expect(page.getByText('…或创建一个空白项目')).toBeVisible();
+  await expect(page.getByText('不指定设计系统')).toBeVisible();
+  await expect(page.getByTestId('working-dir-picker')).toContainText(/本地存储|选择工作目录/);
+  await expect(page.getByTestId('home-hero-submit')).toContainText('发送');
+});
+
+test('[P1] home template picker selects a starter template and can clear it', async ({ page }) => {
+  await gotoEntryHome(page);
+
+  await page.getByTestId('home-hero-template-trigger').click();
+  const menu = page.getByTestId('home-hero-template-menu');
+  await expect(menu).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-card-prototype')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-card-deck')).toBeVisible();
+
+  await page.getByTestId('home-hero-template-search').fill('deck');
+  await expect(page.getByTestId('home-hero-template-card-deck')).toBeVisible();
+  await page.getByTestId('home-hero-template-card-deck').click();
+
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/Slide deck|幻灯片|投影片/i);
+
+  await page.getByTestId('home-hero-template-reset').click();
+  await expect(page.getByTestId('home-hero-footer-option-speakerNotes')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/None|无|無/i);
+});
+
+test('[P1] first-run home keeps community templates collapsed until the hint is used', async ({ page }) => {
+  await gotoEntryHome(page);
+
+  const home = page.getByTestId('entry-view-home');
+  const revealBody = page.locator('.home-templates-reveal__body');
+  await expect(page.getByTestId('recent-projects-strip')).toHaveCount(0);
+  await expect(page.getByTestId('home-templates-hint')).toBeVisible();
+  await expect(home.getByTestId('plugins-home-section')).toBeAttached();
+  await expect(revealBody).toHaveAttribute('aria-hidden', 'true');
+
+  await page.getByTestId('home-templates-hint').click();
+
+  await expect(revealBody).toHaveAttribute('aria-hidden', 'false');
+  await expect(home.getByTestId('plugins-home-section')).toBeVisible();
+  await expect(home.getByTestId('plugins-home-browse-registry')).toBeVisible();
+  await expect(home.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
+  await expect(home.locator('article.plugins-home__card[data-plugin-id="example-web-prototype"]')).toBeVisible();
+});
+
+test('[P1] blank project entry creates an empty project without prompt or template metadata', async ({ page }) => {
+  await page.route('**/api/projects', async (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') {
+      await route.fulfill({ json: { projects: [] } });
+      return;
+    }
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON() as { id?: string; name?: string };
+      await route.fulfill({
+        json: {
+          project: {
+            id: body.id ?? 'blank-project-entry',
+            name: body.name ?? 'Untitled project',
+            path: `/tmp/open-design/${body.id ?? 'blank-project-entry'}`,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            metadata: {},
+          },
+          conversationId: `conv-${body.id ?? 'blank-project-entry'}`,
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await gotoEntryHome(page);
+
+  const createRequestPromise = page.waitForRequest((request) =>
+    request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
+  );
+  await page.getByTestId('home-hero-blank-project').click();
+  const createRequest = await createRequestPromise;
+  const body = createRequest.postDataJSON() as {
+    pendingPrompt?: string;
+    pluginId?: string | null;
+    skillId?: string | null;
+    metadata?: { kind?: string };
+  };
+
+  expect(body.pendingPrompt).toBeUndefined();
+  expect(body.pluginId ?? null).toBeNull();
+  expect(body.skillId ?? null).toBeNull();
+  expect(body.metadata?.kind ?? null).toBeNull();
 });
 
 test('[P1] home hero rail switches non-media modes without surfacing media-only footer options', async ({ page }) => {
@@ -523,6 +887,72 @@ test('[P1] home hero example presets update the composer input for prototype and
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="image-template-notion-team-dashboard-live-artifact"]')
     .click();
   await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
+});
+
+test('[P1] home hero preset inline Use and Duplicate actions work from the template card', async ({ page }) => {
+  const duplicateRequests: Array<{ name?: string }> = [];
+  await page.route('**/api/plugins/example-web-prototype/duplicate-project', async (route) => {
+    duplicateRequests.push(route.request().postDataJSON() as { name?: string });
+    await route.fulfill({
+      json: {
+        ok: true,
+        sourcePluginId: 'example-web-prototype',
+        projectId: 'web-prototype-template-project',
+        conversationId: 'web-prototype-template-conversation',
+        relPath: 'index.html',
+      },
+    });
+  });
+  await page.route('**/api/projects/web-prototype-template-project', async (route) => {
+    await route.fulfill({
+      json: {
+        project: {
+          id: 'web-prototype-template-project',
+          name: 'Web Prototype',
+          path: '/tmp/open-design/web-prototype-template-project',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          metadata: { kind: 'prototype', duplicatedFromPluginId: 'example-web-prototype' },
+        },
+      },
+    });
+  });
+  await page.route('**/api/projects/web-prototype-template-project/conversations', async (route) => {
+    await route.fulfill({
+      json: {
+        conversations: [
+          {
+            id: 'web-prototype-template-conversation',
+            title: 'Web Prototype',
+            projectId: 'web-prototype-template-project',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            sessionMode: 'design',
+          },
+        ],
+      },
+    });
+  });
+  await page.route('**/api/projects/web-prototype-template-project/conversations/*/messages**', async (route) => {
+    await route.fulfill({ json: { messages: [] } });
+  });
+
+  await gotoEntryHome(page);
+  await page.getByTestId('home-hero-rail-prototype').click();
+  const card = page.locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-web-prototype"]');
+  await card.hover();
+
+  await page.getByTestId('home-hero-plugin-preset-use-example-web-prototype').click();
+  await expect(page.getByTestId('home-hero-input')).toHaveText(
+    'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
+  );
+
+  await card.hover();
+  await page.getByTestId('home-hero-plugin-preset-duplicate-example-web-prototype').click();
+  await expect
+    .poll(() => duplicateRequests.at(-1)?.name)
+    .toBe('Web Prototype');
+  await expect(page).toHaveURL(/\/projects\/web-prototype-template-project/);
 });
 
 test('[P1] home hero deck example preset updates the composer input', async ({ page }) => {
@@ -630,4 +1060,188 @@ async function clearActiveChip(page: Page) {
   await page.getByTestId('home-hero-active-type-chip').click();
   await expect(page.getByTestId('home-hero-active-type-chip')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
+}
+
+async function routeRunsAccepted(page: Page) {
+  await page.route('**/api/runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"home-run-smoke"}',
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
+    });
+  });
+}
+
+async function routeProjectCreates(page: Page, options: { failFirstCreate?: boolean } = {}) {
+  let createCount = 0;
+  await page.route('**/api/projects', async (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') {
+      await route.fulfill({ json: { projects: [] } });
+      return;
+    }
+    if (request.method() === 'POST') {
+      createCount += 1;
+      if (options.failFirstCreate && createCount === 1) {
+        await route.fulfill({ status: 500, body: 'create failed' });
+        return;
+      }
+      const body = request.postDataJSON() as { id?: string; name?: string; metadata?: Record<string, unknown> };
+      const id = body.id ?? `home-created-${createCount}`;
+      await route.fulfill({
+        json: {
+          project: {
+            id,
+            name: body.name ?? 'Untitled project',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            metadata: body.metadata ?? {},
+          },
+          conversationId: `conv-${id}`,
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+}
+
+async function routeHomeDesignSystems(page: Page, options: { includeBrandKit?: boolean } = {}) {
+  const systems = options.includeBrandKit
+    ? [BRAND_DESIGN_SYSTEM, ...HOME_DESIGN_SYSTEMS]
+    : HOME_DESIGN_SYSTEMS;
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { config: HOME_CONFIG } });
+      return;
+    }
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({ json: { ok: true } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/design-systems', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { designSystems: systems } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/brands', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        json: {
+          brands: options.includeBrandKit ? [ACME_BRAND] : [],
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/design-systems/*/showcase', async (route) => {
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? '');
+    await route.fulfill({
+      contentType: 'text/html',
+      body: `<!doctype html><html><body><main><h1>${id} showcase</h1></main></body></html>`,
+    });
+  });
+}
+
+async function routeBrandExtraction(
+  page: Page,
+  requests: Array<{ url?: string; locale?: string }>,
+) {
+  let started = false;
+  await page.route('**/api/brands', async (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') {
+      await route.fulfill({ json: { brands: started ? [{ ...ACME_BRAND, meta: { ...ACME_BRAND.meta, status: 'extracting' } }] : [] } });
+      return;
+    }
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON() as { url?: string; locale?: string };
+      requests.push(body);
+      started = true;
+      await route.fulfill({
+        json: {
+          id: 'brand-acme',
+          projectId: 'brand-project-acme',
+          conversationId: 'conv-brand-acme',
+          sourceUrl: body.url ?? 'https://acme.example.com',
+          status: 'extracting',
+          designSystemId: BRAND_DESIGN_SYSTEM.id,
+          brandName: 'Acme',
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/projects/brand-project-acme', async (route) => {
+    await route.fulfill({
+      json: {
+        project: {
+          id: 'brand-project-acme',
+          name: 'Acme Brand Kit',
+          skillId: 'brand-extract',
+          designSystemId: null,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          metadata: {
+            kind: 'brand',
+            importedFrom: 'brand-extraction',
+            brandId: 'brand-acme',
+            brandSourceUrl: 'https://acme.example.com',
+            brandDesignSystemId: BRAND_DESIGN_SYSTEM.id,
+          },
+        },
+      },
+    });
+  });
+  await page.route('**/api/projects/brand-project-acme/conversations', async (route) => {
+    const conversation = {
+      id: 'conv-brand-acme',
+      title: 'Acme Brand Kit',
+      projectId: 'brand-project-acme',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      sessionMode: 'design',
+    };
+    if (route.request().method() === 'POST') {
+      await route.fulfill({ json: { conversation } });
+      return;
+    }
+    await route.fulfill({ json: { conversations: [conversation] } });
+  });
+  await page.route('**/api/projects/brand-project-acme/conversations/*/messages**', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { messages: [] } });
+      return;
+    }
+    await route.fulfill({ json: { ok: true } });
+  });
+}
+
+async function selectHomeDesignSystem(page: Page, id: string | null) {
+  await page.getByTestId('home-hero-design-system-trigger').click();
+  const popover = page.getByTestId('project-ds-picker-popover');
+  await expect(popover).toBeVisible();
+  if (id === null) {
+    await popover.getByRole('option', { name: /No design system|不指定设计系统|不指定設計系統/i }).click();
+  } else {
+    await popover.getByTestId(`project-ds-picker-option-${id}`).click();
+  }
+  await expect(popover).toHaveCount(0);
 }

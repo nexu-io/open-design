@@ -16,8 +16,32 @@ import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
 import type { TrackingRuntimeType } from '../analytics/public-params.js';
 
 export type ChatRole = 'user' | 'assistant';
-export type ChatSessionMode = 'design' | 'chat';
+export type ChatSessionMode = 'design' | 'chat' | 'plan';
 export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
+export type ByokChatProtocol =
+  | 'anthropic'
+  | 'openai'
+  | 'azure'
+  | 'google'
+  | 'ollama'
+  | 'senseaudio'
+  | 'aihubmix';
+
+export interface ByokChatProviderConfig {
+  protocol: ByokChatProtocol;
+  apiKey: string;
+  baseUrl?: string;
+  apiVersion?: string;
+  /** Explicit run-scoped provider policy for presets that do not require bearer credentials. */
+  requiresApiKey?: boolean;
+}
+
+export interface ByokMediaDefaults {
+  imageModel?: string;
+  videoModel?: string;
+  speechModel?: string;
+  speechVoice?: string;
+}
 
 export interface ChatRequest {
   agentId: string;
@@ -42,6 +66,17 @@ export interface ChatRequest {
   commentAttachments?: ChatCommentAttachment[];
   model?: string | null;
   reasoning?: string | null;
+  /**
+   * Run-scoped BYOK provider credentials for the daemon-backed OpenCode
+   * adapter. The daemon must not persist this object; it is translated into
+   * child env + OPENCODE_CONFIG_CONTENT for the current run only.
+   */
+  byokProvider?: ByokChatProviderConfig;
+  /**
+   * Run-scoped BYOK media defaults selected in the chat UI. The daemon uses
+   * these to guide OpenCode-backed `od media generate` calls for this run only.
+   */
+  byokMediaDefaults?: ByokMediaDefaults;
   /** UI locale selected by the client, used by prompt composition for user-visible generated UI. */
   locale?: string;
   research?: ResearchOptions;
@@ -157,11 +192,23 @@ export interface ChatAnalyticsHints {
   turnIndex?: number;
   isFirstRun?: boolean;
   hasExistingArtifact?: boolean;
+  // Per-project run turn index (0-based, project-lifetime on this device):
+  // "within THIS project, which prompt / follow-up number is this?". Unlike
+  // `turnIndex` (session-wide, spans all projects and resets each browser
+  // session), this persists in localStorage keyed by project id. Optional:
+  // omitted when storage is unavailable (SSR / privacy mode).
+  projectTurnIndex?: number;
   // Active execution runtime for THIS run, computed client-side at launch
   // (the only layer that can tell BYOK from amr_cloud). The daemon stamps it
   // onto run_created / run_finished, overriding its own BYOK-blind
   // derivation. Omitted means "let the daemon keep its derived value".
   runtimeType?: TrackingRuntimeType;
+  // Analytics-only marker that THIS run is the AI-optimize ("enrich") pass on a
+  // programmatically-extracted design system. The web AI-optimize path sets it;
+  // the daemon uses it to emit `design_system_enrich_result` and to stamp the
+  // `ai_refined` enrichment metadata on success. It carries no execution
+  // semantics — omitting it just means the run is not an enrichment pass.
+  dsEnrichment?: boolean;
 }
 
 export interface RunScopedMcpServerConfig extends Omit<McpServerConfig, 'enabled'> {
@@ -448,6 +495,22 @@ export type PersistedAgentEvent =
   | { kind: 'tool_use'; id: string; name: string; input: unknown }
   | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
   | {
+      kind: 'diagnostic';
+      name: string;
+      source?: string;
+      elapsedMs?: number;
+      reason?: string;
+      suppressedChars?: number;
+      suppressedChunks?: number;
+      openedBlocks?: number;
+      closedBlocks?: number;
+      fileCount?: number;
+      files?: string[];
+      pendingCandidateChars?: number;
+      suppressing?: boolean;
+      shape?: Record<string, unknown>;
+    }
+  | {
       kind: 'plugin_candidate';
       candidateId: string;
       title: string;
@@ -482,6 +545,7 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   commentAttachments?: ChatCommentAttachment[];
   producedFiles?: ProjectFile[];
+  traceObjectFiles?: ProjectFile[];
   // Diff baseline so reattach can rebuild producedFiles after reload.
   preTurnFileNames?: string[];
   feedback?: ChatMessageFeedback;

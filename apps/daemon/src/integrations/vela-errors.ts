@@ -7,6 +7,15 @@ export interface AmrAccountFailure {
   actionUrl?: string;
 }
 
+export interface AmrAccountFailureSignal {
+  details?: unknown;
+  message?: unknown;
+  errorMessage?: unknown;
+  errorCode?: unknown;
+  stdoutTail?: unknown;
+  stderrTail?: unknown;
+}
+
 // `source=open_design` tags the wallet landing page_view so vela analytics can
 // attribute the recharge visit to Open Design.
 export const DEFAULT_AMR_RECHARGE_URL =
@@ -44,6 +53,52 @@ function containsInsufficientBalanceSignal(value: string): boolean {
     return true;
   }
   return value.includes('quota') && /\b(wallet|balance|credit|billing|funds?)\b/.test(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function classifyAmrAccountFailureDetails(details: unknown): AmrAccountFailure | null {
+  if (!isRecord(details)) return null;
+  const code = typeof details.code === 'string' ? details.code.toLowerCase() : '';
+  const accountAction =
+    typeof details.accountAction === 'string' ? details.accountAction.toLowerCase() : '';
+
+  if (code === 'insufficient_balance' || accountAction === 'recharge') {
+    return {
+      code: 'AMR_INSUFFICIENT_BALANCE',
+      message: AMR_INSUFFICIENT_BALANCE_MESSAGE,
+      action: 'recharge',
+      actionUrl: DEFAULT_AMR_RECHARGE_URL,
+    };
+  }
+
+  return null;
+}
+
+function stringPart(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+export function classifyAmrAccountFailureSignal(
+  signal: AmrAccountFailureSignal,
+): AmrAccountFailure | null {
+  const structured = classifyAmrAccountFailureDetails(signal.details);
+  if (structured) return structured;
+
+  const primaryText = [
+    stringPart(signal.message),
+    stringPart(signal.errorMessage),
+    stringPart(signal.errorCode),
+    stringPart(signal.stdoutTail),
+  ].join('\n');
+  const primary = classifyAmrAccountFailure(primaryText);
+  if (primary) return primary;
+
+  // Stderr is intentionally last. Prefer ACP structured details and protocol
+  // messages so AMR account errors are managed through one stable channel.
+  return classifyAmrAccountFailure(stringPart(signal.stderrTail));
 }
 
 export function classifyAmrAccountFailure(text: string): AmrAccountFailure | null {

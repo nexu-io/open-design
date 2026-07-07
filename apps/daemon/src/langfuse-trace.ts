@@ -205,6 +205,16 @@ export interface InputTextSnapshotManifestEntry extends TraceSafeObjectManifestB
   type: 'text';
 }
 
+export interface TraceObjectSummary {
+  new_file_count: number;
+  modified_file_count: number;
+  recovered_file_count: number;
+  candidate_file_count: number;
+  uploaded_file_count: number;
+  skipped_file_count: number;
+  skip_reasons: Record<string, number>;
+}
+
 export interface ToolCallSummary {
   id: string;
   name: string;
@@ -284,6 +294,7 @@ export interface ReportContext {
   artifactManifest?: ArtifactManifestEntry[];
   inputTextSnapshotManifest?: InputTextSnapshotManifestEntry[];
   manifestCompleteness?: ObjectManifestCompleteness;
+  traceObjectSummary?: TraceObjectSummary;
   tools?: ToolCallSummary[];
   agentEvents?: AgentEventSummary[];
   eventsSummary: EventsSummary;
@@ -906,8 +917,14 @@ function buildSemanticPhaseDiagnostics(ctx: ReportContext): Record<string, unkno
         : { duration_ms: null, status: 'unmeasured' };
   };
   addMeasured('prompt-build', marks.promptBuildStartAt, marks.promptBuildEndAt);
+  addMeasured('launch-preflight', marks.launchPreflightStartAt, marks.launchPreflightEndAt);
+  addMeasured('process-spawn', marks.processSpawnStartedAt, marks.processSpawnedAt);
+  addMeasured('stdin-write', marks.stdinWriteStartAt, marks.stdinWriteEndAt);
+  addMeasured('runtime-init-to-first-model-event', marks.stdinWriteEndAt ?? marks.modelCallStartAt ?? marks.processSpawnedAt, marks.firstModelEventAt);
+  addMeasured('runtime-init-to-first-token', marks.stdinWriteEndAt ?? marks.modelCallStartAt ?? marks.processSpawnedAt, marks.firstTokenAt);
   addMeasured('agent-call', marks.modelCallStartAt, ctx.run.endedAt);
   addMeasured('stream-output', marks.firstTokenAt, marks.finalizeStartAt ?? ctx.run.endedAt);
+  addMeasured('artifact-write', marks.firstArtifactWriteAt, marks.finalizeStartAt ?? ctx.run.endedAt);
   addMeasured('finalize', marks.finalizeStartAt, ctx.run.endedAt);
   return {
     measured,
@@ -1007,6 +1024,23 @@ function buildTimingSpanBodies(
       metadata: { boundary: 'promptBuildStartAt -> promptBuildEndAt' },
     },
     {
+      name: 'launch-preflight',
+      start: marks.launchPreflightStartAt,
+      end: marks.launchPreflightEndAt,
+      input: {
+        phase: 'launch-preflight',
+        from: 'promptBuildEndAt',
+        to: 'processSpawnStartedAt',
+      },
+      output: {
+        status:
+          marks.launchPreflightEndAt === undefined
+            ? 'unmeasured'
+            : 'ready_to_spawn',
+      },
+      metadata: { boundary: 'launchPreflightStartAt -> launchPreflightEndAt' },
+    },
+    {
       name: 'spawn',
       start: marks.processSpawnStartedAt,
       end: marks.processSpawnedAt,
@@ -1024,6 +1058,52 @@ function buildTimingSpanBodies(
       metadata: {
         boundary: 'processSpawnStartedAt -> processSpawnedAt',
       },
+    },
+    {
+      name: 'stdin-write',
+      start: marks.stdinWriteStartAt,
+      end: marks.stdinWriteEndAt,
+      input: {
+        phase: 'stdin-write',
+        prompt_input_format: 'redacted',
+      },
+      output: {
+        status:
+          marks.stdinWriteEndAt === undefined ? 'unmeasured' : 'prompt_sent',
+      },
+      metadata: { boundary: 'stdinWriteStartAt -> stdinWriteEndAt' },
+    },
+    {
+      name: 'runtime-init-to-first-model-event',
+      start: marks.stdinWriteEndAt ?? marks.modelCallStartAt ?? marks.processSpawnedAt,
+      end: marks.firstModelEventAt,
+      input: {
+        phase: 'runtime-init-to-first-model-event',
+        from: 'stdinWriteEndAt',
+        to: 'firstModelEventAt',
+      },
+      output: {
+        status:
+          marks.firstModelEventAt === undefined
+            ? 'unmeasured'
+            : 'first_model_event_seen',
+      },
+      metadata: { boundary: 'stdinWriteEndAt/modelCallStartAt/processSpawnedAt -> firstModelEventAt' },
+    },
+    {
+      name: 'runtime-init-to-first-token',
+      start: marks.stdinWriteEndAt ?? marks.modelCallStartAt ?? marks.processSpawnedAt,
+      end: marks.firstTokenAt,
+      input: {
+        phase: 'runtime-init-to-first-token',
+        from: 'stdinWriteEndAt',
+        to: 'firstTokenAt',
+      },
+      output: {
+        status:
+          marks.firstTokenAt === undefined ? 'unmeasured' : 'first_token_seen',
+      },
+      metadata: { boundary: 'stdinWriteEndAt/modelCallStartAt/processSpawnedAt -> firstTokenAt' },
     },
     {
       name: opts.modelCallName ?? 'agent-call',
@@ -1064,6 +1144,24 @@ function buildTimingSpanBodies(
         artifact_blocks_redacted: true,
       },
       metadata: { boundary: 'firstTokenAt -> finalizeStartAt' },
+    },
+    {
+      name: 'artifact-write',
+      start: marks.firstArtifactWriteAt,
+      end: marks.finalizeStartAt ?? runEnd,
+      input: {
+        phase: 'artifact-write',
+        from: 'firstArtifactWriteAt',
+        to: 'finalizeStartAt',
+      },
+      output: {
+        status:
+          marks.firstArtifactWriteAt === undefined
+            ? 'not_seen'
+            : 'artifact_write_seen',
+        artifact_count: ctx.artifacts.length,
+      },
+      metadata: { boundary: 'firstArtifactWriteAt -> finalizeStartAt' },
     },
     {
       name: 'finalize',
@@ -1292,6 +1390,7 @@ export function buildTracePayload(ctx: ReportContext): unknown[] {
     artifact_manifest_truncated: artifactManifestTruncated,
     input_text_snapshot_manifest: inputTextSnapshotManifest,
     input_text_snapshot_manifest_truncated: inputTextSnapshotManifestTruncated,
+    trace_object_summary: ctx.traceObjectSummary,
     manifest_completeness: wantsArtifacts
       ? (ctx.manifestCompleteness ?? 'unavailable')
       : undefined,

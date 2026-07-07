@@ -1,6 +1,7 @@
 import { Button, Select } from '@open-design/components';
 import { useT } from '../i18n';
 import type { AgentInfo, ExecMode } from '../types';
+import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 
 interface Props {
   mode: ExecMode;
@@ -22,7 +23,8 @@ export function AgentPicker({
   onRefresh,
 }: Props) {
   const t = useT();
-  const available = agents.filter((a) => a.available);
+  const visibleAgents = agents.filter(isVisibleLocalCliAgent);
+  const available = visibleAgents.filter((a) => a.available);
   const currentAgent = agents.find((a) => a.id === agentId);
 
   return (
@@ -53,7 +55,7 @@ export function AgentPicker({
             {available.length === 0 ? (
               <option value="">{t('agentPicker.noAgents')}</option>
             ) : null}
-            {agents.map((a) => (
+            {visibleAgents.map((a) => (
               <option key={a.id} value={a.id} disabled={!a.available}>
                 {a.name}
                 {a.available ? '' : ` · ${t('agentPicker.notInstalled')}`}

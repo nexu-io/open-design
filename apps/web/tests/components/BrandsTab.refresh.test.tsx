@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BrandSummary } from '@open-design/contracts';
@@ -37,7 +37,21 @@ vi.mock('../../src/components/BrandReferencePicker', () => ({
   BrandReferencePicker: () => null,
 }));
 vi.mock('../../src/components/NewBrandModal', () => ({
-  NewBrandModal: () => null,
+  NewBrandModal: ({
+    open,
+    onCreated,
+  }: {
+    open: boolean;
+    onCreated: (brandId: string, projectId: string, conversationId: string) => void;
+  }) => open ? (
+    <button
+      type="button"
+      data-testid="mock-new-brand-created"
+      onClick={() => onCreated('brand-acme', 'project-acme', 'conversation-acme')}
+    >
+      created
+    </button>
+  ) : null,
 }));
 
 import { BrandsTab } from '../../src/components/BrandsTab';
@@ -103,18 +117,40 @@ describe('BrandsTab refresh reconciliation', () => {
     renderBrandsTab();
 
     // Initial activation fetch resolves; the extracting brand arms the poll.
-    await vi.advanceTimersByTimeAsync(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
     expect(fetchBrandsMock).toHaveBeenCalledTimes(1);
 
     // The poll fires while extraction is in flight.
-    await vi.advanceTimersByTimeAsync(4000);
-    await vi.waitFor(() => expect(fetchBrandsMock).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+    expect(fetchBrandsMock).toHaveBeenCalledTimes(2);
 
     // Extraction settles to ready — the next poll tick tears the interval down.
     fetchBrandsMock.mockResolvedValue([brandSummary('acme', 'ready')]);
-    await vi.advanceTimersByTimeAsync(4000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
     const afterSettle = fetchBrandsMock.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(8000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8000);
+    });
     expect(fetchBrandsMock).toHaveBeenCalledTimes(afterSettle);
+  });
+
+  it('refreshes design systems when a brand extraction project is created', async () => {
+    const onDesignSystemsRefresh = vi.fn();
+    render(
+      <I18nProvider initial="en">
+        <BrandsTab onDesignSystemsRefresh={onDesignSystemsRefresh} />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('brands-new'));
+    fireEvent.click(screen.getByTestId('mock-new-brand-created'));
+
+    expect(onDesignSystemsRefresh).toHaveBeenCalledTimes(1);
   });
 });

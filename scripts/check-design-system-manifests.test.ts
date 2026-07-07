@@ -317,6 +317,43 @@ test("design-system design tokens guard rejects prefix token source line referen
   }
 });
 
+test("design-system design tokens guard does not flag CRLF-normalized design-tokens.json as stale", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "od-design-tokens-crlf-"));
+  try {
+    writeDerivedTokenFixture(root);
+    const filePath = path.join(root, "design-tokens.json");
+    writeFileSync(filePath, readFileSync(filePath, "utf8").replace(/\n/g, "\r\n"));
+
+    const violations: string[] = [];
+    await validateDesignTokensJson(violations, "design-systems/test/manifest.json", root, "tokens.css", "design-tokens.json", REPORT_PATH);
+    assert.deepEqual(violations, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("design-system design tokens guard still rejects genuinely stale content when the file is CRLF", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "od-design-tokens-crlf-stale-"));
+  try {
+    writeDerivedTokenFixture(root);
+    const filePath = path.join(root, "design-tokens.json");
+    const stale = JSON.parse(readFileSync(filePath, "utf8")) as {
+      tokens: Array<{ value: string }>;
+    };
+    stale.tokens[0]!.value = "#abcdef";
+    const staleContent = `${JSON.stringify(stale, null, 2)}\n`;
+    writeFileSync(filePath, staleContent.replace(/\n/g, "\r\n"));
+
+    const violations: string[] = [];
+    await validateDesignTokensJson(violations, "design-systems/test/manifest.json", root, "tokens.css", "design-tokens.json", REPORT_PATH);
+    assert.deepEqual(violations, [
+      "design-systems/test/manifest.json: design-tokens.json is stale; regenerate it from source/token-contract.report.json",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("design-system tailwind v4 guard rejects swapped canonical mappings", async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "od-tailwind-guard-"));
   try {
@@ -330,6 +367,42 @@ test("design-system tailwind v4 guard rejects swapped canonical mappings", async
       filePath,
       readFileSync(filePath, "utf8").replace("  --color-accent: var(--accent);", "  --color-accent: var(--bg);"),
     );
+    const violations: string[] = [];
+    await validateTailwindV4Css(violations, "design-systems/test/manifest.json", root, "tokens.css", "tailwind-v4.css");
+    assert.deepEqual(violations, [
+      "design-systems/test/manifest.json: tailwind-v4.css is stale; regenerate it from tokens.css",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("design-system tailwind v4 guard does not flag CRLF-normalized tailwind-v4.css as stale", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "od-tailwind-crlf-"));
+  try {
+    writeDerivedTokenFixture(root);
+    const filePath = path.join(root, "tailwind-v4.css");
+    writeFileSync(filePath, readFileSync(filePath, "utf8").replace(/\n/g, "\r\n"));
+
+    const violations: string[] = [];
+    await validateTailwindV4Css(violations, "design-systems/test/manifest.json", root, "tokens.css", "tailwind-v4.css");
+    assert.deepEqual(violations, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("design-system tailwind v4 guard still rejects genuinely stale content when the file is CRLF", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "od-tailwind-crlf-stale-"));
+  try {
+    writeDerivedTokenFixture(root);
+    const filePath = path.join(root, "tailwind-v4.css");
+    const staleContent = readFileSync(filePath, "utf8").replace(
+      "  --color-accent: var(--accent);",
+      "  --color-accent: var(--bg);",
+    );
+    writeFileSync(filePath, staleContent.replace(/\n/g, "\r\n"));
+
     const violations: string[] = [];
     await validateTailwindV4Css(violations, "design-systems/test/manifest.json", root, "tokens.css", "tailwind-v4.css");
     assert.deepEqual(violations, [

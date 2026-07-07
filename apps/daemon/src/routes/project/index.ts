@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { Express, Response } from 'express';
@@ -5,12 +6,31 @@ import {
   defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
   type PluginManifest,
+  type ProjectFile,
+  type ProjectFileVersion,
+  type ProjectFileVersionPromptSource,
+  type ProjectFileVersionSource,
+  type ProjectFileVersionWarning,
 } from '@open-design/contracts';
 import { readMeta as readBrandMeta } from '../../brands/store.js';
 import { createProjectArtifactFile } from '../../artifacts/create.js';
 import { ArtifactPublicationBlockedError } from '../../artifacts/publication-guard.js';
 import { ArtifactRegressionError } from '../../artifacts/stub-guard.js';
-import { listDesignSystems } from '../../design-systems/index.js';
+import {
+  createProjectFileVersion,
+  isProjectFileVersionPath,
+  listProjectFileVersions,
+  markProjectFileVersionStoreDeleted,
+  readProjectFileVersion,
+  renameProjectFileVersionStore,
+  withProjectFileVersionLock,
+} from '../../project-file-versions.js';
+import {
+  createUserDesignSystem,
+  deleteUserDesignSystem,
+  linkUserDesignSystemProject,
+  listDesignSystems,
+} from '../../design-systems/index.js';
 import {
   FIRST_PARTY_ATOMS,
   buildConnectorProbe,
@@ -53,6 +73,33 @@ function projectDetailResolvedDir(
   return resolveProjectDir(projectsRoot, project.id, project.metadata, {
     allowUnavailableSandboxImportedProject: true,
   });
+}
+
+/**
+ * Materialize a *managed* project's folder before it is referenced as
+ * read-only context for another run.
+ *
+ * Invariant: after this resolves for a managed project, `PROJECTS_DIR/<id>`
+ * exists on disk. A brand-new project has a DB row but no on-disk directory
+ * until its first file write, so without this a reference resolves to a path
+ * that fails both the composer's existence probe and the daemon's
+ * all-or-nothing linkedDirs validation. External / imported roots (an absolute
+ * `metadata.baseDir`) are the user's own folders and are never created here.
+ * Materialization failures are required failures: callers must surface them
+ * instead of continuing with a resolvedDir that may not exist.
+ */
+export async function ensureReferencedProjectDir(
+  projectsRoot: string,
+  project: { id: string; metadata?: unknown },
+  ensureProject: (projectsRoot: string, projectId: string, metadata?: unknown) => Promise<string>,
+): Promise<void> {
+  const metadata = (project?.metadata ?? null) as { baseDir?: unknown } | null;
+  const baseDir = typeof metadata?.baseDir === 'string'
+    ? path.normalize(metadata.baseDir)
+    : null;
+  const managedRoot = !(baseDir && path.isAbsolute(baseDir));
+  if (!managedRoot) return;
+  await ensureProject(projectsRoot, project.id, project.metadata);
 }
 
 const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
@@ -904,13 +951,182 @@ export function daemonSanitizeTitleInDoc(html: string): string {
 }
 
 function normalizeChatSessionMode(value: unknown): ChatSessionMode {
-  return value === 'chat' ? 'chat' : 'design';
+  return value === 'chat' || value === 'plan' ? value : 'design';
+}
+
+function isDesignSystemLikeProject(project: any): boolean {
+  const metadata = project?.metadata;
+  if (!metadata || typeof metadata !== 'object') return false;
+  return (
+    metadata.kind === 'brand' ||
+    metadata.importedFrom === 'design-system' ||
+    metadata.importedFrom === 'brand-extraction' ||
+    (typeof metadata.brandDesignSystemId === 'string' && metadata.brandDesignSystemId.trim().length > 0)
+  );
+}
+
+function normalizeDesignSystemCopyName(value: unknown, sourceProject: any): string {
+  const explicit = typeof value === 'string' ? value.trim() : '';
+  if (explicit) return explicit.slice(0, 160);
+  const sourceName = typeof sourceProject?.name === 'string' && sourceProject.name.trim()
+    ? sourceProject.name.trim()
+    : 'Untitled';
+  return /\bdesign system\b/i.test(sourceName)
+    ? sourceName.slice(0, 160)
+    : `${sourceName} Design System`.slice(0, 160);
+}
+
+function normalizeProjectDuplicateName(value: unknown, sourceProject: any): string {
+  const explicit = typeof value === 'string' ? value.trim() : '';
+  if (explicit) return explicit.slice(0, 160);
+  const sourceName = typeof sourceProject?.name === 'string' && sourceProject.name.trim()
+    ? sourceProject.name.trim()
+    : 'Untitled';
+  return `${sourceName} Copy`.slice(0, 160);
+}
+
+function normalizePendingPrompt(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function cloneProjectMetadataForDuplicate(sourceProject: any): Record<string, unknown> {
+  const sourceMetadata =
+    sourceProject?.metadata && typeof sourceProject.metadata === 'object'
+      ? { ...sourceProject.metadata }
+      : {};
+  delete sourceMetadata.baseDir;
+  delete sourceMetadata.projectLocationId;
+  delete sourceMetadata.fromTrustedPicker;
+  delete sourceMetadata.orchestratorWorkspace;
+  return {
+    ...sourceMetadata,
+    sourceProjectId: sourceProject.id,
+    sourceProjectName: sourceProject.name,
+  };
+}
+
+function buildDesignSystemCopySourceContext(input: {
+  sourceProject: any;
+  targetProjectId: string;
+  designSystemId: string;
+  copiedFiles: string[];
+  skippedFiles: Array<{ name: string; reason: string }>;
+}): string {
+  const metadata =
+    input.sourceProject?.metadata && typeof input.sourceProject.metadata === 'object'
+      ? JSON.stringify(input.sourceProject.metadata, null, 2)
+      : '{}';
+  const copied = input.copiedFiles.length > 0
+    ? input.copiedFiles.map((name) => `- ${name}`).join('\n')
+    : '- (none)';
+  const skipped = input.skippedFiles.length > 0
+    ? input.skippedFiles.map((entry) => `- ${entry.name}: ${entry.reason}`).join('\n')
+    : '- (none)';
+  return [
+    '# Source Project Context',
+    '',
+    'This design-system workspace was created from an existing Open Design project. Treat the copied project files as the primary source evidence for the generated design system.',
+    '',
+    '## Source project',
+    '',
+    `- Source project id: ${input.sourceProject.id}`,
+    `- Source project name: ${input.sourceProject.name}`,
+    `- New design-system project id: ${input.targetProjectId}`,
+    `- New design-system id: ${input.designSystemId}`,
+    `- Source skill id: ${input.sourceProject.skillId ?? '(none)'}`,
+    `- Source design system id: ${input.sourceProject.designSystemId ?? '(none)'}`,
+    '',
+    '## Source metadata',
+    '',
+    '```json',
+    metadata,
+    '```',
+    '',
+    '## Copied files',
+    '',
+    copied,
+    '',
+    '## Skipped files',
+    '',
+    skipped,
+    '',
+    '## Generation contract',
+    '',
+    '- Read this file before editing design-system outputs.',
+    '- Read the copied files directly from the project workspace; they are source evidence, not generated design-system output.',
+    '- Preserve high-signal assets, source examples, UI surfaces, copy, tokens, typography, and interaction patterns from the copied project.',
+    '- Generate a reusable Open Design design-system package in this same project: DESIGN.md, README.md, SKILL.md, colors_and_type.css, context/provenance, focused preview cards, preserved assets/build/fonts when available, and ui_kits/app/.',
+    '- Before final response, run `"$OD_NODE_BIN" "$OD_BIN" tools connectors design-system-package-audit --path . --fail-on-warnings` and fix every actionable issue.',
+    '',
+  ].join('\n');
+}
+
+function buildDesignSystemCopyPendingPrompt(input: {
+  sourceProject: any;
+  targetProjectId: string;
+  designSystemId: string;
+  copiedFiles: string[];
+}): string {
+  const metadata =
+    input.sourceProject?.metadata && typeof input.sourceProject.metadata === 'object'
+      ? JSON.stringify(input.sourceProject.metadata, null, 2)
+      : '{}';
+  const visibleFiles = input.copiedFiles
+    .slice(0, 140)
+    .map((name) => `  - ${name}`);
+  return [
+    'Create this project as a complete Open Design design system workspace.',
+    '',
+    'Autonomy requirement:',
+    '- Do not ask setup or clarification questions during design-system generation.',
+    '- Do not emit `<question-form>`, "Quick brief — 30 seconds", direction cards, choice cards, or any UI that waits for user input.',
+    '- The source project already contains the evidence. Choose sensible defaults where details are missing and begin generating the design-system artifacts immediately.',
+    '',
+    'Source project handoff:',
+    `- Source project id: ${input.sourceProject.id}`,
+    `- Source project name: ${input.sourceProject.name}`,
+    `- New design-system project id: ${input.targetProjectId}`,
+    `- New design-system id: ${input.designSystemId}`,
+    '- Read `context/source-context.md` first. It lists the copied project files and original project metadata.',
+    '- Treat every copied file, uploaded asset, reference image, browser snapshot, sketch, generated artifact, and context note in this workspace as design-system evidence.',
+    '- Use the copied project outputs to infer real visual language, components, layout, interaction patterns, copy tone, tokens, typography, spacing, assets, and anti-patterns.',
+    '- Do not create another project or another design-system id. Update this new design-system project in place.',
+    '',
+    'Source project metadata:',
+    '```json',
+    metadata,
+    '```',
+    '',
+    'Copied files to inspect:',
+    ...(visibleFiles.length > 0 ? visibleFiles : ['  - (none copied; rely on context/source-context.md and project metadata)']),
+    input.copiedFiles.length > visibleFiles.length
+      ? `  - ...and ${input.copiedFiles.length - visibleFiles.length} more files listed in context/source-context.md`
+      : '',
+    '',
+    'Expected output:',
+    '- A clear `DESIGN.md` with product context, visual foundations, color, type, spacing, layout, components, motion, voice, and anti-patterns.',
+    '- A reusable package: `README.md`, `SKILL.md`, `colors_and_type.css`, provenance notes, `assets/`, `build/` when runtime icons exist, optional `fonts/`, focused `preview/` cards, preserved source examples, and `ui_kits/app/`.',
+    '- Preserve real source assets when evidence provides them: logos, app icons, tray icons, avatars, wordmarks, imagery, and font files belong in `assets/`, `build/`, or `fonts/`, not only in prose.',
+    '- Preserve high-signal source/component examples outside `context/` when copied files include substantial implementation or artifact code. Do not replace them with tiny stubs.',
+    '- Split review previews into focused cards for colors, typography, spacing, radius/shadows, components, brand assets, and applied UI surfaces. Preview cards must visibly load preserved files when available.',
+    '- Build `ui_kits/app/` as an applied interface kit that reflects the source project, with an index page and component files when the evidence supports them. Do not leave it as a generic static mock.',
+    '- Keep `README.md`, `SKILL.md`, `DESIGN.md`, preview manifest text, and `ui_kits/app/README.md` synchronized with the final file structure.',
+    '',
+    'Completion gate:',
+    '- Finish only after the project contains reviewable design-system artifacts and the right-side Design System tab can inspect them.',
+    '- Before your final response, run `"$OD_NODE_BIN" "$OD_BIN" tools connectors design-system-package-audit --path . --fail-on-warnings`.',
+    '- Fix every audit error and design-quality warning. If an issue cannot be fixed because source evidence is missing, explain that blocker instead of claiming the design system is ready.',
+    '',
+    'When finished, summarize the generated files and name the first previews reviewers should inspect.',
+  ].filter(Boolean).join('\n');
 }
 
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR, BRANDS_DIR } = ctx.paths;
+  const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR, BRANDS_DIR, USER_DESIGN_SYSTEMS_DIR } = ctx.paths;
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
   const { insertProject, validateLinkedDirs, getProject, updateProject, dbDeleteProject, removeProjectDir } = ctx.projectStore;
   const { writeProjectFile, readProjectFile, ensureProject, listFiles, listTabs, setTabs, resolveProjectDir } = ctx.projectFiles;
@@ -1501,11 +1717,263 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     }
   });
 
+  app.post('/api/projects/:id/duplicate', async (req, res) => {
+    const sourceProject = getProject(db, req.params.id);
+    try {
+      const locations = await configuredProjectLocations();
+      if (!sourceProject || !projectVisibleForLocations(sourceProject, locations)) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      }
+      if (isDesignSystemLikeProject(sourceProject)) {
+        return sendApiError(
+          res,
+          400,
+          'PROJECT_ALREADY_DESIGN_SYSTEM',
+          'project is already a design-system workspace',
+        );
+      }
+
+      const targetProjectId = randomId();
+      const targetName = normalizeProjectDuplicateName(req.body?.name, sourceProject);
+      const metadata = cloneProjectMetadataForDuplicate(sourceProject);
+      let insertedProject = false;
+      try {
+        await ensureProject(PROJECTS_DIR, targetProjectId, metadata);
+        const sourceFiles = await listFiles(PROJECTS_DIR, sourceProject.id, {
+          metadata: sourceProject.metadata,
+        });
+        const copiedFiles: string[] = [];
+        for (const file of sourceFiles) {
+          if (!file?.name || typeof file.name !== 'string') continue;
+          const sourceFile = await readProjectFile(
+            PROJECTS_DIR,
+            sourceProject.id,
+            file.name,
+            sourceProject.metadata,
+          );
+          await writeProjectFile(
+            PROJECTS_DIR,
+            targetProjectId,
+            sourceFile.name,
+            sourceFile.buffer,
+            {
+              overwrite: true,
+              ...(sourceFile.artifactManifest ? { artifactManifest: sourceFile.artifactManifest } : {}),
+            },
+            metadata,
+          );
+          copiedFiles.push(sourceFile.name);
+        }
+
+        const now = Date.now();
+        const project = insertProject(db, {
+          id: targetProjectId,
+          name: targetName,
+          skillId: sourceProject.skillId ?? null,
+          designSystemId: sourceProject.designSystemId ?? null,
+          pendingPrompt: null,
+          metadata,
+          customInstructions: sourceProject.customInstructions ?? null,
+          createdAt: now,
+          updatedAt: now,
+        });
+        insertedProject = true;
+        const conversationId = randomId();
+        insertConversation(db, {
+          id: conversationId,
+          projectId: targetProjectId,
+          title: null,
+          sessionMode: 'design',
+          createdAt: now,
+          updatedAt: now,
+        });
+        try {
+          const tabs = listTabs(db, sourceProject.id);
+          setTabs(db, targetProjectId, tabs);
+        } catch {
+          // Open-tabs state is convenience metadata; file duplication succeeds
+          // without it.
+        }
+        /** @type {import('@open-design/contracts').DuplicateProjectResponse} */
+        const body = {
+          project,
+          conversationId,
+          copiedFiles,
+        };
+        res.json(body);
+      } catch (err) {
+        if (insertedProject) dbDeleteProject(db, targetProjectId);
+        await removeProjectDir(PROJECTS_DIR, targetProjectId).catch(() => {});
+        throw err;
+      }
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.post('/api/projects/:id/design-system-copy', async (req, res) => {
+    const sourceProject = getProject(db, req.params.id);
+    try {
+      const locations = await configuredProjectLocations();
+      if (!sourceProject || !projectVisibleForLocations(sourceProject, locations)) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      }
+      if (isDesignSystemLikeProject(sourceProject)) {
+        return sendApiError(
+          res,
+          400,
+          'PROJECT_ALREADY_DESIGN_SYSTEM',
+          'project is already a design-system workspace',
+        );
+      }
+
+      const targetProjectId = randomId();
+      const targetName = normalizeDesignSystemCopyName(req.body?.name, sourceProject);
+      const requestedPendingPrompt = normalizePendingPrompt(req.body?.pendingPrompt);
+      const sourceNotes = `Created from Open Design project "${sourceProject.name}" (${sourceProject.id}).`;
+      let createdDesignSystemId: string | null = null;
+      let insertedProject = false;
+      try {
+        const designSystem = await createUserDesignSystem(USER_DESIGN_SYSTEMS_DIR, {
+          title: targetName,
+          summary: sourceNotes,
+          category: 'Project Design System',
+          surface: 'web',
+          status: 'draft',
+          artifactMode: 'agent-managed',
+          sourceNotes,
+          provenance: {
+            notes: sourceNotes,
+            sourceNotes,
+          },
+        });
+        createdDesignSystemId = designSystem.id;
+
+        const metadata = {
+          kind: 'other',
+          importedFrom: 'design-system',
+          entryFile: 'DESIGN.md',
+          sourceFileName: designSystem.id,
+          nameSource: 'generated',
+          sourceProjectId: sourceProject.id,
+          sourceProjectName: sourceProject.name,
+        };
+        await ensureProject(PROJECTS_DIR, targetProjectId, metadata);
+
+        const sourceFiles = await listFiles(PROJECTS_DIR, sourceProject.id, {
+          metadata: sourceProject.metadata,
+        });
+        const copiedFiles: string[] = [];
+        for (const file of sourceFiles) {
+          if (!file?.name || typeof file.name !== 'string') continue;
+          const sourceFile = await readProjectFile(
+            PROJECTS_DIR,
+            sourceProject.id,
+            file.name,
+            sourceProject.metadata,
+          );
+          await writeProjectFile(
+            PROJECTS_DIR,
+            targetProjectId,
+            sourceFile.name,
+            sourceFile.buffer,
+            {
+              overwrite: true,
+              ...(sourceFile.artifactManifest ? { artifactManifest: sourceFile.artifactManifest } : {}),
+            },
+            metadata,
+          );
+          copiedFiles.push(sourceFile.name);
+        }
+
+        const pendingPrompt = requestedPendingPrompt ?? buildDesignSystemCopyPendingPrompt({
+          sourceProject,
+          targetProjectId,
+          designSystemId: designSystem.id,
+          copiedFiles,
+        });
+        const now = Date.now();
+        const project = insertProject(db, {
+          id: targetProjectId,
+          name: targetName,
+          skillId: null,
+          designSystemId: designSystem.id,
+          pendingPrompt,
+          metadata,
+          customInstructions: null,
+          createdAt: now,
+          updatedAt: now,
+        });
+        insertedProject = true;
+        const conversationId = randomId();
+        insertConversation(db, {
+          id: conversationId,
+          projectId: targetProjectId,
+          title: null,
+          sessionMode: 'design',
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        await writeProjectFile(
+          PROJECTS_DIR,
+          targetProjectId,
+          'context/source-context.md',
+          Buffer.from(
+            buildDesignSystemCopySourceContext({
+              sourceProject,
+              targetProjectId,
+              designSystemId: designSystem.id,
+              copiedFiles,
+              skippedFiles: [],
+            }),
+            'utf8',
+          ),
+          { overwrite: true },
+          metadata,
+        );
+        await linkUserDesignSystemProject(USER_DESIGN_SYSTEMS_DIR, designSystem.id, targetProjectId);
+        /** @type {import('@open-design/contracts').CreateDesignSystemProjectFromProjectResponse} */
+        const body = {
+          project,
+          conversationId,
+          designSystemId: designSystem.id,
+          copiedFiles,
+        };
+        res.json(body);
+      } catch (err) {
+        if (insertedProject) dbDeleteProject(db, targetProjectId);
+        await removeProjectDir(PROJECTS_DIR, targetProjectId).catch(() => {});
+        if (createdDesignSystemId) {
+          await deleteUserDesignSystem(USER_DESIGN_SYSTEMS_DIR, createdDesignSystemId).catch(() => false);
+        }
+        throw err;
+      }
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
   app.get('/api/projects/:id', async (req, res) => {
     const project = getProject(db, req.params.id);
     const locations = await configuredProjectLocations();
     if (!project || !projectVisibleForLocations(project, locations))
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    // When a caller is about to *reference* this project (add it as read-only
+    // context for another run), materialize its managed folder first so the
+    // reference resolves to a real directory. See ensureReferencedProjectDir.
+    if (req.query.ensureDir === '1' || req.query.ensureDir === 'true') {
+      try {
+        await ensureReferencedProjectDir(PROJECTS_DIR, project, ensureProject);
+      } catch (err: any) {
+        return sendApiError(
+          res,
+          500,
+          'PROJECT_DIR_MATERIALIZATION_FAILED',
+          String(err?.message || err),
+        );
+      }
+    }
     const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
     /** @type {import('@open-design/contracts').ProjectResponse} */
     const body = { project, resolvedDir };
@@ -1945,6 +2413,213 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     res.setHeader('Content-Security-Policy', projectPreviewCsp);
   }
 
+  function rejectInternalVersionPath(res: Response, value: unknown): boolean {
+    if (!isProjectFileVersionPath(value)) return false;
+    sendApiError(res, 404, 'FILE_NOT_FOUND', 'file not found');
+    return true;
+  }
+
+  function normalizeProjectFileVersionSource(value: unknown): ProjectFileVersionSource | undefined {
+    return value === 'ai' || value === 'manual' || value === 'restore' ? value : undefined;
+  }
+
+  function parseProjectFileVersionSourceInput(
+    value: unknown,
+    fieldName: 'source' | 'versionSource',
+  ): ProjectFileVersionSource | undefined {
+    if (value === undefined || value === null) return undefined;
+    const normalized = normalizeProjectFileVersionSource(value);
+    if (normalized) return normalized;
+    throw new Error(`invalid ${fieldName}; expected one of: ai, manual, restore`);
+  }
+
+  function requestProjectFileVersionSource(value: unknown): ProjectFileVersionSource {
+    return parseProjectFileVersionSourceInput(value, 'source') ?? 'manual';
+  }
+
+  function requestProjectFileVersionUploadSource(body: any): ProjectFileVersionSource {
+    const hasVersionSource = body?.versionSource !== undefined && body?.versionSource !== null;
+    return parseProjectFileVersionSourceInput(
+      hasVersionSource ? body.versionSource : body?.source,
+      hasVersionSource ? 'versionSource' : 'source',
+    ) ?? 'manual';
+  }
+
+  function latestProjectPrompt(project: any): { prompt: string | null; promptSource?: Extract<ProjectFileVersionPromptSource, 'message' | 'project'> } {
+    try {
+      const row = db.prepare(
+        `SELECT m.content
+           FROM messages m
+           JOIN conversations c ON c.id = m.conversation_id
+          WHERE c.project_id = ?
+            AND m.role = 'user'
+            AND LENGTH(TRIM(m.content)) > 0
+          ORDER BY COALESCE(m.ended_at, m.started_at, m.created_at, 0) DESC,
+                   m.position DESC
+          LIMIT 1`,
+      ).get(project?.id) as { content?: string } | undefined;
+      if (typeof row?.content === 'string' && row.content.trim()) {
+        return { prompt: row.content.trim(), promptSource: 'message' };
+      }
+    } catch {
+      // Prompt provenance is best-effort; versions still save without it.
+    }
+    if (typeof project?.pendingPrompt === 'string' && project.pendingPrompt.trim()) {
+      return { prompt: project.pendingPrompt.trim(), promptSource: 'project' };
+    }
+    if (typeof project?.pending_prompt === 'string' && project.pending_prompt.trim()) {
+      return { prompt: project.pending_prompt.trim(), promptSource: 'project' };
+    }
+    return { prompt: null };
+  }
+
+  type HtmlVersionOverride = {
+    prompt?: string | null;
+    promptSource?: ProjectFileVersionPromptSource;
+    source?: ProjectFileVersionSource;
+    label?: string | null;
+  };
+
+  function htmlVersionOptions(
+    project: any,
+    override?: HtmlVersionOverride,
+  ): {
+    prompt: string | null;
+    promptSource?: ProjectFileVersionPromptSource;
+    source?: ProjectFileVersionSource;
+    label?: string;
+  } {
+    const fallbackPromptInfo = latestProjectPrompt(project);
+    const prompt = override?.prompt !== undefined
+      ? (typeof override.prompt === 'string' && override.prompt.trim() ? override.prompt.trim() : null)
+      : (override?.source === 'manual' || override?.source === 'restore' ? null : fallbackPromptInfo.prompt);
+    const promptSource = override?.promptSource
+      ?? (override?.source === 'manual'
+        ? 'manual'
+        : override?.source === 'restore'
+          ? 'restore'
+          : fallbackPromptInfo.promptSource);
+    const versionOptions: {
+      prompt: string | null;
+      promptSource?: ProjectFileVersionPromptSource;
+      source?: ProjectFileVersionSource;
+      label?: string;
+    } = {
+      prompt,
+    };
+    if (promptSource) versionOptions.promptSource = promptSource;
+    if (override?.source) versionOptions.source = override.source;
+    if (typeof override?.label === 'string' && override.label.trim()) {
+      versionOptions.label = override.label.trim();
+    }
+    return versionOptions;
+  }
+
+  type HtmlVersionLock = {
+    ensureCurrentVersion: (
+      content: string,
+      options?: ReturnType<typeof htmlVersionOptions>,
+    ) => Promise<ProjectFileVersion | null>;
+  };
+
+  function htmlVersionCaptureWarning(err: unknown): ProjectFileVersionWarning {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      code: 'PROJECT_FILE_VERSION_CAPTURE_FAILED',
+      message: `HTML version could not be saved: ${message}`,
+    };
+  }
+
+  async function tryEnsureLockedHtmlCurrentVersion(
+    project: any,
+    fileName: string,
+    content: string,
+    ensureCurrentVersion: HtmlVersionLock['ensureCurrentVersion'],
+    override?: HtmlVersionOverride,
+  ): Promise<{ version: ProjectFileVersion | null; versionWarning?: ProjectFileVersionWarning }> {
+    if (!/\.html?$/i.test(fileName)) return { version: null };
+    try {
+      return { version: await ensureCurrentVersion(content, htmlVersionOptions(project, override)) };
+    } catch (err) {
+      return { version: null, versionWarning: htmlVersionCaptureWarning(err) };
+    }
+  }
+
+  function fileFromVersionHistory(fileName: string, versions: ProjectFileVersion[]): ProjectFile | null {
+    const latest = versions.at(-1);
+    if (!latest) return null;
+    return {
+      name: latest.fileName || fileName,
+      path: latest.fileName || fileName,
+      type: 'file',
+      size: latest.size,
+      mtime: latest.createdAt,
+      kind: latest.kind,
+      mime: latest.mime,
+    };
+  }
+
+  // Lets a browser (or the desktop export window, which shares the same Chromium
+  // session/cache as the web UI) reuse already-downloaded fonts/CSS/images
+  // across loads instead of re-fetching them every time — covers, live preview,
+  // and screenshot export all hit /raw/. The ETag/Last-Modified are derived from
+  // the file's size+mtime, so any agent rewrite changes them and busts the cache
+  // immediately; `no-cache` means "always revalidate" (never serve stale without
+  // asking), so a 304 only happens when the bytes are genuinely unchanged.
+  function setRawRevalidationHeaders(res: Response, meta: { size: number; mtime: number }): string {
+    const mtime = Math.floor(meta.mtime);
+    const etag = `W/"${meta.size.toString(16)}-${mtime.toString(16)}"`;
+    res.setHeader('ETag', etag);
+    res.setHeader('Last-Modified', new Date(mtime).toUTCString());
+    res.setHeader('Cache-Control', 'no-cache');
+    return etag;
+  }
+
+  function rawRequestIsFresh(req: any, etag: string, mtimeMs: number): boolean {
+    // If-None-Match is authoritative when present (RFC 9110 §13.1.3): freshness
+    // is decided solely by whether the ETag matches — do NOT fall through to
+    // If-Modified-Since. Otherwise a same-second rewrite (ETag changes
+    // immediately, but Last-Modified is identical at HTTP-date second
+    // granularity) would 304 stale-but-changed bytes when a client sends both a
+    // non-matching ETag and the current If-Modified-Since.
+    const ifNoneMatch = req.headers['if-none-match'];
+    if (typeof ifNoneMatch === 'string') {
+      return ifNoneMatch.split(',').some((tag) => tag.trim() === etag);
+    }
+    const ifModifiedSince = req.headers['if-modified-since'];
+    if (typeof ifModifiedSince === 'string') {
+      const since = Date.parse(ifModifiedSince);
+      // Last-Modified is second-resolution, so compare at second granularity.
+      if (Number.isFinite(since) && Math.floor(mtimeMs / 1000) * 1000 <= since) return true;
+    }
+    return false;
+  }
+
+  // RFC 9110 §13.1.5: a Range request with If-Range may only be served as 206
+  // when the If-Range validator still matches the current representation; if it
+  // doesn't (the file changed), the range must be ignored and the full current
+  // file returned, so a resumed download can't splice stale + fresh bytes.
+  //
+  // §13.1.5 also requires the entity-tag form to use a STRONG validator. Our
+  // ETag is weak (`W/"size-mtime"` — size+mtime is not byte-exact), so an
+  // entity-tag If-Range can never authorize partial content: a same-size rewrite
+  // or mtime-granularity collision could otherwise splice stale + fresh bytes
+  // under a matching weak tag. We therefore reject ALL entity-tag If-Range values
+  // (weak ones explicitly; a strong `"…"` never equals our weak ETag anyway) and
+  // honor only the date form.
+  function ifRangeAllowsPartial(req: any, _etag: string, mtimeMs: number): boolean {
+    const ifRange = req.headers['if-range'];
+    if (typeof ifRange !== 'string' || ifRange.length === 0) return true; // no If-Range → honor Range
+    const value = ifRange.trim();
+    // Any entity-tag (weak `W/"…"` or strong `"…"`) → not a strong match against
+    // our weak validator → fall back to the full 200.
+    if (value.startsWith('"') || value.startsWith('W/')) return false;
+    // Date form: honor the range only if the file has NOT changed since (its
+    // current Last-Modified is at/before the If-Range date).
+    const since = Date.parse(value);
+    return Number.isFinite(since) && Math.floor(mtimeMs / 1000) * 1000 <= since;
+  }
+
   async function sendProjectFile(
     req: any,
     res: Response,
@@ -1953,6 +2628,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     metadata?: unknown,
     beforeSend?: (mime: string) => void,
     transformFile?: (file: { mime: string; buffer: Buffer }) => Buffer | string | Promise<Buffer | string>,
+    revalidate = false,
   ) {
     const meta = await resolveProjectFilePath(
       PROJECTS_DIR,
@@ -1962,7 +2638,25 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     );
     beforeSend?.(meta.mime);
 
-    if (meta.mime.startsWith('video/') || meta.mime.startsWith('audio/')) {
+    const isStreamed = meta.mime.startsWith('video/') || meta.mime.startsWith('audio/');
+    // A transform (the Vite dev-entry -> dist/index.html substitution, or preview
+    // bridge injection) can replace the response bytes — but only for HTML. For
+    // HTML the source file's mtime/size is NOT a valid validator, so its ETag is
+    // computed from the actual sent bytes after the transform. Everything else
+    // (assets, fonts, images, streamed media — where the transform is a no-op)
+    // keeps the fast mtime ETag with an early 304.
+    const willSubstitute =
+      !isStreamed && !!transformFile && /^text\/html(?:;|$)/i.test(meta.mime);
+
+    let currentEtag: string | null = null;
+    if (revalidate && !willSubstitute) {
+      currentEtag = setRawRevalidationHeaders(res, meta);
+      if (rawRequestIsFresh(req, currentEtag, meta.mtime)) {
+        return res.status(304).end();
+      }
+    }
+
+    if (isStreamed) {
       res.setHeader('Accept-Ranges', 'bytes');
       res.setHeader('Content-Type', meta.mime);
 
@@ -1971,7 +2665,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         return res.status(200).end();
       }
 
-      const range = parseByteRange(req.headers.range, meta.size);
+      // Honor Range only when If-Range still matches the current file — otherwise
+      // a resumed download after a rewrite would splice stale + fresh bytes.
+      const range =
+        currentEtag === null || ifRangeAllowsPartial(req, currentEtag, meta.mtime)
+          ? parseByteRange(req.headers.range, meta.size)
+          : null;
 
       if (range === 'unsatisfiable') {
         res.setHeader('Content-Range', `bytes */${meta.size}`);
@@ -2007,7 +2706,23 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
 
     const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, metadata);
-    res.type(file.mime).send(transformFile ? await transformFile(file) : file.buffer);
+    const body = transformFile ? await transformFile(file) : file.buffer;
+    if (revalidate && willSubstitute) {
+      // Validator from the ACTUAL response bytes, so a change to the substituted
+      // content (e.g. dist/index.html) busts the cache even when the source
+      // file's mtime is unchanged.
+      const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
+      const etag = `W/"${createHash('sha1').update(buf).digest('hex').slice(0, 16)}"`;
+      res.setHeader('ETag', etag);
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Last-Modified', new Date(Math.floor(meta.mtime)).toUTCString());
+      const ifNoneMatch = req.headers['if-none-match'];
+      if (typeof ifNoneMatch === 'string' && ifNoneMatch.split(',').some((tag) => tag.trim() === etag)) {
+        return res.status(304).end();
+      }
+      return res.type(file.mime).send(buf);
+    }
+    res.type(file.mime).send(body);
   }
 
   function previewFilePathForProject(project: any, queryFile: unknown): string {
@@ -2287,6 +3002,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const params = req.params as unknown as { 0?: string; 1?: string };
       const projectId = String(params[0] ?? '');
       const relPath = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, relPath)) return;
       const project = getProject(db, projectId);
       // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
       // data: URIs, file://, and some sandboxed iframes also send null — all are
@@ -2338,6 +3054,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           }
           return transformed;
         },
+        true, // revalidate: emit ETag/Last-Modified so covers/preview/export reuse cached assets
       );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
@@ -2355,8 +3072,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const params = req.params as unknown as { 0?: string; 1?: string };
       const projectId = String(params[0] ?? '');
       const rawSplat = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, rawSplat)) return;
       const project = getProject(db, projectId);
       await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
+      await markProjectFileVersionStoreDeleted(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -2398,11 +3117,220 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
+  app.get(/^\/api\/projects\/([^/]+)\/files\/(.+)\/versions$/u, async (req, res) => {
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string };
+      const projectId = String(params[0] ?? '');
+      const fileName = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, fileName)) return;
+      const project = getProject(db, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!/\.html?$/i.test(fileName)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'versions are only available for HTML files');
+      }
+      let file: ProjectFile | null = null;
+      let historyFileName = fileName;
+      try {
+        const workingFile = await readProjectFile(PROJECTS_DIR, project.id, fileName, project.metadata);
+        if (!/\.html?$/i.test(workingFile.name)) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'versions are only available for HTML files');
+        }
+        file = workingFile;
+        historyFileName = workingFile.name;
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT') throw err;
+      }
+      const versions = await listProjectFileVersions(PROJECTS_DIR, project.id, historyFileName, project.metadata);
+      file ??= fileFromVersionHistory(historyFileName, versions);
+      if (!file) {
+        return sendApiError(res, 404, 'FILE_NOT_FOUND', 'file not found');
+      }
+      /** @type {import('@open-design/contracts').ProjectFileVersionsResponse} */
+      const body = { file, versions };
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(body);
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  app.post(/^\/api\/projects\/([^/]+)\/files\/(.+)\/versions$/u, async (req, res) => {
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string };
+      const projectId = String(params[0] ?? '');
+      const fileName = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, fileName)) return;
+      const project = getProject(db, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      const file = await readProjectFile(PROJECTS_DIR, project.id, fileName, project.metadata);
+      if (!/\.html?$/i.test(file.name)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'versions are only available for HTML files');
+      }
+      const manualPrompt = typeof req.body?.prompt === 'string' && req.body.prompt.trim()
+        ? req.body.prompt.trim()
+        : null;
+      const requestedSource = requestProjectFileVersionSource(req.body?.source);
+      const fallbackPromptInfo = requestedSource === 'ai' && !manualPrompt ? latestProjectPrompt(project) : null;
+      const versionOptions: {
+        prompt: string | null;
+        promptSource?: ProjectFileVersionPromptSource;
+        source: ProjectFileVersionSource;
+        label?: string | null;
+      } = {
+        prompt: manualPrompt ?? fallbackPromptInfo?.prompt ?? null,
+        source: requestedSource,
+        label: typeof req.body?.label === 'string' ? req.body.label : null,
+      };
+      if (manualPrompt) {
+        versionOptions.promptSource = 'manual';
+      } else if (requestedSource === 'manual') {
+        versionOptions.promptSource = 'manual';
+      } else if (requestedSource === 'restore') {
+        versionOptions.promptSource = 'restore';
+      } else if (fallbackPromptInfo?.promptSource) {
+        versionOptions.promptSource = fallbackPromptInfo.promptSource;
+      }
+      const version = await createProjectFileVersion(
+        PROJECTS_DIR,
+        project.id,
+        file.name,
+        file.buffer.toString('utf8'),
+        versionOptions,
+        project.metadata,
+      );
+      if (!version) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'version could not be created');
+      }
+      /** @type {import('@open-design/contracts').CreateProjectFileVersionResponse} */
+      const body = { version };
+      res.json(body);
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  app.post(/^\/api\/projects\/([^/]+)\/files\/(.+)\/versions\/([^/]+)\/restore$/u, async (req, res) => {
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string; 2?: string };
+      const projectId = String(params[0] ?? '');
+      const fileName = String(params[1] ?? '');
+      const versionId = String(params[2] ?? '');
+      if (rejectInternalVersionPath(res, fileName)) return;
+      const project = getProject(db, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      const restored = await readProjectFileVersion(
+        PROJECTS_DIR,
+        project.id,
+        fileName,
+        versionId,
+        project.metadata,
+      );
+      const requestPrompt = typeof req.body?.prompt === 'string' && req.body.prompt.trim()
+        ? req.body.prompt.trim()
+        : null;
+      const prompt = requestPrompt
+        ?? restored.version.prompt
+        ?? latestProjectPrompt(project).prompt;
+      const { file, version, versionWarning } = await withProjectFileVersionLock(
+        PROJECTS_DIR,
+        project.id,
+        fileName,
+        project.metadata,
+        async (versionLock) => {
+          const file = await writeProjectFile(
+            PROJECTS_DIR,
+            project.id,
+            fileName,
+            Buffer.from(restored.content, 'utf8'),
+            {},
+            project.metadata,
+          );
+          let version: ProjectFileVersion | null = null;
+          let versionWarning: ProjectFileVersionWarning | undefined;
+          try {
+            version = await versionLock.createVersion(restored.content, {
+              prompt,
+              promptSource: requestPrompt ? 'manual' : 'restore',
+              source: 'restore',
+              restoreFromVersionId: restored.version.id,
+            });
+          } catch (err) {
+            versionWarning = htmlVersionCaptureWarning(err);
+          }
+          return { file, version, versionWarning };
+        },
+      );
+      /** @type {import('@open-design/contracts').RestoreProjectFileVersionResponse} */
+      const body = { file, version, ...(versionWarning ? { versionWarning } : {}) };
+      res.json(body);
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'VERSION_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  app.get(/^\/api\/projects\/([^/]+)\/files\/(.+)\/versions\/([^/]+)$/u, async (req, res) => {
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string; 2?: string };
+      const projectId = String(params[0] ?? '');
+      const fileName = String(params[1] ?? '');
+      const versionId = String(params[2] ?? '');
+      if (rejectInternalVersionPath(res, fileName)) return;
+      const project = getProject(db, projectId);
+      if (!project) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      const body = await readProjectFileVersion(
+        PROJECTS_DIR,
+        project.id,
+        fileName,
+        versionId,
+        project.metadata,
+      );
+      /** @type {import('@open-design/contracts').ProjectFileVersionResponse} */
+      const typedBody = body;
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(typedBody);
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'VERSION_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
   app.get(/^\/api\/projects\/([^/]+)\/files\/(.+)$/u, async (req, res) => {
     try {
       const params = req.params as unknown as { 0?: string; 1?: string };
       const projectId = String(params[0] ?? '');
       const fileSplat = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, fileSplat)) return;
       const project = getProject(db, projectId);
       const file = await readProjectFile(
         PROJECTS_DIR,
@@ -2438,30 +3366,78 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         const uploadProject = getProject(db, req.params.id);
         await ensureProject(PROJECTS_DIR, req.params.id, uploadProject?.metadata);
         if (req.file) {
-          const buf = await fs.promises.readFile(req.file.path);
-          // A caller-supplied `name` may carry an intentional subdirectory
-          // (e.g. "imagery/hero.png" from the design-kit uploader). Preserve it
-          // with sanitizePath (sanitizes each segment, keeps the slashes) so the
-          // file lands where brand.json references it; sanitizeName would flatten
-          // the slash to "_" and orphan the asset at the project root. Raw
-          // multipart originalnames are plain basenames, so sanitizeName fits.
-          const desiredName = req.body?.name
-            ? sanitizePath(req.body.name)
-            : sanitizeName(req.file.originalname);
-          const meta = await writeProjectFile(
-            PROJECTS_DIR,
-            req.params.id,
-            desiredName,
-            buf,
-            {},
-            uploadProject?.metadata,
-          );
-          fs.promises.unlink(req.file.path).catch(() => {});
-          /** @type {import('@open-design/contracts').ProjectFileResponse} */
-          const body = { file: meta };
-          return res.json(body);
+          try {
+            const buf = await fs.promises.readFile(req.file.path);
+            // A caller-supplied `name` may carry an intentional subdirectory
+            // (e.g. "imagery/hero.png" from the design-kit uploader). Preserve it
+            // with sanitizePath (sanitizes each segment, keeps the slashes) so the
+            // file lands where brand.json references it; sanitizeName would flatten
+            // the slash to "_" and orphan the asset at the project root. Raw
+            // multipart originalnames are plain basenames, so sanitizeName fits.
+            const desiredName = req.body?.name
+              ? sanitizePath(req.body.name)
+              : sanitizeName(req.file.originalname);
+            if (rejectInternalVersionPath(res, desiredName)) return;
+            const requestedSource = uploadProject && /\.html?$/i.test(desiredName)
+              ? requestProjectFileVersionUploadSource(req.body)
+              : null;
+            const writeAndCapture = async (versionLock?: HtmlVersionLock) => {
+              const meta = await writeProjectFile(
+                PROJECTS_DIR,
+                req.params.id,
+                desiredName,
+                buf,
+                {},
+                uploadProject?.metadata,
+              );
+              const versionCapture = uploadProject && requestedSource && /\.html?$/i.test(meta.name) && versionLock
+                ? await (async () => {
+                  const savedFile = await readProjectFile(PROJECTS_DIR, uploadProject.id, meta.name, uploadProject.metadata);
+                  return tryEnsureLockedHtmlCurrentVersion(
+                    uploadProject,
+                    meta.name,
+                    savedFile.buffer.toString('utf8'),
+                    versionLock.ensureCurrentVersion,
+                    {
+                      prompt: typeof req.body?.versionPrompt === 'string' ? req.body.versionPrompt : null,
+                      promptSource: 'manual',
+                      source: requestedSource,
+                      label: typeof req.body?.versionLabel === 'string' ? req.body.versionLabel : null,
+                    },
+                  );
+                })()
+                : null;
+              return { meta, versionCapture };
+            };
+            const { meta, versionCapture } = uploadProject && requestedSource
+              ? await withProjectFileVersionLock(
+                PROJECTS_DIR,
+                req.params.id,
+                desiredName,
+                uploadProject.metadata,
+                (versionLock) => writeAndCapture(versionLock),
+              )
+              : await writeAndCapture();
+            /** @type {import('@open-design/contracts').ProjectFileResponse} */
+            const body = {
+              file: meta,
+              ...(versionCapture?.versionWarning ? { versionWarning: versionCapture.versionWarning } : {}),
+            };
+            return res.json(body);
+          } finally {
+            fs.promises.unlink(req.file.path).catch(() => {});
+          }
         }
-        const { name, content, encoding, artifactManifest, artifact, overwrite } = req.body || {};
+        const {
+          name,
+          content,
+          encoding,
+          artifactManifest,
+          artifact,
+          overwrite,
+          versionLabel,
+          versionPrompt,
+        } = req.body || {};
         if (typeof name !== 'string' || typeof content !== 'string') {
           return sendApiError(
             res,
@@ -2470,6 +3446,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             'name and content required',
           );
         }
+        if (rejectInternalVersionPath(res, name)) return;
+        const desiredName = sanitizePath(name);
+        if (rejectInternalVersionPath(res, desiredName)) return;
+        const requestedSource = uploadProject && /\.html?$/i.test(desiredName)
+          ? requestProjectFileVersionUploadSource(req.body)
+          : null;
         if (artifactManifest !== undefined && artifactManifest !== null) {
           const validated = validateArtifactManifestInput(
             artifactManifest,
@@ -2488,15 +3470,16 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           encoding === 'base64'
             ? Buffer.from(content, 'base64')
             : Buffer.from(content, 'utf8');
-        const meta = artifact === true
-          ? await createProjectArtifactFile({
+        const writeAndCapture = async (versionLock?: HtmlVersionLock) => {
+          const meta = artifact === true
+            ? await createProjectArtifactFile({
               projectsRoot: PROJECTS_DIR,
               projectId: req.params.id,
               input: { name, content, encoding, artifactManifest },
               metadata: uploadProject?.metadata,
               writeProjectFile,
             })
-          : await writeProjectFile(
+            : await writeProjectFile(
               PROJECTS_DIR,
               req.params.id,
               name,
@@ -2507,10 +3490,52 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
               },
               uploadProject?.metadata,
             );
+          const versionCapture = uploadProject && requestedSource && /\.html?$/i.test(meta.name) && versionLock
+            ? await (async () => {
+              const savedFile = await readProjectFile(PROJECTS_DIR, uploadProject.id, meta.name, uploadProject.metadata);
+              const versionOverride: HtmlVersionOverride = {
+                source: requestedSource,
+                label: typeof versionLabel === 'string' ? versionLabel : null,
+              };
+              if (typeof versionPrompt === 'string') {
+                versionOverride.prompt = versionPrompt;
+              }
+              if (requestedSource === 'manual') {
+                versionOverride.promptSource = 'manual';
+              } else if (requestedSource === 'restore') {
+                versionOverride.promptSource = 'restore';
+              }
+              return tryEnsureLockedHtmlCurrentVersion(
+                uploadProject,
+                meta.name,
+                savedFile.buffer.toString('utf8'),
+                versionLock.ensureCurrentVersion,
+                versionOverride,
+              );
+            })()
+            : null;
+          return { meta, versionCapture };
+        };
+        const { meta, versionCapture } = uploadProject && requestedSource
+          ? await withProjectFileVersionLock(
+            PROJECTS_DIR,
+            req.params.id,
+            desiredName,
+            uploadProject.metadata,
+            (versionLock) => writeAndCapture(versionLock),
+          )
+          : await writeAndCapture();
         /** @type {import('@open-design/contracts').ProjectFileResponse} */
-        const body = { file: meta };
+        const body = {
+          file: meta,
+          ...(versionCapture?.versionWarning ? { versionWarning: versionCapture.versionWarning } : {}),
+        };
         res.json(body);
       } catch (err: any) {
+        const message = String(err?.message || err);
+        if (/^invalid (source|versionSource);/u.test(message)) {
+          return sendApiError(res, 400, 'BAD_REQUEST', message);
+        }
         if (err instanceof ArtifactRegressionError) {
           return sendApiError(res, 422, 'ARTIFACT_REGRESSION', err.message, {
             details: {
@@ -2546,12 +3571,20 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (typeof from !== 'string' || typeof to !== 'string') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'from and to required');
       }
+      if (rejectInternalVersionPath(res, from) || rejectInternalVersionPath(res, to)) return;
       const project = getProject(db, req.params.id);
       const result = await renameProjectFile(
         PROJECTS_DIR,
         req.params.id,
         from,
         to,
+        project?.metadata,
+      );
+      await renameProjectFileVersionStore(
+        PROJECTS_DIR,
+        req.params.id,
+        result.oldName,
+        result.newName,
         project?.metadata,
       );
       /** @type {import('@open-design/contracts').RenameProjectFileResponse} */
@@ -2571,8 +3604,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
   app.delete('/api/projects/:id/files/:name', async (req, res) => {
     try {
+      if (rejectInternalVersionPath(res, req.params.name)) return;
       const delProject = getProject(db, req.params.id);
       await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+      await markProjectFileVersionStoreDeleted(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);

@@ -11,6 +11,8 @@ export type WorkspaceContextKind =
   | 'design-system'
   | 'file'
   | 'folder'
+  | 'project'
+  | 'local-code'
   | 'browser'
   | 'terminal'
   | 'side-chat'
