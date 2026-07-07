@@ -10,6 +10,7 @@ import {
 
 const CONTRACT_PATH = new URL("../public/pricing/plans.json", import.meta.url);
 const HEADERS_PATH = new URL("../public/_headers", import.meta.url);
+const PRICING_MD_PATH = new URL("../public/pricing.md", import.meta.url);
 
 function assertPlanContract(value: unknown): asserts value is PricingContract {
   assert.equal(typeof value, "object");
@@ -62,5 +63,40 @@ describe("pricing contract", () => {
     const contract = JSON.parse(file) as unknown;
 
     assert.deepEqual(contract, PRICING_SNAPSHOT);
+  });
+
+  // The machine-readable /pricing.md is quoted verbatim by AI agents, so its
+  // numbers must not silently drift from the plans.json contract. This asserts
+  // every tier's monthly + yearly price, annual discount, deploy limit, and the
+  // overage price appear in the markdown. A pricing edit that forgets to update
+  // pricing.md fails here instead of shipping a stale AI-facing surface.
+  it("keeps public/pricing.md in sync with the pricing contract", async () => {
+    const md = await readFile(PRICING_MD_PATH, "utf8");
+    const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
+
+    for (const tier of PRICING_SNAPSHOT.tiers) {
+      const t = tier.tier;
+      assert.ok(
+        md.includes(`${usd(tier.monthly.priceUsd)} / month`),
+        `pricing.md missing ${t} monthly price ${usd(tier.monthly.priceUsd)} / month`,
+      );
+      assert.ok(
+        md.includes(`${usd(tier.yearly.priceUsd)} / year`),
+        `pricing.md missing ${t} yearly price ${usd(tier.yearly.priceUsd)} / year`,
+      );
+      assert.ok(
+        md.includes(`${tier.yearly.discountPct}% off`),
+        `pricing.md missing ${t} annual discount ${tier.yearly.discountPct}% off`,
+      );
+      assert.ok(
+        md.includes(`up to ${tier.deployLimit} / month`),
+        `pricing.md missing ${t} deploy limit up to ${tier.deployLimit} / month`,
+      );
+    }
+
+    assert.ok(
+      md.includes(`${usd(PRICING_SNAPSHOT.overageDeployPriceUsd)} each`),
+      `pricing.md missing overage price ${usd(PRICING_SNAPSHOT.overageDeployPriceUsd)} each`,
+    );
   });
 });

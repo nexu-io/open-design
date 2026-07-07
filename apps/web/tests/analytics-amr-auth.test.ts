@@ -12,9 +12,13 @@ import type { AmrEntryAttribution } from '@open-design/contracts/analytics';
 // observable without a live PostHog instance.
 vi.mock('../src/analytics/client', () => ({
   setAnalyticsUserId: vi.fn(),
+  setAnalyticsPersonProperties: vi.fn(),
 }));
 
-import { setAnalyticsUserId } from '../src/analytics/client';
+import {
+  setAnalyticsPersonProperties,
+  setAnalyticsUserId,
+} from '../src/analytics/client';
 import {
   beginAmrAuthTracking,
   resolveAmrAuthTracking,
@@ -35,6 +39,7 @@ describe('amr-auth single-flight tracking', () => {
     // Drain any attempt a previous test left armed.
     resolveAmrAuthTracking(() => undefined, 'cancelled');
     vi.mocked(setAnalyticsUserId).mockClear();
+    vi.mocked(setAnalyticsPersonProperties).mockClear();
   });
 
   it('fires one amr_auth_result with attribution on success', () => {
@@ -89,7 +94,14 @@ describe('amr-auth single-flight tracking', () => {
       signedInUserId: 'usr_amr_42',
     });
     const setUserMock = vi.mocked(setAnalyticsUserId);
+    const setPersonMock = vi.mocked(setAnalyticsPersonProperties);
     expect(setUserMock).toHaveBeenCalledWith('usr_amr_42');
+    expect(setPersonMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        od_app_user_id: 'usr_amr_42',
+        od_source_bound_at: expect.any(String),
+      }),
+    );
     expect(track).toHaveBeenCalledTimes(1);
     expect(setUserMock.mock.invocationCallOrder[0]).toBeLessThan(
       track.mock.invocationCallOrder[0] ?? Number.NEGATIVE_INFINITY,

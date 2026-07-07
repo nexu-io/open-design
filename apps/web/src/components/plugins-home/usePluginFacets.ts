@@ -22,6 +22,12 @@ import {
   type FacetSelection,
 } from './facets';
 import { sortByVisualAppeal } from './visualScore';
+import {
+  readStoredSortOrder,
+  sortByNewest,
+  writeStoredSortOrder,
+  type PluginSortOrder,
+} from './sortOrder';
 
 export type FilterMode = 'all' | 'saved';
 
@@ -46,6 +52,8 @@ export interface UsePluginFacetsResult {
   setMode: (next: FilterMode) => void;
   query: string;
   setQuery: (next: string) => void;
+  sortOrder: PluginSortOrder;
+  setSortOrder: (next: PluginSortOrder) => void;
   totalVisible: number;
 }
 
@@ -63,6 +71,12 @@ export function usePluginFacets({
   const [mode, setMode] = useState<FilterMode>('all');
   const [selection, setSelection] = useState<FacetSelection>(EMPTY_SELECTION);
   const [query, setQuery] = useState('');
+  // Hot vs newest scan order, remembered per browser so a returning
+  // user keeps their preferred ordering (lazy read: storage is only
+  // touched once per mount).
+  const [sortOrder, setSortOrderState] = useState<PluginSortOrder>(
+    () => readStoredSortOrder(),
+  );
   // Apply the preferred default selection once, on the first render that
   // sees a non-empty catalog. Using a flag (instead of a useState lazy
   // initializer) handles the realistic case where `args.plugins` is
@@ -84,9 +98,18 @@ export function usePluginFacets({
     [plugins],
   );
 
+  // Re-rank for the "newest" order on top of the visual-appeal base:
+  // sortByNewest is stable, so same-timestamp batches (e.g. the bundled
+  // catalog seeded in one transaction) keep their appeal ranking
+  // instead of collapsing into raw daemon order.
+  const orderedPlugins = useMemo(
+    () => (sortOrder === 'newest' ? sortByNewest(visiblePlugins) : visiblePlugins),
+    [sortOrder, visiblePlugins],
+  );
+
   const savedList = useMemo(
-    () => visiblePlugins.filter((plugin) => savedPluginIds?.has(plugin.id)),
-    [savedPluginIds, visiblePlugins],
+    () => orderedPlugins.filter((plugin) => savedPluginIds?.has(plugin.id)),
+    [savedPluginIds, orderedPlugins],
   );
 
   const catalog = useMemo(() => buildFacetCatalog(visiblePlugins), [visiblePlugins]);
@@ -113,9 +136,9 @@ export function usePluginFacets({
     const base =
       mode === 'saved'
         ? savedList
-        : applyFacetSelection(visiblePlugins, selection);
+        : applyFacetSelection(orderedPlugins, selection);
     return filterByQuery(base, query, locale);
-  }, [mode, savedList, visiblePlugins, selection, query, locale]);
+  }, [mode, savedList, orderedPlugins, selection, query, locale]);
 
   function pickCategory(slug: string | null): void {
     if (mode === 'saved') setMode('all');
@@ -131,6 +154,11 @@ export function usePluginFacets({
       ...prev,
       subcategory: prev.subcategory === slug ? null : slug,
     }));
+  }
+
+  function setSortOrder(next: PluginSortOrder): void {
+    setSortOrderState(next);
+    writeStoredSortOrder(next);
   }
 
   function clearFacets(): void {
@@ -161,6 +189,8 @@ export function usePluginFacets({
     setMode,
     query,
     setQuery,
+    sortOrder,
+    setSortOrder,
     totalVisible: visiblePlugins.length,
   };
 }

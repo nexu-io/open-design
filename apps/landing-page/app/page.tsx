@@ -192,9 +192,9 @@ const FOOTER_AGENTS = [
 // Legal / company labels — small inline map (en/zh/zh-tw, fallback en) kept
 // identical to `site-footer.astro` so the two footers never drift.
 const FOOTER_LEGAL = {
-  en: { company: 'Company', about: 'About', faq: 'FAQ', privacy: 'Privacy Policy', terms: 'Terms', allAgents: 'All agents' },
-  zh: { company: '公司', about: '关于', faq: '常见问题', privacy: '隐私政策', terms: '服务条款', allAgents: '全部 Agent' },
-  'zh-tw': { company: '公司', about: '關於', faq: '常見問題', privacy: '隱私政策', terms: '服務條款', allAgents: '全部 Agent' },
+  en: { company: 'Company', about: 'About', careers: 'Careers', faq: 'FAQ', privacy: 'Privacy Policy', terms: 'Terms', allAgents: 'All agents' },
+  zh: { company: '公司', about: '关于', careers: '招聘', faq: '常见问题', privacy: '隐私政策', terms: '服务条款', allAgents: '全部 Agent' },
+  'zh-tw': { company: '公司', about: '關於', careers: '招聘', faq: '常見問題', privacy: '隱私政策', terms: '服務條款', allAgents: '全部 Agent' },
 } satisfies Record<string, Record<string, string>>;
 
 const ext = {
@@ -1247,6 +1247,7 @@ export default function Page({
                 <h5>{footL.company}</h5>
                 <ul>
                   <li><a href={href('/about/')}>{footL.about}</a></li>
+                  <li><a href={href('/careers/')}>{footL.careers}</a></li>
                   <li><a href={href('/faq/')}>{footL.faq}</a></li>
                   <li><a href={href('/privacy/')}>{footL.privacy}</a></li>
                   <li><a href={href('/terms/')}>{footL.terms}</a></li>

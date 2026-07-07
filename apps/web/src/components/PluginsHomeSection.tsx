@@ -26,6 +26,7 @@ import { localizePluginTitle } from './plugins-home/localization';
 import { usePluginFacets } from './plugins-home/usePluginFacets';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
 import { useSavedPluginIds } from './plugins-home/savedPlugins';
+import type { PluginSortOrder } from './plugins-home/sortOrder';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Toast } from './Toast';
 import { AnimatePresence } from 'motion/react';
@@ -93,6 +94,8 @@ export function PluginsHomeSection({
     setMode,
     query,
     setQuery,
+    sortOrder,
+    setSortOrder,
     totalVisible,
   } = usePluginFacets({
     plugins,
@@ -195,6 +198,8 @@ export function PluginsHomeSection({
               }
               query={query}
               onQueryChange={setQuery}
+              sortOrder={sortOrder}
+              onSortOrderChange={setSortOrder}
             />
             {selection.category ? (
               <SubcategoryRow
@@ -279,12 +284,15 @@ interface CategoryRowProps {
   onToggleSaved: () => void;
   query: string;
   onQueryChange: (next: string) => void;
+  sortOrder: PluginSortOrder;
+  onSortOrderChange: (next: PluginSortOrder) => void;
 }
 
 // Single combined filter bar: an optional Saved override chip + category
-// pills on the left, search field on the right. The "All" pill doubles as a
-// clear-filters affordance, so a separate `X / Y` counter and `Clear` link
-// would just repeat what the pill strip already shows.
+// pills on the left, sort toggle + search field on the right. The "All"
+// pill doubles as a clear-filters affordance, so a separate `X / Y`
+// counter and `Clear` link would just repeat what the pill strip already
+// shows.
 function CategoryRow({
   options,
   selectedSlug,
@@ -296,6 +304,8 @@ function CategoryRow({
   onToggleSaved,
   query,
   onQueryChange,
+  sortOrder,
+  onSortOrderChange,
 }: CategoryRowProps) {
   const t = useT();
   if (options.length === 0) return null;
@@ -348,6 +358,7 @@ function CategoryRow({
         ))}
       </div>
       <div className="plugins-home__facet-tools">
+        <SortToggle value={sortOrder} onChange={onSortOrderChange} />
         <SearchInput value={query} onChange={onQueryChange} />
       </div>
     </div>
@@ -471,6 +482,46 @@ function pluginFacetLabel(slug: string, fallback: string, t: ReturnType<typeof u
     // top-level slugs fall through to the subfacet table before giving up.
     default: return pluginSubfacetLabel(slug, fallback, t);
   }
+}
+
+interface SortToggleProps {
+  value: PluginSortOrder;
+  onChange: (next: PluginSortOrder) => void;
+}
+
+// Hot / newest ordering toggle that lives next to the search field.
+// Rendered as a compact two-segment radio group: "hot" keeps the
+// visual-appeal ranking the gallery leads with today, "newest" re-ranks
+// by record freshness. The picked order persists per browser via the
+// hook (`sortOrder.ts`).
+function SortToggle({ value, onChange }: SortToggleProps) {
+  const t = useT();
+  const segments: Array<{ order: PluginSortOrder; label: string }> = [
+    { order: 'hot', label: t('pluginsHome.sortHot') },
+    { order: 'newest', label: t('pluginsHome.sortNewest') },
+  ];
+  return (
+    <div
+      className="plugins-home__sort"
+      role="radiogroup"
+      aria-label={t('pluginsHome.sortAria')}
+      data-testid="plugins-home-sort"
+    >
+      {segments.map((segment) => (
+        <button
+          key={segment.order}
+          type="button"
+          role="radio"
+          aria-checked={value === segment.order}
+          className={`plugins-home__sort-segment${value === segment.order ? ' is-active' : ''}`}
+          onClick={() => onChange(segment.order)}
+          data-testid={`plugins-home-sort-${segment.order}`}
+        >
+          {segment.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 interface SearchInputProps {
