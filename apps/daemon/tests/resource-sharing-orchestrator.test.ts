@@ -6,6 +6,7 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { materializeRef, packTree, pushTree } from '../src/resource-drive.js';
+import { upsertInstalledPlugin } from '../src/plugins/registry.js';
 import { createSharingOrchestrator } from '../src/resource-sharing/orchestrator.js';
 import { migrateResourceSharing } from '../src/resource-sharing/store.js';
 
@@ -63,6 +64,7 @@ describe('resource-sharing orchestrator', () => {
 
   beforeEach(async () => {
     db = new Database(':memory:');
+    migrateInstalledPluginsFixture(db);
     migrateResourceSharing(db);
     tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-resource-sharing-'));
     mockState.materializations = [];
@@ -85,7 +87,7 @@ describe('resource-sharing orchestrator', () => {
       paths: {
         RUNTIME_DATA_DIR: tempDir,
         USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
-        USER_SKILLS_DIR: path.join(tempDir, 'skills'),
+        SKILL_ROOTS: [path.join(tempDir, 'skills')],
       },
     });
     mockState.materializations.push(
@@ -129,7 +131,7 @@ describe('resource-sharing orchestrator', () => {
       paths: {
         RUNTIME_DATA_DIR: tempDir,
         USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
-        USER_SKILLS_DIR: path.join(tempDir, 'skills'),
+        SKILL_ROOTS: [path.join(tempDir, 'skills')],
       },
     });
 
@@ -146,7 +148,7 @@ describe('resource-sharing orchestrator', () => {
     const paths = {
       RUNTIME_DATA_DIR: tempDir,
       USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
-      USER_SKILLS_DIR: path.join(tempDir, 'skills'),
+      SKILL_ROOTS: [path.join(tempDir, 'skills')],
     };
     const orchestrator = createSharingOrchestrator({ db, paths });
     mockState.materializations.push({ 'DESIGN.md': 'team copy\n' });
@@ -175,7 +177,7 @@ describe('resource-sharing orchestrator', () => {
       paths: {
         RUNTIME_DATA_DIR: tempDir,
         USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
-        USER_SKILLS_DIR: path.join(tempDir, 'skills'),
+        SKILL_ROOTS: [path.join(tempDir, 'skills')],
       },
     });
 
@@ -194,7 +196,7 @@ describe('resource-sharing orchestrator', () => {
       paths: {
         RUNTIME_DATA_DIR: tempDir,
         USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
-        USER_SKILLS_DIR: path.join(tempDir, 'skills'),
+        SKILL_ROOTS: [path.join(tempDir, 'skills')],
       },
     });
     mockState.resourceKind = 'plugin';
@@ -213,4 +215,97 @@ describe('resource-sharing orchestrator', () => {
       ),
     ).rejects.toMatchObject({ code: 'ENOENT' });
   });
+
+  it('shares a built-in skill from the daemon skill roots', async () => {
+    const userSkillRoot = path.join(tempDir, 'user-skills');
+    const bundledSkillRoot = path.join(tempDir, 'bundled-skills');
+    const builtInSkillDir = path.join(bundledSkillRoot, 'built-in-skill');
+    await fsp.mkdir(builtInSkillDir, { recursive: true });
+    await fsp.writeFile(path.join(builtInSkillDir, 'SKILL.md'), '# Built in\n');
+    const orchestrator = createSharingOrchestrator({
+      db,
+      paths: {
+        RUNTIME_DATA_DIR: tempDir,
+        USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+        SKILL_ROOTS: [userSkillRoot, bundledSkillRoot],
+      },
+    });
+
+    await expect(orchestrator.share('skill', 'built-in-skill')).resolves.toEqual({
+      hubResourceId: 'created_resource',
+      version: 2,
+    });
+    expect(packTree).toHaveBeenCalledWith(builtInSkillDir);
+    expect(pushTree).toHaveBeenCalled();
+  });
+
+  it('shares a bundled plugin from its installed plugin record', async () => {
+    const bundledPluginDir = path.join(
+      tempDir,
+      'plugins',
+      '_official',
+      'bundled-plugin',
+    );
+    await fsp.mkdir(bundledPluginDir, { recursive: true });
+    await fsp.writeFile(
+      path.join(bundledPluginDir, 'open-design.json'),
+      JSON.stringify({ name: 'bundled-plugin', version: '1.0.0' }),
+    );
+    upsertInstalledPlugin(db, {
+      id: 'bundled-plugin',
+      title: 'Bundled Plugin',
+      version: '1.0.0',
+      sourceKind: 'bundled',
+      source: bundledPluginDir,
+      trust: 'bundled',
+      capabilitiesGranted: [],
+      manifest: { name: 'bundled-plugin', version: '1.0.0' },
+      fsPath: bundledPluginDir,
+      installedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    const orchestrator = createSharingOrchestrator({
+      db,
+      paths: {
+        RUNTIME_DATA_DIR: tempDir,
+        USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+        SKILL_ROOTS: [path.join(tempDir, 'skills')],
+      },
+    });
+
+    await expect(orchestrator.share('plugin', 'bundled-plugin')).resolves.toEqual({
+      hubResourceId: 'created_resource',
+      version: 2,
+    });
+    expect(packTree).toHaveBeenCalledWith(bundledPluginDir);
+    expect(pushTree).toHaveBeenCalled();
+  });
 });
+
+function migrateInstalledPluginsFixture(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE installed_plugins (
+      id                   TEXT PRIMARY KEY,
+      title                TEXT NOT NULL,
+      version              TEXT NOT NULL,
+      source_kind          TEXT NOT NULL,
+      source               TEXT NOT NULL,
+      pinned_ref           TEXT,
+      source_digest        TEXT,
+      source_marketplace_id TEXT,
+      source_marketplace_entry_name TEXT,
+      source_marketplace_entry_version TEXT,
+      marketplace_trust    TEXT,
+      resolved_source      TEXT,
+      resolved_ref         TEXT,
+      manifest_digest      TEXT,
+      archive_integrity    TEXT,
+      trust                TEXT NOT NULL,
+      capabilities_granted TEXT NOT NULL,
+      manifest_json        TEXT NOT NULL,
+      fs_path              TEXT NOT NULL,
+      installed_at         INTEGER NOT NULL,
+      updated_at           INTEGER NOT NULL
+    )
+  `);
+}

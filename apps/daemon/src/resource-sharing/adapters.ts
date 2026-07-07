@@ -6,16 +6,19 @@ import path from 'node:path';
 // and the neutral SDK stay kind-agnostic. Adapters only READ the existing
 // managers' on-disk layout — they never mutate the managers or their storage.
 //
-// All three kinds share the same shape: a resource is a directory under a
-// per-kind root (design systems: USER_DESIGN_SYSTEMS_DIR/<id>; skills:
-// USER_SKILLS_DIR/<id>; plugins: RUNTIME_DATA_DIR/plugins/<id>), and a pulled
-// team copy lands read-only under a distinct team-shared namespace. Ids are
-// validated + resolved within their root so a hostile id cannot escape it.
+// All three kinds expose a source directory to pack and a team-copy directory
+// for pulled resources. Source lookup mirrors each owning subsystem: design
+// systems are user-owned, skills can resolve from any daemon skill root, and
+// plugins resolve through the installed-plugin registry record.
 
 export interface AdapterPaths {
   USER_DESIGN_SYSTEMS_DIR: string;
-  USER_SKILLS_DIR: string;
+  SKILL_ROOTS: string[];
   RUNTIME_DATA_DIR: string;
+}
+
+export interface AdapterSources {
+  resolvePluginSourceDir?: (localId: string) => string | null;
 }
 
 export interface ResourceKindAdapter {
@@ -82,24 +85,74 @@ function createDirAdapter(
   };
 }
 
+function createMultiRootDirAdapter(
+  kind: string,
+  sourceRoots: string[],
+  teamCopyRoot: string,
+): ResourceKindAdapter {
+  const sources = sourceRoots.map((root) => path.resolve(root));
+  const teamCopy = path.resolve(teamCopyRoot);
+  return {
+    kind,
+    resolveSourceDir(localId) {
+      const segment = validatePathSegment(localId, `local ${kind} id`);
+      for (const source of sources) {
+        const dir = resolveWithinRoot(source, segment);
+        if (existsSync(dir)) return dir;
+      }
+      return null;
+    },
+    teamCopyDir(hubResourceId) {
+      return resolveWithinRoot(
+        teamCopy,
+        validatePathSegment(hubResourceId, 'hub resource id'),
+      );
+    },
+  };
+}
+
+function createRegistryBackedPluginAdapter(
+  resolvePluginSourceDir: (localId: string) => string | null,
+  teamCopyRoot: string,
+): ResourceKindAdapter {
+  const teamCopy = path.resolve(teamCopyRoot);
+  return {
+    kind: 'plugin',
+    resolveSourceDir(localId) {
+      const pluginId = validatePathSegment(localId, 'local plugin id');
+      const dir = resolvePluginSourceDir(pluginId);
+      return dir && existsSync(dir) ? dir : null;
+    },
+    teamCopyDir(hubResourceId) {
+      return resolveWithinRoot(
+        teamCopy,
+        validatePathSegment(hubResourceId, 'hub resource id'),
+      );
+    },
+  };
+}
+
 export function createAdapterRegistry(
   paths: AdapterPaths,
+  sources: AdapterSources = {},
 ): Map<string, ResourceKindAdapter> {
   const teamShared = path.join(paths.RUNTIME_DATA_DIR, 'team-shared');
+  const resolvePluginSourceDir =
+    sources.resolvePluginSourceDir ??
+    ((localId: string) => path.join(paths.RUNTIME_DATA_DIR, 'plugins', localId));
   const adapters: ResourceKindAdapter[] = [
     createDirAdapter(
       'design_system',
       paths.USER_DESIGN_SYSTEMS_DIR,
       path.join(teamShared, 'design-systems'),
     ),
-    createDirAdapter(
+    createMultiRootDirAdapter(
       'skill',
-      paths.USER_SKILLS_DIR,
+      paths.SKILL_ROOTS,
       path.join(teamShared, 'skills'),
     ),
-    createDirAdapter(
-      'plugin',
-      path.join(paths.RUNTIME_DATA_DIR, 'plugins'),
+    createRegistryBackedPluginAdapter(
+      resolvePluginSourceDir,
       path.join(teamShared, 'plugins'),
     ),
   ];

@@ -17,6 +17,7 @@ import {
   type AdapterPaths,
   createAdapterRegistry,
 } from './adapters.js';
+import { getInstalledPlugin } from '../plugins/registry.js';
 import {
   getSharedByHub,
   getSharedByLocal,
@@ -63,7 +64,10 @@ export async function readResourceDetail(
 }
 
 export function createSharingOrchestrator(deps: SharingDeps) {
-  const adapters = createAdapterRegistry(deps.paths);
+  const adapters = createAdapterRegistry(deps.paths, {
+    resolvePluginSourceDir: (localId) =>
+      getInstalledPlugin(deps.db, localId)?.fsPath ?? null,
+  });
   const client = createResourceHubClient();
 
   function principalOrThrow(): ResourceHubPrincipal {

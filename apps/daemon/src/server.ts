@@ -3927,6 +3927,7 @@ export async function startServer({
     CRAFT_DIR,
     SKILLS_DIR,
     USER_SKILLS_DIR,
+    SKILL_ROOTS,
     PROMPT_TEMPLATES_DIR,
     BUNDLED_PETS_DIR,
     OD_BIN,
