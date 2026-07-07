@@ -6,7 +6,7 @@ import type {
 
 import {
   ResourceHubError,
-  createResourceHubClient,
+  hasExplicitResourceHubConfig,
   readResourceHubPrincipal,
 } from '../../integrations/resource-hub.js';
 import {
@@ -45,7 +45,7 @@ export function registerResourceSharingRoutes(
   // Readiness probe: hub URL configured + workspace principal resolvable.
   app.get('/api/resources/_status', (_req: Request, res: Response) => {
     res.json({
-      configured: createResourceHubClient().isConfigured(),
+      configured: hasExplicitResourceHubConfig(),
       principalAvailable: readResourceHubPrincipal() !== null,
     });
   });

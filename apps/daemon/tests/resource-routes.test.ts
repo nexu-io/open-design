@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const routeState = vi.hoisted(() => ({
   listError: null as unknown,
   allowLocalRequest: true,
+  hasExplicitResourceHubConfig: true,
 }));
 
 vi.mock('../src/integrations/resource-hub.js', () => {
@@ -24,6 +25,9 @@ vi.mock('../src/integrations/resource-hub.js', () => {
     createResourceHubClient: vi.fn(() => ({
       isConfigured: () => true,
     })),
+    hasExplicitResourceHubConfig: vi.fn(
+      () => routeState.hasExplicitResourceHubConfig,
+    ),
     readResourceHubPrincipal: vi.fn(() => ({
       memberId: 'member_1',
       teamId: 'team_1',
@@ -64,6 +68,7 @@ describe('resource routes error handling', () => {
       new Promise<void>((resolve) => {
         routeState.listError = null;
         routeState.allowLocalRequest = true;
+        routeState.hasExplicitResourceHubConfig = true;
         const app = express();
         registerResourceSharingRoutes(app, {
           db: {} as never,
@@ -160,6 +165,18 @@ describe('resource routes error handling', () => {
     expect(res.status).toBe(403);
     await expect(res.json()).resolves.toEqual({
       error: 'local_origin_required',
+    });
+  });
+
+  it('reports the resource hub as unconfigured without explicit hub config', async () => {
+    routeState.hasExplicitResourceHubConfig = false;
+
+    const res = await fetch(`${baseUrl}/api/resources/_status`);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({
+      configured: false,
+      principalAvailable: true,
     });
   });
 });

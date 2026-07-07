@@ -36,6 +36,7 @@ export default function ResourcePanelPage(): React.ReactElement {
   const [status, setStatus] = useState<string>('');
   const [shareKind, setShareKind] = useState('design_system');
   const [shareId, setShareId] = useState('');
+  const [pullKind, setPullKind] = useState('design_system');
   const [pullId, setPullId] = useState('');
 
   const refresh = useCallback(async () => {
@@ -113,12 +114,18 @@ export default function ResourcePanelPage(): React.ReactElement {
         <div>
           <h3>Pull (team → local)</h3>
           <input
+            data-testid="pull-kind"
+            value={pullKind}
+            onChange={(e) => setPullKind(e.target.value)}
+            style={{ width: 130 }}
+          />
+          <input
             data-testid="pull-id"
             placeholder="hub resource id"
             value={pullId}
             onChange={(e) => setPullId(e.target.value)}
           />
-          <button data-testid="pull-btn" onClick={() => void pull('design_system', pullId)}>
+          <button data-testid="pull-btn" onClick={() => void pull(pullKind, pullId)}>
             pull
           </button>
         </div>

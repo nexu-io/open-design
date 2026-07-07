@@ -126,6 +126,12 @@ export function readResourceHubConfig(
   return { baseUrl, internalToken };
 }
 
+export function hasExplicitResourceHubConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return Boolean(env.OD_RESOURCE_HUB_URL?.trim());
+}
+
 // Provisional principal source. Real sourcing joins the signed-in Vela identity
 // (integrations/vela.ts) with the workspace membership from link B; until that
 // lands, dev/local reads it from env so the loop is drivable.
