@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { __forTestReadProjectPluginManifest } from '../src/server.js';
+import { __forTestReadProjectPluginManifest } from '../src/plugins/share-helpers.js';
 
 describe('readProjectPluginManifest', () => {
   async function withManifest(name: string, fn: (folder: string) => Promise<void>) {

@@ -20,7 +20,7 @@ import {
 import {
   detectSkillPluginCandidateOnRunSuccess,
   upsertSkillPluginCandidateAssistantMessage,
-} from '../src/server.js';
+} from '../src/plugins/share-helpers.js';
 
 let tmpDir: string;
 let projectRoot: string;
