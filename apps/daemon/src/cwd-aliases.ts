@@ -71,7 +71,7 @@ type SkillCopyFn = (
 // through copy_file_range. `stat()` (not `lstat`) follows symlinks, so
 // every staged entry lands as a real directory or regular file — keeping
 // `.od-skills/` a self-contained write barrier even on the fallback path.
-async function copyTreeDereferenced(srcDir: string, destDir: string): Promise<void> {
+export async function copyTreeDereferenced(srcDir: string, destDir: string): Promise<void> {
   await mkdir(destDir, { recursive: true });
   for (const entry of await readdir(srcDir, { withFileTypes: true })) {
     const from = path.join(srcDir, entry.name);
