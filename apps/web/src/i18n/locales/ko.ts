@@ -460,7 +460,7 @@ export const ko: Dict = {
   'workspaceTabs.project': '프로젝트',
   'workspaceTabs.pluginDetails': '플러그인 세부 정보',
   'workspaceTabs.marketplace': '마켓플레이스',
-  'homeHero.title': '무엇을 디자인하고 싶으신가요?',
+  'homeHero.title': '보닥의 무엇을 만들까요?',
   'homeHero.templatesScrollHint': '위로 스크롤하여 더 많은 템플릿 살펴보기',
   'homeHero.templatesCollapse': '템플릿 접기',
   'homeHero.subtitlePrefix': '오픈소스 Claude Design 대안.',

@@ -70,11 +70,17 @@ export interface HomeHeroChip {
   group: ChipGroup;
   hint?: string;
   action: ChipAction;
+  // UI 노출 여부 — 카탈로그에서 지우지 않고 숨긴다. bodoc 3채널
+  // (Braze IAM · 네이버 블로그 · 카드뉴스) 집중 기간 동안 나머지 칩을
+  // 레일에서 내리되, findChip/딥링크·prefill 경로는 전체 카탈로그를
+  // 계속 조회하므로 기존 프로젝트 재개는 깨지지 않는다.
+  hidden?: boolean;
 }
 
 export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'prototype',
+    hidden: true,
     label: 'Prototype',
     icon: 'palette',
     group: 'create',
@@ -95,6 +101,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'deck',
+    hidden: true,
     label: 'Slide deck',
     icon: 'present',
     group: 'create',
@@ -116,6 +123,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'hyperframes',
+    hidden: true,
     label: 'HyperFrames',
     icon: 'orbit',
     group: 'create',
@@ -128,6 +136,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'live-artifact',
+    hidden: true,
     label: 'Live artifact',
     icon: 'refresh',
     group: 'create',
@@ -190,6 +199,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'image',
+    hidden: true,
     label: 'Image',
     icon: 'image',
     group: 'create',
@@ -207,6 +217,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'video',
+    hidden: true,
     label: 'Video',
     icon: 'play',
     group: 'create',
@@ -224,6 +235,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'audio',
+    hidden: true,
     label: 'Audio',
     icon: 'mic',
     group: 'create',
@@ -241,6 +253,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'create-plugin',
+    hidden: true,
     label: 'Create plugin',
     icon: 'edit',
     group: 'migrate',
@@ -249,6 +262,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'figma',
+    hidden: true,
     label: 'From Figma',
     icon: 'import',
     group: 'migrate',
@@ -265,6 +279,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'template',
+    hidden: true,
     label: 'From template',
     icon: 'file-code',
     group: 'migrate',
@@ -273,8 +288,9 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
 ];
 
+// 레일·"..." 메뉴가 그리는 노출 칩만 반환 — hidden 칩은 UI에서 제외.
 export function chipsForGroup(group: ChipGroup): HomeHeroChip[] {
-  return HOME_HERO_CHIPS.filter((c) => c.group === group);
+  return HOME_HERO_CHIPS.filter((c) => c.group === group && !c.hidden);
 }
 
 // Helper used by tests + the rail component to pull the chip metadata

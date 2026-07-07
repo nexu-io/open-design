@@ -41,6 +41,7 @@ import {
 import { sessionModeToTracking } from '@marketing-ax/contracts/analytics';
 import {
   chipsForGroup,
+  HOME_HERO_CHIPS,
   type ChipGroup,
   type HomeHeroChip,
 } from './home-hero/chips';
@@ -509,9 +510,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       .filter((field): field is InputFieldSpec => Boolean(field)),
     [fieldByName, footerInputNames],
   );
+  // 전체 카탈로그에서 조회 — hidden 칩도 prefill/딥링크로 활성화될 수 있어
+  // 노출 필터(chipsForGroup)를 타면 기존 프로젝트 재개가 끊긴다.
   const activeCreateChip = useMemo(
     () => activeChipId
-      ? chipsForGroup('create').find((chip) => chip.id === activeChipId) ?? null
+      ? HOME_HERO_CHIPS.find((chip) => chip.group === 'create' && chip.id === activeChipId) ?? null
       : null,
     [activeChipId],
   );
@@ -548,12 +551,15 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     );
   }, [activeExamplePlugins, activeChipId, selectedSubcategory, pluginOptions]);
 
-  // First-run guide, beat 1: pulse the Prototype chip for brand-new users.
+  // First-run guide, beat 1: pulse the first visible create chip for
+  // brand-new users. (Derived, not hardcoded — the rail can hide chips,
+  // and a pulse aimed at a hidden chip would silently no-op the guide.)
   // The settle delay lets the hero finish its entrance before the sheen.
   useEffect(() => {
     if (firstRunGuide !== true) return;
     if (readHomeGuideStage() !== 'chip') return;
-    const arm = window.setTimeout(() => setGuidePulseChipId('prototype'), 900);
+    const firstChipId = chipsForGroup('create')[0]?.id ?? null;
+    const arm = window.setTimeout(() => setGuidePulseChipId(firstChipId), 900);
     const disarm = window.setTimeout(() => setGuidePulseChipId(null), 3600);
     return () => {
       window.clearTimeout(arm);
@@ -2704,6 +2710,8 @@ function ShortcutsMenu({
 }: ShortcutsMenuProps) {
   const t = useT();
   const shortcuts = useMemo(() => chipsForGroup('migrate'), []);
+  // migrate 그룹이 전부 hidden이면 빈 메뉴만 여는 "..." 버튼이 남으므로 통째로 내린다.
+  if (shortcuts.length === 0) return null;
   const disabled = pluginsLoading || pendingPluginId !== null;
   const hasActiveShortcut = shortcuts.some((chip) => chip.id === activeChipId);
   const hasPendingShortcut = shortcuts.some((chip) => chip.id === pendingChipId);

@@ -18,6 +18,21 @@ import {
   findChip,
 } from '../../src/components/home-hero/chips';
 
+// The home rail currently hides every chip except the bodoc channels
+// (Braze IAM / Naver Blog / Card News) via the catalog's `hidden` flag.
+// This suite covers the flow logic BEHIND the chips, so it renders the
+// full catalog; visibility policy itself is owned by
+// HomeHero.rail-visibility.test.tsx.
+vi.mock('../../src/components/home-hero/chips', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../../src/components/home-hero/chips')>();
+  return {
+    ...mod,
+    chipsForGroup: (group: 'create' | 'migrate') =>
+      mod.HOME_HERO_CHIPS.filter((c) => c.group === group),
+  };
+});
+
+
 afterEach(() => {
   cleanup();
 });
