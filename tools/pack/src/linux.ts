@@ -28,7 +28,7 @@ import {
 
 import type { ToolPackConfig } from "./config.js";
 import { domToPptxBundleResource } from "./dom-to-pptx-resource.js";
-import { copyBundledOdTeamBinary, copyBundledResourceTrees, linuxResources } from "./resources.js";
+import { buildOdTeamBinary, copyBundledOdTeamBinary, copyBundledResourceTrees, linuxResources } from "./resources.js";
 import { copyOptionalVelaCliBinary } from "./vela-cli.js";
 import { electronBuilderVersionForAppVersion, readRuntimeAppVersion } from "./versions.js";
 import { processWebSourcemaps } from "./web-sourcemaps.js";
@@ -470,10 +470,15 @@ async function copyResourceTree(config: ToolPackConfig, paths: LinuxPaths): Prom
     requireBundled: config.requireVelaCli,
     resourceRoot: paths.resourceRoot,
   });
+  await buildOdTeamBinary({
+    platform: "linux",
+    workspaceRoot: config.workspaceRoot,
+  });
   await copyBundledOdTeamBinary({
     platform: "linux",
     resourceRoot: paths.resourceRoot,
     workspaceRoot: config.workspaceRoot,
+    requireBundled: true,
   });
 }
 
@@ -634,6 +639,14 @@ export type LinuxPackResult = {
 
 export async function packLinux(config: ToolPackConfig): Promise<LinuxPackResult> {
   if (config.containerized) {
+    // The container image (electronuserland/builder:base) does not ship a Go
+    // toolchain, so the odteam binary must be compiled on the host before the
+    // container starts. The workspace is mounted at /project so the pre-built
+    // binary at packages/multi-agent-team/cmd/odteam/odteam is visible inside.
+    await buildOdTeamBinary({
+      platform: "linux",
+      workspaceRoot: config.workspaceRoot,
+    });
     await runBuildInContainer(config);
     const paths = resolveLinuxPaths(config);
     const appImagePath = config.to === "dir" ? null : await findBuiltAppImage(paths);

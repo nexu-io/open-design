@@ -65,6 +65,14 @@ async function createWorkspaceFixture(workspaceRoot: string): Promise<void> {
   await mkdir(join(workspaceRoot, "plugins", "registry", "official"), {
     recursive: true,
   });
+  // Pre-build a fake odteam binary so buildOdTeamBinary skips go build in tests.
+  const odteamDir = join(workspaceRoot, "packages", "multi-agent-team", "cmd", "odteam");
+  await mkdir(odteamDir, { recursive: true });
+  await writeFile(join(odteamDir, "odteam.exe"), "fake odteam\n", "utf8");
+  // Minimal go.mod so hashOdTeamSource does not error on missing files.
+  const pkgDir = join(workspaceRoot, "packages", "multi-agent-team");
+  await writeFile(join(pkgDir, "go.mod"), "module test\n\ngo 1.23\n", "utf8");
+  await writeFile(join(pkgDir, "go.sum"), "", "utf8");
 }
 
 describe("prepareResourceTree", () => {

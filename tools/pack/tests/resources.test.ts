@@ -15,7 +15,7 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 
 import { domToPptxBundleResource } from "../src/dom-to-pptx-resource.js";
-import { copyBundledResourceTrees } from "../src/resources.js";
+import { copyBundledOdTeamBinary, copyBundledResourceTrees, hashOdTeamSource } from "../src/resources.js";
 import { copyOptionalVelaCliBinary, resolveOptionalVelaCliBinary } from "../src/vela-cli.js";
 
 async function writeFakeOpenCodeCompanion(
@@ -414,5 +414,118 @@ describe("resolveOptionalVelaCliBinary", () => {
         },
       }),
     ).resolves.toBeNull();
+  });
+});
+
+describe("copyBundledOdTeamBinary", () => {
+  it("copies a pre-built odteam binary into the resource bin (POSIX)", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-odteam-"));
+    const workspaceRoot = join(root, "workspace");
+    const resourceRoot = join(root, "resources", "open-design");
+    const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux";
+    const binName = platform === "win" ? "odteam.exe" : "odteam";
+
+    try {
+      const binaryDir = join(workspaceRoot, "packages", "multi-agent-team", "cmd", "odteam");
+      await mkdir(binaryDir, { recursive: true });
+      const binaryPath = join(binaryDir, binName);
+      await writeFile(binaryPath, "fake binary\n", "utf8");
+      if (platform !== "win") await chmod(binaryPath, 0o755);
+
+      await mkdir(join(resourceRoot, "bin"), { recursive: true });
+      const result = await copyBundledOdTeamBinary({
+        platform,
+        resourceRoot,
+        workspaceRoot,
+      });
+
+      expect(result).toBe(join(resourceRoot, "bin", binName));
+      await expect(readFile(join(resourceRoot, "bin", binName), "utf8")).resolves.toBe("fake binary\n");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("returns null when binary is missing and requireBundled is false", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-odteam-missing-"));
+    const workspaceRoot = join(root, "workspace");
+    const resourceRoot = join(root, "resources", "open-design");
+
+    try {
+      await mkdir(join(resourceRoot, "bin"), { recursive: true });
+      const result = await copyBundledOdTeamBinary({
+        platform: "mac",
+        resourceRoot,
+        workspaceRoot,
+        requireBundled: false,
+      });
+      expect(result).toBeNull();
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("throws when binary is missing and requireBundled is true", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-odteam-strict-"));
+    const workspaceRoot = join(root, "workspace");
+    const resourceRoot = join(root, "resources", "open-design");
+
+    try {
+      await mkdir(join(resourceRoot, "bin"), { recursive: true });
+      await expect(
+        copyBundledOdTeamBinary({
+          platform: "mac",
+          resourceRoot,
+          workspaceRoot,
+          requireBundled: true,
+        }),
+      ).rejects.toThrow(/odteam binary not found/);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("hashOdTeamSource", () => {
+  it("produces a stable hash for the same Go source tree", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-odteam-hash-"));
+    const workspaceRoot = join(root, "workspace");
+
+    try {
+      const pkgDir = join(workspaceRoot, "packages", "multi-agent-team");
+      await mkdir(join(pkgDir, "cmd", "odteam"), { recursive: true });
+      await mkdir(join(pkgDir, "internal", "scheduler"), { recursive: true });
+      await writeFile(join(pkgDir, "go.mod"), "module github.com/nexu-io/open-design/packages/multi-agent-team\n\ngo 1.23\n", "utf8");
+      await writeFile(join(pkgDir, "go.sum"), "", "utf8");
+      await writeFile(join(pkgDir, "cmd", "odteam", "main.go"), "package main\n\nfunc main() {}\n", "utf8");
+      await writeFile(join(pkgDir, "internal", "scheduler", "scheduler.go"), "package scheduler\n", "utf8");
+
+      const hash1 = await hashOdTeamSource(workspaceRoot);
+      const hash2 = await hashOdTeamSource(workspaceRoot);
+      expect(hash1).toBe(hash2);
+      expect(hash1.length).toBe(64);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("produces a different hash when Go source changes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-odteam-hash-diff-"));
+    const workspaceRoot = join(root, "workspace");
+
+    try {
+      const pkgDir = join(workspaceRoot, "packages", "multi-agent-team");
+      await mkdir(join(pkgDir, "cmd", "odteam"), { recursive: true });
+      await writeFile(join(pkgDir, "go.mod"), "module github.com/nexu-io/open-design/packages/multi-agent-team\n\ngo 1.23\n", "utf8");
+      await writeFile(join(pkgDir, "go.sum"), "", "utf8");
+      await writeFile(join(pkgDir, "cmd", "odteam", "main.go"), "package main\n\nfunc main() {}\n", "utf8");
+
+      const hash1 = await hashOdTeamSource(workspaceRoot);
+      await writeFile(join(pkgDir, "cmd", "odteam", "main.go"), "package main\n\nfunc main() { println(\"changed\") }\n", "utf8");
+      const hash2 = await hashOdTeamSource(workspaceRoot);
+      expect(hash1).not.toBe(hash2);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 });

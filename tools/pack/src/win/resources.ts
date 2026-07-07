@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 
 import { hashJson, hashPath, ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
-import { copyBundledOdTeamBinary, copyBundledResourceTrees, winResources } from "../resources.js";
+import { buildOdTeamBinary, copyBundledOdTeamBinary, copyBundledResourceTrees, hashOdTeamSource, winResources } from "../resources.js";
 import {
   copyOptionalVelaCliBinary,
   resolveOptionalVelaCliBinary,
@@ -36,6 +36,7 @@ async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<strin
     skills: await hashPath(join(config.workspaceRoot, "skills")),
     sevenZipDll: await hashPath(winResources.sevenZipDll),
     sevenZipExe: await hashPath(winResources.sevenZipExe),
+    odTeamSource: await hashOdTeamSource(config.workspaceRoot),
     requireVelaCli: config.requireVelaCli,
     velaCliBin: velaCliBin ? await hashPath(velaCliBin) : null,
     velaOpenCodeCompanion: velaOpenCodeCompanion
@@ -76,10 +77,15 @@ export async function prepareResourceTree(
         requireBundled: config.requireVelaCli,
         resourceRoot,
       });
+      await buildOdTeamBinary({
+        platform: "win",
+        workspaceRoot: config.workspaceRoot,
+      });
       await copyBundledOdTeamBinary({
         platform: "win",
         resourceRoot,
         workspaceRoot: config.workspaceRoot,
+        requireBundled: true,
       });
       return { resourceName: "open-design" };
     },

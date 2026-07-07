@@ -1,4 +1,4 @@
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os, { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -174,6 +174,12 @@ describe("copyResourceTree", () => {
       for (const name of resourceNames) {
         await mkdir(join(root, name), { recursive: true });
       }
+
+      // Pre-build a fake odteam binary so buildOdTeamBinary skips go build in tests.
+      const odteamDir = join(root, "packages", "multi-agent-team", "cmd", "odteam");
+      await mkdir(odteamDir, { recursive: true });
+      await writeFile(join(odteamDir, "odteam"), "fake odteam\n", "utf8");
+      await chmod(join(odteamDir, "odteam"), 0o755);
 
       await copyResourceTree(config, paths);
 
