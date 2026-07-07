@@ -27,6 +27,19 @@ describe('buildSrcdoc', () => {
     expect(doc).toContain('var initialSlideIndex = 0;');
   });
 
+  it('injects the download bridge that reroutes a[download] clicks through ?download=1', () => {
+    // sandbox에 allow-same-origin이 없어 srcdoc 문서는 opaque origin —
+    // 앵커 download 속성이 무시되고 네비게이션된다. 클릭을 가로채
+    // ?download=1(서버 Content-Disposition attachment)로 우회해야 다운로드됨.
+    const srcdoc = buildSrcdoc('<a href="cover.png" download>다운로드</a>', {
+      baseHref: 'http://127.0.0.1:1234/api/projects/p1/raw/example.html',
+    });
+
+    expect(srcdoc).toContain('data-od-download-bridge');
+    expect(srcdoc).toContain("a[download]");
+    expect(srcdoc).toContain("'download', '1'");
+  });
+
   it('injects the snapshot bridge used by draw annotations', () => {
     const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
 

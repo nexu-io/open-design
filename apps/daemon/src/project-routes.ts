@@ -714,6 +714,36 @@ const URL_PREVIEW_SNAPSHOT_BRIDGE = `<script data-od-url-snapshot-bridge>
 })();
 </script>`;
 
+// 프리뷰 iframe sandbox에 allow-same-origin이 없어 문서 origin이 opaque —
+// 앵커의 download 속성이 cross-origin 취급으로 무시되고 이미지로 네비게이션된다.
+// 클릭을 가로채 ?download=1(서버가 Content-Disposition: attachment 응답)로
+// 우회해야 네비게이션 자체가 다운로드가 된다.
+const URL_PREVIEW_DOWNLOAD_BRIDGE = `<script data-od-url-download-bridge>
+(function(){
+  if (window.__odUrlDownloadBridge) return;
+  window.__odUrlDownloadBridge = true;
+  document.addEventListener('click', function(ev){
+    var target = ev.target;
+    var anchor = target && target.closest ? target.closest('a[download]') : null;
+    if (!anchor) return;
+    var href = anchor.getAttribute('href');
+    if (!href) return;
+    var url;
+    var base;
+    try {
+      url = new URL(href, document.baseURI);
+      base = new URL(document.baseURI);
+    } catch (err) { return; }
+    if (!/^https?:$/.test(url.protocol)) return;
+    if (url.host !== base.host) return;
+    if (url.searchParams.get('download') === '1') return;
+    ev.preventDefault();
+    url.searchParams.set('download', '1');
+    window.location.assign(url.href);
+  }, true);
+})();
+</script>`;
+
 function previewBridgeTokens(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap(previewBridgeTokens);
   if (typeof value !== 'string') return [];
@@ -732,6 +762,15 @@ function wantsUrlPreviewSnapshotBridge(value: unknown): boolean {
   return previewBridgeTokens(value).some((token) => token === 'snapshot' || token === 'image' || token === 'capture');
 }
 
+function wantsUrlPreviewDownloadBridge(value: unknown): boolean {
+  return previewBridgeTokens(value).some((token) => token === 'download');
+}
+
+// raw 파일을 브라우저 네비게이션으로 받을 때 다운로드로 처리할지 여부.
+function wantsRawDownload(value: unknown): boolean {
+  return value === '1' || value === 'true' || (Array.isArray(value) && value.some(wantsRawDownload));
+}
+
 function injectBeforeBodyClose(html: string, marker: string, injection: string): string {
   if (html.includes(marker)) return html;
   const bodyCloseIndex = html.search(/<\/body\s*>/i);
@@ -741,12 +780,15 @@ function injectBeforeBodyClose(html: string, marker: string, injection: string):
   return `${html}${injection}`;
 }
 
-function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection' | 'snapshot'): string {
+function injectUrlPreviewBridge(html: string, bridge: 'scroll' | 'selection' | 'snapshot' | 'download'): string {
   if (bridge === 'scroll') {
     return injectBeforeBodyClose(html, 'data-od-url-scroll-bridge', URL_PREVIEW_SCROLL_BRIDGE);
   }
   if (bridge === 'selection') {
     return injectBeforeBodyClose(html, 'data-od-url-selection-bridge', URL_PREVIEW_SELECTION_BRIDGE);
+  }
+  if (bridge === 'download') {
+    return injectBeforeBodyClose(html, 'data-od-url-download-bridge', URL_PREVIEW_DOWNLOAD_BRIDGE);
   }
   return injectBeforeBodyClose(html, 'data-od-url-snapshot-bridge', URL_PREVIEW_SNAPSHOT_BRIDGE);
 }
@@ -2370,6 +2412,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         res.header('Access-Control-Allow-Origin', '*');
       }
 
+      // ?download=1 — 프리뷰 iframe(opaque origin)의 a[download] 클릭이 속성
+      // 무시로 네비게이션되는 것을 서버 attachment 응답으로 다운로드 전환.
+      if (wantsRawDownload(req.query.download)) {
+        res.attachment(path.posix.basename(relPath));
+      }
+
       await sendProjectFile(
         req,
         res,
@@ -2389,7 +2437,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           if (
             (wantsUrlPreviewScrollBridge(req.query.odPreviewBridge) ||
               wantsUrlPreviewSelectionBridge(req.query.odPreviewBridge) ||
-              wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge)) &&
+              wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge) ||
+              wantsUrlPreviewDownloadBridge(req.query.odPreviewBridge)) &&
             /^text\/html(?:;|$)/i.test(file.mime)
           ) {
             let html = Buffer.isBuffer(transformed) ? transformed.toString('utf8') : transformed;
@@ -2401,6 +2450,9 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             }
             if (wantsUrlPreviewSnapshotBridge(req.query.odPreviewBridge)) {
               html = injectUrlPreviewBridge(html, 'snapshot');
+            }
+            if (wantsUrlPreviewDownloadBridge(req.query.odPreviewBridge)) {
+              html = injectUrlPreviewBridge(html, 'download');
             }
             transformed = html;
           }
