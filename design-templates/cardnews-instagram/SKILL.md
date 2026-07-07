@@ -78,6 +78,9 @@ od:
    관성으로 직행하는 것이 대표 위반. 컨펌 시 `brief.md`를 cwd에 Write(기본정보/인터뷰
    결정/기획/출처/캡션 방향), 반려 시 기획 수정 → 다음 번호로 `plan-v2.md` Write(이전
    `plan-v*.md`는 히스토리 — 덮어쓰기·삭제 절대 금지) → 재컨펌 폼 발행 + 즉시 턴 종료.
+   **폼 취소·무응답·옵션 미선택의 모호 답변은 컨펌이 아니다** — ★ 권장안으로 암묵
+   진행 금지(도그푸딩 실측 위반 패턴). 취소 사유를 1줄로 묻는 재컨펌 폼을 발행하고
+   턴을 종료한다.
 5. **Produce** — `craft/instagram-cardnews.md` + 활성 DESIGN.md Read 후:
    - 5a. **cards.json Write** — 카드별 텍스트 확정 (스키마 정본
      `references/card-structure.md` — 본문 줄바꿈·양쪽맞춤은 compose가 자동 처리,

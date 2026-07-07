@@ -5,7 +5,8 @@
 (산출물 계약 동일). dispatch 프롬프트에 다음 입력을 채워 넣는다:
 
 - `{topic}` — 인터뷰에서 확정한 주제
-- `{keyword}` — 타겟 키워드 (없으면 "없음")
+- `{keyword}` — 타겟 키워드 (없으면 "없음". naver-blog의 "롱테일" 수식은 의도적
+  미적용 — 검색 SEO 개념이라 인스타 채널에선 해시태그·주제 앵글 용도)
 - `{audience}` — 타겟 독자
 - `{design_md_path}` — 활성 design-systems/<brand>/DESIGN.md 절대 경로
 - `{cwd}` — 프로젝트 작업 디렉토리 절대 경로
