@@ -61,6 +61,36 @@ describe('resource-sharing store', () => {
     );
   });
 
+  it('migrates the pre-team-scoped primary key before upserting', () => {
+    db = new Database(':memory:');
+    db.exec(`
+      CREATE TABLE shared_resources (
+        kind TEXT NOT NULL,
+        local_id TEXT NOT NULL,
+        hub_resource_id TEXT NOT NULL,
+        hub_team_id TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('owner','consumer')),
+        last_synced_version INTEGER,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (kind, local_id)
+      );
+      INSERT INTO shared_resources
+        (kind, local_id, hub_resource_id, hub_team_id, role, last_synced_version, updated_at)
+      VALUES
+        ('design_system', 'demo-ds', 'res_1', 'team_1', 'owner', 1, '2026-07-07T00:00:00.000Z');
+    `);
+
+    migrateResourceSharing(db);
+    upsertShared(db, owner({ hubTeamId: 'team_2', hubResourceId: 'res_2' }));
+
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'demo-ds')?.hubResourceId).toBe(
+      'res_1',
+    );
+    expect(getSharedByLocal(db, 'team_2', 'design_system', 'demo-ds')?.hubResourceId).toBe(
+      'res_2',
+    );
+  });
+
   it('lists mappings scoped to a team', () => {
     upsertShared(db, owner());
     upsertShared(db, owner({ localId: 'other', hubResourceId: 'res_2' }));
