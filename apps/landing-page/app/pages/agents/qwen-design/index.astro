@@ -9,6 +9,7 @@
 import Layout from '../../../_components/sub-page-layout.astro';
 import { getInfoPageCopy } from '../../../info-page-i18n';
 import { localeFromPath, localizedHref } from '../../../i18n';
+import { downloadFirstCtas } from '../../../cta-actions';
 
 const SLUG = 'qwen';
 const ROUTE = 'qwen-design';
@@ -22,6 +23,10 @@ const common = copy.common;
 // Compact locales fall back to the English guide rather than crash on undefined.
 const page = copy.agentGuides[SLUG] ?? getInfoPageCopy('en').agentGuides[SLUG]!;
 const rich = page.rich;
+
+// Lead the CTAs with the desktop download (drop the get-started action).
+const heroCtas = rich ? downloadFirstCtas(rich.heroCtaActions) : [];
+const finalCtas = rich ? downloadFirstCtas(rich.ctaActions) : [];
 
 // Localize CTA action hrefs while leaving external links untouched.
 const ctaHref = (a: { href: string; external?: boolean }) =>
@@ -84,7 +89,7 @@ const jsonLd = [
           <h1 class="display">{page.heading}</h1>
           <p class="lead">{page.lead}</p>
           <div class="solution-hero-cta">
-            {rich.heroCtaActions.map((a) => (
+            {heroCtas.map((a) => (
               <a
                 class={`btn ${a.variant === 'primary' ? 'btn-primary' : 'btn-ghost'}`}
                 href={ctaHref(a)}
@@ -182,7 +187,7 @@ const jsonLd = [
             <p>{rich.ctaBody}</p>
           </div>
           <div class="info-cta-actions">
-            {rich.ctaActions.map((a) => (
+            {finalCtas.map((a) => (
               <a
                 class={`btn ${a.variant === 'primary' ? 'btn-primary' : 'btn-ghost'}`}
                 href={ctaHref(a)}
@@ -279,9 +284,8 @@ const jsonLd = [
             <p>{page.ctaBody}</p>
           </div>
           <div class="info-cta-actions">
-            <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
-            <a class="btn btn-ghost" href={href('/quickstart/')}>{common.quickstart}</a>
-            <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+            <a class="btn btn-primary" href={href('/download/')}>{common.downloadDesktop}</a>
+            <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
           </div>
           <div class="info-cta-meta">
             <span class="stamp">● {common.apache}</span>
