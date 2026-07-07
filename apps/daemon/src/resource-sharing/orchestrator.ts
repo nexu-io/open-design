@@ -128,6 +128,14 @@ export function createSharingOrchestrator(deps: SharingDeps) {
     async pull(kind: string, hubResourceId: string) {
       const principal = principalOrThrow();
       const adapter = adapterOrThrow(kind);
+      const resource = await client.getResource(principal, hubResourceId);
+      if (resource.kind !== kind) {
+        throw new SharingError(
+          409,
+          'resource_kind_mismatch',
+          `resource ${hubResourceId} is ${resource.kind}, not ${kind}`,
+        );
+      }
       const existing = getSharedByHub(deps.db, principal.teamId, hubResourceId);
       // You own this locally already; pulling would overwrite your editable
       // source, so it is a no-op.

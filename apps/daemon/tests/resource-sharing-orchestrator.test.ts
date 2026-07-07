@@ -13,12 +13,21 @@ const mockState = vi.hoisted(() => ({
   materializations: [] as Array<Record<string, string>>,
   versions: [{ id: 'version_1', version: 1, manifestDigest: 'digest_1' }],
   createdResources: [] as string[],
+  resourceKind: 'design_system',
 }));
 
 vi.mock('../src/integrations/resource-hub.js', () => ({
   createResourceHubClient: vi.fn(() => ({
     createResource: vi.fn(async () => ({
       id: mockState.createdResources.shift() ?? 'created_resource',
+    })),
+    getResource: vi.fn(async (_principal, resourceId) => ({
+      id: resourceId,
+      teamId: 'team_1',
+      kind: mockState.resourceKind,
+      ownerMemberId: 'member_1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      deletedAt: null,
     })),
     listVersions: vi.fn(async () => mockState.versions),
   })),
@@ -61,6 +70,7 @@ describe('resource-sharing orchestrator', () => {
       { id: 'version_1', version: 1, manifestDigest: 'digest_1' },
     ];
     mockState.createdResources = [];
+    mockState.resourceKind = 'design_system';
     vi.clearAllMocks();
   });
 
@@ -176,5 +186,31 @@ describe('resource-sharing orchestrator', () => {
       code: 'invalid_resource_id',
     });
     expect(materializeRef).not.toHaveBeenCalled();
+  });
+
+  it('rejects pulling a hub resource through the wrong kind before materializing', async () => {
+    const orchestrator = createSharingOrchestrator({
+      db,
+      paths: {
+        RUNTIME_DATA_DIR: tempDir,
+        USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+        USER_SKILLS_DIR: path.join(tempDir, 'skills'),
+      },
+    });
+    mockState.resourceKind = 'plugin';
+    mockState.materializations.push({ 'DESIGN.md': 'wrong kind\n' });
+
+    await expect(
+      orchestrator.pull('design_system', 'hub-plugin'),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: 'resource_kind_mismatch',
+    });
+    expect(materializeRef).not.toHaveBeenCalled();
+    await expect(
+      fsp.access(
+        path.join(tempDir, 'team-shared', 'design-systems', 'hub-plugin'),
+      ),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });
