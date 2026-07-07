@@ -5,9 +5,16 @@ import path from 'node:path';
 // disk, where a pulled team copy should land) is isolated here; the orchestrator
 // and the neutral SDK stay kind-agnostic. Adapters only READ the existing
 // managers' on-disk layout — they never mutate the managers or their storage.
+//
+// All three kinds share the same shape: a resource is a directory under a
+// per-kind root (design systems: USER_DESIGN_SYSTEMS_DIR/<id>; skills:
+// USER_SKILLS_DIR/<id>; plugins: RUNTIME_DATA_DIR/plugins/<id>), and a pulled
+// team copy lands read-only under a distinct team-shared namespace. Ids are
+// validated + resolved within their root so a hostile id cannot escape it.
 
 export interface AdapterPaths {
   USER_DESIGN_SYSTEMS_DIR: string;
+  USER_SKILLS_DIR: string;
   RUNTIME_DATA_DIR: string;
 }
 
@@ -30,50 +37,9 @@ export class ResourceAdapterError extends Error {
   }
 }
 
-export function createDesignSystemAdapter(
-  paths: AdapterPaths,
-): ResourceKindAdapter {
-  const userDesignSystemsRoot = path.resolve(paths.USER_DESIGN_SYSTEMS_DIR);
-  const teamDesignSystemsRoot = path.resolve(
-    paths.RUNTIME_DATA_DIR,
-    'team-shared',
-    'design-systems',
-  );
-
-  return {
-    kind: 'design_system',
-    resolveSourceDir(localId) {
-      const dirId = validatePathSegment(localId, 'local design-system id');
-      const dir = resolveWithinRoot(userDesignSystemsRoot, dirId);
-      return existsSync(dir) ? dir : null;
-    },
-    // Team copies land under a distinct, read-only namespace so they never
-    // collide with the user's own editable design systems.
-    teamCopyDir(hubResourceId) {
-      const dirId = validatePathSegment(hubResourceId, 'hub resource id');
-      return resolveWithinRoot(teamDesignSystemsRoot, dirId);
-    },
-  };
-}
-
-export function createAdapterRegistry(
-  paths: AdapterPaths,
-): Map<string, ResourceKindAdapter> {
-  const registry = new Map<string, ResourceKindAdapter>();
-  // MVP: design systems only. Plugin/skill adapters plug in here next, with no
-  // change to the orchestrator, store, routes, or SDK.
-  const designSystem = createDesignSystemAdapter(paths);
-  registry.set(designSystem.kind, designSystem);
-  return registry;
-}
-
 function validatePathSegment(id: string, label: string): string {
   if (!/^[a-zA-Z0-9._-]+$/.test(id) || id === '.' || id === '..') {
-    throw new ResourceAdapterError(
-      400,
-      'invalid_resource_id',
-      `invalid ${label}`,
-    );
+    throw new ResourceAdapterError(400, 'invalid_resource_id', `invalid ${label}`);
   }
   return id;
 }
@@ -89,4 +55,55 @@ function resolveWithinRoot(root: string, segment: string): string {
     );
   }
   return target;
+}
+
+function createDirAdapter(
+  kind: string,
+  sourceRoot: string,
+  teamCopyRoot: string,
+): ResourceKindAdapter {
+  const source = path.resolve(sourceRoot);
+  const teamCopy = path.resolve(teamCopyRoot);
+  return {
+    kind,
+    resolveSourceDir(localId) {
+      const dir = resolveWithinRoot(
+        source,
+        validatePathSegment(localId, `local ${kind} id`),
+      );
+      return existsSync(dir) ? dir : null;
+    },
+    teamCopyDir(hubResourceId) {
+      return resolveWithinRoot(
+        teamCopy,
+        validatePathSegment(hubResourceId, 'hub resource id'),
+      );
+    },
+  };
+}
+
+export function createAdapterRegistry(
+  paths: AdapterPaths,
+): Map<string, ResourceKindAdapter> {
+  const teamShared = path.join(paths.RUNTIME_DATA_DIR, 'team-shared');
+  const adapters: ResourceKindAdapter[] = [
+    createDirAdapter(
+      'design_system',
+      paths.USER_DESIGN_SYSTEMS_DIR,
+      path.join(teamShared, 'design-systems'),
+    ),
+    createDirAdapter(
+      'skill',
+      paths.USER_SKILLS_DIR,
+      path.join(teamShared, 'skills'),
+    ),
+    createDirAdapter(
+      'plugin',
+      path.join(paths.RUNTIME_DATA_DIR, 'plugins'),
+      path.join(teamShared, 'plugins'),
+    ),
+  ];
+  const registry = new Map<string, ResourceKindAdapter>();
+  for (const adapter of adapters) registry.set(adapter.kind, adapter);
+  return registry;
 }
