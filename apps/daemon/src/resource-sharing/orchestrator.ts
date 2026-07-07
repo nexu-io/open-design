@@ -96,8 +96,15 @@ export function createSharingOrchestrator(deps: SharingDeps) {
       if (!dir) {
         throw new SharingError(404, 'local_resource_not_found', localId);
       }
-      const packed = await packTree(dir);
       const existing = getSharedByLocal(deps.db, kind, localId);
+      if (existing?.role === 'consumer') {
+        throw new SharingError(
+          409,
+          'consumer_mapping_conflict',
+          'pulled resources cannot be promoted to owner mappings',
+        );
+      }
+      const packed = await packTree(dir);
       const hubResourceId =
         existing?.hubResourceId ??
         (await client.createResource(principal, { kind })).id;

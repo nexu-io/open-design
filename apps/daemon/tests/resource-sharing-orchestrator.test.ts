@@ -5,17 +5,21 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { materializeRef, packTree } from '../src/resource-drive.js';
+import { materializeRef, packTree, pushTree } from '../src/resource-drive.js';
 import { createSharingOrchestrator } from '../src/resource-sharing/orchestrator.js';
 import { migrateResourceSharing } from '../src/resource-sharing/store.js';
 
 const mockState = vi.hoisted(() => ({
   materializations: [] as Array<Record<string, string>>,
   versions: [{ id: 'version_1', version: 1, manifestDigest: 'digest_1' }],
+  createdResources: [] as string[],
 }));
 
 vi.mock('../src/integrations/resource-hub.js', () => ({
   createResourceHubClient: vi.fn(() => ({
+    createResource: vi.fn(async () => ({
+      id: mockState.createdResources.shift() ?? 'created_resource',
+    })),
     listVersions: vi.fn(async () => mockState.versions),
   })),
   readResourceHubPrincipal: vi.fn(() => ({
@@ -37,7 +41,11 @@ vi.mock('../src/resource-drive.js', () => ({
     }
   }),
   packTree: vi.fn(),
-  pushTree: vi.fn(),
+  pushTree: vi.fn(async () => ({
+    id: 'version_pushed',
+    version: 2,
+    manifestDigest: 'digest_pushed',
+  })),
 }));
 
 describe('resource-sharing orchestrator', () => {
@@ -52,6 +60,7 @@ describe('resource-sharing orchestrator', () => {
     mockState.versions = [
       { id: 'version_1', version: 1, manifestDigest: 'digest_1' },
     ];
+    mockState.createdResources = [];
     vi.clearAllMocks();
   });
 
@@ -121,6 +130,33 @@ describe('resource-sharing orchestrator', () => {
       code: 'invalid_resource_id',
     });
     expect(packTree).not.toHaveBeenCalled();
+  });
+
+  it('rejects sharing over a pulled consumer mapping with the same local id', async () => {
+    const paths = {
+      RUNTIME_DATA_DIR: tempDir,
+      USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+      USER_SKILLS_DIR: path.join(tempDir, 'skills'),
+    };
+    const orchestrator = createSharingOrchestrator({ db, paths });
+    mockState.materializations.push({ 'DESIGN.md': 'team copy\n' });
+
+    await orchestrator.pull('design_system', 'hub-1');
+    const editableDir = path.join(paths.USER_DESIGN_SYSTEMS_DIR, 'hub-1');
+    await fsp.mkdir(editableDir, { recursive: true });
+    await fsp.writeFile(path.join(editableDir, 'DESIGN.md'), 'local edit\n');
+
+    await expect(
+      orchestrator.share('design_system', 'hub-1'),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: 'consumer_mapping_conflict',
+    });
+    expect(packTree).not.toHaveBeenCalled();
+    expect(pushTree).not.toHaveBeenCalled();
+    expect(await fsp.readFile(path.join(editableDir, 'DESIGN.md'), 'utf8')).toBe(
+      'local edit\n',
+    );
   });
 
   it('rejects traversal hub ids before materializing a pulled design system', async () => {
