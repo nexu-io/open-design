@@ -106,7 +106,8 @@ const LIMIT = Number(arg('limit', '0')) || 0;
 const ONLY = argList('id');
 // Strict mode (--strict or PREVIEW_STRICT=1): exit non-zero when any bake left
 // broken metadata behind — a stale entry (source changed but the re-bake
-// failed, so the manifest keeps serving the OLD clip) or a blank clip. The
+// failed, so the manifest keeps serving the OLD clip), a blank clip, or an
+// unexpected error (thrown exception, e.g. ffprobe unavailable). The
 // pre-merge validation workflow runs strict so a PR that breaks its own
 // preview fails visibly; the post-merge/nightly path stays lenient and only
 // reports, so one broken plugin never blocks publishing the rest.
@@ -135,13 +136,18 @@ function resolveChrome() {
 // wall-clock walk; the VFR concat + fps resample can land somewhere else
 // entirely (observed 1155ms recorded for a 3667ms clip), and holdMs — the span
 // the gallery loops while idle — must never exceed what the file actually has.
+//
+// Both probes THROW on failure instead of degrading: ffprobe is required
+// validation infrastructure (the workflow installs ffmpeg explicitly), and a
+// swallowed probe error would silently disable exactly the checks this
+// pipeline exists for. A thrown error becomes an `error …` skip for that
+// plugin, lands in bake-report.json, and fails strict mode.
 function probeClipMs(file) {
-  try {
-    const out = execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration',
-      '-of', 'csv=p=0', file], { encoding: 'utf8' }).trim();
-    const s = Number(out);
-    return Number.isFinite(s) && s > 0 ? Math.round(s * 1000) : null;
-  } catch { return null; }
+  const out = execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration',
+    '-of', 'csv=p=0', file], { encoding: 'utf8' }).trim();
+  const s = Number(out);
+  if (!Number.isFinite(s) || s <= 0) throw new Error(`ffprobe returned no duration for ${file}: "${out}"`);
+  return Math.round(s * 1000);
 }
 
 // Aggregate luma range across every frame of the clip. If no frame ever gets
@@ -153,24 +159,23 @@ function probeClipMs(file) {
 const BLANK_MAX_Y = 24;
 const BLANK_MIN_Y = 232;
 function clipLumaRange(file) {
-  try {
-    const esc = file.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/:/g, '\\:');
-    // nk=0 keeps the tag names in the output: ffprobe emits the tags in
-    // signalstats' own order (YMIN before YMAX), not the -show_entries order,
-    // so parse by key instead of by position.
-    const out = execFileSync('ffprobe', ['-v', 'error', '-f', 'lavfi',
-      '-i', `movie='${esc}',signalstats`,
-      '-show_entries', 'frame_tags=lavfi.signalstats.YMAX,lavfi.signalstats.YMIN',
-      '-of', 'csv=p=0:nk=0'], { encoding: 'utf8' });
-    let maxY = 0, minY = 255, frames = 0;
-    for (const match of out.matchAll(/signalstats\.(YMAX|YMIN)=([0-9.]+)/g)) {
-      const value = Number(match[2]);
-      if (!Number.isFinite(value)) continue;
-      if (match[1] === 'YMAX') { frames += 1; if (value > maxY) maxY = value; }
-      else if (value < minY) minY = value;
-    }
-    return frames > 0 ? { maxY, minY } : null;
-  } catch { return null; }
+  const esc = file.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/:/g, '\\:');
+  // nk=0 keeps the tag names in the output: ffprobe emits the tags in
+  // signalstats' own order (YMIN before YMAX), not the -show_entries order,
+  // so parse by key instead of by position.
+  const out = execFileSync('ffprobe', ['-v', 'error', '-f', 'lavfi',
+    '-i', `movie='${esc}',signalstats`,
+    '-show_entries', 'frame_tags=lavfi.signalstats.YMAX,lavfi.signalstats.YMIN',
+    '-of', 'csv=p=0:nk=0'], { encoding: 'utf8' });
+  let maxY = 0, minY = 255, frames = 0;
+  for (const match of out.matchAll(/signalstats\.(YMAX|YMIN)=([0-9.]+)/g)) {
+    const value = Number(match[2]);
+    if (!Number.isFinite(value)) continue;
+    if (match[1] === 'YMAX') { frames += 1; if (value > maxY) maxY = value; }
+    else if (value < minY) minY = value;
+  }
+  if (frames === 0) throw new Error(`ffprobe signalstats returned no frames for ${file}`);
+  return { maxY, minY };
 }
 
 // ---- discover the html-preview plugins ------------------------------------
@@ -518,7 +523,7 @@ async function bakeOne(browser, id, hash, motion) {
   // keeps the broken clip out of the R2 upload (the CI step copies OUT
   // recursively).
   const luma = clipLumaRange(video);
-  if (luma && (luma.maxY < BLANK_MAX_Y || luma.minY > BLANK_MIN_Y)) {
+  if (luma.maxY < BLANK_MAX_Y || luma.minY > BLANK_MIN_Y) {
     rmSync(path.dirname(video), { recursive: true, force: true });
     return { id, skipped: `blank clip (luma ${luma.minY}..${luma.maxY})` };
   }
@@ -526,7 +531,7 @@ async function bakeOne(browser, id, hash, motion) {
   // Manifest metadata must describe the FILE, not the intent: durationMs is
   // the encoded duration, and holdMs (the span the gallery loops while idle)
   // is clamped to it so the idle loop never points past the end of the clip.
-  const encodedMs = probeClipMs(video) ?? durMs;
+  const encodedMs = probeClipMs(video);
   return { id, durationMs: encodedMs, holdMs: Math.min(HOLD_MS, encodedMs), video: videoKey, poster: posterKey,
     bytes: statSync(video).size, posterBytes: statSync(poster).size };
 }
@@ -550,8 +555,11 @@ let ok = 0, skip = 0, reused = 0;
 // Machine-readable outcome for the workflows: which plugins were skipped and
 // why, and — the metadata-sync failure this pipeline used to swallow — which
 // committed entries are now STALE: their source changed but the re-bake
-// failed, so the manifest keeps serving a clip of the OLD content.
-const report = { skipped: [], stale: [], blank: [] };
+// failed, so the manifest keeps serving a clip of the OLD content. `errors`
+// separates unexpected failures (thrown exceptions: ffprobe missing, encoder
+// crash, …) from the routine skips every sweep has (non-html plugins 404 the
+// preview route); strict mode fails on the former, never on the latter.
+const report = { skipped: [], stale: [], blank: [], errors: [] };
 for (const id of ids) {
   const t0 = Date.now();
   // Content-hash skip: a plugin whose preview HTML (and the bake recipe) is
@@ -580,6 +588,7 @@ for (const id of ids) {
     console.log(`  ~ ${id}: skip (${r.skipped})`);
     report.skipped.push({ id, reason: r.skipped });
     if (r.skipped.startsWith('blank clip')) report.blank.push(id);
+    if (r.skipped.startsWith('error ')) report.errors.push(id);
     if (prev && hash && prev.hash !== hash) report.stale.push(id);
     continue;
   }
@@ -601,7 +610,10 @@ if (report.blank.length) {
 if (report.stale.length) {
   console.error(`STALE manifest entries (source changed but the re-bake failed — the gallery keeps showing the OLD clip until a bake succeeds): ${report.stale.join(', ')}`);
 }
-if (STRICT && (report.blank.length || report.stale.length)) {
-  console.error('strict mode: failing on blank/stale previews');
+if (report.errors.length) {
+  console.error(`ERRORED bakes (unexpected exception — validation infrastructure problem or renderer crash, see the skip reasons above): ${report.errors.join(', ')}`);
+}
+if (STRICT && (report.blank.length || report.stale.length || report.errors.length)) {
+  console.error('strict mode: failing on blank/stale/errored previews');
   process.exit(1);
 }
