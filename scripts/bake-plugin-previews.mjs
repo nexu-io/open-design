@@ -52,7 +52,12 @@ import path from 'node:path';
 //       misread tall pages with a horizontal marquee as decks); pan via REAL
 //       wheel events so scroll-hijack landing pages (custom/transform scroll)
 //       actually move.
-const BAKE_VERSION = 4;
+//   v5: validate the encoded output — reject blank (never-rendered) clips,
+//       record durationMs from the FILE (not the intended walk time), and
+//       clamp holdMs to the encoded duration so the gallery's idle loop never
+//       points past the end of the clip. Bumped so every entry's metadata is
+//       corrected in one sweep (23 entries carried holdMs > real duration).
+const BAKE_VERSION = 5;
 
 // ---- config ---------------------------------------------------------------
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:17579';
@@ -99,6 +104,13 @@ function argList(name) {
 const OUT = path.resolve(arg('out', '.tmp/plugin-previews'));
 const LIMIT = Number(arg('limit', '0')) || 0;
 const ONLY = argList('id');
+// Strict mode (--strict or PREVIEW_STRICT=1): exit non-zero when any bake left
+// broken metadata behind — a stale entry (source changed but the re-bake
+// failed, so the manifest keeps serving the OLD clip) or a blank clip. The
+// pre-merge validation workflow runs strict so a PR that breaks its own
+// preview fails visibly; the post-merge/nightly path stays lenient and only
+// reports, so one broken plugin never blocks publishing the rest.
+const STRICT = process.argv.includes('--strict') || process.env.PREVIEW_STRICT === '1';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -111,6 +123,54 @@ function resolveChrome() {
   ];
   for (const c of candidates) if (existsSync(c)) return c;
   throw new Error('No Chrome found. Set CHROME=/path/to/chrome.');
+}
+
+// ---- baked-output validation ----------------------------------------------
+// The gallery faithfully renders whatever the manifest names, so a broken bake
+// must be rejected HERE — once an entry lands, the card shows the broken clip
+// until the next content change (see the "preview shows wrong content" class
+// of reports: stale clips, blank cards).
+
+// Real duration of the encoded clip. `durMs` upstream is only the *intended*
+// wall-clock walk; the VFR concat + fps resample can land somewhere else
+// entirely (observed 1155ms recorded for a 3667ms clip), and holdMs — the span
+// the gallery loops while idle — must never exceed what the file actually has.
+function probeClipMs(file) {
+  try {
+    const out = execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration',
+      '-of', 'csv=p=0', file], { encoding: 'utf8' }).trim();
+    const s = Number(out);
+    return Number.isFinite(s) && s > 0 ? Math.round(s * 1000) : null;
+  } catch { return null; }
+}
+
+// Aggregate luma range across every frame of the clip. If no frame ever gets
+// brighter than BLANK_MAX_Y (~9% grey), nothing rendered — the page 404'd into
+// a dark shell, a CDN dependency never loaded, fonts raced, … — and the mirror
+// check catches an all-white nothing. Thresholds are deliberately extreme so a
+// legitimately dark (or light) design never trips them: any visible text or
+// artwork moves YMAX/YMIN far past these bounds.
+const BLANK_MAX_Y = 24;
+const BLANK_MIN_Y = 232;
+function clipLumaRange(file) {
+  try {
+    const esc = file.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/:/g, '\\:');
+    // nk=0 keeps the tag names in the output: ffprobe emits the tags in
+    // signalstats' own order (YMIN before YMAX), not the -show_entries order,
+    // so parse by key instead of by position.
+    const out = execFileSync('ffprobe', ['-v', 'error', '-f', 'lavfi',
+      '-i', `movie='${esc}',signalstats`,
+      '-show_entries', 'frame_tags=lavfi.signalstats.YMAX,lavfi.signalstats.YMIN',
+      '-of', 'csv=p=0:nk=0'], { encoding: 'utf8' });
+    let maxY = 0, minY = 255, frames = 0;
+    for (const match of out.matchAll(/signalstats\.(YMAX|YMIN)=([0-9.]+)/g)) {
+      const value = Number(match[2]);
+      if (!Number.isFinite(value)) continue;
+      if (match[1] === 'YMAX') { frames += 1; if (value > maxY) maxY = value; }
+      else if (value < minY) minY = value;
+    }
+    return frames > 0 ? { maxY, minY } : null;
+  } catch { return null; }
 }
 
 // ---- discover the html-preview plugins ------------------------------------
@@ -453,7 +513,21 @@ async function bakeOne(browser, id, hash, motion) {
     '-q:v', '5', '-frames:v', '1', poster]);
   rmSync(frameDir, { recursive: true, force: true });
 
-  return { id, durationMs: durMs, holdMs: HOLD_MS, video: videoKey, poster: posterKey,
+  // Reject a clip that never rendered anything — an entry for it would show a
+  // blank card until the plugin's next content change. Deleting the outputs
+  // keeps the broken clip out of the R2 upload (the CI step copies OUT
+  // recursively).
+  const luma = clipLumaRange(video);
+  if (luma && (luma.maxY < BLANK_MAX_Y || luma.minY > BLANK_MIN_Y)) {
+    rmSync(path.dirname(video), { recursive: true, force: true });
+    return { id, skipped: `blank clip (luma ${luma.minY}..${luma.maxY})` };
+  }
+
+  // Manifest metadata must describe the FILE, not the intent: durationMs is
+  // the encoded duration, and holdMs (the span the gallery loops while idle)
+  // is clamped to it so the idle loop never points past the end of the clip.
+  const encodedMs = probeClipMs(video) ?? durMs;
+  return { id, durationMs: encodedMs, holdMs: Math.min(HOLD_MS, encodedMs), video: videoKey, poster: posterKey,
     bytes: statSync(video).size, posterBytes: statSync(poster).size };
 }
 
@@ -473,6 +547,11 @@ const manifestPath = path.join(OUT, 'manifest.json');
 const previews = existsSync(manifestPath)
   ? (JSON.parse(readFileSync(manifestPath, 'utf8')).previews || {}) : {};
 let ok = 0, skip = 0, reused = 0;
+// Machine-readable outcome for the workflows: which plugins were skipped and
+// why, and — the metadata-sync failure this pipeline used to swallow — which
+// committed entries are now STALE: their source changed but the re-bake
+// failed, so the manifest keeps serving a clip of the OLD content.
+const report = { skipped: [], stale: [], blank: [] };
 for (const id of ids) {
   const t0 = Date.now();
   // Content-hash skip: a plugin whose preview HTML (and the bake recipe) is
@@ -496,11 +575,33 @@ for (const id of ids) {
   }
   let r;
   try { r = await bakeOne(browser, id, hash, motionMap[id]); } catch (e) { r = { id, skipped: `error ${e.message}` }; }
-  if (r.skipped) { skip += 1; console.log(`  ~ ${id}: skip (${r.skipped})`); continue; }
+  if (r.skipped) {
+    skip += 1;
+    console.log(`  ~ ${id}: skip (${r.skipped})`);
+    report.skipped.push({ id, reason: r.skipped });
+    if (r.skipped.startsWith('blank clip')) report.blank.push(id);
+    if (prev && hash && prev.hash !== hash) report.stale.push(id);
+    continue;
+  }
   previews[id] = { video: r.video, poster: r.poster, durationMs: r.durationMs, holdMs: r.holdMs, hash };
   ok += 1;
   console.log(`  + ${id}: ${(r.bytes / 1024).toFixed(0)}KB mp4, ${(r.posterBytes / 1024).toFixed(0)}KB poster (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
   writeFileSync(manifestPath, JSON.stringify({ generatedAt: null, previews }, null, 2));
 }
 await browser.close();
+// Written next to the manifest (the R2 upload step excludes it, same as
+// manifest.json) so both the strict pre-merge job and a human reading a
+// nightly run can see exactly which entries are broken or lagging.
+writeFileSync(path.join(OUT, 'bake-report.json'),
+  JSON.stringify({ baked: ok, reused, ...report }, null, 2));
 console.log(`done: ${ok} baked, ${reused} reused (unchanged), ${skip} skipped -> ${manifestPath}`);
+if (report.blank.length) {
+  console.error(`BLANK bakes rejected (nothing ever rendered; entry NOT written): ${report.blank.join(', ')}`);
+}
+if (report.stale.length) {
+  console.error(`STALE manifest entries (source changed but the re-bake failed — the gallery keeps showing the OLD clip until a bake succeeds): ${report.stale.join(', ')}`);
+}
+if (STRICT && (report.blank.length || report.stale.length)) {
+  console.error('strict mode: failing on blank/stale previews');
+  process.exit(1);
+}

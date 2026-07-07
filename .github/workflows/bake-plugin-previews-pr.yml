@@ -41,6 +41,11 @@ jobs:
         uses: ./.github/actions/bake-previews
         with:
           upload: 'false'
+          # Strict: a PR that breaks its own preview (blank clip, or a change
+          # whose re-bake fails and would leave the committed entry serving the
+          # OLD clip) fails here, pre-merge, instead of shipping a gallery card
+          # that no longer matches the plugin.
+          strict: 'true'
 
       - name: Compare generated manifest
         run: |
