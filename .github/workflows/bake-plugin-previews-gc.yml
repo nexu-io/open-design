@@ -35,6 +35,7 @@ concurrency:
 jobs:
   gc:
     name: GC orphaned preview clips
+    if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:

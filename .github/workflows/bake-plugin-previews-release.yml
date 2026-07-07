@@ -31,7 +31,7 @@ jobs:
     # triggering ref with contents:write, so a dispatch on `main` would write
     # straight to main and bypass the release back-merge/review path. Hard-gate
     # the whole job to release branches.
-    if: ${{ startsWith(github.ref, 'refs/heads/release/') }}
+    if: ${{ startsWith(github.ref, 'refs/heads/release/') && github.repository == 'nexu-io/open-design' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
