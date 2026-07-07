@@ -10,7 +10,11 @@
 
 **메인 에이전트가 codex 자체인 런타임**: CLI 재호출(중첩 spawn) 대신 내장
 `image_gen` 도구를 직접 사용해도 된다 — 프롬프트 스캐폴드·스타일 앵커(view_image)·
-산출 경로 계약(`bg-NN.png`)은 동일하게 준수한다.
+산출 경로 계약(`bg/bg-NN.png`)은 동일하게 준수한다.
+
+**배경 산출 경로 = `{cwd}/bg/` 하위 고정** — 중간산출을 프로젝트 루트에 두면
+`*.png` 글롭·갤러리 나열이 배경을 집어가는 위생 문제(도그푸딩 실측). 삭제는
+금지 — 배경 보존이 "텍스트 수정 시 재생성 불필요" 결정성 계약의 전제다.
 
 ## 실행 전제 (미충족 시 정직 안내 후 중단 — 대체 생성 경로 없음)
 
@@ -21,10 +25,10 @@
 ## dispatch 입력
 
 - `{cwd}` — 프로젝트 작업 디렉토리 절대 경로
-- `{out_name}` — 산출 파일명: 표지 `bg-01.png`, 본문 `bg-NN.png` (cards.json index와 일치)
+- `{out_name}` — 산출 상대 경로: 표지 `bg/bg-01.png`, 본문 `bg/bg-NN.png` (cards.json index와 일치)
 - `{prompt}` — 아래 스캐폴드로 조립한 생성 프롬프트 전문
 - `{anchor_paths}` — view_image 참조 이미지 절대 경로 목록. 표지: DESIGN.md 비주얼 무드
-  섹션의 브랜드 레퍼런스 이미지(있으면 필수). 본문: 반드시 `{cwd}/bg-01.png` 포함 +
+  섹션의 브랜드 레퍼런스 이미지(있으면 필수). 본문: 반드시 `{cwd}/bg/bg-01.png` 포함 +
   브랜드 캐릭터가 있으면 DESIGN.md 등재 **캐릭터 레퍼런스 이미지도 함께**(앵커 2장 —
   스타일·팔레트는 bg-01이, 캐릭터 정체성은 캐릭터 레퍼런스가 담당. 세대 드리프트 방지).
   없으면 "없음".
@@ -34,7 +38,8 @@
 너는 카드뉴스 배경 이미지 생성 전담 에이전트다. 최종 텍스트 반환만이 메인에게
 전달된다 — 잡담 없이 결과만.
 
-1. 실행 (기본 샌드박스는 read-only라 cwd 복사가 실패한다 — 두 플래그 필수):
+1. 실행 (기본 샌드박스는 read-only라 cwd 복사가 실패한다 — 두 플래그 필수.
+   `{cwd}/bg/` 디렉토리는 메인이 표지 dispatch 전에 만들어 둔다 — 순서 계약 1):
 
    ```bash
    codex exec --skip-git-repo-check --sandbox workspace-write -C {cwd} "<지시문>"
@@ -95,7 +100,7 @@ Constraints: no text, no letters, no numbers, no watermark, no logo,
   단순화가 담당). 원경 롱숏·상단 구석 배치·크롭 잘림이 도그푸딩 실패 패턴.
 - **표지**: 브랜드 레퍼런스 이미지(DESIGN.md 비주얼 무드 섹션 등재)가 있으면
   view_image 참조로 캐릭터·구도를 잇는다.
-- **본문**: 반드시 표지 산출물(`bg-01.png`) + (캐릭터 브랜드면) 캐릭터 레퍼런스
+- **본문**: 반드시 표지 산출물(`bg/bg-01.png`) + (캐릭터 브랜드면) 캐릭터 레퍼런스
   **2장을 view_image 참조** — "same style, same palette" + Character 절 + **앵커
   중력 해제 1줄(필수)**: "Match the style, palette, and character identity of
   the reference images, but do NOT copy their composition — this card uses the
@@ -103,19 +108,19 @@ Constraints: no text, no letters, no numbers, no watermark, no logo,
   **구도(cards.json `bg` 필드의 매핑 표 전개)**. 라이팅 무드는 앵커 유지
   ("consistent bright natural daylight mood" 계열 1줄) — locale이 바뀌어도
   세트 톤은 묶인다.
-- **CTA**: 생성 호출 없음 — compose가 `bg-01.png`를 재사용한다(craft 룰 9).
+- **CTA**: 생성 호출 없음 — compose가 `bg/bg-01.png`를 재사용한다(craft 룰 9).
 
 ## 순서 계약
 
-1. cards.json 확정 후 표지 dispatch 1회 → `{cwd}/bg-01.png` 존재 확인
-   (스타일 앵커 — 완료 전 본문 진행 금지, 병렬 불가).
-2. 본문 N-2개 병렬 dispatch → `bg-02.png` … `bg-{N-1}.png`. 실패한 카드만 순차
+1. `mkdir -p {cwd}/bg` (메인) → cards.json 확정 후 표지 dispatch 1회 →
+   `{cwd}/bg/bg-01.png` 존재 확인 (스타일 앵커 — 완료 전 본문 진행 금지, 병렬 불가).
+2. 본문 N-2개 병렬 dispatch → `bg/bg-02.png` … `bg/bg-{N-1}.png`. 실패한 카드만 순차
    재시도 폴백(전체 재생성 금지 — 성공분은 보존).
-3. 메인이 직접 합성:
+3. 메인이 직접 합성 (`--bg-dir` 필수 — 배경은 `bg/` 하위, 카드 산출은 cwd 루트):
 
    ```bash
    python3 <스킬 폴더>/scripts/compose_cards.py --spec {cwd}/cards.json --out-dir {cwd} \
-     [--logo <DESIGN.md의 로고타입 에셋 절대 경로>]
+     --bg-dir {cwd}/bg [--logo <DESIGN.md의 로고타입 에셋 절대 경로>]
    ```
 
 4. 메인이 직접 `<slug>-preview.html` 갤러리 Write (구조는 SKILL.md 5e).
