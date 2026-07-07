@@ -52,7 +52,7 @@ import {
   writeProjectTextFile,
 } from '../providers/registry';
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
-import { claimRunTurnIndex } from '../analytics/identity';
+import { claimProjectTurnIndex, claimRunTurnIndex } from '../analytics/identity';
 import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import {
   type ByokMediaDefaults,
@@ -5464,6 +5464,12 @@ export function ProjectView({
         // had a generated artifact (project-scoped) so the run reads as an edit
         // rather than a first creation.
         const sessionTurn = claimRunTurnIndex();
+        // Per-project run turn index (project-lifetime, localStorage-backed):
+        // "within THIS project, which prompt / follow-up is this?". Sibling to
+        // the session-wide `sessionTurn` above — claimed together per real run
+        // so run_created / run_finished carry both the session-global and the
+        // project-scoped sequence.
+        const projectTurn = claimProjectTurnIndex(project.id);
         const hasExistingArtifact = projectFilesRef.current.some(
           (file) => Boolean(file.artifactManifest),
         );
@@ -5473,6 +5479,7 @@ export function ProjectView({
           ...(sessionTurn
             ? { turnIndex: sessionTurn.turnIndex, isFirstRun: sessionTurn.isFirstRun }
             : {}),
+          ...(projectTurn ? { projectTurnIndex: projectTurn.projectTurnIndex } : {}),
           ...(meta?.dsEnrichment ? { dsEnrichment: true } : {}),
           hasExistingArtifact,
           runtimeType: daemonByokOpenCode
@@ -5632,6 +5639,14 @@ export function ProjectView({
           projectFiles,
           { omitNativeImageAttachments: usesAnthropicProxy(config) },
         );
+        // Session-dimension hints on the BYOK-OpenCode path too, so
+        // run_created / run_finished carry the same session-global and
+        // project-scoped run sequence on every runtime (cli / amr / byok).
+        const byokSessionTurn = claimRunTurnIndex();
+        const byokProjectTurn = claimProjectTurnIndex(project.id);
+        const byokHasExistingArtifact = projectFilesRef.current.some(
+          (file) => Boolean(file.artifactManifest),
+        );
         void streamViaDaemon({
           agentId: 'byok-opencode',
           history: byokOpenCodeHistory,
@@ -5670,6 +5685,11 @@ export function ProjectView({
           locale,
           analyticsHints: {
             ...(meta?.entryFrom ? { entryFrom: meta.entryFrom } : {}),
+            ...(byokSessionTurn
+              ? { turnIndex: byokSessionTurn.turnIndex, isFirstRun: byokSessionTurn.isFirstRun }
+              : {}),
+            ...(byokProjectTurn ? { projectTurnIndex: byokProjectTurn.projectTurnIndex } : {}),
+            hasExistingArtifact: byokHasExistingArtifact,
             runtimeType: 'byok',
           },
           onRunCreated: (runId) => {
