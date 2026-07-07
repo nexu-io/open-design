@@ -179,13 +179,13 @@ anchor or an anchor href that does not match that card's filename.
 |---|------|----------------|
 | 1 | Card size | PNG ≠ 1080×1350 (or explicit 1:1) |
 | 2 | Background prompt | missing no-text/portrait clause; flat-illustration background on basic layout |
-| 3 | Style anchor | body bg without cover anchor; mismatched styles; missing character reference; character drift |
+| 3 | Style anchor | body bg without cover anchor; mismatched styles; missing character reference; character drift; character tiny/distant or crop-clipped |
 | 4 | Pillow-only text | copy baked into a generated background |
 | 5 | Type minimums | body <36px; hook <80px |
 | 6 | Safe margins | text inside the 72px edge band |
 | 7 | One message | multi-topic body card; >7 support lines |
 | 8 | Card count | <5 or >10 without explicit request |
-| 9 | Role layouts | box/band/uniform darkening behind text; font-rendered logo; CTA own bg or gradient dim |
+| 9 | Role layouts | box/band/uniform darkening behind text; font-rendered logo; CTA own bg or gradient dim; body longest line <80% usable width |
 | 10 | Color | off-palette bg; illegible contrast |
 | 11 | Caption anatomy | caption in PNG; missing ①/③/⑧; inline hashtags |
 | 12 | Output set | missing gallery/caption block; img order mismatch; missing/wrong download anchor |
