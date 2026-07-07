@@ -1,6 +1,11 @@
 ---
 name: "Generate Variations"
 description: "Claude design system prompt skill for Generate Variations"
+triggers:
+  - "claude generate variations"
+od:
+  category: prompt-library
+  upstream: "https://github.com/Trystan-SA/claude-design-system-prompt"
 ---
 # Generate Variations: Produce 3+ Design Options
 

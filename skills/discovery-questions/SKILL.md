@@ -1,6 +1,11 @@
 ---
 name: "Discovery Questions"
 description: "Claude design system prompt skill for Discovery Questions"
+triggers:
+  - "claude discovery questions"
+od:
+  category: prompt-library
+  upstream: "https://github.com/Trystan-SA/claude-design-system-prompt"
 ---
 # Discovery Questions: Kickoff Question Protocol
 

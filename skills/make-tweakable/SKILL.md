@@ -1,6 +1,11 @@
 ---
 name: "Make Tweakable"
 description: "Claude design system prompt skill for Make Tweakable"
+triggers:
+  - "claude make tweakable"
+od:
+  category: prompt-library
+  upstream: "https://github.com/Trystan-SA/claude-design-system-prompt"
 ---
 # Make Tweakable: Add In-Design Tweak Controls
 

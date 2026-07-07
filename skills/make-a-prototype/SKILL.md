@@ -1,6 +1,11 @@
 ---
 name: "Make A Prototype"
 description: "Claude design system prompt skill for Make A Prototype"
+triggers:
+  - "claude make a prototype"
+od:
+  category: prompt-library
+  upstream: "https://github.com/Trystan-SA/claude-design-system-prompt"
 ---
 # Make a Prototype: Interactive Clickable Prototype
 
@@ -31,7 +36,7 @@ State:
 
 For each screen: mount it in the DOM (display toggling or React state within a single page); hi-fi visuals matching the design system — real components, not generic boxes; plausible real content (actual names, product copy, numbers); one primary CTA per screen, secondary actions smaller and de-emphasized.
 
-Use the right device frame via `copy_starter_component`: `ios_frame.jsx`, `android_frame.jsx`, `macos_window.jsx`, or `browser_window.jsx`. The frame stays fixed; the prototype lives inside it.
+Initialize an appropriate device frame (iOS, Android, macOS, or Browser). The frame stays fixed; the prototype lives inside it.
 
 ## Phase 4: Wire up interactions
 

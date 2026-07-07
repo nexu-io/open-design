@@ -1,6 +1,11 @@
 ---
 name: "Design System Extract"
 description: "Claude design system prompt skill for Design System Extract"
+triggers:
+  - "claude design system extract"
+od:
+  category: prompt-library
+  upstream: "https://github.com/Trystan-SA/claude-design-system-prompt"
 ---
 # Design System Extract: Pull Tokens from Sources
 

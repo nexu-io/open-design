@@ -1,6 +1,11 @@
 ---
 name: "Accessibility Audit"
 description: "Claude design system prompt skill for Accessibility Audit"
+triggers:
+  - "claude accessibility audit"
+od:
+  category: prompt-library
+  upstream: "https://github.com/Trystan-SA/claude-design-system-prompt"
 ---
 # Accessibility Audit: WCAG and Inclusive Design Review
 
@@ -12,7 +17,7 @@ Audit the HTML file the user just edited or asked about; otherwise the most rece
 
 ## Phase 2: Launch four review agents in parallel
 
-Use the ${AGENT_TOOL_NAME} tool to launch all four agents concurrently in a single message, each with the full file contents.
+Use the your autonomous sub-agent capabilities tool to launch all four agents concurrently in a single message, each with the full file contents.
 
 Instruct every agent explicitly: report every issue found, including borderline and low-severity ones, with a confidence and severity estimate. Coverage is the agent's job; filtering happens at aggregation (Phase 3).
 

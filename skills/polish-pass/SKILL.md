@@ -1,6 +1,11 @@
 ---
 name: "Polish Pass"
 description: "Claude design system prompt skill for Polish Pass"
+triggers:
+  - "claude polish pass"
+od:
+  category: prompt-library
+  upstream: "https://github.com/Trystan-SA/claude-design-system-prompt"
 ---
 # Polish Pass: End-of-Design Quality Gate
 
@@ -14,7 +19,7 @@ If the design is clearly mid-flight (broken layout, missing sections, placeholde
 
 ## Phase 2: Launch four review agents in parallel
 
-Use the ${AGENT_TOOL_NAME} tool to launch all four agents concurrently in a single message. Each runs the equivalent of one standalone review skill, scoped to this file.
+Use the your autonomous sub-agent capabilities tool to launch all four agents concurrently in a single message. Each runs the equivalent of one standalone review skill, scoped to this file.
 
 Instruct every agent explicitly: **report every issue found, including uncertain and low-severity ones, with a confidence and severity estimate for each.** Coverage is the agent's job; filtering and prioritization happen in Phase 3. An agent that self-censors "minor" findings silently lowers recall.
 

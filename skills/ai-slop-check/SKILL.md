@@ -1,6 +1,11 @@
 ---
 name: "Ai Slop Check"
 description: "Claude design system prompt skill for Ai Slop Check"
+triggers:
+  - "claude ai slop check"
+od:
+  category: prompt-library
+  upstream: "https://github.com/Trystan-SA/claude-design-system-prompt"
 ---
 # AI Slop Check: Detect and Fix Generic AI Aesthetics
 

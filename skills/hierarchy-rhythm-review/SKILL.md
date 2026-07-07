@@ -1,6 +1,11 @@
 ---
 name: "Hierarchy Rhythm Review"
 description: "Claude design system prompt skill for Hierarchy Rhythm Review"
+triggers:
+  - "claude hierarchy rhythm review"
+od:
+  category: prompt-library
+  upstream: "https://github.com/Trystan-SA/claude-design-system-prompt"
 ---
 # Hierarchy and Rhythm Review
 
@@ -12,7 +17,7 @@ Review the HTML/CSS file the user just edited or asked about; otherwise the most
 
 ## Phase 2: Launch two review agents in parallel
 
-Use the ${AGENT_TOOL_NAME} tool to launch both agents concurrently in a single message.
+Use the your autonomous sub-agent capabilities tool to launch both agents concurrently in a single message.
 
 Instruct both agents explicitly: report every issue found, including uncertain and low-severity ones, with a confidence and severity estimate. Coverage is the agent's job; filtering happens at aggregation (Phase 3).
 

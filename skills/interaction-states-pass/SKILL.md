@@ -1,6 +1,11 @@
 ---
 name: "Interaction States Pass"
 description: "Claude design system prompt skill for Interaction States Pass"
+triggers:
+  - "claude interaction states pass"
+od:
+  category: prompt-library
+  upstream: "https://github.com/Trystan-SA/claude-design-system-prompt"
 ---
 # Interaction States Pass
 

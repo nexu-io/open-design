@@ -1,6 +1,11 @@
 ---
 name: "Component Extract"
 description: "Claude design system prompt skill for Component Extract"
+triggers:
+  - "claude component extract"
+od:
+  category: prompt-library
+  upstream: "https://github.com/Trystan-SA/claude-design-system-prompt"
 ---
 # Component Extract: Identify Reusable Components from a Design
 

@@ -1,6 +1,11 @@
 ---
 name: "Make A Deck"
 description: "Claude design system prompt skill for Make A Deck"
+triggers:
+  - "claude make a deck"
+od:
+  category: prompt-library
+  upstream: "https://github.com/Trystan-SA/claude-design-system-prompt"
 ---
 # Make a Deck: Slide Presentation in HTML
 

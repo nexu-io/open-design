@@ -1,6 +1,11 @@
 ---
 name: "Frontend Aesthetic Direction"
 description: "Claude design system prompt skill for Frontend Aesthetic Direction"
+triggers:
+  - "claude frontend aesthetic direction"
+od:
+  category: prompt-library
+  upstream: "https://github.com/Trystan-SA/claude-design-system-prompt"
 ---
 # Frontend Aesthetic Direction: Commit to a Look When No Brand Exists
 
