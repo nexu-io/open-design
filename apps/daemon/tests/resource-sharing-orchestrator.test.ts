@@ -18,15 +18,23 @@ const mockState = vi.hoisted(() => ({
   versions: [{ id: 'version_1', version: 1, manifestDigest: 'digest_1' }],
   latestVersionId: 'version_1',
   createdResources: [] as string[],
+  createdResourceCalls: 0,
+  delayCreateResource: false,
   principalTeamId: 'team_1',
   resourceKind: 'design_system',
 }));
 
 vi.mock('../src/integrations/resource-hub.js', () => ({
   createResourceHubClient: vi.fn(() => ({
-    createResource: vi.fn(async () => ({
-      id: mockState.createdResources.shift() ?? 'created_resource',
-    })),
+    createResource: vi.fn(async () => {
+      mockState.createdResourceCalls += 1;
+      if (mockState.delayCreateResource) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      return {
+        id: mockState.createdResources.shift() ?? 'created_resource',
+      };
+    }),
     getResource: vi.fn(async (_principal, resourceId) => ({
       id: resourceId,
       teamId: 'team_1',
@@ -92,6 +100,8 @@ describe('resource-sharing orchestrator', () => {
     ];
     mockState.latestVersionId = 'version_1';
     mockState.createdResources = [];
+    mockState.createdResourceCalls = 0;
+    mockState.delayCreateResource = false;
     mockState.principalTeamId = 'team_1';
     mockState.resourceKind = 'design_system';
     vi.clearAllMocks();
@@ -284,6 +294,52 @@ describe('resource-sharing orchestrator', () => {
       expect.anything(),
       expect.objectContaining({ teamId: 'team_2' }),
       'hub-team-2',
+      undefined,
+      { ref: 'latest' },
+    );
+  });
+
+  it('serializes concurrent shares of the same local resource before creating a hub resource', async () => {
+    const paths = {
+      RUNTIME_DATA_DIR: tempDir,
+      USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+      SKILL_ROOTS: [path.join(tempDir, 'skills')],
+    };
+    const editableDir = path.join(paths.USER_DESIGN_SYSTEMS_DIR, 'demo');
+    await fsp.mkdir(editableDir, { recursive: true });
+    await fsp.writeFile(path.join(editableDir, 'DESIGN.md'), 'local design\n');
+    mockState.createdResources = ['hub-single', 'hub-leaked'];
+    mockState.delayCreateResource = true;
+    const orchestrator = createSharingOrchestrator({ db, paths });
+
+    await expect(
+      Promise.all([
+        orchestrator.share('design_system', 'demo'),
+        orchestrator.share('design_system', 'demo'),
+      ]),
+    ).resolves.toEqual([
+      { hubResourceId: 'hub-single', version: 2 },
+      { hubResourceId: 'hub-single', version: 2 },
+    ]);
+
+    expect(mockState.createdResourceCalls).toBe(1);
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'demo')?.hubResourceId).toBe(
+      'hub-single',
+    );
+    expect(pushTree).toHaveBeenCalledTimes(2);
+    expect(pushTree).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({ teamId: 'team_1' }),
+      'hub-single',
+      undefined,
+      { ref: 'latest' },
+    );
+    expect(pushTree).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.objectContaining({ teamId: 'team_1' }),
+      'hub-single',
       undefined,
       { ref: 'latest' },
     );

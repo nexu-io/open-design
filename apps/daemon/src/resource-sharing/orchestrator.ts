@@ -78,6 +78,7 @@ export function createSharingOrchestrator(deps: SharingDeps) {
       getInstalledPlugin(deps.db, localId)?.fsPath ?? null,
   });
   const client = createResourceHubClient();
+  const shareLocks = new Map<string, Promise<void>>();
 
   function principalOrThrow(): ResourceHubPrincipal {
     const principal = readResourceHubPrincipal();
@@ -104,36 +105,38 @@ export function createSharingOrchestrator(deps: SharingDeps) {
     // the hub resource if already mapped), record the owner mapping.
     async share(kind: string, localId: string) {
       const principal = principalOrThrow();
-      const adapter = adapterOrThrow(kind);
-      const dir = await resolveAdapterPath(() => adapter.resolveSourceDir(localId));
-      if (!dir) {
-        throw new SharingError(404, 'local_resource_not_found', localId);
-      }
-      const existing = getSharedByLocal(deps.db, principal.teamId, kind, localId);
-      if (existing?.role === 'consumer') {
-        throw new SharingError(
-          409,
-          'consumer_mapping_conflict',
-          'pulled resources cannot be promoted to owner mappings',
-        );
-      }
-      const packed = await packTree(dir);
-      const hubResourceId =
-        existing?.hubResourceId ??
-        (await client.createResource(principal, { kind })).id;
-      const version = await pushTree(client, principal, hubResourceId, packed, {
-        ref: 'latest',
+      return withShareLock(principal.teamId, kind, localId, async () => {
+        const adapter = adapterOrThrow(kind);
+        const dir = await resolveAdapterPath(() => adapter.resolveSourceDir(localId));
+        if (!dir) {
+          throw new SharingError(404, 'local_resource_not_found', localId);
+        }
+        const existing = getSharedByLocal(deps.db, principal.teamId, kind, localId);
+        if (existing?.role === 'consumer') {
+          throw new SharingError(
+            409,
+            'consumer_mapping_conflict',
+            'pulled resources cannot be promoted to owner mappings',
+          );
+        }
+        const packed = await packTree(dir);
+        const hubResourceId =
+          existing?.hubResourceId ??
+          (await client.createResource(principal, { kind })).id;
+        const version = await pushTree(client, principal, hubResourceId, packed, {
+          ref: 'latest',
+        });
+        upsertShared(deps.db, {
+          kind,
+          localId,
+          hubResourceId,
+          hubTeamId: principal.teamId,
+          role: 'owner',
+          lastSyncedVersion: version.version,
+          updatedAt: new Date().toISOString(),
+        });
+        return { hubResourceId, version: version.version };
       });
-      upsertShared(deps.db, {
-        kind,
-        localId,
-        hubResourceId,
-        hubTeamId: principal.teamId,
-        role: 'owner',
-        lastSyncedVersion: version.version,
-        updatedAt: new Date().toISOString(),
-      });
-      return { hubResourceId, version: version.version };
     },
 
     // Pull a shared team resource: materialize its latest tree into a read-only
@@ -243,6 +246,29 @@ export function createSharingOrchestrator(deps: SharingDeps) {
         await fsp.rm(backupDir, { recursive: true, force: true });
       }
       throw error;
+    }
+  }
+
+  async function withShareLock<T>(
+    teamId: string,
+    kind: string,
+    localId: string,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const key = `${teamId}\0${kind}\0${localId}`;
+    const previous = shareLocks.get(key) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(run);
+    const currentSettled = current.then(
+      () => undefined,
+      () => undefined,
+    );
+    shareLocks.set(key, currentSettled);
+    try {
+      return await current;
+    } finally {
+      if (shareLocks.get(key) === currentSettled) {
+        shareLocks.delete(key);
+      }
     }
   }
 }
