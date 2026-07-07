@@ -31,6 +31,31 @@ describe('resource-sharing adapters', () => {
     );
   });
 
+  it('resolves canonical user design-system ids from the user design-system root', async () => {
+    const userDesignSystemsRoot = mkdtempSync(path.join(tmpdir(), 'adapter-design-systems-'));
+    mkdirSync(path.join(userDesignSystemsRoot, 'acme'));
+    const designSystem = createAdapterRegistry({
+      ...paths,
+      USER_DESIGN_SYSTEMS_DIR: userDesignSystemsRoot,
+    }).get('design_system');
+
+    await expect(designSystem?.resolveSourceDir('user:acme')).resolves.toBe(
+      path.join(userDesignSystemsRoot, 'acme'),
+    );
+    await expect(designSystem?.resolveSourceDir('user:missing')).resolves.toBeNull();
+  });
+
+  it('rejects invalid canonical user design-system ids before filesystem lookup', async () => {
+    const registry = createAdapterRegistry(paths);
+
+    await expect(
+      registry.get('design_system')?.resolveSourceDir('user:../acme'),
+    ).rejects.toMatchObject({
+      status: 400,
+      code: 'invalid_resource_id',
+    });
+  });
+
   it('resolveSourceDir checks all daemon skill roots', async () => {
     const userRoot = mkdtempSync(path.join(tmpdir(), 'adapter-user-'));
     const bundledRoot = mkdtempSync(path.join(tmpdir(), 'adapter-bundled-'));

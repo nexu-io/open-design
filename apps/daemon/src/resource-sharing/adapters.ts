@@ -70,16 +70,15 @@ function createDirAdapter(
   kind: string,
   sourceRoot: string,
   teamCopyRoot: string,
+  sourceSegmentFromLocalId: (localId: string) => string = (localId) =>
+    validatePathSegment(localId, `local ${kind} id`),
 ): ResourceKindAdapter {
   const source = path.resolve(sourceRoot);
   const teamCopy = path.resolve(teamCopyRoot);
   return {
     kind,
     async resolveSourceDir(localId) {
-      const dir = resolveWithinRoot(
-        source,
-        validatePathSegment(localId, `local ${kind} id`),
-      );
+      const dir = resolveWithinRoot(source, sourceSegmentFromLocalId(localId));
       return existsSync(dir) ? dir : null;
     },
     async teamCopyDir(hubResourceId) {
@@ -89,6 +88,14 @@ function createDirAdapter(
       );
     },
   };
+}
+
+function designSystemSourceSegment(localId: string): string {
+  const userPrefix = 'user:';
+  const dirId = localId.startsWith(userPrefix)
+    ? localId.slice(userPrefix.length)
+    : localId;
+  return validatePathSegment(dirId, 'local design_system id');
 }
 
 function createSkillAdapter(
@@ -168,6 +175,7 @@ export function createAdapterRegistry(
       'design_system',
       paths.USER_DESIGN_SYSTEMS_DIR,
       path.join(teamShared, 'design-systems'),
+      designSystemSourceSegment,
     ),
     createSkillAdapter(
       resolveSkillSourceDir,

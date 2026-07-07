@@ -225,6 +225,30 @@ describe('resource-sharing orchestrator', () => {
     expect(packTree).not.toHaveBeenCalled();
   });
 
+  it('stores canonical user design-system ids while packing the backing slug directory', async () => {
+    const paths = {
+      RUNTIME_DATA_DIR: tempDir,
+      USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+      SKILL_ROOTS: [path.join(tempDir, 'skills')],
+    };
+    const editableDir = path.join(paths.USER_DESIGN_SYSTEMS_DIR, 'acme');
+    await fsp.mkdir(editableDir, { recursive: true });
+    await fsp.writeFile(path.join(editableDir, 'DESIGN.md'), 'local design\n');
+    const orchestrator = createSharingOrchestrator({ db, paths });
+
+    await expect(orchestrator.share('design_system', 'user:acme')).resolves.toEqual({
+      hubResourceId: 'created_resource',
+      version: 2,
+    });
+
+    expect(packTree).toHaveBeenCalledWith(editableDir);
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'user:acme')).toMatchObject({
+      hubResourceId: 'created_resource',
+      role: 'owner',
+    });
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'acme')).toBeNull();
+  });
+
   it('rejects sharing over a pulled consumer mapping with the same local id', async () => {
     const paths = {
       RUNTIME_DATA_DIR: tempDir,
