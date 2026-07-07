@@ -164,9 +164,11 @@ describe('OnboardingDropdown', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /deepseek-v4-flash/ }));
 
-    const option = screen.getByRole('option', { name: /deepseek-v4-flash/ });
+    const option = screen.getByRole('option', { name: /^deepseek-v4-flash$/ });
     expect(option.textContent).toContain('Lowest cost');
     expect(option.textContent).toContain('Fast');
+    expect(option).toHaveAccessibleName('deepseek-v4-flash');
+    expect(option).toHaveAccessibleDescription('Lowest cost Fast');
     expect(option.querySelector('[data-description]')).toBeNull();
     expect(option.querySelector('[data-label]')).toBeNull();
   });

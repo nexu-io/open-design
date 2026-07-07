@@ -127,6 +127,13 @@ export const SearchableModelSelect = forwardRef<
   const selectedTagLabel = selectedTag
     ? t(MODEL_CAPABILITY_TAG_LABEL_KEYS[selectedTag])
     : null;
+  const selectedTagDescriptionId = selectedTagLabel
+    ? `${listboxId}-selected-tag`
+    : undefined;
+  const buttonDescriptionIds = [
+    buttonProps['aria-describedby'],
+    selectedTagDescriptionId,
+  ].filter(Boolean).join(' ') || undefined;
   const normalizedQuery = query.trim().toLowerCase();
   const filteredOptions = useMemo(() => {
     if (!normalizedQuery) return allOptions;
@@ -233,6 +240,7 @@ export const SearchableModelSelect = forwardRef<
         aria-expanded={open}
         aria-controls={listboxId}
         aria-haspopup="listbox"
+        aria-describedby={buttonDescriptionIds}
         className={className}
         onClick={(event) => {
           buttonProps.onClick?.(event);
@@ -247,6 +255,7 @@ export const SearchableModelSelect = forwardRef<
             <span
               className="model-select-searchable__value-badge"
               data-tag={selectedTag}
+              id={selectedTagDescriptionId}
             >
               {selectedTagLabel}
             </span>
@@ -294,7 +303,7 @@ export const SearchableModelSelect = forwardRef<
                   maxHeight: `${Math.max(96, popoverStyle.maxHeight - (shouldShowSearch ? 52 : 12))}px`,
                 }}
               >
-                {filteredOptions.map((option) => {
+                {filteredOptions.map((option, index) => {
                   const active = option.id === value;
                   const tag = getModelCapabilityTag(option);
                   const tagLabel = tag
@@ -304,12 +313,21 @@ export const SearchableModelSelect = forwardRef<
                   const costLabel = costTier
                     ? t(MODEL_COST_TIER_LABEL_KEYS[costTier])
                     : null;
+                  const optionId = `${listboxId}-option-${index}`;
+                  const optionLabelId = `${optionId}-label`;
+                  const optionCostId = costLabel ? `${optionId}-cost` : undefined;
+                  const optionTagId = tagLabel ? `${optionId}-tag` : undefined;
+                  const optionDescriptionIds = [optionCostId, optionTagId]
+                    .filter(Boolean)
+                    .join(' ') || undefined;
                   return (
                     <button
                       key={option.id}
                       type="button"
                       role="option"
                       aria-selected={active}
+                      aria-labelledby={optionLabelId}
+                      aria-describedby={optionDescriptionIds}
                       className={`model-select-searchable__option${active ? ' is-active' : ''}`}
                       data-selected={active ? 'true' : undefined}
                       onClick={() => {
@@ -320,11 +338,12 @@ export const SearchableModelSelect = forwardRef<
                       <span className="model-select-searchable__option-content">
                         <span className="model-select-searchable__option-copy">
                           <span className="model-select-searchable__option-label">
-                            {option.label}
+                            <span id={optionLabelId}>{option.label}</span>
                           </span>
                           {costLabel ? (
                             <span
                               className="model-select-searchable__option-meta"
+                              id={optionCostId}
                             >
                               {costLabel}
                             </span>
@@ -334,6 +353,7 @@ export const SearchableModelSelect = forwardRef<
                           <span
                             className="model-select-searchable__option-badge"
                             data-tag={tag}
+                            id={optionTagId}
                           >
                             {tagLabel}
                           </span>

@@ -3369,6 +3369,9 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
     : selectedOption?.label;
   const selectedTag = multiple ? undefined : selectedOption?.tag;
   const selectedTagKind = multiple ? undefined : selectedOption?.tagKind;
+  const selectedTagDescriptionId = selectedTag
+    ? `${dropdownIdRef.current}-selected-tag`
+    : undefined;
   const triggerLabel = selectedLabel || placeholder;
   const normalizedQuery = query.trim().toLowerCase();
   const visibleOptions =
@@ -3484,6 +3487,8 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
         }`}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-label={triggerLabel}
+        aria-describedby={selectedTagDescriptionId}
         title={triggerLabel}
         onClick={toggleOpen}
       >
@@ -3493,6 +3498,7 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
             <span
               className="onboarding-view__select-badge"
               data-tag={selectedTagKind}
+              id={selectedTagDescriptionId}
             >
               {selectedTag}
             </span>
@@ -3533,8 +3539,15 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
             aria-label={label}
             aria-multiselectable={multiple || undefined}
           >
-            {visibleOptions.map((option) => {
+            {visibleOptions.map((option, index) => {
               const selected = selectedValues.includes(option.value);
+              const optionId = `${dropdownIdRef.current}-option-${index}`;
+              const optionLabelId = `${optionId}-label`;
+              const optionMetaId = option.meta ? `${optionId}-meta` : undefined;
+              const optionTagId = option.tag ? `${optionId}-tag` : undefined;
+              const optionDescriptionIds = [optionMetaId, optionTagId]
+                .filter(Boolean)
+                .join(' ') || undefined;
               return (
                 <button
                   key={option.value}
@@ -3542,6 +3555,8 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
                   className={`onboarding-view__select-option${selected ? ' is-selected' : ''}`}
                   role="option"
                   aria-selected={selected}
+                  aria-labelledby={optionLabelId}
+                  aria-describedby={optionDescriptionIds}
                   onClick={() => {
                     if (props.multiple) {
                       props.onChange(
@@ -3557,10 +3572,11 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
                 >
                   <span className="onboarding-view__select-option-content">
                     <span className="onboarding-view__select-option-copy">
-                      <span>{option.label}</span>
+                      <span id={optionLabelId}>{option.label}</span>
                       {option.meta ? (
                         <span
                           className="onboarding-view__select-option-meta"
+                          id={optionMetaId}
                         >
                           {option.meta}
                         </span>
@@ -3570,6 +3586,7 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
                       <span
                         className="onboarding-view__select-badge"
                         data-tag={option.tagKind}
+                        id={optionTagId}
                       >
                         {option.tag}
                       </span>
