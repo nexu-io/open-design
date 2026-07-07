@@ -212,7 +212,7 @@ function findNextArtifactOpen(
 
 function isRealArtifactOpenAt(text: string, idx: number): boolean {
   const next = text.charAt(idx + OPEN_TAG.length);
-  return next === '>' || /\s/.test(next);
+  return /\s/.test(next);
 }
 
 function findOpenTagEnd(text: string, from: number): number {

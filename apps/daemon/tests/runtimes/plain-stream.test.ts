@@ -107,6 +107,17 @@ describe('plain stream artifact extraction', () => {
     }
   });
 
+  it('ignores bare artifact tags to match the web artifact parser', () => {
+    const artifacts = extractPlainStreamArtifacts([
+      '<artifact><!doctype html><html><body>Bare</body></html></artifact>',
+      '<artifact identifier="real" type="text/html"><!doctype html><html><body>Real</body></html></artifact>',
+    ].join('\n'));
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]?.fileName).toBe('real.html');
+    expect(artifacts[0]?.content).toBe('<!doctype html><html><body>Real</body></html>');
+  });
+
   it('maps supported text artifact types to stable project file names', () => {
     const artifacts = extractPlainStreamArtifacts([
       '<artifact identifier="theme" type="text/css">body { color: red; }</artifact>',
