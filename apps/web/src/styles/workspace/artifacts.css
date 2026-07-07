@@ -340,7 +340,7 @@
 }
 .agent-inventory-dialog {
   width: min(640px, 100%);
-  max-height: min(680px, calc(100vh - 48px));
+  height: min(680px, calc(100vh - 48px));
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -352,19 +352,21 @@
 }
 .agent-inventory-dialog-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
 .agent-inventory-dialog-head h3 {
   margin: 0;
   font-size: 16px;
+  line-height: 30px;
   font-weight: 650;
   color: var(--text);
 }
 .agent-inventory-dialog-close {
-  width: 30px;
-  height: 30px;
+  flex: none;
+  width: 34px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -401,6 +403,8 @@
   font: inherit;
 }
 .agent-inventory-dialog-list {
+  min-height: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -466,6 +470,7 @@
   overflow-wrap: anywhere;
 }
 .agent-inventory-dialog-empty {
+  flex: 1;
   margin: 0;
   padding: 12px;
   border: 1px dashed var(--border);
@@ -486,7 +491,7 @@
     padding: 12px;
   }
   .agent-inventory-dialog {
-    max-height: calc(100vh - 24px);
+    height: calc(100vh - 24px);
   }
   .agent-inventory-dialog-item-head {
     flex-direction: column;
