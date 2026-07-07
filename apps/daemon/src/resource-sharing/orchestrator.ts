@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+
 import type Database from 'better-sqlite3';
 
 import {
@@ -108,7 +112,7 @@ export function createSharingOrchestrator(deps: SharingDeps) {
         };
       }
       const dir = adapter.teamCopyDir(hubResourceId);
-      await materializeRef(client, principal, hubResourceId, 'latest', dir);
+      await replaceWithMaterializedRef(principal, hubResourceId, dir);
       const versions = await client.listVersions(principal, hubResourceId);
       const latest = versions[0]?.version ?? null;
       // Idempotent: same PK (kind, hubResourceId) updates the consumer row on
@@ -138,6 +142,53 @@ export function createSharingOrchestrator(deps: SharingDeps) {
       }));
     },
   };
+
+  async function replaceWithMaterializedRef(
+    principal: ResourceHubPrincipal,
+    hubResourceId: string,
+    dir: string,
+  ): Promise<void> {
+    const parent = path.dirname(dir);
+    const basename = path.basename(dir);
+    await fsp.mkdir(parent, { recursive: true });
+    const tempDir = path.join(parent, `.${basename}.tmp-${randomUUID()}`);
+    const backupDir = path.join(parent, `.${basename}.previous-${randomUUID()}`);
+    let movedExisting = false;
+    let installed = false;
+    try {
+      await materializeRef(client, principal, hubResourceId, 'latest', tempDir);
+      try {
+        await fsp.rename(dir, backupDir);
+        movedExisting = true;
+      } catch (error) {
+        if (!isNotFoundError(error)) throw error;
+      }
+      await fsp.rename(tempDir, dir);
+      installed = true;
+      if (movedExisting) {
+        await fsp.rm(backupDir, { recursive: true, force: true });
+      }
+    } catch (error) {
+      await fsp.rm(tempDir, { recursive: true, force: true });
+      if (movedExisting && !installed) {
+        await fsp.rename(backupDir, dir).catch(async () => {
+          await fsp.rm(backupDir, { recursive: true, force: true });
+        });
+      } else {
+        await fsp.rm(backupDir, { recursive: true, force: true });
+      }
+      throw error;
+    }
+  }
 }
 
 export type SharingOrchestrator = ReturnType<typeof createSharingOrchestrator>;
+
+function isNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'ENOENT'
+  );
+}
