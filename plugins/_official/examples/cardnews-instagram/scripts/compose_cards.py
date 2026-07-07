@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Role: 인스타 카드뉴스 합성 CLI — cards.json + bg-NN.png → <slug>-NN.png (1080×1350)
-# Key Features: 역할별(cover/body/cta) 텍스트 오버레이, body 자동 줄바꿈+양쪽맞춤(5~7줄 계약), 로고 합성(폭 99px 고정), --self-test 지오메트리 회귀 모드
+# Key Features: 4:5 중앙 크롭·LANCZOS 리사이즈, 역할별(cover/body/cta) 텍스트 오버레이, body 자동 줄바꿈+양쪽맞춤(5~7줄 계약), 로고 합성(폭 99px 고정), --self-test 지오메트리 회귀 모드
 # Dependencies: Pillow만 (시스템 python3 3.9+). 폰트는 Pretendard variable 우선 자동 탐색, 나눔 폴백.
 # Notes: body 카드는 박스·스크림 밴드·전면 균일 다크닝 금지 — 하단 페더 그라디언트만(v2 레퍼런스 실측).
 #        결정성 계약: 같은 cards.json + 같은 배경 → 같은 출력 (텍스트 수정 시 배경 재생성 불필요).
