@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
   type Dispatch,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent,
   type SetStateAction,
 } from 'react';
@@ -3656,6 +3657,31 @@ function SourcesPanel({
 
 type ImportKind = 'github' | 'zip' | 'folder';
 
+interface PluginDropEntry {
+  isFile: boolean;
+  isDirectory: boolean;
+  name: string;
+}
+
+interface PluginDropFileEntry extends PluginDropEntry {
+  isFile: true;
+  file: (success: (file: File) => void, error?: (error: DOMException) => void) => void;
+}
+
+interface PluginDropDirectoryEntry extends PluginDropEntry {
+  isDirectory: true;
+  createReader: () => {
+    readEntries: (
+      success: (entries: PluginDropEntry[]) => void,
+      error?: (error: DOMException) => void,
+    ) => void;
+  };
+}
+
+type DataTransferItemWithEntry = DataTransferItem & {
+  webkitGetAsEntry?: () => PluginDropEntry | null;
+};
+
 function PluginImportModal({
   onClose,
   onInstallSource,
@@ -3916,13 +3942,76 @@ function FileImportPanel({
   onChange: (files: File[]) => void;
   onImport: () => void;
 }) {
+  const [dragOver, setDragOver] = useState(false);
+  const [dropError, setDropError] = useState<string | null>(null);
+
+  function handleDragEnter(event: ReactDragEvent<HTMLLabelElement>) {
+    if (!dragEventHasFiles(event) || working) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setDragOver(true);
+  }
+
+  function handleDragOver(event: ReactDragEvent<HTMLLabelElement>) {
+    if (!dragEventHasFiles(event) || working) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setDragOver(true);
+  }
+
+  function handleDragLeave(event: ReactDragEvent<HTMLLabelElement>) {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+    setDragOver(false);
+  }
+
+  async function handleDrop(event: ReactDragEvent<HTMLLabelElement>) {
+    if (!dragEventHasFiles(event) || working) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setDragOver(false);
+    const { dataTransfer } = event;
+    try {
+      const droppedFiles = await filesFromPluginDrop(dataTransfer);
+      if (folder) {
+        if (droppedFiles.length === 0) {
+          onChange([]);
+          setDropError('Drop a plugin folder or files.');
+          return;
+        }
+        onChange(droppedFiles);
+        setDropError(null);
+        return;
+      }
+
+      const zip = droppedFiles.find(isZipPluginFile) ?? null;
+      if (!zip) {
+        onChange([]);
+        setDropError('Drop a .zip plugin archive.');
+        return;
+      }
+      onChange([zip]);
+      setDropError(null);
+    } catch {
+      onChange([]);
+      setDropError('Could not read dropped files. Try choosing the folder instead.');
+    }
+  }
+
   return (
     <section className="plugins-view__install-card">
       <div>
         <h3>{title}</h3>
         <p>{body}</p>
       </div>
-      <label className="plugins-import-modal__file">
+      <label
+        className={`plugins-import-modal__file${dragOver ? ' is-drag-over' : ''}`}
+        data-testid={folder ? 'plugins-folder-dropzone' : 'plugins-zip-dropzone'}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={(event) => void handleDrop(event)}
+      >
         <input
           type="file"
           data-testid={folder ? 'plugins-folder-input' : 'plugins-zip-input'}
@@ -3930,10 +4019,18 @@ function FileImportPanel({
           {...(folder ? { webkitdirectory: '', directory: '' } : {})}
           multiple={folder}
           disabled={working}
-          onChange={(event) => onChange(Array.from(event.currentTarget.files ?? []))}
+          onChange={(event) => {
+            setDropError(null);
+            onChange(Array.from(event.currentTarget.files ?? []));
+          }}
         />
         <span>{fileLabel}</span>
       </label>
+      {dropError ? (
+        <p className="plugins-import-modal__file-error" role="alert">
+          {dropError}
+        </p>
+      ) : null}
       <button
         type="button"
         className="plugins-view__primary"
@@ -3944,6 +4041,99 @@ function FileImportPanel({
       </button>
     </section>
   );
+}
+
+function dragEventHasFiles(event: ReactDragEvent<HTMLElement>): boolean {
+  return Array.from(event.dataTransfer.types ?? []).includes('Files');
+}
+
+async function filesFromPluginDrop(dataTransfer: DataTransfer): Promise<File[]> {
+  const fallbackFiles = Array.from(dataTransfer.files ?? []);
+  const items = Array.from(dataTransfer.items ?? []);
+  if (items.length === 0) return fallbackFiles;
+
+  const results = await Promise.allSettled(items.map(filesFromPluginDropItem));
+  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (rejected) {
+    if (fallbackFiles.length > 0) return fallbackFiles;
+    throw rejected.reason;
+  }
+  const files = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
+  return files.length > 0 ? files : fallbackFiles;
+}
+
+async function filesFromPluginDropItem(item: DataTransferItem): Promise<File[]> {
+  const entry = (item as DataTransferItemWithEntry).webkitGetAsEntry?.();
+  if (entry && isPluginDropEntry(entry)) return filesFromPluginDropEntry(entry, entry.name);
+
+  const file = item.kind === 'file' ? item.getAsFile() : null;
+  return file ? [file] : [];
+}
+
+function isPluginDropEntry(entry: unknown): entry is PluginDropEntry {
+  if (!entry || typeof entry !== 'object') return false;
+  const candidate = entry as Partial<PluginDropEntry>;
+  return (
+    typeof candidate.name === 'string' &&
+    typeof candidate.isFile === 'boolean' &&
+    typeof candidate.isDirectory === 'boolean'
+  );
+}
+
+async function filesFromPluginDropEntry(entry: PluginDropEntry, relativePath: string): Promise<File[]> {
+  if (entry.isFile) {
+    const file = await fileFromPluginDropEntry(entry as PluginDropFileEntry);
+    return [withPluginDropRelativePath(file, relativePath)];
+  }
+  if (!entry.isDirectory) return [];
+
+  const children = await readPluginDropDirectoryEntries(entry as PluginDropDirectoryEntry);
+  const nested = await Promise.all(
+    children.map((child) => filesFromPluginDropEntry(child, `${relativePath}/${child.name}`)),
+  );
+  return nested.flat();
+}
+
+function fileFromPluginDropEntry(entry: PluginDropFileEntry): Promise<File> {
+  return new Promise((resolve, reject) => {
+    entry.file(resolve, reject);
+  });
+}
+
+function readPluginDropDirectoryEntries(entry: PluginDropDirectoryEntry): Promise<PluginDropEntry[]> {
+  const reader = entry.createReader();
+  const entries: PluginDropEntry[] = [];
+  return new Promise((resolve, reject) => {
+    function readNextBatch() {
+      reader.readEntries((batch) => {
+        if (batch.length === 0) {
+          resolve(entries);
+          return;
+        }
+        entries.push(...batch);
+        readNextBatch();
+      }, reject);
+    }
+    readNextBatch();
+  });
+}
+
+function withPluginDropRelativePath(file: File, relativePath: string): File {
+  const currentPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+  if (currentPath) return file;
+  Object.defineProperty(file, 'webkitRelativePath', {
+    value: normalizePluginDropPath(relativePath),
+    configurable: true,
+  });
+  return file;
+}
+
+function normalizePluginDropPath(input: string): string {
+  return input.replace(/\\/g, '/').split('/').filter(Boolean).join('/');
+}
+
+function isZipPluginFile(file: File): boolean {
+  return /\.zip$/i.test(file.name);
 }
 
 function buildAvailablePlugins(

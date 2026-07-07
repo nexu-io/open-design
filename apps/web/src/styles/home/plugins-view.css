@@ -852,13 +852,26 @@
   cursor: pointer;
 }
 
-.plugins-import-modal__file:hover {
+.plugins-import-modal__file:hover,
+.plugins-import-modal__file.is-drag-over {
   border-color: var(--border-strong);
   color: var(--text);
 }
 
+.plugins-import-modal__file.is-drag-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-tint) 62%, var(--bg-subtle));
+}
+
 .plugins-import-modal__file input {
   display: none;
+}
+
+.plugins-import-modal__file-error {
+  margin: -2px 0 0;
+  color: var(--danger, #d4543b);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .plugins-view__install-card p,

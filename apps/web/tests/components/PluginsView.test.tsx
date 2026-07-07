@@ -103,6 +103,71 @@ const mockedApplyPlugin = vi.mocked(applyPlugin);
 const mockedUploadPluginFolder = vi.mocked(uploadPluginFolder);
 const mockedUploadPluginZip = vi.mocked(uploadPluginZip);
 
+interface MockPluginDropEntry {
+  isFile: boolean;
+  isDirectory: boolean;
+  name: string;
+  file?: (success: (file: File) => void, error?: (error: DOMException) => void) => void;
+  createReader?: () => {
+    readEntries: (
+      success: (entries: MockPluginDropEntry[]) => void,
+      error?: (error: DOMException) => void,
+    ) => void;
+  };
+}
+
+function fileDropDataTransfer(file: File): DataTransfer {
+  return {
+    types: ['Files'],
+    files: [file],
+    items: [],
+  } as unknown as DataTransfer;
+}
+
+function entryDropDataTransfer(entry: MockPluginDropEntry): DataTransfer {
+  return {
+    types: ['Files'],
+    files: [],
+    items: [
+      {
+        kind: 'file',
+        getAsFile: () => null,
+        webkitGetAsEntry: () => entry,
+      },
+    ],
+  } as unknown as DataTransfer;
+}
+
+function mockFileEntry(name: string, file: File): MockPluginDropEntry {
+  return {
+    isFile: true,
+    isDirectory: false,
+    name,
+    file: (success) => success(file),
+  };
+}
+
+function mockDirectoryEntry(name: string, entries: MockPluginDropEntry[]): MockPluginDropEntry {
+  return {
+    isFile: false,
+    isDirectory: true,
+    name,
+    createReader: () => {
+      let read = false;
+      return {
+        readEntries: (success) => {
+          if (read) {
+            success([]);
+            return;
+          }
+          read = true;
+          success(entries);
+        },
+      };
+    },
+  };
+}
+
 beforeEach(() => {
   analyticsTrack.mockClear();
   mockedListPlugins.mockResolvedValue([
@@ -770,6 +835,66 @@ describe('PluginsView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Import' }));
     await waitFor(() => expect(mockedUploadPluginFolder).toHaveBeenCalledWith([folderFile]));
     expect(await screen.findByText('Installed Folder Plugin.')).toBeTruthy();
+  });
+
+  it('selects a dropped zip plugin before importing', async () => {
+    render(<PluginsView />);
+
+    fireEvent.click(await screen.findByTestId('plugins-import-button'));
+    fireEvent.click(screen.getByRole('button', { name: /upload zip/i }));
+    const zip = new File(['zip-bytes'], 'dragged-plugin.zip', { type: 'application/zip' });
+    fireEvent.drop(screen.getByTestId('plugins-zip-dropzone'), {
+      dataTransfer: fileDropDataTransfer(zip),
+    });
+
+    expect(await screen.findByText('dragged-plugin.zip')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+    await waitFor(() => expect(mockedUploadPluginZip).toHaveBeenCalledWith(zip));
+  });
+
+  it('preserves dropped folder relative paths before importing', async () => {
+    render(<PluginsView />);
+
+    fireEvent.click(await screen.findByTestId('plugins-import-button'));
+    fireEvent.click(screen.getByRole('button', { name: /upload folder/i }));
+    const manifest = new File(['{}'], 'open-design.json', { type: 'application/json' });
+    const skill = new File(['# Skill'], 'SKILL.md', { type: 'text/markdown' });
+    const root = mockDirectoryEntry('sample-plugin', [
+      mockFileEntry('open-design.json', manifest),
+      mockDirectoryEntry('docs', [mockFileEntry('SKILL.md', skill)]),
+    ]);
+
+    fireEvent.drop(screen.getByTestId('plugins-folder-dropzone'), {
+      dataTransfer: entryDropDataTransfer(root),
+    });
+
+    expect(await screen.findByText('2 files selected')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+    await waitFor(() => expect(mockedUploadPluginFolder).toHaveBeenCalledTimes(1));
+    const files = mockedUploadPluginFolder.mock.calls[0]?.[0] ?? [];
+    expect(files.map((file) => (file as File & { webkitRelativePath?: string }).webkitRelativePath)).toEqual([
+      'sample-plugin/open-design.json',
+      'sample-plugin/docs/SKILL.md',
+    ]);
+  });
+
+  it('rejects non-zip drops in the zip import panel', async () => {
+    render(<PluginsView />);
+
+    fireEvent.click(await screen.findByTestId('plugins-import-button'));
+    fireEvent.click(screen.getByRole('button', { name: /upload zip/i }));
+    const textFile = new File(['not a zip'], 'plugin.txt', { type: 'text/plain' });
+    fireEvent.drop(screen.getByTestId('plugins-zip-dropzone'), {
+      dataTransfer: fileDropDataTransfer(textFile),
+    });
+
+    expect(await screen.findByText('Drop a .zip plugin archive.')).toBeTruthy();
+    const importButton = screen.getByRole('button', { name: 'Import' });
+    expect(importButton.getAttribute('disabled')).not.toBeNull();
+    fireEvent.click(importButton);
+    expect(mockedUploadPluginZip).not.toHaveBeenCalled();
   });
 
   it('confirms a plugin share action before starting the GitHub repo task', async () => {
