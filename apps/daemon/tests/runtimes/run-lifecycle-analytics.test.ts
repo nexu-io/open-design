@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
-  __forTestRetryFinalResultForRunStatus,
-  __forTestRunRetryEventsForAnalytics,
-  __forTestResolveRunProjectKindForAnalytics,
-  __forTestScanRunEventsForRetrySideEffects,
-  __forTestScanRunEventsForFinishedProps,
-} from '../../src/server.js';
+  resolveRunProjectKindForAnalytics,
+  retryFinalResultForRunStatus,
+  runRetryEventsForAnalytics,
+  scanRunEventsForFinishedProps,
+  scanRunEventsForRetrySideEffects,
+} from '../../src/runtimes/run-lifecycle-analytics.js';
 import { hasExplicitRequestedModelForAnalytics } from '../../src/run-analytics-observability.js';
 
 describe('run lifecycle analytics', () => {
   it('falls back to stored project metadata when analytics hints omit project kind', () => {
     expect(
-      __forTestResolveRunProjectKindForAnalytics({
+      resolveRunProjectKindForAnalytics({
         hintProjectKind: null,
         projectMetadata: { kind: 'prototype' },
       }),
@@ -20,7 +20,7 @@ describe('run lifecycle analytics', () => {
 
   it('maps project metadata kind to the analytics project_kind enum', () => {
     expect(
-      __forTestResolveRunProjectKindForAnalytics({
+      resolveRunProjectKindForAnalytics({
         hintProjectKind: null,
         projectMetadata: { kind: 'deck' },
       }),
@@ -29,7 +29,7 @@ describe('run lifecycle analytics', () => {
 
   it('preserves explicit analytics hints over project metadata', () => {
     expect(
-      __forTestResolveRunProjectKindForAnalytics({
+      resolveRunProjectKindForAnalytics({
         hintProjectKind: 'design_system',
         projectMetadata: { kind: 'other' },
       }),
@@ -38,7 +38,7 @@ describe('run lifecycle analytics', () => {
 
   it('classifies design-system workspace projects when hints are absent', () => {
     expect(
-      __forTestResolveRunProjectKindForAnalytics({
+      resolveRunProjectKindForAnalytics({
         hintProjectKind: null,
         projectMetadata: { kind: 'other', importedFrom: 'design-system' },
       }),
@@ -47,7 +47,7 @@ describe('run lifecycle analytics', () => {
 
   it('classifies brand-extraction backing projects as design-system runs', () => {
     expect(
-      __forTestResolveRunProjectKindForAnalytics({
+      resolveRunProjectKindForAnalytics({
         hintProjectKind: null,
         projectMetadata: { kind: 'brand', importedFrom: 'brand-extraction' },
       }),
@@ -56,7 +56,7 @@ describe('run lifecycle analytics', () => {
 
   it('splits HyperFrames out of generic video via videoModel', () => {
     expect(
-      __forTestResolveRunProjectKindForAnalytics({
+      resolveRunProjectKindForAnalytics({
         hintProjectKind: null,
         projectMetadata: { kind: 'video', videoModel: 'hyperframes-html' },
       }),
@@ -65,11 +65,27 @@ describe('run lifecycle analytics', () => {
 
   it('keeps AI video projects as video when videoModel is not HyperFrames', () => {
     expect(
-      __forTestResolveRunProjectKindForAnalytics({
+      resolveRunProjectKindForAnalytics({
         hintProjectKind: null,
         projectMetadata: { kind: 'video', videoModel: 'kling-v2' },
       }),
     ).toBe('video');
+  });
+
+  it('returns null when project metadata is missing or unrecognized', () => {
+    expect(
+      resolveRunProjectKindForAnalytics({
+        hintProjectKind: null,
+        projectMetadata: null,
+      }),
+    ).toBeNull();
+
+    expect(
+      resolveRunProjectKindForAnalytics({
+        hintProjectKind: null,
+        projectMetadata: { kind: 'future-kind' },
+      }),
+    ).toBeNull();
   });
 });
 
@@ -90,7 +106,7 @@ describe('scanRunEventsForFinishedProps', () => {
     // Append order mirrors a real run: initializing first, usage last.
     // Reverse scan must not stop at usage before reading the model signal.
     const events = [initializingEvent('claude-opus-4'), usageEvent(100, 200)];
-    const result = __forTestScanRunEventsForFinishedProps(events, '');
+    const result = scanRunEventsForFinishedProps(events, '');
     expect(result.agentReportedModel).toBe('claude-opus-4');
     expect(result.inputTokens).toBe(100);
     expect(result.outputTokens).toBe(200);
@@ -98,7 +114,7 @@ describe('scanRunEventsForFinishedProps', () => {
 
   it('extracts agent model from ACP status:model event when usage follows it', () => {
     const events = [modelEvent('gpt-4o'), usageEvent(50, 75)];
-    const result = __forTestScanRunEventsForFinishedProps(events, '');
+    const result = scanRunEventsForFinishedProps(events, '');
     expect(result.agentReportedModel).toBe('gpt-4o');
     expect(result.inputTokens).toBe(50);
   });
@@ -108,7 +124,7 @@ describe('scanRunEventsForFinishedProps', () => {
       { event: 'agent', data: { type: 'status', label: 'initializing', detail: 'gemini-pro' } },
       usageEvent(10, 20),
     ];
-    const result = __forTestScanRunEventsForFinishedProps(events, '');
+    const result = scanRunEventsForFinishedProps(events, '');
     expect(result.agentReportedModel).toBe('gemini-pro');
   });
 
@@ -117,7 +133,7 @@ describe('scanRunEventsForFinishedProps', () => {
     // as soon as usage tokens are found — it does not need to walk back to
     // the initializing event.
     const events = [initializingEvent('claude-opus-4'), usageEvent(30, 40)];
-    const result = __forTestScanRunEventsForFinishedProps(events, 'claude-haiku-4-5');
+    const result = scanRunEventsForFinishedProps(events, 'claude-haiku-4-5');
     expect(result.inputTokens).toBe(30);
     expect(result.outputTokens).toBe(40);
     // agentReportedModel may or may not be found (early exit), but the caller
@@ -126,7 +142,7 @@ describe('scanRunEventsForFinishedProps', () => {
 
   it('treats synthetic default request model as unresolved and reads the agent model', () => {
     const events = [initializingEvent('gpt-5.4-mini'), usageEvent(30, 40)];
-    const result = __forTestScanRunEventsForFinishedProps(events, 'default');
+    const result = scanRunEventsForFinishedProps(events, 'default');
     expect(result.agentReportedModel).toBe('gpt-5.4-mini');
     expect(result.inputTokens).toBe(30);
     expect(result.outputTokens).toBe(40);
@@ -134,13 +150,13 @@ describe('scanRunEventsForFinishedProps', () => {
 
   it('returns null agentReportedModel when no status event is present', () => {
     const events = [usageEvent(5, 10)];
-    const result = __forTestScanRunEventsForFinishedProps(events, '');
+    const result = scanRunEventsForFinishedProps(events, '');
     expect(result.agentReportedModel).toBeNull();
     expect(result.inputTokens).toBe(5);
   });
 
   it('handles empty event list', () => {
-    const result = __forTestScanRunEventsForFinishedProps([], '');
+    const result = scanRunEventsForFinishedProps([], '');
     expect(result.agentReportedModel).toBeNull();
     expect(result.inputTokens).toBeUndefined();
     expect(result.outputTokens).toBeUndefined();
@@ -156,7 +172,7 @@ describe('scanRunEventsForFinishedProps', () => {
       usageEvent(100, 200), // step 1 — must NOT overwrite terminal values
       usageEvent(500, 750), // terminal turn — seen first in reverse, values must survive
     ];
-    const result = __forTestScanRunEventsForFinishedProps(events, '');
+    const result = scanRunEventsForFinishedProps(events, '');
     expect(result.agentReportedModel).toBe('claude-opus-4');
     expect(result.inputTokens).toBe(500);
     expect(result.outputTokens).toBe(750);
@@ -174,7 +190,7 @@ describe('hasExplicitRequestedModelForAnalytics', () => {
 
 describe('run retry analytics helpers', () => {
   it('detects retry-blocking side effects from run events', () => {
-    expect(__forTestScanRunEventsForRetrySideEffects([
+    expect(scanRunEventsForRetrySideEffects([
       { event: 'stderr', data: { chunk: 'HTTP 503' } },
     ])).toEqual({
       userVisibleOutputSeen: false,
@@ -183,7 +199,7 @@ describe('run retry analytics helpers', () => {
       liveArtifactSeen: false,
     });
 
-    expect(__forTestScanRunEventsForRetrySideEffects([
+    expect(scanRunEventsForRetrySideEffects([
       { event: 'agent', data: { type: 'text_delta', delta: 'hello' } },
       { event: 'agent', data: { type: 'tool_use', id: 't1', name: 'Read', input: {} } },
       { event: 'agent', data: { type: 'live_artifact' } },
@@ -195,11 +211,11 @@ describe('run retry analytics helpers', () => {
   });
 
   it('derives retry final result from terminal status and attempt count', () => {
-    expect(__forTestRetryFinalResultForRunStatus('succeeded', 0)).toBe('not_attempted');
-    expect(__forTestRetryFinalResultForRunStatus('failed', 0)).toBe('suppressed');
-    expect(__forTestRetryFinalResultForRunStatus('succeeded', 1)).toBe('success');
-    expect(__forTestRetryFinalResultForRunStatus('failed', 1)).toBe('failed');
-    expect(__forTestRetryFinalResultForRunStatus('canceled', 1)).toBe('suppressed');
+    expect(retryFinalResultForRunStatus('succeeded', 0)).toBe('not_attempted');
+    expect(retryFinalResultForRunStatus('failed', 0)).toBe('suppressed');
+    expect(retryFinalResultForRunStatus('succeeded', 1)).toBe('success');
+    expect(retryFinalResultForRunStatus('failed', 1)).toBe('failed');
+    expect(retryFinalResultForRunStatus('canceled', 1)).toBe('suppressed');
   });
 
   it('selects retry events for daemon-side analytics replay', () => {
@@ -209,7 +225,7 @@ describe('run retry analytics helpers', () => {
       { event: 'run_retry_finished', data: { retry_result: 'success' } },
       { event: 'end', data: {} },
     ];
-    expect(__forTestRunRetryEventsForAnalytics(events).map((event) => event.event)).toEqual([
+    expect(runRetryEventsForAnalytics(events).map((event) => event.event)).toEqual([
       'run_retry_attempted',
       'run_retry_finished',
     ]);

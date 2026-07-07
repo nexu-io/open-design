@@ -13,6 +13,18 @@ import type {
   ProviderModelOption,
 } from '../../src/types';
 
+function optionNames(container: HTMLElement): string[] {
+  return within(container).getAllByRole('option').map((option) => {
+    const labelledBy = option.getAttribute('aria-labelledby');
+    if (!labelledBy) return option.textContent?.trim() ?? '';
+    return labelledBy
+      .split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
+      .filter(Boolean)
+      .join(' ');
+  });
+}
+
 vi.mock('../../src/providers/provider-models', () => ({
   fetchProviderModels: vi.fn(),
 }));
@@ -245,9 +257,7 @@ describe('InlineModelSwitcher AMR row', () => {
     expect(modelPicker.textContent).toContain('Default');
     fireEvent.click(modelPicker);
     const modelPopover = screen.getByTestId('inline-model-switcher-agent-model-popover');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(['Default', 'AMR Cloud Latest']);
+    expect(optionNames(modelPopover)).toEqual(['Default', 'AMR Cloud Latest']);
   });
 
   it('persists the live AMR fallback when the saved AMR model is stale', async () => {
@@ -276,9 +286,7 @@ describe('InlineModelSwitcher AMR row', () => {
     expect(modelPicker.textContent).toContain('Default');
     fireEvent.click(modelPicker);
     const modelPopover = screen.getByTestId('inline-model-switcher-agent-model-popover');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(['Default', 'AMR Cloud Latest']);
+    expect(optionNames(modelPopover)).toEqual(['Default', 'AMR Cloud Latest']);
     await waitFor(() => {
       expect(onAgentModelChange).toHaveBeenCalledWith('amr', {
         model: 'default',
@@ -516,9 +524,7 @@ describe('InlineModelSwitcher AMR row', () => {
     fireEvent.change(searchInput, { target: { value: '5.5' } });
 
     const modelPopover = screen.getByTestId('inline-model-switcher-api-model-popover');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(['gpt-4.1-mini', 'gpt-5.5']);
+    expect(optionNames(modelPopover)).toEqual(['gpt-4.1-mini', 'gpt-5.5']);
   });
 
   it('prefers fetched BYOK provider models over only showing the currently selected custom model', async () => {
@@ -550,9 +556,9 @@ describe('InlineModelSwitcher AMR row', () => {
     const modelPicker = screen.getByTestId('inline-model-switcher-api-model');
     fireEvent.click(modelPicker);
     const modelPopover = screen.getByTestId('inline-model-switcher-api-model-popover');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(expect.arrayContaining(['gpt-4.1-mini', 'gpt-4.1', 'gpt-5.5']));
+    expect(optionNames(modelPopover)).toEqual(
+      expect.arrayContaining(['gpt-4.1-mini', 'gpt-4.1', 'gpt-5.5']),
+    );
     expect(within(modelPopover).getAllByRole('option').length).toBeGreaterThan(1);
   });
 

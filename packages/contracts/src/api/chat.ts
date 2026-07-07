@@ -192,6 +192,12 @@ export interface ChatAnalyticsHints {
   turnIndex?: number;
   isFirstRun?: boolean;
   hasExistingArtifact?: boolean;
+  // Per-project run turn index (0-based, project-lifetime on this device):
+  // "within THIS project, which prompt / follow-up number is this?". Unlike
+  // `turnIndex` (session-wide, spans all projects and resets each browser
+  // session), this persists in localStorage keyed by project id. Optional:
+  // omitted when storage is unavailable (SSR / privacy mode).
+  projectTurnIndex?: number;
   // Active execution runtime for THIS run, computed client-side at launch
   // (the only layer that can tell BYOK from amr_cloud). The daemon stamps it
   // onto run_created / run_finished, overriding its own BYOK-blind
@@ -488,6 +494,22 @@ export type PersistedAgentEvent =
     }
   | { kind: 'tool_use'; id: string; name: string; input: unknown }
   | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  | {
+      kind: 'diagnostic';
+      name: string;
+      source?: string;
+      elapsedMs?: number;
+      reason?: string;
+      suppressedChars?: number;
+      suppressedChunks?: number;
+      openedBlocks?: number;
+      closedBlocks?: number;
+      fileCount?: number;
+      files?: string[];
+      pendingCandidateChars?: number;
+      suppressing?: boolean;
+      shape?: Record<string, unknown>;
+    }
   | {
       kind: 'plugin_candidate';
       candidateId: string;

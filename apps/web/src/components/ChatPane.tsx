@@ -749,6 +749,7 @@ function hasVisibleBrandAssistantEvent(event: NonNullable<ChatMessage['events']>
     case 'status':
       return !HIDDEN_BRAND_ASSISTANT_STATUS_LABELS.has(event.label);
     case 'usage':
+    case 'diagnostic':
     case 'conversation_title':
       return false;
   }

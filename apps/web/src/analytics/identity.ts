@@ -10,6 +10,8 @@ import { detectOpenDesignHostClientType } from '@open-design/host';
 const ANONYMOUS_ID_KEY = 'open-design:analytics.anonymous_id';
 const SESSION_ID_KEY = 'open-design:analytics.session_id';
 const RUN_TURN_INDEX_KEY = 'open-design:analytics.run_turn_index';
+// Per-project counter keys are this prefix + the project id (localStorage).
+const PROJECT_TURN_INDEX_KEY_PREFIX = 'open-design:analytics.project_turn_index:';
 
 function randomUuid(): string {
   // Prefer the standard crypto.randomUUID — present in every modern browser
@@ -69,6 +71,32 @@ export function claimRunTurnIndex(): { turnIndex: number; isFirstRun: boolean } 
     const turnIndex = Number.isFinite(current) && current >= 0 ? current : 0;
     window.sessionStorage.setItem(RUN_TURN_INDEX_KEY, String(turnIndex + 1));
     return { turnIndex, isFirstRun: turnIndex === 0 };
+  } catch {
+    return null;
+  }
+}
+
+// Per-PROJECT run turn index, keyed by project id. Answers "within THIS
+// project, which prompt / follow-up number is this run?" — the project-scoped
+// counterpart to the session-wide `claimRunTurnIndex` above. Persisted in
+// localStorage (NOT sessionStorage) so it is project-lifetime on this device:
+// it survives tab-session ends and reloads, and each project keeps its own
+// independent 0-based counter. Claimed together with the session turn at the
+// create-run dispatch. Returns null when storage is unavailable (SSR / privacy
+// mode) or the project id is empty, so callers omit the hint rather than
+// reporting a misleading 0.
+export function claimProjectTurnIndex(
+  projectId: string,
+): { projectTurnIndex: number } | null {
+  if (typeof window === 'undefined') return null;
+  if (!projectId) return null;
+  try {
+    const key = `${PROJECT_TURN_INDEX_KEY_PREFIX}${projectId}`;
+    const raw = window.localStorage.getItem(key);
+    const current = raw ? Number.parseInt(raw, 10) : 0;
+    const projectTurnIndex = Number.isFinite(current) && current >= 0 ? current : 0;
+    window.localStorage.setItem(key, String(projectTurnIndex + 1));
+    return { projectTurnIndex };
   } catch {
     return null;
   }

@@ -97,6 +97,13 @@ export interface RunCreatedProps {
   // them (e.g. storage unavailable).
   turn_index?: number;
   is_first_run?: boolean;
+  // Per-project run turn index (0-based, project-lifetime per device): "within
+  // THIS project, which prompt / follow-up number is this run?". Complements
+  // the session-wide `turn_index` above (which spans all projects and resets
+  // each browser session) — this one is scoped to a single project and
+  // persists across sessions. Optional: omitted when the client could not
+  // compute it (storage unavailable).
+  project_turn_index?: number;
   // True when the project already had a generated artifact when this run
   // started (project-scoped) — i.e. the run is an edit, not a first creation.
   has_existing_artifact?: boolean;
