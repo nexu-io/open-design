@@ -19,6 +19,33 @@ afterEach(() => {
   vi.mocked(requestPreviewSnapshot).mockClear();
 });
 
+function setElementRect(
+  element: Element,
+  rect: Partial<DOMRect> & Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>,
+) {
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () =>
+      ({
+        x: rect.left,
+        y: rect.top,
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        right: rect.left + rect.width,
+        bottom: rect.top + rect.height,
+        toJSON: () => ({}),
+      }) as DOMRect,
+  });
+}
+
+function drawSelectionBox(canvas: HTMLCanvasElement, start: { x: number; y: number }, end: { x: number; y: number }) {
+  fireEvent.pointerDown(canvas, { clientX: start.x, clientY: start.y, pointerId: 1 });
+  fireEvent.pointerMove(canvas, { clientX: end.x, clientY: end.y, pointerId: 1 });
+  fireEvent.pointerUp(canvas, { clientX: end.x, clientY: end.y, pointerId: 1 });
+}
+
 function installImageCompositeMocks() {
   const originalImage = globalThis.Image;
   class MockImage {
@@ -97,6 +124,7 @@ describe('PreviewDrawOverlay', () => {
     expect(canvas?.style.zIndex).toBe('80');
     expect(dock?.style.zIndex).toBe('91');
     expect(dock?.style.flexDirection).toBe('column');
+    expect(dock?.dataset.drawLayout).toBe('docked');
     expect(dock?.style.left).toBe('calc(50% - 52px)');
     expect(dock?.style.maxWidth).toContain('100% - 144px');
     expect(toolbar?.style.flexWrap).toBe('wrap');
@@ -109,6 +137,67 @@ describe('PreviewDrawOverlay', () => {
     expect(input?.style.flexBasis).toBe('220px');
     expect(input?.style.minWidth).toBe('0px');
     expect(input?.style.maxWidth).toBe('100%');
+  });
+
+  it('floats the composer next to the latest box annotation instead of docking it at the bottom', async () => {
+    const { container } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 640, height: 400 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const overlay = container.firstElementChild as HTMLElement;
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    const dock = container.querySelector<HTMLElement>('.preview-draw-dock')!;
+    setElementRect(overlay, { left: 0, top: 0, width: 640, height: 400 });
+    setElementRect(canvas, { left: 0, top: 0, width: 640, height: 400 });
+    setElementRect(dock, { left: 0, top: 0, width: 280, height: 96 });
+
+    drawSelectionBox(canvas, { x: 120, y: 80 }, { x: 240, y: 180 });
+    fireEvent(window, new Event('resize'));
+
+    await waitFor(() => expect(dock.dataset.drawLayout).toBe('floating'));
+    expect(dock.dataset.drawSide).toBe('right');
+    expect(dock.style.top).not.toBe('');
+    expect(dock.style.bottom).toBe('auto');
+    expect(dock.style.transform).toBe('none');
+  });
+
+  it('flips the floating composer to the left when the selection is near the right edge', async () => {
+    const { container } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 640, height: 400 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const overlay = container.firstElementChild as HTMLElement;
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    const dock = container.querySelector<HTMLElement>('.preview-draw-dock')!;
+    setElementRect(overlay, { left: 0, top: 0, width: 640, height: 400 });
+    setElementRect(canvas, { left: 0, top: 0, width: 640, height: 400 });
+    setElementRect(dock, { left: 0, top: 0, width: 280, height: 96 });
+
+    drawSelectionBox(canvas, { x: 540, y: 80 }, { x: 620, y: 180 });
+    fireEvent(window, new Event('resize'));
+
+    await waitFor(() => expect(dock.dataset.drawLayout).toBe('floating'));
+    expect(dock.dataset.drawSide).toBe('left');
+  });
+
+  it('falls back to the bottom dock when there is no valid annotation anchor', async () => {
+    const { container } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 320, height: 200 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const dock = container.querySelector<HTMLElement>('.preview-draw-dock')!;
+    const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+    fireEvent.change(input, { target: { value: 'note only' } });
+    fireEvent(window, new Event('resize'));
+
+    await waitFor(() => expect(dock.dataset.drawLayout).toBe('docked'));
+    expect(dock.dataset.drawSide).toBeUndefined();
   });
 
   it('queues a note when Enter submits from the draw input', async () => {
@@ -476,8 +565,16 @@ describe('PreviewDrawOverlay', () => {
 
     const body = container.querySelector('.viewer-body')!;
     const iframe = body.querySelector('iframe')!;
+    const dock = body.querySelector<HTMLElement>('.preview-draw-dock')!;
     // The overlay wrap (and its ink canvas) stays inside the clipped device frame…
     const wrap = iframe.parentElement!;
+    const canvas = wrap.querySelector<HTMLCanvasElement>('canvas')!;
+    setElementRect(body, { left: 0, top: 0, width: 720, height: 520 });
+    setElementRect(wrap, { left: 120, top: 60, width: 320, height: 200 });
+    setElementRect(canvas, { left: 120, top: 60, width: 320, height: 200 });
+    setElementRect(dock, { left: 0, top: 0, width: 260, height: 96 });
+    drawSelectionBox(canvas, { x: 160, y: 100 }, { x: 220, y: 150 });
+    fireEvent(window, new Event('resize'));
 
     await waitFor(() => {
       const input = body.querySelector<HTMLInputElement>('.preview-draw-note-input');
@@ -486,6 +583,7 @@ describe('PreviewDrawOverlay', () => {
       // the clip so it can never be cut off by the device frame (issue #3455).
       expect(wrap.contains(input!)).toBe(false);
       expect(body.contains(input!)).toBe(true);
+      expect(dock.dataset.drawLayout).toBe('floating');
     });
   });
 

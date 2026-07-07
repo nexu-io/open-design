@@ -27,6 +27,17 @@ interface PreviewSnapshot {
   h: number;
 }
 type CaptureFrameRect = Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>;
+type AnnotationAnchorEntry = {
+  id: number;
+  source: 'box' | 'stroke';
+  bounds: NormalizedRect;
+};
+type DockPlacementSide = 'right' | 'left' | 'bottom' | 'top';
+type PreviewDrawDockLayout = {
+  mode: 'floating' | 'docked';
+  side: DockPlacementSide | null;
+  style: CSSProperties;
+};
 
 export const ANNOTATION_EVENT = 'opendesign:annotation';
 export type AnnotationAction = 'draft' | 'queue' | 'send';
@@ -70,6 +81,12 @@ interface Props {
 const STROKE_COLOR = '#ff3b30';
 const STROKE_WIDTH = 4;
 const TARGET_COLOR = '#1677ff';
+const PREVIEW_DRAW_DOCK_EDGE_PAD = 16;
+const PREVIEW_DRAW_DOCK_GAP = 12;
+const PREVIEW_DRAW_DOCK_BOTTOM_OFFSET = 16;
+const PREVIEW_DRAW_DOCK_MIN_WIDTH = 280;
+const PREVIEW_DRAW_DOCK_MIN_VISIBLE_HEIGHT = 120;
+const PREVIEW_DRAW_DOCK_MAX_OVERLAP_RATIO = 0.35;
 
 // Render `node` into `host` via a portal when one is provided, otherwise inline.
 function maybePortal(node: ReactNode, host: HTMLElement | null) {
@@ -93,6 +110,7 @@ export function PreviewDrawOverlay({
   const t = useT();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const dockRef = useRef<HTMLDivElement | null>(null);
   const [note, setNote] = useState('');
   const [markTool, setMarkTool] = useState<MarkTool>('box');
   const strokesRef = useRef<Stroke[]>([]);
@@ -101,6 +119,9 @@ export function PreviewDrawOverlay({
   // Box-select accumulates: each drag commits another region, so the user can
   // mark several areas in one pass instead of one box replacing the last.
   const selectionBoxesRef = useRef<NormalizedRect[]>([]);
+  const anchorTimelineRef = useRef<AnnotationAnchorEntry[]>([]);
+  const undoneStrokeAnchorsRef = useRef<AnnotationAnchorEntry[]>([]);
+  const nextAnchorIdRef = useRef(1);
   const boxDraftRef = useRef<{ start: Point; current: Point } | null>(null);
   const composingRef = useRef(false);
   const [hasInk, setHasInk] = useState(false);
@@ -130,7 +151,18 @@ export function PreviewDrawOverlay({
     action: AnnotationAction;
     message: string;
   } | null>(null);
+  const [dockSize, setDockSize] = useState<{ width: number; height: number } | null>(null);
+  const [dockLayoutRevision, setDockLayoutRevision] = useState(0);
+  const [dockLayout, setDockLayout] = useState<PreviewDrawDockLayout>({
+    mode: 'docked',
+    side: null,
+    style: previewDrawDockedStyle,
+  });
   const sending = pendingAction !== null;
+
+  const bumpDockLayoutRevision = useCallback(() => {
+    setDockLayoutRevision((value) => value + 1);
+  }, []);
 
   const redraw = useCallback(() => {
     const cvs = canvasRef.current;
@@ -222,6 +254,27 @@ export function PreviewDrawOverlay({
     setHasBox(selectionBoxesRef.current.length > 0);
     setUndoCount(strokesRef.current.length);
     setRedoCount(undoneStrokesRef.current.length);
+  }
+
+  function pushAnchor(source: AnnotationAnchorEntry['source'], bounds: NormalizedRect) {
+    anchorTimelineRef.current = [
+      ...anchorTimelineRef.current,
+      { id: nextAnchorIdRef.current++, source, bounds },
+    ];
+    bumpDockLayoutRevision();
+  }
+
+  function popLatestAnchor(source: AnnotationAnchorEntry['source']) {
+    let index = -1;
+    for (let entryIndex = anchorTimelineRef.current.length - 1; entryIndex >= 0; entryIndex -= 1) {
+      if (anchorTimelineRef.current[entryIndex]?.source === source) {
+        index = entryIndex;
+        break;
+      }
+    }
+    if (index < 0) return;
+    anchorTimelineRef.current = anchorTimelineRef.current.filter((_, entryIndex) => entryIndex !== index);
+    bumpDockLayoutRevision();
   }
 
   function pointFromEvent(e: PointerEvent): Point {
@@ -327,6 +380,7 @@ export function PreviewDrawOverlay({
       // Commit the drawn region; ignore accidental micro-drags (click without move).
       if (next.width >= 0.006 && next.height >= 0.006) {
         selectionBoxesRef.current = [...selectionBoxesRef.current, next];
+        pushAnchor('box', next);
       }
       syncHistoryState();
       redraw();
@@ -336,6 +390,9 @@ export function PreviewDrawOverlay({
     if (drawingRef.current.points.length > 1) {
       strokesRef.current.push(drawingRef.current);
       undoneStrokesRef.current = [];
+      const nextBounds = normalizedStrokeBounds(drawingRef.current, canvasRef.current?.getBoundingClientRect());
+      if (nextBounds) pushAnchor('stroke', nextBounds);
+      undoneStrokeAnchorsRef.current = [];
       syncHistoryState();
     }
     drawingRef.current = null;
@@ -357,6 +414,9 @@ export function PreviewDrawOverlay({
     drawingRef.current = null;
     selectionBoxesRef.current = [];
     boxDraftRef.current = null;
+    anchorTimelineRef.current = [];
+    undoneStrokeAnchorsRef.current = [];
+    bumpDockLayoutRevision();
     syncHistoryState();
     redraw();
   }
@@ -444,6 +504,7 @@ export function PreviewDrawOverlay({
     }
     if (selectionBoxesRef.current.length > 0) {
       selectionBoxesRef.current = selectionBoxesRef.current.slice(0, -1);
+      popLatestAnchor('box');
       syncHistoryState();
       redraw();
       onToolbarClick?.('undo');
@@ -453,6 +514,16 @@ export function PreviewDrawOverlay({
     if (!stroke) return;
     onToolbarClick?.('undo');
     undoneStrokesRef.current.push(stroke);
+    let anchor: AnnotationAnchorEntry | null = null;
+    for (let entryIndex = anchorTimelineRef.current.length - 1; entryIndex >= 0; entryIndex -= 1) {
+      const candidate = anchorTimelineRef.current[entryIndex];
+      if (candidate?.source === 'stroke') {
+        anchor = candidate;
+        break;
+      }
+    }
+    if (anchor) undoneStrokeAnchorsRef.current.push(anchor);
+    popLatestAnchor('stroke');
     drawingRef.current = null;
     syncHistoryState();
     redraw();
@@ -464,6 +535,11 @@ export function PreviewDrawOverlay({
     if (!stroke) return;
     onToolbarClick?.('redo');
     strokesRef.current.push(stroke);
+    const anchor = undoneStrokeAnchorsRef.current.pop();
+    if (anchor) {
+      anchorTimelineRef.current = [...anchorTimelineRef.current, anchor];
+      bumpDockLayoutRevision();
+    }
     drawingRef.current = null;
     syncHistoryState();
     redraw();
@@ -480,8 +556,11 @@ export function PreviewDrawOverlay({
     drawingRef.current = null;
     selectionBoxesRef.current = [];
     boxDraftRef.current = null;
+    anchorTimelineRef.current = [];
+    undoneStrokeAnchorsRef.current = [];
     setExtraFiles([]);
     setPreviewIndex(null);
+    bumpDockLayoutRevision();
     syncHistoryState();
     redraw();
   }, [active, redraw]);
@@ -775,6 +854,85 @@ export function PreviewDrawOverlay({
     setToolbarHost((wrapRef.current?.closest('.viewer-body') as HTMLElement | null) ?? null);
   }, [active]);
 
+  useLayoutEffect(() => {
+    const node = dockRef.current;
+    if (!node) return;
+    const measure = () => {
+      const rect = node.getBoundingClientRect();
+      const next = {
+        width: Math.ceil(rect.width),
+        height: Math.ceil(rect.height),
+      };
+      if (next.width <= 0 || next.height <= 0) return;
+      setDockSize((current) =>
+        current?.width === next.width && current.height === next.height ? current : next,
+      );
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [active, imagePreviews.length, Boolean(captureWarning)]);
+
+  useEffect(() => {
+    if (!active) return;
+    const schedule = () => bumpDockLayoutRevision();
+    const wrap = wrapRef.current;
+    const host = toolbarHost ?? wrap;
+    if (!wrap || !host) return;
+    window.addEventListener('resize', schedule);
+    window.addEventListener('scroll', schedule, true);
+    if (typeof ResizeObserver === 'undefined') {
+      return () => {
+        window.removeEventListener('resize', schedule);
+        window.removeEventListener('scroll', schedule, true);
+      };
+    }
+    const observer = new ResizeObserver(schedule);
+    observer.observe(wrap);
+    observer.observe(host);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('scroll', schedule, true);
+    };
+  }, [active, toolbarHost, bumpDockLayoutRevision]);
+
+  useLayoutEffect(() => {
+    if (!active) {
+      setDockLayout({ mode: 'docked', side: null, style: previewDrawDockedStyle });
+      return;
+    }
+    const wrap = wrapRef.current;
+    const host = toolbarHost ?? wrap;
+    const measuredDock = dockSize ?? dockRef.current?.getBoundingClientRect();
+    if (!wrap || !host || !measuredDock) {
+      setDockLayout({ mode: 'docked', side: null, style: previewDrawDockedStyle });
+      return;
+    }
+    const wrapRect = wrap.getBoundingClientRect();
+    const hostRect = host.getBoundingClientRect();
+    const latestAnchor = anchorTimelineRef.current.at(-1) ?? null;
+    const anchorRect = latestAnchor
+      ? normalizedRectToHostRect(latestAnchor.bounds, wrapRect, hostRect)
+      : captureTarget
+        ? absoluteRectToHostRect(captureTarget.position, wrapRect, hostRect)
+        : null;
+    if (!anchorRect) {
+      setDockLayout({ mode: 'docked', side: null, style: previewDrawDockedStyle });
+      return;
+    }
+    const nextLayout = computePreviewDrawDockLayout({
+      hostWidth: hostRect.width,
+      hostHeight: hostRect.height,
+      anchorRect,
+      dockWidth: Math.ceil(measuredDock.width),
+      dockHeight: Math.ceil(measuredDock.height),
+    });
+    setDockLayout(nextLayout);
+  }, [active, toolbarHost, captureTarget, dockSize, dockLayoutRevision]);
+
   const overlayPointer = active ? 'auto' : 'none';
   const showCanvas = active || hasInk || hasBox;
   const canSubmit = hasInk || hasBox || Boolean(captureTarget) || captureViewport || Boolean(note.trim()) || extraFiles.length > 0;
@@ -857,7 +1015,13 @@ export function PreviewDrawOverlay({
       {active ? maybePortal(
         <>
           <style>{tooltipStyle}</style>
-          <div className="preview-draw-dock" style={previewDrawDockStyle}>
+          <div
+            ref={dockRef}
+            className="preview-draw-dock"
+            data-draw-layout={dockLayout.mode}
+            data-draw-side={dockLayout.side ?? undefined}
+            style={dockLayout.style}
+          >
           {captureWarning ? (
             <div
               role="status"
@@ -1277,6 +1441,154 @@ function drawNormalizedBox(ctx: CanvasRenderingContext2D, box: NormalizedRect, w
   ctx.restore();
 }
 
+function normalizedStrokeBounds(stroke: Stroke, rect: DOMRect | undefined | null): NormalizedRect | null {
+  if (!rect || rect.width <= 0 || rect.height <= 0 || stroke.points.length === 0) return null;
+  const xs = stroke.points.map((point) => point.x);
+  const ys = stroke.points.map((point) => point.y);
+  const padX = 8 / rect.width;
+  const padY = 8 / rect.height;
+  const minX = Math.max(0, Math.min(...xs) - padX);
+  const minY = Math.max(0, Math.min(...ys) - padY);
+  const maxX = Math.min(1, Math.max(...xs) + padX);
+  const maxY = Math.min(1, Math.max(...ys) + padY);
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(0, maxX - minX),
+    height: Math.max(0, maxY - minY),
+  };
+}
+
+function normalizedRectToHostRect(
+  rect: NormalizedRect,
+  wrapRect: DOMRect,
+  hostRect: DOMRect,
+): { x: number; y: number; width: number; height: number } | null {
+  if (wrapRect.width <= 0 || wrapRect.height <= 0) return null;
+  return {
+    x: wrapRect.left - hostRect.left + rect.x * wrapRect.width,
+    y: wrapRect.top - hostRect.top + rect.y * wrapRect.height,
+    width: Math.max(1, rect.width * wrapRect.width),
+    height: Math.max(1, rect.height * wrapRect.height),
+  };
+}
+
+function absoluteRectToHostRect(
+  rect: { x: number; y: number; width: number; height: number },
+  wrapRect: DOMRect,
+  hostRect: DOMRect,
+): { x: number; y: number; width: number; height: number } | null {
+  if (wrapRect.width <= 0 || wrapRect.height <= 0) return null;
+  return {
+    x: wrapRect.left - hostRect.left + rect.x,
+    y: wrapRect.top - hostRect.top + rect.y,
+    width: Math.max(1, rect.width),
+    height: Math.max(1, rect.height),
+  };
+}
+
+function clampRange(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
+}
+
+function overlapRatio(
+  anchorRect: { x: number; y: number; width: number; height: number },
+  dockRect: { x: number; y: number; width: number; height: number },
+): number {
+  const left = Math.max(anchorRect.x, dockRect.x);
+  const top = Math.max(anchorRect.y, dockRect.y);
+  const right = Math.min(anchorRect.x + anchorRect.width, dockRect.x + dockRect.width);
+  const bottom = Math.min(anchorRect.y + anchorRect.height, dockRect.y + dockRect.height);
+  if (right <= left || bottom <= top) return 0;
+  const overlapArea = (right - left) * (bottom - top);
+  const anchorArea = Math.max(1, anchorRect.width * anchorRect.height);
+  return overlapArea / anchorArea;
+}
+
+function computePreviewDrawDockLayout({
+  hostWidth,
+  hostHeight,
+  anchorRect,
+  dockWidth,
+  dockHeight,
+}: {
+  hostWidth: number;
+  hostHeight: number;
+  anchorRect: { x: number; y: number; width: number; height: number };
+  dockWidth: number;
+  dockHeight: number;
+}): PreviewDrawDockLayout {
+  if (
+    hostWidth <= 0 ||
+    hostHeight <= 0 ||
+    dockWidth <= 0 ||
+    dockHeight <= 0 ||
+    hostWidth < PREVIEW_DRAW_DOCK_MIN_WIDTH + PREVIEW_DRAW_DOCK_EDGE_PAD * 2 ||
+    dockWidth > hostWidth - PREVIEW_DRAW_DOCK_EDGE_PAD * 2
+  ) {
+    return { mode: 'docked', side: null, style: previewDrawDockedStyle };
+  }
+  const minLeft = PREVIEW_DRAW_DOCK_EDGE_PAD;
+  const minTop = PREVIEW_DRAW_DOCK_EDGE_PAD;
+  const maxLeft = hostWidth - dockWidth - PREVIEW_DRAW_DOCK_EDGE_PAD;
+  const maxTop = hostHeight - dockHeight - PREVIEW_DRAW_DOCK_EDGE_PAD;
+  if (maxLeft < minLeft || maxTop < minTop) {
+    return { mode: 'docked', side: null, style: previewDrawDockedStyle };
+  }
+  const centerX = anchorRect.x + anchorRect.width / 2;
+  const centerY = anchorRect.y + anchorRect.height / 2;
+  const candidates: { side: DockPlacementSide; left: number; top: number; fits: boolean }[] = [
+    {
+      side: 'right',
+      left: anchorRect.x + anchorRect.width + PREVIEW_DRAW_DOCK_GAP,
+      top: centerY - dockHeight / 2,
+      fits: hostWidth - (anchorRect.x + anchorRect.width) - PREVIEW_DRAW_DOCK_EDGE_PAD >= dockWidth + PREVIEW_DRAW_DOCK_GAP,
+    },
+    {
+      side: 'left',
+      left: anchorRect.x - dockWidth - PREVIEW_DRAW_DOCK_GAP,
+      top: centerY - dockHeight / 2,
+      fits: anchorRect.x - PREVIEW_DRAW_DOCK_EDGE_PAD >= dockWidth + PREVIEW_DRAW_DOCK_GAP,
+    },
+    {
+      side: 'bottom',
+      left: centerX - dockWidth / 2,
+      top: anchorRect.y + anchorRect.height + PREVIEW_DRAW_DOCK_GAP,
+      fits: hostHeight - (anchorRect.y + anchorRect.height) - PREVIEW_DRAW_DOCK_EDGE_PAD >= dockHeight + PREVIEW_DRAW_DOCK_GAP,
+    },
+    {
+      side: 'top',
+      left: centerX - dockWidth / 2,
+      top: anchorRect.y - dockHeight - PREVIEW_DRAW_DOCK_GAP,
+      fits: anchorRect.y - PREVIEW_DRAW_DOCK_EDGE_PAD >= dockHeight + PREVIEW_DRAW_DOCK_GAP,
+    },
+  ];
+  for (const candidate of candidates) {
+    if (!candidate.fits) continue;
+    const left = clampRange(candidate.left, minLeft, maxLeft);
+    const top = clampRange(candidate.top, minTop, maxTop);
+    const maxHeight = Math.max(PREVIEW_DRAW_DOCK_MIN_VISIBLE_HEIGHT, hostHeight - top - PREVIEW_DRAW_DOCK_EDGE_PAD);
+    if (maxHeight < PREVIEW_DRAW_DOCK_MIN_VISIBLE_HEIGHT) continue;
+    const overlap = overlapRatio(anchorRect, { x: left, y: top, width: dockWidth, height: dockHeight });
+    if (overlap > PREVIEW_DRAW_DOCK_MAX_OVERLAP_RATIO) continue;
+    return {
+      mode: 'floating',
+      side: candidate.side,
+      style: {
+        ...previewDrawDockBaseStyle,
+        left,
+        top,
+        bottom: 'auto',
+        transform: 'none',
+        maxWidth: Math.min(760, Math.max(160, hostWidth - PREVIEW_DRAW_DOCK_EDGE_PAD * 2)),
+        maxHeight,
+      },
+    };
+  }
+  return { mode: 'docked', side: null, style: previewDrawDockedStyle };
+}
+
 const subToolGroupStyle: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -1374,18 +1686,22 @@ const closeButtonStyle: CSSProperties = {
 // strip, and toolbar with real spacing. Absolute per-element `bottom` offsets
 // used to collide once the toolbar wrapped taller, so the image strip visually
 // covered the controls; a flex column keeps them apart at any height.
-const previewDrawDockStyle: CSSProperties = {
+const previewDrawDockBaseStyle: CSSProperties = {
   position: 'absolute',
-  left: 'calc(50% - 52px)',
-  bottom: 16,
-  transform: 'translateX(-50%)',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
   gap: 8,
-  maxWidth: 'min(760px, calc(100% - 144px))',
   zIndex: 91,
   pointerEvents: 'none',
+};
+
+const previewDrawDockedStyle: CSSProperties = {
+  ...previewDrawDockBaseStyle,
+  left: 'calc(50% - 52px)',
+  bottom: PREVIEW_DRAW_DOCK_BOTTOM_OFFSET,
+  transform: 'translateX(-50%)',
+  maxWidth: 'min(760px, calc(100% - 144px))',
 };
 
 const submitSplitStyle: CSSProperties = {
