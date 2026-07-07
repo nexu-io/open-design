@@ -16,6 +16,8 @@ describe('agentDisplayName', () => {
   it('resolves common aliases like "claude code" and "qodercli"', () => {
     expect(agentDisplayName('Claude Code')).toBe('Claude');
     expect(agentDisplayName('qodercli')).toBe('Qoder');
+    expect(agentDisplayName('Kiro CLI')).toBe('Kiro');
+    expect(agentDisplayName('kiro-cli')).toBe('Kiro');
   });
 
   it('matches embedded substrings such as cursor-agent in a longer path', () => {
@@ -40,6 +42,8 @@ describe('exactAgentDisplayName', () => {
     expect(exactAgentDisplayName('Qoder CLI')).toBe('Qoder');
     expect(exactAgentDisplayName('qodercli.cmd')).toBe('Qoder');
     expect(exactAgentDisplayName('cursor-agent-fork')).toBeNull();
+    expect(exactAgentDisplayName('kiro')).toBe('Kiro');
+    expect(exactAgentDisplayName('Kiro CLI')).toBe('Kiro');
   });
 
   it('returns null for empty or nullish input', () => {
