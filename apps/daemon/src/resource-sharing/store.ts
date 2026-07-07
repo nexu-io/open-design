@@ -39,7 +39,7 @@ export function migrateResourceSharing(db: SqliteDb): void {
       role TEXT NOT NULL CHECK (role IN ('owner','consumer')),
       last_synced_version INTEGER,
       updated_at TEXT NOT NULL,
-      PRIMARY KEY (kind, local_id)
+      PRIMARY KEY (hub_team_id, kind, local_id)
     );
     CREATE UNIQUE INDEX IF NOT EXISTS shared_resources_hub_idx
       ON shared_resources (hub_team_id, hub_resource_id);
@@ -60,14 +60,15 @@ function toShared(row: SharedResourceRow): SharedResource {
 
 export function getSharedByLocal(
   db: SqliteDb,
+  hubTeamId: string,
   kind: string,
   localId: string,
 ): SharedResource | null {
   const row = db
     .prepare(
-      'SELECT * FROM shared_resources WHERE kind = ? AND local_id = ?',
+      'SELECT * FROM shared_resources WHERE hub_team_id = ? AND kind = ? AND local_id = ?',
     )
-    .get(kind, localId) as SharedResourceRow | undefined;
+    .get(hubTeamId, kind, localId) as SharedResourceRow | undefined;
   return row ? toShared(row) : null;
 }
 
@@ -99,9 +100,8 @@ export function upsertShared(db: SqliteDb, entry: SharedResource): void {
     `INSERT INTO shared_resources
        (kind, local_id, hub_resource_id, hub_team_id, role, last_synced_version, updated_at)
      VALUES (@kind, @localId, @hubResourceId, @hubTeamId, @role, @lastSyncedVersion, @updatedAt)
-     ON CONFLICT (kind, local_id) DO UPDATE SET
+     ON CONFLICT (hub_team_id, kind, local_id) DO UPDATE SET
        hub_resource_id = excluded.hub_resource_id,
-       hub_team_id = excluded.hub_team_id,
        role = excluded.role,
        last_synced_version = excluded.last_synced_version,
        updated_at = excluded.updated_at`,

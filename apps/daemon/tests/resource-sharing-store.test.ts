@@ -33,16 +33,32 @@ describe('resource-sharing store', () => {
 
   it('upserts and reads a mapping by local id and by hub id', () => {
     upsertShared(db, owner());
-    expect(getSharedByLocal(db, 'design_system', 'demo-ds')?.hubResourceId).toBe('res_1');
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'demo-ds')?.hubResourceId).toBe(
+      'res_1',
+    );
     expect(getSharedByHub(db, 'team_1', 'res_1')?.role).toBe('owner');
-    expect(getSharedByLocal(db, 'design_system', 'missing')).toBeNull();
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'missing')).toBeNull();
   });
 
-  it('is idempotent on the same (kind, local_id) — updates in place', () => {
+  it('is idempotent on the same (hub_team_id, kind, local_id) — updates in place', () => {
     upsertShared(db, owner({ lastSyncedVersion: 1 }));
     upsertShared(db, owner({ lastSyncedVersion: 3 }));
-    expect(getSharedByLocal(db, 'design_system', 'demo-ds')?.lastSyncedVersion).toBe(3);
+    expect(
+      getSharedByLocal(db, 'team_1', 'design_system', 'demo-ds')?.lastSyncedVersion,
+    ).toBe(3);
     expect(listSharedForTeam(db, 'team_1')).toHaveLength(1);
+  });
+
+  it('keeps same local ids isolated across teams', () => {
+    upsertShared(db, owner({ hubTeamId: 'team_1', hubResourceId: 'res_1' }));
+    upsertShared(db, owner({ hubTeamId: 'team_2', hubResourceId: 'res_2' }));
+
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'demo-ds')?.hubResourceId).toBe(
+      'res_1',
+    );
+    expect(getSharedByLocal(db, 'team_2', 'design_system', 'demo-ds')?.hubResourceId).toBe(
+      'res_2',
+    );
   });
 
   it('lists mappings scoped to a team', () => {

@@ -8,12 +8,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { materializeRef, packTree, pushTree } from '../src/resource-drive.js';
 import { upsertInstalledPlugin } from '../src/plugins/registry.js';
 import { createSharingOrchestrator } from '../src/resource-sharing/orchestrator.js';
-import { migrateResourceSharing } from '../src/resource-sharing/store.js';
+import {
+  getSharedByLocal,
+  migrateResourceSharing,
+} from '../src/resource-sharing/store.js';
 
 const mockState = vi.hoisted(() => ({
   materializations: [] as Array<Record<string, string>>,
   versions: [{ id: 'version_1', version: 1, manifestDigest: 'digest_1' }],
   createdResources: [] as string[],
+  principalTeamId: 'team_1',
   resourceKind: 'design_system',
 }));
 
@@ -34,7 +38,7 @@ vi.mock('../src/integrations/resource-hub.js', () => ({
   })),
   readResourceHubPrincipal: vi.fn(() => ({
     memberId: 'member_1',
-    teamId: 'team_1',
+    teamId: mockState.principalTeamId,
     role: 'member',
     lifecycleState: null,
   })),
@@ -72,6 +76,7 @@ describe('resource-sharing orchestrator', () => {
       { id: 'version_1', version: 1, manifestDigest: 'digest_1' },
     ];
     mockState.createdResources = [];
+    mockState.principalTeamId = 'team_1';
     mockState.resourceKind = 'design_system';
     vi.clearAllMocks();
   });
@@ -168,6 +173,53 @@ describe('resource-sharing orchestrator', () => {
     expect(pushTree).not.toHaveBeenCalled();
     expect(await fsp.readFile(path.join(editableDir, 'DESIGN.md'), 'utf8')).toBe(
       'local edit\n',
+    );
+  });
+
+  it('creates a team-local hub resource when sharing the same local id from another team', async () => {
+    const paths = {
+      RUNTIME_DATA_DIR: tempDir,
+      USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+      SKILL_ROOTS: [path.join(tempDir, 'skills')],
+    };
+    const editableDir = path.join(paths.USER_DESIGN_SYSTEMS_DIR, 'demo');
+    await fsp.mkdir(editableDir, { recursive: true });
+    await fsp.writeFile(path.join(editableDir, 'DESIGN.md'), 'local design\n');
+    mockState.createdResources = ['hub-team-1', 'hub-team-2'];
+    const orchestrator = createSharingOrchestrator({ db, paths });
+
+    await expect(orchestrator.share('design_system', 'demo')).resolves.toEqual({
+      hubResourceId: 'hub-team-1',
+      version: 2,
+    });
+    mockState.principalTeamId = 'team_2';
+
+    await expect(orchestrator.share('design_system', 'demo')).resolves.toEqual({
+      hubResourceId: 'hub-team-2',
+      version: 2,
+    });
+
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'demo')?.hubResourceId).toBe(
+      'hub-team-1',
+    );
+    expect(getSharedByLocal(db, 'team_2', 'design_system', 'demo')?.hubResourceId).toBe(
+      'hub-team-2',
+    );
+    expect(pushTree).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({ teamId: 'team_1' }),
+      'hub-team-1',
+      undefined,
+      { ref: 'latest' },
+    );
+    expect(pushTree).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.objectContaining({ teamId: 'team_2' }),
+      'hub-team-2',
+      undefined,
+      { ref: 'latest' },
     );
   });
 

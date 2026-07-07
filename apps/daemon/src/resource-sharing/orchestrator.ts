@@ -103,7 +103,7 @@ export function createSharingOrchestrator(deps: SharingDeps) {
       if (!dir) {
         throw new SharingError(404, 'local_resource_not_found', localId);
       }
-      const existing = getSharedByLocal(deps.db, kind, localId);
+      const existing = getSharedByLocal(deps.db, principal.teamId, kind, localId);
       if (existing?.role === 'consumer') {
         throw new SharingError(
           409,
