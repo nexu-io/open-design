@@ -105,4 +105,64 @@ describe('od resource CLI share/pull daemon wrappers', () => {
       'daemon resource endpoint failed (400 unsupported_kind): unknown kind: plugin\n',
     );
   });
+
+  it('gets resource detail from the daemon route without local workspace principal env', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          resource: {
+            id: 'hub-1',
+            teamId: 'team-1',
+            kind: 'design_system',
+            ownerMemberId: 'owner-1',
+            createdAt: '2026-07-07T10:00:00.000Z',
+            deletedAt: null,
+          },
+          versions: [
+            {
+              id: 'version-1',
+              resourceId: 'hub-1',
+              version: 1,
+              manifestDigest: 'sha256:abc',
+              createdByMemberId: 'owner-1',
+              createdAt: '2026-07-07T10:00:00.000Z',
+            },
+          ],
+          manifest: {
+            digest: 'sha256:abc',
+            entries: [
+              {
+                path: 'tokens.json',
+                type: 'file',
+                executable: false,
+                blobDigest: 'sha256:def',
+                symlinkTarget: null,
+              },
+            ],
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await runResource([
+      'detail',
+      'hub-1',
+      '--daemon-url',
+      'http://127.0.0.1:7456/',
+      '--json',
+    ]);
+
+    expect(process.exitCode).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:7456/api/resources/hub-1/detail',
+      { method: 'GET' },
+    );
+    expect(JSON.parse(stdout.join(''))).toMatchObject({
+      resource: { id: 'hub-1', kind: 'design_system' },
+      versions: [{ id: 'version-1', version: 1 }],
+      manifest: { digest: 'sha256:abc' },
+    });
+    expect(stderr.join('')).toBe('');
+  });
 });

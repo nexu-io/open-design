@@ -3,9 +3,9 @@ import {
   createResourceHubClient,
   readResourceHubPrincipal,
 } from './integrations/resource-hub.js';
+import type { ResourceDetailResponse } from '@open-design/contracts';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { materializeRef, packTree, pushTree } from './resource-drive.js';
-import { readResourceDetail } from './resource-sharing/orchestrator.js';
 
 // `od resource …` — neutral cloud-drive CLI over the resource hub. It moves
 // directory trees to/from the hub (put/get) and lists team resources; it is
@@ -22,7 +22,8 @@ const USAGE = `Usage:
                                                 Share a local resource through the daemon
   od resource pull <kind> <hub-resource-id> [--json] [--daemon-url <url>]
                                                 Pull a team resource through the daemon
-  od resource detail <resource-id> [--json]     Inspect versions and latest manifest
+  od resource detail <resource-id> [--json] [--daemon-url <url>]
+                                                Inspect versions and latest manifest through the daemon
 
 Environment (dev/local, provisional until link B lands the member table):
   OD_RESOURCE_HUB_URL / OD_RESOURCE_HUB_TOKEN
@@ -242,21 +243,27 @@ async function runGet(args: string[]): Promise<void> {
 }
 
 async function runDetail(args: string[]): Promise<void> {
-  const principal = requirePrincipalOrExit();
-  if (!principal) return;
   const { positionals, flags } = parseFlags(args);
   const resourceId = positionals[0];
   if (!resourceId) {
-    console.error('usage: od resource detail <resource-id> [--json]');
+    console.error('usage: od resource detail <resource-id> [--json] [--daemon-url <url>]');
     process.exitCode = 1;
     return;
   }
   try {
-    const detail = await readResourceDetail(
-      createResourceHubClient(),
-      principal,
-      resourceId,
+    const flagUrl = flags.get('daemon-url');
+    const baseUrl = await resolveDaemonUrl(
+      flagUrl === undefined ? {} : { flagUrl },
     );
+    const response = await fetch(
+      endpoint(baseUrl, `/api/resources/${encodeURIComponent(resourceId)}/detail`),
+      { method: 'GET' },
+    );
+    const payload = await readDaemonJson(response);
+    if (!response.ok) {
+      throw new Error(daemonErrorMessage(response.status, payload));
+    }
+    const detail = payload as ResourceDetailResponse;
     if (flags.has('json')) {
       console.log(JSON.stringify(detail, null, 2));
       return;

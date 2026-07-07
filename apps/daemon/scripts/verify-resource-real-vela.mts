@@ -13,7 +13,7 @@
  * Usage:
  *   OD_RESOURCE_HUB_URL=http://localhost:18080 \
  *   OD_RESOURCE_HUB_TOKEN=dev-internal-token \
- *   node apps/daemon/scripts/verify-resource-real-vela.mjs
+ *   pnpm exec tsx apps/daemon/scripts/verify-resource-real-vela.mts
  *
  * Exits 0 when every check passes, 1 otherwise.
  */
@@ -42,21 +42,26 @@ const TOKEN = process.env.OD_RESOURCE_HUB_TOKEN || "dev-internal-token";
 const OD_BIN = path.join(HERE, "..", "bin", "od.mjs");
 
 const client = createResourceHubClient({ config: { baseUrl: BASE, internalToken: TOKEN } });
-const owner = (team, member, life = null) => ({ memberId: member, teamId: team, role: "owner", lifecycleState: life });
-const sha = (s) => `sha256:${createHash("sha256").update(s).digest("hex")}`;
+const owner = (team: string, member: string, life: string | null = null) => ({
+  memberId: member,
+  teamId: team,
+  role: "owner",
+  lifecycleState: life,
+});
+const sha = (s: string) => `sha256:${createHash("sha256").update(s).digest("hex")}`;
 
 let passed = 0;
 let failed = 0;
-function ok(label) {
+function ok(label: string) {
   passed += 1;
   console.log(`  PASS ${label}`);
 }
-function bad(label, detail) {
+function bad(label: string, detail: unknown) {
   failed += 1;
   console.log(`  FAIL ${label} — ${detail}`);
 }
 
-async function expectError(label, status, code, fn) {
+async function expectError(label: string, status: number, code: string, fn: () => Promise<unknown>) {
   try {
     await fn();
     bad(label, "expected error, call succeeded");

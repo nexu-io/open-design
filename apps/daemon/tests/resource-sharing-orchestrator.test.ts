@@ -66,6 +66,7 @@ describe('resource-sharing orchestrator', () => {
       paths: {
         RUNTIME_DATA_DIR: tempDir,
         USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+        USER_SKILLS_DIR: path.join(tempDir, 'skills'),
       },
     });
     mockState.materializations.push(
@@ -109,6 +110,7 @@ describe('resource-sharing orchestrator', () => {
       paths: {
         RUNTIME_DATA_DIR: tempDir,
         USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+        USER_SKILLS_DIR: path.join(tempDir, 'skills'),
       },
     });
 
@@ -127,6 +129,7 @@ describe('resource-sharing orchestrator', () => {
       paths: {
         RUNTIME_DATA_DIR: tempDir,
         USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+        USER_SKILLS_DIR: path.join(tempDir, 'skills'),
       },
     });
 
