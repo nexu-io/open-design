@@ -4,33 +4,28 @@ import {
   ResourceHubError,
   createResourceHubClient,
   readResourceHubPrincipal,
-  type ResourceHubClient,
 } from '../../integrations/resource-hub.js';
+import {
+  SharingError,
+  type SharingDeps,
+  createSharingOrchestrator,
+} from '../../resource-sharing/orchestrator.js';
 
-// Daemon-local team-resource-sharing surface (Spec E, daemon side). Thin: it
-// resolves the workspace principal and proxies the INDEX operations to the hub.
-// The capability operations (share/pull) that wrap the local design-system /
-// plugin / skill managers into blobs + manifests are stubbed 501 — they depend
-// on the blob transport decision (presigned vs proxy) and the shared_resources
-// local mapping, which are not built yet. Self-contained on purpose so the
-// server.ts wiring is a single dep-free call.
+// Daemon-local team-resource-sharing surface (Spec E, consumer layer). Delegates
+// to the sharing orchestrator (kind adapter + neutral SDK + local mapping store).
+// Self-contained aside from the daemon context it needs (db + paths).
 
-interface RegisterResourceSharingRoutesOptions {
-  client?: ResourceHubClient;
+function paramStr(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
 }
 
-function resolvePrincipalOr401(res: Response) {
-  const principal = readResourceHubPrincipal();
-  if (!principal) {
-    res.status(401).json({ error: 'workspace_principal_unavailable' });
-    return null;
-  }
-  return principal;
-}
-
-function handleHubError(res: Response, error: unknown) {
+function handleError(res: Response, error: unknown): void {
   if (error instanceof ResourceHubError) {
     res.status(error.status).json({ error: error.code });
+    return;
+  }
+  if (error instanceof SharingError) {
+    res.status(error.status).json({ error: error.code, detail: error.message });
     return;
   }
   res.status(502).json({ error: 'resource_hub_unreachable' });
@@ -38,45 +33,48 @@ function handleHubError(res: Response, error: unknown) {
 
 export function registerResourceSharingRoutes(
   app: Express,
-  options: RegisterResourceSharingRoutesOptions = {},
+  deps: SharingDeps,
 ): void {
-  const client = options.client ?? createResourceHubClient();
+  const orchestrator = createSharingOrchestrator(deps);
 
-  // Readiness probe: confirms wiring (hub URL configured, principal resolvable)
-  // without touching data — useful for the local closed-loop check.
+  // Readiness probe: hub URL configured + workspace principal resolvable.
   app.get('/api/resources/_status', (_req: Request, res: Response) => {
     res.json({
-      configured: client.isConfigured(),
+      configured: createResourceHubClient().isConfigured(),
       principalAvailable: readResourceHubPrincipal() !== null,
     });
   });
 
+  // Team resources joined with local mapping state (shared / pulled / stale).
   app.get('/api/resources', async (_req: Request, res: Response) => {
-    const principal = resolvePrincipalOr401(res);
-    if (!principal) return;
     try {
-      res.json({ resources: await client.listResources(principal) });
+      res.json({ resources: await orchestrator.list() });
     } catch (error) {
-      handleHubError(res, error);
+      handleError(res, error);
     }
   });
 
-  // Capability ops pending wrap logic + transport decision.
+  // Share a locally-owned resource to the team.
   app.post(
     '/api/resources/:kind/:id/share',
-    (_req: Request, res: Response) => {
-      res.status(501).json({
-        error: 'not_implemented',
-        detail:
-          'sharing wraps the local resource into blobs+manifest; pending blob transport decision and shared_resources mapping',
-      });
+    async (req: Request, res: Response) => {
+      try {
+        res.json(await orchestrator.share(paramStr(req.params.kind), paramStr(req.params.id)));
+      } catch (error) {
+        handleError(res, error);
+      }
     },
   );
 
-  app.post('/api/resources/:kind/:id/pull', (_req: Request, res: Response) => {
-    res.status(501).json({
-      error: 'not_implemented',
-      detail: 'pull materializes a hub version locally; pending blob transport decision',
-    });
-  });
+  // Pull a shared team resource into a local read-only copy.
+  app.post(
+    '/api/resources/:kind/:id/pull',
+    async (req: Request, res: Response) => {
+      try {
+        res.json(await orchestrator.pull(paramStr(req.params.kind), paramStr(req.params.id)));
+      } catch (error) {
+        handleError(res, error);
+      }
+    },
+  );
 }

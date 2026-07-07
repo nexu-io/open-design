@@ -4464,7 +4464,7 @@ export async function startServer({
     research: researchDeps,
   });
 
-  registerResourceSharingRoutes(app);
+  registerResourceSharingRoutes(app, { db, paths: pathDeps });
   registerVelaRoutes(app, {
     paths: { RUNTIME_DATA_DIR },
     appConfig: { readAppConfig },
