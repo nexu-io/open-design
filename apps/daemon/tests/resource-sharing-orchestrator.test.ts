@@ -249,6 +249,51 @@ describe('resource-sharing orchestrator', () => {
     expect(getSharedByLocal(db, 'team_1', 'design_system', 'acme')).toBeNull();
   });
 
+  it('reuses a design-system share when called with bare and canonical ids', async () => {
+    const paths = {
+      RUNTIME_DATA_DIR: tempDir,
+      USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+      SKILL_ROOTS: [path.join(tempDir, 'skills')],
+    };
+    const editableDir = path.join(paths.USER_DESIGN_SYSTEMS_DIR, 'acme');
+    await fsp.mkdir(editableDir, { recursive: true });
+    await fsp.writeFile(path.join(editableDir, 'DESIGN.md'), 'local design\n');
+    mockState.createdResources = ['hub-acme', 'hub-duplicate'];
+    const orchestrator = createSharingOrchestrator({ db, paths });
+
+    await expect(orchestrator.share('design_system', 'acme')).resolves.toEqual({
+      hubResourceId: 'hub-acme',
+      version: 2,
+    });
+    await expect(orchestrator.share('design_system', 'user:acme')).resolves.toEqual({
+      hubResourceId: 'hub-acme',
+      version: 2,
+    });
+
+    expect(mockState.createdResourceCalls).toBe(1);
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'user:acme')).toMatchObject({
+      hubResourceId: 'hub-acme',
+      role: 'owner',
+    });
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'acme')).toBeNull();
+    expect(pushTree).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({ teamId: 'team_1' }),
+      'hub-acme',
+      undefined,
+      { ref: 'latest' },
+    );
+    expect(pushTree).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.objectContaining({ teamId: 'team_1' }),
+      'hub-acme',
+      undefined,
+      { ref: 'latest' },
+    );
+  });
+
   it('rejects sharing over a pulled consumer mapping with the same local id', async () => {
     const paths = {
       RUNTIME_DATA_DIR: tempDir,
@@ -299,12 +344,12 @@ describe('resource-sharing orchestrator', () => {
       version: 2,
     });
 
-    expect(getSharedByLocal(db, 'team_1', 'design_system', 'demo')?.hubResourceId).toBe(
-      'hub-team-1',
-    );
-    expect(getSharedByLocal(db, 'team_2', 'design_system', 'demo')?.hubResourceId).toBe(
-      'hub-team-2',
-    );
+    expect(
+      getSharedByLocal(db, 'team_1', 'design_system', 'user:demo')?.hubResourceId,
+    ).toBe('hub-team-1');
+    expect(
+      getSharedByLocal(db, 'team_2', 'design_system', 'user:demo')?.hubResourceId,
+    ).toBe('hub-team-2');
     expect(pushTree).toHaveBeenNthCalledWith(
       1,
       expect.anything(),
@@ -347,9 +392,9 @@ describe('resource-sharing orchestrator', () => {
     ]);
 
     expect(mockState.createdResourceCalls).toBe(1);
-    expect(getSharedByLocal(db, 'team_1', 'design_system', 'demo')?.hubResourceId).toBe(
-      'hub-single',
-    );
+    expect(
+      getSharedByLocal(db, 'team_1', 'design_system', 'user:demo')?.hubResourceId,
+    ).toBe('hub-single');
     expect(pushTree).toHaveBeenCalledTimes(2);
     expect(pushTree).toHaveBeenNthCalledWith(
       1,

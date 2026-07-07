@@ -105,14 +105,26 @@ export function createSharingOrchestrator(deps: SharingDeps) {
     // the hub resource if already mapped), record the owner mapping.
     async share(kind: string, localId: string) {
       const principal = principalOrThrow();
-      return withShareLock(principal.teamId, kind, localId, async () => {
+      const canonicalLocalId = canonicalizeLocalId(kind, localId);
+      return withShareLock(principal.teamId, kind, canonicalLocalId, async () => {
         const adapter = adapterOrThrow(kind);
-        const dir = await resolveAdapterPath(() => adapter.resolveSourceDir(localId));
+        const dir = await resolveAdapterPath(() =>
+          adapter.resolveSourceDir(canonicalLocalId),
+        );
         if (!dir) {
-          throw new SharingError(404, 'local_resource_not_found', localId);
+          throw new SharingError(404, 'local_resource_not_found', canonicalLocalId);
         }
-        const existing = getSharedByLocal(deps.db, principal.teamId, kind, localId);
-        if (existing?.role === 'consumer') {
+        const existing = getSharedByLocal(
+          deps.db,
+          principal.teamId,
+          kind,
+          canonicalLocalId,
+        );
+        const rawExisting =
+          canonicalLocalId === localId
+            ? null
+            : getSharedByLocal(deps.db, principal.teamId, kind, localId);
+        if (existing?.role === 'consumer' || rawExisting?.role === 'consumer') {
           throw new SharingError(
             409,
             'consumer_mapping_conflict',
@@ -128,7 +140,7 @@ export function createSharingOrchestrator(deps: SharingDeps) {
         });
         upsertShared(deps.db, {
           kind,
-          localId,
+          localId: canonicalLocalId,
           hubResourceId,
           hubTeamId: principal.teamId,
           role: 'owner',
@@ -293,6 +305,13 @@ function isNotFoundError(error: unknown): boolean {
     'code' in error &&
     error.code === 'ENOENT'
   );
+}
+
+function canonicalizeLocalId(kind: string, localId: string): string {
+  if (kind !== 'design_system' || localId.startsWith('user:')) {
+    return localId;
+  }
+  return `user:${localId}`;
 }
 
 async function resolveLatestVersion(
