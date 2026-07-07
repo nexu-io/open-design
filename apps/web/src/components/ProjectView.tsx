@@ -55,6 +55,7 @@ import { useProjectFileEvents, type ProjectEvent } from '../providers/project-ev
 import { claimProjectTurnIndex, claimRunTurnIndex } from '../analytics/identity';
 import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import {
+  type AmrWalletSnapshot,
   type ByokMediaDefaults,
   type ByokChatProviderConfig,
   type ByokChatProtocol,
@@ -102,6 +103,9 @@ import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent, removeErrorStatusEvent } from '../runtime/chat-events';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
+import { checkAmrBalanceGate } from '../runtime/amr-balance-gate';
+import { AmrBalanceDialog } from './AmrBalanceDialog';
+import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import {
   cancelBrandExtraction,
   continueBrandExtraction,
@@ -272,6 +276,14 @@ type ProjectChatSendMeta = ChatSendMeta & {
    *  can emit design_system_enrich_result + flag the DS as ai_refined on
    *  success (tracking spec C14/C15). Daemon mode only. */
   dsEnrichment?: boolean;
+  /** Marks a send replayed from the queued-sends drain. Its payload already
+   *  lives in the queue item, so a pre-run block (e.g. the AMR balance gate)
+   *  must NOT re-queue it — only pause further drains. */
+  queueDrain?: boolean;
+  /** The Open Design Cloud balance gate already ran for this exact send at
+   *  the home submit (with any soft warning answered there); skip re-gating
+   *  so the user is never double-prompted for one task. */
+  amrGatePrechecked?: boolean;
 };
 
 export function mergeSavedPreviewComment(current: PreviewComment[], saved: PreviewComment): PreviewComment[] {
@@ -782,6 +794,12 @@ function autoSendContextKey(projectId: string): string {
   return `od:auto-send-context:${projectId}`;
 }
 
+/** Set by the home create flow when its submit already ran the Open Design
+ * Cloud balance gate — the first auto-send must not re-prompt the user. */
+function autoSendAmrGateOkKey(projectId: string): string {
+  return `od:auto-send-amr-gate-ok:${projectId}`;
+}
+
 function designSystemAuditAutoRepairKey(projectId: string): string {
   return `od:design-system-audit-auto-repair:${projectId}`;
 }
@@ -817,6 +835,7 @@ function clearAutoSendSession(projectId: string): void {
     window.sessionStorage.removeItem(autoSendFirstMessageKey(projectId));
     window.sessionStorage.removeItem(autoSendAttachmentsKey(projectId));
     window.sessionStorage.removeItem(autoSendContextKey(projectId));
+    window.sessionStorage.removeItem(autoSendAmrGateOkKey(projectId));
   } catch {
     /* ignore */
   }
@@ -1563,6 +1582,30 @@ export function ProjectView({
   const autoOpenedBrandDesignSystemRef = useRef<string | null>(null);
   const brandEmptyTranscriptRetriesRef = useRef<Map<string, number>>(new Map());
   const [chatSeed, setChatSeed] = useState<{ id: string; value: string } | null>(null);
+  // Hard block from the pre-run balance gate (empty wallet or signed out);
+  // non-null renders the AmrBalanceDialog. `conversationId` remembers whose
+  // queue to resume when the dialog resolves (sign-in done / recharge landed).
+  const [amrBalanceGateBlock, setAmrBalanceGateBlock] = useState<
+    {
+      reason: 'insufficient' | 'signed_out';
+      snapshot: AmrWalletSnapshot;
+      conversationId: string;
+    } | null
+  >(null);
+  // Soft low-balance warning holding a pending send: the dialog resolves the
+  // promise the gate is awaiting ('proceed' continues the very same send).
+  const [amrLowBalanceWarn, setAmrLowBalanceWarn] = useState<
+    { snapshot: AmrWalletSnapshot; resolve: (decision: AmrLowBalanceDecision) => void } | null
+  >(null);
+  // Conversations with a balance-gate check currently in flight. Sends that
+  // arrive during the check queue instead of racing a duplicate run through
+  // the not-yet-busy window the gate's await opens.
+  const amrGateInFlightConversationsRef = useRef<Set<string>>(new Set());
+  // Conversations whose queue auto-drain is paused because the balance gate
+  // blocked a send. Without the pause, every unrelated re-run of the drain
+  // effect would re-hit the wallet endpoint and re-pop the dialog. Lifted by
+  // the next send that passes the gate.
+  const amrGatePausedQueueConversationsRef = useRef<Set<string>>(new Set());
   const [autoAuditRepairSeed, setAutoAuditRepairSeed] =
     useState<{ id: string; value: string } | null>(null);
   const [chatPanelWidth, setChatPanelWidth] = useState(readSavedChatPanelWidth);
@@ -4660,6 +4703,92 @@ export function ProjectView({
         });
         return false;
       }
+      // Open Design Cloud pre-run balance gate: a definitively insufficient
+      // wallet blocks the run BEFORE any message is persisted or a daemon run
+      // spawned, surfacing the subscription dialog instead of a mid-run
+      // AMR_INSUFFICIENT_BALANCE failure. Sends the home submit already gated
+      // (amrGatePrechecked) pass straight through — the user answered there.
+      if (config.mode === 'daemon' && config.agentId === 'amr' && !meta?.amrGatePrechecked) {
+        const gateConversationId = activeConversationId;
+        // The gate's await opens a window where the conversation is not yet
+        // marked busy. A second send arriving during that window behaves like
+        // a busy conversation: it queues instead of racing a duplicate run.
+        if (amrGateInFlightConversationsRef.current.has(gateConversationId)) {
+          if (retryTarget) return false;
+          queueChatSendForCurrentConversation({
+            conversationId: gateConversationId,
+            prompt,
+            attachments: effectiveAttachments,
+            commentAttachments,
+            meta: { ...(meta ?? {}), sessionMode: runSessionMode },
+          });
+          return false;
+        }
+        amrGateInFlightConversationsRef.current.add(gateConversationId);
+        try {
+          const gate = await checkAmrBalanceGate();
+          // A blocked send parks in the conversation queue with its FULL
+          // payload (prompt, attachments, comment context) — the composer
+          // already cleared itself, and a text-only draft restore would
+          // silently drop staged attachments. Retries keep their error card
+          // and queue drains already have their queue item, so both skip the
+          // re-queue. The pause keeps queued items from re-hitting the gate
+          // (and re-popping a dialog) on every unrelated state change; any
+          // later send that passes the gate lifts it, and a manual "run now"
+          // on a queued item bypasses it deliberately.
+          const queueGateSend = () => {
+            if (!retryTarget && !meta?.queueDrain) {
+              queueChatSendForCurrentConversation({
+                conversationId: gateConversationId,
+                prompt,
+                attachments: effectiveAttachments,
+                commentAttachments,
+                meta: { ...(meta ?? {}), sessionMode: runSessionMode },
+              });
+            }
+          };
+          const parkBlockedSend = () => {
+            queueGateSend();
+            amrGatePausedQueueConversationsRef.current.add(gateConversationId);
+          };
+          // The await may have raced a conversation switch; re-run the entry
+          // guard before touching any state so this stale closure can't write
+          // the old conversation's messages into the now-visible view. The
+          // composer has already cleared, so keep the full payload queued for
+          // the original conversation instead of dropping it.
+          if (messagesConversationIdRef.current !== activeConversationId) {
+            queueGateSend();
+            return false;
+          }
+          if (gate.kind === 'hard') {
+            setAmrBalanceGateBlock({
+              reason: gate.reason,
+              snapshot: gate.snapshot,
+              conversationId: gateConversationId,
+            });
+            parkBlockedSend();
+            return false;
+          }
+          if (gate.kind === 'soft') {
+            // Low balance: pause THIS send while the reminder dialog waits
+            // for a decision. 'proceed' resumes the very same send below —
+            // a continuation, not a re-submit.
+            const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
+              setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
+            });
+            setAmrLowBalanceWarn(null);
+            // Same conversation-switch guard for the dialog-open window; the
+            // payload is parked (not sent) so nothing is lost either way.
+            if (decision !== 'proceed' || messagesConversationIdRef.current !== activeConversationId) {
+              parkBlockedSend();
+              return false;
+            }
+          }
+          amrGatePausedQueueConversationsRef.current.delete(gateConversationId);
+        } finally {
+          amrGateInFlightConversationsRef.current.delete(gateConversationId);
+        }
+      }
       setChatSeed(null);
       const runConversationId = activeConversationId;
       setError(null);
@@ -5908,7 +6037,7 @@ export function ProjectView({
         item.prompt,
         item.attachments,
         item.commentAttachments,
-        item.meta,
+        { ...(item.meta ?? {}), queueDrain: true },
       );
       if (started) removeQueuedChatSend(id);
     })();
@@ -5922,6 +6051,17 @@ export function ProjectView({
     if (startingQueuedChatSendIdRef.current) return;
     if (!activeConversationId) return;
     if (messagesConversationIdRef.current !== activeConversationId) return;
+    // Queue paused by the balance gate: don't re-drain (and re-pop the
+    // dialog) on unrelated state churn while AMR is still the agent. The
+    // manual "run now" path below bypasses this deliberately, and switching
+    // agents makes the pause irrelevant.
+    if (
+      config.mode === 'daemon' &&
+      config.agentId === 'amr' &&
+      amrGatePausedQueueConversationsRef.current.has(activeConversationId)
+    ) {
+      return;
+    }
     const next = queuedChatSendsRef.current.find(
       (item) => item.conversationId === activeConversationId,
     );
@@ -5933,7 +6073,7 @@ export function ProjectView({
         next.prompt,
         next.attachments,
         next.commentAttachments,
-        next.meta,
+        { ...(next.meta ?? {}), queueDrain: true },
       );
       if (!started) {
         if (startingQueuedChatSendIdRef.current === next.id) {
@@ -5951,6 +6091,8 @@ export function ProjectView({
   }, [
     activeConversationId,
     armSlideNavForQueuedSend,
+    config.mode,
+    config.agentId,
     currentConversationBusy,
     queuedAutoStartTick,
     queuedChatSends,
@@ -7314,16 +7456,22 @@ export function ProjectView({
   const autoSendAttachmentsRef = useRef<ChatAttachment[] | null>(null);
   const autoSendContextRef = useRef<RunContextSelection | null>(null);
   const autoSendFirstMessageRef = useRef(false);
+  const autoSendAmrGateOkRef = useRef(false);
   if (autoSendSeedRef.current === null) {
     let isAutoSend = false;
+    let amrGateOk = false;
     try {
       isAutoSend = Boolean(
         window.sessionStorage.getItem(autoSendFirstMessageKey(project.id)),
+      );
+      amrGateOk = Boolean(
+        window.sessionStorage.getItem(autoSendAmrGateOkKey(project.id)),
       );
     } catch {
       /* sessionStorage may be unavailable; treat as manual flow. */
     }
     autoSendFirstMessageRef.current = isAutoSend;
+    autoSendAmrGateOkRef.current = isAutoSend && amrGateOk;
     autoSendSeedRef.current = isAutoSend ? (project.pendingPrompt ?? '') : '';
     autoSendAttachmentsRef.current = isAutoSend ? readAutoSendAttachments(project.id) : [];
     autoSendContextRef.current = isAutoSend ? readAutoSendContext(project.id) : null;
@@ -7955,7 +8103,12 @@ export function ProjectView({
     }
     clearAutoSendSession(project.id);
     autoSendAttachmentsRef.current = [];
-    void handleSend(seed, attachments, [], context ? { context } : undefined);
+    void handleSend(seed, attachments, [], {
+      ...(context ? { context } : {}),
+      // The home submit already gated this exact task (and the user answered
+      // any soft warning there); asking again would double-prompt.
+      ...(autoSendAmrGateOkRef.current ? { amrGatePrechecked: true } : {}),
+    });
   }, [
     activeConversationId,
     messagesInitialized,
@@ -8405,6 +8558,37 @@ export function ProjectView({
           system={contextDesignSystemDetails}
           initialViewId="kit"
           onClose={() => setContextDesignSystemDetails(null)}
+        />
+      ) : null}
+      {amrBalanceGateBlock ? (
+        <AmrBalanceDialog
+          reason={amrBalanceGateBlock.reason}
+          balanceUsd={amrBalanceGateBlock.snapshot.balanceUsd}
+          profile={amrBalanceGateBlock.snapshot.profile}
+          entrySource="chat_balance_gate_upgrade"
+          metricsConsent={config.telemetry?.metrics === true}
+          installationId={config.installationId}
+          onClose={() => setAmrBalanceGateBlock(null)}
+          onResolved={() => {
+            // Sign-in completed or the recharge landed: lift the balance
+            // pause and kick the drain so the parked send starts on its own
+            // (it still re-gates, so a half-measure recharge surfaces the
+            // soft reminder rather than silently failing mid-run).
+            const conversationId = amrBalanceGateBlock.conversationId;
+            setAmrBalanceGateBlock(null);
+            amrGatePausedQueueConversationsRef.current.delete(conversationId);
+            setQueuedAutoStartTick((tick) => tick + 1);
+          }}
+        />
+      ) : null}
+      {amrLowBalanceWarn ? (
+        <AmrLowBalanceDialog
+          balanceUsd={amrLowBalanceWarn.snapshot.balanceUsd}
+          profile={amrLowBalanceWarn.snapshot.profile}
+          entrySource="chat_low_balance_warn_recharge"
+          metricsConsent={config.telemetry?.metrics === true}
+          installationId={config.installationId}
+          onDecision={amrLowBalanceWarn.resolve}
         />
       ) : null}
       <AnimatePresence>

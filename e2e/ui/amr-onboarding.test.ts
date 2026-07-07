@@ -1,7 +1,12 @@
 import { expect, test } from '@/playwright/suite';
 import type { Locator, Page } from '@playwright/test';
 
-import { dismissPrivacyDialog, STORAGE_KEY, waitForLoadingToClear } from '@/playwright/amr';
+import {
+  dismissPrivacyDialog,
+  mockAmrWalletSnapshot,
+  STORAGE_KEY,
+  waitForLoadingToClear,
+} from '@/playwright/amr';
 import { fulfillAgentsRoute } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
 
@@ -1180,6 +1185,15 @@ async function wireOnboardingMocks(
       });
     }
   });
+
+  if (options.amrAvailable) {
+    await mockAmrWalletSnapshot(page, {
+      email: 'onboarding@example.com',
+      loggedIn: () => loggedIn,
+      plan: 'free',
+      profile: 'local',
+    });
+  }
 
   await page.route('**/api/integrations/vela/login', async (route) => {
     loginCalls += 1;
