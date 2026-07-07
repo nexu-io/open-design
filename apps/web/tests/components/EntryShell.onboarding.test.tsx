@@ -38,6 +38,24 @@ class ResizeObserverMock {
   unobserve() {}
 }
 
+function memoryStorage(): Storage {
+  const values = new Map<string, string>();
+  return {
+    get length() {
+      return values.size;
+    },
+    clear: () => values.clear(),
+    getItem: (key) => values.get(key) ?? null,
+    key: (index) => Array.from(values.keys())[index] ?? null,
+    removeItem: (key) => {
+      values.delete(key);
+    },
+    setItem: (key, value) => {
+      values.set(key, value);
+    },
+  };
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -288,6 +306,10 @@ afterEach(() => {
 beforeEach(() => {
   globalThis.fetch = originalFetch;
   globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: memoryStorage(),
+  });
   analyticsMocks.track.mockReset();
 });
 
