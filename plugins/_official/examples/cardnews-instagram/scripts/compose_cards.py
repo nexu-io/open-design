@@ -25,7 +25,9 @@ CTA_DIM_ALPHA = 115          # cta 전면 균일 딤 ~45% 고정 — 그라디�
 COVER_GRAD_START, COVER_GRAD_PEAK = 0.45, 200  # cover 하단 그라디언트 (기존 유지)
 BODY_GRAD_START, BODY_GRAD_PEAK = 0.40, 230    # body 하단 그라디언트 (레퍼런스 실측 근사)
 BODY_TITLE_SIZE = 58         # body 타이틀 (레퍼런스 잉크 44~49px 실측)
+BODY_TITLE_WEIGHT = 800      # body 타이틀 weight — 가드·렌더 동일값 강제 (리터럴 중복 제거)
 BODY_TEXT_SIZE = 43          # body 본문 (레퍼런스 잉크 34px 실측)
+BODY_TEXT_WEIGHT = 500       # body 본문 weight — 가드·렌더·self-test 동일값 강제
 BODY_PITCH = 62              # body 타이틀·본문 공통 줄 피치 (실측 균일)
 BODY_TITLE_INK_TOP = 648     # 타이틀 첫 줄 잉크 상단 (실측 646~650)
 BODY_TITLE_BODY_GAP = 37     # 타이틀 마지막 줄 잉크하단 → 본문 첫 줄 잉크상단 갭 (2026-07-07 사용자 지정 — 고정 앵커 794 폐기, 타이틀 줄수 무관 균일 갭)
@@ -195,14 +197,14 @@ def body_copy_report(card, fonts):
     """body 카드 카피 가드 — 에러 목록 반환. 타이틀 잉크 912px 초과 = 프레임 침범이라 에러,
     본문 렌더 줄수 5~7 밖 = 카피 계약 위반 에러(줄바꿈·양쪽맞춤은 compose 소유라 줄수가 유일한 카피 축)."""
     draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    title_font = fonts.get(BODY_TITLE_SIZE, 800)
+    title_font = fonts.get(BODY_TITLE_SIZE, BODY_TITLE_WEIGHT)
     errors = []
     for line in card["title_lines"][:2]:
         ink = draw.textlength(line, font=title_font)
         if ink > BODY_MAX_INK:
             errors.append(
                 f"index {card['index']} title 줄 잉크 {ink:.0f}px > 한계 {BODY_MAX_INK}px — 글자수를 줄이세요: {line!r}")
-    body_font = fonts.get(BODY_TEXT_SIZE, 500)
+    body_font = fonts.get(BODY_TEXT_SIZE, BODY_TEXT_WEIGHT)
     n = len(wrap_paragraph(draw, " ".join(card["body_lines"]), body_font))
     if n < BODY_MIN_LINES:
         errors.append(
@@ -234,7 +236,7 @@ def compose_body(img, card, fonts):
     # 레퍼런스 실측 2026-07-06). 가독 1차 책임은 여전히 배경 프롬프트(하반부 단순화).
     apply_bottom_gradient(img, BODY_GRAD_START, BODY_GRAD_PEAK)
     draw = ImageDraw.Draw(img)
-    title_font = fonts.get(BODY_TITLE_SIZE, 800)
+    title_font = fonts.get(BODY_TITLE_SIZE, BODY_TITLE_WEIGHT)
     # 잉크 상단 고정 앵커 — draw.text의 y는 라인박스 상단이라 대표 글리프("한")의
     # 잉크 오프셋만큼 보정 (폰트 폴백이 바뀌어도 앵커 유지)
     tb = title_font.getbbox("한")
@@ -245,7 +247,7 @@ def compose_body(img, card, fonts):
         y += BODY_PITCH
     # 본문 앵커 = 타이틀 잉크하단 + 고정 갭 — 대표 글리프 기준이라 결정성 유지
     title_ink_bottom = BODY_TITLE_INK_TOP + BODY_PITCH * (len(title_lines) - 1) + (tb[3] - tb[1])
-    body_font = fonts.get(BODY_TEXT_SIZE, 500)
+    body_font = fonts.get(BODY_TEXT_SIZE, BODY_TEXT_WEIGHT)
     # 본문 = 문단 자동 줄바꿈 + 양쪽맞춤(마지막 줄은 자연폭) — 2026-07-07 계약 개정:
     # body_lines는 문장 소스일 뿐, 줄 분할·정렬은 compose가 소유한다
     lines = wrap_paragraph(draw, " ".join(card["body_lines"]), body_font)
@@ -360,7 +362,7 @@ def self_test():
             "hashtags": [],
         }
         probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-        body_font = fonts.get(BODY_TEXT_SIZE, 500)
+        body_font = fonts.get(BODY_TEXT_SIZE, BODY_TEXT_WEIGHT)
         n02 = len(wrap_paragraph(probe, " ".join(spec["cards"][1]["body_lines"]), body_font))
         n03 = len(wrap_paragraph(probe, " ".join(spec["cards"][2]["body_lines"]), body_font))
         assert BODY_MIN_LINES <= n02 <= BODY_MAX_LINES, n02
