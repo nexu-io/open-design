@@ -492,7 +492,9 @@ if (first && SUBCOMMAND_MAP[first]) {
   const idx = argv.indexOf(first);
   const rest = [...argv.slice(0, idx), ...argv.slice(idx + 1)];
   await SUBCOMMAND_MAP[first](rest);
-  process.exit(0);
+  // Respect a non-zero exit code a handler set via process.exitCode (e.g. a
+  // failed `od resource get`); default to 0 when it left it unset.
+  process.exit(process.exitCode ?? 0);
 }
 
 if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
