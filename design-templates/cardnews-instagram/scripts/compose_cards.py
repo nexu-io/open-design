@@ -195,11 +195,15 @@ def draw_justified(draw, line, font, y, fill):
 
 def body_copy_report(card, fonts):
     """body 카드 카피 가드 — 에러 목록 반환. 타이틀 잉크 912px 초과 = 프레임 침범이라 에러,
+    타이틀 1~2줄 밖 = 계약 위반 에러(구 [:2] 무언 절단 폐기 — 잘려도 조용히 통과하던 갭),
     본문 렌더 줄수 5~7 밖 = 카피 계약 위반 에러(줄바꿈·양쪽맞춤은 compose 소유라 줄수가 유일한 카피 축)."""
     draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     title_font = fonts.get(BODY_TITLE_SIZE, BODY_TITLE_WEIGHT)
     errors = []
-    for line in card["title_lines"][:2]:
+    if not 1 <= len(card["title_lines"]) <= 2:
+        errors.append(
+            f"index {card['index']} title_lines {len(card['title_lines'])}줄 — 계약은 1~2줄, 줄을 합치거나 내용을 나누세요")
+    for line in card["title_lines"]:
         ink = draw.textlength(line, font=title_font)
         if ink > BODY_MAX_INK:
             errors.append(
@@ -217,10 +221,14 @@ def body_copy_report(card, fonts):
 
 
 def cover_copy_report(card, fonts):
-    """cover 카드 카피 가드 — 서브·훅 잉크 912px(우측 마진 84 대칭) 초과 = 에러(글자수 축소 유도).
+    """cover 카드 카피 가드 — 서브·훅 잉크 912px(우측 마진 84 대칭) 초과 = 에러(글자수 축소 유도),
+    훅 1~2줄 밖 = 계약 위반 에러(card-structure.md 계약 — 3줄+는 하단 블록이 위로 밀림).
     2026-07-07: 커버가 우측 프레임에 붙는 도그푸딩-4 실측 재발 차단."""
     draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     errors = []
+    if not 1 <= len(card["hook_lines"]) <= 2:
+        errors.append(
+            f"index {card['index']} hook_lines {len(card['hook_lines'])}줄 — 계약은 1~2줄")
     for label, lines, font in (("sub", [card["sub"]], fonts.get(44, 600)),
                                ("hook", card["hook_lines"], fonts.get(92, 800))):
         for line in lines:
@@ -241,7 +249,8 @@ def compose_body(img, card, fonts):
     # 잉크 오프셋만큼 보정 (폰트 폴백이 바뀌어도 앵커 유지)
     tb = title_font.getbbox("한")
     y = BODY_TITLE_INK_TOP - tb[1]
-    title_lines = card["title_lines"][:2]
+    # 1~2줄은 body_copy_report가 compose() 진입 시 이미 강제 — 무언 절단 없음
+    title_lines = card["title_lines"]
     for line in title_lines:
         draw.text((LEFT, y), line, font=title_font, fill=(255, 255, 255))
         y += BODY_PITCH
@@ -416,6 +425,12 @@ def self_test():
         assert errs and "최대" in errs[0], errs
         wide_cover = {"index": 9, "role": "cover", "sub": "서브", "hook_lines": ["가" * 16]}
         assert any("hook" in e for e in cover_copy_report(wide_cover, fonts)), "커버 훅 912px 초과 미검출"
+        # 입력 상한 가드 — 타이틀 3줄·훅 3줄은 무언 절단 없이 명시 에러 (2026-07-07 v1 이월 픽스)
+        tall_title = {"index": 9, "role": "body", "title_lines": ["하나", "둘", "셋"],
+                      "body_lines": spec["cards"][1]["body_lines"]}
+        assert any("title_lines" in e for e in body_copy_report(tall_title, fonts)), "타이틀 3줄 미검출"
+        tall_hook = {"index": 9, "role": "cover", "sub": "서브", "hook_lines": ["하나", "둘", "셋"]}
+        assert any("hook_lines" in e for e in cover_copy_report(tall_hook, fonts)), "훅 3줄 미검출"
         # compose 경로에서도 커버 초과·본문 줄수 미달이 에러로 끊기는지
         for bad_cards, token in (
             ([dict(spec["cards"][0], hook_lines=["가" * 16])], "한계"),
