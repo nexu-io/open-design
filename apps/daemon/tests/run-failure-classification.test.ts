@@ -1017,6 +1017,106 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
     expect(
       classify(
         'AGENT_EXECUTION_FAILED',
+        'Missing environment variable: `AICODEX_OAI_KEY`.',
+      ),
+    ).toMatchObject({
+      failure_category: 'auth',
+      failure_detail: 'missing_api_key',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'login',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'Reconnecting... 2/5 (unexpected status 403 Forbidden: Country, region, or territory not supported, url: wss://api.openai.com/v1/responses)',
+      ),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      retryable: false,
+      user_action: 'none',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'Forbidden: request was blocked by a gateway or proxy. You may not have permission to access this resource.',
+      ),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      retryable: false,
+      user_action: 'none',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'API Error: Server error mid-response. The response above may be incomplete.',
+      ),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'stream_disconnected',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'API Error: API returned an empty or malformed response (HTTP 200) — check for a proxy or gateway intercepting the request',
+      ),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'stream_disconnected',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        "API Error: Claude's response exceeded the 32000 output token maximum. To configure this behavior, set the CLAUDE_CODE_MAX_OUTPUT_TOKENS environment variable.",
+      ),
+    ).toMatchObject({
+      failure_category: 'prompt_too_large',
+      failure_detail: 'prompt_too_large',
+      failure_stage: 'prompt_send',
+      retryable: false,
+      user_action: 'reduce_context',
+    });
+
+    expect(classify('AGENT_EXECUTION_FAILED', 'Streaming response failed')).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'stream_disconnected',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(classify('AGENT_EXECUTION_FAILED', 'Failed to process error response')).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_5xx',
+      retryable: true,
+      user_action: 'retry',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'Failed to process error response\nstatusCode:403',
+      ),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      retryable: false,
+      user_action: 'none',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
         [
           '============================================================',
           'Bun v1.3.10 (30e609e0) Windows x64 (baseline)',
