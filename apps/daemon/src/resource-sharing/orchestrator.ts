@@ -133,6 +133,20 @@ export function createSharingOrchestrator(deps: SharingDeps) {
       return { dir, version: latest, alreadyOwned: false };
     },
 
+    // Full detail of one hub resource for inspection: the record, its version
+    // history, and the latest version's manifest (paths -> blob digests). Makes
+    // the content-addressed core model visible.
+    async detail(hubResourceId: string) {
+      const principal = principalOrThrow();
+      const resource = await client.getResource(principal, hubResourceId);
+      const versions = await client.listVersions(principal, hubResourceId);
+      const latest = versions[0];
+      const manifest = latest
+        ? await client.getManifest(principal, latest.manifestDigest)
+        : null;
+      return { resource, versions, manifest };
+    },
+
     // Team resources from the hub, joined with local mapping state (shared /
     // pulled / stale).
     async list() {

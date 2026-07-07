@@ -54,6 +54,15 @@ export function registerResourceSharingRoutes(
     }
   });
 
+  // Inspect one resource: record + versions + latest manifest.
+  app.get('/api/resources/:id/detail', async (req: Request, res: Response) => {
+    try {
+      res.json(await orchestrator.detail(paramStr(req.params.id)));
+    } catch (error) {
+      handleError(res, error);
+    }
+  });
+
   // Share a locally-owned resource to the team.
   app.post(
     '/api/resources/:kind/:id/share',
