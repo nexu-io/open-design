@@ -1335,9 +1335,11 @@ function OnboardingView({
   const canFetchProviderModels =
     apiProtocol !== 'azure' &&
     apiProtocol !== 'ollama' &&
-    Boolean(config.apiKey.trim()) &&
-    Boolean(config.baseUrl.trim()) &&
-    isLikelyHttpUrl(config.baseUrl);
+    (providerCredentialSource === 'deployment'
+      ? deploymentProviderAvailable && apiProtocol === 'openai'
+      : Boolean(config.apiKey.trim()) &&
+        Boolean(config.baseUrl.trim()) &&
+        isLikelyHttpUrl(config.baseUrl));
   const visibleProviderTestState =
     providerTestState.status !== 'idle' &&
     providerTestState.inputKey === providerTestInputKey
@@ -1762,7 +1764,9 @@ function OnboardingView({
   const fetchedProviderModels =
     shouldCacheProviderModels
       ? activeProviderModelsCache[providerModelsInputKey] ?? []
-      : [];
+      : visibleProviderModelsState.status === 'done' && visibleProviderModelsState.result.ok
+        ? visibleProviderModelsState.result.models ?? []
+        : [];
   const byokModelOptions = mergeOnboardingProviderModelOptions(
     fetchedProviderModels,
     providerCredentialSource === 'deployment'
@@ -2422,11 +2426,19 @@ function OnboardingView({
     }
     setProviderModelsState({ status: 'running', inputKey });
     try {
-      const result = await fetchProviderModels({
-        protocol: apiProtocol,
-        baseUrl: config.baseUrl,
-        apiKey: config.apiKey,
-      });
+      const result = await fetchProviderModels(
+        providerCredentialSource === 'deployment'
+          ? {
+              protocol: 'openai',
+              credentialSource: 'deployment',
+            }
+          : {
+              protocol: apiProtocol,
+              baseUrl: config.baseUrl,
+              apiKey: config.apiKey,
+              credentialSource: 'user',
+            },
+      );
       if (result.ok && result.models?.length) {
         selectFirstProviderModelWhenEmpty(result.models, inputKey);
         if (shouldCacheProviderModels) {
@@ -2452,7 +2464,7 @@ function OnboardingView({
   }
 
   useEffect(() => {
-    if (runtime !== 'byok' || step !== 0) return;
+    if ((runtime !== 'byok' && runtime !== 'deployment') || step !== 0) return;
     if (!canFetchProviderModels) return;
     if (providerModelsState.status === 'running') return;
     if (providerModelsAutoFetchKeyRef.current === providerModelsInputKey) return;
@@ -2742,6 +2754,10 @@ function OnboardingView({
                     <OnboardingDeploymentProviderPanel
                       provider={deploymentProviderConfig}
                       model={config.model}
+                      modelOptions={byokModelOptions}
+                      modelsState={visibleProviderModelsState}
+                      canFetchModels={canFetchProviderModels}
+                      onFetchModels={() => void fetchProviderModelsInline()}
                       onModelChange={updateDeploymentProviderModel}
                     />
                   ) : (
@@ -3104,13 +3120,25 @@ function OnboardingCliSetupPanel({
 function OnboardingDeploymentProviderPanel({
   provider,
   model,
+  modelOptions,
+  modelsState,
+  canFetchModels,
+  onFetchModels,
   onModelChange,
 }: {
   provider: DeploymentProviderConfig;
   model: string;
+  modelOptions: Array<{ value: string; label: string }>;
+  modelsState:
+    | { status: 'idle' }
+    | { status: 'running'; inputKey: string }
+    | { status: 'done'; inputKey: string; result: ProviderModelsResponse };
+  canFetchModels: boolean;
+  onFetchModels: () => void;
   onModelChange: (model: string) => void;
 }) {
   const t = useT();
+  const fetchingModels = modelsState.status === 'running';
   return (
     <div className="onboarding-view__setup-panel">
       <div className="onboarding-view__setup-head">
@@ -3122,16 +3150,54 @@ function OnboardingDeploymentProviderPanel({
               : t('settings.modeApi')}
           </p>
         </div>
+        <div className="onboarding-view__setup-head-actions">
+          <button
+            type="button"
+            className={`onboarding-view__mini-button${fetchingModels ? ' is-loading' : ''}`}
+            onClick={onFetchModels}
+            disabled={fetchingModels || !canFetchModels}
+            title={t('settings.fetchModelsTitle')}
+          >
+            {fetchingModels ? t('settings.fetchModelsRunning') : t('settings.fetchModels')}
+          </button>
+        </div>
       </div>
-      <label className="onboarding-view__inline-field">
-        <span>{t('settings.model')}</span>
-        <input
-          type="text"
-          value={model}
+      {modelOptions.length > 0 ? (
+        <OnboardingDropdown
+          label={t('settings.model')}
           placeholder={provider.defaultModel ?? 'gpt-4.1'}
-          onChange={(event) => onModelChange(event.target.value.trim())}
+          value={model}
+          options={modelOptions}
+          onChange={onModelChange}
+          placement="top"
+          searchable
+          searchPlaceholder={t('newproj.modelSearch')}
         />
-      </label>
+      ) : (
+        <label className="onboarding-view__inline-field">
+          <span>{t('settings.model')}</span>
+          <input
+            type="text"
+            value={model}
+            placeholder={provider.defaultModel ?? 'gpt-4.1'}
+            onChange={(event) => onModelChange(event.target.value.trim())}
+          />
+        </label>
+      )}
+      {modelsState.status === 'running' ? (
+        <p className="onboarding-view__test-status is-running" role="status">
+          {t('settings.fetchModelsRunning')}
+        </p>
+      ) : modelsState.status === 'done' ? (
+        <p
+          className={`onboarding-view__test-status is-${onboardingProviderModelsVariant(
+            modelsState.result,
+          )}`}
+          role={modelsState.result.ok ? 'status' : 'alert'}
+        >
+          {renderOnboardingProviderModelsMessage(t, modelsState.result)}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -1332,10 +1332,18 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
   });
 
   it('continues with an available deployment provider without browser-held credentials', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/api/integrations/vela/status')) {
         return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 10,
+          models: [{ id: 'gpt-routed', label: 'GPT routed' }],
+        });
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1373,6 +1381,18 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0].apiProtocolConfigs?.openai)
       .toBeUndefined();
 
+    fireEvent.click(screen.getByRole('button', { name: /^Fetch models$/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Fetched 1 models.')).toBeTruthy();
+    });
+    const providerModelsRequest = fetchMock.mock.calls.find(([url]) =>
+      String(url).endsWith('/api/provider/models'),
+    )?.[1];
+    expect(JSON.parse(String(providerModelsRequest?.body))).toMatchObject({
+      protocol: 'openai',
+      credentialSource: 'deployment',
+    });
+
     const continueButton = screen.getByRole('button', { name: /^Continue$/i });
     expect(continueButton.getAttribute('aria-disabled')).toBeNull();
     fireEvent.click(continueButton);
@@ -1380,15 +1400,25 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'About you' })).toBeTruthy();
     });
-    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/provider/models'))).toBe(false);
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/test/connection'))).toBe(false);
   });
 
   it('requires an explicit deployment model when the daemon config has no default model', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/api/integrations/vela/status')) {
         return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/provider/models') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 10,
+          models: [
+            { id: 'gpt-routed', label: 'GPT routed' },
+            { id: 'gpt-fast', label: 'GPT fast' },
+          ],
+        });
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1419,7 +1449,19 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(persisted.apiProtocolConfigs?.openai).toBeUndefined();
     expect((screen.getByLabelText('Model') as HTMLInputElement).value).toBe('');
     expect(screen.getByRole('button', { name: /^Continue$/i }).getAttribute('aria-disabled')).toBe('true');
-    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/provider/models'))).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: /^Fetch models$/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Fetched 2 models.')).toBeTruthy();
+    });
+    chooseOnboardingOption('Model', /GPT fast/i);
+    await waitFor(() => {
+      expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0])
+        .toMatchObject({
+          apiCredentialSource: 'deployment',
+          model: 'gpt-fast',
+        });
+    });
+    expect(screen.getByRole('button', { name: /^Continue$/i }).getAttribute('aria-disabled')).toBeNull();
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/test/connection'))).toBe(false);
   });
 
