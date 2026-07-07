@@ -1835,6 +1835,43 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-shell .context-
   min-height: 28px;
   box-sizing: border-box;
 }
+.token-diet-toggle {
+  height: 28px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.token-diet-toggle:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.token-diet-toggle.is-on {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  color: var(--text);
+}
+.token-diet-toggle__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--text-faint);
+}
+.token-diet-toggle.is-on .token-diet-toggle__dot {
+  background: var(--accent);
+}
+.token-diet-toggle strong {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+}
 .app .composer-send:disabled {
   background: var(--bg-subtle);
   border-color: var(--border);

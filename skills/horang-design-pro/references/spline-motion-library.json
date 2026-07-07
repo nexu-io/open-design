@@ -1,0 +1,236 @@
+{
+  "schemaVersion": "horangdesign-motion-library/v1",
+  "generatedAt": "2026-07-07T18:42:21.381Z",
+  "policy": {
+    "sourceScope": "Public webpages and user-provided reference URLs only.",
+    "blockedScope": "Do not crawl app.spline.design or private/login/paid scenes; robots for app.spline.design disallows crawling.",
+    "usage": "Store reusable motion vocabulary, interaction patterns, and implementation prompts. Do not copy private scene files or protected assets."
+  },
+  "entries": [
+    {
+      "id": "spline-design-https-spline-design",
+      "source": {
+        "url": "https://spline.design/",
+        "title": "spline.design"
+      },
+      "libraries": [
+        "canvas",
+        "spline",
+        "three"
+      ],
+      "motionVocabulary": [
+        "3d-scene",
+        "cinematic-scroll",
+        "cursor-responsive",
+        "hover-magnetic",
+        "motion-field",
+        "orbit",
+        "parallax",
+        "reveal-mask",
+        "timeline-animation"
+      ],
+      "applicationPrompts": [
+        "Use 3d-scene, cinematic-scroll, cursor-responsive, hover-magnetic, motion-field, orbit, parallax, reveal-mask, timeline-animation as motion vocabulary; recreate the feeling with HTML/CSS/Three.js/Spline-inspired code, not by copying protected assets.",
+        "Prefer full-viewport scenes, scroll-linked depth, cursor-responsive lighting, reveal masks, and one coherent camera/motion path when they fit the brief.",
+        "Audit the artifact against the reference at feel level: section rhythm, depth, motion timing, interaction model, and 16:9/21:9 composition."
+      ]
+    },
+    {
+      "id": "spline-design-https-spline-design-examples",
+      "source": {
+        "url": "https://spline.design/examples",
+        "title": "spline.design"
+      },
+      "libraries": [
+        "spline"
+      ],
+      "motionVocabulary": [
+        "3d-scene",
+        "cinematic-scroll",
+        "cursor-responsive",
+        "orbit",
+        "parallax",
+        "reveal-mask"
+      ],
+      "applicationPrompts": [
+        "Use 3d-scene, cinematic-scroll, cursor-responsive, orbit, parallax, reveal-mask as motion vocabulary; recreate the feeling with HTML/CSS/Three.js/Spline-inspired code, not by copying protected assets.",
+        "Prefer full-viewport scenes, scroll-linked depth, cursor-responsive lighting, reveal masks, and one coherent camera/motion path when they fit the brief.",
+        "Audit the artifact against the reference at feel level: section rhythm, depth, motion timing, interaction model, and 16:9/21:9 composition."
+      ]
+    },
+    {
+      "id": "www-rideradian-com-https-www-rideradian-com",
+      "source": {
+        "url": "https://www.rideradian.com/",
+        "title": "www.rideradian.com"
+      },
+      "libraries": [
+        "canvas",
+        "gsap",
+        "lenis",
+        "scrolltrigger"
+      ],
+      "motionVocabulary": [
+        "3d-scene",
+        "cinematic-scroll",
+        "cursor-responsive",
+        "hover-magnetic",
+        "motion-field",
+        "orbit",
+        "parallax",
+        "reveal-mask",
+        "timeline-animation"
+      ],
+      "applicationPrompts": [
+        "Use 3d-scene, cinematic-scroll, cursor-responsive, hover-magnetic, motion-field, orbit, parallax, reveal-mask, timeline-animation as motion vocabulary; recreate the feeling with HTML/CSS/Three.js/Spline-inspired code, not by copying protected assets.",
+        "Prefer full-viewport scenes, scroll-linked depth, cursor-responsive lighting, reveal masks, and one coherent camera/motion path when they fit the brief.",
+        "Audit the artifact against the reference at feel level: section rhythm, depth, motion timing, interaction model, and 16:9/21:9 composition."
+      ]
+    },
+    {
+      "id": "podium-global-https-podium-global",
+      "source": {
+        "url": "https://podium.global/",
+        "title": "podium.global"
+      },
+      "libraries": [
+        "canvas",
+        "lenis"
+      ],
+      "motionVocabulary": [
+        "3d-scene",
+        "cinematic-scroll",
+        "cursor-responsive",
+        "hover-magnetic",
+        "motion-field",
+        "orbit",
+        "parallax",
+        "reveal-mask"
+      ],
+      "applicationPrompts": [
+        "Use 3d-scene, cinematic-scroll, cursor-responsive, hover-magnetic, motion-field, orbit, parallax, reveal-mask as motion vocabulary; recreate the feeling with HTML/CSS/Three.js/Spline-inspired code, not by copying protected assets.",
+        "Prefer full-viewport scenes, scroll-linked depth, cursor-responsive lighting, reveal masks, and one coherent camera/motion path when they fit the brief.",
+        "Audit the artifact against the reference at feel level: section rhythm, depth, motion timing, interaction model, and 16:9/21:9 composition."
+      ]
+    },
+    {
+      "id": "business-nrg-com-https-business-nrg-com-campaigns-build-your-data-center",
+      "source": {
+        "url": "https://business.nrg.com/campaigns/build-your-data-center/",
+        "title": "business.nrg.com"
+      },
+      "libraries": [
+        "lenis",
+        "lottie"
+      ],
+      "motionVocabulary": [
+        "3d-scene",
+        "cinematic-scroll",
+        "cursor-responsive",
+        "hover-magnetic",
+        "parallax",
+        "reveal-mask",
+        "timeline-animation"
+      ],
+      "applicationPrompts": [
+        "Use 3d-scene, cinematic-scroll, cursor-responsive, hover-magnetic, parallax, reveal-mask, timeline-animation as motion vocabulary; recreate the feeling with HTML/CSS/Three.js/Spline-inspired code, not by copying protected assets.",
+        "Prefer full-viewport scenes, scroll-linked depth, cursor-responsive lighting, reveal masks, and one coherent camera/motion path when they fit the brief.",
+        "Audit the artifact against the reference at feel level: section rhythm, depth, motion timing, interaction model, and 16:9/21:9 composition."
+      ]
+    },
+    {
+      "id": "everswap-com-https-everswap-com",
+      "source": {
+        "url": "https://everswap.com/",
+        "title": "everswap.com"
+      },
+      "libraries": [
+        "canvas"
+      ],
+      "motionVocabulary": [
+        "cinematic-scroll",
+        "orbit",
+        "parallax"
+      ],
+      "applicationPrompts": [
+        "Use cinematic-scroll, orbit, parallax as motion vocabulary; recreate the feeling with HTML/CSS/Three.js/Spline-inspired code, not by copying protected assets.",
+        "Prefer full-viewport scenes, scroll-linked depth, cursor-responsive lighting, reveal masks, and one coherent camera/motion path when they fit the brief.",
+        "Audit the artifact against the reference at feel level: section rhythm, depth, motion timing, interaction model, and 16:9/21:9 composition."
+      ]
+    },
+    {
+      "id": "www-tekatekistudios-com-https-www-tekatekistudios-com",
+      "source": {
+        "url": "https://www.tekatekistudios.com/",
+        "title": "www.tekatekistudios.com"
+      },
+      "libraries": [],
+      "motionVocabulary": [
+        "3d-scene",
+        "cinematic-scroll",
+        "cursor-responsive",
+        "hover-magnetic",
+        "orbit"
+      ],
+      "applicationPrompts": [
+        "Use 3d-scene, cinematic-scroll, cursor-responsive, hover-magnetic, orbit as motion vocabulary; recreate the feeling with HTML/CSS/Three.js/Spline-inspired code, not by copying protected assets.",
+        "Prefer full-viewport scenes, scroll-linked depth, cursor-responsive lighting, reveal masks, and one coherent camera/motion path when they fit the brief.",
+        "Audit the artifact against the reference at feel level: section rhythm, depth, motion timing, interaction model, and 16:9/21:9 composition."
+      ]
+    },
+    {
+      "id": "venetianspa-ca-https-venetianspa-ca",
+      "source": {
+        "url": "https://venetianspa.ca/",
+        "title": "venetianspa.ca"
+      },
+      "libraries": [
+        "framer-motion",
+        "gsap",
+        "lenis",
+        "lottie",
+        "scrolltrigger",
+        "three"
+      ],
+      "motionVocabulary": [
+        "3d-scene",
+        "cinematic-scroll",
+        "cursor-responsive",
+        "hover-magnetic",
+        "motion-field",
+        "orbit",
+        "parallax",
+        "reveal-mask",
+        "timeline-animation"
+      ],
+      "applicationPrompts": [
+        "Use 3d-scene, cinematic-scroll, cursor-responsive, hover-magnetic, motion-field, orbit, parallax, reveal-mask, timeline-animation as motion vocabulary; recreate the feeling with HTML/CSS/Three.js/Spline-inspired code, not by copying protected assets.",
+        "Prefer full-viewport scenes, scroll-linked depth, cursor-responsive lighting, reveal masks, and one coherent camera/motion path when they fit the brief.",
+        "Audit the artifact against the reference at feel level: section rhythm, depth, motion timing, interaction model, and 16:9/21:9 composition."
+      ]
+    },
+    {
+      "id": "auwa-life-https-auwa-life",
+      "source": {
+        "url": "https://auwa.life/",
+        "title": "auwa.life"
+      },
+      "libraries": [
+        "canvas"
+      ],
+      "motionVocabulary": [
+        "3d-scene",
+        "cinematic-scroll",
+        "cursor-responsive",
+        "hover-magnetic",
+        "orbit",
+        "reveal-mask"
+      ],
+      "applicationPrompts": [
+        "Use 3d-scene, cinematic-scroll, cursor-responsive, hover-magnetic, orbit, reveal-mask as motion vocabulary; recreate the feeling with HTML/CSS/Three.js/Spline-inspired code, not by copying protected assets.",
+        "Prefer full-viewport scenes, scroll-linked depth, cursor-responsive lighting, reveal masks, and one coherent camera/motion path when they fit the brief.",
+        "Audit the artifact against the reference at feel level: section rhythm, depth, motion timing, interaction model, and 16:9/21:9 composition."
+      ]
+    }
+  ]
+}

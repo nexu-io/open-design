@@ -1,0 +1,28 @@
+services:
+  open-design:
+    image: horangdesign-cli:latest
+    ports: !reset []
+    network_mode: host
+    environment:
+      OD_PORT: ${OPEN_DESIGN_PORT:-7456}
+      OD_WEB_PORT: ${OPEN_DESIGN_PORT:-7456}
+      OD_BIND_HOST: 127.0.0.1
+      OD_COMPACT_DESIGN_PROMPT: "1"
+      OD_CODEX_SANDBOX: danger-full-access
+      CODEX_BIN: /home/ubuntu/.npm-global/bin/codex
+      CODEX_HOME: /home/open-design/.codex
+      OD_CODEX_IMAGEGEN_MODEL: gpt-5.5
+      OD_CODEX_IMAGEGEN_TIMEOUT_MS: "600000"
+      PATH: /home/ubuntu/.npm-global/bin:/mnt/host-local-bin:/usr/local/bin:/usr/bin:/bin
+    tmpfs:
+      - /tmp
+      - /home/open-design:uid=1001,gid=1001,mode=700
+    volumes:
+      - /home/ubuntu/.npm-global:/home/ubuntu/.npm-global:ro
+      - /home/ubuntu/.local/bin:/mnt/host-local-bin:ro
+      - /home/ubuntu/.local/share/claude:/home/ubuntu/.local/share/claude:ro
+      - /home/ubuntu/.claude:/home/open-design/.claude:rw
+      - /home/ubuntu/.codex:/home/open-design/.codex:rw
+      - /home/ubuntu/.agents:/home/open-design/.agents:ro
+      - /lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu:ro
+      - /lib/ld-linux-aarch64.so.1:/lib/ld-linux-aarch64.so.1:ro

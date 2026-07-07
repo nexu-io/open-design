@@ -545,6 +545,8 @@ interface Props {
   onDeleteConversation: (id: string) => void;
   // Composer settings/CLI button forwards to here. The dialog lives in App
   // (it owns the AppConfig lifecycle) so we just pass the open trigger.
+  tokenDietEnabled?: boolean;
+  onTokenDietChange?: (enabled: boolean) => void;
   onOpenSettings?: (section?: SettingsSection) => void;
   showByokRecoveryAction?: boolean;
   onSwitchToLocalCli?: () => void;
@@ -812,6 +814,8 @@ export function ChatPane({
   messagesConversationId = null,
   onSelectConversation,
   onDeleteConversation,
+  tokenDietEnabled = true,
+  onTokenDietChange,
   onOpenSettings,
   showByokRecoveryAction = false,
   onSwitchToLocalCli,
@@ -1986,6 +1990,8 @@ export function ChatPane({
         onSend(prompt, attachments, commentAttachments, meta);
       }}
       onStop={onStop}
+      tokenDietEnabled={tokenDietEnabled}
+      onTokenDietChange={onTokenDietChange}
       onOpenSettings={onOpenSettings}
       onOpenMcpSettings={onOpenMcpSettings}
       onBrowsePlugins={onBrowsePlugins}

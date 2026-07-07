@@ -236,6 +236,9 @@ interface Props {
     meta?: ChatSendMeta,
   ) => void;
   onStop: () => void;
+  // Horangdesign token diet: compact design prompt when enabled, full charter when disabled.
+  tokenDietEnabled?: boolean;
+  onTokenDietChange?: (enabled: boolean) => void;
   // Opens the global settings dialog (CLI / model / agent picker). The
   // composer's leading gear icon routes here so users can switch models
   // without leaving the chat.
@@ -402,6 +405,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       skills = [],
       onSend,
       onStop,
+      tokenDietEnabled = true,
+      onTokenDietChange,
       onOpenMcpSettings,
       onBrowsePlugins,
       onOpenConnectors,
@@ -3000,6 +3005,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             {leadingAccessory}
             <span className="composer-spacer" />
             {footerAccessory}
+            {onTokenDietChange ? (
+              <button
+                type="button"
+                className={`token-diet-toggle ${tokenDietEnabled ? 'is-on' : 'is-off'}`}
+                onClick={() => onTokenDietChange(!tokenDietEnabled)}
+                aria-pressed={tokenDietEnabled}
+                title={tokenDietEnabled ? '토큰 다이어트 ON — compact design prompt' : '토큰 다이어트 OFF — full design prompt'}
+                data-tooltip={tokenDietEnabled ? '토큰 다이어트 ON' : '토큰 다이어트 OFF'}
+              >
+                <span className="token-diet-toggle__dot" aria-hidden="true" />
+                <span>토큰</span>
+                <strong>{tokenDietEnabled ? 'ON' : 'OFF'}</strong>
+              </button>
+            ) : null}
             <SessionModeToggle
               mode={sessionMode}
               onChange={onSessionModeChange}

@@ -122,6 +122,8 @@ export interface AppConfigPrefs {
   // `metadata.linkedDirs` (read-only `--add-dir` awareness, no Design Files
   // import). Stored most-recent-first; capped at RECENT_LINKED_DIRS_MAX.
   recentLinkedDirs?: string[];
+  /** Horangdesign token diet toggle: compact design prompt when true, full charter when false. */
+  tokenDietEnabled?: boolean;
 }
 
 // Cap on how many recent working directories we remember. Keeps the picker's
@@ -146,6 +148,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'projectLocations',
   'defaultProjectLocationId',
   'recentLinkedDirs',
+  'tokenDietEnabled',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -500,7 +503,7 @@ function applyConfigValue(
   key: keyof AppConfigPrefs,
   value: unknown,
 ): void {
-  if (key === 'onboardingCompleted') {
+  if (key === 'onboardingCompleted' || key === 'tokenDietEnabled') {
     if (typeof value === 'boolean') target[key] = value;
     return;
   }

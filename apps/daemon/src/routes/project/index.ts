@@ -1081,7 +1081,7 @@ function buildDesignSystemCopyPendingPrompt(input: {
     '',
     'Autonomy requirement:',
     '- Do not ask setup or clarification questions during design-system generation.',
-    '- Do not emit `<question-form>`, "Quick brief — 30 seconds", direction cards, choice cards, or any UI that waits for user input.',
+    '- Do not emit `<question-form>`, time-limit wording, direction cards, choice cards, or any UI that waits for user input.',
     '- The source project already contains the evidence. Choose sensible defaults where details are missing and begin generating the design-system artifacts immediately.',
     '',
     'Source project handoff:',
@@ -1633,7 +1633,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             && req.body.appliedPluginSnapshotId.trim().length > 0;
       let resolveBody =
         explicitPlugin ? (req.body as Record<string, unknown>) : null;
-      if (!resolveBody && initialSessionMode === 'design') {
+      if (!resolveBody && !normalizedSkillId && initialSessionMode === 'design') {
         const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectMetadata);
         if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
           resolveBody = { ...(req.body || {}), pluginId: fallbackPluginId };

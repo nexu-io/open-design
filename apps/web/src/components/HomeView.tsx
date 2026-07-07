@@ -255,8 +255,8 @@ const EMPTY_PROMPT_TEMPLATES: PromptTemplateSummary[] = [];
 // template, skill, staged files, working directory) are intentionally NOT
 // persisted here — they reference live catalogue records / File handles / a
 // desktop auth token that cannot round-trip through JSON safely.
-const HOME_COMPOSER_PROMPT_KEY = 'open-design:home-composer:prompt';
-const HOME_COMPOSER_DESIGN_SYSTEM_KEY = 'open-design:home-composer:design-system';
+const HOME_COMPOSER_PROMPT_KEY = 'horangdesign:home-composer:prompt';
+const HOME_COMPOSER_DESIGN_SYSTEM_KEY = 'horangdesign:home-composer:design-system';
 
 function readHomeComposerDraft(key: string): string | null {
   if (typeof window === 'undefined') return null;
@@ -1919,14 +1919,15 @@ export function HomeView({
             submittedActive?.inputs ?? null,
             submittedActive?.projectMetadata ?? fallbackProjectMetadata ?? null,
           );
-      // Scenario plugins (chips / preset cards) and explicit skill picks are
-      // mutually exclusive routing sources. In Design mode, free-form prompts
-      // route through the default design router; in Ask mode they stay plain
-      // chat conversations with no hidden router plugin.
-      const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
+          // Scenario plugins (chips / preset cards) and explicit/default skills are
+      // mutually exclusive routing sources. Horangdesign free-form Design runs
+      // should use the Horang workflow skill directly so it asks mood and lets
+      // mood/community design systems affect the output instead of forcing the
+      // generic default-router plugin.
+      const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? 'horang-design-pro';
       const routedPluginId =
         sessionMode === 'design'
-          ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
+          ? submittedActive?.record.id ?? (resolvedSkillId ? null : DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID)
           : submittedActive?.record.id ?? null;
       // The example-prompt override is a one-shot marker. Decide whether to
       // send it now, but defer spending the marker until the create is
@@ -2454,19 +2455,18 @@ function selectableHomeDesignSystems(
   return [defaultSystem, ...sorted.filter((system) => system.id !== defaultSystem.id)];
 }
 
-// The composer's default selection id. A user-owned ("Personal") default
-// design system stays pre-selected; otherwise the composer defaults to
-// "不指定 / No design system" (null) so nothing is imposed implicitly and the
-// project opens with an empty Design system.
+// The composer's default selection id. Horangdesign intentionally keeps this
+// null unless the user explicitly chooses a design system. Mood interview and
+// community design systems must drive visual direction per project.
 function homeDefaultDesignSystemId(
   systems: DesignSystemSummary[],
   defaultDesignSystemId: string | null,
 ): string | null {
+  if (!defaultDesignSystemId) return null;
   const defaultSystem = systems.find(
     (system) =>
       system.id === defaultDesignSystemId &&
       Boolean(system.title) &&
-      designSystemOptionGroup(system) === 'Personal' &&
       (system.status ?? 'draft') === 'published',
   );
   return defaultSystem?.id ?? null;

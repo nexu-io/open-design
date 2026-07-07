@@ -1037,22 +1037,25 @@ function AppInner() {
     config.onboardingCompleted,
   ]);
 
-  // Auto-pick the default design system the same way — only after daemon
-  // config has merged so we never overwrite a daemon-stored selection.
+  // Horangdesign Pro intentionally leaves the global design system unset so
+  // the daemon-side mood router can select a per-work visual system. Do not
+  // auto-pin `default` for that workflow.
   useEffect(() => {
     if (!daemonConfigLoaded || dsLoading) return;
+    if (config.skillId === 'horang-design-pro') return;
     if (config.designSystemId) return;
     if (designSystems.length === 0) return;
     const id =
       designSystems.find((d) => d.id === 'default')?.id ?? designSystems[0]!.id;
     setConfig((prev) => {
+      if (prev.skillId === 'horang-design-pro') return prev;
       if (prev.designSystemId) return prev;
       const next: AppConfig = { ...prev, designSystemId: id };
       saveConfig(next);
       void syncConfigToDaemon(next);
       return next;
     });
-  }, [daemonConfigLoaded, dsLoading, designSystems, config.designSystemId]);
+  }, [daemonConfigLoaded, dsLoading, designSystems, config.designSystemId, config.skillId]);
 
   // One-shot self-healing migration for pets adopted before the
   // overlay learned atlas-row switching. If the stored pet is a
@@ -1224,6 +1227,17 @@ function AppInner() {
       setConfig(next);
     },
     [config],
+  );
+
+  const handleTokenDietChange = useCallback(
+    (tokenDietEnabled: boolean) => {
+      const next = { ...latestPersistedConfigRef.current, tokenDietEnabled };
+      latestPersistedConfigRef.current = next;
+      saveConfig(next);
+      void syncConfigToDaemon(next);
+      setConfig(next);
+    },
+    [],
   );
 
   const handleAgentChange = useCallback(
@@ -2304,6 +2318,7 @@ function AppInner() {
         onApiModelChange={handleApiModelChange}
         onRefreshAgents={refreshAgents}
         onThemeChange={handleThemeChange}
+        onTokenDietChange={handleTokenDietChange}
         onOpenSettings={openSettings}
         onOpenAmrSettings={openAmrSettings}
         onOpenMcpSettings={openMcpSettings}

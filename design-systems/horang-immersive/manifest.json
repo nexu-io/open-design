@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "od-design-system-project/v1",
+  "id": "horang-immersive",
+  "name": "Horang Immersive",
+  "category": "3D/Spline Web",
+  "description": "Awwwards/studio/experimental design system for cinematic 3D/Spline-style websites, 16:9 and 21:9 first.",
+  "source": {
+    "type": "bundled",
+    "origin": "Horangdesign curated immersive fixture"
+  },
+  "files": {
+    "design": "DESIGN.md",
+    "tokens": "tokens.css"
+  },
+  "craft": {
+    "applies": [
+      "anti-ai-slop",
+      "animation-discipline",
+      "typography-hierarchy",
+      "color"
+    ],
+    "suggested": [
+      "accessibility-baseline",
+      "state-coverage"
+    ],
+    "exemptions": []
+  }
+}

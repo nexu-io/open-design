@@ -459,6 +459,8 @@ export interface AppConfig {
   customInstructions?: string;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
+  /** Horangdesign token diet toggle: compact design prompt when true, full charter when false. */
+  tokenDietEnabled?: boolean;
 }
 
 export interface TelemetryConfig {

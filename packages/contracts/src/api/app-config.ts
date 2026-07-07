@@ -60,6 +60,8 @@ export interface AppConfigPrefs {
    * most-recent-first and capped by the daemon.
    */
   recentLinkedDirs?: string[];
+  /** Horangdesign token diet toggle: compact design prompt when true, full charter when false. */
+  tokenDietEnabled?: boolean;
 }
 
 export interface AppConfigResponse {

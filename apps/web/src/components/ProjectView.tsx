@@ -399,6 +399,7 @@ interface Props {
   onApiModelChange?: (model: string) => void;
   onRefreshAgents: () => void;
   onThemeChange?: (theme: AppConfig['theme']) => void;
+  onTokenDietChange?: (enabled: boolean) => void;
   onOpenSettings: (section?: SettingsSection) => void;
   onOpenAmrSettings?: () => void;
   onOpenMcpSettings?: () => void;
@@ -1310,6 +1311,7 @@ export function ProjectView({
   onApiModelChange,
   onRefreshAgents,
   onThemeChange,
+  onTokenDietChange,
   onOpenSettings,
   onOpenAmrSettings,
   onOpenMcpSettings,
@@ -8277,6 +8279,8 @@ export function ProjectView({
               onSelectConversation={handleSelectConversation}
               onDeleteConversation={handleDeleteConversation}
               config={config}
+              tokenDietEnabled={config.tokenDietEnabled ?? true}
+              onTokenDietChange={onTokenDietChange}
               onOpenSettings={onOpenSettings}
               showByokRecoveryAction={
                 config.mode === 'api' &&

@@ -2,8 +2,8 @@ name: open-design
 
 services:
   open-design:
-    container_name: open-design
-    image: ${OPEN_DESIGN_IMAGE:-ghcr.io/nexu-io/od:latest}
+    container_name: horangdesign
+    image: ${OPEN_DESIGN_IMAGE:-horangdesign:latest}
     build:
       context: ..
       dockerfile: deploy/Dockerfile

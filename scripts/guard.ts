@@ -79,6 +79,9 @@ const residualAllowedExactPaths = new Set([
   "scripts/postinstall.mjs",
   // Checked-in bin shim so pnpm can link `od` before daemon dist output exists.
   "apps/daemon/bin/od.mjs",
+  // Vendored upstream Anthropic algorithmic-art skill template. It is copied as
+  // a user-facing p5.js starter asset and is not imported by OD runtime code.
+  "skills/algorithmic-art/templates/generator_template.js",
   "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",

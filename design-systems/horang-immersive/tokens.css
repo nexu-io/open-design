@@ -1,0 +1,34 @@
+:root {
+  --bg: #050506;
+  --surface: rgba(255, 255, 255, 0.055);
+  --surface-warm: rgba(246, 239, 225, 0.08);
+  --fg: #f4f1e8;
+  --fg-2: rgba(244, 241, 232, 0.74);
+  --muted: rgba(244, 241, 232, 0.54);
+  --meta: rgba(244, 241, 232, 0.42);
+  --border: rgba(244, 241, 232, 0.16);
+  --border-soft: rgba(244, 241, 232, 0.08);
+  --accent: #d7ff4f;
+  --accent-on: #050506;
+  --accent-hover: #f0ff95;
+  --accent-active: #a9db25;
+  --success: #5ee787;
+  --warn: #f6c85f;
+  --danger: #ff5c7a;
+  --font-display: "PP Neue Montreal", "Neue Haas Grotesk Display", "Inter Tight", system-ui, sans-serif;
+  --font-body: "Inter", "Neue Haas Grotesk Text", system-ui, sans-serif;
+  --font-mono: "Space Mono", "JetBrains Mono", ui-monospace, monospace;
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 28px;
+  --text-2xl: clamp(44px, 8vw, 132px);
+  --tracking-tight: -0.06em;
+  --tracking-wide: 0.12em;
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  --elev-raised: 0 28px 90px rgba(0, 0, 0, 0.46);
+}

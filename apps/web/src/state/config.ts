@@ -20,8 +20,8 @@ import {
 } from '../utils/notifications';
 import { randomUUID } from '../utils/uuid';
 
-const STORAGE_KEY = 'open-design:config';
-const CONFIG_MIGRATION_VERSION = 1;
+const STORAGE_KEY = 'horangdesign:config';
+const CONFIG_MIGRATION_VERSION = 3;
 
 // Hatched out of the box, but tucked away — the user has to go through
 // either the entry-view "adopt a pet" callout or Settings → Pets to
@@ -72,7 +72,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   configMigrationVersion: CONFIG_MIGRATION_VERSION,
   apiProviderBaseUrl: 'https://api.anthropic.com',
   agentId: null,
-  skillId: null,
+  skillId: 'horang-design-pro',
   designSystemId: null,
   onboardingCompleted: false,
   theme: 'system',
@@ -87,6 +87,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   orbit: DEFAULT_ORBIT,
   projectLocations: [],
   defaultProjectLocationId: 'default',
+  tokenDietEnabled: true,
   // Telemetry defaults to ON so fresh-install users emit onboarding /
   // ui_click events from the first frame. The disclosure modal still
   // appears after `onboardingCompleted` flips, and Settings → Privacy
@@ -600,6 +601,12 @@ export function loadConfig(): AppConfig {
         );
         merged.apiProviderBaseUrl = knownProvider?.baseUrl ?? null;
       }
+      // Migration v3: Horangdesign keeps the workflow skill active, but does
+      // not pin a visual design system. Mood/community design choices must
+      // drive the visual system per project; otherwise every site looks the same
+      // and the active DESIGN.md suppresses the mood question.
+      if (merged.skillId == null) merged.skillId = 'horang-design-pro';
+      if (merged.designSystemId === 'horang-immersive') merged.designSystemId = null;
       merged.configMigrationVersion = CONFIG_MIGRATION_VERSION;
     }
 
@@ -939,6 +946,9 @@ export function mergeDaemonConfig(
   if (daemonConfig.defaultProjectLocationId !== undefined) {
     next.defaultProjectLocationId = daemonConfig.defaultProjectLocationId ?? 'default';
   }
+  if (daemonConfig.tokenDietEnabled !== undefined) {
+    next.tokenDietEnabled = daemonConfig.tokenDietEnabled;
+  }
   return next;
 }
 
@@ -1056,6 +1066,7 @@ export async function syncConfigToDaemon(
     customInstructions: config.customInstructions ?? null,
     projectLocations: config.projectLocations ?? [],
     defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',
+    tokenDietEnabled: config.tokenDietEnabled ?? true,
   };
   try {
     const response = await fetch('/api/app-config', {

@@ -900,6 +900,79 @@ function mcpOAuthCallbackUrl(req) {
  * for. Tokens persisted before that context was recorded can't be safely
  * refreshed; the caller treats `null` as "needs reconnect".
  */
+const HORANG_MOOD_DESIGN_SYSTEM_MAP = Object.freeze([
+  {
+    id: 'horang-immersive',
+    terms: ['3d', 'spline', 'awwwards', 'studio', 'experimental', 'immersive', 'three.js', 'webgl', 'motion', 'animation', '3D', '스플라인', '몰입', '모션', '애니메이션', '실험'],
+  },
+  {
+    id: 'brutalism',
+    terms: ['brutalist', 'brutalism', 'bold', '브루탈', '대담'],
+  },
+  {
+    id: 'luxury',
+    terms: ['luxury', 'refined', 'premium', 'elegant', 'bmw', 'bugatti', '고급', '럭셔리', '프리미엄', '정제'],
+  },
+  {
+    id: 'editorial',
+    terms: ['editorial', 'magazine', 'contemporary', 'artistic', '에디토리얼', '매거진', '잡지', '아트'],
+  },
+  {
+    id: 'colorful',
+    terms: ['playful', 'illustrative', 'colorful', 'canva', 'clay', 'fun', '밝은', '장난', '일러스트', '컬러풀', '귀여운'],
+  },
+  {
+    id: 'application',
+    terms: ['tech', 'utility', 'dashboard', 'tool', 'productivity', 'clickhouse', 'coinbase', '기술', '유틸', '대시보드', '툴', '생산성'],
+  },
+  {
+    // Airbnb's bundled DESIGN.md is unusually large (~29k chars). Use the
+    // compact Friendly package for the same human/warm intent so Horangdesign
+    // mood routing does not add ~7k tokens on otherwise simple jobs.
+    id: 'friendly',
+    terms: ['human', 'approachable', 'friendly', 'warm', 'community', '사람', '친근', '따뜻', '커뮤니티'],
+  },
+  {
+    id: 'clean',
+    terms: ['modern minimal', 'minimal', 'clean', 'simple', 'vercel', '모던', '미니멀', '깔끔', '심플'],
+  },
+]);
+
+function inferHorangMoodDesignSystemId(input) {
+  const text = [
+    input?.message,
+    input?.currentPrompt,
+    input?.systemPrompt,
+    typeof input?.context === 'string' ? input.context : input?.context ? JSON.stringify(input.context) : '',
+  ]
+    .filter((value) => typeof value === 'string' && value.trim().length > 0)
+    .join('\\n')
+    .toLowerCase();
+  if (!text) return null;
+  if (!/(form answers|visual tone|tone|mood|style|무드|분위기|스타일|시각|디자인|3d|spline|awwwards|studio|immersive|motion|animation|스플라인|몰입|모션|애니메이션)/iu.test(text)) return null;
+  let best = null;
+  for (const candidate of HORANG_MOOD_DESIGN_SYSTEM_MAP) {
+    for (const term of candidate.terms) {
+      const idx = text.indexOf(term.toLowerCase());
+      if (idx < 0) continue;
+      if (!best || idx < best.idx) best = { id: candidate.id, idx, term };
+    }
+  }
+  return best?.id ?? null;
+}
+
+async function shouldApplyHorangMoodRouter({ skillId, projectSkillId, projectDesignSystemId, requestDesignSystemId }) {
+  if (typeof requestDesignSystemId === 'string' && requestDesignSystemId.length > 0) return false;
+  if (typeof projectDesignSystemId === 'string' && projectDesignSystemId.length > 0) return false;
+  if (skillId === 'horang-design-pro' || projectSkillId === 'horang-design-pro') return true;
+  try {
+    const cfg = await readAppConfig(RUNTIME_DATA_DIR);
+    return cfg?.skillId === 'horang-design-pro';
+  } catch {
+    return false;
+  }
+}
+
 async function refreshAndPersistToken(dataDir, serverId, current) {
   if (!current.refreshToken) return null;
   if (!current.tokenEndpoint || !current.clientId) return null;
@@ -3819,6 +3892,7 @@ export async function startServer({
       byokMediaDefaults,
       streamFormat,
       executionProfile: executionProfileFromStreamFormat(streamFormat),
+      tokenDietEnabled: appConfigForPrompt?.tokenDietEnabled,
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
         ? connectedExternalMcp
         : undefined,
@@ -4146,6 +4220,28 @@ export async function startServer({
       typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
         : null;
+    const moodDesignSystemId = await shouldApplyHorangMoodRouter({
+      skillId,
+      projectSkillId: projectRecord?.skillId,
+      projectDesignSystemId: projectRecord?.designSystemId,
+      requestDesignSystemId: designSystemId,
+    })
+      ? inferHorangMoodDesignSystemId({ message, currentPrompt, systemPrompt, context })
+      : null;
+    const effectiveChatDesignSystemId =
+      typeof designSystemId === 'string' && designSystemId.length > 0
+        ? designSystemId
+        : moodDesignSystemId;
+    if (moodDesignSystemId && typeof projectId === 'string' && projectId && projectRecord) {
+      updateProject(db, projectId, {
+        designSystemId: moodDesignSystemId,
+        metadata: {
+          ...(projectRecord.metadata ?? {}),
+          horangMoodDesignSystemId: moodDesignSystemId,
+          horangMoodDesignSystemSource: 'interview-mood',
+        },
+      });
+    }
     const runContextPrompt = renderRunContextPrompt(context, projectRecord?.metadata);
     const linkedDirs = (() => {
       if (!Array.isArray(projectRecord?.metadata?.linkedDirs)) return [];
@@ -4283,7 +4379,7 @@ export async function startServer({
         projectId,
         skillId,
         skillIds,
-        designSystemId,
+        designSystemId: effectiveChatDesignSystemId,
         streamFormat: def?.streamFormat ?? 'plain',
         locale,
         sessionMode: runSessionMode,

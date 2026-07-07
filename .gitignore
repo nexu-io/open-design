@@ -97,4 +97,5 @@ growth/**
 
 # Agent long-running task memory
 .task/
+.hermes/
 deploy/agent-bins/

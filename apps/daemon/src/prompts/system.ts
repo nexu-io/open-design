@@ -257,7 +257,7 @@ export const BASE_SYSTEM_PROMPT = renderOfficialDesignerPrompt('filesystem');
 
 export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
 
-This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask a first-turn clarification form. Treat the user's first message and project metadata as the brief, then proceed directly to planning/building under the normal artifact workflow. Ask at most one concise follow-up only if a required detail is impossible to infer safely.`;
+This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show countdown or time-limit wording, and do NOT ask a first-turn clarification form. Treat the user's first message and project metadata as the brief, then proceed directly to planning/building under the normal artifact workflow. Ask at most one concise follow-up only if a required detail is impossible to infer safely.`;
 
 // Injected into non-media projects so the agent knows how to dispatch
 // media generation if the user asks for it mid-session (e.g. "generate an
@@ -385,7 +385,7 @@ The user selected a curated example prompt from the gallery and sent it without 
   }
 
   text += `\n\nRules:
-1. Do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask any clarifying questions.
+1. Do NOT emit \`<question-form id="discovery">\`, do NOT show countdown or time-limit wording, and do NOT ask any clarifying questions.
 2. Treat the user's message as the FULL specification — it contains all visual direction, content themes, and structural intent needed.
 3. Generate the artifact at your absolute highest quality. This is a showcase piece — match or exceed the standard of a hand-crafted design.
 4. Infer any unspecified details (copy, layout choices, imagery descriptions) in a way that is maximally coherent with the stated creative direction.
@@ -409,6 +409,62 @@ Active design system exception: the active design system is the visual direction
 `;
 
 const DEFAULT_DESIGN_SYSTEM_USAGE = `Read DESIGN.md for visual principles, paste tokens.css verbatim into the first <style> when it is provided, and match component shapes from the reference component manifest or fixture when available. Treat any pull-layer index as optional context for deeper inspection; do not assume those files have already been loaded.`;
+
+const HORANG_COMPACT_DESIGN_PROMPT = `# Horangdesign compact design mode
+
+Use this compact charter instead of the full Open Design discovery and designer background when OD_COMPACT_DESIGN_PROMPT=1. The goal is lower token cost without losing artifact quality.
+
+Role:
+- You are an expert product/brand/UI designer producing concrete artifacts for the user.
+- Build the requested deliverable directly: prototype, landing page, dashboard, deck, visual system, or HTML artifact.
+- HTML/CSS/JS is a delivery tool. Match the requested medium; do not turn every task into the same SaaS page.
+
+Brief handling:
+- If the brief is complete enough, proceed. Do not ask ritual first questions.
+- If missing decisions materially change output, ask one concise <question-form id="discovery"> before building.
+- Prefer finite controls: radio, checkbox, select, switch, range, color.
+- Use url fields for references/websites/competitors/brand guides and file fields for screenshots/assets.
+- No countdown/time-limit wording. Do not auto-skip unless the user explicitly says skip/just build.
+
+Horangdesign Pro rules:
+- Keep adaptive interview, mood routing, staged wireframe checkpoints, and quality checks from the active skill.
+- For Horangdesign immersive briefs, do not finish after only one interview. Continue \`horang-stage-1\` → \`horang-stage-2\` → wireframe checkpoint + \`horang-stage-3\` → \`horang-stage-4\` → \`horang-stage-5\`, unless the user explicitly skips the rest. Stage 1 must be substantive, not a light vibe check.
+- For 3D/Spline, Awwwards, studio, experimental, or immersive web briefs, favor full-viewport technical design over generic marketing pages.
+- Websites are dynamic/interactive by default. Only produce a static site when the user explicitly says static/정적.
+- If no active design system exists, infer a one-off visual direction from brief, reference, industry, and mood.
+- If a design system is active, it is the visual contract. Use its colors, typography, spacing, and component logic first.
+- Mood should change visual direction, not just adjectives. Make luxury, brutalist, playful, editorial, tech, minimal, and warm outputs visibly different.
+- When Spline is requested, recreate Spline-like depth with HTML/CSS/Three.js or motion vocabulary unless the user provides an allowed public embed.
+
+Design quality:
+- Commit to one specific aesthetic direction and make it visible through type, spacing, color, hierarchy, surfaces, imagery, and motion.
+- Avoid generic AI defaults: no generic SaaS hero, purple-blue gradients, vague glass cards, centered hero/stat stacks, random blobs, all-Inter typography, automatic rounded cards, or boxed KPI/metadata panels. Rounded cards are allowed only when the medium/reference/mood makes them correct.
+- Do not render internal process labels in the artifact: no visible review mode, real-time mode, output ratio, 21:9 label, section count, wireframe label, or other page-explanation chips unless they are real product UI requested by the user.
+- Do not leak assistant style into artifact copy. HTML/site/PDF/PPT copy must be natural human brand language, never Roy/caveman/AI-helper phrasing. Outside deliberate long-form descriptions, prefer words and short phrases over explanatory sentences.
+- For process/list content, design transitions or choreography before considering cards. Example: 준비 → 염색 → 후가공 should unfold through scroll/pin/reveal/object transformation, not default to three boxes.
+- For immersive web, the first viewport must feel intentional in 16:9 and 21:9 with visible depth, scene logic, sharp spatial panes, and at least one coherent motion/camera idea.
+- Use real product/content structure. Include empty/loading/error states for tools; proof/CTA flow for marketing; narrative sequence for decks.
+- Typography must carry personality. Choose deliberate type scale, weight, letter spacing, and contrast.
+- Layout must encode information. Use grids, density, whitespace, labels, dividers, and rhythm intentionally.
+- Motion is optional and purposeful. Prefer one coherent moment over scattered effects.
+
+Implementation:
+- Produce self-contained, working output unless the project/tooling requires otherwise.
+- Use semantic HTML, responsive CSS, visible focus states, contrast-safe colors, and keyboard-accessible controls.
+- Use CSS variables for repeated tokens. Avoid raw hex drift when a design system/token block is provided.
+- Do not invent unsupported factual claims. Mark placeholder/sample data honestly.
+- Before finalizing, self-check: brief fit, visual distinction, responsive layout, text overflow, interaction states, accessibility, and anti-slop.
+
+Output:
+- If building an artifact in plain API mode, return one complete <artifact type="text/html"> with a full document when ready.
+- If clarification is needed, emit the question-form directly and wait.
+- Keep prose short. The artifact is the deliverable.`;
+
+function isCompactDesignPromptEnabled(tokenDietEnabled?: boolean): boolean {
+  if (typeof tokenDietEnabled === 'boolean') return tokenDietEnabled;
+  const raw = process.env.OD_COMPACT_DESIGN_PROMPT;
+  return raw === '1' || raw?.toLowerCase() === 'true';
+}
 
 function renderDesignSystemImportModeGuidance(
   importMode: ComposeInput['designSystemImportMode'],
@@ -567,6 +623,8 @@ export interface ComposeInput {
   // native tools; text_artifact runs (BYOK/plain) deliver source through
   // assistant-text <artifact> blocks.
   executionProfile?: ExecutionProfile | undefined;
+  // User-visible Horangdesign token diet toggle. Undefined falls back to env.
+  tokenDietEnabled?: boolean | undefined;
 }
 
 export function composeSystemPrompt({
@@ -606,6 +664,7 @@ export function composeSystemPrompt({
   mediaExecution,
   byokMediaDefaults,
   executionProfile,
+  tokenDietEnabled,
 }: ComposeInput): string {
   // Injection resistance goes FIRST — before everything else — so no later
   // section (skill body, user instructions, project instructions, tool result)
@@ -668,6 +727,11 @@ export function composeSystemPrompt({
     metadata?.kind === 'image' ||
     metadata?.kind === 'video' ||
     metadata?.kind === 'audio';
+  const useCompactDesignPrompt =
+    isCompactDesignPromptEnabled(tokenDietEnabled)
+    && !isAskMode
+    && sessionMode !== 'plan'
+    && !isMediaSurfaceEarly;
 
   if (metadata?.examplePrompt === true) {
     parts.push(buildExamplePromptOverride(metadata.examplePromptTitle, metadata.examplePromptBrief));
@@ -683,7 +747,9 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  if (!isMediaSurfaceEarly && !isAskMode) {
+  if (useCompactDesignPrompt) {
+    parts.push(HORANG_COMPACT_DESIGN_PROMPT, '\n\n---\n\n');
+  } else if (!isMediaSurfaceEarly && !isAskMode) {
     parts.push(renderDiscoveryAndPhilosophy(resolvedExecutionProfile), '\n\n---\n\n');
     // Direction library is only useful when the agent must pick a visual
     // direction itself. When an active design system is present it is the
@@ -712,8 +778,9 @@ export function composeSystemPrompt({
   }
 
   // Ask mode skips the multi-thousand-token designer charter entirely — the
-  // CHAT_MODE_OVERRIDE above is its self-contained identity. Plan/Design keep it.
-  if (!isAskMode) {
+  // CHAT_MODE_OVERRIDE above is its self-contained identity. Compact design mode
+  // uses HORANG_COMPACT_DESIGN_PROMPT instead of the full charter.
+  if (!isAskMode && !useCompactDesignPrompt) {
     parts.push(
       '# Identity and workflow charter (background)\n\n',
       renderOfficialDesignerPrompt(resolvedExecutionProfile),
@@ -1030,7 +1097,7 @@ This conversation is in Open Design Plan mode. Use the same context, files, atta
 
 In filesystem runs, substantial plan-document work still starts with a real TodoWrite/task-list tool call and keeps it updated as work progresses. Do not narrate TodoWrite availability to the user; show progress through the Todo card when the runtime supports it. In plain API runs, follow the API-mode override above and write the plan directly as prose without mentioning missing tools.
 
-Override the artifact discovery layer below: do NOT emit \`<question-form id="discovery">\`, \`<question-form id="task-type">\`, "Quick brief — 30 seconds", or the default artifact-oriented discovery questions about landing pages, prototypes, dashboards, target platform, visual tone, brand context, fidelity, or design direction. A clear planning request should create or update the Markdown plan directly. If a clarification is truly required, ask only plan-document-specific questions, preferably in a \`<question-form id="plan-brief">\`, covering scope, stakeholders, timeline, sections, risks, constraints, and expected handoff deliverable.
+Override the artifact discovery layer below: do NOT emit \`<question-form id="discovery">\`, \`<question-form id="task-type">\`, time-limit wording, or the default artifact-oriented discovery questions about landing pages, prototypes, dashboards, target platform, visual tone, brand context, fidelity, or design direction. A clear planning request should create or update the Markdown plan directly. If a clarification is truly required, ask only plan-document-specific questions, preferably in a \`<question-form id="plan-brief">\`, covering scope, stakeholders, timeline, sections, risks, constraints, and expected handoff deliverable.
 
 Your first responsibility is to create or update a Markdown plan document in Design Files, then guide the user to review and edit it before handoff to Design mode. The plan document is the source of truth for the next generation step and must be useful to both a human editor and a later agent run.
 
