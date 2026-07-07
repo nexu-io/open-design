@@ -27,6 +27,33 @@ export function sanitizeRepoName(url) {
 }
 
 /**
+ * Recursively report whether `dir` contains any symbolic link at any depth.
+ * Uses lstat-based dirents (readdir withFileTypes) so it detects symlinks
+ * without following them and never descends through one.
+ * @param {string} dir
+ * @returns {Promise<boolean>}
+ */
+export async function containsSymlink(dir) {
+  let entries;
+  try {
+    entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  } catch (err) {
+    // A missing dir has nothing to scan. Any other readdir failure on a tree we
+    // just cloned is unexpected; fail closed so a partially-readable clone can't
+    // slip a symlink past the scan.
+    if (err && err.code === 'ENOENT') return false;
+    return true;
+  }
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) return true;
+    if (entry.isDirectory() && (await containsSymlink(path.join(dir, entry.name)))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * @param {InstallTarget} target
  * @param {string} userDir - user-installed directory (e.g. ~/.open-design/skills)
  * @param {'skill' | 'design-system'} kind
@@ -79,6 +106,16 @@ async function installFromGithub(url, userDir, manifest) {
     });
   } catch (err) {
     return { ok: false, error: `git clone failed: ${String(err).split('\n')[0]}` };
+  }
+
+  // Refuse a clone that contains symbolic links. The daemon's design-system and
+  // skill file readers follow symlinks, so a committed in-tree symlink pointing
+  // outside the install dir (e.g. `DESIGN.md -> /etc/passwd`) would let a
+  // third-party repo exfiltrate any daemon-readable file. Extensions are
+  // self-contained trees and never need symlinks.
+  if (await containsSymlink(dest)) {
+    try { fs.rmSync(dest, { recursive: true, force: true }); } catch {}
+    return { ok: false, error: 'Repository contains symbolic links, which are not allowed' };
   }
 
   // Verify manifest exists

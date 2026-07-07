@@ -790,7 +790,10 @@ export function formatVelaBalanceUsd(raw?: string | null): string | null {
   if (raw == null || raw === '') return null;
   const amount = Number(raw);
   if (!Number.isFinite(amount)) return null;
-  return `$${amount.toFixed(2)}`;
+  // Sign before the currency symbol: an overdrawn wallet reads "-$1.25",
+  // never the malformed "$-1.25".
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}$${Math.abs(amount).toFixed(2)}`;
 }
 
 /** Top subscription tier — no upgrade affordance is shown at/above this. */
