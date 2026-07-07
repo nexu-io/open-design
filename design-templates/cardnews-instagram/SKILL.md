@@ -26,7 +26,7 @@ od:
   design_system:
     requires: true
     sections: [color, typography, voice, anti-patterns]
-  example_prompt: "환절기 비염 실비 청구 카드뉴스 만들어줘 — 30대 직장인 대상."
+  example_prompt: "환절기 비염 관리법 카드뉴스 만들어줘 — 30대 직장인 대상."
 ---
 
 # cardnews-instagram — 인스타그램 카드뉴스 제작
@@ -80,8 +80,10 @@ od:
    `plan-v*.md`는 히스토리 — 덮어쓰기·삭제 절대 금지) → 재컨펌 폼 발행 + 즉시 턴 종료.
 5. **Produce** — `craft/instagram-cardnews.md` + 활성 DESIGN.md Read 후:
    - 5a. **cards.json Write** — 카드별 텍스트 확정 (스키마 정본
-     `references/card-structure.md` — 줄바꿈은 여기서 확정, compose는 자동 줄바꿈 없음.
-     본문은 서술형 문단 + 폭 기준 줄바꿈(한 줄 25~31자 풀폭) — 규칙·예외는 card-structure.md).
+     `references/card-structure.md` — 본문 줄바꿈·양쪽맞춤은 compose가 자동 처리,
+     body_lines는 문장 소스만. 본문은 서술형 문단, 분량 = 렌더 5~7줄(공백 포함 약
+     150~220자) — 미달·초과는 compose 에러. 커버 훅·서브와 본문 타이틀은 줄당 잉크
+     912px 이내(초과 = compose 에러 → 글자수 축소). 규칙·예외는 card-structure.md).
      캡션은 8블록 템플릿, 해시태그는 별도 배열. 본문 레이아웃은 기본형(basic) 고정 — cards.json 최상위 body_layout 기본값. 자유형(free)은 후속 트랙(현재 compose가 명시 에러로 거부).
    - 5b. **표지 배경 생성** — `references/imagegen-pipeline.md` Read 후 그 지시대로
      imagegen 서브에이전트 1회 dispatch(순차 — 스타일 앵커). 프롬프트는 메인이 스캐폴드로
