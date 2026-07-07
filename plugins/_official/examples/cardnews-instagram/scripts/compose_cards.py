@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Role: 인스타 카드뉴스 합성 CLI — cards.json + bg-NN.png → <slug>-NN.png (1080×1350)
-# Key Features: 역할별(cover/body/cta) 텍스트 오버레이, 로고 합성(폭 99px 고정), --self-test 지오메트리 회귀 모드
+# Key Features: 역할별(cover/body/cta) 텍스트 오버레이, body 자동 줄바꿈+양쪽맞춤(5~7줄 계약), 로고 합성(폭 99px 고정), --self-test 지오메트리 회귀 모드
 # Dependencies: Pillow만 (시스템 python3 3.9+). 폰트는 Pretendard variable 우선 자동 탐색, 나눔 폴백.
 # Notes: body 카드는 박스·스크림 밴드·전면 균일 다크닝 금지 — 하단 페더 그라디언트만(v2 레퍼런스 실측).
 #        결정성 계약: 같은 cards.json + 같은 배경 → 같은 출력 (텍스트 수정 시 배경 재생성 불필요).
@@ -28,9 +28,10 @@ BODY_TITLE_SIZE = 58         # body 타이틀 (레퍼런스 잉크 44~49px 실�
 BODY_TEXT_SIZE = 43          # body 본문 (레퍼런스 잉크 34px 실측)
 BODY_PITCH = 62              # body 타이틀·본문 공통 줄 피치 (실측 균일)
 BODY_TITLE_INK_TOP = 648     # 타이틀 첫 줄 잉크 상단 (실측 646~650)
-BODY_TEXT_INK_TOP = 794      # 본문 첫 줄 잉크 상단 (실측 793~794 — 타이틀 줄수 무관 고정)
-BODY_MAX_INK = W - 2 * LEFT  # 912 — 본문 잉크 폭 한계 (좌우 대칭 84px, 우측 한계 x=996)
-BODY_MIN_FILL = 0.8          # body 최장 줄 하한 비율 — 미달 = 좁은 컬럼 경고 (레퍼런스 실측 98%)
+BODY_TITLE_BODY_GAP = 37     # 타이틀 마지막 줄 잉크하단 → 본문 첫 줄 잉크상단 갭 (2026-07-07 사용자 지정 — 고정 앵커 794 폐기, 타이틀 줄수 무관 균일 갭)
+BODY_MAX_INK = W - 2 * LEFT  # 912 — 텍스트 잉크 폭 한계 (좌우 대칭 84px, 우측 한계 x=996) — cover·body 공통
+BODY_MIN_LINES = 5           # body 본문 렌더 최소 줄수 (2026-07-07 사용자 지정 — 하단 여백 과다 방지)
+BODY_MAX_LINES = 7           # body 본문 렌더 최대 줄수 (v2 계약 유지)
 
 # 폰트 자동 탐색 후보 — Pretendard variable 우선, 나눔 폴백 (craft 룰 4: 텍스트 = 100% Pillow)
 VARIABLE_CANDIDATES = [
@@ -140,26 +141,92 @@ def compose_cover(img, card, fonts):
         y += hook_lh
 
 
-def body_width_report(card, fonts):
-    """body 카드 줄폭 검사 — (errors, warnings). 자동 재줄바꿈 없음(결정성 계약).
-    초과는 프레임 밖 잘림이라 에러, 좁은 컬럼(절반 폭 줄바꿈)은 계약 위반 신호라 경고."""
+LINE_HEAD_FORBIDDEN = ".,!?%·)」’”"  # 줄머리 금칙 구두점 — 줄 시작에 오면 앞 글자를 당겨서 함께 꺾는다
+NO_BREAK_RUN = set("0123456789%ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")  # 숫자·영문 런은 중간 개행 금지 ("30%" → "3/0%" 방지)
+
+
+def wrap_paragraph(draw, text, font, max_w=BODY_MAX_INK):
+    """폭 기준 글자 단위 줄바꿈 — 어절 중간 개행 허용(레퍼런스 풀폭 스타일 "과육이 푸/석해져요").
+    매 줄이 자연폭 ~100% 차서 양쪽맞춤 간격 벌어짐이 없다. 같은 텍스트+같은 폰트 → 같은 분할.
+    금칙 2종: 줄머리 구두점(앞 글자 동반 개행), 숫자·영문 런 중간 개행(런 통째로 다음 줄)."""
+    text = " ".join(text.split())
+    lines, cur = [], ""
+    for ch in text:
+        if cur and draw.textlength(cur + ch, font=font) > max_w:
+            if ch == " ":  # 줄 경계의 공백은 버린다 (줄머리 공백 금지)
+                lines.append(cur.rstrip())
+                cur = ""
+                continue
+            kept, carry = cur.rstrip(), ""
+            if ch in LINE_HEAD_FORBIDDEN and len(kept) > 1:
+                kept, carry = kept[:-1], kept[-1]
+            elif ch in NO_BREAK_RUN and kept and kept[-1] in NO_BREAK_RUN:
+                while kept and kept[-1] in NO_BREAK_RUN:
+                    carry = kept[-1] + carry
+                    kept = kept[:-1]
+                kept = kept.rstrip()
+                if not kept:  # 줄 전체가 한 런 — 이때만 강제 분할 허용
+                    kept, carry = cur.rstrip(), ""
+            lines.append(kept)
+            cur = carry + ch
+        else:
+            cur += ch
+    if cur.strip():
+        lines.append(cur.rstrip())
+    return lines
+
+
+def draw_justified(draw, line, font, y, fill):
+    """양쪽맞춤 1줄 — 잔여 폭을 글자 사이에 미세 균등 분배(신문식)해 우측 잉크를 x=996(LEFT+912)에 맞춘다.
+    글자 단위 채움이라 잔여분은 글자 1자 폭 미만 → 글자당 1px 안팎, 눈에 안 띈다."""
+    widths = [draw.textlength(c, font=font) for c in line]
+    gaps = len(line) - 1
+    if gaps < 1 or sum(widths) >= BODY_MAX_INK:
+        draw.text((LEFT, y), line, font=font, fill=fill)
+        return
+    extra = (BODY_MAX_INK - sum(widths)) / gaps
+    x = float(LEFT)
+    for ch, wd in zip(line, widths):
+        draw.text((x, y), ch, font=font, fill=fill)
+        x += wd + extra
+
+
+def body_copy_report(card, fonts):
+    """body 카드 카피 가드 — 에러 목록 반환. 타이틀 잉크 912px 초과 = 프레임 침범이라 에러,
+    본문 렌더 줄수 5~7 밖 = 카피 계약 위반 에러(줄바꿈·양쪽맞춤은 compose 소유라 줄수가 유일한 카피 축)."""
     draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     title_font = fonts.get(BODY_TITLE_SIZE, 800)
+    errors = []
+    for line in card["title_lines"][:2]:
+        ink = draw.textlength(line, font=title_font)
+        if ink > BODY_MAX_INK:
+            errors.append(
+                f"index {card['index']} title 줄 잉크 {ink:.0f}px > 한계 {BODY_MAX_INK}px — 글자수를 줄이세요: {line!r}")
     body_font = fonts.get(BODY_TEXT_SIZE, 500)
-    errors, warnings = [], []
-    for label, lines, font in (("title", card["title_lines"][:2], title_font),
-                               ("body", card["body_lines"], body_font)):
+    n = len(wrap_paragraph(draw, " ".join(card["body_lines"]), body_font))
+    if n < BODY_MIN_LINES:
+        errors.append(
+            f"index {card['index']} 본문 렌더 {n}줄 < 최소 {BODY_MIN_LINES}줄 — 내용을 보강하세요"
+            f"(공백 포함 ~{BODY_MIN_LINES * 28}자 이상 권장)")
+    elif n > BODY_MAX_LINES:
+        errors.append(
+            f"index {card['index']} 본문 렌더 {n}줄 > 최대 {BODY_MAX_LINES}줄 — 내용을 축약하세요")
+    return errors
+
+
+def cover_copy_report(card, fonts):
+    """cover 카드 카피 가드 — 서브·훅 잉크 912px(우측 마진 84 대칭) 초과 = 에러(글자수 축소 유도).
+    2026-07-07: 커버가 우측 프레임에 붙는 도그푸딩-4 실측 재발 차단."""
+    draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    errors = []
+    for label, lines, font in (("sub", [card["sub"]], fonts.get(44, 600)),
+                               ("hook", card["hook_lines"], fonts.get(92, 800))):
         for line in lines:
             ink = draw.textlength(line, font=font)
             if ink > BODY_MAX_INK:
                 errors.append(
-                    f"index {card['index']} {label} 줄 잉크 {ink:.0f}px > 한계 {BODY_MAX_INK}px: {line!r}")
-    longest = max((draw.textlength(l, font=body_font) for l in card["body_lines"]), default=0)
-    if card["body_lines"] and longest < BODY_MAX_INK * BODY_MIN_FILL:
-        warnings.append(
-            f"index {card['index']} 본문 최장 줄 {longest:.0f}px < 가용폭 80%"
-            f"({BODY_MAX_INK * BODY_MIN_FILL:.0f}px) — 좁은 컬럼: 한 줄 25~31자(공백 포함)로 재줄바꿈 권장")
-    return errors, warnings
+                    f"index {card['index']} {label} 줄 잉크 {ink:.0f}px > 한계 {BODY_MAX_INK}px — 글자수를 줄이세요: {line!r}")
+    return errors
 
 
 def compose_body(img, card, fonts):
@@ -170,14 +237,24 @@ def compose_body(img, card, fonts):
     title_font = fonts.get(BODY_TITLE_SIZE, 800)
     # 잉크 상단 고정 앵커 — draw.text의 y는 라인박스 상단이라 대표 글리프("한")의
     # 잉크 오프셋만큼 보정 (폰트 폴백이 바뀌어도 앵커 유지)
-    y = BODY_TITLE_INK_TOP - title_font.getbbox("한")[1]
-    for line in card["title_lines"][:2]:
+    tb = title_font.getbbox("한")
+    y = BODY_TITLE_INK_TOP - tb[1]
+    title_lines = card["title_lines"][:2]
+    for line in title_lines:
         draw.text((LEFT, y), line, font=title_font, fill=(255, 255, 255))
         y += BODY_PITCH
+    # 본문 앵커 = 타이틀 잉크하단 + 고정 갭 — 대표 글리프 기준이라 결정성 유지
+    title_ink_bottom = BODY_TITLE_INK_TOP + BODY_PITCH * (len(title_lines) - 1) + (tb[3] - tb[1])
     body_font = fonts.get(BODY_TEXT_SIZE, 500)
-    y = BODY_TEXT_INK_TOP - body_font.getbbox("한")[1]
-    for line in card["body_lines"]:
-        draw.text((LEFT, y), line, font=body_font, fill=(240, 240, 240))
+    # 본문 = 문단 자동 줄바꿈 + 양쪽맞춤(마지막 줄은 자연폭) — 2026-07-07 계약 개정:
+    # body_lines는 문장 소스일 뿐, 줄 분할·정렬은 compose가 소유한다
+    lines = wrap_paragraph(draw, " ".join(card["body_lines"]), body_font)
+    y = title_ink_bottom + BODY_TITLE_BODY_GAP - body_font.getbbox("한")[1]
+    for i, line in enumerate(lines):
+        if i == len(lines) - 1:
+            draw.text((LEFT, y), line, font=body_font, fill=(240, 240, 240))
+        else:
+            draw_justified(draw, line, body_font, y, (240, 240, 240))
         y += BODY_PITCH
 
 
@@ -208,11 +285,13 @@ def compose(spec, out_dir, bg_dir, fonts, logo):
         if role not in COMPOSERS:
             sys.exit(f"알 수 없는 role: {role} (index {idx}) — cover|body|cta 만 허용")
         if role == "body":
-            errors, warnings = body_width_report(card, fonts)
+            errors = body_copy_report(card, fonts)
             if errors:
-                sys.exit("본문 줄폭 한계 초과 — " + " / ".join(errors))
-            for wmsg in warnings:
-                print(f"경고: {wmsg}", file=sys.stderr)
+                sys.exit("본문 카피 계약 위반 — " + " / ".join(errors))
+        elif role == "cover":
+            errors = cover_copy_report(card, fonts)
+            if errors:
+                sys.exit("커버 줄폭 한계 초과 — " + " / ".join(errors))
         # CTA는 표지 배경 재사용 — 생성 호출 N-1회 계약 (craft 룰 9)
         bg_path = bg_dir / ("bg-01.png" if role == "cta" else f"bg-{idx:02d}.png")
         if not bg_path.exists():
@@ -224,6 +303,22 @@ def compose(spec, out_dir, bg_dir, fonts, logo):
         img.save(out)
         produced.append(out)
     return produced
+
+
+def _ink_edges(im, y0, y1):
+    """밴드 구간의 near-white 잉크 좌/우 엣지 x — 양쪽맞춤 회귀 검증용."""
+    px = im.convert("L").load()
+    left, right = None, None
+    for y in range(y0, y1 + 1):
+        for x in range(60, 1020):
+            if px[x, y] >= 235:
+                left = x if left is None else min(left, x)
+                break
+        for x in range(1019, 59, -1):
+            if px[x, y] >= 235:
+                right = x if right is None else max(right, x)
+                break
+    return left, right
 
 
 def _text_bands(im, y_from=560, y_to=H, x_from=60, x_to=1020):
@@ -256,14 +351,20 @@ def self_test():
             "cards": [
                 {"index": 1, "role": "cover", "sub": "자가 테스트 서브타이틀", "hook_lines": ["첫 줄 훅 문구", "둘째 줄 훅"]},
                 {"index": 2, "role": "body", "title_lines": ["본문 카드 타이틀", "둘째 줄 타이틀"],
-                 "body_lines": [f"본문 {n}번째 줄 문장을 스무 자 안팎 폭으로 채워요." for n in range(1, 8)]},
+                 "body_lines": [f"본문 {n}번째 문장을 스무 자 안팎 폭으로 이어 채워요." for n in range(1, 8)]},
                 {"index": 3, "role": "body", "title_lines": ["둘째 본문 타이틀"],
-                 "body_lines": ["한 줄짜리 본문도 폭 규칙에 맞춰 길게 채웁니다."]},
+                 "body_lines": [f"둘째 카드 {n}번째 문장으로 다섯 줄 이상 분량을 채워 봅니다." for n in range(1, 7)]},
                 {"index": 4, "role": "cta", "handle": "@self_test", "sub": "저장하고 팔로우하세요"},
             ],
             "caption": "",
             "hashtags": [],
         }
+        probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+        body_font = fonts.get(BODY_TEXT_SIZE, 500)
+        n02 = len(wrap_paragraph(probe, " ".join(spec["cards"][1]["body_lines"]), body_font))
+        n03 = len(wrap_paragraph(probe, " ".join(spec["cards"][2]["body_lines"]), body_font))
+        assert BODY_MIN_LINES <= n02 <= BODY_MAX_LINES, n02
+        assert BODY_MIN_LINES <= n03 <= BODY_MAX_LINES, n03
         produced = compose(spec, td, td, fonts, None)
         assert len(produced) == 4, produced
         for p in produced:
@@ -273,37 +374,58 @@ def self_test():
                 # badge 부재 — 우상단 영역 near-white 밴드 없음 (v2: badge 전면 제거)
                 assert _text_bands(im, y_from=40, y_to=170, x_from=W - 220, x_to=W - 40) == [], p.name
 
-        # v2 지오메트리 회귀 — 레퍼런스 실측 (타이틀 잉크 상단 648 / 본문 794 / 피치 62)
+        # v2 지오메트리 회귀 — 타이틀 잉크 상단 648 / 피치 62 / 타이틀→본문 잉크갭 37 (상대 앵커)
         with Image.open(td / "self-test-02.png") as im:
             bands = _text_bands(im)
-            assert len(bands) == 9, bands  # 타이틀 2 + 본문 7
+            assert len(bands) == 2 + n02, bands  # 타이틀 2 + 본문(자동 줄바꿈 결과)
             assert abs(bands[0][0] - BODY_TITLE_INK_TOP) <= 6, bands[0]
             assert abs(bands[1][0] - bands[0][0] - BODY_PITCH) <= 4, bands[:2]
-            assert abs(bands[2][0] - BODY_TEXT_INK_TOP) <= 6, bands[2]
+            assert abs(bands[2][0] - bands[1][1] - 1 - BODY_TITLE_BODY_GAP) <= 6, bands[1:3]
             for a, b in zip(bands[2:], bands[3:]):
                 assert abs(b[0] - a[0] - BODY_PITCH) <= 4, (a, b)
             assert bands[-1][1] <= H - 72, bands[-1]  # 안전여백 (craft 룰 6)
+            # 양쪽맞춤 회귀 — 마지막 제외 본문 줄의 잉크가 좌 84·우 996 양끝에 정렬
+            for y0, y1 in bands[2:-1]:
+                left, right = _ink_edges(im, y0, y1)
+                assert LEFT <= left <= LEFT + 10, (left, y0)
+                assert BODY_MAX_INK + LEFT - 14 <= right <= BODY_MAX_INK + LEFT + 2, (right, y0)
             # 하단 그라디언트 실효 — 텍스트 없는 좌하단이 좌상단보다 어두움 (균일 다크닝 폐기 확인)
             g = im.convert("L").load()
             assert g[10, H - 10] < g[10, 10], (g[10, H - 10], g[10, 10])
 
-        # 줄폭 가드 — 초과 = 에러, 좁은 컬럼 = 경고 (핫픽스 2026-07-07: 줄폭 계약)
-        wide_card = {"index": 9, "role": "body", "title_lines": ["타이틀"],
-                     "body_lines": ["가" * 30]}
-        errs, _ = body_width_report(wide_card, fonts)
-        assert errs, "912px 초과 줄이 에러로 잡히지 않음"
-        narrow_card = {"index": 9, "role": "body", "title_lines": ["타이틀"],
-                       "body_lines": ["짧은 줄"]}
-        errs2, warns = body_width_report(narrow_card, fonts)
-        assert not errs2 and warns, (errs2, warns)
-        # compose 경로에서도 초과가 에러로 끊기는지
-        overflow = dict(spec)
-        overflow["cards"] = [dict(spec["cards"][1], body_lines=["가" * 30])]
-        try:
-            compose(overflow, td, td, fonts, None)
-            raise AssertionError("잉크 폭 초과가 에러 없이 통과")
-        except SystemExit as e:
-            assert "한계" in str(e.code), e.code
+        # 타이틀 1줄 카드도 동일 갭 — 상대 앵커가 줄수 무관하게 유지되는지 (2026-07-07 갭 계약)
+        with Image.open(td / "self-test-03.png") as im:
+            bands = _text_bands(im)
+            assert len(bands) == 1 + n03, bands  # 타이틀 1 + 본문(자동 줄바꿈 결과)
+            assert abs(bands[0][0] - BODY_TITLE_INK_TOP) <= 6, bands[0]
+            assert abs(bands[1][0] - bands[0][1] - 1 - BODY_TITLE_BODY_GAP) <= 6, bands[:2]
+
+        # 카피 가드 — 타이틀·커버 잉크 초과 = 에러, 본문 렌더 줄수 5~7 밖 = 에러 (2026-07-07 개정)
+        long_title = {"index": 9, "role": "body", "title_lines": ["가" * 20],
+                      "body_lines": spec["cards"][1]["body_lines"]}
+        assert any("title" in e for e in body_copy_report(long_title, fonts)), "타이틀 912px 초과 미검출"
+        short_body = {"index": 9, "role": "body", "title_lines": ["타이틀"],
+                      "body_lines": ["짧은 본문 한 줄."]}
+        errs = body_copy_report(short_body, fonts)
+        assert errs and "최소" in errs[0], errs
+        over_body = {"index": 9, "role": "body", "title_lines": ["타이틀"],
+                     "body_lines": spec["cards"][1]["body_lines"] * 3}
+        errs = body_copy_report(over_body, fonts)
+        assert errs and "최대" in errs[0], errs
+        wide_cover = {"index": 9, "role": "cover", "sub": "서브", "hook_lines": ["가" * 16]}
+        assert any("hook" in e for e in cover_copy_report(wide_cover, fonts)), "커버 훅 912px 초과 미검출"
+        # compose 경로에서도 커버 초과·본문 줄수 미달이 에러로 끊기는지
+        for bad_cards, token in (
+            ([dict(spec["cards"][0], hook_lines=["가" * 16])], "한계"),
+            ([dict(spec["cards"][1], body_lines=["짧은 본문 한 줄."])], "최소"),
+        ):
+            bad_spec = dict(spec)
+            bad_spec["cards"] = bad_cards
+            try:
+                compose(bad_spec, td, td, fonts, None)
+                raise AssertionError(f"카피 계약 위반({token})이 에러 없이 통과")
+            except SystemExit as e:
+                assert token in str(e.code), e.code
 
         # body_layout 분기 예약 — basic 외 값은 명시 에러
         bad = dict(spec)

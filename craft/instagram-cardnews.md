@@ -110,17 +110,22 @@ text + background only.
   bottom gradient (feathered — hard edges forbidden). A "저장" nudge tag is
   allowed in the subtitle.
 - **body** — top-center logo + left-aligned bold title (≤2 lines, ~58px,
-  ink-top anchored at ~648px) + body lines (~43px, uniform 62px line pitch,
-  ≤7 lines, ink-top anchored at ~794px — fixed grid regardless of title line
-  count) over a soft bottom gradient (start ~0.40H, peak alpha ~230,
+  ink-top anchored at ~648px, per-line ink ≤912px) + body paragraph (~43px,
+  uniform 62px line pitch, first line anchored 37px below the title's ink
+  bottom) over a soft bottom gradient (start ~0.40H, peak alpha ~230,
   feathered — hard edges forbidden). **No boxes, no scrim bands, no uniform
   full-frame darkening** (v2: uniform darkening is retired; a hard-edge scrim
   band remains a user-rejected pattern). Legibility is primarily the
   background prompt's job (rule 2's calm lower half).
-  Body lines are prose-style paragraph lines that fill the column — width-based
-  breaks (roughly 25–31 chars/line incl. spaces at the 43px body size, mid-word breaks allowed), longest body line ≥80% of
-  the 912px usable width (symmetric 84px margins, right ink limit x=996). A
-  half-width narrow column or clipped summary fragments are a fail.
+  Body copy is a prose paragraph; the compose script owns line breaking
+  (character-unit full-width fill — mid-word breaks allowed, reference style
+  "과육이 푸/석해져요"; digit/latin runs and leading punctuation are protected)
+  and renders it **justified** — every line except the last fills the full
+  912px usable width (symmetric 84px margins, ink edges x=84/996); the last
+  line is natural-width left-aligned. Rendered body must be 5–7 lines
+  (enforced by compose); the agent controls volume only (~150–220 chars incl.
+  spaces). A half-width narrow column, a <5-line body block, or clipped
+  summary fragments are a fail.
 - **cta** — reuse of the COVER background (no extra generation: N-1 calls
   total) + **uniform full-frame dim (~45%) by contract — never a gradient**
   (user-confirmed 2026-07-06) + centered account handle (~112px) + sub line
@@ -130,8 +135,10 @@ text + background only.
 
 **Checklist item (fails lint):** box/band/uniform darkening behind text; a
 font-rendered logo; a CTA card with its own generated background; a CTA card
-with a gradient instead of the uniform dim; a body card whose longest line
-fills <80% of the usable width (narrow column).
+with a gradient instead of the uniform dim; a body card whose rendered body
+block is under 5 lines or whose justified lines stop short of the full
+column (narrow column); a cover hook/sub or body title whose ink exceeds the
+912px width (right-margin violation).
 
 ## 10. Color discipline
 
