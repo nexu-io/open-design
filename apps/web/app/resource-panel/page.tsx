@@ -7,39 +7,15 @@
 // (proxied by next.config rewrites, so no CORS). Disposable — delete this whole
 // directory at cleanup, together with the tools-serve resource-hub fixture.
 
+import type {
+  ResourceDetailResponse,
+  ResourceListResponse,
+  ResourceSummary,
+} from '@open-design/contracts';
 import { useCallback, useEffect, useState } from 'react';
 
-interface LocalMapping {
-  role: 'owner' | 'consumer';
-  lastSyncedVersion: number | null;
-}
-
-interface Resource {
-  id: string;
-  kind: string;
-  ownerMemberId: string;
-  local: LocalMapping | null;
-}
-
-interface Version {
-  id: string;
-  version: number;
-  manifestDigest: string;
-  createdAt: string;
-}
-
-interface ManifestEntry {
-  path: string;
-  type: string;
-  blobDigest: string | null;
-  executable: boolean;
-}
-
-interface Detail {
-  resource: Resource;
-  versions: Version[];
-  manifest: { digest: string; entries: ManifestEntry[] } | null;
-}
+type Resource = ResourceSummary;
+type Detail = ResourceDetailResponse;
 
 async function api(path: string, method = 'GET'): Promise<unknown> {
   const res = await fetch(path, { method });
@@ -64,7 +40,7 @@ export default function ResourcePanelPage(): React.ReactElement {
 
   const refresh = useCallback(async () => {
     try {
-      const body = (await api('/api/resources')) as { resources: Resource[] };
+      const body = (await api('/api/resources')) as ResourceListResponse;
       setResources(body.resources ?? []);
     } catch (error) {
       setStatus(`list failed: ${(error as Error).message}`);
@@ -105,7 +81,9 @@ export default function ResourcePanelPage(): React.ReactElement {
 
   const inspect = async (id: string) => {
     try {
-      setDetail((await api(`/api/resources/${encodeURIComponent(id)}/detail`)) as Detail);
+      setDetail(
+        (await api(`/api/resources/${encodeURIComponent(id)}/detail`)) as ResourceDetailResponse,
+      );
     } catch (error) {
       setStatus(`detail failed: ${(error as Error).message}`);
     }

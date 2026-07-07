@@ -1,4 +1,8 @@
 import type { Express, Request, Response } from 'express';
+import type {
+  ResourceDetailResponse,
+  ResourceListResponse,
+} from '@open-design/contracts';
 
 import {
   ResourceHubError,
@@ -48,7 +52,10 @@ export function registerResourceSharingRoutes(
   // Team resources joined with local mapping state (shared / pulled / stale).
   app.get('/api/resources', async (_req: Request, res: Response) => {
     try {
-      res.json({ resources: await orchestrator.list() });
+      const response: ResourceListResponse = {
+        resources: await orchestrator.list(),
+      };
+      res.json(response);
     } catch (error) {
       handleError(res, error);
     }
@@ -57,7 +64,10 @@ export function registerResourceSharingRoutes(
   // Inspect one resource: record + versions + latest manifest.
   app.get('/api/resources/:id/detail', async (req: Request, res: Response) => {
     try {
-      res.json(await orchestrator.detail(paramStr(req.params.id)));
+      const response: ResourceDetailResponse = await orchestrator.detail(
+        paramStr(req.params.id),
+      );
+      res.json(response);
     } catch (error) {
       handleError(res, error);
     }
