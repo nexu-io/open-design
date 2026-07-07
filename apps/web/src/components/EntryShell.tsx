@@ -111,6 +111,13 @@ import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { AgentIcon } from './AgentIcon';
+import {
+  getModelCapabilityTag,
+  getModelCostTier,
+  MODEL_CAPABILITY_TAG_LABEL_KEYS,
+  MODEL_COST_TIER_LABEL_KEYS,
+  type ModelCapabilityTag,
+} from './modelCapabilityTags';
 import { LanguageMenu } from './LanguageMenu';
 import { IntegrationsView, type IntegrationTab } from './IntegrationsView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
@@ -2838,10 +2845,17 @@ function OnboardingAmrModelSelect({
 }) {
   const t = useT();
   const modelSource = modelsSource ?? 'fallback';
-  const displayModels = models.map((model) => ({
-    value: model.id,
-    label: formatOnboardingAmrModelLabel(model),
-  }));
+  const displayModels = models.map((model) => {
+    const capability = onboardingModelCapabilityLabel(t, model);
+    const cost = onboardingModelCostLabel(t, model);
+    return {
+      value: model.id,
+      label: formatOnboardingAmrModelLabel(model),
+      tag: capability?.label,
+      tagKind: capability?.kind,
+      meta: cost?.label,
+    };
+  });
   const modelSourceLabel = t('settings.onboardingAmrModelSourceLabel');
   return (
     <div
@@ -2899,6 +2913,22 @@ function formatModelToken(token: string): string {
   if (/^\d+b$/i.test(token) || /^a\d+b$/i.test(token)) return token.toUpperCase();
   if (/^\d+(\.\d+)*$/.test(token)) return token;
   return token.charAt(0).toUpperCase() + token.slice(1);
+}
+
+function onboardingModelCapabilityLabel(
+  t: ReturnType<typeof useT>,
+  model: Pick<NonNullable<AgentInfo['models']>[number], 'id' | 'label'>,
+): { label: string; kind: ModelCapabilityTag } | undefined {
+  const tag = getModelCapabilityTag(model);
+  return tag ? { label: t(MODEL_CAPABILITY_TAG_LABEL_KEYS[tag]), kind: tag } : undefined;
+}
+
+function onboardingModelCostLabel(
+  t: ReturnType<typeof useT>,
+  model: Pick<NonNullable<AgentInfo['models']>[number], 'id' | 'label'>,
+): { label: string } | undefined {
+  const tier = getModelCostTier(model);
+  return tier ? { label: t(MODEL_COST_TIER_LABEL_KEYS[tier]) } : undefined;
 }
 
 function OnboardingByokSetupPanel({
@@ -3281,10 +3311,18 @@ function OnboardingChipField(props: OnboardingChipFieldProps) {
   );
 }
 
+type OnboardingDropdownOption = {
+  value: string;
+  label: string;
+  tag?: string;
+  tagKind?: ModelCapabilityTag;
+  meta?: string;
+};
+
 type OnboardingDropdownBaseProps = {
   label: string;
   placeholder: string;
-  options: Array<{ value: string; label: string }>;
+  options: OnboardingDropdownOption[];
   placement?: 'bottom' | 'top';
   searchable?: boolean;
   searchPlaceholder?: string;
@@ -3329,6 +3367,11 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
   const selectedLabel = multiple
     ? selectedOptions.map((option) => option.label).join(', ')
     : selectedOption?.label;
+  const selectedTag = multiple ? undefined : selectedOption?.tag;
+  const selectedTagKind = multiple ? undefined : selectedOption?.tagKind;
+  const selectedTagDescriptionId = selectedTag
+    ? `${dropdownIdRef.current}-selected-tag`
+    : undefined;
   const triggerLabel = selectedLabel || placeholder;
   const normalizedQuery = query.trim().toLowerCase();
   const visibleOptions =
@@ -3444,10 +3487,23 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
         }`}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-label={triggerLabel}
+        aria-describedby={selectedTagDescriptionId}
         title={triggerLabel}
         onClick={toggleOpen}
       >
-        <span>{triggerLabel}</span>
+        <span className="onboarding-view__select-trigger-value">
+          <span>{triggerLabel}</span>
+          {selectedTag ? (
+            <span
+              className="onboarding-view__select-badge"
+              data-tag={selectedTagKind}
+              id={selectedTagDescriptionId}
+            >
+              {selectedTag}
+            </span>
+          ) : null}
+        </span>
         <Icon name="chevron-down" size={16} />
       </button>
       {open ? (
@@ -3483,8 +3539,15 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
             aria-label={label}
             aria-multiselectable={multiple || undefined}
           >
-            {visibleOptions.map((option) => {
+            {visibleOptions.map((option, index) => {
               const selected = selectedValues.includes(option.value);
+              const optionId = `${dropdownIdRef.current}-option-${index}`;
+              const optionLabelId = `${optionId}-label`;
+              const optionMetaId = option.meta ? `${optionId}-meta` : undefined;
+              const optionTagId = option.tag ? `${optionId}-tag` : undefined;
+              const optionDescriptionIds = [optionMetaId, optionTagId]
+                .filter(Boolean)
+                .join(' ') || undefined;
               return (
                 <button
                   key={option.value}
@@ -3492,6 +3555,8 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
                   className={`onboarding-view__select-option${selected ? ' is-selected' : ''}`}
                   role="option"
                   aria-selected={selected}
+                  aria-labelledby={optionLabelId}
+                  aria-describedby={optionDescriptionIds}
                   onClick={() => {
                     if (props.multiple) {
                       props.onChange(
@@ -3505,7 +3570,28 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
                     setOpen(false);
                   }}
                 >
-                  <span>{option.label}</span>
+                  <span className="onboarding-view__select-option-content">
+                    <span className="onboarding-view__select-option-copy">
+                      <span id={optionLabelId}>{option.label}</span>
+                      {option.meta ? (
+                        <span
+                          className="onboarding-view__select-option-meta"
+                          id={optionMetaId}
+                        >
+                          {option.meta}
+                        </span>
+                      ) : null}
+                    </span>
+                    {option.tag ? (
+                      <span
+                        className="onboarding-view__select-badge"
+                        data-tag={option.tagKind}
+                        id={optionTagId}
+                      >
+                        {option.tag}
+                      </span>
+                    ) : null}
+                  </span>
                   {selected ? <Icon name="check" size={15} /> : null}
                 </button>
               );

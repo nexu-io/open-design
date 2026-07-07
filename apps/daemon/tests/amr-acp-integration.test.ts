@@ -15,7 +15,7 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -205,9 +205,9 @@ describe('AMR runtime def', () => {
     ].join('\n'));
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+      { id: 'claude-opus-4.6', label: 'claude-opus-4.6' },
       { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
       { id: 'glm-5.1', label: 'glm-5.1' },
-      { id: 'claude-opus-4.6', label: 'claude-opus-4.6' },
       { id: 'kimi-k2.6', label: 'kimi-k2.6' },
     ]);
     expect(models.every((model) => !model.label.includes('vela/'))).toBe(true);
@@ -221,13 +221,18 @@ describe('AMR runtime def', () => {
       data: [
         { id: 'public_model_kimi_k2_7_code' },
         { id: 'public_model_deepseek_v3_2' },
-        { id: 'deepseek-v4-flash' },
+        { id: 'deepseek-v4-flash', cost: { input: 0.14, output: 0.28 } },
         { id: 'gpt-image-2' },
         { id: 'deepseek-v4-flash' },
       ],
     }), 'remote');
     expect(models).toEqual([
-      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+      {
+        id: 'deepseek-v4-flash',
+        label: 'deepseek-v4-flash',
+        inputPriceUsdPerMillion: 0.14,
+        outputPriceUsdPerMillion: 0.28,
+      },
       { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
       { id: 'kimi-k2.7-code', label: 'kimi-k2.7-code' },
     ]);
@@ -237,13 +242,97 @@ describe('AMR runtime def', () => {
       .toThrow(/expected remote/);
   });
 
+  it('enriches Vela models from the AMR OpenCode model-price cache', async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'od-amr-model-prices-'));
+    try {
+      const cacheDir = path.join(tempDir, 'opencode');
+      mkdirSync(cacheDir, { recursive: true });
+      writeFileSync(
+        path.join(cacheDir, 'models.json'),
+        JSON.stringify({
+          opencode: {
+            models: {
+              'claude-fable-5': {
+                id: 'claude-fable-5',
+                cost: { input: 10, output: 50 },
+              },
+              'claude-opus-4-6': {
+                id: 'claude-opus-4-6',
+                cost: { input: 5, output: 25 },
+              },
+            },
+          },
+          'opencode-go': {
+            models: {
+              'mimo-v2.5-pro': {
+                id: 'mimo-v2.5-pro',
+                cost: { input: 1.74, output: 3.48 },
+              },
+            },
+          },
+          openrouter: {
+            models: {
+              'google/gemini-3-flash-preview': {
+                id: 'google/gemini-3-flash-preview',
+                cost: { input: 0.5, output: 3 },
+              },
+            },
+          },
+        }),
+        'utf8',
+      );
+      const models = await amrAgentDef.fetchModels?.(FAKE_VELA, {
+        ...process.env,
+        OPENCODE_TEST_HOME: tempDir,
+        FAKE_VELA_MODEL_LIST_JSON: JSON.stringify({
+          source: 'remote',
+          data: [
+            { id: 'claude-fable-5' },
+            { id: 'claude-opus-4.6' },
+            { id: 'mimo-v2.5-pro' },
+            { id: 'gemini-3-flash-preview' },
+          ],
+        }),
+      });
+
+      expect(models).toEqual([
+        {
+          id: 'claude-fable-5',
+          label: 'claude-fable-5',
+          inputPriceUsdPerMillion: 10,
+          outputPriceUsdPerMillion: 50,
+        },
+        {
+          id: 'claude-opus-4.6',
+          label: 'claude-opus-4.6',
+          inputPriceUsdPerMillion: 5,
+          outputPriceUsdPerMillion: 25,
+        },
+        {
+          id: 'gemini-3-flash-preview',
+          label: 'gemini-3-flash-preview',
+          inputPriceUsdPerMillion: 0.5,
+          outputPriceUsdPerMillion: 3,
+        },
+        {
+          id: 'mimo-v2.5-pro',
+          label: 'mimo-v2.5-pro',
+          inputPriceUsdPerMillion: 1.74,
+          outputPriceUsdPerMillion: 3.48,
+        },
+      ]);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('fetches AMR preset models from `vela model preset --format json`', async () => {
     const models = await fetchVelaPresetModels(FAKE_VELA, process.env);
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
       { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
-      { id: 'glm-5.1', label: 'glm-5.1' },
       { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
+      { id: 'glm-5.1', label: 'glm-5.1' },
     ]);
   });
 
@@ -251,15 +340,15 @@ describe('AMR runtime def', () => {
     const models = await amrAgentDef.fetchModels?.(FAKE_VELA, process.env);
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
-      { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
-      { id: 'glm-5.1', label: 'glm-5.1' },
-      { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
       { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+      { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
+      { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
       { id: 'gemini-3.1-flash-lite-preview', label: 'gemini-3.1-flash-lite-preview' },
       { id: 'gemini-3.1-pro-preview', label: 'gemini-3.1-pro-preview' },
+      { id: 'glm-5', label: 'glm-5' },
+      { id: 'glm-5.1', label: 'glm-5.1' },
       { id: 'gpt-5.4', label: 'gpt-5.4' },
       { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini' },
-      { id: 'glm-5', label: 'glm-5' },
       { id: 'kimi-k2.6', label: 'kimi-k2.6' },
       { id: 'minimax-m2.7', label: 'minimax-m2.7' },
       { id: 'qwen3-235b-a22b', label: 'qwen3-235b-a22b' },
