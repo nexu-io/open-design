@@ -3,12 +3,13 @@ import {
   createResourceHubClient,
   readResourceHubPrincipal,
 } from './integrations/resource-hub.js';
+import { resolveDaemonUrl } from './daemon-url.js';
 import { materializeRef, packTree, pushTree } from './resource-drive.js';
 
 // `od resource …` — neutral cloud-drive CLI over the resource hub. It moves
 // directory trees to/from the hub (put/get) and lists team resources; it is
-// kind-agnostic. Feature-specific sharing ("share a design system") belongs to
-// a consumer layer built on top, not here.
+// kind-agnostic. Feature-specific sharing ("share a design system") is exposed
+// here as a thin daemon-route wrapper so the CLI matches the HTTP surface.
 
 const USAGE = `Usage:
   od resource list                              List team resources
@@ -16,6 +17,10 @@ const USAGE = `Usage:
                                                 Upload a directory tree as a new version
   od resource get <resource-id> <dest-dir> [--ref <name>]
                                                 Materialize a version's tree locally
+  od resource share <kind> <local-id> [--json] [--daemon-url <url>]
+                                                Share a local resource through the daemon
+  od resource pull <kind> <hub-resource-id> [--json] [--daemon-url <url>]
+                                                Pull a team resource through the daemon
 
 Environment (dev/local, provisional until link B lands the member table):
   OD_RESOURCE_HUB_URL / OD_RESOURCE_HUB_TOKEN
@@ -72,6 +77,89 @@ function reportError(error: unknown): void {
     console.error('resource hub operation failed');
   }
   process.exitCode = 1;
+}
+
+function writeJson(value: unknown): void {
+  console.log(JSON.stringify(value));
+}
+
+function endpoint(baseUrl: string, pathname: string): string {
+  return `${baseUrl.replace(/\/+$/, '')}${pathname}`;
+}
+
+async function readDaemonJson(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (text.length === 0) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
+function daemonErrorMessage(status: number, payload: unknown): string {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const body = payload as { error?: unknown; detail?: unknown };
+    const error = typeof body.error === 'string' ? body.error : `HTTP ${status}`;
+    const detail = typeof body.detail === 'string' ? `: ${body.detail}` : '';
+    return `daemon resource endpoint failed (${status} ${error})${detail}`;
+  }
+  return `daemon resource endpoint failed with ${status}`;
+}
+
+async function postDaemonResource(
+  action: 'share' | 'pull',
+  args: string[],
+): Promise<void> {
+  const { positionals, flags } = parseFlags(args);
+  const kind = positionals[0];
+  const id = positionals[1];
+  const json = flags.has('json');
+  if (!kind || !id) {
+    console.error(
+      `usage: od resource ${action} <kind> <${action === 'share' ? 'local-id' : 'hub-resource-id'}> [--json] [--daemon-url <url>]`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  try {
+    const flagUrl = flags.get('daemon-url');
+    const baseUrl = await resolveDaemonUrl(
+      flagUrl === undefined ? {} : { flagUrl },
+    );
+    const response = await fetch(
+      endpoint(
+        baseUrl,
+        `/api/resources/${encodeURIComponent(kind)}/${encodeURIComponent(id)}/${action}`,
+      ),
+      { method: 'POST' },
+    );
+    const payload = await readDaemonJson(response);
+    if (!response.ok) {
+      throw new Error(daemonErrorMessage(response.status, payload));
+    }
+    if (json) {
+      writeJson(payload);
+      return;
+    }
+    const body = payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? payload as { hubResourceId?: unknown; version?: unknown; dir?: unknown; alreadyOwned?: unknown }
+      : {};
+    if (action === 'share') {
+      console.log(
+        `shared ${kind} ${id} -> resource ${String(body.hubResourceId ?? '')} version ${String(body.version ?? '')}`,
+      );
+    } else if (body.alreadyOwned === true) {
+      console.log(`resource ${id} is already owned locally`);
+    } else {
+      console.log(
+        `pulled ${kind} ${id} -> ${String(body.dir ?? '')} version ${String(body.version ?? '')}`,
+      );
+    }
+  } catch (error) {
+    reportError(error);
+  }
 }
 
 async function runList(): Promise<void> {
@@ -163,6 +251,12 @@ export async function runResource(args: string[]): Promise<void> {
       return;
     case 'get':
       await runGet(rest);
+      return;
+    case 'share':
+      await postDaemonResource('share', rest);
+      return;
+    case 'pull':
+      await postDaemonResource('pull', rest);
       return;
     case undefined:
     case 'help':
