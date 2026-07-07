@@ -2526,6 +2526,9 @@ export const zhTW: Dict = {
   "workspace.focusMode": "專注工作區",
   "workspace.showChat": "顯示聊天",
   "workspace.closeTab": "關閉分頁",
+  "workspace.tabActions": "工作區分頁操作",
+  "workspace.closeOtherTabs": "關閉其他分頁",
+  "workspace.closeTabsToRight": "關閉右側分頁",
   "workspace.deleteFileConfirm": "從專案資料夾中刪除「{name}」？",
   "workspace.deleteSelectedFilesConfirm":
     "從專案資料夾中刪除選中的 {n} 個檔案？",

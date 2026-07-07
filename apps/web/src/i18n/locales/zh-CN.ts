@@ -2516,6 +2516,9 @@ export const zhCN: Dict = {
   "workspace.focusMode": "专注工作区",
   "workspace.showChat": "显示聊天",
   "workspace.closeTab": "关闭标签页",
+  "workspace.tabActions": "工作区标签页操作",
+  "workspace.closeOtherTabs": "关闭其他标签页",
+  "workspace.closeTabsToRight": "关闭右侧标签页",
   "workspace.deleteFileConfirm": "从项目文件夹中删除「{name}」？",
   "workspace.deleteSelectedFilesConfirm":
     "从项目文件夹中删除选中的 {n} 个文件？",
