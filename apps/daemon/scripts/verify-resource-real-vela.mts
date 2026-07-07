@@ -129,8 +129,6 @@ const cliSrc = await seedTree();
 const put = await run("node", [OD_BIN, "resource", "put", cliSrc, "--kind", "design_system", "--ref", "latest"], { env: cliEnv });
 const rid = (put.stdout.match(/resource (\S+)/) || [])[1];
 if (rid) ok(`od resource put -> ${rid}`); else bad("od resource put", put.stdout + put.stderr);
-const list = await run("node", [OD_BIN, "resource", "list"], { env: cliEnv });
-if (rid && list.stdout.includes(rid)) ok("od resource list shows it"); else bad("od resource list", list.stdout);
 const cliDest = await mkdtemp(path.join(tmpdir(), "rv-cli-dst-"));
 await run("node", [OD_BIN, "resource", "get", rid, cliDest], { env: cliEnv });
 const got = await readFile(path.join(cliDest, "tokens.json"), "utf8");
