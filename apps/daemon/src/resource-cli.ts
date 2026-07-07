@@ -3,7 +3,11 @@ import {
   createResourceHubClient,
   readResourceHubPrincipal,
 } from './integrations/resource-hub.js';
-import type { ResourceDetailResponse } from '@open-design/contracts';
+import type {
+  ResourceDetailResponse,
+  ResourceListResponse,
+  ResourceLocalMapping,
+} from '@open-design/contracts';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { materializeRef, packTree, pushTree } from './resource-drive.js';
 
@@ -13,7 +17,8 @@ import { materializeRef, packTree, pushTree } from './resource-drive.js';
 // here as a thin daemon-route wrapper so the CLI matches the HTTP surface.
 
 const USAGE = `Usage:
-  od resource list                              List team resources
+  od resource list [--json] [--daemon-url <url>]
+                                                List team resources through the daemon
   od resource put <dir> --kind <kind> [--resource <id>] [--ref <name>]
                                                 Upload a directory tree as a new version
   od resource get <resource-id> <dest-dir> [--ref <name>]
@@ -165,17 +170,41 @@ async function postDaemonResource(
   }
 }
 
-async function runList(): Promise<void> {
-  const principal = requirePrincipalOrExit();
-  if (!principal) return;
+function formatLocalMapping(local: ResourceLocalMapping | null): string {
+  if (!local) return '-';
+  const version = local.lastSyncedVersion === null
+    ? 'unsynced'
+    : `v${local.lastSyncedVersion}`;
+  return `${local.role}:${local.localId}:${version}`;
+}
+
+async function runList(args: string[]): Promise<void> {
+  const { flags } = parseFlags(args);
   try {
-    const resources = await createResourceHubClient().listResources(principal);
+    const flagUrl = flags.get('daemon-url');
+    const baseUrl = await resolveDaemonUrl(
+      flagUrl === undefined ? {} : { flagUrl },
+    );
+    const response = await fetch(endpoint(baseUrl, '/api/resources'), {
+      method: 'GET',
+    });
+    const payload = await readDaemonJson(response);
+    if (!response.ok) {
+      throw new Error(daemonErrorMessage(response.status, payload));
+    }
+    const { resources } = payload as ResourceListResponse;
+    if (flags.has('json')) {
+      writeJson(payload);
+      return;
+    }
     if (resources.length === 0) {
       console.log('no team resources');
       return;
     }
     for (const resource of resources) {
-      console.log(`${resource.kind}\t${resource.id}\t${resource.ownerMemberId}`);
+      console.log(
+        `${resource.kind}\t${resource.id}\t${resource.ownerMemberId}\t${formatLocalMapping(resource.local)}`,
+      );
     }
   } catch (error) {
     reportError(error);
@@ -294,7 +323,7 @@ export async function runResource(args: string[]): Promise<void> {
   const rest = args.slice(1);
   switch (sub) {
     case 'list':
-      await runList();
+      await runList(rest);
       return;
     case 'put':
       await runPut(rest);

@@ -106,6 +106,113 @@ describe('od resource CLI share/pull daemon wrappers', () => {
     );
   });
 
+  it('gets resource list from the daemon route and supports JSON output', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          resources: [
+            {
+              id: 'hub-1',
+              teamId: 'team-1',
+              kind: 'design_system',
+              ownerMemberId: 'owner-1',
+              createdAt: '2026-07-07T10:00:00.000Z',
+              deletedAt: null,
+              local: {
+                kind: 'design_system',
+                localId: 'system-1',
+                hubResourceId: 'hub-1',
+                hubTeamId: 'team-1',
+                role: 'owner',
+                lastSyncedVersion: 3,
+                updatedAt: '2026-07-07T10:05:00.000Z',
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await runResource([
+      'list',
+      '--daemon-url',
+      'http://127.0.0.1:7456/',
+      '--json',
+    ]);
+
+    expect(process.exitCode).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:7456/api/resources',
+      { method: 'GET' },
+    );
+    expect(JSON.parse(stdout.join(''))).toMatchObject({
+      resources: [
+        {
+          id: 'hub-1',
+          kind: 'design_system',
+          local: {
+            role: 'owner',
+            localId: 'system-1',
+            lastSyncedVersion: 3,
+          },
+        },
+      ],
+    });
+    expect(stderr.join('')).toBe('');
+  });
+
+  it('prints resource list local mapping state in readable output', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          resources: [
+            {
+              id: 'hub-1',
+              teamId: 'team-1',
+              kind: 'design_system',
+              ownerMemberId: 'owner-1',
+              createdAt: '2026-07-07T10:00:00.000Z',
+              deletedAt: null,
+              local: {
+                kind: 'design_system',
+                localId: 'system-1',
+                hubResourceId: 'hub-1',
+                hubTeamId: 'team-1',
+                role: 'consumer',
+                lastSyncedVersion: null,
+                updatedAt: '2026-07-07T10:05:00.000Z',
+              },
+            },
+            {
+              id: 'hub-2',
+              teamId: 'team-1',
+              kind: 'plugin',
+              ownerMemberId: 'owner-2',
+              createdAt: '2026-07-07T10:01:00.000Z',
+              deletedAt: null,
+              local: null,
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await runResource([
+      'list',
+      '--daemon-url',
+      'http://127.0.0.1:7456',
+    ]);
+
+    expect(process.exitCode).toBeUndefined();
+    expect(stdout.join('')).toBe(
+      'design_system\thub-1\towner-1\tconsumer:system-1:unsynced\n' +
+        'plugin\thub-2\towner-2\t-\n',
+    );
+    expect(stderr.join('')).toBe('');
+  });
+
   it('gets resource detail from the daemon route without local workspace principal env', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
