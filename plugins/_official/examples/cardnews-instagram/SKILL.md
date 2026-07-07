@@ -91,12 +91,14 @@ od:
    - 5b. **표지 배경 생성** — `references/imagegen-pipeline.md` Read 후 그 지시대로
      imagegen 서브에이전트 1회 dispatch(순차 — 스타일 앵커). 프롬프트는 메인이 스캐폴드로
      전량 조립(브랜드 팔레트·비주얼 무드·portrait·no-text 필수·텍스트 영역 단순화).
-     DESIGN.md에 브랜드 레퍼런스 이미지가 등재돼 있으면 view_image 참조 필수.
+     DESIGN.md에 브랜드 레퍼런스 이미지가 등재돼 있으면 view_image 참조 필수 +
+     **캐릭터 시트(DESIGN.md 등재 시)도 함께 앵커** — 표지부터 캐릭터 정체성은
+     시트가 정본(imagegen-pipeline.md 앵커 우선순위).
      배경 중간산출은 전부 `{cwd}/bg/` 하위(사전 `mkdir -p` — 루트 잔존 = 글롭·위생
      문제, 삭제는 금지: 텍스트 수정 시 재생성 불필요 계약의 전제). `bg/bg-01.png`
      확인 후 진행.
    - 5c. **본문 배경 생성** — imagegen 서브에이전트 N-2개 **한 턴에 병렬 dispatch**
-     (각각 `bg/bg-01.png` + 브랜드 캐릭터 레퍼런스(DESIGN.md 등재 시)를 view_image 앵커 2장으로 — "same style, same palette" + 캐릭터 고정절). 병렬 실패
+     (각각 `bg/bg-01.png` + 캐릭터 시트(DESIGN.md 등재 시)를 view_image 앵커 2장으로 — "same style, same palette" + 캐릭터 고정절 + 시트 해설절). 병렬 실패
      (rate limit 등) 시 순차 폴백 — 실패 카드만 재시도. dispatch 불가 런타임은 인라인
      순차. CTA는 생성 없음(표지 재사용).
    - 5d. **합성(메인 직접)** — `python3 <스킬 폴더>/scripts/compose_cards.py --spec

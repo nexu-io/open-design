@@ -28,10 +28,11 @@
 - `{out_name}` — 산출 상대 경로: 표지 `bg/bg-01.png`, 본문 `bg/bg-NN.png` (cards.json index와 일치)
 - `{prompt}` — 아래 스캐폴드로 조립한 생성 프롬프트 전문
 - `{anchor_paths}` — view_image 참조 이미지 절대 경로 목록. 표지: DESIGN.md 비주얼 무드
-  섹션의 브랜드 레퍼런스 이미지(있으면 필수). 본문: 반드시 `{cwd}/bg/bg-01.png` 포함 +
-  브랜드 캐릭터가 있으면 DESIGN.md 등재 **캐릭터 레퍼런스 이미지도 함께**(앵커 2장 —
-  스타일·팔레트는 bg-01이, 캐릭터 정체성은 캐릭터 레퍼런스가 담당. 세대 드리프트 방지).
-  없으면 "없음".
+  섹션의 브랜드 레퍼런스 이미지(있으면 필수) + **캐릭터 시트(등재 시 필수)** — 표지가
+  시트 없이 생성되면 구형 체형이 bg-01로 이월돼 세트 전체가 오염된다. 본문: 반드시
+  `{cwd}/bg/bg-01.png` 포함 + **캐릭터 시트(등재 시 필수)**(앵커 2장 — 스타일·팔레트는
+  bg-01이, 캐릭터 정체성은 시트가 담당. 세대 드리프트 방지). 캐릭터 시트 = DESIGN.md
+  등재 턴어라운드+포즈 시트, **통째 1장** 전달(셀 크롭 금지). 없으면 "없음".
 
 ## 서브에이전트 임무 (dispatch 프롬프트 본문)
 
@@ -67,6 +68,13 @@ Composition: portrait orientation. [cover: (고정) dominant subject framing /
 Character: [브랜드 캐릭터 있을 때만] Use the exact same character as in the reference
   image — identical proportions, face, eyes, mouth, colors. Do not redesign,
   restyle, or reinterpret the character.
+  [캐릭터 시트 앵커 있을 때 필수] The character sheet reference shows the SAME
+  single character in multiple views and poses — match its proportions exactly
+  (stubby unibody blob, no neck, short limbs), matte texture, tongue-visible
+  mouth, and color. Do not add accessories, collars, or clothing not present
+  in the sheet[, 카드가 소품·의상을 명시하면 해당 항목만 예외로 뒤에 나열].
+  If any other reference image conflicts with the sheet's character design,
+  the sheet wins.
   [cover 고정: The character is the dominant subject: roughly 50-70% of frame
   height, near-center, full body, close-to-mid shot (no distant long shot).]
   [body: bg 매핑 표의 shot 스케일 + view 문구. no distant long shot 상수.]
@@ -98,9 +106,11 @@ Constraints: no text, no letters, no numbers, no watermark, no logo,
 - **캐릭터 스케일**: Composition의 "하반부 calm"은 캐릭터 축소·원경화 지시가
   아니다 — 캐릭터가 하반부로 내려와도 된다(가독은 하단 그라디언트 + 배경
   단순화가 담당). 원경 롱숏·상단 구석 배치·크롭 잘림이 도그푸딩 실패 패턴.
-- **표지**: 브랜드 레퍼런스 이미지(DESIGN.md 비주얼 무드 섹션 등재)가 있으면
-  view_image 참조로 캐릭터·구도를 잇는다.
-- **본문**: 반드시 표지 산출물(`bg/bg-01.png`) + (캐릭터 브랜드면) 캐릭터 레퍼런스
+- **표지**: 브랜드 레퍼런스 이미지(DESIGN.md 비주얼 무드 섹션 등재)로 무드·구도를,
+  **캐릭터 시트(등재 시)로 캐릭터 정체성을** 잇는다 — 둘 다 view_image 참조.
+  브랜드 레퍼런스의 캐릭터 형태가 시트와 다르면 시트가 정본(Character 절의
+  sheet-wins 문구가 이를 강제).
+- **본문**: 반드시 표지 산출물(`bg/bg-01.png`) + (캐릭터 브랜드면) 캐릭터 시트
   **2장을 view_image 참조** — "same style, same palette" + Character 절 + **앵커
   중력 해제 1줄(필수)**: "Match the style, palette, and character identity of
   the reference images, but do NOT copy their composition — this card uses the
