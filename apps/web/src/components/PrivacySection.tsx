@@ -187,30 +187,33 @@ interface ConsentProps {
 function ConsentCard({ onShare, onDecline }: ConsentProps): JSX.Element {
   const t = useT();
   return (
-    <div className="settings-subsection">
-      <div className="section-head">
-        <div>
-          <h4>{t('settings.privacyConsentKicker')}</h4>
-          <p className="hint">{t('settings.privacyConsentLead')}</p>
+    <>
+      <div className="settings-subsection">
+        <div className="section-head">
+          <div>
+            <h4>{t('settings.privacyConsentKicker')}</h4>
+            <p className="hint">{t('settings.privacyConsentLead')}</p>
+          </div>
+        </div>
+
+        <PrivacyTelemetryDisclosure includeSafety={false} />
+
+        <p className="hint">{t('settings.privacyConsentFooter')}</p>
+
+        <div
+          className="privacy-consent-actions"
+          role="group"
+          aria-label={t('settings.privacyConsentKicker')}
+        >
+          <button type="button" className="privacy-consent-action" onClick={onDecline}>
+            {t('settings.privacyConsentDecline')}
+          </button>
+          <button type="button" className="privacy-consent-action" onClick={onShare}>
+            {t('settings.privacyConsentShare')}
+          </button>
         </div>
       </div>
-
-      <PrivacyTelemetryDisclosure />
-
-      <p className="hint">{t('settings.privacyConsentFooter')}</p>
-
-      <div
-        className="privacy-consent-actions"
-        role="group"
-        aria-label={t('settings.privacyConsentKicker')}
-      >
-        <button type="button" className="privacy-consent-action" onClick={onDecline}>
-          {t('settings.privacyConsentDecline')}
-        </button>
-        <button type="button" className="privacy-consent-action" onClick={onShare}>
-          {t('settings.privacyConsentShare')}
-        </button>
-      </div>
-    </div>
+      <PrivacySafetyDisclosure />
+    </>
   );
 }

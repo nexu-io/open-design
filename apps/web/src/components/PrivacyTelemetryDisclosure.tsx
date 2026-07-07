@@ -1,6 +1,12 @@
 import { useT } from '../i18n';
 
-export function PrivacyTelemetryDisclosure(): JSX.Element {
+interface PrivacyTelemetryDisclosureProps {
+  includeSafety?: boolean;
+}
+
+export function PrivacyTelemetryDisclosure({
+  includeSafety = true,
+}: PrivacyTelemetryDisclosureProps): JSX.Element {
   const t = useT();
   return (
     <dl className="settings-privacy-disclosure">
@@ -12,10 +18,12 @@ export function PrivacyTelemetryDisclosure(): JSX.Element {
         <dt>{t('settings.privacyContent')}</dt>
         <dd>{t('settings.privacyContentHint')}</dd>
       </div>
-      <div>
-        <dt>{t('settings.privacySafety')}</dt>
-        <dd>{t('settings.privacySafetyHint')}</dd>
-      </div>
+      {includeSafety ? (
+        <div>
+          <dt>{t('settings.privacySafety')}</dt>
+          <dd>{t('settings.privacySafetyHint')}</dd>
+        </div>
+      ) : null}
     </dl>
   );
 }

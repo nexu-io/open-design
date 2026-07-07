@@ -77,4 +77,21 @@ describe('PrivacySection', () => {
     expect(screen.getByText('Safety and crash diagnostics')).toBeTruthy();
     expect(screen.getByText(/sent even when usage telemetry is off/i)).toBeTruthy();
   });
+
+  it('keeps safety diagnostics separate from the pre-decision usage telemetry choices', () => {
+    render(<Harness initial={baseConfig} />);
+
+    const shareButton = screen.getByRole('button', { name: 'Share usage data' });
+    const safetyHeading = screen.getByRole('heading', {
+      name: 'Safety and crash diagnostics',
+    });
+
+    expect(screen.getByText('Anonymous metrics')).toBeTruthy();
+    expect(screen.getByText('Conversation and tool content')).toBeTruthy();
+    expect(screen.getByText('You can change these any time in Settings → Privacy.')).toBeTruthy();
+    expect(
+      Boolean(shareButton.compareDocumentPosition(safetyHeading) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+    expect(screen.getByText(/sent even when usage telemetry is off/i)).toBeTruthy();
+  });
 });
