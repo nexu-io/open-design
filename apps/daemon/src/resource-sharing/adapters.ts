@@ -19,24 +19,39 @@ export interface ResourceKindAdapter {
   teamCopyDir(hubResourceId: string): string;
 }
 
+export class ResourceAdapterError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message?: string,
+  ) {
+    super(message ?? code);
+    this.name = 'ResourceAdapterError';
+  }
+}
+
 export function createDesignSystemAdapter(
   paths: AdapterPaths,
 ): ResourceKindAdapter {
+  const userDesignSystemsRoot = path.resolve(paths.USER_DESIGN_SYSTEMS_DIR);
+  const teamDesignSystemsRoot = path.resolve(
+    paths.RUNTIME_DATA_DIR,
+    'team-shared',
+    'design-systems',
+  );
+
   return {
     kind: 'design_system',
     resolveSourceDir(localId) {
-      const dir = path.join(paths.USER_DESIGN_SYSTEMS_DIR, localId);
+      const dirId = validatePathSegment(localId, 'local design-system id');
+      const dir = resolveWithinRoot(userDesignSystemsRoot, dirId);
       return existsSync(dir) ? dir : null;
     },
     // Team copies land under a distinct, read-only namespace so they never
     // collide with the user's own editable design systems.
     teamCopyDir(hubResourceId) {
-      return path.join(
-        paths.RUNTIME_DATA_DIR,
-        'team-shared',
-        'design-systems',
-        hubResourceId,
-      );
+      const dirId = validatePathSegment(hubResourceId, 'hub resource id');
+      return resolveWithinRoot(teamDesignSystemsRoot, dirId);
     },
   };
 }
@@ -50,4 +65,28 @@ export function createAdapterRegistry(
   const designSystem = createDesignSystemAdapter(paths);
   registry.set(designSystem.kind, designSystem);
   return registry;
+}
+
+function validatePathSegment(id: string, label: string): string {
+  if (!/^[a-zA-Z0-9._-]+$/.test(id) || id === '.' || id === '..') {
+    throw new ResourceAdapterError(
+      400,
+      'invalid_resource_id',
+      `invalid ${label}`,
+    );
+  }
+  return id;
+}
+
+function resolveWithinRoot(root: string, segment: string): string {
+  const target = path.resolve(root, segment);
+  const relative = path.relative(root, target);
+  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new ResourceAdapterError(
+      400,
+      'invalid_resource_id',
+      'resource id resolves outside its namespace',
+    );
+  }
+  return target;
 }

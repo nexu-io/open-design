@@ -5,6 +5,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { materializeRef, packTree } from '../src/resource-drive.js';
 import { createSharingOrchestrator } from '../src/resource-sharing/orchestrator.js';
 import { migrateResourceSharing } from '../src/resource-sharing/store.js';
 
@@ -51,6 +52,7 @@ describe('resource-sharing orchestrator', () => {
     mockState.versions = [
       { id: 'version_1', version: 1, manifestDigest: 'digest_1' },
     ];
+    vi.clearAllMocks();
   });
 
   afterEach(async () => {
@@ -99,5 +101,41 @@ describe('resource-sharing orchestrator', () => {
     await expect(
       fsp.readFile(path.join(second.dir ?? '', 'tokens.json'), 'utf8'),
     ).resolves.toBe('{}\n');
+  });
+
+  it('rejects traversal local ids before packing a shared design system', async () => {
+    const orchestrator = createSharingOrchestrator({
+      db,
+      paths: {
+        RUNTIME_DATA_DIR: tempDir,
+        USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+      },
+    });
+
+    await expect(
+      orchestrator.share('design_system', '../brands'),
+    ).rejects.toMatchObject({
+      status: 400,
+      code: 'invalid_resource_id',
+    });
+    expect(packTree).not.toHaveBeenCalled();
+  });
+
+  it('rejects traversal hub ids before materializing a pulled design system', async () => {
+    const orchestrator = createSharingOrchestrator({
+      db,
+      paths: {
+        RUNTIME_DATA_DIR: tempDir,
+        USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+      },
+    });
+
+    await expect(
+      orchestrator.pull('design_system', '../../design-systems/hub-1'),
+    ).rejects.toMatchObject({
+      status: 400,
+      code: 'invalid_resource_id',
+    });
+    expect(materializeRef).not.toHaveBeenCalled();
   });
 });

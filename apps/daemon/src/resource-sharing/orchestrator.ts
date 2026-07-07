@@ -10,7 +10,11 @@ import {
   readResourceHubPrincipal,
 } from '../integrations/resource-hub.js';
 import { materializeRef, packTree, pushTree } from '../resource-drive.js';
-import { type AdapterPaths, createAdapterRegistry } from './adapters.js';
+import {
+  ResourceAdapterError,
+  type AdapterPaths,
+  createAdapterRegistry,
+} from './adapters.js';
 import {
   getSharedByHub,
   getSharedByLocal,
@@ -72,7 +76,7 @@ export function createSharingOrchestrator(deps: SharingDeps) {
     async share(kind: string, localId: string) {
       const principal = principalOrThrow();
       const adapter = adapterOrThrow(kind);
-      const dir = adapter.resolveSourceDir(localId);
+      const dir = resolveAdapterPath(() => adapter.resolveSourceDir(localId));
       if (!dir) {
         throw new SharingError(404, 'local_resource_not_found', localId);
       }
@@ -111,7 +115,7 @@ export function createSharingOrchestrator(deps: SharingDeps) {
           alreadyOwned: true,
         };
       }
-      const dir = adapter.teamCopyDir(hubResourceId);
+      const dir = resolveAdapterPath(() => adapter.teamCopyDir(hubResourceId));
       await replaceWithMaterializedRef(principal, hubResourceId, dir);
       const versions = await client.listVersions(principal, hubResourceId);
       const latest = versions[0]?.version ?? null;
@@ -183,6 +187,17 @@ export function createSharingOrchestrator(deps: SharingDeps) {
 }
 
 export type SharingOrchestrator = ReturnType<typeof createSharingOrchestrator>;
+
+function resolveAdapterPath<T>(resolve: () => T): T {
+  try {
+    return resolve();
+  } catch (error) {
+    if (error instanceof ResourceAdapterError) {
+      throw new SharingError(error.status, error.code, error.message);
+    }
+    throw error;
+  }
+}
 
 function isNotFoundError(error: unknown): boolean {
   return (
