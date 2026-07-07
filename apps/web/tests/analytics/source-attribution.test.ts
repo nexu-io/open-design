@@ -17,6 +17,7 @@ import {
 describe('source attribution person properties', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    document.cookie = 'od_attr=;path=/;max-age=0';
     vi.mocked(setAnalyticsPersonProperties).mockClear();
   });
 
@@ -74,6 +75,130 @@ describe('source attribution person properties', () => {
     );
   });
 
+  it('binds landing UTM attribution to the signed-in AMR user', () => {
+    writeLandingAttributionCookie({
+      s: 'twitter',
+      m: 'organic_social',
+      c: '202606_story',
+      ct: 'official',
+      tm: 'design_agent',
+      ref: 'x.com',
+      lp: '/stories/ikigai-one/',
+      t: Date.parse('2026-06-30T12:00:00.000Z'),
+    });
+
+    bindSignedInUserAttributionPersonProperties(
+      'usr_amr_42',
+      new Date('2026-07-02T08:30:00.000Z'),
+    );
+
+    expect(setAnalyticsPersonProperties).toHaveBeenCalledWith(
+      expect.objectContaining({
+        od_app_user_id: 'usr_amr_42',
+        od_source_bound_at: '2026-07-02T08:30:00.000Z',
+        od_utm_source: 'twitter',
+        od_utm_medium: 'organic_social',
+        od_utm_campaign: '202606_story',
+        od_utm_content: 'official',
+        od_utm_term: 'design_agent',
+        od_referrer: 'x.com',
+        od_landing_path: '/stories/ikigai-one/',
+        od_utm_first_touch_at: '2026-06-30T12:00:00.000Z',
+        od_source_resolved: 'twitter',
+        od_source_resolution: 'utm',
+      }),
+    );
+  });
+
+  it('keeps UTM and onboarding separate while resolving source from UTM first', () => {
+    writeLandingAttributionCookie({
+      s: 'linkedin',
+      m: 'paid_social',
+      c: 'launch',
+      ct: 'founder_post',
+      lp: '/download',
+      t: Date.parse('2026-06-30T12:00:00.000Z'),
+    });
+    saveOnboardingProfile(
+      {
+        role: 'founder',
+        orgSize: 'solo',
+        useCase: ['landing_pages'],
+        source: 'github',
+      },
+      new Date('2026-07-01T07:00:00.000Z'),
+    );
+
+    bindSignedInUserAttributionPersonProperties(
+      'usr_amr_42',
+      new Date('2026-07-02T08:30:00.000Z'),
+    );
+
+    expect(setAnalyticsPersonProperties).toHaveBeenCalledWith(
+      expect.objectContaining({
+        od_utm_source: 'linkedin',
+        od_utm_medium: 'paid_social',
+        od_utm_campaign: 'launch',
+        od_utm_content: 'founder_post',
+        od_landing_path: '/download',
+        od_utm_first_touch_at: '2026-06-30T12:00:00.000Z',
+        od_onboarding_source: 'github',
+        od_onboarding_at: '2026-07-01T07:00:00.000Z',
+        od_source_resolved: 'linkedin',
+        od_source_resolution: 'utm',
+      }),
+    );
+  });
+
+  it('falls back to referrer attribution when od_attr has no UTM source', () => {
+    writeLandingAttributionCookie({
+      ref: 'google.com',
+      lp: '/download',
+      t: Date.parse('2026-06-30T12:00:00.000Z'),
+    });
+
+    bindSignedInUserAttributionPersonProperties(
+      'usr_amr_42',
+      new Date('2026-07-02T08:30:00.000Z'),
+    );
+
+    expect(setAnalyticsPersonProperties).toHaveBeenCalledWith(
+      expect.objectContaining({
+        od_referrer: 'google.com',
+        od_landing_path: '/download',
+        od_utm_first_touch_at: '2026-06-30T12:00:00.000Z',
+        od_source_resolved: 'google.com',
+        od_source_resolution: 'referrer',
+      }),
+    );
+  });
+
+  it('ignores malformed landing attribution cookies and falls back to onboarding', () => {
+    document.cookie = 'od_attr=%7Bbad-json;path=/';
+    saveOnboardingProfile(
+      {
+        role: 'designer',
+        orgSize: 'startup',
+        useCase: ['product'],
+        source: 'friend',
+      },
+      new Date('2026-07-01T07:00:00.000Z'),
+    );
+
+    bindSignedInUserAttributionPersonProperties(
+      'usr_amr_42',
+      new Date('2026-07-02T08:30:00.000Z'),
+    );
+
+    expect(setAnalyticsPersonProperties).toHaveBeenCalledWith(
+      expect.objectContaining({
+        od_onboarding_source: 'friend',
+        od_source_resolved: 'friend',
+        od_source_resolution: 'onboarding',
+      }),
+    );
+  });
+
   it('binds the stored AMR entry attribution alongside onboarding fields', () => {
     saveOnboardingProfile(
       {
@@ -115,3 +240,7 @@ describe('source attribution person properties', () => {
     expect(setAnalyticsPersonProperties).not.toHaveBeenCalled();
   });
 });
+
+function writeLandingAttributionCookie(value: Record<string, unknown>): void {
+  document.cookie = `od_attr=${encodeURIComponent(JSON.stringify(value))};path=/`;
+}
