@@ -71,8 +71,10 @@ Character: [브랜드 캐릭터 있을 때만] Use the exact same character as i
   [캐릭터 시트 앵커 있을 때 필수] The character sheet reference shows the SAME
   single character in multiple views and poses — match its proportions exactly
   (stubby unibody blob, no neck, short limbs), matte texture, tongue-visible
-  mouth, and color. Do not add accessories, collars, or clothing not present
-  in the sheet[, 카드가 소품·의상을 명시하면 해당 항목만 예외로 뒤에 나열].
+  mouth, and color. The body color must be the EXACT same blue as the sheet
+  in every card — no lighter, paler, or cyan-shifted variants. Do not add
+  accessories, collars, or clothing not present in the sheet[, 카드가
+  소품·의상을 명시하면 해당 항목만 예외로 뒤에 나열].
   If any other reference image conflicts with the sheet's character design,
   the sheet wins.
   [cover 고정: The character is the dominant subject: roughly 50-70% of frame
