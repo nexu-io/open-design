@@ -127,6 +127,19 @@ describe('memory-llm chat extraction: duplicate-turn gate + reply serialization'
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(2);
   });
 
+  it('does NOT de-dup when no conversation id is supplied (BYOK/API-mode HTTP path)', async () => {
+    // The `/api/memory/extract` post-turn path invokes extractWithLLM without a
+    // conversationId. An empty fallback key would be shared across every such
+    // caller, so an identical (message, reply) pair from two unrelated
+    // conversations would collide and the second would be wrongly skipped.
+    // With no real conversation id the gate is disabled, so both are examined.
+    const turn = { userMessage: 'Same HTTP message.', assistantMessage: 'Same HTTP reply.' };
+    await extractWithLLM(dataDir, turn, { projectRoot: process.cwd() });
+    await extractWithLLM(dataDir, turn, { projectRoot: process.cwd() });
+
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(2);
+  });
+
   it('feeds the rendered reply — not raw stream transport — as "## Assistant reply"', async () => {
     // A realistic Claude stream-json stdout capture: session bootstrap noise,
     // a resume hook, extended thinking, then the actual reply text.

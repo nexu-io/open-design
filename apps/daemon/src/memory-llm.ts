@@ -1143,10 +1143,18 @@ async function collectProposedEntries(dataDir, input, options) {
   // retry produces its reply on that attempt, and must still be mined. The
   // signature is recorded only AFTER a successful provider call (below), so a
   // failed or no-provider extraction never permanently marks the turn as seen.
+  //
+  // Gate is scoped to a REAL conversation id. Callers that don't thread one —
+  // e.g. the BYOK/API-mode `/api/memory/extract` post-turn path — get no
+  // de-dup at all, because an empty fallback key would be shared across every
+  // such caller and collapse identical (message, reply) pairs from unrelated
+  // conversations into a single skipped extraction. The chat close hook that
+  // caused the re-fire storm always passes `run.conversationId`, so its
+  // protection is preserved.
   const conversationKey =
     typeof options?.conversationId === 'string' ? options.conversationId : '';
   let turnSignature = null;
-  if (extractionKind === 'llm') {
+  if (extractionKind === 'llm' && conversationKey) {
     turnSignature = llmTurnSignature(conversationKey, userMessage, input?.assistantMessage);
     if (recentLlmTurnSignatures.has(turnSignature)) {
       return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
