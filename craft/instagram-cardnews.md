@@ -23,8 +23,10 @@ this via center 4:5 crop + LANCZOS resize; never ship a raw generated image.
 Backgrounds come from codex `image_gen`. Every generation prompt MUST: state
 **portrait orientation** (4:5 is not directly supported — the crop guarantees
 the final ratio); forbid text (**"no text, no letters, no watermark"**); and
-instruct the model to keep the text zone (per role layout, rule 9) simple and
-calm.
+instruct the model to keep that card's text zone simple and calm. The text
+zone is fixed by the role layouts (rule 9): the **lower half** for cover
+(bottom-left sub + hook block) and body (title + paragraph from ~0.45H down),
+the **center band** for cta.
 
 Basic-layout runs (the current only body layout): the background must be a
 **photorealistic real-world environment** — an actual place/scene the card's
@@ -116,7 +118,8 @@ text + background only.
   feathered — hard edges forbidden). **No boxes, no scrim bands, no uniform
   full-frame darkening** (v2: uniform darkening is retired; a hard-edge scrim
   band remains a user-rejected pattern). Legibility is primarily the
-  background prompt's job (rule 2's calm lower half).
+  background prompt's job — rule 2 requires the generation prompt to keep
+  this text zone (the lower half, for body) calm.
   Body copy is a prose paragraph; the compose script owns line breaking
   (character-unit full-width fill — mid-word breaks allowed, reference style
   "과육이 푸/석해져요"; digit/latin runs and leading punctuation are protected)
@@ -192,7 +195,7 @@ anchor or an anchor href that does not match that card's filename.
 | 6 | Safe margins | text inside the 72px edge band |
 | 7 | One message | multi-topic body card; >7 support lines |
 | 8 | Card count | <5 or >10 without explicit request |
-| 9 | Role layouts | box/band/uniform darkening behind text; font-rendered logo; CTA own bg or gradient dim; body longest line <80% usable width |
+| 9 | Role layouts | box/band/uniform darkening behind text; font-rendered logo; CTA own bg or gradient dim; body <5 lines or justified lines short of the full column; ink over 912px |
 | 10 | Color | off-palette bg; illegible contrast |
 | 11 | Caption anatomy | caption in PNG; missing ①/③/⑧; inline hashtags |
 | 12 | Output set | missing gallery/caption block; img order mismatch; missing/wrong download anchor |
