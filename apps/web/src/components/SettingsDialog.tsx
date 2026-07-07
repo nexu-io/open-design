@@ -7837,7 +7837,7 @@ function InventoryDetailDialog({
             aria-label={t('common.close')}
             title={t('common.close')}
           >
-            <Icon name="close" size={18} />
+            <Icon name="close" size={24} />
           </button>
         </header>
         <label className="agent-inventory-search">
