@@ -244,6 +244,35 @@ describe('resource-sharing orchestrator', () => {
     expect(pushTree).toHaveBeenCalled();
   });
 
+  it('shares a derived example skill id through the parent skill directory', async () => {
+    const skillRoot = path.join(tempDir, 'skills');
+    const parentSkillDir = path.join(skillRoot, 'parent-skill');
+    await fsp.mkdir(path.join(parentSkillDir, 'examples'), { recursive: true });
+    await fsp.writeFile(
+      path.join(parentSkillDir, 'SKILL.md'),
+      '---\nname: parent\n---\n# Parent skill\n',
+    );
+    await fsp.writeFile(
+      path.join(parentSkillDir, 'examples', 'child.html'),
+      '<!doctype html><p>child</p>\n',
+    );
+    const orchestrator = createSharingOrchestrator({
+      db,
+      paths: {
+        RUNTIME_DATA_DIR: tempDir,
+        USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+        SKILL_ROOTS: [skillRoot],
+      },
+    });
+
+    await expect(orchestrator.share('skill', 'parent:child')).resolves.toEqual({
+      hubResourceId: 'created_resource',
+      version: 2,
+    });
+    expect(packTree).toHaveBeenCalledWith(parentSkillDir);
+    expect(pushTree).toHaveBeenCalled();
+  });
+
   it('shares a bundled plugin from its installed plugin record', async () => {
     const bundledPluginDir = path.join(
       tempDir,

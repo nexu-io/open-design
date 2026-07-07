@@ -61,6 +61,11 @@ function resolveWithinRoot(root: string, segment: string): string {
   return target;
 }
 
+function isWithinRoot(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
 function createDirAdapter(
   kind: string,
   sourceRoot: string,
@@ -88,15 +93,25 @@ function createDirAdapter(
 
 function createSkillAdapter(
   resolveSkillSourceDir: (localId: string) => string | null | Promise<string | null>,
+  sourceRoots: string[],
   teamCopyRoot: string,
 ): ResourceKindAdapter {
+  const sources = sourceRoots.map((root) => path.resolve(root));
   const teamCopy = path.resolve(teamCopyRoot);
   return {
     kind: 'skill',
     async resolveSourceDir(localId) {
-      const skillId = validatePathSegment(localId, 'local skill id');
-      const dir = await resolveSkillSourceDir(skillId);
-      return dir && existsSync(dir) ? dir : null;
+      const dir = await resolveSkillSourceDir(localId);
+      if (!dir) return null;
+      const resolved = path.resolve(dir);
+      if (!sources.some((source) => isWithinRoot(source, resolved))) {
+        throw new ResourceAdapterError(
+          400,
+          'invalid_resource_id',
+          'skill source resolves outside its namespace',
+        );
+      }
+      return existsSync(resolved) ? resolved : null;
     },
     async teamCopyDir(hubResourceId) {
       return resolveWithinRoot(
@@ -136,11 +151,11 @@ export function createAdapterRegistry(
   const resolveSkillSourceDir =
     sources.resolveSkillSourceDir ??
     ((localId: string) => {
+      if (!/^[a-zA-Z0-9._-]+$/.test(localId) || localId === '.' || localId === '..') {
+        return null;
+      }
       for (const root of paths.SKILL_ROOTS) {
-        const dir = resolveWithinRoot(
-          path.resolve(root),
-          validatePathSegment(localId, 'local skill id'),
-        );
+        const dir = resolveWithinRoot(path.resolve(root), localId);
         if (existsSync(dir)) return dir;
       }
       return null;
@@ -154,7 +169,11 @@ export function createAdapterRegistry(
       paths.USER_DESIGN_SYSTEMS_DIR,
       path.join(teamShared, 'design-systems'),
     ),
-    createSkillAdapter(resolveSkillSourceDir, path.join(teamShared, 'skills')),
+    createSkillAdapter(
+      resolveSkillSourceDir,
+      paths.SKILL_ROOTS,
+      path.join(teamShared, 'skills'),
+    ),
     createRegistryBackedPluginAdapter(
       resolvePluginSourceDir,
       path.join(teamShared, 'plugins'),
