@@ -503,6 +503,12 @@ export interface ComposeInput {
   // Run-scoped media policy. Defaults to enabled when omitted so existing
   // local OD behavior keeps the same media prompt contract.
   mediaExecution?: MediaExecutionPolicy | undefined;
+  brandTitle?: string | undefined;
+  brandCoreMd?: string | undefined;
+  brandDeliverableKey?: string | undefined;
+  brandDeliverableMd?: string | undefined;
+  /** 서브에이전트에 전달할 소스 파일 경로 안내 (데몬이 절대경로 조립) */
+  brandSourceNote?: string | undefined;
 }
 
 export function composeSystemPrompt({
@@ -539,6 +545,11 @@ export function composeSystemPrompt({
   userInstructions,
   projectInstructions,
   mediaExecution,
+  brandTitle,
+  brandCoreMd,
+  brandDeliverableKey,
+  brandDeliverableMd,
+  brandSourceNote,
 }: ComposeInput): string {
   // Injection resistance goes FIRST — before everything else — so no later
   // section (skill body, user instructions, project instructions, tool result)
@@ -649,6 +660,27 @@ export function composeSystemPrompt({
   if (projectInstructions && projectInstructions.trim().length > 0) {
     parts.push(
       `\n\n## Custom instructions (project-level)\n\nThe user has set the following instructions for this specific project. They take precedence over user-level custom instructions whenever both address the same topic (e.g. if user-level says "use spaces" but project-level says "use tabs", use tabs).\n\n${projectInstructions.trim()}`,
+    );
+  }
+
+  // Brand core + active deliverable context. Injected BEFORE the
+  // design-system block so DESIGN.md tokens read as the concrete
+  // execution of the brand's voice/terminology, not a competing source.
+  // Manual-sync convention with @marketing-ax/contracts's composer (see
+  // ComposeInput's brand* fields there): keep this block text-identical
+  // to the contracts copy so a daemon chat and a BYOK/API chat with the
+  // same brand binding see the exact same brand framing.
+  if (brandCoreMd) {
+    parts.push(
+      `\n\n## Active brand${brandTitle ? ` — ${brandTitle}` : ''}\n\n` +
+        `Treat the following brand context as authoritative for voice, terminology, forbidden expressions, services, sources, and the brand palette. It applies to every deliverable of this brand.` +
+        `${brandSourceNote ? `\n${brandSourceNote}` : ''}\n\n${brandCoreMd}`,
+    );
+  }
+  if (brandDeliverableMd) {
+    parts.push(
+      `\n\n## Brand deliverable context${brandDeliverableKey ? ` — ${brandDeliverableKey}` : ''}\n\n` +
+        `Channel-specific production facts for the active deliverable. These extend the brand core; on channel-format concerns this section wins.\n\n${brandDeliverableMd}`,
     );
   }
 

@@ -168,6 +168,13 @@ import {
   updateUserDesignSystem,
   updateUserDesignSystemRevisionStatus,
 } from './design-systems.js';
+import {
+  brandDeliverableDefaultDesignSystem,
+  listBrands,
+  readBrandCore,
+  readBrandDeliverable,
+  readBrandManifest,
+} from './brands.js';
 import { createDesignSystemGenerationJobStore } from './design-system-generation-jobs.js';
 import { prepareDesignTokenContractRebuild } from './design-token-contract-rebuild.js';
 import {
@@ -1339,6 +1346,11 @@ const DESIGN_SYSTEMS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'design-systems',
   path.join(PROJECT_ROOT, 'design-systems'),
+);
+const BRANDS_DIR = resolveDaemonResourceDir(
+  DAEMON_RESOURCE_ROOT,
+  'brands',
+  path.join(PROJECT_ROOT, 'brands'),
 );
 // Renderable templates pulled out of `skills/` by the skills/design-templates
 // split (PR #955) so the EntryView Templates tab gets the large rendering
@@ -7609,10 +7621,16 @@ export async function startServer({
         : null;
     const effectiveSkillId =
       typeof skillId === 'string' && skillId ? skillId : project?.skillId;
+    const projectBrandId = project?.brandId ?? undefined;
+    const projectBrandDeliverable = project?.brandDeliverable ?? undefined;
+    const brandManifest = projectBrandId
+      ? await readBrandManifest(BRANDS_DIR, projectBrandId)
+      : null;
     const effectiveDesignSystemId =
       typeof designSystemId === 'string' && designSystemId
         ? designSystemId
-        : project?.designSystemId;
+        : project?.designSystemId
+          ?? brandDeliverableDefaultDesignSystem(brandManifest, projectBrandDeliverable);
     const metadata = project?.metadata;
     let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntries> | null = null;
     const loadAllSkills = async () => {
@@ -7797,6 +7815,32 @@ export async function startServer({
       if (appCfg.customInstructions) userInstructions = appCfg.customInstructions;
     } catch (err) {
       console.warn('[custom-instructions] readAppConfig failed', err);
+    }
+
+    // Brand core + active deliverable body, loaded from brands/<id> per the
+    // project's binding (Task 5 columns). Threaded into the composer as the
+    // `## Active brand` / `## Brand deliverable context` blocks — see
+    // apps/daemon/src/prompts/system.ts. brandSourceNote gives subagents
+    // (research/review) an absolute path they can Read directly instead of
+    // re-deriving the brand root from BRANDS_DIR themselves.
+    let brandCoreMd;
+    let brandDeliverableMd;
+    let brandSourceNote;
+    if (projectBrandId && brandManifest) {
+      brandCoreMd = (await readBrandCore(BRANDS_DIR, projectBrandId)) ?? undefined;
+      if (projectBrandDeliverable) {
+        brandDeliverableMd =
+          (await readBrandDeliverable(BRANDS_DIR, projectBrandId, projectBrandDeliverable)) ?? undefined;
+      }
+      if (brandCoreMd) {
+        const coreAbs = path.join(BRANDS_DIR, projectBrandId, brandManifest.core ?? 'brand.md');
+        const delivRel = projectBrandDeliverable
+          ? brandManifest.deliverables?.[projectBrandDeliverable]?.file
+          : undefined;
+        brandSourceNote =
+          `Source files (pass these paths to subagents that need to Read the brand context): ` +
+          `core=${coreAbs}${delivRel ? `; deliverable=${path.join(BRANDS_DIR, projectBrandId, delivRel)}` : ''}`;
+      }
     }
 
     let designSystemBody;
@@ -8064,6 +8108,11 @@ export async function startServer({
       ...(pluginBlock ? { pluginBlock } : {}),
       ...(activeStageBlocks ? { activeStageBlocks } : {}),
       userInstructions,
+      brandTitle: brandManifest?.title,
+      brandCoreMd,
+      brandDeliverableKey: projectBrandDeliverable,
+      brandDeliverableMd,
+      brandSourceNote,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
