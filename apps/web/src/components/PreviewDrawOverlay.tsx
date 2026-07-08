@@ -930,6 +930,7 @@ export function PreviewDrawOverlay({
     const nextLayout = computePreviewDrawDockLayout({
       hostWidth: hostRect.width,
       hostHeight: hostRect.height,
+      hostScroll,
       anchorRect,
       dockWidth: Math.ceil(measuredDock.width),
       dockHeight: Math.ceil(measuredDock.height),
@@ -1515,12 +1516,14 @@ function overlapRatio(
 function computePreviewDrawDockLayout({
   hostWidth,
   hostHeight,
+  hostScroll,
   anchorRect,
   dockWidth,
   dockHeight,
 }: {
   hostWidth: number;
   hostHeight: number;
+  hostScroll: { left: number; top: number };
   anchorRect: { x: number; y: number; width: number; height: number };
   dockWidth: number;
   dockHeight: number;
@@ -1535,10 +1538,10 @@ function computePreviewDrawDockLayout({
   ) {
     return { mode: 'docked', side: null, style: previewDrawDockedStyle };
   }
-  const minLeft = PREVIEW_DRAW_DOCK_EDGE_PAD;
-  const minTop = PREVIEW_DRAW_DOCK_EDGE_PAD;
-  const maxLeft = hostWidth - dockWidth - PREVIEW_DRAW_DOCK_EDGE_PAD;
-  const maxTop = hostHeight - dockHeight - PREVIEW_DRAW_DOCK_EDGE_PAD;
+  const minLeft = hostScroll.left + PREVIEW_DRAW_DOCK_EDGE_PAD;
+  const minTop = hostScroll.top + PREVIEW_DRAW_DOCK_EDGE_PAD;
+  const maxLeft = hostScroll.left + hostWidth - dockWidth - PREVIEW_DRAW_DOCK_EDGE_PAD;
+  const maxTop = hostScroll.top + hostHeight - dockHeight - PREVIEW_DRAW_DOCK_EDGE_PAD;
   if (maxLeft < minLeft || maxTop < minTop) {
     return { mode: 'docked', side: null, style: previewDrawDockedStyle };
   }
@@ -1549,32 +1552,39 @@ function computePreviewDrawDockLayout({
       side: 'right',
       left: anchorRect.x + anchorRect.width + PREVIEW_DRAW_DOCK_GAP,
       top: centerY - dockHeight / 2,
-      fits: hostWidth - (anchorRect.x + anchorRect.width) - PREVIEW_DRAW_DOCK_EDGE_PAD >= dockWidth + PREVIEW_DRAW_DOCK_GAP,
+      fits:
+        hostScroll.left + hostWidth - (anchorRect.x + anchorRect.width) - PREVIEW_DRAW_DOCK_EDGE_PAD >=
+        dockWidth + PREVIEW_DRAW_DOCK_GAP,
     },
     {
       side: 'left',
       left: anchorRect.x - dockWidth - PREVIEW_DRAW_DOCK_GAP,
       top: centerY - dockHeight / 2,
-      fits: anchorRect.x - PREVIEW_DRAW_DOCK_EDGE_PAD >= dockWidth + PREVIEW_DRAW_DOCK_GAP,
+      fits: anchorRect.x - minLeft >= dockWidth + PREVIEW_DRAW_DOCK_GAP,
     },
     {
       side: 'bottom',
       left: centerX - dockWidth / 2,
       top: anchorRect.y + anchorRect.height + PREVIEW_DRAW_DOCK_GAP,
-      fits: hostHeight - (anchorRect.y + anchorRect.height) - PREVIEW_DRAW_DOCK_EDGE_PAD >= dockHeight + PREVIEW_DRAW_DOCK_GAP,
+      fits:
+        hostScroll.top + hostHeight - (anchorRect.y + anchorRect.height) - PREVIEW_DRAW_DOCK_EDGE_PAD >=
+        dockHeight + PREVIEW_DRAW_DOCK_GAP,
     },
     {
       side: 'top',
       left: centerX - dockWidth / 2,
       top: anchorRect.y - dockHeight - PREVIEW_DRAW_DOCK_GAP,
-      fits: anchorRect.y - PREVIEW_DRAW_DOCK_EDGE_PAD >= dockHeight + PREVIEW_DRAW_DOCK_GAP,
+      fits: anchorRect.y - minTop >= dockHeight + PREVIEW_DRAW_DOCK_GAP,
     },
   ];
   for (const candidate of candidates) {
     if (!candidate.fits) continue;
     const left = clampRange(candidate.left, minLeft, maxLeft);
     const top = clampRange(candidate.top, minTop, maxTop);
-    const maxHeight = Math.max(PREVIEW_DRAW_DOCK_MIN_VISIBLE_HEIGHT, hostHeight - top - PREVIEW_DRAW_DOCK_EDGE_PAD);
+    const maxHeight = Math.max(
+      PREVIEW_DRAW_DOCK_MIN_VISIBLE_HEIGHT,
+      hostScroll.top + hostHeight - top - PREVIEW_DRAW_DOCK_EDGE_PAD,
+    );
     if (maxHeight < PREVIEW_DRAW_DOCK_MIN_VISIBLE_HEIGHT) continue;
     const overlap = overlapRatio(anchorRect, { x: left, y: top, width: dockWidth, height: dockHeight });
     if (overlap > PREVIEW_DRAW_DOCK_MAX_OVERLAP_RATIO) continue;

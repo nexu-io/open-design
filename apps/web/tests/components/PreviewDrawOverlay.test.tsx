@@ -609,7 +609,7 @@ describe('PreviewDrawOverlay', () => {
     setElementRect(canvas, { left: 120, top: 60, width: 320, height: 200 });
     setElementRect(dock, { left: 0, top: 0, width: 260, height: 96 });
     Object.defineProperty(body, 'scrollLeft', { configurable: true, value: 40 });
-    Object.defineProperty(body, 'scrollTop', { configurable: true, value: 140 });
+    Object.defineProperty(body, 'scrollTop', { configurable: true, value: 640 });
 
     drawSelectionBox(canvas, { x: 160, y: 100 }, { x: 220, y: 150 });
     fireEvent(window, new Event('scroll'));
@@ -617,7 +617,7 @@ describe('PreviewDrawOverlay', () => {
     await waitFor(() => expect(dock.dataset.drawLayout).toBe('floating'));
     expect(dock.dataset.drawSide).toBe('right');
     expect(dock.style.left).toBe('272px');
-    expect(dock.style.top).toBe('217px');
+    expect(dock.style.top).toBe('717px');
   });
 
   it('hides draw chrome before a compositor annotation snapshot', async () => {
