@@ -30,6 +30,13 @@ it('falls back to FALLBACK_MAX_TOKENS for unknown cloud models', () => {
     expect(modelMaxTokensDefault('deepseek-v4-flash')).toBe(384000);
   });
 
+  it('keeps deepseek-v3.2 override intact alongside the new -cloud id', () => {
+    // Regression: an earlier revision replaced this entry instead of
+    // adding the new deepseek-v3.1:671b-cloud id alongside it, which
+    // silently dropped deepseek-v3.2 to FALLBACK_MAX_TOKENS (8192).
+    expect(modelMaxTokensDefault('deepseek-v3.2')).toBe(163840);
+  });
+
   it('keeps recent Ollama Cloud models out of the unknown-model fallback', () => {
     expect(modelMaxTokensDefault('glm-5.2')).toBe(131072);
     expect(modelMaxTokensDefault('kimi-k2.7-code')).toBe(131072);

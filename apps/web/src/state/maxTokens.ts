@@ -40,8 +40,8 @@ const OVERRIDES: Record<string, number> = {
   'cogito-2.1:671b': 65536,
   'deepseek-v3.1:671b': 163840,
   'deepseek-v3.1:671b-cloud': 163840,
+  'deepseek-v3.2': 163840,
   'devstral-2:123b': 131072,
-
   'devstral-small-2:24b': 131072,
   'gemini-3-flash-preview': 131072,
   'gemma3:4b': 131072,
