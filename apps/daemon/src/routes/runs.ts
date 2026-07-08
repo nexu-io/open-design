@@ -283,7 +283,7 @@ export interface RegisterRunRoutesDeps {
   };
   telemetry: {
     reportRunCompletionTelemetryFallback: (input: RunCreatedFallbackInput) => void;
-    resolveRunProjectKindForAnalytics: (input: RunProjectKindInput) => string;
+    resolveRunProjectKindForAnalytics: (input: RunProjectKindInput) => string | null;
     runArtifactBaselines: RunArtifactBaselines;
     runRetryEventsForAnalytics: (events: RunEventRecord[]) => RunRetryAnalyticsEvent[];
   };
@@ -778,9 +778,15 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const hintHasExistingArtifact = typeof analyticsHints.hasExistingArtifact === 'boolean'
         ? analyticsHints.hasExistingArtifact
         : undefined;
+      const hintProjectTurnIndex = typeof analyticsHints.projectTurnIndex === 'number'
+        ? analyticsHints.projectTurnIndex
+        : undefined;
       const sessionDimensionProps = {
         ...(hintTurnIndex !== undefined ? { turn_index: hintTurnIndex } : {}),
         ...(hintIsFirstRun !== undefined ? { is_first_run: hintIsFirstRun } : {}),
+        ...(hintProjectTurnIndex !== undefined
+          ? { project_turn_index: hintProjectTurnIndex }
+          : {}),
         ...(hintHasExistingArtifact !== undefined
           ? { has_existing_artifact: hintHasExistingArtifact }
           : {}),

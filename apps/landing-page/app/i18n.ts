@@ -4535,7 +4535,7 @@ const LANDING_UI_COPY: LandingUiCopy = {
   },
   tutorials: {
     title: 'Open Design Tutorials',
-    seoTitle: 'Open Design Tutorials — How to Use Open Design',
+    seoTitle: 'Open Design Tutorials — Free Video Guides & How-Tos',
     description:
       'Learn how to use Open Design with step-by-step video tutorials — getting started, plugins, design systems, and real workflows. Every guide plays right on the page.',
     categoriesLabel: 'Tutorial categories',

@@ -206,3 +206,45 @@
 /:loc/skills/*     /:loc/plugins/skills/     301
 /:loc/systems/*    /:loc/plugins/systems/    301
 /:loc/templates/*  /:loc/plugins/templates/  301
+
+# Mistral Vibe CLI moved from /agents/vibe-design/ to /agents/vibe-cli-design/ so the
+# exact-match 'vibe design' concept URL serves the informational blog instead of a
+# product page. 301 the old agent URL (all locales) to the what-is-vibe-design guide.
+/agents/vibe-design/  /blog/what-is-vibe-design/  301
+/agents/vibe-design  /blog/what-is-vibe-design/  301
+/en/agents/vibe-design/  /en/blog/what-is-vibe-design/  301
+/en/agents/vibe-design  /en/blog/what-is-vibe-design/  301
+/zh/agents/vibe-design/  /zh/blog/what-is-vibe-design/  301
+/zh/agents/vibe-design  /zh/blog/what-is-vibe-design/  301
+/zh-tw/agents/vibe-design/  /zh-tw/blog/what-is-vibe-design/  301
+/zh-tw/agents/vibe-design  /zh-tw/blog/what-is-vibe-design/  301
+/ja/agents/vibe-design/  /ja/blog/what-is-vibe-design/  301
+/ja/agents/vibe-design  /ja/blog/what-is-vibe-design/  301
+/ko/agents/vibe-design/  /ko/blog/what-is-vibe-design/  301
+/ko/agents/vibe-design  /ko/blog/what-is-vibe-design/  301
+/de/agents/vibe-design/  /de/blog/what-is-vibe-design/  301
+/de/agents/vibe-design  /de/blog/what-is-vibe-design/  301
+/fr/agents/vibe-design/  /fr/blog/what-is-vibe-design/  301
+/fr/agents/vibe-design  /fr/blog/what-is-vibe-design/  301
+/ru/agents/vibe-design/  /ru/blog/what-is-vibe-design/  301
+/ru/agents/vibe-design  /ru/blog/what-is-vibe-design/  301
+/es/agents/vibe-design/  /es/blog/what-is-vibe-design/  301
+/es/agents/vibe-design  /es/blog/what-is-vibe-design/  301
+/pt-br/agents/vibe-design/  /pt-br/blog/what-is-vibe-design/  301
+/pt-br/agents/vibe-design  /pt-br/blog/what-is-vibe-design/  301
+/it/agents/vibe-design/  /it/blog/what-is-vibe-design/  301
+/it/agents/vibe-design  /it/blog/what-is-vibe-design/  301
+/vi/agents/vibe-design/  /vi/blog/what-is-vibe-design/  301
+/vi/agents/vibe-design  /vi/blog/what-is-vibe-design/  301
+/pl/agents/vibe-design/  /pl/blog/what-is-vibe-design/  301
+/pl/agents/vibe-design  /pl/blog/what-is-vibe-design/  301
+/id/agents/vibe-design/  /id/blog/what-is-vibe-design/  301
+/id/agents/vibe-design  /id/blog/what-is-vibe-design/  301
+/nl/agents/vibe-design/  /nl/blog/what-is-vibe-design/  301
+/nl/agents/vibe-design  /nl/blog/what-is-vibe-design/  301
+/ar/agents/vibe-design/  /ar/blog/what-is-vibe-design/  301
+/ar/agents/vibe-design  /ar/blog/what-is-vibe-design/  301
+/tr/agents/vibe-design/  /tr/blog/what-is-vibe-design/  301
+/tr/agents/vibe-design  /tr/blog/what-is-vibe-design/  301
+/uk/agents/vibe-design/  /uk/blog/what-is-vibe-design/  301
+/uk/agents/vibe-design  /uk/blog/what-is-vibe-design/  301

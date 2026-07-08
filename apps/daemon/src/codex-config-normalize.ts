@@ -62,6 +62,101 @@ export function resolveCodexConfigPath(
 }
 
 /**
+ * Strip a trailing TOML comment from a line, honoring quoted strings so a `#`
+ * inside a quoted value (e.g. `env_key = "A#B"`) is preserved.
+ */
+function stripTomlComment(line: string): string {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === "'" && !inDouble) inSingle = !inSingle;
+    else if (ch === '"' && !inSingle) inDouble = !inDouble;
+    else if (ch === '#' && !inSingle && !inDouble) return line.slice(0, i);
+  }
+  return line;
+}
+
+/** Read a `key = "value"` (single- or double-quoted) string, or null. */
+function matchQuotedValue(line: string, key: string): string | null {
+  const match = new RegExp(`^${key}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(line);
+  if (!match) return null;
+  const value = (match[1] ?? match[2] ?? '').trim();
+  return value.length > 0 ? value : null;
+}
+
+/**
+ * Resolve the `env_key` of the currently-selected Codex provider from a
+ * config.toml string, or null when there is no custom provider / env_key.
+ *
+ * Codex custom providers name the environment variable holding their API key
+ * via `env_key`, e.g.:
+ *
+ *   model_provider = "azure"
+ *   [model_providers.azure]
+ *   env_key = "AZURE_OPENAI_API_KEY"
+ *
+ * Consumed by the auth probe (`runtimes/auth.ts`) so a working custom-provider
+ * Codex install isn't reported as unauthenticated just because
+ * `codex login status` (a ChatGPT/OpenAI-login check) exits non-zero.
+ *
+ * Deliberately a narrow line scanner rather than a full TOML parse — matching
+ * this module's regex-scoped handling of config.toml (the daemon ships no TOML
+ * parser); it reads only the two fields it needs.
+ */
+export function extractCodexProviderEnvKey(toml: string): string | null {
+  const lines = String(toml || '').split(/\r?\n/);
+
+  // The selected provider is a root-table key, which in TOML must appear before
+  // the first `[table]` header.
+  let provider: string | null = null;
+  for (const raw of lines) {
+    const line = stripTomlComment(raw).trim();
+    if (line.startsWith('[')) break;
+    const value = matchQuotedValue(line, 'model_provider');
+    if (value) {
+      provider = value;
+      break;
+    }
+  }
+  if (!provider) return null;
+
+  // Walk the `[model_providers.<provider>]` table and return its `env_key`.
+  const headerRe =
+    /^\[\s*model_providers\.\s*(?:"([^"]*)"|'([^']*)'|([A-Za-z0-9_.-]+))\s*\]$/;
+  let inSelectedTable = false;
+  for (const raw of lines) {
+    const line = stripTomlComment(raw).trim();
+    if (line.startsWith('[')) {
+      const match = headerRe.exec(line);
+      const name = match ? (match[1] ?? match[2] ?? match[3]) : null;
+      inSelectedTable = name === provider;
+      continue;
+    }
+    if (!inSelectedTable) continue;
+    const value = matchQuotedValue(line, 'env_key');
+    if (value) return value;
+  }
+  return null;
+}
+
+/**
+ * Read the selected Codex provider's `env_key` from the on-disk config.toml
+ * (honoring CODEX_HOME). Returns null when the file is absent/unreadable or
+ * declares no custom provider env_key.
+ */
+export async function readCodexProviderEnvKey(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string | null> {
+  try {
+    const toml = await readFile(resolveCodexConfigPath(env), 'utf8');
+    return extractCodexProviderEnvKey(toml);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The only `service_tier` values the Codex CLI accepts. Anything else makes
  * the CLI exit on config load, so the normalizer removes it.
  */

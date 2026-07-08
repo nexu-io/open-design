@@ -32,6 +32,7 @@ import {
   PRECISE_LAZY_PLACEHOLDER,
 } from './image-assets';
 import { getHomeExtra, getHomeCta } from './home-translations';
+import { getFooterLegalCopy } from './footer-legal-i18n';
 
 /**
  * `<img>` wrapper for non-hero homepage images. Outputs `data-precise-src`
@@ -189,13 +190,6 @@ const FOOTER_AGENTS = [
   { name: 'OpenCode', route: 'opencode-design' },
 ] as const;
 
-// Legal / company labels — small inline map (en/zh/zh-tw, fallback en) kept
-// identical to `site-footer.astro` so the two footers never drift.
-const FOOTER_LEGAL = {
-  en: { company: 'Company', about: 'About', faq: 'FAQ', privacy: 'Privacy Policy', terms: 'Terms', allAgents: 'All agents' },
-  zh: { company: '公司', about: '关于', faq: '常见问题', privacy: '隐私政策', terms: '服务条款', allAgents: '全部 Agent' },
-  'zh-tw': { company: '公司', about: '關於', faq: '常見問題', privacy: '隱私政策', terms: '服務條款', allAgents: '全部 Agent' },
-} satisfies Record<string, Record<string, string>>;
 
 const ext = {
   target: '_blank',
@@ -322,6 +316,11 @@ export default function Page({
   const tt = (zh: string, en: string) => (locale === 'zh' ? zh : en);
   const skills = fmt(counts.skills);
   const systems = fmt(counts.systems);
+  // Design Systems stat card: derive from the raw count so a missing count
+  // keeps the neutral "—" fallback with no countup metadata (never "—+" nor a
+  // non-finite data-countup-to). `to: null` makes the renderer skip countup.
+  const systemsCardNum = counts.systems > 0 ? `${counts.systems}+` : '—';
+  const systemsCardTo: string | null = counts.systems > 0 ? String(counts.systems) : null;
   const deckCount = pad2(counts.byMode?.deck);
   const prototypeCount = pad2(counts.byMode?.prototype);
   const mobileCount = pad2(counts.byPlatform?.mobile);
@@ -329,8 +328,7 @@ export default function Page({
   const home = getHomePageCopy(locale);
   const ui = getLandingUiCopy(locale);
   const menu = getHeaderProductMenuCopy(locale);
-  const footL =
-    FOOTER_LEGAL[locale as keyof typeof FOOTER_LEGAL] ?? FOOTER_LEGAL.en;
+  const footL = getFooterLegalCopy(locale);
   const localeDef = getLocaleDefinition(locale);
   const localeOptions = LANDING_LOCALES.map((entry) => ({
     ...entry,
@@ -495,8 +493,11 @@ export default function Page({
                   </span>
                 </a>
               </div>
+              {/* `{systems}` in heroSub is substituted with the live
+                  getCatalogCounts() total (same source as the meta description
+                  and stat cards) so the design-systems count never drifts. */}
               <p className='hero-sub' data-reveal>
-                <BreakText text={t.heroSub} />
+                <BreakText text={t.heroSub.replace('{systems}', systems)} />
               </p>
               {/* Product shot sits just under the hero copy. fetchPriority=low
                   lets the full-bleed hero-bg (the LCP element, fetchpriority
@@ -986,7 +987,7 @@ export default function Page({
                   { src: 'card-1.webp', num: '74K+', to: '74', suffix: 'K+', alt: 'GitHub Stars', href: REPO, live: 'stars' as const },
                   { src: 'card-2.webp', num: '340+', to: '340', suffix: '+', alt: tt('贡献者', 'Contributors'), href: `${REPO}/graphs/contributors`, live: 'contributors' as const },
                   { src: 'card-3.webp', num: '217+', to: '217', suffix: '+', alt: 'Plugins', href: href('/plugins/') },
-                  { src: 'card-4.webp', num: '129+', to: '129', suffix: '+', alt: 'Design Systems', href: href('/plugins/systems/') },
+                  { src: 'card-4.webp', num: systemsCardNum, to: systemsCardTo, suffix: '+', alt: 'Design Systems', href: href('/plugins/systems/') },
                   { src: 'card-5.webp', num: '21', to: '21', suffix: '', alt: tt('Coding Agent 支持', 'Coding Agents'), href: href('/agents/') },
                   { src: 'card-6.webp', num: null, to: null, suffix: '', alt: 'Star us', href: REPO, cta: true },
                 ] as ReadonlyArray<{ src: string; num: string | null; to: string | null; suffix: string; alt: string; href: string; live?: 'stars' | 'contributors'; cta?: boolean }>).map((item, index) => (
@@ -1006,7 +1007,7 @@ export default function Page({
                         <span data-github-stars>{item.num}</span>
                       ) : item.live === 'contributors' ? (
                         <span data-github-contributors>{item.num}</span>
-                      ) : item.num ? (
+                      ) : item.num && item.to ? (
                         <span
                           data-countup
                           data-countup-to={item.to}
@@ -1014,6 +1015,8 @@ export default function Page({
                         >
                           {item.num}
                         </span>
+                      ) : item.num ? (
+                        <span>{item.num}</span>
                       ) : null}
                       {item.num ? ' ' : ''}<em>{item.alt}</em>
                     </h3>
@@ -1237,6 +1240,7 @@ export default function Page({
                 <h5>{footL.company}</h5>
                 <ul>
                   <li><a href={href('/about/')}>{footL.about}</a></li>
+                  <li><a href={href('/careers/')}>{footL.careers}</a></li>
                   <li><a href={href('/faq/')}>{footL.faq}</a></li>
                   <li><a href={href('/privacy/')}>{footL.privacy}</a></li>
                   <li><a href={href('/terms/')}>{footL.terms}</a></li>

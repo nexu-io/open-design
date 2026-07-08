@@ -334,6 +334,15 @@ export interface DaemonReattachOptions {
 }
 
 export const RUNS_CHANGED_EVENT = 'open-design:runs-changed';
+export const GENERIC_DAEMON_DISCONNECT_MESSAGE =
+  'daemon stream disconnected before run completed';
+export const GENERIC_DAEMON_DISCONNECT_CODE = 'DAEMON_STREAM_DISCONNECTED';
+
+export function createGenericDaemonDisconnectError(): Error & { code: string } {
+  const error = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE) as Error & { code: string };
+  error.code = GENERIC_DAEMON_DISCONNECT_CODE;
+  return error;
+}
 
 function notifyRunsChanged() {
   if (typeof window === 'undefined') return;
@@ -781,7 +790,10 @@ export function formatVelaBalanceUsd(raw?: string | null): string | null {
   if (raw == null || raw === '') return null;
   const amount = Number(raw);
   if (!Number.isFinite(amount)) return null;
-  return `$${amount.toFixed(2)}`;
+  // Sign before the currency symbol: an overdrawn wallet reads "-$1.25",
+  // never the malformed "$-1.25".
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}$${Math.abs(amount).toFixed(2)}`;
 }
 
 /** Top subscription tier — no upgrade affordance is shown at/above this. */
@@ -1190,7 +1202,7 @@ async function consumeDaemonRun({
         onRunStatus?.(endStatus);
       } else {
         onRunStatus?.('failed');
-        handlers.onError(new Error('daemon stream disconnected before run completed'));
+        handlers.onError(createGenericDaemonDisconnectError());
         return;
       }
     }

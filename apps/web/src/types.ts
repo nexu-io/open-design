@@ -521,6 +521,8 @@ export interface ExamplePreview {
 export interface AgentModelOption {
   id: string;
   label: string;
+  inputPriceUsdPerMillion?: number;
+  outputPriceUsdPerMillion?: number;
 }
 
 export type Surface = 'web' | 'image' | 'video' | 'audio';

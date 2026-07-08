@@ -189,7 +189,7 @@ export function createChatRunService({
     errorCode: run.errorCode ?? null,
     resumable: run.resumable ?? false,
     eventsLogPath: run.eventsLogPath ?? null,
-    workspace: run.workspace ?? projectWorkspaceProvenance(run.projectMetadata),
+    workspace: projectWorkspaceProvenance(run.projectMetadata),
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
     toolBundle: summarizeRunToolBundle(run.toolBundle),
     ...(run.promptCache ? { promptCache: run.promptCache } : {}),

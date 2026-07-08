@@ -67,8 +67,12 @@ export interface PricingContent {
   plans: Record<PlanTierId, PlanCopy>;
 }
 
-// Model rosters are proper nouns — identical across locales.
+// Model rosters are proper nouns — identical across locales. Every paid tier
+// shares one hosted-model roster (plans differ by credit grant, not by model
+// access), so the lists render the same on each plan card. Membership follows
+// the cloud console's hosted-model catalog (`status: "active"`).
 export const PREMIUM_MODELS = [
+  'Claude Fable 5',
   'Claude Opus 4.8',
   'Claude Opus 4.7',
   'GPT-5.5 Pro',

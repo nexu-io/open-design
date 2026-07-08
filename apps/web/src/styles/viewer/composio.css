@@ -331,12 +331,18 @@
   align-items: center;
   padding: 6px 12px;
   font-size: 12px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out);
 }
-.present-exit:hover { background: white; }
+.present-exit:hover { background: var(--bg-muted); }
+.present-exit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* Picker (legacy in some surfaces) */
 .picker {

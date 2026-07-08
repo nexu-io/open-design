@@ -132,6 +132,10 @@ type AppCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   initialRunContext?: RunContextSelection | null;
   conversationMode?: ChatSessionMode;
   autoSendFirstMessage?: boolean;
+  /** The home submit already ran the Open Design Cloud balance gate (and the
+   *  user acknowledged any soft warning), so the project's first auto-send
+   *  must not re-gate — re-prompting a decision the user just made. */
+  amrGatePrechecked?: boolean;
   requestId?: string;
   pendingFiles?: File[];
   userWorkingDirToken?: string;
@@ -1537,6 +1541,16 @@ function AppInner() {
             `od:auto-send-first:${result.project.id}`,
             '1',
           );
+          if (input.amrGatePrechecked) {
+            window.sessionStorage.setItem(
+              `od:auto-send-amr-gate-ok:${result.project.id}`,
+              '1',
+            );
+          } else {
+            window.sessionStorage.removeItem(
+              `od:auto-send-amr-gate-ok:${result.project.id}`,
+            );
+          }
           if (firstMessageAttachments.length > 0) {
             window.sessionStorage.setItem(
               `od:auto-send-attachments:${result.project.id}`,

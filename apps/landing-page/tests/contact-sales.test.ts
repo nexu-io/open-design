@@ -34,8 +34,13 @@ const ENTERPRISE_OK = {
   seats: "20-50",
   budget: "usd_50_200",
   useCases: ["design_system"],
+  industry: "internet_software",
   location: "中国 (CN)",
 };
+
+// The /pricing "Request team access" modal renders the same shared lead form,
+// so it submits the identical contract — only `source` differs.
+const PRICING_TEAM_OK = { ...ENTERPRISE_OK, source: "pricing_team" };
 
 describe("contact-sales validation", () => {
   it("rejects a missing or invalid email on every source", async () => {
@@ -44,12 +49,13 @@ describe("contact-sales validation", () => {
     assert.equal((await call({ name: "Ada", source: "pricing_team" })).body.error, "invalid_email");
   });
 
-  it("rejects a missing name on every source except enterprise", async () => {
-    const { status, body } = await call({ email: "ada@acme.com", source: "pricing_team" });
+  it("does not require a name on the shared lead-form sources; the in-app `client` source still does", async () => {
+    // Neither web surface collects a name (email is the contact handle).
+    assert.equal((await call(ENTERPRISE_OK)).status, 200);
+    assert.equal((await call(PRICING_TEAM_OK)).status, 200);
+    const { status, body } = await call({ ...ENTERPRISE_OK, source: "client" });
     assert.equal(status, 400);
     assert.equal(body.error, "missing_fields");
-    // The /enterprise form no longer collects a name.
-    assert.equal((await call(ENTERPRISE_OK)).status, 200);
   });
 
   it("rejects an unrecognized or missing source (no silent relaxed write)", async () => {
@@ -61,11 +67,15 @@ describe("contact-sales validation", () => {
     assert.equal(typo.body.error, "invalid_source");
   });
 
-  it("keeps the in-app `client` source strict too (only pricing_team is relaxed)", async () => {
+  it("keeps the in-app `client` source strict (name + full enums)", async () => {
     assert.equal((await call({ name: "Ada", email: "ada@acme.com", source: "client" })).body.error, "missing_fields");
+    // With a name and the full enum contract, client is accepted; industry and
+    // location predate the field there and stay optional.
+    const { industry: _industry, location: _location, ...clientContract } = ENTERPRISE_OK;
+    assert.equal((await call({ ...clientContract, name: "Ada", source: "client" })).status, 200);
   });
 
-  it("keeps the enterprise contract: known team-size/seat-range/budget enums + a use case are required", async () => {
+  it("keeps the shared contract: known team-size/seat-range/budget enums + a use case are required", async () => {
     assert.equal((await call({ ...ENTERPRISE_OK, teamSize: "nonsense" })).body.error, "missing_fields");
     assert.equal((await call({ ...ENTERPRISE_OK, seats: "" })).body.error, "missing_fields");
     assert.equal((await call({ ...ENTERPRISE_OK, seats: "nonsense" })).body.error, "missing_fields");
@@ -73,6 +83,19 @@ describe("contact-sales validation", () => {
     assert.equal((await call({ ...ENTERPRISE_OK, useCases: [] })).body.error, "missing_fields");
     // Company became optional when the form slimmed down.
     assert.equal((await call({ ...ENTERPRISE_OK, company: "" })).status, 200);
+  });
+
+  it("requires a known industry on both shared lead-form sources", async () => {
+    assert.equal((await call({ ...ENTERPRISE_OK, industry: "" })).body.error, "missing_fields");
+    assert.equal((await call({ ...ENTERPRISE_OK, industry: "nonsense" })).body.error, "missing_fields");
+    assert.equal((await call({ ...PRICING_TEAM_OK, industry: "" })).body.error, "missing_fields");
+    assert.equal((await call({ ...PRICING_TEAM_OK, industry: "nonsense" })).body.error, "missing_fields");
+    assert.equal((await call({ ...ENTERPRISE_OK, industry: "gaming" })).status, 200);
+  });
+
+  it("requires location on both shared lead-form sources", async () => {
+    assert.equal((await call({ ...ENTERPRISE_OK, location: "" })).body.error, "missing_fields");
+    assert.equal((await call({ ...PRICING_TEAM_OK, location: "" })).body.error, "missing_fields");
   });
 
   it("accepts a complete enterprise submission", async () => {
@@ -83,17 +106,23 @@ describe("contact-sales validation", () => {
     assert.equal((await call({ ...ENTERPRISE_OK, useCases: ["video_motion"] })).status, 200);
   });
 
-  it("accepts a pricing_team lead with only name + email (canonical team-size/budget enums)", async () => {
-    const { status, body } = await call({
-      name: "Ada",
-      email: "ada@acme.com",
-      source: "pricing_team",
-      teamSize: "11-50",
-      budget: "usd_1k_5k",
-      location: "中国大陆",
-      seats: "20",
-    });
+  it("holds pricing_team to the same full contract (the old relaxed name+email path is gone)", async () => {
+    // The full shared contract is accepted.
+    const { status, body } = await call(PRICING_TEAM_OK);
     assert.equal(status, 200);
     assert.equal(body.ok, true);
+
+    // Each relaxation the retired lightweight pricing modal relied on now fails
+    // on its own — mutate exactly one rule per assertion from the otherwise
+    // valid PRICING_TEAM_OK so no single check leans on another field also
+    // being wrong.
+    // Free-form numeric seats (the old modal sent e.g. "20", not a range code):
+    assert.equal((await call({ ...PRICING_TEAM_OK, seats: "20" })).body.error, "missing_fields");
+    // Legacy pricing-only budget buckets that are no longer in the enum:
+    assert.equal((await call({ ...PRICING_TEAM_OK, budget: "lt_1k" })).body.error, "missing_fields");
+    assert.equal((await call({ ...PRICING_TEAM_OK, budget: "usd_20k_plus" })).body.error, "missing_fields");
+    // The old modal collected neither a use case nor an industry:
+    assert.equal((await call({ ...PRICING_TEAM_OK, useCases: [] })).body.error, "missing_fields");
+    assert.equal((await call({ ...PRICING_TEAM_OK, industry: "" })).body.error, "missing_fields");
   });
 });

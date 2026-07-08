@@ -1,17 +1,21 @@
 ---
 /*
- * /agents/vibe-design/ — agent detail page (industrial long-form).
+ * /agents/vibe-cli-design/ — Mistral Vibe CLI agent detail page (long-form).
  *
- * Captures "vibe design" intent and drives to Open Design. Renders the
- * rich how-to layout from copy.agentGuides['vibe'].rich. Linked from /agents/.
+ * This is the Mistral Vibe CLI agent guide. It lives at /agents/vibe-cli-design/
+ * (not /agents/vibe-design/) so it does not squat the informational "vibe design"
+ * concept query — that intent is served by /blog/what-is-vibe-design/, which the
+ * old /agents/vibe-design/ URL now 301-redirects to (see public/_redirects).
+ * Renders the rich how-to layout from copy.agentGuides['vibe'].rich. Linked from /agents/.
  * Never fabricate URLs or facts here.
  */
 import Layout from '../../../_components/sub-page-layout.astro';
 import { getInfoPageCopy } from '../../../info-page-i18n';
 import { localeFromPath, localizedHref } from '../../../i18n';
+import { downloadFirstCtas } from '../../../cta-actions';
 
 const SLUG = 'vibe';
-const ROUTE = 'vibe-design';
+const ROUTE = 'vibe-cli-design';
 const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
 const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_RELEASES = `${REPO}/releases`;
@@ -22,6 +26,10 @@ const common = copy.common;
 // Compact locales fall back to the English guide rather than crash on undefined.
 const page = copy.agentGuides[SLUG] ?? getInfoPageCopy('en').agentGuides[SLUG]!;
 const rich = page.rich;
+
+// Lead the CTAs with the desktop download (drop the get-started action).
+const heroCtas = rich ? downloadFirstCtas(rich.heroCtaActions) : [];
+const finalCtas = rich ? downloadFirstCtas(rich.ctaActions) : [];
 
 // Localize CTA action hrefs while leaving external links untouched.
 const ctaHref = (a: { href: string; external?: boolean }) =>
@@ -84,7 +92,7 @@ const jsonLd = [
           <h1 class="display">{page.heading}</h1>
           <p class="lead">{page.lead}</p>
           <div class="solution-hero-cta">
-            {rich.heroCtaActions.map((a) => (
+            {heroCtas.map((a) => (
               <a
                 class={`btn ${a.variant === 'primary' ? 'btn-primary' : 'btn-ghost'}`}
                 href={ctaHref(a)}
@@ -182,7 +190,7 @@ const jsonLd = [
             <p>{rich.ctaBody}</p>
           </div>
           <div class="info-cta-actions">
-            {rich.ctaActions.map((a) => (
+            {finalCtas.map((a) => (
               <a
                 class={`btn ${a.variant === 'primary' ? 'btn-primary' : 'btn-ghost'}`}
                 href={ctaHref(a)}
@@ -279,9 +287,8 @@ const jsonLd = [
             <p>{page.ctaBody}</p>
           </div>
           <div class="info-cta-actions">
-            <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
-            <a class="btn btn-ghost" href={href('/quickstart/')}>{common.quickstart}</a>
-            <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+            <a class="btn btn-primary" href={href('/download/')}>{common.downloadDesktop}</a>
+            <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
           </div>
           <div class="info-cta-meta">
             <span class="stamp">● {common.apache}</span>
