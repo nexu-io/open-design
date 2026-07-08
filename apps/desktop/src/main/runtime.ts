@@ -224,6 +224,19 @@ export function signDesktopImportToken(
   return [options.nonce, options.exp, signature].join(DESKTOP_IMPORT_TOKEN_FIELD_SEP);
 }
 
+/**
+ * An HTTP 5xx main-frame document is a failed load. Electron resolves
+ * `loadURL` for any response that carries a body — `did-fail-load` fires
+ * only for net::ERR_* failures — so an error document (e.g. the packaged
+ * od:// proxy's synthetic 502) parks the renderer on a dead page the
+ * recovery loop never sees. Route it into the same renderer-failed
+ * reload path as a network failure. Electron reports non-HTTP
+ * navigations with 0 / -1, which must never trip this.
+ */
+export function isRendererFailureHttpStatus(httpResponseCode: number): boolean {
+  return httpResponseCode >= 500;
+}
+
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
 // Minimum time the light splash window stays on screen before we reveal the main
@@ -1888,6 +1901,20 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   window.webContents.on("did-fail-load", (_event, errorCode, _description, _url, isMainFrame) => {
     if (isMainFrame && errorCode !== -3) markRendererFailed();
   });
+  // `did-fail-load` never fires for an HTTP error *document* — a 5xx response
+  // with a body is a successful load to Electron — so a 502 page (e.g. the
+  // packaged od:// proxy's exhaustion fallback) would otherwise sit on screen
+  // until a manual reload. `did-navigate` is main-frame-only and carries the
+  // HTTP status (-1 for non-HTTP navigations); in-page SPA routing emits
+  // `did-navigate-in-page` instead, so app navigation never trips this.
+  window.webContents.on("did-navigate", (_event, url, httpResponseCode) => {
+    if (!isRendererFailureHttpStatus(httpResponseCode)) return;
+    console.error("[open-design desktop] main window loaded an HTTP error document", {
+      httpResponseCode,
+      url,
+    });
+    markRendererFailed();
+  });
 
   const sendUpdaterStatus = (status = options.updater?.snapshot() ?? unavailableUpdaterStatus()) => {
     if (window.isDestroyed()) return;
@@ -2240,13 +2267,18 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       // restored from the background recovers instead of staying blank.
       if (url != null && (url !== currentUrl || rendererFailed)) {
         pendingUrl = url;
+        // Clear the failure flag BEFORE the load: `did-navigate` (which
+        // re-flags an HTTP 5xx error document) fires before `loadURL`'s
+        // promise resolves, so clearing afterwards would clobber a failure
+        // detected mid-load. A rejecting `loadURL` re-flags via
+        // `did-fail-load`, so net-error behavior is unchanged.
+        rendererFailed = false;
         // Load the web app into the still-hidden main window as soon as it is
         // discovered; it mounts behind the splash so the swap is instant.
         console.info("[open-design desktop] main window loadURL start", { currentUrl, url });
         await window.loadURL(url);
         console.info("[open-design desktop] main window loadURL success", { url });
         currentUrl = url;
-        rendererFailed = false;
         pendingUrl = null;
         const nextPetUrl = desktopPetUrl(url);
         if (!petWindow.isDestroyed() && nextPetUrl !== currentPetUrl) {
@@ -2261,7 +2293,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       } else if (url == null) {
         pendingUrl = null;
       }
-      schedule(currentUrl == null ? PENDING_POLL_MS : RUNNING_POLL_MS);
+      // A renderer still flagged failed (e.g. the document that just "loaded"
+      // was an HTTP 5xx error page) re-polls at the same prompt cadence as the
+      // connection-refused recovery path.
+      schedule(currentUrl == null || rendererFailed ? PENDING_POLL_MS : RUNNING_POLL_MS);
     } catch (error) {
       pendingUrl = null;
       console.error("desktop web discovery failed", error);
