@@ -582,6 +582,8 @@ export const zhCN: Dict = {
     '点击"在 Cursor 中安装"以通过确认对话框安装，或将此 JSON 合并到 {path}。',
   "settings.mcpDeeplinkInstallCursor": "在 Cursor 中安装",
   "settings.mcpMethodJson": "JSON 配置",
+  "settings.mcpInstructionKiro":
+    "打开 {path} 并合并此 JSON。对于 workspace 级配置，请使用 .kiro/settings/mcp.json。",
   "settings.mcpInstructionCopilot":
     '打开命令面板（{shortcut}），运行 "MCP: Open User Configuration"，然后合并此 JSON。Copilot Chat 必须处于 Agent 模式，工具才会显示。',
   "settings.mcpInstructionAntigravity":

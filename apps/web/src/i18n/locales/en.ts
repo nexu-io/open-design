@@ -572,6 +572,7 @@ export const en: Dict = {
   'settings.mcpInstructionCursor': 'Click "Install in Cursor" to install with an approval dialog, or merge this JSON into {path}.',
   'settings.mcpDeeplinkInstallCursor': 'Install in Cursor',
   'settings.mcpMethodJson': 'JSON config',
+  'settings.mcpInstructionKiro': 'Open {path} and merge this JSON. For workspace-level config, use .kiro/settings/mcp.json.',
   'settings.mcpInstructionCopilot': 'Open the Command Palette ({shortcut}), run "MCP: Open User Configuration", and merge this JSON. Copilot Chat must be in Agent mode for tools to show up.',
   'settings.mcpInstructionAntigravity': 'In Antigravity: Agent panel "..." menu → MCP Servers → Manage MCP Servers → View raw config. Merge this JSON.',
   'settings.mcpInstructionZed': 'Open Zed Settings ({shortcut}) and merge this into the top-level object. Zed uses "context_servers", not "mcpServers".',

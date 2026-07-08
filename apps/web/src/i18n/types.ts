@@ -885,6 +885,7 @@ export interface Dict {
   'settings.mcpInstructionCursor': string;
   'settings.mcpDeeplinkInstallCursor': string;
   'settings.mcpMethodJson': string;
+  'settings.mcpInstructionKiro': string;
   'settings.mcpInstructionCopilot': string;
   'settings.mcpInstructionAntigravity': string;
   'settings.mcpInstructionZed': string;

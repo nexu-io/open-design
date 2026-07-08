@@ -7362,7 +7362,7 @@ function MediaProvidersSection({
 //
 // Schemas drift between clients in deliberate ways. VS Code keys
 // servers under "servers" with a required "type" field; Zed uses
-// "context_servers"; Cursor, Windsurf, and Antigravity share
+// "context_servers"; Cursor, Kiro, Windsurf, and Antigravity share
 // "mcpServers"; Claude Code is best served by its CLI which writes
 // to the local config for you. Verified against each tool's official
 // docs in May 2026.
@@ -7377,6 +7377,7 @@ type McpClientId =
   | 'claude'
   | 'codex'
   | 'cursor'
+  | 'kiro'
   | 'vscode'
   | 'zed'
   | 'windsurf'
@@ -7639,6 +7640,17 @@ function IntegrationsSection() {
         return `cursor://anysphere.cursor-deeplink/mcp/install?name=open-design&config=${encoded}`;
       },
       deeplinkLabel: () => t('settings.mcpDeeplinkInstallCursor'),
+    },
+    {
+      id: 'kiro',
+      label: 'Kiro CLI',
+      buildMethod: () => t('settings.mcpMethodJson'),
+      buildInstruction: (info) =>
+        t('settings.mcpInstructionKiro', {
+          path: homeConfigPath(info.platform, '~/.kiro/settings/mcp.json', '%USERPROFILE%\\.kiro\\settings\\mcp.json'),
+        }),
+      buildSnippet: buildSharedMcpJson,
+      buildSnippetLang: () => 'json',
     },
     {
       id: 'vscode',

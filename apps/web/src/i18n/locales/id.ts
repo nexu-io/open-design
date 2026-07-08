@@ -572,6 +572,7 @@ export const id: Dict = {
   'settings.mcpInstructionCursor': 'Klik "Install in Cursor" untuk memasang dengan dialog persetujuan, atau gabungkan JSON ini ke {path}.',
   'settings.mcpDeeplinkInstallCursor': 'Install di Cursor',
   'settings.mcpMethodJson': 'Konfigurasi JSON',
+  'settings.mcpInstructionKiro': 'Buka {path} dan gabungkan JSON ini. Untuk konfigurasi level workspace, gunakan .kiro/settings/mcp.json.',
   'settings.mcpInstructionCopilot': 'Buka Command Palette ({shortcut}), jalankan "MCP: Open User Configuration", dan gabungkan JSON ini. Copilot Chat harus dalam mode Agent agar tools muncul.',
   'settings.mcpInstructionAntigravity': 'Di Antigravity: panel Agent menu "..." → MCP Servers → Manage MCP Servers → View raw config. Gabungkan JSON ini.',
   'settings.mcpInstructionZed': 'Buka Zed Settings ({shortcut}) dan gabungkan ini ke dalam objek tingkat atas. Zed menggunakan "context_servers", bukan "mcpServers".',

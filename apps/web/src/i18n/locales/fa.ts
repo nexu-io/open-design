@@ -572,6 +572,7 @@ export const fa: Dict = {
   'settings.mcpInstructionCursor': 'برای نصب با یک پنجره تأیید، روی «Install in Cursor» کلیک کنید، یا این JSON را در {path} ادغام کنید.',
   'settings.mcpDeeplinkInstallCursor': 'نصب در Cursor',
   'settings.mcpMethodJson': 'پیکربندی JSON',
+  'settings.mcpInstructionKiro': '{path} را باز کنید و این JSON را ادغام کنید. برای پیکربندی در سطح workspace از .kiro/settings/mcp.json استفاده کنید.',
   'settings.mcpInstructionCopilot': 'Command Palette ({shortcut}) را باز کنید، «MCP: Open User Configuration» را اجرا کنید و این JSON را ادغام کنید. برای نمایش ابزارها، Copilot Chat باید در حالت Agent باشد.',
   'settings.mcpInstructionAntigravity': 'در Antigravity: منوی «...» پنل Agent ← MCP Servers ← Manage MCP Servers ← View raw config. این JSON را ادغام کنید.',
   'settings.mcpInstructionZed': 'تنظیمات Zed ({shortcut}) را باز کنید و این را در شیء سطح‌بالا ادغام کنید. Zed از «context_servers» استفاده می‌کند، نه «mcpServers».',

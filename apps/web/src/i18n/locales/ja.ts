@@ -572,6 +572,7 @@ export const ja: Dict = {
   'settings.mcpInstructionCursor': '「Install in Cursor」をクリックして承認ダイアログ付きでインストールするか、このJSONを {path} にマージしてください。',
   'settings.mcpDeeplinkInstallCursor': 'Cursor にインストール',
   'settings.mcpMethodJson': 'JSON設定',
+  'settings.mcpInstructionKiro': '{path} を開き、このJSONをマージしてください。ワークスペースレベルの設定には .kiro/settings/mcp.json を使用します。',
   'settings.mcpInstructionCopilot': 'コマンドパレット（{shortcut}）を開き、「MCP: Open User Configuration」を実行して、このJSONをマージしてください。ツールを表示するには、Copilot ChatがAgentモードである必要があります。',
   'settings.mcpInstructionAntigravity': 'Antigravity の場合：Agent パネルの「...」メニュー → MCP Servers → Manage MCP Servers → View raw config。この JSON をマージしてください。',
   'settings.mcpInstructionZed': 'Zedの設定（{shortcut}）を開き、これをトップレベルのオブジェクトにマージしてください。Zedは「mcpServers」ではなく「context_servers」を使用します。',

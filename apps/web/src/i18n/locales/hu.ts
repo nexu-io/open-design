@@ -572,6 +572,7 @@ export const hu: Dict = {
   'settings.mcpInstructionCursor': 'Kattints az „Install in Cursor” gombra a jóváhagyási párbeszédpanellel történő telepítéshez, vagy egyesítsd ezt a JSON-t a következővel: {path}.',
   'settings.mcpDeeplinkInstallCursor': 'Telepítés a Cursorba',
   'settings.mcpMethodJson': 'JSON konfiguráció',
+  'settings.mcpInstructionKiro': 'Nyisd meg ezt: {path}, és egyesítsd ezt a JSON-t. Workspace-szintű konfigurációhoz használd: .kiro/settings/mcp.json.',
   'settings.mcpInstructionCopilot': 'Nyisd meg a Command Palette-et ({shortcut}), futtasd az „MCP: Open User Configuration” parancsot, és egyesítsd ezt a JSON-t. A Copilot Chatnek Agent módban kell lennie, hogy az eszközök megjelenjenek.',
   'settings.mcpInstructionAntigravity': 'Az Antigravityben: Agent panel "..." menü → MCP Servers → Manage MCP Servers → View raw config. Egyesítsd ezt a JSON-t.',
   'settings.mcpInstructionZed': 'Nyisd meg a Zed beállításait ({shortcut}), és egyesítsd ezt a legfelső szintű objektummal. A Zed a „context_servers” kulcsot használja, nem a „mcpServers” kulcsot.',

@@ -572,6 +572,7 @@ export const ko: Dict = {
   'settings.mcpInstructionCursor': '"Install in Cursor"를 클릭하여 승인 대화상자와 함께 설치하거나, 이 JSON을 {path}에 병합하세요.',
   'settings.mcpDeeplinkInstallCursor': 'Cursor에 설치',
   'settings.mcpMethodJson': 'JSON 설정',
+  'settings.mcpInstructionKiro': '{path}을(를) 열고 이 JSON을 병합하세요. 워크스페이스 수준 설정은 .kiro/settings/mcp.json을 사용하세요.',
   'settings.mcpInstructionCopilot': 'Command Palette({shortcut})를 열고 "MCP: Open User Configuration"을 실행한 후 이 JSON을 병합하세요. 도구가 표시되려면 Copilot Chat이 Agent 모드여야 합니다.',
   'settings.mcpInstructionAntigravity': 'Antigravity에서: Agent 패널 "..." 메뉴 → MCP Servers → Manage MCP Servers → View raw config. 이 JSON을 병합하세요.',
   'settings.mcpInstructionZed': 'Zed 설정({shortcut})을 열고 이것을 최상위 객체에 병합하세요. Zed는 "mcpServers"가 아닌 "context_servers"를 사용합니다.',
