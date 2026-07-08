@@ -18,7 +18,11 @@ import ts from "typescript";
 //      through its public barrel (`features/<other>`), never a deep file. This
 //      also holds from OUTSIDE `features/**`: the orchestrator (and any other
 //      app file) may reach a slice only through its barrel, so the boundary the
-//      slice publishes is the boundary every consumer sees.
+//      slice publishes is the boundary every consumer sees. Both the relative
+//      (`../features/<slice>/...`) and the `@/*` path-alias form of a deep
+//      import are rejected — `apps/web/tsconfig.json` maps `@/*` onto the
+//      `apps/web` root, so `@/src/features/<slice>/...` resolves to the same
+//      file and must not be a boundary escape hatch.
 //   4. One transport home per route: a route fetched inside a multi-adapter
 //      provider folder (`providers/<resource>/`) must not also be owned by a
 //      second provider folder. A plain component still fetching that route
@@ -34,6 +38,13 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const webSrcDir = path.join(repoRoot, "apps", "web", "src");
 const featuresDir = path.join(webSrcDir, "features");
 const providersDir = path.join(webSrcDir, "providers");
+
+// Repo-relative POSIX roots. The import-boundary rules (2 and 3) run in this
+// space so they can resolve BOTH relative and `@/*`-aliased specifiers and stay
+// unit-testable from a source string without touching disk.
+const WEB_ROOT_REL = "apps/web";
+const FEATURES_REL = "apps/web/src/features";
+const PROVIDERS_REL = "apps/web/src/providers";
 
 const sourceExtensions = new Set([".ts", ".tsx"]);
 
@@ -89,11 +100,128 @@ async function collectSourceFiles(directory: string): Promise<string[]> {
   return files;
 }
 
-/** The slice a features/ file belongs to, or null for a loose top-level file. */
-function sliceOf(fullPath: string): string | null {
-  const rel = path.relative(featuresDir, fullPath);
-  const segments = rel.split(path.sep);
+function isUnderRel(candidate: string, root: string): boolean {
+  return candidate === root || candidate.startsWith(root + "/");
+}
+
+/**
+ * The slice a repo-relative path belongs to, or null for a loose top-level
+ * `features/` file or a bare barrel path (`features/<slice>`). A slice is only
+ * named once the path reaches INTO it (`features/<slice>/<deeper>`), so a barrel
+ * import (`features/<slice>` or `.../index`) is never flagged as a deep import.
+ */
+function sliceOfRel(rel: string): string | null {
+  if (!isUnderRel(rel, FEATURES_REL) || rel === FEATURES_REL) return null;
+  const segments = rel.slice(FEATURES_REL.length + 1).split("/");
   return segments.length > 1 ? (segments[0] ?? null) : null;
+}
+
+function isSliceBarrelImport(resolved: string, slice: string): boolean {
+  const barrel = `${FEATURES_REL}/${slice}`;
+  return resolved === barrel || resolved === `${barrel}/index`;
+}
+
+/**
+ * Resolve a module specifier to a repo-relative POSIX path under `apps/web`, or
+ * null for a bare package import that never touches the slice boundary. Handles
+ * the relative form and the `@/*` path alias from `apps/web/tsconfig.json`
+ * (rooted at `apps/web`), so an aliased deep import is checked exactly like its
+ * relative twin instead of slipping past as a non-relative specifier.
+ */
+export function resolveWebImport(importerRepoPath: string, specifier: string): string | null {
+  const pathOnly = specifier.split(/[?#]/, 1)[0];
+  if (!pathOnly) return null;
+  // Normalize like path.resolve did: strip any trailing slash so a barrel import
+  // written `../features/<slice>/` still matches its barrel path.
+  const strip = (p: string): string => p.replace(/\/+$/, "") || "/";
+  if (pathOnly.startsWith("@/")) {
+    return strip(path.posix.normalize(path.posix.join(WEB_ROOT_REL, pathOnly.slice("@/".length))));
+  }
+  if (pathOnly.startsWith(".")) {
+    return strip(path.posix.normalize(path.posix.join(path.posix.dirname(importerRepoPath), pathOnly)));
+  }
+  return null;
+}
+
+/**
+ * All per-file import-boundary violations (rules 1–3) for a single web source
+ * file, given its repo-relative POSIX path and its text. Pure and disk-free so
+ * the guard is unit-testable; the disk walkers below just feed it every file.
+ * Whether the importer lives inside `features/**` decides which rules apply:
+ * feature files get the transport-free + provider-binding + cross-slice rules,
+ * everything else gets the outside-in barrel rule.
+ */
+export function collectImportBoundaryViolations(
+  importerRepoPath: string,
+  sourceText: string,
+): Violation[] {
+  const violations: Violation[] = [];
+  const source = ts.createSourceFile(
+    importerRepoPath,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    scriptKindFor(importerRepoPath),
+  );
+
+  const isFeatureFile = isUnderRel(importerRepoPath, FEATURES_REL) && importerRepoPath !== FEATURES_REL;
+  const importerSlice = isFeatureFile ? sliceOfRel(importerRepoPath) : null;
+  const isDependenciesFile = path.posix.basename(importerRepoPath) === "dependencies.ts";
+
+  // Rule 1 — transport/DOM globals are not allowed in slice files.
+  if (isFeatureFile) {
+    for (const use of forbiddenGlobalUses(source)) {
+      violations.push({
+        filePath: importerRepoPath,
+        lineNumber: lineOf(source, use.position),
+        message: `slice file uses \`${use.name}\` — move transport behind a provider adapter reached via the port`,
+      });
+    }
+  }
+
+  for (const { specifier, node } of moduleSpecifiersOf(source)) {
+    const resolved = resolveWebImport(importerRepoPath, specifier);
+    if (!resolved) continue;
+    const lineNumber = lineOf(source, node.getStart(source));
+
+    if (isFeatureFile) {
+      // Rule 2 — only dependencies.ts may import providers/.
+      if (isUnderRel(resolved, PROVIDERS_REL) && !isDependenciesFile) {
+        violations.push({
+          filePath: importerRepoPath,
+          lineNumber,
+          message: `feature file imports \`${specifier}\` from providers/ — only dependencies.ts may bind a provider`,
+        });
+      }
+
+      // Rule 3 (in-slice) — cross-slice imports must go through the sibling barrel.
+      if (importerSlice) {
+        const targetSlice = sliceOfRel(resolved);
+        if (targetSlice && targetSlice !== importerSlice && !isSliceBarrelImport(resolved, targetSlice)) {
+          violations.push({
+            filePath: importerRepoPath,
+            lineNumber,
+            message: `deep import into slice \`${targetSlice}\` — import its public barrel \`features/${targetSlice}\` instead`,
+          });
+        }
+      }
+      continue;
+    }
+
+    // Rule 3 (outside-in) — a file outside features/ may reach a slice only
+    // through its public barrel, so the boundary the slice publishes is the
+    // boundary every consumer sees.
+    const targetSlice = sliceOfRel(resolved);
+    if (targetSlice && !isSliceBarrelImport(resolved, targetSlice)) {
+      violations.push({
+        filePath: importerRepoPath,
+        lineNumber,
+        message: `deep import into slice \`${targetSlice}\` from outside features/ — import its public barrel \`features/${targetSlice}\` instead`,
+      });
+    }
+  }
+
+  return violations;
 }
 
 function moduleSpecifiersOf(source: ts.SourceFile): Array<{ specifier: string; node: ts.Node }> {
@@ -176,86 +304,23 @@ async function providerResourceFolders(): Promise<string[]> {
   return folders;
 }
 
+// Rules 1–3 for every migrated slice file (transport-free, provider-binding,
+// and cross-slice barrel), delegated to the pure per-file collector.
 async function checkSliceFiles(violations: Violation[]): Promise<void> {
   for (const fullPath of await collectSourceFiles(featuresDir)) {
-    const rel = repositoryPath(fullPath);
-    const source = ts.createSourceFile(
-      fullPath,
-      await readFile(fullPath, "utf8"),
-      ts.ScriptTarget.Latest,
-      true,
-      scriptKindFor(fullPath),
-    );
-
-    // Rule 1 — transport/DOM globals are not allowed in slice files.
-    for (const use of forbiddenGlobalUses(source)) {
-      violations.push({
-        filePath: rel,
-        lineNumber: lineOf(source, use.position),
-        message: `slice file uses \`${use.name}\` — move transport behind a provider adapter reached via the port`,
-      });
-    }
-
-    const isDependenciesFile = path.basename(fullPath) === "dependencies.ts";
-    const importerSlice = sliceOf(fullPath);
-
-    for (const { specifier, node } of moduleSpecifiersOf(source)) {
-      if (!specifier.startsWith(".")) continue;
-      const resolved = path.resolve(path.dirname(fullPath), specifier);
-
-      // Rule 2 — only dependencies.ts may import providers/.
-      if ((resolved === providersDir || resolved.startsWith(providersDir + path.sep)) && !isDependenciesFile) {
-        violations.push({
-          filePath: rel,
-          lineNumber: lineOf(source, node.getStart(source)),
-          message: `feature file imports \`${specifier}\` from providers/ — only dependencies.ts may bind a provider`,
-        });
-      }
-
-      // Rule 3 — cross-slice imports must go through the sibling barrel.
-      if (resolved.startsWith(featuresDir + path.sep) && importerSlice) {
-        const targetSlice = sliceOf(resolved);
-        if (targetSlice && targetSlice !== importerSlice) {
-          const barrel = path.join(featuresDir, targetSlice);
-          const isBarrelImport = resolved === barrel || resolved === path.join(barrel, "index");
-          if (!isBarrelImport) {
-            violations.push({
-              filePath: rel,
-              lineNumber: lineOf(source, node.getStart(source)),
-              message: `deep import into slice \`${targetSlice}\` — import its public barrel \`features/${targetSlice}\` instead`,
-            });
-          }
-        }
-      }
-    }
+    violations.push(...collectImportBoundaryViolations(repositoryPath(fullPath), await readFile(fullPath, "utf8")));
   }
 }
 
 // Rule 3 (outside-in half): a file outside `features/**` may import a slice only
 // through its public barrel. Without this, the orchestrator could deep-import
 // slice internals and keep the canary coupled while checkSliceFiles — which only
-// walks featuresDir — reports success.
+// walks featuresDir — reports success. The same collector resolves `@/*` aliases
+// too, so `@/src/features/<slice>/...` is not a boundary escape hatch.
 async function checkExternalSliceImports(violations: Violation[]): Promise<void> {
   for (const fullPath of await collectSourceFiles(webSrcDir)) {
     if (fullPath === featuresDir || fullPath.startsWith(featuresDir + path.sep)) continue;
-    const source = await parseSourceFile(fullPath);
-    const rel = repositoryPath(fullPath);
-    for (const { specifier, node } of moduleSpecifiersOf(source)) {
-      if (!specifier.startsWith(".")) continue;
-      const resolved = path.resolve(path.dirname(fullPath), specifier);
-      if (resolved !== featuresDir && !resolved.startsWith(featuresDir + path.sep)) continue;
-      const targetSlice = sliceOf(resolved);
-      if (!targetSlice) continue; // barrel import or a loose top-level features file
-      const barrel = path.join(featuresDir, targetSlice);
-      const isBarrelImport = resolved === barrel || resolved === path.join(barrel, "index");
-      if (!isBarrelImport) {
-        violations.push({
-          filePath: rel,
-          lineNumber: lineOf(source, node.getStart(source)),
-          message: `deep import into slice \`${targetSlice}\` from outside features/ — import its public barrel \`features/${targetSlice}\` instead`,
-        });
-      }
-    }
+    violations.push(...collectImportBoundaryViolations(repositoryPath(fullPath), await readFile(fullPath, "utf8")));
   }
 }
 
