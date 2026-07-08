@@ -142,8 +142,8 @@ obvious, block the PR and request core-maintainer guidance.
 - `nightly` is the internal validation channel for stable delivery. Stable releases remain gated by validated nightly artifacts.
 - `preview` is an independent early-access channel with stable-like release rigor. It should use preview versions such as `X.Y.Z-preview.N`, publish to the `preview` R2 channel, publish updater feeds under `preview/latest`, and follow stable's platform policy including the existing optional Linux enablement.
 - `stable` is the formal delivery channel. Do not make stable promotion depend on preview; stable continues to depend on nightly only.
-- Public packaged app identity must stay channel-distinct: stable uses `Marketing AX`, beta uses `Marketing AX Beta`, and preview uses `Marketing AX Preview`. Do not ship beta or preview mac DMGs whose drag-install app bundle is `Marketing AX.app`.
-- Windows beta updater validation must use the real beta namespace `release-beta-win`; otherwise a local beta-like namespace can create a separate uninstall registry key while looking like the same `Marketing AX Beta` app. See `tools/pack/AGENTS.md` for the architecture map and high-confidence acceptance harness.
+- Public packaged app identity must stay channel-distinct: stable uses `M-AX`, beta uses `M-AX Beta`, and preview uses `M-AX Preview`. Do not ship beta or preview mac DMGs whose drag-install app bundle is `M-AX.app`.
+- Windows beta updater validation must use the real beta namespace `release-beta-win`; otherwise a local beta-like namespace can create a separate uninstall registry key while looking like the same `M-AX Beta` app. See `tools/pack/AGENTS.md` for the architecture map and high-confidence acceptance harness.
 
 ## Boundary constraints
 

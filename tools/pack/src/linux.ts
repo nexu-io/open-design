@@ -34,8 +34,8 @@ import { processWebSourcemaps } from "./web-sourcemaps.js";
 
 const execFileAsync = promisify(execFile);
 
-const PRODUCT_NAME = "Marketing AX";
-const APP_IMAGE_PRODUCT_NAME = "Marketing-AX";
+const PRODUCT_NAME = "M-AX";
+const APP_IMAGE_PRODUCT_NAME = "M-AX";
 const DESKTOP_LOG_ECHO_ENV = "MAX_DESKTOP_LOG_ECHO";
 // The containerized build sets this to the standalone pnpm binary fetched by
 // buildDockerArgs; runProductionInstall reads it to avoid invoking `npm` inside
@@ -571,7 +571,7 @@ async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths
       target,
       icon: linuxResources.icon,
       category: "Development",
-      synopsis: "Marketing AX",
+      synopsis: "M-AX",
       maintainer: "Marketing AX Contributors",
     },
     nodeGypRebuild: false,
@@ -1437,7 +1437,7 @@ export async function installPackedLinuxHeadless(config: ToolPackConfig): Promis
   const dataDir = dirname(config.roots.runtime.namespaceBaseRoot);
   const script = [
     "#!/bin/sh",
-    `# Marketing AX headless launcher — namespace: ${config.namespace}`,
+    `# M-AX headless launcher — namespace: ${config.namespace}`,
     `MAX_PACKAGED_NAMESPACE=${JSON.stringify(config.namespace)} MAX_DATA_DIR=${JSON.stringify(dataDir)} MAX_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
   ].join("\n") + "\n";
 

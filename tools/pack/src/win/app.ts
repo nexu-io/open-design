@@ -256,7 +256,7 @@ async function writeAssembledAppEntrypoints(
     `${JSON.stringify(
       {
         dependencies: options.dependencies ?? createAssembledAppDependencies(config, paths, packedTarballs),
-        description: "Marketing AX packaged runtime",
+        description: "M-AX packaged runtime",
         main: "./main.cjs",
         name: "open-design-packaged-app",
         private: true,

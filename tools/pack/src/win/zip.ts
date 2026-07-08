@@ -19,7 +19,7 @@ function logWinZipProgress(message: string, fields: Record<string, unknown> = {}
 // Produces a portable zip from the unpacked Electron build using the same 7z
 // binary that ships with tools-pack for the NSIS payload. The zip lays files
 // flat at the archive root so that users can extract it anywhere on Windows
-// and run `Marketing AX.exe` without going through the NSIS installer.
+// and run `M-AX.exe` without going through the NSIS installer.
 //
 // We deliberately do not delegate this to electron-builder's native `zip`
 // target: the existing tools-pack flow forces electron-builder to `to: "dir"`

@@ -134,7 +134,7 @@ export async function exportDiagnosticsToFile(
   const defaultPath = join(downloadsDir, filename);
 
   const dialogOptions = {
-    title: "Export Marketing AX diagnostics",
+    title: "Export M-AX diagnostics",
     defaultPath,
     filters: [{ name: "Zip archive", extensions: ["zip"] }],
   };
@@ -191,11 +191,12 @@ export async function exportDiagnosticsToFile(
       sources,
       redaction: { username: safeUsername() },
       crashReports: {
-        // Restrict to Marketing AX's own process names. A generic "Electron"
+        // Restrict to M-AX's own process names. A generic "Electron"
         // substring would sweep up crash reports from any other Electron app
         // on the host (VS Code, Slack, …) and leak unrelated user data into
         // the support bundle.
-        matchSubstrings: ["Marketing AX", "open-design"],
+        // "Marketing AX"는 rename 이전 프로세스명 크래시 리포트(7일 윈도) 커버용 잔존
+        matchSubstrings: ["M-AX", "Marketing AX", "open-design"],
         withinDays: 7,
         maxReports: 10,
         homeDir: homedir(),

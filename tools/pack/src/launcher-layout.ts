@@ -95,7 +95,7 @@ export function resolveToolPackLauncherPayloadLayout(
   const archivePath = join(
     config.roots.output.namespaceRoot,
     "payload",
-    `Marketing AX-${namespaceToken}-payload.${payloadArchiveExtension(config.platform)}`,
+    `M-AX-${namespaceToken}-payload.${payloadArchiveExtension(config.platform)}`,
   );
   return {
     archivePath,
