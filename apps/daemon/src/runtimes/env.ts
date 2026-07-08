@@ -83,7 +83,6 @@ export function spawnEnvForAgent(
     baseEnv,
     expandedConfiguredEnv,
   );
-  applyWindowsUserCacheEnv(env);
   if (agentId === 'amr') {
     Object.assign(env, amrVelaProfileEnv(env));
     Object.assign(env, amrAnalyticsIdentityEnv(env));
@@ -118,13 +117,13 @@ export function spawnEnvForAgent(
       const opencodeBin = resolveAmrOpenCodeExecutable(env);
       if (opencodeBin) env.VELA_OPENCODE_BIN = opencodeBin;
     }
-    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'claude') {
-    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'codex') {
-    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'opencode' || agentId === 'byok-opencode') {
     stripKeysCaseInsensitive(env, [
@@ -144,7 +143,7 @@ export function spawnEnvForAgent(
     if (!env.OPENCODE_DISABLE_PROJECT_CONFIG?.trim()) {
       env.OPENCODE_DISABLE_PROJECT_CONFIG = 'true';
     }
-    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'mimo') {
     stripKeysCaseInsensitive(env, [
@@ -160,9 +159,9 @@ export function spawnEnvForAgent(
     if (!env.MIMOCODE_DISABLE_PROJECT_CONFIG?.trim()) {
       env.MIMOCODE_DISABLE_PROJECT_CONFIG = 'true';
     }
-    return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+    return finalizeRuntimeEnv(env, sandboxRuntime);
   }
-  return reapplySandboxRuntimeEnv(env, sandboxRuntime);
+  return finalizeRuntimeEnv(env, sandboxRuntime);
 }
 
 export function openDesignAmrTraceEnv(input: {
@@ -208,6 +207,15 @@ function reapplySandboxRuntimeEnv(
 ): NodeJS.ProcessEnv {
   if (!sandboxRuntime) return env;
   return applySandboxRuntimeEnv(env, sandboxRuntime);
+}
+
+function finalizeRuntimeEnv(
+  env: NodeJS.ProcessEnv,
+  sandboxRuntime: SandboxRuntimeConfig | null,
+): NodeJS.ProcessEnv {
+  const finalizedEnv = reapplySandboxRuntimeEnv(env, sandboxRuntime);
+  applyWindowsUserCacheEnv(finalizedEnv);
+  return finalizedEnv;
 }
 
 function stripKeysCaseInsensitive(
