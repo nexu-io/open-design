@@ -36,6 +36,18 @@ od resource put ./some-dir --kind design_system --ref latest
 od resource get <resource-id> ./dest
 ```
 
+Or run against a **local vela stack** instead of the fixture, for real byte
+transport (the vela stack's MinIO) — see the vela repo's
+`docker/docker-compose.dev.yml` + `services/api/.env.example`. Start the vela api
+(`pnpm dev:docker:up` + `pnpm --filter @vela/api dev`, api on `:18080`, which is
+also the daemon's default hub URL), then set only:
+
+```
+export OD_RESOURCE_HUB_TOKEN=dev-internal-token   # matches vela CLOUD_INTERNAL_API_TOKEN
+export OD_WORKSPACE_MEMBER_ID=you OD_WORKSPACE_TEAM_ID=your-team OD_WORKSPACE_ROLE=owner
+# OD_RESOURCE_HUB_URL is optional here — it defaults to http://127.0.0.1:18080
+```
+
 - **The daemon makes no mock concessions** — it runs its real client/SDK against
   this exactly as it would against vela. The fixture is the only "fake" piece.
 - **This is disposable.** Once the vela test environment is stood up, delete
