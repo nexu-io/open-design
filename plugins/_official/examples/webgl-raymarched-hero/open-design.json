@@ -1,0 +1,118 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-webgl-raymarched-hero",
+  "title": "Raymarched Hero",
+  "title_i18n": {
+    "zh-CN": "光线步进主视觉",
+    "zh-TW": "光線步進主視覺",
+    "ja": "レイマーチングヒーロー",
+    "ko": "레이마칭 히어로",
+    "de": "Raymarching-Hero",
+    "fr": "Hero en raymarching",
+    "ru": "Raymarching-герой",
+    "es": "Hero con raymarching",
+    "pt-BR": "Hero com raymarching",
+    "it": "Hero in raymarching",
+    "vi": "Hero raymarching",
+    "pl": "Hero z raymarchingiem",
+    "id": "Hero Raymarching",
+    "nl": "Raymarching-hero",
+    "ar": "بطل بتقنية Raymarching",
+    "tr": "Raymarching Hero",
+    "uk": "Raymarching-герой",
+    "en": "Raymarched Hero"
+  },
+  "version": "0.1.0",
+  "description": "Build a raymarched 3D hero — soft-shadowed morphing metaballs with a fresnel rim light, orbiting slowly and sphere-traced per pixel in a fragment shader — rendered full-screen at 60fps as a single self-contained index.html.",
+  "description_i18n": {
+    "zh-CN": "构建一个光线步进的 3D 主视觉——带 fresnel 边缘光的柔和阴影形变元球，缓慢环绕并在片元 shader 中逐像素球体追踪——以 60fps 全屏渲染，作为单个自包含的 index.html。",
+    "zh-TW": "建立一個光線步進的 3D 主視覺——帶 fresnel 邊緣光的柔和陰影形變元球，緩慢環繞並在片元 shader 中逐像素球體追蹤——以 60fps 全螢幕渲染，作為單個自包含的 index.html。",
+    "ja": "レイマーチングによる 3D ヒーローを構築します。fresnel リムライトをまとったソフトシャドウのモーフィングメタボールがゆっくりと周回し、フラグメント shader でピクセルごとにスフィアトレースされます。60fps でフルスクリーン描画し、単一の自己完結型 index.html として出力します。",
+    "ko": "레이마칭 기반 3D 히어로를 구축합니다. fresnel 림 라이트가 감도는 부드러운 그림자의 모핑 메타볼이 천천히 공전하며 프래그먼트 shader에서 픽셀마다 스피어 트레이싱됩니다. 60fps로 전체 화면 렌더링되어 단일 자체 완결형 index.html로 제공됩니다.",
+    "de": "Erstellen Sie einen raymarchten 3D-Hero — weich beschattete, morphende Metaballs mit einem Fresnel-Randlicht, langsam kreisend und im Fragment-Shader pro Pixel sphere-getract — vollflächig mit 60fps gerendert als eine einzige eigenständige index.html.",
+    "fr": "Créez un hero 3D en raymarching — des métaballes morphantes aux ombres douces avec une lumière de contour fresnel, orbitant lentement et sphere-tracées par pixel dans un fragment shader — rendu en plein écran à 60fps sous forme d'un unique index.html autonome.",
+    "ru": "Создайте 3D-героя на raymarching — плавно перетекающие метаболы с мягкими тенями и контурной подсветкой fresnel, медленно вращающиеся и трассируемые сферами попиксельно во фрагментном shader — полноэкранный рендеринг на 60fps в виде единого самодостаточного index.html.",
+    "es": "Crea un hero 3D con raymarching — metaballs que se transforman con sombras suaves y una luz de borde fresnel, orbitando lentamente y trazadas por esferas píxel a píxel en un fragment shader — renderizado a pantalla completa a 60fps como un único index.html autónomo.",
+    "pt-BR": "Crie um hero 3D com raymarching — metaballs que se transformam com sombras suaves e uma luz de contorno fresnel, orbitando lentamente e traçadas por esferas pixel a pixel em um fragment shader — renderizado em tela cheia a 60fps como um único index.html autossuficiente.",
+    "it": "Crea un hero 3D in raymarching — metaball che si trasformano con ombre morbide e una luce di contorno fresnel, orbitando lentamente e tracciate a sfere pixel per pixel in un fragment shader — renderizzato a schermo intero a 60fps come un unico index.html autonomo.",
+    "vi": "Xây dựng một hero 3D raymarching — các metaball biến hình đổ bóng mềm với ánh viền fresnel, xoay quanh chậm rãi và được truy vết cầu theo từng pixel trong fragment shader — kết xuất toàn màn hình ở 60fps dưới dạng một tệp index.html tự chứa duy nhất.",
+    "pl": "Zbuduj raymarchowany hero 3D — miękko cieniowane, morfujące metaballe z fresnelowym światłem krawędziowym, powoli okrążające i śledzone sferami piksel po pikselu we fragment shaderze — renderowany pełnoekranowo w 60fps jako pojedynczy, samodzielny plik index.html.",
+    "id": "Bangun hero 3D raymarching — metaball yang bermorf dengan bayangan lembut dan cahaya tepi fresnel, mengorbit perlahan dan ditelusuri bola per piksel di fragment shader — dirender layar penuh pada 60fps sebagai satu index.html mandiri.",
+    "nl": "Bouw een raymarched 3D-hero — zacht geschaduwde, morphende metaballs met een fresnel-randlicht, langzaam draaiend en per pixel sphere-getraced in een fragment shader — schermvullend gerenderd op 60fps als één op zichzelf staande index.html.",
+    "ar": "أنشئ بطلاً ثلاثي الأبعاد بتقنية raymarching — كرات ميتابول متحوّلة بظلال ناعمة وإضاءة حافة fresnel، تدور ببطء وتُتتبَّع كرويًا لكل بكسل داخل fragment shader — يُعرَض بملء الشاشة بمعدل 60fps ضمن ملف index.html واحد مكتفٍ بذاته.",
+    "tr": "Raymarching ile bir 3D hero oluşturun — fresnel kenar ışığına sahip, yumuşak gölgeli, biçim değiştiren metaball'lar yavaşça yörüngede döner ve fragment shader içinde piksel başına küre izlemesiyle çizilir — 60fps'de tam ekran ve tek, kendi kendine yeten bir index.html olarak render edilir.",
+    "uk": "Створіть 3D-героя на raymarching — плавно перетікні метаболи з м'якими тінями та контурним підсвічуванням fresnel, що повільно обертаються й трасуються сферами попіксельно у фрагментному shader — повноекранний рендеринг на 60fps як єдиний самодостатній index.html.",
+    "en": "Build a raymarched 3D hero — soft-shadowed morphing metaballs with a fresnel rim light, orbiting slowly and sphere-traced per pixel in a fragment shader — rendered full-screen at 60fps as a single self-contained index.html."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/webgl-raymarched-hero",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "web",
+    "webgl",
+    "webgl2",
+    "shader",
+    "3d",
+    "raymarch",
+    "gpu",
+    "generative",
+    "powered-preview",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a raymarched 3D hero as a single self-contained index.html: a signed-distance field of smooth-unioned metaballs, sphere-traced per pixel in a fragment shader, with soft shadows, a fresnel rim light, and a slow camera orbit at 60fps.",
+        "zh-CN": "构建一个光线步进的 3D 主视觉，作为单个自包含的 index.html：在片元着色器中逐像素球体追踪一组平滑并集的元球有向距离场，配以软阴影、菲涅尔轮廓光和缓慢的镜头环绕，60fps 实时运行。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      }
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

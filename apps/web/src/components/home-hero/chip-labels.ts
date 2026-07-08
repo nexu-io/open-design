@@ -23,6 +23,7 @@ export function homeHeroChipLabel(chipId: string, t: Translate): string {
     case 'image': return t('homeHero.chip.image');
     case 'video': return t('homeHero.chip.video');
     case 'hyperframes': return t('homeHero.chip.hyperframes');
+    case 'webgl': return t('homeHero.chip.webgl');
     case 'audio': return t('homeHero.chip.audio');
     case 'create-brand-kit': return t('homeHero.chip.createBrandKit');
     case 'create-plugin': return t('homeHero.chip.createPlugin');

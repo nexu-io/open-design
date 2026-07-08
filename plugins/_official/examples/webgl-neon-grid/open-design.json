@@ -1,0 +1,118 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-webgl-neon-grid",
+  "title": "Neon Grid",
+  "title_i18n": {
+    "zh-CN": "霓虹网格",
+    "zh-TW": "霓虹網格",
+    "ja": "ネオングリッド",
+    "ko": "네온 그리드",
+    "de": "Neon-Grid",
+    "fr": "Grille néon",
+    "ru": "Неоновая сетка",
+    "es": "Rejilla de neón",
+    "pt-BR": "Grade de neon",
+    "it": "Griglia al neon",
+    "vi": "Lưới neon",
+    "pl": "Neonowa siatka",
+    "id": "Kisi Neon",
+    "nl": "Neonraster",
+    "ar": "شبكة نيون",
+    "tr": "Neon Izgara",
+    "uk": "Неонова сітка",
+    "en": "Neon Grid"
+  },
+  "version": "0.1.0",
+  "description": "Build a synthwave neon-grid scene — a perspective floor grid scrolling toward a banded retro sun under a neon starfield — rendered at 60fps as a single self-contained index.html.",
+  "description_i18n": {
+    "zh-CN": "构建一个 synthwave 霓虹网格场景——透视地面网格朝着带状复古落日滚动，铺在霓虹星空之下——以 60fps 渲染，作为单个自包含的 index.html。",
+    "zh-TW": "建立一個 synthwave 霓虹網格場景——透視地面網格朝著帶狀復古落日滾動，鋪在霓虹星空之下——以 60fps 渲染，作為單個自包含的 index.html。",
+    "ja": "synthwave なネオングリッドシーンを構築します。パースのかかった床グリッドが帯状のレトロな太陽へ向かってスクロールし、ネオンの星空の下に広がります。60fps で描画し、単一の自己完結型 index.html として出力します。",
+    "ko": "synthwave 네온 그리드 장면을 구축합니다. 원근이 적용된 바닥 그리드가 띠무늬 레트로 태양을 향해 스크롤되고, 네온 별밤 아래 펼쳐집니다. 60fps로 렌더링되어 단일 자체 완결형 index.html로 제공됩니다.",
+    "de": "Erstellen Sie eine Synthwave-Neon-Grid-Szene — ein perspektivisches Bodengitter, das auf eine gebänderte Retro-Sonne zuscrollt, unter einem Neon-Sternenfeld — mit 60fps gerendert als eine einzige eigenständige index.html.",
+    "fr": "Créez une scène de grille néon synthwave — une grille de sol en perspective défilant vers un soleil rétro strié, sous un champ d'étoiles néon — rendue à 60fps sous forme d'un unique index.html autonome.",
+    "ru": "Создайте synthwave-сцену с неоновой сеткой — перспективная сетка пола, прокручивающаяся к полосатому ретро-солнцу под неоновым звёздным полем — рендеринг на 60fps в виде единого самодостаточного index.html.",
+    "es": "Crea una escena synthwave de rejilla de neón — una rejilla de suelo en perspectiva que se desplaza hacia un sol retro con bandas, bajo un campo de estrellas de neón — renderizada a 60fps como un único index.html autónomo.",
+    "pt-BR": "Crie uma cena synthwave de grade de neon — uma grade de chão em perspectiva rolando em direção a um sol retrô listrado, sob um campo de estrelas de neon — renderizada a 60fps como um único index.html autossuficiente.",
+    "it": "Crea una scena synthwave con griglia al neon — una griglia di pavimento in prospettiva che scorre verso un sole retro a bande, sotto un campo stellato al neon — renderizzata a 60fps come un unico index.html autonomo.",
+    "vi": "Xây dựng một cảnh lưới neon synthwave — lưới sàn phối cảnh cuộn về phía mặt trời retro sọc ngang, dưới bầu trời sao neon — kết xuất ở 60fps dưới dạng một tệp index.html tự chứa duy nhất.",
+    "pl": "Zbuduj synthwave'ową scenę z neonową siatką — perspektywiczna siatka podłogi przewijająca się w stronę pasiastego, retro słońca pod neonowym gwiezdnym polem — renderowana w 60fps jako pojedynczy, samodzielny plik index.html.",
+    "id": "Bangun adegan kisi neon synthwave — kisi lantai berperspektif yang bergulir menuju matahari retro berpita, di bawah medan bintang neon — dirender pada 60fps sebagai satu index.html mandiri.",
+    "nl": "Bouw een synthwave neonraster-scène — een perspectivisch vloerraster dat naar een gebande retrozon toe scrollt, onder een neon sterrenveld — gerenderd op 60fps als één op zichzelf staande index.html.",
+    "ar": "أنشئ مشهد شبكة نيون بأسلوب synthwave — شبكة أرضية منظورية تنساب نحو شمس رجعية مخطّطة تحت حقل نجوم نيوني — يُعرَض بمعدل 60fps ضمن ملف index.html واحد مكتفٍ بذاته.",
+    "tr": "Bir synthwave neon ızgara sahnesi oluşturun — perspektifli bir zemin ızgarası, neon yıldız alanının altında bantlı retro bir güneşe doğru kayar — 60fps'de tek ve kendi kendine yeten bir index.html olarak render edilir.",
+    "uk": "Створіть synthwave-сцену з неоновою сіткою — перспективна сітка підлоги, що прокручується до смугастого ретро-сонця під неоновим зоряним полем — рендериться на 60fps як єдиний самодостатній index.html.",
+    "en": "Build a synthwave neon-grid scene — a perspective floor grid scrolling toward a banded retro sun under a neon starfield — rendered at 60fps as a single self-contained index.html."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/webgl-neon-grid",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "web",
+    "webgl",
+    "webgl2",
+    "shader",
+    "gpu",
+    "generative",
+    "synthwave",
+    "retro",
+    "powered-preview",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a synthwave neon-grid scene as a single self-contained index.html: an analytic perspective floor grid scrolling toward a banded retro sun under a hashed starfield, with a glowing horizon, at 60fps.",
+        "zh-CN": "构建一个赛博朋克霓虹网格场景，作为单个自包含的 index.html：解析式透视地面网格向着带状复古落日滚动，头顶是哈希生成的星空，地平线泛着辉光，60fps 实时运行。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      }
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

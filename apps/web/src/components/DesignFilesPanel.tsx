@@ -115,6 +115,7 @@ const SECTION_ORDER: FileCategory[] = [
 ];
 
 const STYLESHEET_EXTENSIONS = new Set(['css', 'scss', 'sass', 'less']);
+const HTML_THUMBNAIL_INLINE_MAX_BYTES = 512 * 1024;
 
 function fileCategory(file: ProjectFile): FileCategory {
   const dot = file.name.lastIndexOf('.');
@@ -1426,7 +1427,12 @@ function DfPreview({
         {rendersSketchJson ? (
           <SketchPreview projectId={projectId} file={file} />
         ) : file.kind === 'image' || file.kind === 'sketch' ? (
-          <img src={`${url}?v=${Math.round(file.mtime)}`} alt={file.name} />
+          <img
+            src={`${url}?v=${Math.round(file.mtime)}`}
+            alt={file.name}
+            loading="lazy"
+            decoding="async"
+          />
         ) : file.kind === 'html' ? (
           <HtmlPreviewThumbnail projectId={projectId} file={file} />
         ) : file.kind === 'video' ? (
@@ -1439,19 +1445,7 @@ function DfPreview({
         ) : file.kind === 'audio' ? (
           <audio src={`${url}?v=${Math.round(file.mtime)}`} controls preload="metadata" />
         ) : (
-          <div
-            style={{
-              width: '100%',
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-faint)',
-              fontSize: 38,
-            }}
-          >
-            {categoryGlyph(fileCategory(file))}
-          </div>
+          <FilePreviewPlaceholder file={file} />
         )}
         {thumbCanOpen ? (
           <button
@@ -1493,31 +1487,57 @@ function HtmlPreviewThumbnail({
   projectId: string;
   file: ProjectFile;
 }) {
+  const t = useT();
+  const tooLargeForThumbnail = file.size > HTML_THUMBNAIL_INLINE_MAX_BYTES;
   const url = projectFileUrl(projectId, file.name);
   const [srcDoc, setSrcDoc] = useState<string | null>(null);
   useEffect(() => {
+    setSrcDoc(null);
+    if (tooLargeForThumbnail) return;
+    const controller = new AbortController();
     let cancelled = false;
-    void fetch(`${url}?v=${Math.round(file.mtime)}`)
+    void fetch(`${url}?v=${Math.round(file.mtime)}`, { signal: controller.signal })
       .then((response) => (response.ok ? response.text() : null))
       .then((html) => {
         if (cancelled || html === null) return;
-        setSrcDoc(buildSrcdoc(html, { baseHref: projectRawUrl(projectId, baseDirForFile(file.name)) }));
+        const nextSrcDoc = buildSrcdoc(html, { baseHref: projectRawUrl(projectId, baseDirForFile(file.name)) });
+        if (!cancelled) setSrcDoc(nextSrcDoc);
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (!cancelled) setSrcDoc(null);
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [file.mtime, file.name, projectId, url]);
+  }, [file.mtime, file.name, projectId, tooLargeForThumbnail, url]);
+
+  if (tooLargeForThumbnail || srcDoc === null) {
+    return <FilePreviewPlaceholder file={file} title={t('designFiles.previewOpen')} />;
+  }
 
   return (
     <iframe
       title={file.name}
-      src={srcDoc ? undefined : url}
-      srcDoc={srcDoc ?? undefined}
+      srcDoc={srcDoc}
       sandbox="allow-scripts allow-downloads"
+      loading="lazy"
     />
+  );
+}
+
+function FilePreviewPlaceholder({
+  file,
+  title,
+}: {
+  file: ProjectFile;
+  title?: string;
+}) {
+  return (
+    <div className="df-preview-placeholder" title={title}>
+      {categoryGlyph(fileCategory(file))}
+    </div>
   );
 }
 

@@ -1,0 +1,127 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-worker-visualizer",
+  "title": "Worker Visualizer",
+  "title_i18n": {
+    "zh-CN": "Worker 可视化",
+    "zh-TW": "Worker 視覺化",
+    "ja": "Worker ビジュアライザー",
+    "ko": "Worker 시각화",
+    "de": "Worker-Visualizer",
+    "fr": "Visualiseur Worker",
+    "ru": "Worker-визуализатор",
+    "es": "Visualizador Worker",
+    "pt-BR": "Visualizador Worker",
+    "it": "Visualizzatore Worker",
+    "vi": "Trình trực quan Worker",
+    "pl": "Wizualizator Worker",
+    "id": "Visualizer Worker",
+    "nl": "Worker-visualizer",
+    "ar": "مُصوِّر Worker",
+    "tr": "Worker Görselleştirici",
+    "uk": "Worker-візуалізатор",
+    "en": "Worker Visualizer"
+  },
+  "version": "0.1.0",
+  "description": "Build a real-time visualizer whose heavy compute runs in a Web Worker — particle systems, physics, fractals, data/audio viz — optionally sharing memory via SharedArrayBuffer, rendered to canvas at 60fps. Trigger when the user asks for a web worker, simulation, particle system, physics, fractal, off-main-thread compute, or real-time visualizer.",
+  "description_i18n": {
+    "zh-CN": "构建一个实时可视化器，将繁重计算放到 Web Worker 中运行——粒子系统、物理、分形、数据/音频可视化——可通过 SharedArrayBuffer 共享内存，以 60fps 渲染到画布。当用户需要 web worker、模拟、粒子系统、物理、分形、离主线程计算或实时可视化时触发。",
+    "zh-TW": "建立一個即時視覺化器，將繁重運算放到 Web Worker 中執行——粒子系統、物理、碎形、資料/音訊視覺化——可透過 SharedArrayBuffer 共享記憶體，以 60fps 渲染到畫布。當使用者需要 web worker、模擬、粒子系統、物理、碎形、離主執行緒運算或即時視覺化時觸發。",
+    "ja": "重い計算を Web Worker で実行するリアルタイムビジュアライザー（パーティクル、物理、フラクタル、データ/オーディオ可視化）を構築。SharedArrayBuffer でメモリを共有し、60fps でキャンバスに描画します。web worker、シミュレーション、パーティクル、物理、フラクタル、メインスレッド外計算、リアルタイム可視化の要望で起動。",
+    "ko": "무거운 연산을 Web Worker에서 실행하는 실시간 시각화기(파티클, 물리, 프랙탈, 데이터/오디오 시각화)를 구축합니다. SharedArrayBuffer로 메모리를 공유하고 60fps로 캔버스에 렌더링합니다. web worker, 시뮬레이션, 파티클, 물리, 프랙탈, 오프메인스레드 연산, 실시간 시각화 요청 시 트리거됩니다.",
+    "de": "Erstellen Sie einen Echtzeit-Visualizer, dessen schwere Berechnung in einem Web Worker läuft — Partikelsysteme, Physik, Fraktale, Daten-/Audio-Visualisierung — optional per SharedArrayBuffer, auf Canvas mit 60fps gerendert. Wird ausgelöst bei Web-Worker-, Simulations-, Partikel-, Physik-, Fraktal-, Off-Main-Thread- oder Echtzeit-Visualizer-Anfragen.",
+    "fr": "Créez un visualiseur temps réel dont le calcul lourd s'exécute dans un Web Worker — systèmes de particules, physique, fractales, visualisation de données/audio — partageant éventuellement la mémoire via SharedArrayBuffer, rendu sur canvas à 60fps. Déclenché pour toute demande de web worker, simulation, particules, physique, fractale, calcul hors thread principal ou visualiseur temps réel.",
+    "ru": "Создайте визуализатор реального времени, тяжёлые вычисления которого выполняются в Web Worker — системы частиц, физика, фракталы, визуализация данных/аудио — с опциональным разделением памяти через SharedArrayBuffer, рендеринг на canvas при 60fps. Срабатывает при запросах web worker, симуляции, частиц, физики, фракталов, вычислений вне основного потока или визуализатора реального времени.",
+    "es": "Crea un visualizador en tiempo real cuyo cómputo pesado corre en un Web Worker — sistemas de partículas, física, fractales, visualización de datos/audio — compartiendo memoria opcionalmente vía SharedArrayBuffer, renderizado en canvas a 60fps. Se activa ante solicitudes de web worker, simulación, partículas, física, fractal, cómputo fuera del hilo principal o visualizador en tiempo real.",
+    "pt-BR": "Crie um visualizador em tempo real cujo cálculo pesado roda em um Web Worker — sistemas de partículas, física, fractais, visualização de dados/áudio — compartilhando memória opcionalmente via SharedArrayBuffer, renderizado em canvas a 60fps. Acionado em pedidos de web worker, simulação, partículas, física, fractal, cálculo fora da thread principal ou visualizador em tempo real.",
+    "it": "Crea un visualizzatore in tempo reale il cui calcolo pesante gira in un Web Worker — sistemi di particelle, fisica, frattali, visualizzazione dati/audio — condividendo opzionalmente la memoria via SharedArrayBuffer, renderizzato su canvas a 60fps. Si attiva per richieste di web worker, simulazione, particelle, fisica, frattale, calcolo fuori dal thread principale o visualizzatore in tempo reale.",
+    "vi": "Xây dựng trình trực quan thời gian thực với phần tính toán nặng chạy trong Web Worker — hệ hạt, vật lý, fractal, trực quan hóa dữ liệu/âm thanh — tùy chọn chia sẻ bộ nhớ qua SharedArrayBuffer, kết xuất lên canvas ở 60fps. Kích hoạt khi người dùng cần web worker, mô phỏng, hệ hạt, vật lý, fractal, tính toán ngoài luồng chính hoặc trình trực quan thời gian thực.",
+    "pl": "Zbuduj wizualizator czasu rzeczywistego, którego ciężkie obliczenia działają w Web Workerze — systemy cząstek, fizyka, fraktale, wizualizacja danych/audio — opcjonalnie współdzieląc pamięć przez SharedArrayBuffer, renderowany na canvasie w 60fps. Uruchamiane przy prośbach o web worker, symulację, cząstki, fizykę, fraktal, obliczenia poza głównym wątkiem lub wizualizator czasu rzeczywistego.",
+    "id": "Bangun visualizer real-time yang komputasi beratnya berjalan di Web Worker — sistem partikel, fisika, fraktal, visualisasi data/audio — opsional berbagi memori via SharedArrayBuffer, dirender ke canvas pada 60fps. Terpicu saat pengguna meminta web worker, simulasi, sistem partikel, fisika, fraktal, komputasi di luar main thread, atau visualizer real-time.",
+    "nl": "Bouw een real-time visualizer waarvan de zware berekening in een Web Worker draait — deeltjessystemen, fysica, fractals, data-/audiovisualisatie — optioneel met gedeeld geheugen via SharedArrayBuffer, op canvas gerenderd op 60fps. Wordt geactiveerd bij web worker-, simulatie-, deeltjes-, fysica-, fractal-, off-main-thread- of real-time visualizer-verzoeken.",
+    "ar": "أنشئ مُصوِّرًا فوريًا تُنفَّذ حساباته الثقيلة في Web Worker — أنظمة جسيمات وفيزياء وكسور (fractals) وتصوير بيانات/صوت — مع مشاركة اختيارية للذاكرة عبر SharedArrayBuffer، ويُرسم على canvas بمعدل 60 إطارًا/ث. يُفعّل عند طلب web worker أو محاكاة أو نظام جسيمات أو فيزياء أو كسور أو حساب خارج الخيط الرئيسي أو مُصوِّر فوري.",
+    "tr": "Ağır hesaplaması bir Web Worker'da çalışan gerçek zamanlı bir görselleştirici oluşturun — parçacık sistemleri, fizik, fraktallar, veri/ses görselleştirme — isteğe bağlı olarak SharedArrayBuffer ile bellek paylaşarak, canvas'a 60fps hızında çizilir. Web worker, simülasyon, parçacık sistemi, fizik, fraktal, ana iş parçacığı dışı hesaplama veya gerçek zamanlı görselleştirici istekleriyle tetiklenir.",
+    "uk": "Створіть візуалізатор реального часу, важкі обчислення якого виконуються у Web Worker — системи частинок, фізика, фрактали, візуалізація даних/аудіо — з опційним спільним використанням пам'яті через SharedArrayBuffer, рендеринг на canvas при 60fps. Спрацьовує на запити web worker, симуляції, частинок, фізики, фракталів, обчислень поза основним потоком або візуалізатора реального часу.",
+    "en": "Build a real-time visualizer whose heavy compute runs in a Web Worker — particle systems, physics, fractals, data/audio viz — optionally sharing memory via SharedArrayBuffer, rendered to canvas at 60fps. Trigger when the user asks for a web worker, simulation, particle system, physics, fractal, off-main-thread compute, or real-time visualizer."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/worker-visualizer",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "web",
+    "web-worker",
+    "worker",
+    "simulation",
+    "particles",
+    "sharedarraybuffer",
+    "offscreencanvas",
+    "powered-preview",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a real-time {{subject}} visualizer whose heavy compute runs in a Web Worker (sharing memory via SharedArrayBuffer when available), rendered to canvas at 60fps as a single self-contained index.html.",
+        "zh-CN": "构建一个实时的{{subject}}可视化器，将繁重计算放到 Web Worker 中运行（可用时通过 SharedArrayBuffer 共享内存），作为单个自包含的 index.html 以 60fps 渲染到画布。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "subject",
+        "label": "What should it simulate?",
+        "type": "text",
+        "required": false,
+        "default": "a 12,000-body swirling particle field",
+        "placeholder": "e.g. an N-body galaxy, a Mandelbrot zoom, reaction-diffusion"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      }
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

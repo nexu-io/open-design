@@ -7,6 +7,7 @@ import {
   type ChatSessionMode,
   type PluginManifest,
   type ProjectFile,
+  type ProjectFileTextPreviewResponse,
   type ProjectFileVersion,
   type ProjectFileVersionPromptSource,
   type ProjectFileVersionSource,
@@ -2392,6 +2393,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   const { validateArtifactManifestInput } = ctx.artifacts;
   const { projectPreviewScopes } = ctx;
   const projectPreviewIframeSandbox = 'allow-scripts allow-forms';
+  const HTML_PREVIEW_BRIDGE_MAX_BYTES = 2 * 1024 * 1024;
+  const HTML_POWERED_PREVIEW_HINT_SCAN_MAX_BYTES = 128 * 1024 * 1024;
   const projectPreviewCsp = [
     `sandbox ${projectPreviewIframeSandbox}`,
     "default-src 'self' data: blob:",
@@ -2411,6 +2414,38 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', projectPreviewCsp);
+  }
+
+  // "Powered preview" headers — the opposite trade-off from setProjectPreviewHeaders.
+  // Real WebGL / Web Worker / WASM sites (Gaussian-splat viewers, physics demos,
+  // ffmpeg.wasm, threaded renderers) need capabilities the opaque-origin preview
+  // sandbox blocks: same-origin Workers, real Web Storage, and — for threaded
+  // WASM — SharedArrayBuffer, which requires the document to be crossOriginIsolated.
+  //
+  // `Document-Isolation-Policy: isolate-and-credentialless` grants the SERVED
+  // document its own cross-origin-isolated agent cluster WITHOUT requiring the
+  // embedding app to opt the whole page into COOP/COEP. That is the key that
+  // unlocks SharedArrayBuffer for just this iframe. The `credentialless` variant
+  // (vs `require-corp`) still lets artifacts pull no-cors cross-origin
+  // subresources (CDN fonts/images) — those loads just drop credentials — so
+  // enabling isolation does not blank out otherwise-working artifacts.
+  //
+  // The web host renders the powered iframe with `allow-same-origin` at the
+  // daemon's host-swapped preview origin (see
+  // apps/web/src/runtime/powered-preview.ts), so this document gets same-origin
+  // Workers/storage for sibling /powered assets while the shared /api
+  // middleware rejects browser requests from that origin to normal daemon APIs.
+  function setPoweredPreviewHeaders(res: Response) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Document-Isolation-Policy', 'isolate-and-credentialless');
+    // Let cross-origin-isolated contexts embed these bytes (the doc + its
+    // worker/wasm/asset subresources under the same /powered prefix).
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    // No CORS headers: powered documents and their relative subresources load
+    // from the same /powered loopback origin. Foreign browser origins must not
+    // get read access to project files by adding an Origin header.
+    res.removeHeader('Content-Security-Policy');
   }
 
   function rejectInternalVersionPath(res: Response, value: unknown): boolean {
@@ -2620,6 +2655,58 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     return Number.isFinite(since) && Math.floor(mtimeMs / 1000) * 1000 <= since;
   }
 
+  function htmlHasPoweredPreviewSignal(source: string): boolean {
+    if (/\bSharedArrayBuffer\b/.test(source)) return true;
+    if (/\bnew\s+(?:Worker|SharedWorker)\s*\(/.test(source)) return true;
+    if (/\bimportScripts\s*\(/.test(source)) return true;
+    if (/\bWebAssembly\s*\.\s*(?:instantiateStreaming|compileStreaming)\b/.test(source)) return true;
+    if (/\.wasm\b/.test(source)) return true;
+    if (/getContext\s*\(\s*["'`]webgl2["'`]/.test(source)) return true;
+    if (/\bOffscreenCanvas\b/.test(source)) return true;
+    if (/\bnavigator\s*\.\s*gpu\b/.test(source)) return true;
+    return false;
+  }
+
+  async function detectPoweredPreviewHint(meta: {
+    filePath: string;
+    mime: string;
+    size: number;
+  }): Promise<ProjectFileTextPreviewResponse['poweredPreview']> {
+    if (!/^text\/html(?:;|$)/i.test(meta.mime)) {
+      return { required: false, scannedBytes: 0, complete: true };
+    }
+    const scanLimit = Math.min(meta.size, HTML_POWERED_PREVIEW_HINT_SCAN_MAX_BYTES);
+    if (scanLimit <= 0) {
+      return { required: false, scannedBytes: 0, complete: true };
+    }
+
+    let scannedBytes = 0;
+    let tail = '';
+    for await (const chunk of fs.createReadStream(meta.filePath, {
+      start: 0,
+      end: scanLimit - 1,
+      highWaterMark: 256 * 1024,
+    })) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+      scannedBytes += buffer.byteLength;
+      const sample = tail + buffer.toString('utf8');
+      if (htmlHasPoweredPreviewSignal(sample)) {
+        return {
+          required: true,
+          scannedBytes,
+          complete: scannedBytes >= meta.size,
+        };
+      }
+      tail = sample.slice(-512);
+    }
+
+    return {
+      required: false,
+      scannedBytes,
+      complete: scannedBytes >= meta.size,
+    };
+  }
+
   async function sendProjectFile(
     req: any,
     res: Response,
@@ -2639,6 +2726,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     beforeSend?.(meta.mime);
 
     const isStreamed = meta.mime.startsWith('video/') || meta.mime.startsWith('audio/');
+    const shouldStreamBody = isStreamed || !transformFile;
     // A transform (the Vite dev-entry -> dist/index.html substitution, or preview
     // bridge injection) can replace the response bytes — but only for HTML. For
     // HTML the source file's mtime/size is NOT a valid validator, so its ETag is
@@ -2656,7 +2744,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
     }
 
-    if (isStreamed) {
+    if (shouldStreamBody) {
       res.setHeader('Accept-Ranges', 'bytes');
       res.setHeader('Content-Type', meta.mime);
 
@@ -2935,6 +3023,58 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
+  app.get(/^\/api\/projects\/([^/]+)\/text-preview\/(.+)$/u, async (req, res) => {
+    let handle: import('fs/promises').FileHandle | null = null;
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string };
+      const projectId = String(params[0] ?? '');
+      const relPath = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, relPath)) return;
+      const requestedLimit = Number(req.query.limit);
+      const limit = Math.max(
+        1024,
+        Math.min(Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 96 * 1024, 512 * 1024),
+      );
+      const project = getProject(db, projectId);
+      const meta = await resolveProjectFilePath(
+        PROJECTS_DIR,
+        projectId,
+        relPath,
+        project?.metadata,
+      );
+      const bytesToRead = Math.min(meta.size, limit);
+      const buffer = Buffer.allocUnsafe(bytesToRead);
+      const opened = await fs.promises.open(meta.filePath, 'r');
+      handle = opened;
+      const result = bytesToRead > 0
+        ? await opened.read(buffer, 0, bytesToRead, 0)
+        : { bytesRead: 0 };
+      const text = buffer.subarray(0, result.bytesRead).toString('utf8');
+      const poweredPreview = await detectPoweredPreviewHint(meta);
+      const body: ProjectFileTextPreviewResponse = {
+        text,
+        truncated: meta.size > result.bytesRead,
+        size: meta.size,
+        limit,
+        mime: meta.mime,
+        kind: meta.kind,
+        poweredPreview,
+      };
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(body);
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
+    } finally {
+      await handle?.close().catch(() => undefined);
+    }
+  });
+
   app.get(/^\/api\/projects\/([^/]+)\/preview\/([^/]+)\/(.+)$/u, async (req, res) => {
     try {
       const params = req.params as unknown as { 0?: string; 1?: string; 2?: string };
@@ -3011,6 +3151,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (req.headers.origin === 'null') {
         res.header('Access-Control-Allow-Origin', '*');
       }
+      const meta = await resolveProjectFilePath(
+        PROJECTS_DIR,
+        projectId,
+        relPath,
+        project?.metadata,
+      );
+      const skipHtmlPreviewBridge =
+        /^text\/html(?:;|$)/i.test(meta.mime) && meta.size > HTML_PREVIEW_BRIDGE_MAX_BYTES;
 
       await sendProjectFile(
         req,
@@ -3019,7 +3167,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         relPath,
         project?.metadata,
         undefined,
-        async (file) => {
+        skipHtmlPreviewBridge ? undefined : async (file) => {
           let transformed = await maybeResolveVitePreviewHtml({
             file,
             projectId,
@@ -3055,6 +3203,62 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           return transformed;
         },
         true, // revalidate: emit ETag/Last-Modified so covers/preview/export reuse cached assets
+      );
+    } catch (err: any) {
+      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        String(err),
+      );
+    }
+  });
+
+  // Explicitly do not grant CORS for powered previews. Same-origin subresource
+  // reads under the powered loopback URL do not preflight; foreign preflights
+  // should complete without ACAO so browsers block the read.
+  app.options(/^\/api\/projects\/([^/]+)\/powered\/(.+)$/u, (_req, res) => {
+    res.sendStatus(204);
+  });
+
+  // "Powered preview" file serving. Mirrors /raw but stamps every response
+  // (the HTML document AND its relatively-referenced worker/wasm/asset
+  // subresources, which resolve under the same /powered/ prefix) with the
+  // cross-origin-isolation headers from setPoweredPreviewHeaders. This is the
+  // serving half of WebGL/Worker/WASM/SharedArrayBuffer support; the web host
+  // decides when to route a preview here (see file-viewer-render-mode.ts).
+  app.get(/^\/api\/projects\/([^/]+)\/powered\/(.+)$/u, async (req, res) => {
+    try {
+      const params = req.params as unknown as { 0?: string; 1?: string };
+      const projectId = String(params[0] ?? '');
+      const relPath = String(params[1] ?? '');
+      if (rejectInternalVersionPath(res, relPath)) return;
+      const project = getProject(db, projectId);
+      const meta = await resolveProjectFilePath(
+        PROJECTS_DIR,
+        projectId,
+        relPath,
+        project?.metadata,
+      );
+      const skipPoweredTransform =
+        /^text\/html(?:;|$)/i.test(meta.mime) && meta.size > HTML_PREVIEW_BRIDGE_MAX_BYTES;
+      await sendProjectFile(
+        req,
+        res,
+        projectId,
+        relPath,
+        project?.metadata,
+        () => setPoweredPreviewHeaders(res),
+        skipPoweredTransform ? undefined : async (file) =>
+          maybeResolveVitePreviewHtml({
+            file,
+            projectId,
+              relPath,
+              metadata: project?.metadata,
+              projectsRoot: PROJECTS_DIR,
+              readProjectFile,
+            }),
       );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;

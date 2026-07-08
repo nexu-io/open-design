@@ -1895,13 +1895,15 @@ function AppInner() {
     void patchProject(id, { name: trimmed });
   }, []);
 
-  // Return to wherever the user opened this project from (Projects, Tasks, a
-  // design system, …) by popping the history stack. Falls back to the Projects
-  // list only when there is no in-app history behind us (a deep link / fresh
-  // load straight onto the project URL) — see `goBack`.
   const handleBack = useCallback(() => {
+    const currentProjectId = route.kind === 'project' ? route.projectId : null;
     goBack({ kind: 'home', view: 'projects' });
-  }, []);
+    if (currentProjectId && typeof window !== 'undefined') {
+      window.setTimeout(() => {
+        iframeKeepAlivePool.evictProject(currentProjectId, { includeActive: true });
+      }, 0);
+    }
+  }, [iframeKeepAlivePool, route]);
 
   const handleClearPendingPrompt = useCallback(() => {
     const projectId = route.kind === 'project' ? route.projectId : null;

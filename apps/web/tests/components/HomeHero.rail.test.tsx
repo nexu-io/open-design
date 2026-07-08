@@ -16,7 +16,7 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
   PlaceholderCarousel: () => null,
 }));
 
-import { HomeHero } from '../../src/components/HomeHero';
+import { HomeHero, homeHeroExamplePluginsForChip } from '../../src/components/HomeHero';
 import {
   HOME_HERO_CHIPS,
   findChip,
@@ -301,6 +301,27 @@ describe('HomeHero intent rail', () => {
       'deck',
       'Create with a focused brief using Investor deck',
     );
+  });
+
+  it('maps powered WebGL presets to the WebGL chip without exposing a Worker chip', () => {
+    const webgl = makePlugin('example-webgl-experience', 'prototype', 'WebGL Experience', [
+      'webgl',
+      'webgl2',
+      'shader',
+      'gpu',
+      'powered-preview',
+    ]);
+    const worker = makePlugin('example-worker-visualizer', 'prototype', 'Worker Visualizer', [
+      'web-worker',
+      'worker',
+      'sharedarraybuffer',
+      'offscreencanvas',
+      'powered-preview',
+    ]);
+    const unrelated = makePlugin('example-web-prototype', 'prototype', 'Prototype');
+
+    expect(homeHeroExamplePluginsForChip('webgl', [webgl, unrelated, worker], 'en')).toEqual([webgl]);
+    expect(findChip('worker')).toBeUndefined();
   });
 
   it('orders curated example presets first for the selected artifact type', () => {

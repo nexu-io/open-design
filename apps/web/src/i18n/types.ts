@@ -1113,6 +1113,10 @@ export interface Dict {
   'homeHero.chip.videoDesc': string;
   'homeHero.chip.audioDesc': string;
   'homeHero.chip.hyperframesDesc': string;
+  'homeHero.chip.webgl': string;
+  'homeHero.chip.webglDesc': string;
+  'homeHero.chip.worker': string;
+  'homeHero.chip.workerDesc': string;
   'homeHero.chip.liveArtifactDesc': string;
   'homeHero.chip.createBrandKitDesc': string;
   'homeHero.chip.prototypeNext': string;
