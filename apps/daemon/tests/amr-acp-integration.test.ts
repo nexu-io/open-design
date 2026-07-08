@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { attachAcpSession, detectAcpModels } from '../src/acp.js';
+import { attachAcpSession, detectAcpModels } from '../src/agent-protocol/index.js';
 import { classifyAmrAccountFailure } from '../src/integrations/vela-errors.js';
 import { AmrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import {

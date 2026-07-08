@@ -27,7 +27,7 @@ import path from 'node:path';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const { attachAcpSession } = await import(
-  path.join(HERE, '..', 'dist', 'acp.js')
+  path.join(HERE, '..', 'dist', 'agent-protocol', 'index.js')
 );
 
 const velaBin = process.env.VELA_BIN || 'vela';
