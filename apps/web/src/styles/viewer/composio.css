@@ -1086,6 +1086,39 @@
   border: 1px solid rgba(0, 0, 0, 0.08);
   min-width: 0;
 }
+
+.qf-card-wireframe {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-auto-rows: 16px;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--bg-subtle) 70%, transparent);
+}
+.qf-card-wireframe-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--bg-panel);
+}
+.qf-card-wireframe-zone--0 { grid-column: span 6; }
+.qf-card-wireframe-zone--1 { grid-column: span 3; }
+.qf-card-wireframe-zone--2 { grid-column: span 3; }
+.qf-card-wireframe-zone--3 { grid-column: span 2; }
+.qf-card-wireframe-zone--4 { grid-column: span 4; }
+
 .qf-card-types {
   display: flex;
   align-items: baseline;

@@ -107,8 +107,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
   function handleSubmit() {
     if (locked || !onSubmit) return;
     // Block submit until required fields are answered and selection caps hold.
-    // skipAll() is the only path that intentionally bypasses this (the new
-    // Questions-tab Skip button / countdown).
+    // skipAll() is the only path that intentionally bypasses this (manual Skip button).
     if (!ready) return;
     onSubmit(formatFormAnswers(form, answers), answers);
   }
@@ -503,6 +502,15 @@ function DirectionCardView({
               style={{ background: c }}
               title={c}
             />
+          ))}
+        </div>
+      ) : null}
+      {card.wireframe && card.wireframe.length > 0 ? (
+        <div className="qf-card-wireframe" aria-hidden>
+          {card.wireframe.slice(0, 8).map((zone, i) => (
+            <span key={`${card.id}-wf-${i}`} className={`qf-card-wireframe-zone qf-card-wireframe-zone--${i % 5}`}>
+              {zone}
+            </span>
           ))}
         </div>
       ) : null}

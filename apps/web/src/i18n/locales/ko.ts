@@ -3032,6 +3032,7 @@ export const ko: Dict = {
   'questions.generating': '질문 생성 중…',
   'questions.skipAll': '모두 건너뛰기',
   'questions.autoSkipHint': '타이머가 종료되면 자동으로 계속됩니다',
+  'questions.manualGateHint': '선택 후 계속을 누르세요. 자동 건너뛰기는 없습니다.',
   'sketch.toolSelect': '선택',
   'sketch.toolPen': '펜',
   'sketch.toolText': '텍스트',

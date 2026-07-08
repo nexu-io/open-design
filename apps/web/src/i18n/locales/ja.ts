@@ -3032,6 +3032,7 @@ export const ja: Dict = {
   'questions.generating': '質問を生成中…',
   'questions.skipAll': 'すべてスキップ',
   'questions.autoSkipHint': 'タイマー終了時に自動で続行します',
+  'questions.manualGateHint': '必要な項目を選んで「続行」を押してください。自動スキップはありません。',
   'sketch.toolSelect': '選択（操作なし）',
   'sketch.toolPen': 'ペン',
   'sketch.toolText': 'テキスト',

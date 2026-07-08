@@ -26,10 +26,6 @@ const revealedOccurrences = new Set<string>();
 // exposure by the stable per-occurrence key instead of component lifetime.
 const viewedFormOccurrences = new Set<string>();
 
-// Once the form is actionable, the user has this long before we auto-continue
-// for them — submitting whatever they picked (unanswered questions count as
-// skipped) so generation never stalls waiting on a reply.
-const SKIP_COUNTDOWN_SECONDS = 10 * 60;
 const QUESTION_FORM_DRAFT_STORAGE_PREFIX = 'open-design:question-form-draft:';
 
 type QuestionFormAnswers = Record<string, string | string[]>;
@@ -69,10 +65,9 @@ export function QuestionsPanel({
   const t = useT();
   const analytics = useAnalytics();
   const formRef = useRef<QuestionFormHandle>(null);
-  // What drove the next submit: the Continue CTA, the Skip button, or the
-  // auto-continue countdown. Read (and reset) inside submitAndClearDraft so
-  // the single submit chokepoint can label the click event.
-  const submitSourceRef = useRef<'continue' | 'skip_button' | 'countdown'>('continue');
+  // What drove the next submit: the Continue CTA or the manual Skip button.
+  // Horangdesign never auto-continues; the user explicitly advances each interview gate.
+  const submitSourceRef = useRef<'continue' | 'skip_button'>('continue');
   const [ready, setReady] = useState(false);
   const [draftAnswers, setDraftAnswers] = useState<QuestionFormAnswers | undefined>(() =>
     readQuestionFormDraft(formKey),
@@ -136,8 +131,8 @@ export function QuestionsPanel({
     [analytics.track, form, projectId],
   );
 
-  // The single submit chokepoint — Continue, Skip and the countdown all land
-  // here, so the submit/skip click is reported exactly once.
+  // The single submit chokepoint — Continue and manual Skip both land here,
+  // so the submit/skip click is reported exactly once.
   const submitAndClearDraft = useCallback(
     (text: string, answers: QuestionFormAnswers) => {
       const source = submitSourceRef.current;
@@ -155,9 +150,7 @@ export function QuestionsPanel({
             ? { element: 'submit' as const }
             : {
                 element: 'skip' as const,
-                skip_source: (source === 'countdown' ? 'countdown' : 'button') as
-                  | 'button'
-                  | 'countdown',
+                skip_source: 'button' as const,
               }),
           answered_count: answeredCount,
           skipped_count: total - answeredCount,
@@ -214,40 +207,6 @@ export function QuestionsPanel({
   const canContinue = canSubmit && ready;
   const canSkip = canSubmit;
 
-  // Auto-skip countdown. It only runs while the form is actionable; pausing
-  // (busy turn, re-stream) resets it so we never auto-submit a half-ready form.
-  const [remaining, setRemaining] = useState(SKIP_COUNTDOWN_SECONDS);
-  const autoFiredRef = useRef(false);
-
-  useEffect(() => {
-    if (!canSubmit) {
-      setRemaining(SKIP_COUNTDOWN_SECONDS);
-      autoFiredRef.current = false;
-      return;
-    }
-    const id = window.setInterval(() => {
-      setRemaining((s) => Math.max(0, s - 1));
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [canSubmit]);
-
-  // When the countdown elapses, continue with the current selections (anything
-  // untouched submits as skipped) and let generation proceed.
-  useEffect(() => {
-    if (canSubmit && remaining <= 0 && !autoFiredRef.current) {
-      autoFiredRef.current = true;
-      // Either branch reports as skip_source=countdown; answered_count tells
-      // apart a countdown submit that carried picks from a pure skip.
-      submitSourceRef.current = 'countdown';
-      // Honour the user's picks when the form is submittable; otherwise fall
-      // back to skipping so a stray selection-cap can't stall generation.
-      if (ready) formRef.current?.submit();
-      else formRef.current?.skipAll();
-    }
-  }, [canSubmit, ready, remaining]);
-
-  const countdown = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
-
   return (
     <div className="questions-panel" data-testid="questions-panel">
       <div className="questions-panel-body">
@@ -282,7 +241,7 @@ export function QuestionsPanel({
           {building
             ? t('questions.generating')
             : canSkip
-              ? t('questions.autoSkipHint')
+              ? t('questions.manualGateHint')
               : null}
         </span>
         <button
@@ -295,7 +254,6 @@ export function QuestionsPanel({
           }}
         >
           {t('questions.skipAll')}
-          {canSkip ? <span className="questions-skip-timer">{countdown}</span> : null}
         </button>
         <button
           type="button"

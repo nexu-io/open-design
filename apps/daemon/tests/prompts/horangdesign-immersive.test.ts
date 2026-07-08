@@ -23,17 +23,18 @@ describe('Horangdesign immersive workflow prompt', () => {
   });
 
   it('keeps the interview compact but multi-stage', () => {
-    expect(discovery).toContain('1,2차');
-    expect(discovery).toContain('와이어프레임');
-    expect(discovery).toContain('3,4차');
-    expect(discovery).toContain('5차');
-    expect(discovery).toContain('4-7 questions');
+    expect(discovery).toContain('Horang 3-interview');
+    expect(discovery).toContain('1차 인터뷰');
+    expect(discovery).toContain('2차 인터뷰');
+    expect(discovery).toContain('3차 인터뷰');
+    expect(discovery).toContain('layout/wireframe');
+    expect(discovery).toContain('at least 5 cards');
     expect(discovery).toContain('horang-stage-1');
     expect(discovery).toContain('horang-stage-2');
     expect(discovery).toContain('horang-stage-3');
-    expect(discovery).toContain('horang-stage-4');
-    expect(discovery).toContain('horang-stage-5');
-    expect(discovery).toContain('Do not jump from 1차 answers directly into final production');
+    expect(discovery).not.toContain('horang-stage-4');
+    expect(discovery).not.toContain('horang-stage-5');
+    expect(discovery).toContain('Do not jump from the first answer directly into final production');
   });
 
   it('prevents metadata labels, automatic card lists, static sites, and assistant copy leakage', () => {
@@ -89,6 +90,8 @@ describe('Horangdesign immersive workflow prompt', () => {
     expect(discovery).toContain('HORANG REWRITE FOUNDATION');
     expect(discovery).toContain('Technique-library contract');
     expect(compactPrompt).toContain('Technique-library hook');
+    expect(compactPrompt).toContain('Horang 3-interview flow');
+    expect(compactPrompt).toContain('project/webdesign/index.md');
     expect(skill).toContain('Horang Rewrite Foundation v2');
     expect(body).toContain('Horang Rewrite Canvas v2');
   });

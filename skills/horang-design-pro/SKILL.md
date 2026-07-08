@@ -45,12 +45,14 @@ Then ask only decisions that materially change the result, but cover these areas
 
 Emit exactly one compact `<question-form>` and stop after the form when answers are needed. Do not silently proceed into design while these core decisions are missing.
 
-For 3D/Spline/Awwwards/studio/experimental projects, the interview is mandatory staged flow, not a single form:
-1. `horang-stage-1`: a substantive strategy interview, not a light vibe check. Cover purpose, audience, reference priority, which reference behaviors to imitate, forbidden patterns, content/copy density, dynamic-vs-static expectation, scope, and intensity.
-2. `horang-stage-2`: camera choreography, scroll behavior, scene object/transformation, Spline/Three.js strategy, interaction model, transition model for process/steps/lists, and assets.
-3. Wireframe checkpoint: show scene structure and 16:9/21:9 composition zones, then ask `horang-stage-3` for selection/refinement.
-4. `horang-stage-4`: section order, copy density, motion priority, generated imagery, technical constraints.
-5. `horang-stage-5`: final QA criteria, visible forbidden elements, delivery/deploy target, and explicit build permission.
+For Horangdesign projects, use the new 3-interview production gate, not the old generic first form:
+
+1. `horang-stage-1` — 1차 인터뷰: project goal, target visitor, page scope, content source, reference URL/files, static-vs-dynamic expectation, forbidden direction, and layout/wireframe selection. Include at least five `direction-cards` layout options. Each card must include compact `wireframe` labels so the UI shows a mini box preview.
+2. Wireframe checkpoint: summarize the selected layout, major zones, and requested edits before asking the next form.
+3. `horang-stage-2` — 2차 인터뷰: mood and DESIGN.MD choice. Recommend candidates from the GDrive `project/webdesign/index.md` catalogue or the synced `references/gdrive-webdesign-index.md`; do not invent design systems. Mood options must be derived from the user's brief/industry. For textile/manufacturing examples, propose tactile editorial, material lab, industrial luxury, B2B trust, and process/motion directions. Include `direction-cards` mood previews with palette/type/reference/wireframe hints.
+4. Mood-applied checkpoint: show how the chosen mood/design system changes the wireframe.
+5. `horang-stage-3` — 3차 인터뷰: functions and polish: motion/animation, scroll/camera, hover/cursor, image generation/assets, forms/CTA, responsive 16:9/21:9 priority, and build readiness.
+6. After Stage 3, proceed to `TodoWrite`, build, then final polish/QA.
 
 Do not move to production after only `horang-stage-1`. Continue the next stage unless the user explicitly says to skip the remaining interview or build now.
 
@@ -132,7 +134,20 @@ Mood router:
 
 The daemon also enforces this router: when a submitted form answer includes a recognized mood and there is no explicit design system override, the project/run designSystemId is set to the mapped built-in design system. If the daemon has already injected an Active design system section, follow that DESIGN.md as the visual contract.
 
-## 7. Image-first layout workflow
+## 7. GDrive design-system catalogue
+
+The design-system catalogue source of truth is Google Drive `project/webdesign/index.md`. A compact mirror is stored at `references/gdrive-webdesign-index.md` for prompt-time lookup.
+
+Use this catalogue only in the 2차 interview. Token rule: do not paste the full catalogue into every answer. Read or summarize only the category/candidates relevant to the brief.
+
+Selection logic:
+- map the brief to a category first (`3d-motion-experimental`, `portfolio-studio`, `media-content`, `saas-product`, `commerce`, `finance`, `health-biotech`, `ai-ml`, `utility-system`)
+- recommend 3-6 DESIGN.MD candidates
+- explain each in one phrase: mood, layout posture, why it fits
+- if the user selects one, use that DESIGN.MD as the active visual contract
+- if the catalogue is missing, say it is unavailable and fallback to `horang-immersive`; never fabricate names
+
+## 8. Image-first layout workflow
 
 Before final visual design, identify needed images first. When generated imagery is needed, generate it through Codex CLI using Open Design media generation, not FAL placeholders.
 
@@ -152,7 +167,7 @@ Workflow:
 
 Do not finalize a layout before the user has had a chance to compare meaningful layout candidates unless the user explicitly asks to skip review.
 
-## 8. Animation and Spline-informed effects
+## 9. Animation and Spline-informed effects
 
 For websites, assume dynamic/interactive output by default. Only make a static site when the user explicitly says static/정적. When animation, interactive 3D, motion graphics, or functional visual effects are relevant, use Spline sites/examples as interaction and motion references.
 

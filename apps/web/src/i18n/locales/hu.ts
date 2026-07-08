@@ -3032,6 +3032,7 @@ export const hu: Dict = {
   'questions.generating': 'Kérdések generálása…',
   'questions.skipAll': 'Összes kihagyása',
   'questions.autoSkipHint': 'Automatikusan folytatódik az időzítő lejártakor',
+  'questions.manualGateHint': 'Choose what you need, then press Continue. No auto-skip.',
   'sketch.toolSelect': 'Kijelölés (nem aktív)',
   'sketch.toolPen': 'Toll',
   'sketch.toolText': 'Szöveg',

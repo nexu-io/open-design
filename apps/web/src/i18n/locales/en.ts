@@ -3032,6 +3032,7 @@ export const en: Dict = {
   'questions.generating': 'Generating questions…',
   'questions.skipAll': 'Skip all',
   'questions.autoSkipHint': 'Auto-continues when the timer ends',
+  'questions.manualGateHint': 'Choose what you need, then press Continue. No auto-skip.',
   'artifact.odCardTaskBriefChip': 'Memory applied · view brief',
   'artifact.odCardScorecardTitle': 'Self-check',
   'artifact.odCardScorecardStatusPass': 'Passed',

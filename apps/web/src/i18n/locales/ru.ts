@@ -3032,6 +3032,7 @@ export const ru: Dict = {
   'questions.generating': 'Генерация вопросов…',
   'questions.skipAll': 'Пропустить всё',
   'questions.autoSkipHint': 'Автоматически продолжается по истечении таймера',
+  'questions.manualGateHint': 'Choose what you need, then press Continue. No auto-skip.',
   'sketch.toolSelect': 'Выбор (без действий)',
   'sketch.toolPen': 'Ручка',
   'sketch.toolText': 'Текст',

@@ -3032,6 +3032,7 @@ export const id: Dict = {
   'questions.generating': 'Generating questions…',
   'questions.skipAll': 'Skip all',
   'questions.autoSkipHint': 'Auto-continues when the timer ends',
+  'questions.manualGateHint': 'Choose what you need, then press Continue. No auto-skip.',
   'sketch.toolSelect': 'Pilih',
   'sketch.toolPen': 'Pena',
   'sketch.toolText': 'Teks',

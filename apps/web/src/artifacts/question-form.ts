@@ -64,6 +64,8 @@ export interface DirectionCard {
   references: string[];
   /** 4–6 swatch hex / OKLch strings for the palette row. */
   palette: string[];
+  /** Optional compact wireframe rows/zones rendered as a mini layout preview. */
+  wireframe?: string[];
   /** Display (headline) font stack, used to render the live "Aa" sample. */
   displayFont: string;
   /** Body font stack, used to render the secondary sample. */
@@ -668,12 +670,15 @@ function parseDirectionCards(raw: unknown): DirectionCard[] | undefined {
     const palette = Array.isArray(e.palette)
       ? e.palette.filter((p): p is string => typeof p === 'string').slice(0, 8)
       : [];
+    const wireframe = Array.isArray(e.wireframe)
+      ? e.wireframe.filter((w): w is string => typeof w === 'string').slice(0, 8)
+      : undefined;
     const displayFont = typeof e.displayFont === 'string' ? e.displayFont : 'Georgia, serif';
     const bodyFont =
       typeof e.bodyFont === 'string'
         ? e.bodyFont
         : '-apple-system, system-ui, sans-serif';
-    out.push({ id, label, mood, references, palette, displayFont, bodyFont });
+    out.push({ id, label, mood, references, palette, ...(wireframe ? { wireframe } : {}), displayFont, bodyFont });
   }
   return out.length > 0 ? out : undefined;
 }

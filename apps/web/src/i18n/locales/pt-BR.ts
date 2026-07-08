@@ -3032,6 +3032,7 @@ export const ptBR: Dict = {
   'questions.generating': 'Gerando perguntas…',
   'questions.skipAll': 'Pular tudo',
   'questions.autoSkipHint': 'Continua automaticamente quando o cronômetro termina',
+  'questions.manualGateHint': 'Choose what you need, then press Continue. No auto-skip.',
   'sketch.toolSelect': 'Selecionar (sem ação)',
   'sketch.toolPen': 'Caneta',
   'sketch.toolText': 'Texto',

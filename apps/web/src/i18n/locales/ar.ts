@@ -3032,6 +3032,7 @@ export const ar: Dict = {
   'questions.generating': 'جارٍ إنشاء الأسئلة…',
   'questions.skipAll': 'تخطّي الكل',
   'questions.autoSkipHint': 'يتابع تلقائيًا عند انتهاء المؤقّت',
+  'questions.manualGateHint': 'Choose what you need, then press Continue. No auto-skip.',
   'sketch.toolSelect': 'تحديد (لا إجراء)',
   'sketch.toolPen': 'قلم',
   'sketch.toolText': 'نص',
