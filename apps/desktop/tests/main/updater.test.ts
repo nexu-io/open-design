@@ -87,9 +87,11 @@ function channelMetadata(channel: FixtureChannel, version: string): Record<strin
 async function createUpdaterFixture(options: {
   artifactBody?: string;
   channel?: FixtureChannel;
+  controlLauncherVersionMin?: string;
   failArtifactAttempts?: number;
   failFirstArtifactWithTerminated?: boolean;
   includePayload?: boolean;
+  launcherSchema?: number;
   platform?: FixturePlatform;
   payloadBody?: string;
   version?: string;
@@ -124,6 +126,10 @@ async function createUpdaterFixture(options: {
       response.end(JSON.stringify({
         channel,
         ...channelMetadata(channel, version),
+        ...(options.launcherSchema != null ? { launcher: { schema: options.launcherSchema } } : {}),
+        ...(options.controlLauncherVersionMin != null
+          ? { control: { launcher: { version: { min: options.controlLauncherVersionMin } } } }
+          : {}),
         platforms: {
           [platformKey]: {
             arch,
@@ -611,6 +617,120 @@ describe("desktop updater", () => {
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  // Stone 1 — installed-base escape hatch: a feed that declares a launcher-contract
+  // schema this build cannot interpret, or a minimum launcher/build version newer
+  // than this build, must route to the full installer instead of an in-place
+  // payload update — even when a payload artifact exists and the launcher payload
+  // context validates (which would otherwise apply in place).
+  async function runLauncherReseedCheck(
+    fixtureOptions: Parameters<typeof createUpdaterFixture>[0],
+    currentVersion = "1.0.0-beta.1",
+  ): Promise<{ close: () => Promise<void>; snapshot: Awaited<ReturnType<ReturnType<typeof createDesktopUpdater>["checkForUpdates"]>> }> {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({
+      channel: "beta",
+      includePayload: true,
+      platform: "win",
+      version: "1.0.0-beta.2",
+      ...fixtureOptions,
+    });
+    const launcherRuntimePath = join(root, "launcher", "runtime.json");
+    const launcherLaunchPath = join(root, "installed", "Open Design Beta.exe");
+    await mkdir(join(root, "installed"), { recursive: true });
+    await writeFile(launcherLaunchPath, "");
+    await mkdir(join(root, "launcher"), { recursive: true });
+    await writeFile(
+      launcherRuntimePath,
+      `${JSON.stringify({
+        active: { generation: 0, version: "1.0.0-beta.1" },
+        channel: "beta",
+        lastSuccessful: { generation: 0, version: "1.0.0-beta.1" },
+        namespace: "release-beta-win",
+        schemaVersion: LAUNCHER_SCHEMA_VERSION,
+      })}\n`,
+    );
+    const updater = createDesktopUpdater({
+      arch: "x64",
+      currentVersion,
+      downloadRoot: join(root, "updates"),
+      env: {
+        ...updaterEnv(fixture.metadataUrl, "win32"),
+        [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: currentVersion,
+        [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "0",
+      },
+      launcherRoot: root,
+      launcherLaunchPath,
+      launcherRuntimePath,
+      namespace: "release-beta-win",
+      source: SIDECAR_SOURCES.PACKAGED,
+    }, {
+      extractLauncherPayloadArchive: async ({ destinationRoot }) => {
+        await mkdir(join(destinationRoot, "payload", "resources", "open-design"), { recursive: true });
+        await writeFile(join(destinationRoot, "payload", "Open Design.exe"), "");
+        await writeFile(
+          join(destinationRoot, "manifest.json"),
+          `${JSON.stringify({
+            channel: "beta",
+            entry: { cwd: "payload", executable: "payload/Open Design.exe" },
+            namespace: "release-beta-win",
+            payloadRoot: "payload",
+            platform: "win32",
+            schemaVersion: LAUNCHER_SCHEMA_VERSION,
+            version: "1.0.0-beta.2",
+          })}\n`,
+        );
+        await writeFile(join(destinationRoot, "payload", "resources", "open-design-config.json"), "{}\n");
+      },
+      launchAppAfterQuit: async () => ({ helperLogPath: join(root, "updates", "helpers", "test.log") }),
+      processExecPath: "C:\\Program Files\\Open Design Beta\\Open Design Beta.exe",
+      processPid: 4242,
+    });
+    const snapshot = await updater.checkForUpdates();
+    return {
+      snapshot,
+      close: async () => {
+        await fixture.close();
+        rmSync(root, { force: true, recursive: true });
+      },
+    };
+  }
+
+  it("routes to the installer when the feed launcher.schema exceeds this build", async () => {
+    const { snapshot, close } = await runLauncherReseedCheck({ launcherSchema: LAUNCHER_SCHEMA_VERSION + 1 });
+    try {
+      expect(snapshot.artifact?.type).toBe("installer");
+      expect(snapshot.capabilities.canApplyInPlace).toBe(false);
+      expect(snapshot.capabilities.requiresManualInstall).toBe(true);
+    } finally {
+      await close();
+    }
+  });
+
+  it("routes to the installer when control.launcher.version.min exceeds this build", async () => {
+    const { snapshot, close } = await runLauncherReseedCheck({ controlLauncherVersionMin: "9.9.9" });
+    try {
+      expect(snapshot.artifact?.type).toBe("installer");
+      expect(snapshot.capabilities.canApplyInPlace).toBe(false);
+      expect(snapshot.capabilities.requiresManualInstall).toBe(true);
+    } finally {
+      await close();
+    }
+  });
+
+  it("still applies the payload in place when schema is supported and min-version is met", async () => {
+    const { snapshot, close } = await runLauncherReseedCheck({
+      launcherSchema: LAUNCHER_SCHEMA_VERSION,
+      controlLauncherVersionMin: "0.9.0-beta.1",
+    });
+    try {
+      expect(snapshot.artifact?.type).toBe("payload");
+      expect(snapshot.capabilities.canApplyInPlace).toBe(true);
+      expect(snapshot.capabilities.requiresManualInstall).toBe(false);
+    } finally {
+      await close();
     }
   });
 

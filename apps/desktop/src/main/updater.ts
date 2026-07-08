@@ -1017,6 +1017,41 @@ function selectUpdateCandidateWithFallback(
   return selectUpdateCandidate(metadata, config);
 }
 
+function controlLauncherVersionMin(metadata: Record<string, unknown>): string | null {
+  const control = objectField(metadata, "control");
+  const launcher = control == null ? null : objectField(control, "launcher");
+  const version = launcher == null ? null : objectField(launcher, "version");
+  return version == null ? null : stringField(version, "min");
+}
+
+/**
+ * Installed-base escape hatch: decide whether the remote release is beyond what
+ * this build can adopt as an in-place payload update, forcing a full installer
+ * instead. Two orthogonal guardrails, either of which trips → installer:
+ *
+ *  - `launcher.schema` (ABI axis): the release declares a launcher-contract schema
+ *    number this build cannot interpret (`feed.launcher.schema >
+ *    LAUNCHER_SCHEMA_VERSION`). This is the reseed boundary — a pure int compare.
+ *  - `control.launcher.version.min` (recency axis): the release requires a
+ *    launcher/build version newer than this one (`min > currentVersion`).
+ *
+ * Both are feed declarations read here; a future launcher enforces the same schema
+ * floor locally against on-disk manifests. Missing/malformed fields are ignored
+ * (fail-open) so older feeds keep updating seamlessly.
+ */
+export function remoteRequiresReinstall(metadata: Record<string, unknown>, config: DesktopUpdaterConfig): boolean {
+  const launcher = objectField(metadata, "launcher");
+  const remoteLauncherSchema = launcher == null ? undefined : numberField(launcher, "schema");
+  if (remoteLauncherSchema != null && remoteLauncherSchema > LAUNCHER_SCHEMA_VERSION) {
+    return true;
+  }
+  const minVersion = controlLauncherVersionMin(metadata);
+  if (minVersion != null && compareVersions(minVersion, config.currentVersion) > 0) {
+    return true;
+  }
+  return false;
+}
+
 async function fetchJson(fetchImpl: typeof globalThis.fetch, url: string): Promise<Record<string, unknown>> {
   const response = await fetchImpl(url);
   if (!response.ok) throw new Error(`metadata request returned HTTP ${response.status}`);
@@ -2623,7 +2658,15 @@ export function createDesktopUpdater(
         lastCheckedAt,
       }));
       if (root != null) scheduleBackCleanup(root.realRoot, logger);
-      const selected = selectUpdateCandidateWithFallback(body, config, await hasValidLauncherPayloadContext(config));
+      const launcherPayloadContextValid = await hasValidLauncherPayloadContext(config);
+      const reseedRequired = launcherPayloadContextValid && remoteRequiresReinstall(body, config);
+      if (reseedRequired) {
+        logUpdateEvent("reseed-required-installer-route", {
+          currentVersion: config.currentVersion,
+          supportedLauncherSchema: LAUNCHER_SCHEMA_VERSION,
+        });
+      }
+      const selected = selectUpdateCandidateWithFallback(body, config, launcherPayloadContextValid && !reseedRequired);
       if (!selected.ok) return setState(selected.state, selected.error);
       if (compareVersions(selected.candidate.version, config.currentVersion) <= 0) {
         logUpdateEvent("check-not-available", { candidateVersion: selected.candidate.version });
