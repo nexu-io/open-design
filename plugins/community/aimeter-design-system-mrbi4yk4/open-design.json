@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "aimeter-design-system-mrbi4yk4",
+  "title": "Aimeter Design System",
+  "version": "0.1.0",
+  "description": "> 版本: `1.0.0-ai-optimized` > 来源: https://aimeter.xk-devops.com/ > 优化时间: 2026-07-08T02:50:40Z > 状态: 可用于生产交付；logo/hero 图像仍需品牌方补源。",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

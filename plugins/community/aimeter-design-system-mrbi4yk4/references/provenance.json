@@ -1,0 +1,33 @@
+{
+  "candidateId": "f699dd45-e5ea-4be1-b341-c059b36f3d80",
+  "projectId": "brand-aimeter-8d2aa2",
+  "runId": "6506b31d-0972-46de-8b33-e3e847057628",
+  "conversationId": "b9d7eb27-0098-43bf-9507-3fa117f89722",
+  "provenance": {
+    "summary": "Detected from DESIGN.md, README.md, SKILL.md after a successful run.",
+    "detectedAt": 1783479137056
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "DESIGN.md",
+      "label": "DESIGN.md",
+      "size": 8538,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 1423,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 1327,
+      "copied": true
+    }
+  ]
+}
