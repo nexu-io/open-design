@@ -246,6 +246,7 @@ import {
 } from '../onboarding/onboarding-entry';
 import { producedPreviewableArtifact } from '../onboarding/first-generation';
 import { sentPrefilledPrompt } from '../onboarding/first-prompt';
+import { beginFirstLoop, recordFirstLoopStep } from '../onboarding/first-loop';
 import { BrandReadyPrompt } from './BrandReadyPrompt';
 import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
@@ -1366,6 +1367,11 @@ export function ProjectView({
     onboardingEntryRef.current = consumeOnboardingEntryForProject(project.id);
     onboardingSeedPromptRef.current =
       onboardingEntryRef.current?.seedPrompt ?? (project.pendingPrompt ?? '').trim();
+    // Pin the first-loop ledger for THIS project so later delivery taps (the
+    // FileViewer share/export path) can close the loop by project id without
+    // prop plumbing. Project-scoped, so an unrelated project's delivery never
+    // closes this loop.
+    if (onboardingEntryRef.current) beginFirstLoop(project.id, onboardingEntryRef.current);
   }
   // The once-per-project funnel guards live in the onboarding-entry module
   // (project-keyed), not mount-local refs: ProjectView remounts on every
@@ -2635,6 +2641,16 @@ export function ProjectView({
     }
     return false;
   }, [projectFileNames]);
+  // First-loop ledger: the artifact reaching the preview is the 查看 step of the
+  // loop (spec §8.3). Recorded once per project; a no-op for any project not
+  // started from a recommendation.
+  const firstLoopViewedRef = useRef(false);
+  useEffect(() => {
+    if (!hasPreviewableArtifact || firstLoopViewedRef.current) return;
+    if (!onboardingEntryRef.current) return;
+    firstLoopViewedRef.current = true;
+    recordFirstLoopStep(analytics.track, 'artifact_viewed', project.id);
+  }, [hasPreviewableArtifact, analytics.track, project.id]);
   const activeProjectFileName = useMemo(
     () => (
       openTabsState.active && projectFileNames.has(openTabsState.active)
@@ -4887,6 +4903,7 @@ export function ProjectView({
           // stays honest.
           has_prefilled_prompt: sentPrefilledPrompt(onboardingSeedPromptRef.current, prompt),
         });
+        recordFirstLoopStep(analytics.track, 'prompt_sent', project.id);
       }
       setChatSeed(null);
       const runConversationId = activeConversationId;
@@ -5460,6 +5477,7 @@ export function ProjectView({
                   product_type: entry.productType,
                   recommendation_id: entry.recommendationId,
                 });
+                recordFirstLoopStep(analytics.track, 'generated', project.id);
               }
               const traceObjectFiles = computeTraceObjectFiles(
                 beforeFileNames,

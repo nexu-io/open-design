@@ -33,6 +33,7 @@ import {
   trackPresentPopoverClick,
   trackShareOptionPopoverClick,
 } from '../analytics/events';
+import { recordFirstLoopStep } from '../onboarding/first-loop';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import {
@@ -5489,6 +5490,10 @@ function HtmlViewer({
         },
         { requestId },
       );
+      // Onboarding first-loop 交付 step (spec §8.3): only a SUCCESSFUL export
+      // closes the loop. Project-scoped — a no-op unless the project was
+      // started from the Home recommendation.
+      if (result === 'success') recordFirstLoopStep(analytics.track, 'delivered', projectId);
     };
     const toastFormats = new Set(['pdf', 'pptx', 'zip', 'html', 'image', 'markdown']);
     // Programmatic exports compute in-browser and can take a while (one render
@@ -8380,6 +8385,9 @@ function HtmlViewer({
       },
       { requestId },
     );
+    // Onboarding first-loop 交付 step (spec §8.3): only a SUCCESSFUL template
+    // export closes the loop. Project-scoped no-op unless started from Home.
+    if (result === 'success') recordFirstLoopStep(analytics.track, 'delivered', projectId);
   };
 
   async function handleSaveAsTemplate() {
@@ -9360,6 +9368,9 @@ function HtmlViewer({
       },
       { requestId },
     );
+    // Onboarding first-loop 交付 step (spec §8.3): only a SUCCESSFUL image
+    // export closes the loop. Project-scoped no-op unless started from Home.
+    if (result === 'success') recordFirstLoopStep(analytics.track, 'delivered', projectId);
   };
 
   async function handleImageExportSave() {

@@ -2,7 +2,7 @@
  * @module analytics/events/surface-view
  * surface_view event prop types and their union.
  */
-import type { TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
+import type { TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
 import type { TrackingArtifactKind, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
 import type { DesignSystemsPresetBrandPickerSurfaceViewProps } from './ui-click.js';
 // ---- surface_view --------------------------------------------------------
@@ -167,6 +167,8 @@ export interface StudioOnboardingHintSurfaceViewProps {
   page_name: 'chat_panel';
   area: 'onboarding_first_artifact_hint';
   hint_type: 'view_artifact';
+  studio_stage?: TrackingOnboardingFirstLoopStep;
+  feature_id?: string;
 }
 
 export type SurfaceViewProps =
