@@ -153,7 +153,7 @@ import {
 import { KNOWN_PROVIDERS } from '../state/config';
 import type { KnownProvider } from '../state/config';
 import { saveOnboardingProfile } from '../state/onboarding-profile';
-import { testApiProvider } from '../providers/connection-test';
+import { testAgent, testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
 import {
   cancelVelaLogin,
@@ -202,6 +202,11 @@ function writeStoredRailOpen(open: boolean): void {
 const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const X_URL = 'https://x.com/OpenDesignHQ';
 const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
+
+type OnboardingAgentTestState =
+  | { status: 'idle' }
+  | { status: 'running'; inputKey: string }
+  | { status: 'done'; inputKey: string; result: ConnectionTestResponse };
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
 // collapse into the settings dropdown when the viewport gets
@@ -1302,6 +1307,9 @@ function OnboardingView({
     | { status: 'running'; inputKey: string }
     | { status: 'done'; inputKey: string; result: ConnectionTestResponse }
   >({ status: 'idle' });
+  const [agentTestState, setAgentTestState] = useState<OnboardingAgentTestState>({
+    status: 'idle',
+  });
   const [providerModelsState, setProviderModelsState] = useState<
     | { status: 'idle' }
     | { status: 'running'; inputKey: string }
@@ -1409,6 +1417,20 @@ function OnboardingView({
   const amrSelectedAndSignedOut = runtime === 'amr' && !amrSignedIn;
   const selectedAgent = visibleAgents.find((agent) => agent.id === config.agentId) ?? null;
   const selectedAgentChoice = selectedAgent ? (config.agentModels?.[selectedAgent.id] ?? {}) : {};
+  const selectedAgentTestModel = selectedAgentChoice.model ?? selectedAgent?.models?.[0]?.id ?? '';
+  const selectedAgentTestReasoning = selectedAgentChoice.reasoning ?? '';
+  const agentTestInputKey = [
+    selectedAgent?.id ?? '',
+    selectedAgentTestModel,
+    selectedAgentTestReasoning,
+    JSON.stringify(config.agentCliEnv ?? {}),
+  ].join('\n');
+  const visibleAgentTestState =
+    agentTestState.status === 'running' ||
+    (agentTestState.status !== 'idle' && agentTestState.inputKey === agentTestInputKey)
+      ? agentTestState
+      : { status: 'idle' as const };
+  const canTestAgent = Boolean(selectedAgent) && daemonLive;
   // Connect-step (step 0) gate. Continue may only advance once the selected
   // runtime is actually usable: AMR signed in, an available local CLI chosen,
   // or a BYOK provider whose connection test passed. AMR-selected-but-signed-out
@@ -2328,6 +2350,37 @@ function OnboardingView({
     }
   }
 
+  async function testAgentInline() {
+    if (!selectedAgent || !canTestAgent || agentTestState.status === 'running') return;
+    const inputKey = agentTestInputKey;
+    const agent = selectedAgent;
+    const model = selectedAgentTestModel;
+    const reasoning = selectedAgentTestReasoning;
+    setAgentTestState({ status: 'running', inputKey });
+    try {
+      const result = await testAgent({
+        agentId: agent.id,
+        model: model || undefined,
+        reasoning: reasoning || undefined,
+        agentCliEnv: config.agentCliEnv ?? {},
+      });
+      setAgentTestState({ status: 'done', inputKey, result });
+    } catch (error) {
+      setAgentTestState({
+        status: 'done',
+        inputKey,
+        result: {
+          ok: false,
+          kind: 'unknown',
+          latencyMs: 0,
+          model: model || 'default',
+          agentName: agent.name,
+          detail: error instanceof Error ? error.message : 'Test request failed',
+        },
+      });
+    }
+  }
+
   async function fetchProviderModelsInline() {
     if (!canFetchProviderModels || providerModelsState.status === 'running') return;
     const inputKey = providerModelsInputKey;
@@ -2609,6 +2662,9 @@ function OnboardingView({
                       if (!selectedAgent) return;
                       onAgentModelChange(selectedAgent.id, { model });
                     }}
+                    testState={visibleAgentTestState}
+                    canTest={canTestAgent}
+                    onTest={() => void testAgentInline()}
                   />
                 ) : null}
                 {connectExpanded === 'byok' ? (
@@ -2920,6 +2976,9 @@ function OnboardingCliSetupPanel({
   onRefresh,
   onSelectAgent,
   onSelectModel,
+  testState,
+  canTest,
+  onTest,
 }: {
   agents: AgentInfo[];
   daemonLive: boolean;
@@ -2931,9 +2990,13 @@ function OnboardingCliSetupPanel({
   onRefresh: () => void;
   onSelectAgent: (agentId: string) => void;
   onSelectModel: (model: string) => void;
+  testState: OnboardingAgentTestState;
+  canTest: boolean;
+  onTest: () => void;
 }) {
   const t = useT();
   const scanning = scanStatus === 'scanning';
+  const running = testState.status === 'running';
   const showEmpty = scanStatus === 'done' && agents.length === 0;
   return (
     <div className="onboarding-view__setup-panel">
@@ -2942,14 +3005,25 @@ function OnboardingCliSetupPanel({
           <strong>{t('settings.localCli')}</strong>
           <p>{daemonLive ? t('settings.codeAgentHint') : t('settings.modeDaemonOffline')}</p>
         </div>
-        <button
-          type="button"
-          className={`onboarding-view__mini-button${scanning ? ' is-loading' : ''}`}
-          onClick={onRefresh}
-          disabled={scanning}
-        >
-          {scanning ? t('settings.rescanRunning') : t('settings.rescan')}
-        </button>
+        <div className="onboarding-view__setup-head-actions">
+          <button
+            type="button"
+            className={`onboarding-view__mini-button${scanning ? ' is-loading' : ''}`}
+            onClick={onRefresh}
+            disabled={scanning}
+          >
+            {scanning ? t('settings.rescanRunning') : t('settings.rescan')}
+          </button>
+          <button
+            type="button"
+            className={`onboarding-view__mini-button${running ? ' is-loading' : ''}`}
+            onClick={onTest}
+            disabled={running || !canTest}
+            title={t('settings.testTitle')}
+          >
+            {running ? t('settings.testRunning') : t('settings.test')}
+          </button>
+        </div>
       </div>
       {scanning ? (
         <div className="onboarding-view__scan-copy" role="status">
@@ -2999,6 +3073,24 @@ function OnboardingCliSetupPanel({
           searchable
           searchPlaceholder={t('newproj.modelSearch')}
         />
+      ) : null}
+      {testState.status === 'running' ? (
+        <p className="onboarding-view__test-status is-running" role="status">
+          {t('settings.testRunning')}
+        </p>
+      ) : testState.status === 'done' ? (
+        <p
+          className={`onboarding-view__test-status is-${onboardingTestVariant(
+            testState.result,
+          )}`}
+          role={testState.result.ok ? 'status' : 'alert'}
+        >
+          {renderOnboardingAgentTestMessage(
+            t,
+            testState.result,
+            selectedAgent?.name ?? '',
+          )}
+        </p>
       ) : null}
     </div>
   );
@@ -3371,6 +3463,37 @@ function renderOnboardingProviderTestMessage(
       });
       return result.detail ? `${baseMessage} ${result.detail}` : baseMessage;
     }
+    case 'timeout':
+      return t('settings.testTimeout', { ms });
+    default:
+      return t('settings.testUnknown', { detail: result.detail ?? '' });
+  }
+}
+
+function renderOnboardingAgentTestMessage(
+  t: ReturnType<typeof useT>,
+  result: ConnectionTestResponse,
+  fallbackAgentName: string,
+): string {
+  const ms = Math.max(0, Math.round(result.latencyMs));
+  const sample = result.sample ?? '';
+  const agentName = result.agentName ?? fallbackAgentName;
+  if (result.ok) {
+    const baseMessage = t('settings.testSuccessCli', { agentName, ms, sample });
+    return result.detail ? `${baseMessage} ${result.detail}` : baseMessage;
+  }
+  switch (result.kind) {
+    case 'agent_not_installed':
+      return t('settings.testAgentMissing', { agentName });
+    case 'agent_auth_required':
+      return result.detail || 'Agent authentication is required.';
+    case 'agent_spawn_failed':
+      return t('settings.testAgentSpawn', {
+        agentName,
+        detail: result.detail ?? '',
+      });
+    case 'rate_limited':
+      return t('settings.testRateLimited');
     case 'timeout':
       return t('settings.testTimeout', { ms });
     default:

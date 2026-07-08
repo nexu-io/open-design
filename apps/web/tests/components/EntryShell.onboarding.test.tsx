@@ -590,6 +590,90 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(localPanel?.textContent).not.toContain('AMR');
   });
 
+  it('tests the selected Local CLI agent from onboarding', async () => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: true,
+          kind: 'success',
+          latencyMs: 12,
+          model: 'sonnet',
+          sample: 'pong',
+          agentName: 'Claude Code',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding({
+      config: baseConfig({
+        agentId: 'claude-code',
+        agentCliEnv: { 'claude-code': { OPEN_DESIGN_TEST: '1' } },
+        agentModels: { 'claude-code': { model: 'sonnet', reasoning: 'high' } },
+      }),
+      agents: [amrAgent(), cliAgent()],
+      onRefreshAgents: vi.fn(() => [amrAgent(), cliAgent()]),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Claude Code')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Test$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Claude Code replied in 12 ms/i)).toBeTruthy();
+    });
+    const connectionTestCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).endsWith('/api/test/connection'),
+    );
+    expect(connectionTestCalls).toHaveLength(1);
+    expect(JSON.parse(String(connectionTestCalls[0]?.[1]?.body))).toMatchObject({
+      mode: 'agent',
+      agentId: 'claude-code',
+      model: 'sonnet',
+      reasoning: 'high',
+      agentCliEnv: { 'claude-code': { OPEN_DESIGN_TEST: '1' } },
+    });
+  });
+
+  it('renders Local CLI test failures as alerts in onboarding', async () => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({ loggedIn: false, profile: 'prod', user: null, configPath: '/x' });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: false,
+          kind: 'agent_not_installed',
+          latencyMs: 0,
+          agentName: 'Claude Code',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding({
+      config: baseConfig({ agentId: 'claude-code' }),
+      agents: [amrAgent(), cliAgent()],
+      onRefreshAgents: vi.fn(() => [amrAgent(), cliAgent()]),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Local coding agent/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Claude Code')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Test$/i }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Claude Code is not installed or not in PATH.');
+  });
+
   it('keeps AMR login pending while device authorization is waiting', async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);
