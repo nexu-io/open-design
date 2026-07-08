@@ -508,7 +508,7 @@ export const zhCN: Dict = {
   "settings.privacyConsentPolicyLink": "阅读隐私政策",
   "settings.privacyMetrics": "匿名指标",
   "settings.privacyMetricsHint":
-    "运行次数、token 用量、错误率、时长。不包含 prompt,不包含项目数据。",
+    "运行次数、token 用量、错误率、时长。不包含 prompt，不包含项目数据。",
   "settings.privacyContent": "对话和工具内容",
   "settings.privacyContentHint":
     "prompt、助手回复、工具输入/输出，以及质量回看所需的完整上下文文件。发送前会剥离密钥等敏感信息。",
