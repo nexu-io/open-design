@@ -85,7 +85,6 @@ interface Props {
       | 'language'
       | 'appearance'
       | 'notifications'
-      | 'pet'
       | 'about',
   ) => void;
 }

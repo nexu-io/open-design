@@ -115,11 +115,9 @@ import { isVisualStabilityMode } from '../utils/visualStability';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
-import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
 import { SkillsSection } from './SkillsSection';
 import { DesignSystemsSection } from './DesignSystemsSection';
-import { PrivacySection } from './PrivacySection';
 import { ProjectLocationsSection } from './ProjectLocationsSection';
 import { RoutinesSection } from './RoutinesSection';
 import { ConnectorsBrowser } from './ConnectorsBrowser';
@@ -173,14 +171,11 @@ export type SettingsSection =
   | 'mcpClient'
   | 'language'
   | 'appearance'
-  | 'critiqueTheater'
   | 'notifications'
-  | 'pet'
   | 'skills'
   | 'designSystems'
   | 'projectLocations'
   | 'memory'
-  | 'privacy'
   // 'library' is consumed by the EntryShell library route — App opens it
   // via this same openSettings entry point, so SettingsSection must
   // accept the token even though SettingsDialog itself has no Library
@@ -2782,13 +2777,7 @@ export function SettingsDialog({
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
     appearance: { title: t('settings.appearance'), subtitle: t('settings.appearanceHint') },
-    critiqueTheater: {
-      title: t('critiqueTheater.settingsNav'),
-      subtitle: t('critiqueTheater.settingsNavHint'),
-    },
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
-    privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
-    pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
     skills: { title: t('settings.skills'), subtitle: t('settings.skillsHint') },
     designSystems: {
       title: t('settings.designSystems'),
@@ -3226,17 +3215,6 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
-              className={`settings-nav-item${activeSection === 'critiqueTheater' ? ' active' : ''}`}
-              onClick={() => setActiveSection('critiqueTheater')}
-            >
-              <Icon name="comment" size={18} />
-              <span>
-                <strong>{t('critiqueTheater.settingsNav')}</strong>
-                <small>{t('critiqueTheater.settingsNavHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
               className={`settings-nav-item${activeSection === 'notifications' ? ' active' : ''}`}
               onClick={() => setActiveSection('notifications')}
             >
@@ -3244,17 +3222,6 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.notifications')}</strong>
                 <small>{t('settings.notificationsHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'pet' ? ' active' : ''}`}
-              onClick={() => setActiveSection('pet')}
-            >
-              <Icon name="sparkles" size={18} />
-              <span>
-                <strong>{t('pet.navTitle')}</strong>
-                <small>{t('pet.navHint')}</small>
               </span>
             </button>
             <button
@@ -3277,17 +3244,6 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.projectLocations')}</strong>
                 <small>{t('settings.projectLocationsHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'privacy' ? ' active' : ''}`}
-              onClick={() => setActiveSection('privacy')}
-            >
-              <Icon name="eye" size={18} />
-              <span>
-                <strong>{t('settings.privacy')}</strong>
-                <small>{t('settings.privacyHint')}</small>
               </span>
             </button>
             <button
@@ -4553,16 +4509,8 @@ export function SettingsDialog({
             <AppearanceSection cfg={cfg} setCfg={setCfg} />
           ) : null}
 
-          {activeSection === 'critiqueTheater' ? (
-            <CritiqueTheaterSection />
-          ) : null}
-
           {activeSection === 'notifications' ? (
             <NotificationsSection cfg={cfg} setCfg={setCfg} />
-          ) : null}
-
-          {activeSection === 'pet' ? (
-            <PetSettings cfg={cfg} setCfg={setCfg} />
           ) : null}
 
           {activeSection === 'skills' ? (
@@ -4622,10 +4570,6 @@ export function SettingsDialog({
               chatAgentId={cfg.mode === 'daemon' ? cfg.agentId ?? null : null}
               chatModel={selectedMemoryChatModel}
             />
-          ) : null}
-
-          {activeSection === 'privacy' ? (
-            <PrivacySection cfg={cfg} setCfg={setCfg} />
           ) : null}
 
           {activeSection === 'about' ? (
@@ -7178,89 +7122,6 @@ function AppearanceSection({
           />
         </div>
       </div>
-    </section>
-  );
-}
-
-/**
- * Settings surface for the M1 Critique Theater rollout toggle.
- *
- * The toggle has two halves on opposite sides of the HTTP boundary:
- *
- *   * Browser-side: `useCritiqueTheaterEnabled` reads / writes the
- *     `open-design:config` localStorage blob; this is what gates
- *     whether `<CritiqueTheaterMount>` actually renders.
- *   * Daemon-side: the rollout resolver in `server.ts` reads
- *     `project.metadata.critiqueTheaterEnabled`, so the daemon only
- *     routes runs through the critique pipeline when the active
- *     project's metadata row says yes (or env / phase / skill policy
- *     overrides it).
- *
- * If we only wrote localStorage, the user would see the mount but
- * every generation would still skip the critique pipeline server-side
- * (Codex + lefarcen P1 on PR #1484). To keep the two halves in
- * lockstep, the setter takes an optional `{ projectId }` and, when
- * provided, does the read-merge-write PATCH on the project's metadata
- * (already shipped by Phase 15 and exercised by the wireup PR).
- *
- * This section threads the currently-open project id when the dialog
- * is opened from `/projects/:id`. When opened from the entry gallery
- * (`/`), the toggle is localStorage-only, and a contextual hint tells
- * the user that per-project persistence requires opening a project
- * first. That matches the actual scope of the wire-up.
- */
-function CritiqueTheaterSection() {
-  const { t } = useI18n();
-  const analytics = useAnalytics();
-  const enabled = useCritiqueTheaterEnabled();
-  const route = useRoute();
-  const activeProjectId = route.kind === 'project' ? route.projectId : null;
-  return (
-    <section className="settings-section">
-      <div className="section-head">
-        <div>
-          <h3>{t('critiqueTheater.settingsNav')}</h3>
-          <p className="hint">{t('critiqueTheater.settingsNavHint')}</p>
-        </div>
-      </div>
-      <label className="field">
-        <span className="field-label">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => {
-              const next = e.target.checked;
-              trackSettingsDesignReviewClick(analytics.track, {
-                page_name: 'settings',
-                area: 'design_review',
-                element: 'enable_toggle',
-                status_before: enabled ? 'on' : 'off',
-                status_after: next ? 'on' : 'off',
-                has_active_project: activeProjectId !== null,
-              });
-              if (activeProjectId !== null) {
-                void setCritiqueTheaterEnabled(next, { projectId: activeProjectId });
-              } else {
-                void setCritiqueTheaterEnabled(next);
-              }
-            }}
-          />
-          {' '}
-          {t('critiqueTheater.settingsEnabledLabel')}
-        </span>
-        <small className="hint">
-          {t('critiqueTheater.settingsEnabledDescription')}
-        </small>
-        {activeProjectId !== null ? (
-          <small className="hint">
-            {t('critiqueTheater.settingsEnabledProjectHint')}
-          </small>
-        ) : (
-          <small className="hint">
-            {t('critiqueTheater.settingsEnabledNoProjectHint')}
-          </small>
-        )}
-      </label>
     </section>
   );
 }
