@@ -10,6 +10,10 @@ import { deriveUploadCohort } from './analytics/upload-tracking';
 import { setPendingDesignSystemCreateEntry } from './analytics/ds-create-entry';
 import { detectClientType } from './analytics/identity';
 import {
+  stashOnboardingEntryForProject,
+  type OnboardingEntry,
+} from './onboarding/onboarding-entry';
+import {
   deriveConfigureGlobals,
   projectKindFromMetadataToTracking,
   fidelityToTracking,
@@ -134,10 +138,15 @@ type AppCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   conversationMode?: ChatSessionMode;
   team?: ChatTeamSelection | null;
   autoSendFirstMessage?: boolean;
+  /** The home submit already ran the Open Design Cloud balance gate (and the
+   *  user acknowledged any soft warning), so the project's first auto-send
+   *  must not re-gate — re-prompting a decision the user just made. */
+  amrGatePrechecked?: boolean;
   requestId?: string;
   pendingFiles?: File[];
   userWorkingDirToken?: string;
   linkedDirs?: string[] | null;
+  onboardingEntry?: OnboardingEntry;
 };
 
 const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
@@ -1541,6 +1550,16 @@ function AppInner() {
             `od:auto-send-first:${result.project.id}`,
             '1',
           );
+          if (input.amrGatePrechecked) {
+            window.sessionStorage.setItem(
+              `od:auto-send-amr-gate-ok:${result.project.id}`,
+              '1',
+            );
+          } else {
+            window.sessionStorage.removeItem(
+              `od:auto-send-amr-gate-ok:${result.project.id}`,
+            );
+          }
           if (firstMessageAttachments.length > 0) {
             window.sessionStorage.setItem(
               `od:auto-send-attachments:${result.project.id}`,
@@ -1575,6 +1594,23 @@ function AppInner() {
           /* sessionStorage may be unavailable (e.g. SSR / private mode); fall
              back to manual send. */
         }
+      }
+      // Home recommendation handoff: now that the project exists and its id is
+      // known, stash the onboarding entry keyed by that id. Studio consumes it
+      // by the same id on mount. Keying by id (instead of a single global slot
+      // written before create) removes the race where opening an unrelated
+      // project mid-create could steal the personalized funnel context, and
+      // means a failed/aborted create leaves nothing behind.
+      if (input.onboardingEntry) {
+        // Cache the prefilled seed prompt WITH the entry so the first-prompt
+        // funnel's `has_prefilled_prompt` comparison base survives a
+        // reopen-before-send (project.pendingPrompt is wiped on first mount).
+        stashOnboardingEntryForProject(result.project.id, {
+          ...input.onboardingEntry,
+          ...(derivedPendingPrompt
+            ? { seedPrompt: derivedPendingPrompt.trim() }
+            : {}),
+        });
       }
       const project = result.appliedPluginSnapshotId
         ? {

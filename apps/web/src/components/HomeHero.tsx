@@ -38,11 +38,13 @@ import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
 import {
+  trackComposerSessionModeClick,
   trackContextLinkResult,
   trackFigmaHelpModalSurfaceView,
   trackHomeChatComposerClick,
   trackProjectReferenceModalSurfaceView,
 } from '../analytics/events';
+import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import {
   chipsForGroup,
   orderedCreateChips,
@@ -245,6 +247,10 @@ interface Props {
   // no design system / template / prompt) and enters it. Omit to hide the link.
   onStartBlankProject?: () => void;
   executionSwitcher?: ReactNode;
+  // Personalized first-run starting point (spec §7). Rendered directly under
+  // the composer card — before the template section — so a brand-new user sees
+  // their recommended entry without scrolling.
+  recommendationSlot?: ReactNode;
 }
 
 type HomeMentionTab = 'all' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors' | 'teams';
@@ -371,6 +377,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onExamplePromptStatusChange,
     onStartBlankProject,
     executionSwitcher,
+    recommendationSlot,
   },
   ref,
 ) {
@@ -2031,7 +2038,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             <div className="home-hero__mode-switcher">
               <SessionModeToggle
                 mode={sessionMode}
-                onChange={onSessionModeChange}
+                onChange={(next) => {
+                  if (next !== sessionMode) {
+                    trackComposerSessionModeClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'session_mode_toggle',
+                      mode_before: sessionModeToTracking(sessionMode),
+                      mode_after: sessionModeToTracking(next),
+                    });
+                  }
+                  onSessionModeChange?.(next);
+                }}
               />
             </div>
             {executionSwitcher ? (
@@ -2103,6 +2121,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           ) : null}
         </div>
       ) : null}
+
+      {recommendationSlot}
 
       {activeCreateChip ? null : (
         <div className="home-hero__template-section" data-testid="home-hero-template-section">

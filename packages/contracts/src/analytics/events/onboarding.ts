@@ -116,6 +116,17 @@ export type TrackingOnboardingDiscoverySource = string;
 // force a contract bump.
 export type TrackingOnboardingRole = string;
 
+// The product bucket a personalized Home recommendation resolved to. Mirrors
+// the `ProductType` union produced by the web recommendation mapping
+// (`apps/web/src/onboarding/recommendation.ts`). Kept as a closed literal
+// union — unlike the open survey strings above — because these four buckets
+// are defined by the mapping, not by the user-extensible survey catalogue.
+export type TrackingOnboardingProductType =
+  | 'product_ui'
+  | 'marketing'
+  | 'internal_tool'
+  | 'general';
+
 export interface OnboardingPageViewProps {
   page_name: 'onboarding';
   area: TrackingOnboardingArea;
@@ -246,5 +257,38 @@ export interface OnboardingCompleteResultProps {
   organization_size?: TrackingOnboardingOrganizationSize;
   use_cases?: TrackingOnboardingUseCase[];
   discovery_source?: TrackingOnboardingDiscoverySource;
+}
+
+// Fired once when Studio mounts with the recommended first request pre-filled
+// in the composer — the "Home → Studio handoff succeeded" step of the funnel,
+// between the recommendation's `enter_studio` click and
+// `onboarding_first_prompt_sent`. `role` / `use_cases` echo the survey answers
+// that produced the recommendation (spec §11.1).
+export interface OnboardingPromptPrefilledProps {
+  entry_source: 'home_recommendation';
+  product_type: TrackingOnboardingProductType;
+  recommendation_id: string;
+  role?: TrackingOnboardingRole;
+  use_cases?: TrackingOnboardingUseCase[];
+}
+
+// Fired once, in Studio, when the user sends the first request in a project
+// they started from the Home recommendation. `has_prefilled_prompt` records
+// whether the composer was still carrying the recommended text at send time
+// (vs the user having cleared/rewritten it). Together with the recommendation
+// `enter_studio` click this gives the send-through rate.
+export interface OnboardingFirstPromptSentProps {
+  entry_source: 'home_recommendation';
+  product_type: TrackingOnboardingProductType;
+  recommendation_id: string;
+  has_prefilled_prompt: boolean;
+}
+
+// Fired once when that first generation completes successfully — the
+// completion rate the acceptance criteria track.
+export interface OnboardingFirstGenerationCompletedProps {
+  entry_source: 'home_recommendation';
+  product_type: TrackingOnboardingProductType;
+  recommendation_id: string;
 }
 

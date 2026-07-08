@@ -108,6 +108,9 @@ import type { PluginUseAction } from './plugins-home/useActions';
 import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
 import { localizePluginDescription } from './plugins-home/localization';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
+import { RecommendedStartRegion } from './RecommendedStartRegion';
+import type { Recommendation } from '../onboarding/recommendation';
+import type { OnboardingEntry } from '../onboarding/onboarding-entry';
 import { AnimatePresence } from 'motion/react';
 
 export interface ActivePlugin {
@@ -215,7 +218,11 @@ interface Props {
   projectsLoading?: boolean;
   designSystems?: DesignSystemSummary[];
   defaultDesignSystemId?: string | null;
-  onSubmit: (payload: PluginLoopSubmit) => Promise<boolean> | boolean | void;
+  // `'blocked'` means the shell refused the submit but already surfaced its
+  // own UI (e.g. the AMR balance gate dialog): keep the draft, show no error.
+  onSubmit: (
+    payload: PluginLoopSubmit,
+  ) => Promise<boolean | 'blocked' | void> | boolean | 'blocked' | void;
   onOpenProject: (id: string, fileName?: string) => void;
   onViewAllProjects: () => void;
   onDeleteProject?: (id: string) => Promise<boolean | void> | boolean | void;
@@ -234,6 +241,16 @@ interface Props {
   skillsLoading?: boolean;
   connectors?: ConnectorDetail[];
   promptTemplates?: PromptTemplateSummary[];
+  // Personalized first-run starting point (spec §7). Null unless the user just
+  // finished the About-you survey this session; EntryShell owns the state.
+  recommendation?: Recommendation | null;
+  onRecommendationStart?: (input: {
+    name: string;
+    prompt: string;
+    metadata: ProjectMetadata;
+    onboardingEntry: OnboardingEntry;
+  }) => boolean | void | Promise<boolean | void>;
+  onRecommendationDismiss?: () => void;
   executionSwitcher?: ReactNode;
 }
 
@@ -304,6 +321,9 @@ export function HomeView({
   skillsLoading = false,
   connectors = EMPTY_CONNECTORS,
   promptTemplates = EMPTY_PROMPT_TEMPLATES,
+  recommendation = null,
+  onRecommendationStart,
+  onRecommendationDismiss,
   executionSwitcher,
 }: Props) {
   const { locale, t } = useI18n();
@@ -1951,6 +1971,9 @@ export function HomeView({
         setError('Failed to start the run. Make sure the daemon is reachable, then try again.');
         return;
       }
+      // Blocked-and-handled (AMR balance gate): the shell already shows its
+      // dialog. Keep the composer draft and staged contexts for the retry.
+      if (accepted === 'blocked') return;
       // Create accepted — now it is safe to spend the one-shot marker.
       if (examplePromptToSend) localStorage.setItem(examplePromptKey, '1');
       // The draft has become a real run; drop it synchronously (before the
@@ -2077,6 +2100,41 @@ export function HomeView({
           void startBlankProject();
         }}
         executionSwitcher={executionSwitcher}
+        recommendationSlot={
+          recommendation && onRecommendationStart && onRecommendationDismiss ? (
+            <RecommendedStartRegion
+              recommendation={recommendation}
+              onStart={async (input) => {
+                // Route recommendation-start failures into the same Home error
+                // channel every other entry action uses, so a failed "Start
+                // creating" surfaces a visible, retryable message instead of a
+                // silent no-op. `onRecommendationStart` returns `false` for a
+                // clean no-project result and throws on real create failures;
+                // both land here as the localized error, and returning `false`
+                // lets RecommendedStartRegion drop its pending state for retry.
+                setError(null);
+                try {
+                  const ok = await onRecommendationStart(input);
+                  if (ok === false) {
+                    setError(t('home.recommendation.startFailed'));
+                    return false;
+                  }
+                  return true;
+                } catch {
+                  setError(t('home.recommendation.startFailed'));
+                  return false;
+                }
+              }}
+              onDismiss={() => {
+                onRecommendationDismiss();
+                // "浏览全部类型" must land the user somewhere concrete — open
+                // the template picker (the "all types" catalogue) instead of
+                // the strip silently vanishing (spec §7.4: 放弃推荐, 进入通用选择).
+                onOpenNewProject?.('template');
+              }}
+            />
+          ) : undefined
+        }
       />
 
       <RecentProjectsStrip

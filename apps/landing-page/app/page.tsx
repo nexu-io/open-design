@@ -32,6 +32,7 @@ import {
   PRECISE_LAZY_PLACEHOLDER,
 } from './image-assets';
 import { getHomeExtra, getHomeCta } from './home-translations';
+import { getFooterLegalCopy } from './footer-legal-i18n';
 
 /**
  * `<img>` wrapper for non-hero homepage images. Outputs `data-precise-src`
@@ -189,13 +190,6 @@ const FOOTER_AGENTS = [
   { name: 'OpenCode', route: 'opencode-design' },
 ] as const;
 
-// Legal / company labels — small inline map (en/zh/zh-tw, fallback en) kept
-// identical to `site-footer.astro` so the two footers never drift.
-const FOOTER_LEGAL = {
-  en: { company: 'Company', about: 'About', faq: 'FAQ', privacy: 'Privacy Policy', terms: 'Terms', allAgents: 'All agents' },
-  zh: { company: '公司', about: '关于', faq: '常见问题', privacy: '隐私政策', terms: '服务条款', allAgents: '全部 Agent' },
-  'zh-tw': { company: '公司', about: '關於', faq: '常見問題', privacy: '隱私政策', terms: '服務條款', allAgents: '全部 Agent' },
-} satisfies Record<string, Record<string, string>>;
 
 const ext = {
   target: '_blank',
@@ -334,8 +328,7 @@ export default function Page({
   const home = getHomePageCopy(locale);
   const ui = getLandingUiCopy(locale);
   const menu = getHeaderProductMenuCopy(locale);
-  const footL =
-    FOOTER_LEGAL[locale as keyof typeof FOOTER_LEGAL] ?? FOOTER_LEGAL.en;
+  const footL = getFooterLegalCopy(locale);
   const localeDef = getLocaleDefinition(locale);
   const localeOptions = LANDING_LOCALES.map((entry) => ({
     ...entry,
@@ -1247,6 +1240,7 @@ export default function Page({
                 <h5>{footL.company}</h5>
                 <ul>
                   <li><a href={href('/about/')}>{footL.about}</a></li>
+                  <li><a href={href('/careers/')}>{footL.careers}</a></li>
                   <li><a href={href('/faq/')}>{footL.faq}</a></li>
                   <li><a href={href('/privacy/')}>{footL.privacy}</a></li>
                   <li><a href={href('/terms/')}>{footL.terms}</a></li>

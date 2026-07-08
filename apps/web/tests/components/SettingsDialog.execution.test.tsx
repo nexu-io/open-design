@@ -6,6 +6,18 @@ import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 import { en } from '../../src/i18n/locales/en';
 
+function optionNames(container: HTMLElement): string[] {
+  return within(container).getAllByRole('option').map((option) => {
+    const labelledBy = option.getAttribute('aria-labelledby');
+    if (!labelledBy) return option.textContent?.trim() ?? '';
+    return labelledBy
+      .split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
+      .filter(Boolean)
+      .join(' ');
+  });
+}
+
 const {
   playSoundMock,
   requestNotificationPermissionMock,
@@ -728,7 +740,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     renderSettingsDialog();
 
     const providerPopover = openGatewayPresetPopover();
-    expect(within(providerPopover).getAllByRole('option').map((option) => option.textContent?.trim())).toEqual(
+    expect(optionNames(providerPopover)).toEqual(
       expect.arrayContaining([
         'Custom provider',
         'Anthropic (Claude)',
@@ -767,7 +779,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Ollama Cloud' }));
     const providerPopover = openGatewayPresetPopover();
-    expect(within(providerPopover).getAllByRole('option').map((option) => option.textContent?.trim())).toEqual([
+    expect(optionNames(providerPopover)).toEqual([
       'Custom provider',
       'Ollama Cloud (managed)',
       'Ollama Self-hosted (local)',
@@ -1050,9 +1062,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     const modelPicker = screen.getByRole('combobox', { name: 'Model' });
     fireEvent.click(modelPicker);
     const modelPopover = screen.getByTestId('settings-byok-model-popover');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(expect.arrayContaining([
+    expect(optionNames(modelPopover)).toEqual(expect.arrayContaining([
       'Account Model (gpt-account) · From your account',
       'gpt-4o · Suggested',
       'Custom (type below)…',
@@ -1389,9 +1399,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     const searchInput = within(modelPopover).getByTestId('settings-byok-model-search') as HTMLInputElement;
     fireEvent.change(searchInput, { target: { value: '5.5' } });
 
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual([
+    expect(optionNames(modelPopover)).toEqual([
       'gpt-4.1-mini · From your account',
       'gpt-5.5 · From your account',
       'Custom (type below)…',
@@ -1464,9 +1472,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     const modelPicker = screen.getByRole('combobox', { name: 'Model' });
     fireEvent.click(modelPicker);
     const modelPopover = screen.getByTestId('settings-byok-model-popover');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(expect.arrayContaining([
+    expect(optionNames(modelPopover)).toEqual(expect.arrayContaining([
       'Remote Alpha (remote-alpha) · From your account',
       'gpt-4o · From your account',
       'Custom (type below)…',
@@ -2238,9 +2244,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.change(searchInput, { target: { value: '5.5' } });
 
     const modelPopover = screen.getByTestId('settings-agent-model-popover-codex');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(['gpt-4.1-mini', 'gpt-5.5', 'Custom (type below)…']);
+    expect(optionNames(modelPopover)).toEqual(['gpt-4.1-mini', 'gpt-5.5', 'Custom (type below)…']);
   });
 
   it('labels live CLI model metadata in the model picker', () => {
@@ -2318,9 +2322,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(modelPickers[0]?.textContent).toContain('GLM 5');
     fireEvent.click(modelPickers[0]!);
     const modelPopover = screen.getByTestId('settings-agent-model-popover-amr');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(['GLM 5', 'GLM 5.1']);
+    expect(optionNames(modelPopover)).toEqual(['GLM 5', 'GLM 5.1']);
     expect(screen.queryByLabelText(en['settings.modelCustomLabel'])).toBeNull();
   });
 
