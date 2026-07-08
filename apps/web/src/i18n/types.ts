@@ -1656,6 +1656,7 @@ export interface Dict {
   'automations.openResult': string;
   'automations.run': string;
   'automations.runNowTitle': string;
+  'automations.targetCreateEachRun': string;
   'automations.history': string;
   'automations.hideHistory': string;
   'automations.edit': string;
@@ -1681,6 +1682,7 @@ export interface Dict {
   'automations.runHistoryEmpty': string;
   'automations.runHistoryTitle': string;
   'automations.runHistoryLatest': string;
+  'automations.promptPlaceholder': string;
   'automations.crystallize': string;
   'automations.crystallizing': string;
   'automations.crystallizeTitle': string;
