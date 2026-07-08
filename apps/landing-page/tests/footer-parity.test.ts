@@ -1,32 +1,34 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
+import { getFooterLegalCopy } from "../app/footer-legal-i18n.ts";
 
 // The homepage renders its own React footer (app/page.tsx), while every
-// sub-page renders app/_components/site-footer.astro. page.tsx explicitly
-// promises the two "never drift". This test enforces that promise at the
-// label level so a link added to one footer (e.g. Careers) can't silently be
-// missing from the other. It would have gone red on the commit that added the
-// Careers link to site-footer.astro only.
+// sub-page renders app/_components/site-footer.astro. Both must use the shared
+// footer legal copy module so footer labels cannot drift.
 const HOMEPAGE_FOOTER = new URL("../app/page.tsx", import.meta.url);
 const SUBPAGE_FOOTER = new URL("../app/_components/site-footer.astro", import.meta.url);
 
-// site-footer.astro also carries an `allSolutions` label for a column the
-// homepage footer expresses differently; it is legitimately sub-page-only.
+// site-footer.astro carries an `allSolutions` label for a column the homepage
+// footer expresses differently; it is legitimately sub-page-only.
 const SUBPAGE_ONLY_LABELS = new Set(["allSolutions"]);
 
-// Extract the keys of the `en: { company: ... }` footer-label object literal.
-function footerEnLabelKeys(source: string): string[] {
-  const anchor = source.indexOf("en: { company:");
-  assert.ok(anchor >= 0, "could not find the `en: { company: ... }` footer dict");
-  const open = source.indexOf("{", anchor);
-  const close = source.indexOf("}", open);
-  assert.ok(open >= 0 && close > open, "malformed footer dict object literal");
-  return source
-    .slice(open + 1, close)
-    .split(",")
-    .map((pair) => pair.split(":")[0]?.trim())
-    .filter((key): key is string => Boolean(key));
+const EXPECTED_FOOTER_LEGAL_KEYS = [
+  "about",
+  "allAgents",
+  "allSolutions",
+  "careers",
+  "company",
+  "faq",
+  "privacy",
+  "terms",
+];
+
+function referencedFooterLegalKeys(source: string): string[] {
+  const legalKeys = Object.keys(getFooterLegalCopy("en"));
+  return legalKeys.filter((key) =>
+    new RegExp(`\\b[A-Za-z_$][\\w$]*\\.${key}\\b`).test(source),
+  );
 }
 
 describe("footer parity", () => {
@@ -36,19 +38,26 @@ describe("footer parity", () => {
       readFile(SUBPAGE_FOOTER, "utf8"),
     ]);
 
-    const homeKeys = new Set(footerEnLabelKeys(homepage));
-    const subKeys = footerEnLabelKeys(subpage);
+    assert.match(homepage, /getFooterLegalCopy/, "homepage footer must use shared footer legal copy");
+    assert.match(subpage, /getFooterLegalCopy/, "sub-page footer must use shared footer legal copy");
 
-    // Every sub-page footer label (minus the intentionally sub-page-only ones)
-    // must also exist on the homepage footer.
+    assert.deepEqual(
+      Object.keys(getFooterLegalCopy("en")).sort(),
+      [...EXPECTED_FOOTER_LEGAL_KEYS].sort(),
+      "shared footer legal copy changed shape",
+    );
+
+    const homeKeys = new Set(referencedFooterLegalKeys(homepage));
+    const subKeys = referencedFooterLegalKeys(subpage);
+
     const expected = subKeys.filter((key) => !SUBPAGE_ONLY_LABELS.has(key)).sort();
+
     assert.deepEqual(
       [...homeKeys].sort(),
       expected,
-      "homepage footer (page.tsx) drifted from site-footer.astro — add the missing label(s) to FOOTER_LEGAL and the Company column",
+      "homepage footer page.tsx drifted from site-footer.astro",
     );
 
-    // Concrete anchor for the Careers link that originally regressed.
     assert.ok(homeKeys.has("careers"), "homepage footer is missing the Careers label");
   });
 });
