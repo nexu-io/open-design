@@ -189,7 +189,7 @@ export function createChatRunService({
     errorCode: run.errorCode ?? null,
     resumable: run.resumable ?? false,
     eventsLogPath: run.eventsLogPath ?? null,
-    workspace: run.workspace ?? projectWorkspaceProvenance(run.projectMetadata),
+    workspace: projectWorkspaceProvenance(run.projectMetadata),
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
     toolBundle: summarizeRunToolBundle(run.toolBundle),
     ...(run.promptCache ? { promptCache: run.promptCache } : {}),
@@ -202,6 +202,16 @@ export function createChatRunService({
     run.exitCode = code;
     run.signal = signal;
     run.updatedAt = Date.now();
+    // Release run-scoped resources the starter registered (e.g. the minted
+    // tool-token grant + agent event-sink entries). This runs on EVERY
+    // terminal path — including a startup throw that never reached the child
+    // lifecycle cleanup — so a failed run can never leave its capability token
+    // live for the token TTL. Best-effort + one-shot.
+    if (typeof run.onFinalize === 'function') {
+      const finalize = run.onFinalize;
+      run.onFinalize = null;
+      try { finalize(); } catch { /* best-effort */ }
+    }
     emit(run, 'end', { code, signal, status, resumable: run.resumable ?? false });
     for (const sse of run.clients) sse.end();
     run.clients.clear();
@@ -297,11 +307,18 @@ export function createChatRunService({
     return Number.isFinite(raw) && raw > 0 ? raw : 500;
   };
 
-  const killChild = (run, signal) => {
-    if (!run.child || childHasExited(run.child)) return false;
-    if (process.platform !== 'win32' && Number.isInteger(run.processGroupId)) {
+  // Signal an EXPLICIT child + its captured process group, rather than
+  // whatever currently occupies `run.child`. Escalation timers (SIGTERM ->
+  // SIGKILL) that outlive a same-run retry MUST target the exact generation
+  // they were scheduled for: after a retry swaps `run.child` to a fresh
+  // child, signalling the shared field would kill the healthy new attempt and
+  // leave the stalled old child unreaped. Callers that legitimately want the
+  // current child use `killChild` below.
+  const signalChildProcess = (child, processGroupId, signal) => {
+    if (!child || childHasExited(child)) return false;
+    if (process.platform !== 'win32' && Number.isInteger(processGroupId)) {
       try {
-        process.kill(-run.processGroupId, signal);
+        process.kill(-processGroupId, signal);
         return true;
       } catch (err) {
         if (err?.code !== 'ESRCH') {
@@ -312,11 +329,14 @@ export function createChatRunService({
       }
     }
     try {
-      return run.child.kill(signal);
+      return child.kill(signal);
     } catch {
       return false;
     }
   };
+
+  const killChild = (run, signal) =>
+    signalChildProcess(run.child, run.processGroupId, signal);
 
   const cancelGraceMs = () => {
     const raw = Number(process.env.OD_CHAT_RUN_CANCEL_GRACE_MS || process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
@@ -437,6 +457,11 @@ export function createChatRunService({
   const drop = (run) => {
     if (!run) return;
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+    if (typeof run.onFinalize === 'function') {
+      const finalize = run.onFinalize;
+      run.onFinalize = null;
+      try { finalize(); } catch { /* best-effort */ }
+    }
     runs.delete(run.id);
     for (const sse of run.clients) {
       try { sse.end(); } catch { /* best-effort detach */ }
@@ -466,6 +491,7 @@ export function createChatRunService({
     drop,
     signalChild: killChild,
     statusBody,
+    signalChildProcess,
     isTerminal(status) {
       return TERMINAL_RUN_STATUSES.has(status);
     },

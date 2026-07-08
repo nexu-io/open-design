@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
@@ -73,10 +73,13 @@ test('cursor-agent declares the --trust capability probe (issue #4461 root cause
 });
 
 test('opencode args keep the documented run/json argv and ignore unsupported reasoning options', () => {
+  agentCapabilities.delete('opencode');
   const prompt = 'design a dashboard';
   const baseArgs = opencode.buildArgs(prompt, [], [], {});
   assert.equal(opencode.promptViaStdin, true);
   assert.equal(opencode.reasoningOptions, undefined);
+  assert.deepEqual(opencode.helpArgs, ['run', '--help']);
+  assert.deepEqual(opencode.capabilityFlags?.['--dangerously-skip-permissions'], 'skipPermissions');
   assert.equal(baseArgs.includes('-'), false);
   assert.equal(baseArgs.includes(prompt), false);
   assert.deepEqual(baseArgs, [
@@ -112,6 +115,21 @@ test('opencode args keep the documented run/json argv and ignore unsupported rea
   assert.deepEqual(withReasoning, withModel);
   assert.equal(withModel.includes('--dangerously-skip-permissions'), false);
   assert.equal(withModel.includes('--model'), false);
+});
+
+test('opencode passes --dangerously-skip-permissions when the help probe finds it', () => {
+  agentCapabilities.set('opencode', { skipPermissions: true });
+  try {
+    const args = opencode.buildArgs('design a dashboard', [], [], {});
+    assert.deepEqual(args, [
+      'run',
+      '--format',
+      'json',
+      '--dangerously-skip-permissions',
+    ]);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely
@@ -308,41 +326,6 @@ test('pi args combine model, thinking, and extraAllowedDirs', () => {
     'medium',
     '--append-system-prompt',
     '/tmp/skills',
-  ]);
-});
-
-test('gemini args avoid version-fragile trust flags', () => {
-  const args = gemini.buildArgs('', [], [], {});
-
-  assert.deepEqual(args, ['--output-format', 'stream-json', '--yolo']);
-  assert.equal(args.includes('--skip-trust'), false);
-  assert.deepEqual(gemini.env, { GEMINI_CLI_TRUST_WORKSPACE: 'true' });
-});
-
-test('gemini args preserve custom model selection', () => {
-  const args = gemini.buildArgs('', [], [], { model: 'gemini-2.5-pro' });
-
-  assert.deepEqual(args, [
-    '--output-format',
-    'stream-json',
-    '--yolo',
-    '--model',
-    'gemini-2.5-pro',
-  ]);
-});
-
-test('gemini picker exposes the Gemini 3 previews and 2.5 family in priority order', () => {
-  // Pin the picker contents and ordering so the Settings UI cannot be
-  // silently reshaped by a future edit to AGENT_DEFS. Gemini also accepts
-  // arbitrary custom ids, which makes it especially easy for a regression
-  // here to slip through manual QA. Issue #981.
-  assert.deepEqual(gemini.fallbackModels.map((m) => m.id), [
-    'default',
-    'gemini-3-pro-preview',
-    'gemini-3-flash-preview',
-    'gemini-2.5-pro',
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
   ]);
 });
 
@@ -745,30 +728,22 @@ test('kilo args use acp subcommand for json-rpc streaming', () => {
   assert.equal(kilo.streamFormat, 'acp-json-rpc');
 });
 
-test('kimi args use prompt-mode JSONL instead of ACP', () => {
-  const prompt = 'design a page';
-  const args = kimi.buildArgs(prompt, [], [], {});
+test('kimi args use ACP so composed prompts do not travel through argv', () => {
+  const args = kimi.buildArgs('design a page', [], [], {});
 
-  assert.deepEqual(args, ['-p', prompt, '--output-format', 'stream-json']);
-  assert.equal(args.includes('acp'), false);
+  assert.deepEqual(args, ['acp']);
   assert.equal(args.includes('--yolo'), false);
-  assert.equal(kimi.streamFormat, 'json-event-stream');
-  assert.equal(kimi.eventParser, 'kimi');
-  assert.equal(kimi.mcpDiscovery, undefined);
-  assert.equal(kimi.externalMcpInjection, undefined);
+  assert.equal(kimi.streamFormat, 'acp-json-rpc');
+  assert.equal(kimi.eventParser, undefined);
+  assert.equal(kimi.mcpDiscovery, 'mature-acp');
+  assert.equal(kimi.externalMcpInjection, 'acp-merge');
+  assert.equal(kimi.maxPromptArgBytes, undefined);
 });
 
-test('kimi args pass explicit model selections through prompt mode', () => {
+test('kimi args leave model selection to the ACP session', () => {
   const args = kimi.buildArgs('hello', [], [], { model: 'moonshot-v1-32k' });
 
-  assert.deepEqual(args, [
-    '-p',
-    'hello',
-    '--output-format',
-    'stream-json',
-    '--model',
-    'moonshot-v1-32k',
-  ]);
+  assert.deepEqual(args, ['acp']);
 });
 
 test('kilo fetchModels falls back to fallbackModels when detection fails', async () => {
@@ -1004,7 +979,6 @@ test('promptInputFormat is a string property (or undefined) on every promptViaSt
     { name: 'codex', def: codex, expected: undefined },
     { name: 'copilot', def: copilot, expected: undefined },
     { name: 'cursor-agent', def: cursorAgent, expected: undefined },
-    { name: 'gemini', def: gemini, expected: undefined },
     { name: 'opencode', def: opencode, expected: undefined },
     { name: 'pi', def: pi, expected: undefined },
     { name: 'qoder', def: qoder, expected: undefined },

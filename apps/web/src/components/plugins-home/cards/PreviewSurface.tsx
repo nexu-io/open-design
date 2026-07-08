@@ -19,7 +19,8 @@ interface Props {
   pluginId: string;
   pluginTitle: string;
   preview: PluginPreviewSpec;
-  // Gallery layout renders the HTML iframe eagerly (no hover gate).
+  // Some small surfaces can opt into wider visibility margins; the Community
+  // gallery leaves this false so template arrival does not start many previews.
   eager?: boolean;
 }
 

@@ -2,8 +2,8 @@ import { amrAgentDef } from './defs/amr.js';
 import { claudeAgentDef } from './defs/claude.js';
 import { codexAgentDef } from './defs/codex.js';
 import { devinAgentDef } from './defs/devin.js';
-import { geminiAgentDef } from './defs/gemini.js';
 import { opencodeAgentDef } from './defs/opencode.js';
+import { byokOpenCodeAgentDef } from './defs/byok-opencode.js';
 import { hermesAgentDef } from './defs/hermes.js';
 import { traeCliAgentDef } from './defs/trae-cli.js';
 import { grokBuildAgentDef } from './defs/grok-build.js';
@@ -31,8 +31,8 @@ const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   claudeAgentDef,
   codexAgentDef,
   devinAgentDef,
-  geminiAgentDef,
   opencodeAgentDef,
+  byokOpenCodeAgentDef,
   hermesAgentDef,
   traeCliAgentDef,
   grokBuildAgentDef,

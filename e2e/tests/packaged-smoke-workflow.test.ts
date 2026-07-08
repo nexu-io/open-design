@@ -36,6 +36,7 @@ const releaseBetaSelfHostedWorkflowPath = join(workspaceRoot, ".github", "workfl
 const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
 const releasePrereleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-prerelease.yml");
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
+const releaseStableNotesScriptPath = join(workspaceRoot, ".github", "scripts", "release", "github", "stable-notes.sh");
 const releasePreviewScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-preview.ts");
 const releaseStableScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-stable.ts");
 const releaseBetaScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-beta.ts");
@@ -43,6 +44,8 @@ const packagedPackageJsonPath = join(workspaceRoot, "apps", "packaged", "package
 const scopesScriptPath = join(workspaceRoot, "scripts", "scopes.ts");
 const runnersScriptPath = join(workspaceRoot, ".github", "scripts", "runners.py");
 const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-daily-feishu.yml");
+const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
+const feishuNoticeScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-notice.ts");
 const landingPageDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-daily-feishu.yml");
 const landingPageProductionWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-production.yml");
 const landingPageDailyFeishuScriptPath = join(workspaceRoot, ".github", "scripts", "landing-page-daily-feishu.ts");
@@ -1337,6 +1340,63 @@ process.stdin.on("end", () => {
     expect(resolveJob).not.toContain("refs/heads/release/v*");
   });
 
+  it("[P2] gates the Thursday patch cut on the Tuesday minor being published", async () => {
+    // cut-patch-release is the Tuesday cut-release flow, one weekday later, with a
+    // PATCH bump and a publish guard. Lock the three properties that make it safe:
+    //   1. It fires Thursday and bumps patch (not minor) from the highest release branch.
+    //   2. It only cuts when this line's minor base X.Y.0 is a PUBLISHED stable
+    //      GitHub Release (non-draft, non-prerelease) — otherwise it must NOT create
+    //      a branch or build; it posts a Feishu notice and stops.
+    //   3. The happy path still cuts from main and pushes with the App token, so the
+    //      existing notify-release-feishu push trigger produces the prerelease + card.
+    const [workflow, notice] = await Promise.all([
+      readFile(cutPatchReleaseWorkflowPath, "utf8"),
+      readFile(feishuNoticeScriptPath, "utf8"),
+    ]);
+
+    // Thursday cron, and a patch (not minor) bump.
+    const trigger = sectionBetween(workflow, "on:", "\npermissions:");
+    expect(trigger).toContain("cron: '0 1 * * 4'");
+    expect(workflow).toContain('V="${major}.${minor}.$((patch+1))"');
+    expect(workflow).not.toContain("minor+1");
+
+    // The guard target (MINOR_BASE) must derive from the FINAL version V, not from
+    // the highest branch — otherwise a manual `version=` on another line is gated
+    // against the wrong minor (e.g. version=0.15.1 while latest is 0.14.0 would
+    // wrongly check open-design-v0.14.0). Assert V's own major/minor drive it.
+    expect(workflow).toContain('vmajor=${V%%.*}; vrest=${V#*.}; vminor=${vrest%%.*}');
+    expect(workflow).toContain('MINOR_BASE="${vmajor}.${vminor}.0"');
+    expect(workflow).not.toContain('MINOR_BASE="${major}.${minor}.0"');
+
+    // The guard reads the minor base's stable release and requires it published
+    // (neither draft nor prerelease); a missing release falls back to not published.
+    const guard = sectionBetween(workflow, "- name: Check the Tuesday minor is published", "# ---- Skip path");
+    expect(guard).toContain('gh release view "$MINOR_TAG"');
+    expect(guard).toContain("--jq '(.isDraft or .isPrerelease) | not'");
+    expect(guard).toContain("|| published=false");
+    expect(workflow).toContain('echo "minor_tag=open-design-v$MINOR_BASE"');
+
+    // Skip path: no branch, no build — only the Feishu notice runs, gated on !published.
+    const noticeStep = sectionBetween(workflow, "- name: Notify Feishu that the patch cut was skipped", "- name: Stop here when skipping");
+    expect(noticeStep).toContain("if: steps.guard.outputs.published != 'true'");
+    expect(noticeStep).toContain("tools/release/src/notifications/feishu-notice.ts");
+    // Every branch-cutting step must be gated on the guard passing: assert the
+    // guard `if:` is the line immediately after each step name.
+    for (const step of ["Bail out if the branch already exists", "Create branch + bump version + push", "Create backport label"]) {
+      expect(workflow).toContain(`- name: ${step}\n        if: steps.guard.outputs.published == 'true'`);
+    }
+
+    // Happy path keeps cut-release's mechanics: cut from main, App-token push.
+    expect(workflow).toContain("ref: main");
+    expect(workflow).toContain("token: ${{ steps.app.outputs.token }}");
+    expect(workflow).toContain('git push origin "$BRANCH"');
+
+    // The notice card is a standalone poster with the same signed-webhook contract.
+    expect(notice).toContain("msg_type: \"interactive\"");
+    expect(notice).toContain('required("NOTICE_TITLE")');
+    expect(notice).toContain('required("NOTICE_BODY")');
+  });
+
   it("[P2] sends the daily landing PR summary to Feishu with staging deployment status", async () => {
     const [workflow, productionWorkflow, script] = await Promise.all([
       readFile(landingPageDailyFeishuWorkflowPath, "utf8"),
@@ -1389,21 +1449,26 @@ process.stdin.on("end", () => {
     expect(script).toContain(".github/workflows/landing-page-staging.yml");
   });
 
-  it("[P2] supports stable dry-run metadata and prepublish boundaries", async () => {
+  it("[P2] supports stable metadata, prepublish, and publish dispatch modes", async () => {
     const [workflow, script] = await Promise.all([
       readFile(releaseStableWorkflowPath, "utf8"),
       readFile(releaseStableScriptPath, "utf8"),
     ]);
 
     expect(workflow).toContain("dry_run:");
-    expect(workflow).toContain("Dry-run boundary to validate. metadata stops after promotion metadata; prepublish runs build/smoke/report/plan without publishing.");
+    expect(workflow).toContain(
+      "Release mode. metadata stops after promotion metadata; prepublish runs build/smoke/report/plan without publishing; publish performs the stable release.",
+    );
     expect(workflow).toContain("group: open-design-release-stable-${{ inputs.dry_run }}");
     expect(workflow).toContain("type: choice");
     expect(workflow).toContain("- metadata");
     expect(workflow).toContain("- prepublish");
+    expect(workflow).toContain("- publish");
     expect(workflow).toContain("default: metadata");
     expect(workflow).not.toContain("inputs.channel");
-    expect(workflow).toContain("OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run }}");
+    expect(workflow).toContain("OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run == 'publish' && 'false' || inputs.dry_run }}");
+    expect(workflow).toContain("RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}");
+    expect(workflow).toContain("run: bash .github/scripts/release/github/stable-notes.sh");
     expect(workflow).toContain("dry_run: ${{ steps.stable.outputs.dry_run }}");
     expect(workflow).toContain("dry_run_mode: ${{ steps.stable.outputs.dry_run_mode }}");
     expect(workflow).toContain("if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}");
@@ -1415,6 +1480,43 @@ process.stdin.on("end", () => {
     expect(script).toContain('setOutput("dry_run_mode", stableDryRunMode);');
     expect(script).toContain('setOutput("run_prepublish_jobs", runPrepublishJobs ? "true" : "false");');
     expect(script).toContain('setOutput("publish_side_effects_enabled", publishSideEffectsEnabled ? "true" : "false");');
+  });
+
+  it("[P2] writes stable release notes from the release public origin variable", async () => {
+    for (const [envName, origin] of [
+      ["RELEASE_PUBLIC_ORIGIN", "https://releases.open-design.ai/current/"],
+      ["CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN", "https://releases.open-design.ai/legacy/"],
+    ] as const) {
+      const runnerTemp = await mkdtemp(join(tmpdir(), "od-stable-notes-"));
+      const outputPath = join(runnerTemp, "github-output.txt");
+
+      try {
+        await execFileAsync("bash", [releaseStableNotesScriptPath], {
+          cwd: workspaceRoot,
+          env: {
+            ...process.env,
+            BRANCH_NAME: "release/v0.13.0",
+            CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: envName === "CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN" ? origin : "",
+            GITHUB_OUTPUT: outputPath,
+            GITHUB_REPOSITORY: "nexu-io/open-design",
+            GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
+            RELEASE_CHANNEL: "stable",
+            RELEASE_PUBLIC_ORIGIN: envName === "RELEASE_PUBLIC_ORIGIN" ? origin : "",
+            RELEASE_SIGNED: "true",
+            RELEASE_VERSION: "0.13.0",
+            RUNNER_TEMP: runnerTemp,
+            VERSION_TAG: "open-design-v0.13.0",
+          },
+        });
+
+        const outputs = parseGithubOutput(await readFile(outputPath, "utf8"));
+        const notes = await readFile(outputs.notes_file ?? "", "utf8");
+        expect(notes).toContain(`R2 metadata: ${origin.replace(/\/+$/, "")}/stable/latest/metadata.json`);
+        expect(notes).toContain(`E2E report: ${origin.replace(/\/+$/, "")}/stable/versions/0.13.0/report.zip`);
+      } finally {
+        await rm(runnerTemp, { force: true, recursive: true });
+      }
+    }
   });
 
   it("[P2] validates stable dry-run prerelease metadata from a release branch", async () => {

@@ -28,6 +28,7 @@ import { runPipelineForRun } from '../src/plugins/pipeline-runner.js';
 import { listIterationsForRun } from '../src/plugins/pipeline.js';
 import { respondSurface } from '../src/genui/registry.js';
 import { findPendingByRunAndSurfaceId } from '../src/genui/store.js';
+import type { RunEventForAnalyticsObservability } from '../src/run-analytics-observability.js';
 import {
   clearAtomWorkers,
   registerAtomWorker,
@@ -255,6 +256,66 @@ describe('pipeline-runner: Stage D registry runner integration', () => {
     expect(outcomes[0]?.converged).toBe(true);
     expect(outcomes[0]?.iterations).toBe(1);
     expect(outcomes[0]?.termination).toBe('no-loop');
+  });
+
+  it('persists registry run-level usage totals and leaves no-usage runs null', async () => {
+    const snap = snapshotWith({
+      pipeline: {
+        stages: [{ id: 'compose', atoms: ['unknown-atom'] }],
+      },
+    });
+    const usageEvents: RunEventForAnalyticsObservability[] = [{
+      id:        1,
+      event:     'agent',
+      data:      {
+        type:  'usage',
+        usage: { input_tokens: 17, output_tokens: 23, total_tokens: 45 },
+      },
+      timestamp: Date.now(),
+    }];
+
+    await runPipelineForRun({
+      db,
+      runId: 'run-with-usage',
+      projectId: 'project-1',
+      conversationId: 'conv-A',
+      snapshot: snap,
+      pipeline: snap.pipeline!,
+      env: { maxIterations: 1 },
+      runStage: async ({ stage, iteration, snapshot: snap2 }) => runStageWithRegistry({
+        db,
+        runId: 'run-with-usage',
+        projectId: 'project-1',
+        conversationId: 'conv-A',
+        stage,
+        iteration,
+        snapshot:  snap2,
+        runEvents: usageEvents,
+      }),
+    });
+
+    await runPipelineForRun({
+      db,
+      runId: 'run-without-usage',
+      projectId: 'project-1',
+      conversationId: 'conv-A',
+      snapshot: snap,
+      pipeline: snap.pipeline!,
+      env: { maxIterations: 1 },
+      runStage: async ({ stage, iteration, snapshot: snap2 }) => runStageWithRegistry({
+        db,
+        runId: 'run-without-usage',
+        projectId: 'project-1',
+        conversationId: 'conv-A',
+        stage,
+        iteration,
+        snapshot:  snap2,
+        runEvents: [],
+      }),
+    });
+
+    expect(listIterationsForRun(db, 'run-with-usage')[0]?.tokensUsed).toBe(45);
+    expect(listIterationsForRun(db, 'run-without-usage')[0]?.tokensUsed).toBeNull();
   });
 });
 

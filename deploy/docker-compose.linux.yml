@@ -1,0 +1,64 @@
+# Linux override for docker-compose.yml.
+#
+# Switches to host networking so the daemon sees browser connections as
+# 127.0.0.1, satisfying the loopback guard on connector endpoints
+# (Composio key save, GitHub OAuth, etc.) that bridge networking breaks.
+#
+# Also mounts host-installed agent CLIs (Claude Code, opencode, …) into the
+# container so Open Design can spawn them as agent runtimes. Requires the
+# local image built from Dockerfile.local (adds glibc compat for Alpine).
+# See README.md "Linux: mounting host agent CLIs" for setup instructions.
+#
+# network_mode: host is Linux-only. macOS and Windows Docker Desktop users
+# should use the base docker-compose.yml behind a loopback-bound reverse proxy.
+#
+# Used automatically by install.sh on Linux. To apply manually:
+#   docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d
+name: open-design
+
+services:
+  open-design:
+    # Cap CPU so a busy agent run does not starve the host.
+    cpus: '1.5'
+    # Drop the bridge port mapping — host networking makes it irrelevant.
+    ports: !reset []
+    network_mode: host
+    environment:
+      # Re-declare both port vars so the daemon listener follows OPEN_DESIGN_PORT
+      # even without the bridge mapping (which normally enforced the remap).
+      OD_PORT: ${OPEN_DESIGN_PORT:-7456}
+      OD_WEB_PORT: ${OPEN_DESIGN_PORT:-7456}
+      # With host networking the daemon binds directly on the host's interfaces.
+      # Lock it to loopback so the base file's 0.0.0.0 default does not expose
+      # Open Design on the LAN or public IP.
+      OD_BIND_HOST: 127.0.0.1
+      # Prepend host-bin mounts so the daemon finds agent CLIs before
+      # any container-local stubs.
+      PATH: /mnt/host-local-bin:/mnt/host-opencode:/usr/local/bin:/usr/bin:/bin
+      # API keys for agent CLIs. Leave blank to omit.
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - ${HOME}/.local/bin:/mnt/host-local-bin:ro
+      - ${HOME}/.opencode/bin:/mnt/host-opencode:ro
+      # Claude Code versioned binaries — mounted at the same absolute path as the host
+      # so the ~/.local/bin/claude symlink resolves correctly inside the container.
+      - ${HOME}/.local/share/claude:${HOME}/.local/share/claude:ro
+      # Claude Code credentials — read-only; never written inside the container.
+      - ${HOME}/.claude:/home/open-design/.claude:ro
+      # Full glibc for CLIs that exceed what libc6-compat (gcompat) covers.
+      # amd64 only — on arm64 replace with /lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu:ro
+      - /lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:ro
+      - /lib64:/lib64:ro
+    tmpfs:
+      # uid/gid must match the base image's open-design user (1001:1001).
+      - /home/open-design:uid=1001,gid=1001
+    healthcheck:
+      # Use wget (available in Alpine) instead of node — faster and does not
+      # compete with the daemon for CPU during startup.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:${OPEN_DESIGN_PORT:-7456}/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s  # increased from 20s — glibc host mounts add startup latency

@@ -15,6 +15,7 @@ import type {
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
   ReplaceProjectWorkingDirResponse,
+  ProjectFileTextPreviewResponse,
   ProjectFileVersion,
   ProjectFileVersionSource,
   ProjectFileVersionResponse,
@@ -1600,11 +1601,11 @@ export async function deleteLiveArtifact(projectId: string, artifactId: string):
 
 async function readApiErrorBody(resp: Response): Promise<{ message: string; code?: string }> {
   try {
-    const json = (await resp.json()) as { error?: { code?: string; message?: string }; message?: string };
-    const message = json.error?.message ?? json.message;
+    const json = (await resp.json()) as { error?: { code?: string; message?: string } | string; message?: string };
+    const message = typeof json.error === 'string' ? json.error : json.error?.message ?? json.message;
     return {
       message: typeof message === 'string' && message.length > 0 ? message : `Request failed (${resp.status}).`,
-      ...(typeof json.error?.code === 'string' ? { code: json.error.code } : {}),
+      ...(typeof json.error === 'object' && typeof json.error?.code === 'string' ? { code: json.error.code } : {}),
     };
   } catch {
     return { message: `Request failed (${resp.status}).` };
@@ -1699,6 +1700,47 @@ export async function fetchProjectFileText(
       name,
       projectId,
       url: requestUrl,
+    });
+    return null;
+  }
+}
+
+export async function fetchProjectFileTextPreview(
+  projectId: string,
+  name: string,
+  options?: { limit?: number; cacheBustKey?: string | number },
+): Promise<ProjectFileTextPreviewResponse | null> {
+  const segments = name
+    .split('/')
+    .filter((segment) => segment.length > 0)
+    .map(encodeURIComponent)
+    .join('/');
+  if (!segments) return null;
+  const params = new URLSearchParams();
+  if (options?.limit != null) params.set('limit', String(options.limit));
+  if (options?.cacheBustKey != null) params.set('cacheBust', String(options.cacheBustKey));
+  const query = params.toString();
+  const url = `/api/projects/${encodeURIComponent(projectId)}/text-preview/${segments}${query ? `?${query}` : ''}`;
+
+  try {
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) {
+      console.warn('[fetchProjectFileTextPreview] failed:', {
+        name,
+        projectId,
+        status: resp.status,
+        statusText: resp.statusText,
+        url,
+      });
+      return null;
+    }
+    return (await resp.json()) as ProjectFileTextPreviewResponse;
+  } catch (err) {
+    console.warn('[fetchProjectFileTextPreview] failed:', {
+      error: err,
+      name,
+      projectId,
+      url,
     });
     return null;
   }
@@ -2125,13 +2167,22 @@ export async function renameProjectFile(
   return (await resp.json()) as RenameProjectFileResponse;
 }
 
-export async function openFolderDialog(): Promise<string | null> {
+export async function openFolderDialog(options: { throwOnError?: boolean } = {}): Promise<string | null> {
   try {
     const resp = await fetch('/api/dialog/open-folder', { method: 'POST' });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      if (options.throwOnError) {
+        const errorBody = await readApiErrorBody(resp);
+        throw new Error(errorBody.message);
+      }
+      return null;
+    }
     const data = await resp.json();
     return typeof data.path === 'string' && data.path.length > 0 ? data.path : null;
-  } catch {
+  } catch (err) {
+    if (options.throwOnError) {
+      throw err instanceof Error ? err : new Error('Could not open folder picker');
+    }
     return null;
   }
 }

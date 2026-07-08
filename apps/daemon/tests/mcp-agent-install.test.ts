@@ -29,6 +29,7 @@ describe('agent slug guard', () => {
     for (const s of AGENT_SLUGS) expect(isAgentSlug(s)).toBe(true);
     expect(isAgentSlug('not-an-agent')).toBe(false);
     expect(AGENT_SLUGS).toHaveLength(14);
+    expect(isAgentSlug('kiro')).toBe(true);
   });
 });
 
@@ -56,14 +57,6 @@ describe('CLI-driven agents', () => {
     expect(plan.addArgv.slice(-SPEC.args.length - 2)).toEqual(['--', SPEC.command, ...SPEC.args]);
   });
 
-  it('gemini omits the -- separator (positional command)', () => {
-    const plan = planAgentInstall('gemini', SPEC_NO_ENV, ctx());
-    if (plan.kind !== 'cli') throw new Error('expected cli');
-    expect(plan.addArgv).toEqual([
-      'mcp', 'add', '-s', 'user', '-t', 'stdio',
-      'open-design', SPEC.command, ...SPEC.args,
-    ]);
-  });
 });
 
 describe('JSON-config agents', () => {
@@ -97,6 +90,19 @@ describe('JSON-config agents', () => {
     if (plan.kind !== 'json') throw new Error('expected json');
     expect(plan.keyPath).toEqual(['mcp', 'servers']);
     expect(plan.entry).toEqual({ command: SPEC.command, args: SPEC.args });
+  });
+
+  it('kiro merges a stdio entry into the user MCP settings file', () => {
+    const plan = planAgentInstall('kiro', SPEC, ctx());
+    if (plan.kind !== 'json') throw new Error('expected json');
+    expect(plan.configPath).toBe('/home/u/.kiro/settings/mcp.json');
+    expect(plan.keyPath).toEqual(['mcpServers']);
+    expect(plan.serverKey).toBe('open-design');
+    expect(plan.entry).toEqual({
+      command: SPEC.command,
+      args: SPEC.args,
+      env: SPEC.env,
+    });
   });
 
   it('omits env entirely when the launch spec has no env', () => {

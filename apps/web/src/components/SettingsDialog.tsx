@@ -57,6 +57,7 @@ import {
   amrPlansUrlForProfile,
   amrProfileBadgeLabel,
 } from '../runtime/amr-guidance';
+import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import {
@@ -127,6 +128,7 @@ import {
 import { MEDIA_PROVIDERS } from '../media/models';
 import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelOptions } from '../media/aihubmix-image-models';
 import { isVisualStabilityMode } from '../utils/visualStability';
+import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
@@ -665,26 +667,6 @@ function providerConnectionTestKey(
   ].join('\n');
 }
 
-function isLocalOllamaBaseUrl(baseUrl: string): boolean {
-  try {
-    const parsed = new URL(baseUrl);
-    const hostname = parsed.hostname.toLowerCase();
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
-  } catch {
-    return false;
-  }
-}
-
-function byokProviderRequiresApiKey(
-  protocol: ApiProtocol,
-  provider: KnownProvider | undefined,
-  baseUrl: string,
-): boolean {
-  if (provider?.requiresApiKey === false) return false;
-  if (protocol === 'ollama' && isLocalOllamaBaseUrl(baseUrl)) return false;
-  return true;
-}
-
 type ByokFirstPartyBaseUrlHint = {
   baseUrl: string;
   hostTypo: boolean;
@@ -773,7 +755,6 @@ const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
   claude: 'Anthropic official CLI',
   codex: 'OpenAI official CLI',
   'cursor-agent': 'Cursor command line',
-  gemini: 'Google official CLI',
   opencode: 'Open-source agent CLI',
   qwen: 'Qwen coding CLI',
   copilot: 'GitHub coding CLI',
@@ -1015,6 +996,15 @@ export function isValidApiBaseUrl(value: string): boolean {
   const trimmed = value.trim();
   if (!/^https?:\/\//i.test(trimmed)) return false;
   const result = validateBaseUrl(trimmed);
+  // The internal-IP / SSRF decision belongs to the daemon, which is the single
+  // source of truth and honors the operator's OD_ALLOWED_INTERNAL_HOSTS
+  // allowlist — a value the browser cannot see (#3225). A `forbidden` result
+  // here is a syntactically-valid URL that points at an internal address; keep
+  // it UI-valid so the operator can run the connection test / model fetch and
+  // get the daemon's authoritative answer (allowed when listed, a clear
+  // "Internal IPs blocked" otherwise). Only genuinely malformed URLs stay
+  // invalid client-side.
+  if (result.forbidden) return true;
   return Boolean(result.parsed && !result.error);
 }
 
@@ -1881,7 +1871,7 @@ export function SettingsDialog({
   }, []);
 
   const installedCount = useMemo(
-    () => agents.filter((a) => a.available).length,
+    () => agents.filter((a) => a.available && isVisibleLocalCliAgent(a)).length,
     [agents],
   );
 
@@ -2650,8 +2640,12 @@ export function SettingsDialog({
         return t('settings.testInvalidBaseUrl');
       case 'rate_limited':
         return t('settings.testRateLimited');
-      case 'upstream_unavailable':
-        return t('settings.testUpstream', { status: result.status ?? 0 });
+      case 'upstream_unavailable': {
+        const baseMessage = t('settings.testUpstream', {
+          status: result.status ?? 0,
+        });
+        return result.detail ? `${baseMessage} ${result.detail}` : baseMessage;
+      }
       case 'timeout':
         return t('settings.testTimeout', { ms });
       case 'agent_not_installed':
@@ -3548,10 +3542,11 @@ export function SettingsDialog({
     about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
   };
   const activeHeader = sectionHeader[activeSection];
+  const visibleAgents = agents.filter(isVisibleLocalCliAgent);
   const installedAgents = orderAgentsWithOpenDesignFirst(
-    agents.filter((a) => a.available),
+    visibleAgents.filter((a) => a.available),
   );
-  const unavailableAgents = agents.filter((a) => !a.available);
+  const unavailableAgents = visibleAgents.filter((a) => !a.available);
   const initialAgentScanRunning = agentsLoading && agents.length === 0;
   const agentModelOptionLabel = (
     model: ProviderModelOption | undefined,
@@ -7933,7 +7928,22 @@ function IntegrationsSection() {
             }}
             data-lang={snippetLang}
           >
-            <code>
+            <code
+              style={{
+                // Neutralize the global inline-`code` chip style (background,
+                // padding, rounded corners, color, size) so it doesn't paint a
+                // light rounded rectangle behind every wrapped segment of the
+                // dark snippet block — which read as permanent selection
+                // highlights on the wrapped `claude mcp add-json` one-liner.
+                // Issue #4509.
+                background: 'transparent',
+                padding: 0,
+                borderRadius: 0,
+                color: 'inherit',
+                fontFamily: 'inherit',
+                fontSize: 'inherit',
+              }}
+            >
               {snippet ||
                 (infoError
                   ? t('settings.mcpResolvingFailed')

@@ -9,6 +9,7 @@ import { checkDesignSystemPackageQuality } from "./check-design-system-package-q
 import { checkDesignSystemComponentFixtureReport } from "./check-components-fixtures.ts";
 import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.ts";
 import { checkComponentsManifestExtraction } from "./check-components-manifest-extraction.ts";
+import { checkPluginPreviewManifest } from "./check-plugin-preview-manifest.ts";
 import { validatePlaywrightSuiteTopology } from "../e2e/lib/playwright/suites.ts";
 import {
   checkDesignSystemA1RequiredTokens,
@@ -146,6 +147,10 @@ const residualAllowedPathPrefixes = [
   "e2e/ui/test-results/",
   // Vendored upstream HyperFrames helper scripts (design template).
   "design-templates/hyperframes/scripts/",
+  // Vendored upstream Web Clone skill helper scripts. These are portable
+  // Node-run skill utilities executed from user workspaces via explicit script
+  // paths, and stay as `.mjs` to preserve the upstream skill packaging.
+  "skills/web-clone/scripts/",
   // Vendored upstream Last30Days runtime helper used by the engine (design template).
   "design-templates/last30days/scripts/lib/vendor/",
   // Vendored upstream html-ppt runtime assets (lewislulu/html-ppt-skill, design template).
@@ -1302,6 +1307,7 @@ const checks: GuardCheck[] = [
   { name: "style policy", run: checkStylePolicy },
   { name: "CI topology", run: checkCiTopology },
   { name: "craft references", run: checkCraftReferences },
+  { name: "plugin preview manifest", run: checkPluginPreviewManifest },
   { name: "design system manifests", run: checkDesignSystemManifests },
   { name: "design system package quality", run: checkDesignSystemPackageQuality },
   { name: "design system component fixture report", run: checkDesignSystemComponentFixtureReport },

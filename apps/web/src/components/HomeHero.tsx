@@ -35,7 +35,14 @@ import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
-import { trackHomeChatComposerClick } from '../analytics/events';
+import {
+  trackComposerSessionModeClick,
+  trackContextLinkResult,
+  trackFigmaHelpModalSurfaceView,
+  trackHomeChatComposerClick,
+  trackProjectReferenceModalSurfaceView,
+} from '../analytics/events';
+import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import {
   chipsForGroup,
   orderedCreateChips,
@@ -76,7 +83,7 @@ import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
-import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { ComposerPlusMenu, PLUS_SUBMENU_RESOURCE_KIND } from './ComposerPlusMenu';
 import { ContextChipHoverCard } from './ContextChipHoverCard';
 import { workspaceContextDetailLine, workspaceContextKindLabel } from './workspace-context';
 import { FigmaHelpModal } from './FigmaHelpModal';
@@ -229,6 +236,10 @@ interface Props {
   // no design system / template / prompt) and enters it. Omit to hide the link.
   onStartBlankProject?: () => void;
   executionSwitcher?: ReactNode;
+  // Personalized first-run starting point (spec §7). Rendered directly under
+  // the composer card — before the template section — so a brand-new user sees
+  // their recommended entry without scrolling.
+  recommendationSlot?: ReactNode;
 }
 
 type HomeMentionTab = 'all' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
@@ -352,6 +363,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onExamplePromptStatusChange,
     onStartBlankProject,
     executionSwitcher,
+    recommendationSlot,
   },
   ref,
 ) {
@@ -959,11 +971,26 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       );
     }
     setProjectReferenceOpen(false);
+    trackContextLinkResult(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      context_kind: 'project',
+      result: 'success',
+      count: selections.length,
+    });
   }
 
   async function handleLinkLocalCodeContext() {
     const selected = await onPickLocalCodeDir?.();
-    if (!selected) return;
+    if (!selected) {
+      trackContextLinkResult(analytics.track, {
+        page_name: 'home',
+        area: 'chat_composer',
+        context_kind: 'local_code',
+        result: 'cancelled',
+      });
+      return;
+    }
     const label = selected.split(/[/\\]/).filter(Boolean).pop() || selected;
     appendWorkspacePrompt(
       {
@@ -975,6 +1002,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         absolutePath: selected,
       }
     );
+    trackContextLinkResult(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      context_kind: 'local_code',
+      result: 'success',
+      count: 1,
+    });
   }
 
   function openDesignSystemPicker() {
@@ -1373,7 +1407,16 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <button
                   type="button"
                   className="home-hero__active-clear od-tooltip"
-                  onClick={() => onRemovePluginContext(plugin.id)}
+                  onClick={() => {
+                    trackHomeChatComposerClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'context_remove',
+                      resource_kind: 'plugin',
+                      resource_id: plugin.id,
+                    });
+                    onRemovePluginContext(plugin.id);
+                  }}
                   aria-label={t('chat.removeAria', { name: plugin.title })}
                   title={t('common.close')}
                   data-tooltip={t('common.close')}
@@ -1400,7 +1443,16 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   <button
                     type="button"
                     className="home-hero__active-clear od-tooltip"
-                    onClick={() => onRemoveMcpContext(server.id)}
+                    onClick={() => {
+                      trackHomeChatComposerClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'chat_composer',
+                        element: 'context_remove',
+                        resource_kind: 'mcp',
+                        resource_id: server.id,
+                      });
+                      onRemoveMcpContext(server.id);
+                    }}
                     aria-label={t('chat.removeAria', { name: label })}
                     title={t('common.close')}
                     data-tooltip={t('common.close')}
@@ -1426,7 +1478,16 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <button
                   type="button"
                   className="home-hero__active-clear od-tooltip"
-                  onClick={() => onRemoveConnectorContext(connector.id)}
+                  onClick={() => {
+                    trackHomeChatComposerClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'context_remove',
+                      resource_kind: 'connector',
+                      resource_id: connector.id,
+                    });
+                    onRemoveConnectorContext(connector.id);
+                  }}
                   aria-label={t('chat.removeAria', { name: connector.name })}
                   title={t('common.close')}
                   data-tooltip={t('common.close')}
@@ -1452,6 +1513,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   type="button"
                   className="home-hero__active-clear od-tooltip"
                   onClick={() => {
+                    trackHomeChatComposerClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'context_remove',
+                      resource_kind: 'workspace',
+                      resource_id: item.id,
+                    });
                     const nextPrompt = stripHomeMentionToken(prompt, item.label);
                     if (nextPrompt !== prompt) onPromptChange(nextPrompt);
                     onRemoveWorkspaceContext(item.id);
@@ -1651,6 +1719,23 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   element: 'plus_menu_open',
                 })
               }
+              onSubmenuOpen={(submenu) => {
+                if (submenu === 'toolbox') return;
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_submenu_open',
+                  resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
+                });
+              }}
+              onSearchUsed={(submenu) => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'plus_search',
+                  resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
+                });
+              }}
               connectors={connectorOptions}
               onPickConnector={(connector) => {
                 trackHomeChatComposerClick(analytics.track, {
@@ -1735,6 +1820,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   page_name: 'home',
                   area: 'chat_composer',
                   element: 'plus_pick',
+                  resource_kind: 'workspace',
+                  resource_id: 'reference-project',
+                });
+                trackProjectReferenceModalSurfaceView(analytics.track, {
+                  page_name: 'home',
+                  area: 'project_reference_modal',
                 });
                 setProjectReferenceOpen(true);
               }}
@@ -1742,7 +1833,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 trackHomeChatComposerClick(analytics.track, {
                   page_name: 'home',
                   area: 'chat_composer',
-                  element: 'working_dir',
+                  element: 'plus_pick',
+                  resource_kind: 'workspace',
+                  resource_id: 'local-code',
                 });
                 void handleLinkLocalCodeContext();
               } : undefined}
@@ -1762,8 +1855,26 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 });
                 onImportFigma();
               } : undefined}
-              onShowFigmaHelp={() => setFigmaHelpOpen(true)}
-              onOpenDesignSystems={onDesignSystemChange ? openDesignSystemPicker : undefined}
+              onShowFigmaHelp={() => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'figma_help',
+                });
+                trackFigmaHelpModalSurfaceView(analytics.track, {
+                  page_name: 'home',
+                  area: 'figma_help_modal',
+                });
+                setFigmaHelpOpen(true);
+              }}
+              onOpenDesignSystems={onDesignSystemChange ? () => {
+                trackHomeChatComposerClick(analytics.track, {
+                  page_name: 'home',
+                  area: 'chat_composer',
+                  element: 'design_system_open',
+                });
+                openDesignSystemPicker();
+              } : undefined}
             />
             {libraryPickerOpen ? (
               <LibraryPicker
@@ -1773,7 +1884,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             ) : null}
             {projectReferenceOpen ? (
               <ProjectReferenceModal
-                onClose={() => setProjectReferenceOpen(false)}
+                onClose={() => {
+                  // Only the dismiss paths (X / backdrop / Escape / Cancel)
+                  // land here — a confirmed pick closes via
+                  // handleReferenceProjects, which reports 'success'.
+                  trackContextLinkResult(analytics.track, {
+                    page_name: 'home',
+                    area: 'chat_composer',
+                    context_kind: 'project',
+                    result: 'cancelled',
+                  });
+                  setProjectReferenceOpen(false);
+                }}
                 onSelect={handleReferenceProjects}
               />
             ) : null}
@@ -1821,7 +1943,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             <div className="home-hero__mode-switcher">
               <SessionModeToggle
                 mode={sessionMode}
-                onChange={onSessionModeChange}
+                onChange={(next) => {
+                  if (next !== sessionMode) {
+                    trackComposerSessionModeClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'session_mode_toggle',
+                      mode_before: sessionModeToTracking(sessionMode),
+                      mode_after: sessionModeToTracking(next),
+                    });
+                  }
+                  onSessionModeChange?.(next);
+                }}
               />
             </div>
             {executionSwitcher ? (
@@ -1893,6 +2026,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           ) : null}
         </div>
       ) : null}
+
+      {recommendationSlot}
 
       {activeCreateChip ? null : (
         <div className="home-hero__template-section" data-testid="home-hero-template-section">
@@ -3365,6 +3500,7 @@ function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): st
     case 'video': return t('homeHero.chip.videoDesc');
     case 'audio': return t('homeHero.chip.audioDesc');
     case 'hyperframes': return t('homeHero.chip.hyperframesDesc');
+    case 'webgl': return t('homeHero.chip.webglDesc');
     case 'live-artifact': return t('homeHero.chip.liveArtifactDesc');
     case 'create-brand-kit': return t('homeHero.chip.createBrandKitDesc');
     default: return '';
@@ -3534,6 +3670,11 @@ export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: 
       return hasPart('hyperframes', 'hyperframe');
     case 'live-artifact':
       return has('live-artifact') || hasPart('live-artifact');
+    case 'webgl':
+      return (
+        has('webgl', 'webgl2', 'shader', 'gpu') ||
+        hasPart('webgl', 'shader', 'gpu')
+      );
     case 'image':
       return (has('image') || hasPart('image-template')) && !hasPart('video', 'audio', 'live-artifact');
     case 'video':

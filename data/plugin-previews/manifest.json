@@ -1,34 +1,6 @@
 {
   "generatedAt": null,
   "previews": {
-    "example-3d-creator-portfolio": {
-      "video": "example-3d-creator-portfolio.7baca4a2f8fe0135.mp4",
-      "poster": "example-3d-creator-portfolio.7baca4a2f8fe0135.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "7baca4a2f8fe0135"
-    },
-    "example-ai-designer-portfolio": {
-      "video": "example-ai-designer-portfolio.44eb17358a2cac55.mp4",
-      "poster": "example-ai-designer-portfolio.44eb17358a2cac55.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "44eb17358a2cac55"
-    },
-    "example-acreage-farming": {
-      "video": "example-acreage-farming.f35f3677cb33573c.mp4",
-      "poster": "example-acreage-farming.f35f3677cb33573c.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "f35f3677cb33573c"
-    },
-    "example-aerocore": {
-      "video": "example-aerocore.469701751a1613f0.mp4",
-      "poster": "example-aerocore.469701751a1613f0.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "469701751a1613f0"
-    },
     "example-audio-jingle": {
       "video": "example-audio-jingle.f4c2e4f0d0523134.mp4",
       "poster": "example-audio-jingle.f4c2e4f0d0523134.poster.jpg",
@@ -42,13 +14,6 @@
       "durationMs": 5500,
       "holdMs": 2500,
       "hash": "55237a22300d62e1"
-    },
-    "example-cinematic-landing-page": {
-      "video": "example-cinematic-landing-page.5c16a1234eecc1a0.mp4",
-      "poster": "example-cinematic-landing-page.5c16a1234eecc1a0.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "5c16a1234eecc1a0"
     },
     "example-clinical-case-report": {
       "video": "example-clinical-case-report.45f70624f603247c.mp4",
@@ -78,13 +43,6 @@
       "holdMs": 2500,
       "hash": "3b8c59826858ddca"
     },
-    "example-dashboard-ui-glass": {
-      "video": "example-dashboard-ui-glass.f7054b39f07cab45.mp4",
-      "poster": "example-dashboard-ui-glass.f7054b39f07cab45.poster.jpg",
-      "durationMs": 2500,
-      "holdMs": 2500,
-      "hash": "f7054b39f07cab45"
-    },
     "example-data-report": {
       "video": "example-data-report.2c7bb6180477d0ba.mp4",
       "poster": "example-data-report.2c7bb6180477d0ba.poster.jpg",
@@ -106,13 +64,6 @@
       "holdMs": 2500,
       "hash": "eb8359c2effbadbf"
     },
-    "example-dreamcore-landing": {
-      "video": "example-dreamcore-landing.6fc7d79fee1814a8.mp4",
-      "poster": "example-dreamcore-landing.6fc7d79fee1814a8.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "6fc7d79fee1814a8"
-    },
     "example-email-marketing": {
       "video": "example-email-marketing.a4e148be5f90ed27.mp4",
       "poster": "example-email-marketing.a4e148be5f90ed27.poster.jpg",
@@ -126,13 +77,6 @@
       "durationMs": 6080,
       "holdMs": 2500,
       "hash": "08e4310a718beb2c"
-    },
-    "example-evergreen-finance": {
-      "video": "example-evergreen-finance.426b6938b9d81ab1.mp4",
-      "poster": "example-evergreen-finance.426b6938b9d81ab1.poster.jpg",
-      "durationMs": 3983,
-      "holdMs": 2500,
-      "hash": "426b6938b9d81ab1"
     },
     "example-finance-report": {
       "video": "example-finance-report.9dc95a28719f2dc7.mp4",
@@ -302,13 +246,6 @@
       "holdMs": 2500,
       "hash": "a2e7f0664e7ceed4"
     },
-    "example-innovation": {
-      "video": "example-innovation.9aa60cc61e4a1498.mp4",
-      "poster": "example-innovation.9aa60cc61e4a1498.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "9aa60cc61e4a1498"
-    },
     "example-invoice": {
       "video": "example-invoice.47e4696e5feb09b4.mp4",
       "poster": "example-invoice.47e4696e5feb09b4.poster.jpg",
@@ -330,26 +267,12 @@
       "holdMs": 2500,
       "hash": "8ac2da926623afc1"
     },
-    "example-layered-depth": {
-      "video": "example-layered-depth.0626ecf2fc39bf08.mp4",
-      "poster": "example-layered-depth.0626ecf2fc39bf08.poster.jpg",
-      "durationMs": 3663,
-      "holdMs": 2500,
-      "hash": "0626ecf2fc39bf08"
-    },
     "example-frame-liquid-bg-hero": {
       "video": "example-frame-liquid-bg-hero.9e6ddc203d8e7b72.mp4",
       "poster": "example-frame-liquid-bg-hero.9e6ddc203d8e7b72.poster.jpg",
       "durationMs": 2500,
       "holdMs": 2500,
       "hash": "9e6ddc203d8e7b72"
-    },
-    "example-liquid-glass-agency": {
-      "video": "example-liquid-glass-agency.8f3cd335566a1555.mp4",
-      "poster": "example-liquid-glass-agency.8f3cd335566a1555.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "8f3cd335566a1555"
     },
     "example-live-dashboard": {
       "video": "example-live-dashboard.8efac14d49673383.mp4",
@@ -364,13 +287,6 @@
       "durationMs": 2500,
       "holdMs": 2500,
       "hash": "5155099221d30e65"
-    },
-    "example-luxury-botanical": {
-      "video": "example-luxury-botanical.ac7b7212ab6525bd.mp4",
-      "poster": "example-luxury-botanical.ac7b7212ab6525bd.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "ac7b7212ab6525bd"
     },
     "example-article-magazine": {
       "video": "example-article-magazine.ab74f291dc1437ef.mp4",
@@ -400,13 +316,6 @@
       "holdMs": 2500,
       "hash": "f6fa234b2d5d261b"
     },
-    "example-mindloop-landing": {
-      "video": "example-mindloop-landing.82de7e40bdc07572.mp4",
-      "poster": "example-mindloop-landing.82de7e40bdc07572.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "82de7e40bdc07572"
-    },
     "example-resume-modern": {
       "video": "example-resume-modern.d92af61e36bc9669.mp4",
       "poster": "example-resume-modern.d92af61e36bc9669.poster.jpg",
@@ -421,13 +330,6 @@
       "holdMs": 2500,
       "hash": "c7748a4d06f04f50"
     },
-    "example-mythic-naturecore": {
-      "video": "example-mythic-naturecore.ac3e218fb4919591.mp4",
-      "poster": "example-mythic-naturecore.ac3e218fb4919591.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "ac3e218fb4919591"
-    },
     "od-new-generation": {
       "video": "od-new-generation.0ca0819285dc12f5.mp4",
       "poster": "od-new-generation.0ca0819285dc12f5.poster.jpg",
@@ -435,26 +337,12 @@
       "holdMs": 2500,
       "hash": "0ca0819285dc12f5"
     },
-    "example-nimbus-grid": {
-      "video": "example-nimbus-grid.3eb328d95ab20968.mp4",
-      "poster": "example-nimbus-grid.3eb328d95ab20968.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "3eb328d95ab20968"
-    },
     "example-open-design-landing": {
       "video": "example-open-design-landing.ebbf0231d87db539.mp4",
       "poster": "example-open-design-landing.ebbf0231d87db539.poster.jpg",
       "durationMs": 7500,
       "holdMs": 2500,
       "hash": "ebbf0231d87db539"
-    },
-    "example-orbis-nft": {
-      "video": "example-orbis-nft.dbaa9abe10bf0ab0.mp4",
-      "poster": "example-orbis-nft.dbaa9abe10bf0ab0.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "dbaa9abe10bf0ab0"
     },
     "example-orbit-general": {
       "video": "example-orbit-general.ecd707b783f5f171.mp4",
@@ -491,13 +379,6 @@
       "holdMs": 2500,
       "hash": "6ef0265fe7bc7647"
     },
-    "example-portfolio-cosmic": {
-      "video": "example-portfolio-cosmic.c76a03adf46bd2e6.mp4",
-      "poster": "example-portfolio-cosmic.c76a03adf46bd2e6.poster.jpg",
-      "durationMs": 7500,
-      "holdMs": 2500,
-      "hash": "c76a03adf46bd2e6"
-    },
     "example-pricing-page": {
       "video": "example-pricing-page.17e9cdfe8a53fbaa.mp4",
       "poster": "example-pricing-page.17e9cdfe8a53fbaa.poster.jpg",
@@ -511,13 +392,6 @@
       "durationMs": 2677,
       "holdMs": 2500,
       "hash": "00ad45618e60f727"
-    },
-    "example-skyelite-private-jets": {
-      "video": "example-skyelite-private-jets.3c9d3d9d74f8a11f.mp4",
-      "poster": "example-skyelite-private-jets.3c9d3d9d74f8a11f.poster.jpg",
-      "durationMs": 2500,
-      "holdMs": 2500,
-      "hash": "3c9d3d9d74f8a11f"
     },
     "example-social-media-dashboard": {
       "video": "example-social-media-dashboard.b7580acde50bbc4f.mp4",
@@ -546,13 +420,6 @@
       "durationMs": 6925,
       "holdMs": 2500,
       "hash": "262b1a664b10051f"
-    },
-    "example-stellar-launch": {
-      "video": "example-stellar-launch.80cf5661a892f7bc.mp4",
-      "poster": "example-stellar-launch.80cf5661a892f7bc.poster.jpg",
-      "durationMs": 2500,
-      "holdMs": 2500,
-      "hash": "80cf5661a892f7bc"
     },
     "example-deck-swiss-international": {
       "video": "example-deck-swiss-international/0c869eb1a4d0d324/preview.mp4",

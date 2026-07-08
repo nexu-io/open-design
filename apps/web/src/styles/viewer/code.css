@@ -893,11 +893,9 @@
   font-size: 13px;
   transition: color 160ms var(--ease-out);
 }
-.chat-example:hover .chat-example-cta {
-  background: var(--accent);
-  color: #fff;
-  transform: translateX(2px);
-}
+/* No hover state on the ↵ glyph: these cards FILL the composer (they don't
+   send), so an accent-filled circle on hover over-promises the action. The
+   card's own hover carries the affordance. */
 
 /* Connect-your-repo CTA in the empty chat state. Shares the example cards'
    sizing and accent system but stands apart with a tinted fill so it reads as
@@ -1229,8 +1227,8 @@
   color: var(--accent-strong);
 }
 .prose-block .md-link-bare {
-  word-break: break-all;
-  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 .prose-block .md-hr {
   border: none;

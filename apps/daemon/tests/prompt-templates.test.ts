@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { listPromptTemplates, readPromptTemplate } from '../src/prompt-templates.js';
+import { listPromptTemplates, readPromptTemplate } from '../src/media/prompt-templates.js';
 
 function makeTemplate(overrides: Record<string, unknown> = {}) {
   return {
@@ -174,5 +174,16 @@ describe('readPromptTemplate', () => {
       JSON.stringify(makeTemplate({ id: 'bad', prompt: 'too short' })),
     );
     expect(await readPromptTemplate(root, 'image', 'bad')).toBeNull();
+  });
+
+  it('returns null for a path-traversal id instead of reading outside the surface dir', async () => {
+    // `id` arrives straight from the request path (`/api/prompt-templates/:surface/:id`,
+    // where a percent-encoded `..%2f` decodes back to `../`). Plant a valid template one
+    // level above the surface dir and confirm a traversal id can't resolve to it.
+    await writeFile(
+      path.join(root, 'secret.json'),
+      JSON.stringify(makeTemplate({ id: '../secret' })),
+    );
+    expect(await readPromptTemplate(root, 'image', '../secret')).toBeNull();
   });
 });

@@ -54,6 +54,15 @@ import { entry as e_open_design_vibe_coders_dream_sean_kochel } from './tutorial
 import { entry as e_open_design_vs_claude_design_better_stack } from './tutorials-longform/open-design-vs-claude-design-better-stack';
 import { entry as e_open_design_vs_claude_design_comparison_panda_making_money } from './tutorials-longform/open-design-vs-claude-design-comparison-panda-making-money';
 import { entry as e_open_design_windows_wsl_installation_setup_ai_automation } from './tutorials-longform/open-design-windows-wsl-installation-setup-ai-automation';
+import { entry as e_open_design_open_design_vs_claude_design_jeremy_de_campos } from './tutorials-longform/open-design-open-design-vs-claude-design-jeremy-de-campos';
+import { entry as e_open_design_claude_design_rebuild_beginner_assets_parth_jadav } from './tutorials-longform/open-design-claude-design-rebuild-beginner-assets-parth-jadav';
+import { entry as e_open_design_claude_alternative_wordpress_design_dan_davies } from './tutorials-longform/open-design-claude-alternative-wordpress-design-dan-davies';
+import { entry as e_open_design_free_open_source_alternative_code_a_program } from './tutorials-longform/open-design-free-open-source-alternative-code-a-program';
+import { entry as e_open_design_cloud_deployment_sealos_sealos } from './tutorials-longform/open-design-cloud-deployment-sealos-sealos';
+import { entry as e_open_design_instalacao_alternativa_gratis_fabricando_sua_ideia_tutoriais } from './tutorials-longform/open-design-instalacao-alternativa-gratis-fabricando-sua-ideia-tutoriais';
+import { entry as e_open_design_open_source_ai_design_overview_ai } from './tutorials-longform/open-design-open-source-ai-design-overview-ai';
+import { entry as e_open_design_install_setup_free_alternative_ai_unlocked } from './tutorials-longform/open-design-install-setup-free-alternative-ai-unlocked';
+import { entry as e_open_design_alternativa_gratis_claude_design_maestros_da_ia } from './tutorials-longform/open-design-alternativa-gratis-claude-design-maestros-da-ia';
 
 export const tutorialsLongformI18n: TutorialLongformI18n = {
   "open-design-31-skills-72-systems-popular-ai": e_open_design_31_skills_72_systems_popular_ai,
@@ -87,6 +96,15 @@ export const tutorialsLongformI18n: TutorialLongformI18n = {
   "open-design-vs-claude-design-better-stack": e_open_design_vs_claude_design_better_stack,
   "open-design-vs-claude-design-comparison-panda-making-money": e_open_design_vs_claude_design_comparison_panda_making_money,
   "open-design-windows-wsl-installation-setup-ai-automation": e_open_design_windows_wsl_installation_setup_ai_automation,
+  "open-design-open-design-vs-claude-design-jeremy-de-campos": e_open_design_open_design_vs_claude_design_jeremy_de_campos,
+  "open-design-claude-design-rebuild-beginner-assets-parth-jadav": e_open_design_claude_design_rebuild_beginner_assets_parth_jadav,
+  "open-design-claude-alternative-wordpress-design-dan-davies": e_open_design_claude_alternative_wordpress_design_dan_davies,
+  "open-design-free-open-source-alternative-code-a-program": e_open_design_free_open_source_alternative_code_a_program,
+  "open-design-cloud-deployment-sealos-sealos": e_open_design_cloud_deployment_sealos_sealos,
+  "open-design-instalacao-alternativa-gratis-fabricando-sua-ideia-tutoriais": e_open_design_instalacao_alternativa_gratis_fabricando_sua_ideia_tutoriais,
+  "open-design-open-source-ai-design-overview-ai": e_open_design_open_source_ai_design_overview_ai,
+  "open-design-install-setup-free-alternative-ai-unlocked": e_open_design_install_setup_free_alternative_ai_unlocked,
+  "open-design-alternativa-gratis-claude-design-maestros-da-ia": e_open_design_alternativa_gratis_claude_design_maestros_da_ia,
 };
 
 export function getLocalizedTutorial(

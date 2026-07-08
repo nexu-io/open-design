@@ -15,13 +15,13 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { attachAcpSession, detectAcpModels } from '../src/acp.js';
+import { attachAcpSession, detectAcpModels } from '../src/agent-protocol/index.js';
 import { classifyAmrAccountFailure } from '../src/integrations/vela-errors.js';
 import { AmrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import {
@@ -167,6 +167,7 @@ describe('AMR runtime def', () => {
   it('normalizes Vela public model ids to link-canonical ACP model ids', () => {
     expect(normalizeVelaModelId('public_model_deepseek_v3_2')).toBe('deepseek-v3.2');
     expect(normalizeVelaModelId('public_model_kimi_k2_6')).toBe('kimi-k2.6');
+    expect(normalizeVelaModelId('public_model_kimi_k2_7_code')).toBe('kimi-k2.7-code');
     expect(normalizeVelaModelId('public_model_gemini_2_5_flash')).toBe('gemini-2.5-flash');
     expect(normalizeVelaModelId('public_model_gemini_3_1_flash_lite_preview')).toBe(
       'gemini-3.1-flash-lite-preview',
@@ -204,9 +205,9 @@ describe('AMR runtime def', () => {
     ].join('\n'));
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
+      { id: 'claude-opus-4.6', label: 'claude-opus-4.6' },
       { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
       { id: 'glm-5.1', label: 'glm-5.1' },
-      { id: 'claude-opus-4.6', label: 'claude-opus-4.6' },
       { id: 'kimi-k2.6', label: 'kimi-k2.6' },
     ]);
     expect(models.every((model) => !model.label.includes('vela/'))).toBe(true);
@@ -214,22 +215,115 @@ describe('AMR runtime def', () => {
     expect(models.map((model) => model.id)).not.toContain('seedance-2');
   });
 
-  it('parses Vela preset and remote JSON without legacy id normalization', () => {
+  it('parses Vela JSON catalog ids through normalizeVelaModelId on the live AMR path', () => {
     const models = parseVelaModelJson(JSON.stringify({
       source: 'remote',
       data: [
+        { id: 'public_model_kimi_k2_7_code' },
         { id: 'public_model_deepseek_v3_2' },
-        { id: 'deepseek-v4-flash' },
+        { id: 'deepseek-v4-flash', cost: { input: 0.14, output: 0.28 } },
         { id: 'gpt-image-2' },
         { id: 'deepseek-v4-flash' },
       ],
     }), 'remote');
     expect(models).toEqual([
-      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
-      { id: 'public_model_deepseek_v3_2', label: 'public_model_deepseek_v3_2' },
+      {
+        id: 'deepseek-v4-flash',
+        label: 'deepseek-v4-flash',
+        inputPriceUsdPerMillion: 0.14,
+        outputPriceUsdPerMillion: 0.28,
+      },
+      { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
+      { id: 'kimi-k2.7-code', label: 'kimi-k2.7-code' },
     ]);
+    expect(models.map((m) => m.id)).not.toContain('gpt-image-2');
+    expect(models.map((m) => m.id)).not.toContain('public_model_kimi_k2_7_code');
     expect(() => parseVelaModelJson(JSON.stringify({ source: 'preset', data: [] }), 'remote'))
       .toThrow(/expected remote/);
+  });
+
+  it('enriches Vela models from the AMR OpenCode model-price cache', async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'od-amr-model-prices-'));
+    try {
+      const cacheDir = path.join(tempDir, 'opencode');
+      mkdirSync(cacheDir, { recursive: true });
+      writeFileSync(
+        path.join(cacheDir, 'models.json'),
+        JSON.stringify({
+          opencode: {
+            models: {
+              'claude-fable-5': {
+                id: 'claude-fable-5',
+                cost: { input: 10, output: 50 },
+              },
+              'claude-opus-4-6': {
+                id: 'claude-opus-4-6',
+                cost: { input: 5, output: 25 },
+              },
+            },
+          },
+          'opencode-go': {
+            models: {
+              'mimo-v2.5-pro': {
+                id: 'mimo-v2.5-pro',
+                cost: { input: 1.74, output: 3.48 },
+              },
+            },
+          },
+          openrouter: {
+            models: {
+              'google/gemini-3-flash-preview': {
+                id: 'google/gemini-3-flash-preview',
+                cost: { input: 0.5, output: 3 },
+              },
+            },
+          },
+        }),
+        'utf8',
+      );
+      const models = await amrAgentDef.fetchModels?.(FAKE_VELA, {
+        ...process.env,
+        OPENCODE_TEST_HOME: tempDir,
+        FAKE_VELA_MODEL_LIST_JSON: JSON.stringify({
+          source: 'remote',
+          data: [
+            { id: 'claude-fable-5' },
+            { id: 'claude-opus-4.6' },
+            { id: 'mimo-v2.5-pro' },
+            { id: 'gemini-3-flash-preview' },
+          ],
+        }),
+      });
+
+      expect(models).toEqual([
+        {
+          id: 'claude-fable-5',
+          label: 'claude-fable-5',
+          inputPriceUsdPerMillion: 10,
+          outputPriceUsdPerMillion: 50,
+        },
+        {
+          id: 'claude-opus-4.6',
+          label: 'claude-opus-4.6',
+          inputPriceUsdPerMillion: 5,
+          outputPriceUsdPerMillion: 25,
+        },
+        {
+          id: 'gemini-3-flash-preview',
+          label: 'gemini-3-flash-preview',
+          inputPriceUsdPerMillion: 0.5,
+          outputPriceUsdPerMillion: 3,
+        },
+        {
+          id: 'mimo-v2.5-pro',
+          label: 'mimo-v2.5-pro',
+          inputPriceUsdPerMillion: 1.74,
+          outputPriceUsdPerMillion: 3.48,
+        },
+      ]);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('fetches AMR preset models from `vela model preset --format json`', async () => {
@@ -237,8 +331,8 @@ describe('AMR runtime def', () => {
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
       { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
-      { id: 'glm-5.1', label: 'glm-5.1' },
       { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
+      { id: 'glm-5.1', label: 'glm-5.1' },
     ]);
   });
 
@@ -246,19 +340,67 @@ describe('AMR runtime def', () => {
     const models = await amrAgentDef.fetchModels?.(FAKE_VELA, process.env);
     expect(models).toEqual([
       { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' },
-      { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
-      { id: 'glm-5.1', label: 'glm-5.1' },
-      { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
       { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro' },
+      { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
+      { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
       { id: 'gemini-3.1-flash-lite-preview', label: 'gemini-3.1-flash-lite-preview' },
       { id: 'gemini-3.1-pro-preview', label: 'gemini-3.1-pro-preview' },
+      { id: 'glm-5', label: 'glm-5' },
+      { id: 'glm-5.1', label: 'glm-5.1' },
       { id: 'gpt-5.4', label: 'gpt-5.4' },
       { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini' },
-      { id: 'glm-5', label: 'glm-5' },
       { id: 'kimi-k2.6', label: 'kimi-k2.6' },
       { id: 'minimax-m2.7', label: 'minimax-m2.7' },
       { id: 'qwen3-235b-a22b', label: 'qwen3-235b-a22b' },
     ]);
+  });
+
+  it('regression #4410: normalizes kimi_k2_7_code from live catalog and routes it via session/set_model', async () => {
+    const rawListJson = JSON.stringify({
+      source: 'remote',
+      data: [
+        { id: 'public_model_kimi_k2_7_code' },
+        { id: 'deepseek-v4-flash' },
+      ],
+    });
+
+    // Step 1: live catalog path normalizes the raw id to the canonical form.
+    const models = await amrAgentDef.fetchModels?.(FAKE_VELA, {
+      ...process.env,
+      FAKE_VELA_MODEL_LIST_JSON: rawListJson,
+    });
+    const ids = (models ?? []).map((m) => m.id);
+    expect(ids).toContain('kimi-k2.7-code');
+    expect(ids).not.toContain('public_model_kimi_k2_7_code');
+    expect(ids).not.toContain('kimi-k2-7-code');
+
+    // Step 2: the normalized id survives the full ACP session/set_model flow.
+    const child = spawnFakeVela({
+      FAKE_VELA_TEXT: 'K2.7 response.',
+      FAKE_VELA_MODEL_LIST_JSON: rawListJson,
+    });
+    const events: Array<{ event: string; payload: unknown }> = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Hello',
+        cwd: process.cwd(),
+        model: 'kimi-k2.7-code',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => events.push({ event, payload }),
+      });
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(false);
+      expect(session.completedSuccessfully()).toBe(true);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    const textDeltas = events
+      .filter((e) => e.event === 'agent' && (e.payload as { type?: unknown }).type === 'text_delta')
+      .map((e) => (e.payload as { delta?: unknown }).delta);
+    expect(textDeltas.join('')).toBe('K2.7 response.');
   });
 
   it('retries transient `vela model list --format json` failures before succeeding', async () => {

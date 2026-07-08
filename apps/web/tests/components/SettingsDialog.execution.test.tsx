@@ -6,6 +6,18 @@ import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 import { en } from '../../src/i18n/locales/en';
 
+function optionNames(container: HTMLElement): string[] {
+  return within(container).getAllByRole('option').map((option) => {
+    const labelledBy = option.getAttribute('aria-labelledby');
+    if (!labelledBy) return option.textContent?.trim() ?? '';
+    return labelledBy
+      .split(/\s+/)
+      .map((id) => document.getElementById(id)?.textContent?.trim() ?? '')
+      .filter(Boolean)
+      .join(' ');
+  });
+}
+
 const {
   playSoundMock,
   requestNotificationPermissionMock,
@@ -728,7 +740,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     renderSettingsDialog();
 
     const providerPopover = openGatewayPresetPopover();
-    expect(within(providerPopover).getAllByRole('option').map((option) => option.textContent?.trim())).toEqual(
+    expect(optionNames(providerPopover)).toEqual(
       expect.arrayContaining([
         'Custom provider',
         'Anthropic (Claude)',
@@ -767,7 +779,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Ollama Cloud' }));
     const providerPopover = openGatewayPresetPopover();
-    expect(within(providerPopover).getAllByRole('option').map((option) => option.textContent?.trim())).toEqual([
+    expect(optionNames(providerPopover)).toEqual([
       'Custom provider',
       'Ollama Cloud (managed)',
       'Ollama Self-hosted (local)',
@@ -865,8 +877,11 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
+    // A non-http scheme is still rejected client-side. (An internal-IP URL is
+    // no longer rejected here — it is syntactically valid and the daemon owns
+    // the allowlist decision; see #3225.)
     fireEvent.change(screen.getByLabelText('Base URL'), {
-      target: { value: 'http://10.0.0.5:11434/v1' },
+      target: { value: 'ftp://api.example.com' },
     });
     expect(screen.getByRole('alert').textContent).toContain(
       'Use a public http:// or https:// URL.',
@@ -1047,9 +1062,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     const modelPicker = screen.getByRole('combobox', { name: 'Model' });
     fireEvent.click(modelPicker);
     const modelPopover = screen.getByTestId('settings-byok-model-popover');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(expect.arrayContaining([
+    expect(optionNames(modelPopover)).toEqual(expect.arrayContaining([
       'Account Model (gpt-account) · From your account',
       'gpt-4o · Suggested',
       'Custom (type below)…',
@@ -1386,9 +1399,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     const searchInput = within(modelPopover).getByTestId('settings-byok-model-search') as HTMLInputElement;
     fireEvent.change(searchInput, { target: { value: '5.5' } });
 
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual([
+    expect(optionNames(modelPopover)).toEqual([
       'gpt-4.1-mini · From your account',
       'gpt-5.5 · From your account',
       'Custom (type below)…',
@@ -1461,9 +1472,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     const modelPicker = screen.getByRole('combobox', { name: 'Model' });
     fireEvent.click(modelPicker);
     const modelPopover = screen.getByTestId('settings-byok-model-popover');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(expect.arrayContaining([
+    expect(optionNames(modelPopover)).toEqual(expect.arrayContaining([
       'Remote Alpha (remote-alpha) · From your account',
       'gpt-4o · From your account',
       'Custom (type below)…',
@@ -1621,6 +1630,41 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       ([input]) => input.toString() === '/api/test/connection',
     );
     expect(testConnectionCalls).toHaveLength(1);
+  });
+
+  it('shows provider upstream detail for failed BYOK connection tests', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          kind: 'upstream_unavailable',
+          latencyMs: 42,
+          status: 400,
+          detail:
+            'The selected NVIDIA model instance is currently unavailable at the provider. Try a different model or retry later.',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog({ apiKey: 'sk-ant-test-provider' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    expect(
+      await screen.findByText(
+        /Provider returned 400\. Try again in a moment\. The selected NVIDIA model instance is currently unavailable/,
+      ),
+    ).toBeTruthy();
   });
 
   it('blocks an obvious OpenAI key in the Anthropic tab before testing', async () => {
@@ -2105,14 +2149,14 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
   it('lets users switch to Local CLI, select an installed agent, and autosave', async () => {
     const installed = availableAgents[0]!;
     const unavailable: AgentInfo = {
-      id: 'gemini',
-      name: 'Gemini CLI',
-      bin: 'gemini',
+      id: 'kimi',
+      name: 'Kimi CLI',
+      bin: 'kimi',
       available: false,
       version: null,
       models: [],
-      installUrl: 'https://github.com/google-gemini/gemini-cli',
-      docsUrl: 'https://github.com/google-gemini/gemini-cli/blob/main/README.md',
+      installUrl: 'https://github.com/MoonshotAI/kimi-cli',
+      docsUrl: 'https://www.kimi.com/code/docs/en/kimi-cli/guides/getting-started.html?aff=open-design',
     };
     const { onPersist } = renderSettingsDialog(
       { mode: 'daemon', agentId: null },
@@ -2127,12 +2171,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(installGroupSummary.closest('details')?.hasAttribute('open')).toBe(false);
     const codexCard = screen.getByRole('button', { name: /Codex CLI/i }) as HTMLButtonElement;
     fireEvent.click(installGroupSummary);
-    const geminiGroup = screen.getByRole('group', { name: /Gemini CLI/i });
-    expect(within(geminiGroup).getByText('Google official CLI')).toBeTruthy();
+    const kimiGroup = screen.getByRole('group', { name: /Kimi CLI/i });
+    expect(within(kimiGroup).getByText('Moonshot Kimi CLI')).toBeTruthy();
     expect(
-      (within(geminiGroup).getByRole('link', { name: en['settings.agentInstall.install'] }) as HTMLAnchorElement).getAttribute('href'),
+      (within(kimiGroup).getByRole('link', { name: en['settings.agentInstall.install'] }) as HTMLAnchorElement).getAttribute('href'),
     ).toBe(
-      'https://github.com/google-gemini/gemini-cli',
+      'https://github.com/MoonshotAI/kimi-cli',
     );
     expect(
       screen.getByText(en['settings.agentInstall.stepAuth']),
@@ -2200,9 +2244,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.change(searchInput, { target: { value: '5.5' } });
 
     const modelPopover = screen.getByTestId('settings-agent-model-popover-codex');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(['gpt-4.1-mini', 'gpt-5.5', 'Custom (type below)…']);
+    expect(optionNames(modelPopover)).toEqual(['gpt-4.1-mini', 'gpt-5.5', 'Custom (type below)…']);
   });
 
   it('labels live CLI model metadata in the model picker', () => {
@@ -2280,9 +2322,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(modelPickers[0]?.textContent).toContain('GLM 5');
     fireEvent.click(modelPickers[0]!);
     const modelPopover = screen.getByTestId('settings-agent-model-popover-amr');
-    expect(
-      within(modelPopover).getAllByRole('option').map((option) => option.textContent?.trim()),
-    ).toEqual(['GLM 5', 'GLM 5.1']);
+    expect(optionNames(modelPopover)).toEqual(['GLM 5', 'GLM 5.1']);
     expect(screen.queryByLabelText(en['settings.modelCustomLabel'])).toBeNull();
   });
 
@@ -2441,13 +2481,13 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
   it('rescans automatically when returning after opening an install link', async () => {
     const unavailable: AgentInfo = {
-      id: 'gemini',
-      name: 'Gemini CLI',
-      bin: 'gemini',
+      id: 'kimi',
+      name: 'Kimi CLI',
+      bin: 'kimi',
       available: false,
       version: null,
       models: [],
-      installUrl: 'https://github.com/google-gemini/gemini-cli',
+      installUrl: 'https://github.com/MoonshotAI/kimi-cli',
     };
     const onRefreshAgents = vi.fn(async () => availableAgents);
 

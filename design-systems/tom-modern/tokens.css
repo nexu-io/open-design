@@ -1,0 +1,99 @@
+/* Tom Modern Design System — tokens.css */
+/* Source: https://github.com/Tom-Opencart/tom-modern-html-style-rule */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-warm: var(--surface);
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg: #27272a;
+  --fg-2: #52525b;
+  --muted: #71717a;
+  --meta: var(--muted);
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border: #969696;
+  --border-soft: #d4d4d8;
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent: #ff5a00;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: 'Geist Sans', 'Geist', system-ui, -apple-system, sans-serif;
+  --font-body: 'Geist Sans', 'Geist', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Type scale */
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-3xl: 38px;
+  --text-4xl: 48px;
+
+  --leading-body: 1.65;
+  --leading-tight: 0.96;
+  --tracking-display: -0.04em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ───────────────────────────────────────────── */
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-pill: 0px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 4px 4px 0 rgba(150, 150, 150, 0.1);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  --focus-ring: 0 0 0 2px var(--accent);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max: 1240px;
+  --container-gutter-desktop: 20px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+
+  /* ─── Brand-specific extensions ────────────────────────────────── */
+  --tm-accent-soft: rgba(255, 90, 0, 0.08);
+  --tm-shadow-hard: 8px 8px 0 rgba(150, 150, 150, 0.12);
+  --tm-shadow-soft: 4px 4px 0 rgba(150, 150, 150, 0.1);
+  --tm-shadow-code: 0 28px 90px rgba(22, 22, 22, 0.14);
+  --tm-header-height: 82px;
+  --tm-code-bg: #111517;
+  --tm-code-panel: #151a1d;
+  --tm-code-text: #d8dee9;
+}

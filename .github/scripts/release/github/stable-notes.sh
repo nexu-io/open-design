@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for name in BRANCH_NAME CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN GITHUB_OUTPUT GITHUB_REPOSITORY GITHUB_SHA RELEASE_CHANNEL RELEASE_SIGNED RELEASE_VERSION RUNNER_TEMP VERSION_TAG; do
+for name in BRANCH_NAME GITHUB_OUTPUT GITHUB_REPOSITORY GITHUB_SHA RELEASE_CHANNEL RELEASE_SIGNED RELEASE_VERSION RUNNER_TEMP VERSION_TAG; do
   if [ -z "${!name:-}" ]; then
     echo "$name is required" >&2
     exit 1
   fi
 done
 
+release_public_origin="${RELEASE_PUBLIC_ORIGIN:-${CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN:-}}"
+if [ -z "$release_public_origin" ]; then
+  echo "RELEASE_PUBLIC_ORIGIN or CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN is required" >&2
+  exit 1
+fi
+
 notes_file="$RUNNER_TEMP/open-design-stable-notes.md"
-public_origin="${CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN%/}"
+public_origin="${release_public_origin%/}"
 cat > "$notes_file" <<EOF
 ## Summary
 - channel: $RELEASE_CHANNEL

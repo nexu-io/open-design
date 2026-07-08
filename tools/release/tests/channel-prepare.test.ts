@@ -411,6 +411,38 @@ describe("tools-release local channel prepare validation", () => {
     }
   });
 
+  it("prepares stable publish controls when dry-run is false", async () => {
+    const packagedVersion = await readPackagedVersion();
+    const prereleaseVersion = `${packagedVersion}-prerelease.2`;
+    const objects: Record<string, unknown> = {};
+    const server = await startMetadataServer(objects);
+    const ghRoot = await mkdtemp(join(tmpdir(), "od-tools-release-gh-"));
+    objects[`prerelease/versions/${prereleaseVersion}/metadata.json`] = stablePrereleaseMetadata(server.origin, packagedVersion);
+
+    try {
+      const fakeGh = await writeFakeGhScript(ghRoot);
+      const stable = await runPrepare("stable", {
+        GITHUB_REF_NAME: `release/v${packagedVersion}`,
+        GITHUB_REPOSITORY: "nexu-io/open-design",
+        GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
+        OPEN_DESIGN_GH_NODE_SCRIPT: fakeGh,
+        OPEN_DESIGN_RELEASE_DRY_RUN: "false",
+        OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: server.origin,
+        OPEN_DESIGN_STABLE_PRERELEASE_VERSION: prereleaseVersion,
+      });
+
+      expect(stable.stdout).toContain("[release-stable] dry run: false");
+      expect(stable.outputs.dry_run).toBe("false");
+      expect(stable.outputs.dry_run_mode).toBe("");
+      expect(stable.outputs.github_release_enabled).toBe("true");
+      expect(stable.outputs.publish_side_effects_enabled).toBe("true");
+      expect(stable.outputs.run_prepublish_jobs).toBe("true");
+    } finally {
+      await server.close();
+      await rm(ghRoot, { force: true, recursive: true });
+    }
+  });
+
   it("rejects stable promotion inputs from non-prerelease counted channels", async () => {
     const packagedVersion = await readPackagedVersion();
     const objects: Record<string, unknown> = {};

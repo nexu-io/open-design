@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, vi } from 'vitest';
-import { detectAcpModels } from '../src/acp.js';
+import { detectAcpModels } from '../src/agent-protocol/index.js';
 
 function writeStallingProbe(): { dir: string; bin: string } {
   const dir = mkdtempSync(join(tmpdir(), 'od-acp-timeout-'));

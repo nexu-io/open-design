@@ -16,6 +16,8 @@ import {
   trackFileUploadResult,
   trackPageView,
   trackTabLauncherClick,
+  trackSketchSaveResult,
+  trackSketchExportResult,
 } from '../analytics/events';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { useT } from '../i18n';
@@ -348,6 +350,7 @@ const BROWSER_TAB_PREFIX = '__browser__:';
 // We keep an LRU of the most-recently-activated browser tabs live and unmount
 // the rest; switching back to an evicted tab remounts (reloads) it.
 const BROWSER_KEEPALIVE_CAP = 3;
+const QUICK_SWITCHER_DOCUMENT_CLASS = 'od-quick-switcher-open';
 const SKETCH_AUTOSAVE_DELAY_MS = 800;
 
 // Stable empty folder list so the render-phase project-switch reset is
@@ -1630,6 +1633,13 @@ export function FileWorkspace({
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
   }, [quickSwitcherOpen]);
 
+  useEffect(() => {
+    document.body.classList.toggle(QUICK_SWITCHER_DOCUMENT_CLASS, quickSwitcherOpen);
+    return () => {
+      document.body.classList.remove(QUICK_SWITCHER_DOCUMENT_CLASS);
+    };
+  }, [quickSwitcherOpen]);
+
   async function handleDelete(name: string) {
     if (!confirm(t('workspace.deleteFileConfirm', { name }))) return;
     const ok = await deleteProjectFile(projectId, name);
@@ -2788,7 +2798,18 @@ export function FileWorkspace({
             onCurrentDirChange={setUploadDir}
             navState={designFilesNavRef.current}
             onNavStateChange={onDesignFilesNavStateChange}
-            onOpenFile={openFile}
+            onOpenFile={(name) => {
+              // Re-engagement entry: opening an existing sketch from the file
+              // list (new_sketch already covers fresh creation).
+              if (isSketchName(name)) {
+                trackFileManagerClick(analytics.track, {
+                  page_name: 'file_manager',
+                  area: 'file_manager',
+                  element: 'open_sketch',
+                });
+              }
+              openFile(name);
+            }}
             onOpenLiveArtifact={(tabId) => openFile(tabId)}
             onRenameFile={handleRename}
             onDeleteFile={(name) => {
@@ -2882,8 +2903,28 @@ export function FileWorkspace({
               }
               onSceneChange={(scene, options) => setSketchScene(activeFile.name, scene, options)}
               onClear={() => clearSketch(activeFile.name)}
-              onSave={(scene) => saveSketch(activeFile.name, scene)}
-              onExportImage={(base64, fileName) => exportSketchImage(activeFile.name, base64, fileName)}
+              onSave={async (scene) => {
+                // Fires only on the explicit "Save" button — background
+                // autosave calls saveSketch() directly and is not tracked.
+                const result = await saveSketch(activeFile.name, scene);
+                trackSketchSaveResult(analytics.track, {
+                  page_name: 'file_manager',
+                  area: 'sketch_editor',
+                  result: result === false ? 'failed' : 'success',
+                  project_id: projectId,
+                });
+                return result;
+              }}
+              onExportImage={async (base64, fileName) => {
+                const result = await exportSketchImage(activeFile.name, base64, fileName);
+                trackSketchExportResult(analytics.track, {
+                  page_name: 'file_manager',
+                  area: 'sketch_editor',
+                  result: result === false ? 'failed' : 'success',
+                  project_id: projectId,
+                });
+                return result;
+              }}
               onOpenExportedImage={openFile}
               saving={activeSketch.saving}
               dirty={activeSketch.dirty || !activeSketch.persisted}

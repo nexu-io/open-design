@@ -190,7 +190,7 @@
         .catch(() => {});
     }
 
-    // Open Design Cloud (AMR) header account. Detects an existing cloud
+    // Open Design Cloud header account. Detects an existing cloud
     // session via the vela API, swaps the "Sign in" link for an avatar menu,
     // drives popup login + polling, and handles sign-out. All endpoints/URLs
     // arrive as `data-*` on `[data-amr-account]` (header.tsx) since this inline
@@ -216,7 +216,7 @@
       const sessionUrl = api + '/api/auth/get-session';
       const signoutUrl = api + '/api/auth/sign-out';
 
-      // Cloud (AMR) account funnel analytics — feeds the same PostHog sink as
+      // Cloud account funnel analytics — feeds the same PostHog sink as
       // the rest of the site (window.__odTrack, guarded). area is always the
       // header since this module only lives in the nav chrome.
       const track = (name, extra) => {
@@ -341,7 +341,7 @@
           const top = Math.round(dy + (vh - H) / 2);
           const popup = window.open(
             loginUrl,
-            'od-amr-login',
+            'od-cloud-login',
             `width=${W},height=${H},left=${left},top=${top},menubar=no,toolbar=no,location=yes`,
           );
           // Popup blocked (or returned null): fall back to a same-tab navigation

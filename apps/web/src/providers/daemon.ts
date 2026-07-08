@@ -24,6 +24,7 @@ import type {
   DaemonAgentPayload,
   AmrModelsResponse,
   AmrWalletSnapshot,
+  ByokChatProviderConfig,
   MediaExecutionPolicy,
   ResearchOptions,
   RunContextSelection,
@@ -57,6 +58,17 @@ import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observabil
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
 const HIGH_INPUT_TOKEN_WARNING_THRESHOLD = 200_000;
+const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
+const API_MODE_AGENT_IDS = new Set([
+  'anthropic-api',
+  'openai-api',
+  'azure-openai-api',
+  'google-gemini-api',
+  'ollama-cloud-api',
+  'senseaudio-api',
+  'aihubmix-api',
+  'bedrock-api',
+]);
 
 export function latestUserPromptFromHistory(history: ChatMessage[]): string {
   for (let i = history.length - 1; i >= 0; i -= 1) {
@@ -137,11 +149,21 @@ function scopeHistoryToAgent(history: ChatMessage[], targetAgentId?: string): Ch
   if (!targetAgentId) return history;
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const message = history[i];
-    if (message?.role === 'assistant' && message.agentId && message.agentId !== targetAgentId) {
+    if (
+      message?.role === 'assistant' &&
+      message.agentId &&
+      !isSameTranscriptAgentFamily(message.agentId, targetAgentId)
+    ) {
       return history.slice(i + 1);
     }
   }
   return history;
+}
+
+function isSameTranscriptAgentFamily(agentId: string, targetAgentId: string): boolean {
+  if (agentId === targetAgentId) return true;
+  if (targetAgentId !== BYOK_OPENCODE_AGENT_ID) return false;
+  return API_MODE_AGENT_IDS.has(agentId);
 }
 
 // Strip OD-specific markup that the agent emitted on a prior turn but
@@ -282,6 +304,8 @@ export interface DaemonStreamOptions {
   // options and falls back to the CLI default when missing.
   model?: string | null;
   reasoning?: string | null;
+  byokProvider?: ByokChatProviderConfig;
+  byokMediaDefaults?: ChatRequest['byokMediaDefaults'];
   research?: ResearchOptions;
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
@@ -310,6 +334,15 @@ export interface DaemonReattachOptions {
 }
 
 export const RUNS_CHANGED_EVENT = 'open-design:runs-changed';
+export const GENERIC_DAEMON_DISCONNECT_MESSAGE =
+  'daemon stream disconnected before run completed';
+export const GENERIC_DAEMON_DISCONNECT_CODE = 'DAEMON_STREAM_DISCONNECTED';
+
+export function createGenericDaemonDisconnectError(): Error & { code: string } {
+  const error = new Error(GENERIC_DAEMON_DISCONNECT_MESSAGE) as Error & { code: string };
+  error.code = GENERIC_DAEMON_DISCONNECT_CODE;
+  return error;
+}
 
 function notifyRunsChanged() {
   if (typeof window === 'undefined') return;
@@ -576,6 +609,8 @@ export async function streamViaDaemon({
   commentAttachments,
   model,
   reasoning,
+  byokProvider,
+  byokMediaDefaults,
   research,
   context,
   appliedPluginSnapshotId,
@@ -612,6 +647,8 @@ export async function streamViaDaemon({
     commentAttachments: commentAttachments ?? [],
     model: model ?? null,
     reasoning: reasoning ?? null,
+    ...(byokProvider ? { byokProvider } : {}),
+    ...(byokMediaDefaults ? { byokMediaDefaults } : {}),
     locale,
     ...(appliedPluginSnapshotId ? { appliedPluginSnapshotId } : {}),
     ...(context ? { context } : {}),
@@ -753,7 +790,10 @@ export function formatVelaBalanceUsd(raw?: string | null): string | null {
   if (raw == null || raw === '') return null;
   const amount = Number(raw);
   if (!Number.isFinite(amount)) return null;
-  return `$${amount.toFixed(2)}`;
+  // Sign before the currency symbol: an overdrawn wallet reads "-$1.25",
+  // never the malformed "$-1.25".
+  const sign = amount < 0 ? '-' : '';
+  return `${sign}$${Math.abs(amount).toFixed(2)}`;
 }
 
 /** Top subscription tier — no upgrade affordance is shown at/above this. */
@@ -1013,7 +1053,19 @@ async function consumeDaemonRun({
       let sawStreamProgress = false;
 
       while (true) {
-        const { value, done } = await reader.read();
+        let readResult: ReadableStreamReadResult<Uint8Array>;
+        try {
+          readResult = await reader.read();
+        } catch (err) {
+          // Only catch reader.read() failures — a broken SSE connection
+          // (tab backgrounded, proxy idle timeout, network drop). Parsing
+          // and handler invocations stay OUTSIDE this catch so local
+          // processing bugs surface through the existing outer error path.
+          if ((err as Error).name === 'AbortError') throw err;
+          try { reader.cancel(); } catch {}
+          break;
+        }
+        const { value, done } = readResult;
         if (done) break;
         buf += decoder.decode(value, { stream: true });
         let idx: number;
@@ -1086,35 +1138,13 @@ async function consumeDaemonRun({
             const data = event.data as SseErrorPayload;
             const structuredError = daemonSseError(data);
             pendingStructuredError = structuredError;
-            // The daemon emits this error frame from the child-close handler
-            // BEFORE `finishWithRetryDecision()` runs, so a transient failure it
-            // can recover via a same-run retry is reported here first and only
-            // resolved later. `run.resumable` is also computed at that same
-            // finalize step. Read the run status ONCE to classify, and let the
-            // SSE `end` frame (always emitted on terminal) resolve in-flight
-            // runs — this has no timeout, so even a slow retry is handled:
-            //  - failed / canceled    -> surface the error now, with the
-            //    finalized `resumable` bit (set just before status flips to
-            //    failed, so a `failed` read already has it);
-            //  - status unreachable   -> surface the structured error (safe
-            //    default; never drop a real failure);
-            //  - succeeded (recovered) or still running/queued (retry in
-            //    flight) -> do NOT surface; keep consuming so the stream's
-            //    `end` frame resolves it (succeeded -> onDone; failed ->
-            //    the failure path below, carrying `end`'s resumable bit).
-            const status = await fetchChatRunStatus(runId).catch(() => null);
-            if (status && (status.status === 'failed' || status.status === 'canceled')) {
-              onRunStatus?.('failed');
-              handlers.onError(
-                markErrorResumable(structuredError, status.resumable === true),
-              );
-              return;
-            }
-            if (!status) {
-              onRunStatus?.('failed');
-              handlers.onError(structuredError);
-              return;
-            }
+            // Error frames can be emitted for a failed first attempt before the
+            // same run's retry has completed. Do not classify the run from a
+            // point-in-time status probe here: that can catch a transient
+            // failed state, surface a stale error, and disconnect before the
+            // later successful retry frames arrive. Cache the structured error
+            // and let the terminal `end` event or the post-stream status
+            // fallback below decide whether it should be surfaced.
             continue;
           }
 
@@ -1132,7 +1162,30 @@ async function consumeDaemonRun({
           }
         }
       }
-      reconnects = sawStreamProgress ? 0 : reconnects + 1;
+      let shouldResetReconnects = sawStreamProgress;
+      if (pendingStructuredError && endStatus === null) {
+        const status = await fetchChatRunStatus(runId).catch(() => null);
+        if (status && isChatRunStatus(status.status) && status.status !== 'queued' && status.status !== 'running') {
+          endStatus = status.status;
+          exitCode = status.exitCode ?? null;
+          exitSignal = status.signal ?? null;
+          serverDeclaredSuccess = status.status === 'succeeded';
+          if (status.resumable === true) endResumable = true;
+          onRunStatus?.(endStatus);
+          break;
+        }
+        if (!status) {
+          onRunStatus?.('failed');
+          handlers.onError(pendingStructuredError);
+          return;
+        }
+        // The connection closed after an error frame but before a terminal
+        // frame. If the run is still active, retry the SSE stream, but count
+        // this as a reconnect attempt instead of letting the error frame reset
+        // the budget forever.
+        shouldResetReconnects = false;
+      }
+      reconnects = shouldResetReconnects ? 0 : reconnects + 1;
     }
 
     if (endStatus === null) {
@@ -1150,7 +1203,7 @@ async function consumeDaemonRun({
         onRunStatus?.(endStatus);
       } else {
         onRunStatus?.('failed');
-        handlers.onError(new Error('daemon stream disconnected before run completed'));
+        handlers.onError(createGenericDaemonDisconnectError());
         return;
       }
     }
