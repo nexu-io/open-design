@@ -52,7 +52,15 @@ import path from 'node:path';
 //       misread tall pages with a horizontal marquee as decks); pan via REAL
 //       wheel events so scroll-hijack landing pages (custom/transform scroll)
 //       actually move.
-const BAKE_VERSION = 4;
+//   v5: validate the encoded output — reject blank (never-rendered) clips,
+//       record durationMs from the FILE (not the intended walk time), and
+//       clamp holdMs to the encoded duration so the gallery's idle loop never
+//       points past the end of the clip; encode static pages (screencast
+//       delivers <5 frames because nothing repaints) as a held still instead
+//       of skipping them forever. Bumped so every entry's metadata is
+//       corrected in one sweep (23 entries carried holdMs > real duration,
+//       5 static-page entries could never refresh at all).
+const BAKE_VERSION = 5;
 
 // ---- config ---------------------------------------------------------------
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:17579';
@@ -99,6 +107,14 @@ function argList(name) {
 const OUT = path.resolve(arg('out', '.tmp/plugin-previews'));
 const LIMIT = Number(arg('limit', '0')) || 0;
 const ONLY = argList('id');
+// Strict mode (--strict or PREVIEW_STRICT=1): exit non-zero when any bake left
+// broken metadata behind — a stale entry (source changed but the re-bake
+// failed, so the manifest keeps serving the OLD clip), a blank clip, or an
+// unexpected error (thrown exception, e.g. ffprobe unavailable). The
+// pre-merge validation workflow runs strict so a PR that breaks its own
+// preview fails visibly; the post-merge/nightly path stays lenient and only
+// reports, so one broken plugin never blocks publishing the rest.
+const STRICT = process.argv.includes('--strict') || process.env.PREVIEW_STRICT === '1';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -111,6 +127,58 @@ function resolveChrome() {
   ];
   for (const c of candidates) if (existsSync(c)) return c;
   throw new Error('No Chrome found. Set CHROME=/path/to/chrome.');
+}
+
+// ---- baked-output validation ----------------------------------------------
+// The gallery faithfully renders whatever the manifest names, so a broken bake
+// must be rejected HERE — once an entry lands, the card shows the broken clip
+// until the next content change (see the "preview shows wrong content" class
+// of reports: stale clips, blank cards).
+
+// Real duration of the encoded clip. `durMs` upstream is only the *intended*
+// wall-clock walk; the VFR concat + fps resample can land somewhere else
+// entirely (observed 1155ms recorded for a 3667ms clip), and holdMs — the span
+// the gallery loops while idle — must never exceed what the file actually has.
+//
+// Both probes THROW on failure instead of degrading: ffprobe is required
+// validation infrastructure (the workflow installs ffmpeg explicitly), and a
+// swallowed probe error would silently disable exactly the checks this
+// pipeline exists for. A thrown error becomes an `error …` skip for that
+// plugin, lands in bake-report.json, and fails strict mode.
+function probeClipMs(file) {
+  const out = execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration',
+    '-of', 'csv=p=0', file], { encoding: 'utf8' }).trim();
+  const s = Number(out);
+  if (!Number.isFinite(s) || s <= 0) throw new Error(`ffprobe returned no duration for ${file}: "${out}"`);
+  return Math.round(s * 1000);
+}
+
+// Aggregate luma range across every frame of the clip. If no frame ever gets
+// brighter than BLANK_MAX_Y (~9% grey), nothing rendered — the page 404'd into
+// a dark shell, a CDN dependency never loaded, fonts raced, … — and the mirror
+// check catches an all-white nothing. Thresholds are deliberately extreme so a
+// legitimately dark (or light) design never trips them: any visible text or
+// artwork moves YMAX/YMIN far past these bounds.
+const BLANK_MAX_Y = 24;
+const BLANK_MIN_Y = 232;
+function clipLumaRange(file) {
+  const esc = file.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/:/g, '\\:');
+  // nk=0 keeps the tag names in the output: ffprobe emits the tags in
+  // signalstats' own order (YMIN before YMAX), not the -show_entries order,
+  // so parse by key instead of by position.
+  const out = execFileSync('ffprobe', ['-v', 'error', '-f', 'lavfi',
+    '-i', `movie='${esc}',signalstats`,
+    '-show_entries', 'frame_tags=lavfi.signalstats.YMAX,lavfi.signalstats.YMIN',
+    '-of', 'csv=p=0:nk=0'], { encoding: 'utf8' });
+  let maxY = 0, minY = 255, frames = 0;
+  for (const match of out.matchAll(/signalstats\.(YMAX|YMIN)=([0-9.]+)/g)) {
+    const value = Number(match[2]);
+    if (!Number.isFinite(value)) continue;
+    if (match[1] === 'YMAX') { frames += 1; if (value > maxY) maxY = value; }
+    else if (value < minY) minY = value;
+  }
+  if (frames === 0) throw new Error(`ffprobe signalstats returned no frames for ${file}`);
+  return { maxY, minY };
 }
 
 // ---- discover the html-preview plugins ------------------------------------
@@ -410,7 +478,7 @@ async function bakeOne(browser, id, hash, motion) {
   await client.send('Page.stopScreencast');
   await page.close();
 
-  if (frames.length < 5) { rmSync(frameDir, { recursive: true, force: true }); return { id, skipped: `frames ${frames.length}` }; }
+  if (frames.length === 0) { rmSync(frameDir, { recursive: true, force: true }); return { id, skipped: 'frames 0' }; }
 
   // VFR concat list (real per-frame durations) -> correct real-time speed.
   const lines = [];
@@ -420,6 +488,15 @@ async function bakeOne(browser, id, hash, motion) {
     if (i > 0) lines.push(`duration ${(frames[i].ts - frames[i - 1].ts).toFixed(4)}`);
     lines.push(`file '${fp}'`);
   }
+  // A static page repaints nothing after its first paint, so the screencast
+  // delivers only a frame or two. That is a still, not a failure: hold the
+  // last frame for the idle-loop span so the encode yields a real clip.
+  // (The old `frames < 5` guard skipped these pages on EVERY bake, so their
+  // manifest entries could never refresh — five entries on main were
+  // permanently stale because of it.) Half the hold here because the trailing
+  // repeated `file` below inherits the last `duration` directive, so the two
+  // sum to ~HOLD_MS.
+  if (frames.length < 5) lines.push(`duration ${(HOLD_MS / 2000).toFixed(4)}`);
   lines.push(`file '${path.join(frameDir, `f-${String(frames.length - 1).padStart(4, '0')}.jpg`)}'`);
   const listPath = path.join(frameDir, 'list.txt');
   writeFileSync(listPath, lines.join('\n'));
@@ -453,7 +530,21 @@ async function bakeOne(browser, id, hash, motion) {
     '-q:v', '5', '-frames:v', '1', poster]);
   rmSync(frameDir, { recursive: true, force: true });
 
-  return { id, durationMs: durMs, holdMs: HOLD_MS, video: videoKey, poster: posterKey,
+  // Reject a clip that never rendered anything — an entry for it would show a
+  // blank card until the plugin's next content change. Deleting the outputs
+  // keeps the broken clip out of the R2 upload (the CI step copies OUT
+  // recursively).
+  const luma = clipLumaRange(video);
+  if (luma.maxY < BLANK_MAX_Y || luma.minY > BLANK_MIN_Y) {
+    rmSync(path.dirname(video), { recursive: true, force: true });
+    return { id, skipped: `blank clip (luma ${luma.minY}..${luma.maxY})` };
+  }
+
+  // Manifest metadata must describe the FILE, not the intent: durationMs is
+  // the encoded duration, and holdMs (the span the gallery loops while idle)
+  // is clamped to it so the idle loop never points past the end of the clip.
+  const encodedMs = probeClipMs(video);
+  return { id, durationMs: encodedMs, holdMs: Math.min(HOLD_MS, encodedMs), video: videoKey, poster: posterKey,
     bytes: statSync(video).size, posterBytes: statSync(poster).size };
 }
 
@@ -473,6 +564,14 @@ const manifestPath = path.join(OUT, 'manifest.json');
 const previews = existsSync(manifestPath)
   ? (JSON.parse(readFileSync(manifestPath, 'utf8')).previews || {}) : {};
 let ok = 0, skip = 0, reused = 0;
+// Machine-readable outcome for the workflows: which plugins were skipped and
+// why, and — the metadata-sync failure this pipeline used to swallow — which
+// committed entries are now STALE: their source changed but the re-bake
+// failed, so the manifest keeps serving a clip of the OLD content. `errors`
+// separates unexpected failures (thrown exceptions: ffprobe missing, encoder
+// crash, …) from the routine skips every sweep has (non-html plugins 404 the
+// preview route); strict mode fails on the former, never on the latter.
+const report = { skipped: [], stale: [], blank: [], errors: [] };
 for (const id of ids) {
   const t0 = Date.now();
   // Content-hash skip: a plugin whose preview HTML (and the bake recipe) is
@@ -483,6 +582,19 @@ for (const id of ids) {
     const html = await (await fetch(`${BASE_URL}/api/plugins/${encodeURIComponent(id)}/preview`)).text();
     hash = createHash('sha256').update(html).update(` ${BAKE_VERSION} ${motionMap[id] || ''}`).digest('hex').slice(0, 16);
   } catch {}
+  // No fingerprint -> no bake. Rendering anyway used to persist an entry with
+  // `hash: null` and un-fingerprinted keys — metadata the reuse skip can never
+  // match again (and the manifest guard rejects). A failed fingerprint fetch
+  // is an infrastructure error: report it, fail strict mode, and leave any
+  // committed entry untouched for the next sweep to refresh.
+  if (!hash) {
+    skip += 1;
+    const reason = 'error preview fingerprint fetch failed';
+    console.log(`  ~ ${id}: skip (${reason})`);
+    report.skipped.push({ id, reason });
+    report.errors.push(id);
+    continue;
+  }
   const prev = previews[id];
   // In CI the unchanged clips already live on R2 (not on disk), so PREVIEW_REMOTE
   // trusts the manifest hash without a local-file check; locally we also confirm
@@ -496,11 +608,37 @@ for (const id of ids) {
   }
   let r;
   try { r = await bakeOne(browser, id, hash, motionMap[id]); } catch (e) { r = { id, skipped: `error ${e.message}` }; }
-  if (r.skipped) { skip += 1; console.log(`  ~ ${id}: skip (${r.skipped})`); continue; }
+  if (r.skipped) {
+    skip += 1;
+    console.log(`  ~ ${id}: skip (${r.skipped})`);
+    report.skipped.push({ id, reason: r.skipped });
+    if (r.skipped.startsWith('blank clip')) report.blank.push(id);
+    if (r.skipped.startsWith('error ')) report.errors.push(id);
+    if (prev && hash && prev.hash !== hash) report.stale.push(id);
+    continue;
+  }
   previews[id] = { video: r.video, poster: r.poster, durationMs: r.durationMs, holdMs: r.holdMs, hash };
   ok += 1;
   console.log(`  + ${id}: ${(r.bytes / 1024).toFixed(0)}KB mp4, ${(r.posterBytes / 1024).toFixed(0)}KB poster (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
   writeFileSync(manifestPath, JSON.stringify({ generatedAt: null, previews }, null, 2));
 }
 await browser.close();
+// Written next to the manifest (the R2 upload step excludes it, same as
+// manifest.json) so both the strict pre-merge job and a human reading a
+// nightly run can see exactly which entries are broken or lagging.
+writeFileSync(path.join(OUT, 'bake-report.json'),
+  JSON.stringify({ baked: ok, reused, ...report }, null, 2));
 console.log(`done: ${ok} baked, ${reused} reused (unchanged), ${skip} skipped -> ${manifestPath}`);
+if (report.blank.length) {
+  console.error(`BLANK bakes rejected (nothing ever rendered; entry NOT written): ${report.blank.join(', ')}`);
+}
+if (report.stale.length) {
+  console.error(`STALE manifest entries (source changed but the re-bake failed — the gallery keeps showing the OLD clip until a bake succeeds): ${report.stale.join(', ')}`);
+}
+if (report.errors.length) {
+  console.error(`ERRORED bakes (unexpected exception — validation infrastructure problem or renderer crash, see the skip reasons above): ${report.errors.join(', ')}`);
+}
+if (STRICT && (report.blank.length || report.stale.length || report.errors.length)) {
+  console.error('strict mode: failing on blank/stale/errored previews');
+  process.exit(1);
+}

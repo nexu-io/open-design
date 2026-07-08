@@ -12,6 +12,16 @@ inputs:
     description: When 'true', publish the freshly rendered clips to R2.
     required: false
     default: 'false'
+  strict:
+    description: >-
+      When 'true', fail the bake when any plugin produced a blank clip, left a
+      stale manifest entry behind (source changed but the re-bake failed), or
+      errored unexpectedly (e.g. the ffprobe validation infrastructure is
+      unavailable). The pre-merge validation job runs strict so a PR that
+      breaks its own preview fails visibly; the post-merge/nightly publishers
+      stay lenient so one broken plugin never blocks publishing the rest.
+    required: false
+    default: 'false'
   r2-access-key-id:
     description: R2 access key id (required when upload is true).
     required: false
@@ -70,6 +80,7 @@ runs:
         BASE_URL: http://127.0.0.1:17470
         # The CI clips live on R2, not on disk, so trust the manifest hash.
         PREVIEW_REMOTE: '1'
+        PREVIEW_STRICT: ${{ inputs.strict == 'true' && '1' || '0' }}
       run: |
         CHROME="$(which google-chrome || which google-chrome-stable || which chromium-browser)"
         export CHROME
@@ -103,7 +114,8 @@ runs:
           --recursive --no-progress \
           --endpoint-url "$endpoint" \
           --cache-control "public, max-age=31536000, immutable" \
-          --exclude manifest.json
+          --exclude manifest.json \
+          --exclude bake-report.json
 
     - name: Stop daemon
       if: always()
