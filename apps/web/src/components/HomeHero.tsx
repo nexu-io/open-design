@@ -3498,6 +3498,7 @@ function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): st
     case 'document': return t('homeHero.chip.documentDesc');
     case 'image': return t('homeHero.chip.imageDesc');
     case 'video': return t('homeHero.chip.videoDesc');
+    case 'production': return 'Begin a guided video production workflow with a task card, voice, and storyboard-ready structure.';
     case 'audio': return t('homeHero.chip.audioDesc');
     case 'hyperframes': return t('homeHero.chip.hyperframesDesc');
     case 'live-artifact': return t('homeHero.chip.liveArtifactDesc');
@@ -3537,6 +3538,7 @@ function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): stri
     case 'document': return t('homeHero.chip.documentNext');
     case 'image': return t('homeHero.chip.imageNext');
     case 'video': return t('homeHero.chip.videoNext');
+    case 'production': return 'Open a guided video production workflow';
     case 'audio': return t('homeHero.chip.audioNext');
     case 'live-artifact': return t('homeHero.chip.liveArtifactHint');
     case 'hyperframes': return t('homeHero.chip.hyperframesHint');

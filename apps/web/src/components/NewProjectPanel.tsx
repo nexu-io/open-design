@@ -47,6 +47,7 @@ import {
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
 } from '../media/models';
+import { ELEVENLABS_DEFAULT_VOICE_ID } from './home-hero/media-surfaces';
 import {
   mergeAihubmixModels,
   useAIHubMixImageModels,
@@ -121,7 +122,7 @@ const DESIGN_PLATFORMS: Array<{
 ];
 
 export type CreateTab = 'prototype' | 'live-artifact' | 'deck' | 'template' | 'media' | 'other';
-export type MediaSurface = 'image' | 'video' | 'audio';
+export type MediaSurface = 'image' | 'video' | 'production' | 'audio';
 
 export interface CreateInput {
   name: string;
@@ -171,6 +172,48 @@ const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
   media: 'newproj.tabMedia',
   other: 'newproj.tabOther',
 };
+
+const PRODUCTION_TASK_CARDS = [
+  {
+    id: 'science-explainer',
+    title: 'Science explainer',
+    description: 'Explain a concept with clear structure and simple visuals.',
+  },
+  {
+    id: 'talking-head',
+    title: 'Talking-head narration',
+    description: 'Generate a voice-led script with a stable presenter persona.',
+  },
+  {
+    id: 'storyboard',
+    title: 'Storyboard planning',
+    description: 'Break a script into shots, assets, and timing.',
+  },
+  {
+    id: 'product-showcase',
+    title: 'Product showcase',
+    description: 'Present a product with scene-level polish and pacing.',
+  },
+] as const;
+type ProductionVoiceTone = 'professional' | 'friendly' | 'calm' | 'confident' | 'energetic' | 'storytelling';
+type ProductionTaskCardId = 'science-explainer' | 'talking-head' | 'storyboard' | 'product-showcase';
+const PRODUCTION_TASK_CARD_IDS: readonly ProductionTaskCardId[] = PRODUCTION_TASK_CARDS.map((card) => card.id);
+
+function buildLocalProductionProjectMetadata(
+  taskCardId: ProductionTaskCardId,
+  options: {
+    voiceProfileId?: string;
+    voiceTone?: ProductionVoiceTone;
+  } = {},
+): ProjectMetadata {
+  return {
+    kind: 'video',
+    workflowMode: 'production',
+    taskCardId,
+    ...(options.voiceProfileId ? { voiceProfileId: options.voiceProfileId } : {}),
+    ...(options.voiceTone ? { voiceTone: options.voiceTone } : {}),
+  } as unknown as ProjectMetadata;
+}
 
 // Maps the New Project tab + media surface to the apply-result target
 // kind enum. `media` collapses to image/video/audio inside callers;
@@ -232,11 +275,18 @@ function deriveDesignSystemStatusValue(
   }
 }
 
-const MEDIA_SURFACE_LABEL_KEYS: Record<MediaSurface, keyof Dict> = {
-  image: 'newproj.surfaceImage',
-  video: 'newproj.surfaceVideo',
-  audio: 'newproj.surfaceAudio',
-};
+function mediaSurfaceLabel(surface: MediaSurface, t: TranslateFn): string {
+  switch (surface) {
+    case 'image':
+      return t('newproj.surfaceImage');
+    case 'video':
+      return t('newproj.surfaceVideo');
+    case 'production':
+      return 'Production';
+    case 'audio':
+      return t('newproj.surfaceAudio');
+  }
+}
 
 export function defaultDesignSystemSelection(
   defaultDesignSystemId: string | null,
@@ -352,6 +402,9 @@ export function NewProjectPanel({
   const [videoModelTouched, setVideoModelTouched] = useState(false);
   const [videoAspect, setVideoAspect] = useState<MediaAspect>('16:9');
   const [videoLength, setVideoLength] = useState(5);
+  const [productionTaskCardId, setProductionTaskCardId] = useState<ProductionTaskCardId>('science-explainer');
+  const [productionVoiceTone, setProductionVoiceTone] = useState<ProductionVoiceTone>('professional');
+  const [productionVoiceProfileId, setProductionVoiceProfileId] = useState(ELEVENLABS_DEFAULT_VOICE_ID);
   const [audioKind, setAudioKind] = useState<AudioKind>('speech');
   const [audioModel, setAudioModel] = useState(DEFAULT_AUDIO_MODEL.speech);
   const [audioDuration, setAudioDuration] = useState(10);
@@ -916,7 +969,7 @@ export function NewProjectPanel({
             role="tablist"
             aria-label={t('newproj.tabMedia')}
           >
-            {(Object.keys(MEDIA_SURFACE_LABEL_KEYS) as MediaSurface[]).map((surface) => (
+            {(['image', 'video', 'production', 'audio'] as MediaSurface[]).map((surface) => (
               <button
                 key={surface}
                 type="button"
@@ -926,7 +979,7 @@ export function NewProjectPanel({
                 className={`newproj-media-surface ${mediaSurface === surface ? 'active' : ''}`}
                 onClick={() => setMediaSurface(surface)}
               >
-                {t(MEDIA_SURFACE_LABEL_KEYS[surface])}
+                {mediaSurfaceLabel(surface, t)}
               </button>
             ))}
           </div>
@@ -1021,6 +1074,25 @@ export function NewProjectPanel({
             videoAspect={videoAspect}
             videoLength={videoLength}
             mediaProviders={mediaProviders}
+            onVideoModel={handleVideoModel}
+            onVideoAspect={setVideoAspect}
+            onVideoLength={setVideoLength}
+          />
+        ) : null}
+
+        {tab === 'media' && mediaSurface === 'production' ? (
+          <MediaProjectOptions
+            surface="production"
+            productionTaskCardId={productionTaskCardId}
+            productionVoiceTone={productionVoiceTone}
+            productionVoiceProfileId={productionVoiceProfileId}
+            videoModel={videoModel}
+            videoAspect={videoAspect}
+            videoLength={videoLength}
+            mediaProviders={mediaProviders}
+            onProductionTaskCardId={setProductionTaskCardId}
+            onProductionVoiceTone={setProductionVoiceTone}
+            onProductionVoiceProfileId={setProductionVoiceProfileId}
             onVideoModel={handleVideoModel}
             onVideoAspect={setVideoAspect}
             onVideoLength={setVideoLength}
@@ -2413,6 +2485,22 @@ function MediaProjectOptions(props:
       onVideoLength: (value: number) => void;
     }
   | {
+      surface: 'production';
+      productionTaskCardId: ProductionTaskCardId;
+      productionVoiceTone: ProductionVoiceTone;
+      productionVoiceProfileId: string;
+      videoModel: string;
+      videoAspect: MediaAspect;
+      videoLength: number;
+      mediaProviders?: Record<string, MediaProviderCredentials>;
+      onProductionTaskCardId: (value: ProductionTaskCardId) => void;
+      onProductionVoiceTone: (value: ProductionVoiceTone) => void;
+      onProductionVoiceProfileId: (value: string) => void;
+      onVideoModel: (value: string) => void;
+      onVideoAspect: (value: MediaAspect) => void;
+      onVideoLength: (value: number) => void;
+    }
+  | {
       surface: 'audio';
       audioKind: AudioKind;
       audioModel: string;
@@ -2452,6 +2540,64 @@ function MediaProjectOptions(props:
   if (props.surface === 'video') {
     return (
       <div className="newproj-media-options">
+        <MediaModelCards
+          label={t('newproj.modelLabel')}
+          models={supportedModels('video', mergeAihubmixModels(VIDEO_MODELS, aihubmixVideoModels))}
+          mediaProviders={props.mediaProviders}
+          value={props.videoModel}
+          onChange={props.onVideoModel}
+        />
+        <AspectCards
+          label={t('newproj.aspectLabel')}
+          value={props.videoAspect}
+          onChange={props.onVideoAspect}
+        />
+        <label className="newproj-label">
+          <span>{t('newproj.videoLengthLabel')}</span>
+          <select value={props.videoLength} onChange={(e) => props.onVideoLength(Number(e.target.value))}>
+            {VIDEO_LENGTHS_SEC.map((sec) => (
+              <option key={sec} value={sec}>{t('newproj.videoLengthSeconds', { n: sec })}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+    );
+  }
+
+  if (props.surface === 'production') {
+    return (
+      <div className="newproj-media-options">
+        <OptionCards
+          label="Task card"
+          options={PRODUCTION_TASK_CARDS.map((card) => ({
+            value: card.id,
+            title: card.title,
+            hint: card.description,
+          }))}
+          value={props.productionTaskCardId}
+          onChange={props.onProductionTaskCardId}
+        />
+        <OptionCards
+          label="Voice tone"
+          options={[
+            { value: 'professional' as const, title: 'Professional' },
+            { value: 'friendly' as const, title: 'Friendly' },
+            { value: 'calm' as const, title: 'Calm' },
+            { value: 'confident' as const, title: 'Confident' },
+            { value: 'energetic' as const, title: 'Energetic' },
+            { value: 'storytelling' as const, title: 'Storytelling' },
+          ]}
+          value={props.productionVoiceTone}
+          onChange={props.onProductionVoiceTone}
+        />
+        <label className="newproj-label">
+          <span>Voice profile</span>
+          <input
+            value={props.productionVoiceProfileId}
+            placeholder="Voice profile id"
+            onChange={(e) => props.onProductionVoiceProfileId(e.target.value)}
+          />
+        </label>
         <MediaModelCards
           label={t('newproj.modelLabel')}
           models={supportedModels('video', mergeAihubmixModels(VIDEO_MODELS, aihubmixVideoModels))}
@@ -2855,6 +3001,9 @@ function buildMetadata(input: {
   videoModel: string;
   videoAspect: MediaAspect;
   videoLength: number;
+  productionTaskCardId?: string;
+  productionVoiceTone?: ProductionVoiceTone;
+  productionVoiceProfileId?: string;
   audioKind: AudioKind;
   audioModel: string;
   audioDuration: number;
@@ -2866,7 +3015,7 @@ function buildMetadata(input: {
     input.tab === 'live-artifact'
       ? 'prototype'
       : input.tab === 'media'
-        ? input.mediaSurface
+        ? (input.mediaSurface === 'production' ? 'video' : input.mediaSurface)
         : input.tab;
   const selectedPlatforms = normalizeSelectedPlatforms(input.platformTargets);
   const concreteTargets = platformTargetsFor(selectedPlatforms);
@@ -2922,6 +3071,26 @@ function buildMetadata(input: {
         imageAspect: input.imageAspect,
         ...buildPromptTemplateMetadata(input.promptTemplate),
         ...inspirations,
+      };
+    }
+    if (input.mediaSurface === 'production') {
+      const productionTaskCardIds = new Set<ProductionTaskCardId>(PRODUCTION_TASK_CARD_IDS);
+      const productionTaskCardRaw = input.productionTaskCardId?.trim() ?? '';
+      const productionTaskCardId = productionTaskCardIds.has(productionTaskCardRaw as ProductionTaskCardId)
+        ? (productionTaskCardRaw as ProductionTaskCardId)
+        : 'science-explainer';
+      const productionVoiceProfileId = input.productionVoiceProfileId?.trim() ?? '';
+      return {
+        ...buildLocalProductionProjectMetadata(
+          productionTaskCardId,
+          {
+            voiceTone: input.productionVoiceTone ?? 'professional',
+            ...(productionVoiceProfileId ? { voiceProfileId: productionVoiceProfileId } : {}),
+          },
+        ),
+        videoModel: input.videoModel.trim() || undefined,
+        videoAspect: input.videoAspect,
+        videoLength: input.videoLength,
       };
     }
     if (input.mediaSurface === 'video') {
@@ -3067,8 +3236,8 @@ function autoName(
 ): string {
   const stamp = new Date().toLocaleDateString();
   // For the Media tab the auto name reads "Image · {date}" / "Video · …" /
-  // "Audio · …" so the project list still surfaces the actual surface.
-  const labelKey: keyof Dict =
-    tab === 'media' ? MEDIA_SURFACE_LABEL_KEYS[mediaSurface] : TAB_LABEL_KEYS[tab];
-  return `${t(labelKey)} · ${stamp}`;
+  // "Production · …" / "Audio · …" so the project list still surfaces the
+  // actual surface.
+  const label = tab === 'media' ? mediaSurfaceLabel(mediaSurface, t) : t(TAB_LABEL_KEYS[tab]);
+  return `${label} · ${stamp}`;
 }

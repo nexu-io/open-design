@@ -544,7 +544,12 @@ export function HomeView({
   }, []);
 
   useEffect(() => {
-    if (active?.mediaSurface !== 'audio' || active.inputs.model !== 'elevenlabs-v3') return;
+    if (
+      active?.mediaSurface !== 'production' &&
+      (active?.mediaSurface !== 'audio' || active.inputs.model !== 'elevenlabs-v3')
+    ) {
+      return;
+    }
     if (elevenLabsVoicesLoaded) return;
     const controller = new AbortController();
     setElevenLabsVoicesLoading(true);
@@ -569,7 +574,12 @@ export function HomeView({
   }, [active?.mediaSurface, active?.inputs.model, elevenLabsVoicesLoaded]);
 
   const elevenLabsVoiceWarning = useMemo(() => {
-    if (active?.mediaSurface !== 'audio' || active.inputs.model !== 'elevenlabs-v3') return null;
+    if (
+      active?.mediaSurface !== 'production' &&
+      (active?.mediaSurface !== 'audio' || active.inputs.model !== 'elevenlabs-v3')
+    ) {
+      return null;
+    }
     if (elevenLabsVoicesError) return elevenLabsVoicesError;
     if (elevenLabsVoicesLoaded && elevenLabsVoices.length === 0) {
       return 'No configured ElevenLabs voices were returned. Using Rachel (default).';
@@ -1860,7 +1870,7 @@ export function HomeView({
       // fields (`subject`/`style`/`aspect`/`mediaKind` stay), so the
       // od-media-generation apply still validates.
       const submittedPluginInputs = submittedActive
-        ? stripArtifactFooterInputs(submittedApplyInputs)
+        ? stripArtifactFooterInputs(submittedActive.mediaSurface, submittedApplyInputs)
         : defaultInputs;
       const activeInputsChangedForSubmit = submittedActive
         ? !inputsEqual(submittedActive.result?.appliedPlugin?.inputs ?? submittedActive.inputs, submittedPluginInputs)
@@ -2435,8 +2445,12 @@ const ARTIFACT_FOOTER_FIELD_NAMES = new Set([
 // would forward a prefilled value (e.g. `fidelity: high-fidelity`) to the run
 // instead of leaving it "unknown" for the first-turn discovery flow to ask.
 function stripArtifactFooterInputs(
+  surface: HomeComposerMediaSurface | null | undefined,
   inputs: Record<string, unknown>,
 ): Record<string, unknown> {
+  if (surface === 'production') {
+    return inputs;
+  }
   if (!Object.keys(inputs).some((key) => ARTIFACT_FOOTER_FIELD_NAMES.has(key))) {
     return inputs;
   }
@@ -2454,6 +2468,9 @@ function footerInputNamesForChip(_chipId: string | null): string[] {
   // so it is selectable for every product kind — not just prototype/deck. No
   // other setting is surfaced inline: the agent asks for fidelity / ratio /
   // duration / model / audio kind via the first-turn question-form flow.
+  if (_chipId === 'production') {
+    return ['taskCardId', 'voiceTone', 'voiceProfileId'];
+  }
   return [];
 }
 

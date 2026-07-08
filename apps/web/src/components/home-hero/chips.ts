@@ -275,6 +275,27 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
+    id: 'production',
+    label: 'Production',
+    icon: 'present',
+    group: 'create',
+    description: 'Scripts, voiceover & shot planning',
+    hint: 'Start a beginner-friendly production flow with a task card, voice profile, and video setup in one place.',
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'od-media-generation',
+      projectKind: 'video',
+      inputs: {
+        mediaKind: 'video',
+        subject: 'a narrated product production',
+        style: 'production-ready pacing, clear narration, polished visual rhythm',
+        aspect: '16:9',
+        taskCardId: 'science-explainer',
+        voiceTone: 'professional',
+      },
+    },
+  },
+  {
     id: 'audio',
     label: 'Audio',
     icon: 'mic',
@@ -347,14 +368,15 @@ export const CREATE_RAIL_ORDER = [
   'live-artifact',
   'image',
   'video',
+  'production',
   'audio',
 ] as const;
 
 // Chip ids the onboarding "build a design system" teaser intentionally omits.
-// Video and Audio are the trailing pure-media outputs in CREATE_RAIL_ORDER and
-// the least central to the design-system story, so they are the first to drop
-// when keeping the teaser chips to a single tidy row.
-const ONBOARDING_ARTIFACT_OMIT = new Set<string>(['video', 'audio']);
+// Video, Production, and Audio are the trailing pure-media outputs in
+// CREATE_RAIL_ORDER and the least central to the design-system story, so they
+// are the first to drop when keeping the teaser chips to a single tidy row.
+const ONBOARDING_ARTIFACT_OMIT = new Set<string>(['video', 'production', 'audio']);
 
 // The artifact chips shown on the onboarding "build a design system" step — a
 // curated single-row subset of the create rail. Derived from CREATE_RAIL_ORDER

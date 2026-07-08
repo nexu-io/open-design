@@ -13,7 +13,7 @@ import {
   VIDEO_MODELS,
 } from '../../media/models';
 
-export type HomeComposerMediaSurface = 'image' | 'video' | 'hyperframes' | 'audio';
+export type HomeComposerMediaSurface = 'image' | 'video' | 'production' | 'hyperframes' | 'audio';
 export const ELEVENLABS_DEFAULT_VOICE_ID = '21m00Tcm4TlvDq8ikWAM';
 export const ELEVENLABS_DEFAULT_VOICE_LABEL = 'Rachel (default)';
 
@@ -26,7 +26,7 @@ export interface HomeMediaComposerState {
   editableFieldNames: string[];
 }
 
-export const HOME_MEDIA_CHIP_IDS = ['image', 'video', 'hyperframes', 'audio'] as const;
+export const HOME_MEDIA_CHIP_IDS = ['image', 'video', 'production', 'hyperframes', 'audio'] as const;
 const NO_TEMPLATE_PLACEHOLDER = 'No template';
 const SFX_AUDIO_DURATIONS_SEC = AUDIO_DURATIONS_SEC.filter((sec) => sec <= 30);
 const MEDIA_RESOLUTIONS = ['2k', '4k'] as const;
@@ -35,10 +35,52 @@ const MEDIA_RESOLUTION_LABELS: Record<(typeof MEDIA_RESOLUTIONS)[number], string
   '4k': '4K',
 };
 const DEFAULT_MEDIA_RESOLUTION = '2k';
+type ProductionVoiceTone = 'professional' | 'friendly' | 'calm' | 'confident' | 'energetic' | 'storytelling';
+type ProductionTaskCardId = 'science-explainer' | 'talking-head' | 'storyboard' | 'product-showcase';
+const PRODUCTION_TASK_CARDS = [
+  {
+    id: 'science-explainer',
+    title: 'Science explainer',
+    description: 'Explain a concept with clear structure and simple visuals.',
+  },
+  {
+    id: 'talking-head',
+    title: 'Talking-head narration',
+    description: 'Generate a voice-led script with a stable presenter persona.',
+  },
+  {
+    id: 'storyboard',
+    title: 'Storyboard planning',
+    description: 'Break a script into shots, assets, and timing.',
+  },
+  {
+    id: 'product-showcase',
+    title: 'Product showcase',
+    description: 'Present a product with scene-level polish and pacing.',
+  },
+] as const;
+const PRODUCTION_TASK_CARD_IDS: readonly ProductionTaskCardId[] = PRODUCTION_TASK_CARDS.map((card) => card.id);
+
+function buildLocalProductionProjectMetadata(
+  taskCardId: ProductionTaskCardId,
+  options: {
+    voiceProfileId?: string;
+    voiceTone?: ProductionVoiceTone;
+  } = {},
+): ProjectMetadata {
+  return {
+    kind: 'video',
+    workflowMode: 'production',
+    taskCardId,
+    ...(options.voiceProfileId ? { voiceProfileId: options.voiceProfileId } : {}),
+    ...(options.voiceTone ? { voiceTone: options.voiceTone } : {}),
+  } as unknown as ProjectMetadata;
+}
 
 export function homeMediaSurfaceForChipId(chipId: string): HomeComposerMediaSurface | null {
   if (chipId === 'image') return 'image';
   if (chipId === 'video') return 'video';
+  if (chipId === 'production') return 'production';
   if (chipId === 'hyperframes') return 'hyperframes';
   if (chipId === 'audio') return 'audio';
   return null;
@@ -71,7 +113,7 @@ export function buildHomeMediaComposer(
   const queryTemplate = queryTemplateForSurface(surface, inputs);
   return {
     surface,
-    projectKind: surface === 'hyperframes' ? 'video' : surface,
+    projectKind: surface === 'hyperframes' || surface === 'production' ? 'video' : surface,
     queryTemplate,
     fields,
     inputs,
@@ -119,6 +161,34 @@ export function normalizeHomeMediaInputs(
       ratio,
       duration: validNumber(raw.duration, VIDEO_LENGTHS_SEC, 5),
       resolution: validOption(stringValue(raw.resolution), MEDIA_RESOLUTIONS, DEFAULT_MEDIA_RESOLUTION),
+    };
+  }
+  if (surface === 'production') {
+    const ratio = validOption(stringValue(raw.ratio) || stringValue(raw.aspect), MEDIA_ASPECTS, '16:9');
+    return {
+      mediaKind: 'video',
+      subject: stringValue(raw.subject) || 'a polished narrated production brief',
+      style: stringValue(raw.style) || 'production-ready pacing, clear narration, polished visual rhythm',
+      aspect: ratio,
+      template: validTemplateId(surface, stringValue(raw.template), promptTemplates),
+      designSystem: stringValue(raw.designSystem) || 'the active project design system',
+      model: validOption(
+        stringValue(raw.model),
+        VIDEO_MODELS.filter((m) => m.id !== 'hyperframes-html').map((m) => m.id),
+        DEFAULT_VIDEO_MODEL === 'hyperframes-html'
+          ? VIDEO_MODELS.find((m) => m.id !== 'hyperframes-html')?.id ?? DEFAULT_VIDEO_MODEL
+          : DEFAULT_VIDEO_MODEL,
+      ),
+      ratio,
+      duration: validNumber(raw.duration, VIDEO_LENGTHS_SEC, 5),
+      resolution: validOption(stringValue(raw.resolution), MEDIA_RESOLUTIONS, DEFAULT_MEDIA_RESOLUTION),
+      taskCardId: validOption(
+        stringValue(raw.taskCardId),
+        PRODUCTION_TASK_CARD_IDS,
+        'science-explainer',
+      ),
+      voiceTone: validOption(stringValue(raw.voiceTone), PRODUCTION_VOICE_TONES, 'professional'),
+      voiceProfileId: normalizedElevenLabsVoice(stringValue(raw.voiceProfileId), voiceOptions),
     };
   }
   if (surface === 'hyperframes') {
@@ -200,6 +270,24 @@ export function metadataForHomeMediaComposer(
       ...(promptTemplate ? { promptTemplate } : {}),
     };
   }
+  if (surface === 'production') {
+    const taskCardId = validOption(
+      stringValue(inputs.taskCardId),
+      PRODUCTION_TASK_CARD_IDS,
+      'science-explainer',
+    );
+    const voiceTone = validOption(stringValue(inputs.voiceTone), PRODUCTION_VOICE_TONES, 'professional');
+    const voiceProfileId = stringValue(inputs.voiceProfileId).trim();
+    return {
+      ...buildLocalProductionProjectMetadata(taskCardId, {
+        ...(voiceProfileId ? { voiceProfileId } : {}),
+        voiceTone,
+      }),
+      videoModel: stringValue(inputs.model).trim() || undefined,
+      videoAspect: validOption(stringValue(inputs.ratio) || stringValue(inputs.aspect), MEDIA_ASPECTS, '16:9'),
+      videoLength: validNumber(inputs.duration, VIDEO_LENGTHS_SEC, 5),
+    };
+  }
   return {
     kind: 'audio',
   };
@@ -213,6 +301,11 @@ export function templatesForHomeMediaSurface(
     return promptTemplates.filter((template) => template.surface === 'image');
   }
   if (surface === 'video') {
+    return promptTemplates.filter(
+      (template) => template.surface === 'video' && !isHyperFramesTemplate(template),
+    );
+  }
+  if (surface === 'production') {
     return promptTemplates.filter(
       (template) => template.surface === 'video' && !isHyperFramesTemplate(template),
     );
@@ -242,6 +335,32 @@ function fieldsForSurface(
   }
   if (surface === 'video') {
     return [
+      stringField('designSystem', 'Design system', 'Design system'),
+      selectField('model', 'Model', VIDEO_MODELS.filter((m) => m.id !== 'hyperframes-html').map((m) => m.id), modelLabels(VIDEO_MODELS)),
+      selectField('ratio', 'Ratio', MEDIA_ASPECTS),
+      selectField('duration', 'Duration', VIDEO_LENGTHS_SEC.map(String), secondsLabels(VIDEO_LENGTHS_SEC)),
+      selectField('resolution', 'Resolution', MEDIA_RESOLUTIONS, MEDIA_RESOLUTION_LABELS),
+    ];
+  }
+  if (surface === 'production') {
+    const voiceOptionsResolved = homeElevenLabsVoiceOptions(voiceOptions);
+    return [
+      selectField(
+        'taskCardId',
+        'Task card',
+        PRODUCTION_TASK_CARDS.map((card) => card.id),
+        PRODUCTION_TASK_CARDS.reduce<Record<string, string>>((labels, card) => {
+          labels[card.id] = card.title;
+          return labels;
+        }, {}),
+      ),
+      selectField('voiceTone', 'Voice tone', PRODUCTION_VOICE_TONES, PRODUCTION_VOICE_TONE_LABELS),
+      selectField(
+        'voiceProfileId',
+        'Voice profile',
+        voiceOptionsResolved.map((voice) => voice.voiceId),
+        voiceLabels(voiceOptionsResolved),
+      ),
       stringField('designSystem', 'Design system', 'Design system'),
       selectField('model', 'Model', VIDEO_MODELS.filter((m) => m.id !== 'hyperframes-html').map((m) => m.id), modelLabels(VIDEO_MODELS)),
       selectField('ratio', 'Ratio', MEDIA_ASPECTS),
@@ -293,6 +412,9 @@ function queryTemplateForSurface(surface: HomeComposerMediaSurface, inputs: Reco
   if (surface === 'video') {
     return 'Create a premium product-studio video using {{designSystem}}: cinematic product pacing, elegant motion, refined lighting, and a polished launch-film feel.';
   }
+  if (surface === 'production') {
+    return 'Create a premium production-ready video using {{designSystem}}: clear scripting, narrated pacing, storyboard-friendly beats, and polished launch-film energy.';
+  }
   if (surface === 'hyperframes') {
     return 'Create a premium product-studio HyperFrames video: refined kinetic typography, elegant transitions, restrained motion language, and studio-grade timing.';
   }
@@ -325,6 +447,21 @@ function defaultInputsForSurface(
       ratio: '16:9',
       duration: 5,
       resolution: DEFAULT_MEDIA_RESOLUTION,
+    };
+  }
+  if (surface === 'production') {
+    return {
+      template: firstTemplateId(surface, promptTemplates),
+      designSystem: 'the active project design system',
+      model: DEFAULT_VIDEO_MODEL === 'hyperframes-html'
+        ? VIDEO_MODELS.find((m) => m.id !== 'hyperframes-html')?.id ?? DEFAULT_VIDEO_MODEL
+        : DEFAULT_VIDEO_MODEL,
+      ratio: '16:9',
+      duration: 5,
+      resolution: DEFAULT_MEDIA_RESOLUTION,
+      taskCardId: 'science-explainer',
+      voiceTone: 'professional',
+      voiceProfileId: ELEVENLABS_DEFAULT_VOICE_ID,
     };
   }
   if (surface === 'hyperframes') {
@@ -376,6 +513,9 @@ function firstTemplateId(
   surface: HomeComposerMediaSurface,
   promptTemplates: PromptTemplateSummary[],
 ): string {
+  if (surface === 'production') {
+    return templatesForHomeMediaSurface('video', promptTemplates)[0]?.id ?? NO_TEMPLATE_PLACEHOLDER;
+  }
   return templatesForHomeMediaSurface(surface, promptTemplates)[0]?.id ?? NO_TEMPLATE_PLACEHOLDER;
 }
 
@@ -384,7 +524,7 @@ function validTemplateId(
   rawTemplate: string,
   promptTemplates: PromptTemplateSummary[],
 ): string {
-  const templates = templatesForHomeMediaSurface(surface, promptTemplates);
+  const templates = templatesForHomeMediaSurface(surface === 'production' ? 'video' : surface, promptTemplates);
   if (templates.some((template) => template.id === rawTemplate)) return rawTemplate;
   return templates[0]?.id ?? NO_TEMPLATE_PLACEHOLDER;
 }
@@ -410,6 +550,24 @@ function voiceLabels(voices: Array<{ voiceId: string; name: string }>): Record<s
   for (const voice of voices) labels[voice.voiceId] = voice.name;
   return labels;
 }
+
+const PRODUCTION_VOICE_TONES: ProductionVoiceTone[] = [
+  'professional',
+  'friendly',
+  'calm',
+  'confident',
+  'energetic',
+  'storytelling',
+];
+
+const PRODUCTION_VOICE_TONE_LABELS: Record<ProductionVoiceTone, string> = {
+  professional: 'Professional',
+  friendly: 'Friendly',
+  calm: 'Calm',
+  confident: 'Confident',
+  energetic: 'Energetic',
+  storytelling: 'Storytelling',
+};
 
 function audioKinds(): AudioKind[] {
   return ['speech', 'sfx'];

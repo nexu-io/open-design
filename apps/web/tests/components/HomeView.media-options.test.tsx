@@ -214,6 +214,34 @@ describe('HomeView media composer options', () => {
     expect(screen.queryByTestId('home-hero-prompt-slot-text')).toBeNull();
   });
 
+  it('opens the Production workflow with a starter task card and merged voiceover controls', async () => {
+    stubFetch();
+    const onSubmit = vi.fn();
+    renderHome({ onSubmit });
+
+    await clickHomeRailChip('production');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-taskCardId')).toBeTruthy());
+    expect(screen.getByTestId('home-hero-footer-option-taskCardId').textContent).toContain('Science explainer');
+    expect(screen.getByTestId('home-hero-footer-option-voiceTone').textContent).toContain('Professional');
+    expect(screen.getByTestId('home-hero-footer-option-voiceProfileId').textContent).toContain('Rachel');
+
+    await setHomePrompt('Create a narrated production brief.');
+    await submitHome();
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        projectKind: 'video',
+        projectMetadata: expect.objectContaining({
+          kind: 'video',
+          workflowMode: 'production',
+          taskCardId: 'science-explainer',
+          voiceTone: 'professional',
+          voiceProfileId: expect.any(String),
+        }),
+      }));
+    });
+  });
+
   it('hides the full selector grid for media surfaces', async () => {
     stubFetch();
     renderHome();

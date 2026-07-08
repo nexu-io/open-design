@@ -574,6 +574,42 @@ describe('NewProjectPanel design system defaults', () => {
     );
   });
 
+  it('keeps the production task-card default stable when switching away and back', () => {
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByTestId('new-project-media-surface-production'));
+    expect(screen.getByRole('button', { name: /Science explainer/i }).getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('new-project-media-surface-video'));
+    fireEvent.click(screen.getByTestId('new-project-media-surface-production'));
+    expect(screen.getByRole('button', { name: /Science explainer/i }).getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          kind: 'video',
+          workflowMode: 'production',
+          taskCardId: 'science-explainer',
+          voiceTone: 'professional',
+        }),
+      }),
+    );
+  });
+
   it('exposes sound effects audio projects and switches to the ElevenLabs SFX model', () => {
     const onCreate = vi.fn();
     render(

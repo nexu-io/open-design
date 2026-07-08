@@ -16,6 +16,38 @@ export type ProjectKind =
   | 'video'
   | 'audio';
 
+export type WorkflowMode = 'production' | 'website-design';
+
+export type VoiceTone =
+  | 'professional'
+  | 'friendly'
+  | 'calm'
+  | 'confident'
+  | 'energetic'
+  | 'storytelling';
+
+export interface ProductionConsistencyLock {
+  character: boolean;
+  wardrobe: boolean;
+  camera: boolean;
+  voice: boolean;
+}
+
+export interface ProductionTaskCard {
+  id: 'science-explainer' | 'talking-head' | 'storyboard' | 'product-showcase';
+  title: string;
+  description: string;
+}
+
+export interface ProductionWorkflowMetadata {
+  kind: 'video';
+  workflowMode: 'production';
+  taskCardId: ProductionTaskCard['id'];
+  voiceProfileId?: string;
+  voiceTone?: VoiceTone;
+  consistencyLock?: ProductionConsistencyLock;
+}
+
 export type MediaAspect = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
 
 export type ProjectPlatform =
@@ -89,7 +121,7 @@ export interface DesignSystemReviewEntry {
   agentTask?: DesignSystemReviewAgentTask;
 }
 
-export interface ProjectMetadata {
+export interface ProjectMetadataCommon {
   kind: ProjectKind;
   // `live-artifact`: the data-backed live dashboard flow (drives the
   // live-artifact skill/system-prompt path). `document`: resume/report/PDF
@@ -199,6 +231,55 @@ export interface ProjectMetadata {
   // cohorts' retention/usage (tracking spec C15 / §6).
   enrichmentStatus?: 'programmatic' | 'ai_refined';
   enrichmentCompletedAt?: number;
+}
+
+export type ProjectMetadata =
+  | ProjectMetadataCommon
+  | (ProjectMetadataCommon & ProductionWorkflowMetadata);
+
+const PRODUCTION_TASK_CARD_CATALOG: readonly ProductionTaskCard[] = Object.freeze([
+    {
+      id: 'science-explainer',
+      title: 'Science explainer',
+      description: 'Explain a concept with clear structure and simple visuals.',
+    },
+    {
+      id: 'talking-head',
+      title: 'Talking-head narration',
+      description: 'Generate a voice-led script with a stable presenter persona.',
+    },
+    {
+      id: 'storyboard',
+      title: 'Storyboard planning',
+      description: 'Break a script into shots, assets, and timing.',
+    },
+    {
+      id: 'product-showcase',
+      title: 'Product showcase',
+      description: 'Present a product with scene-level polish and pacing.',
+    },
+]);
+
+export function productionTaskCardCatalog(): readonly ProductionTaskCard[] {
+  return PRODUCTION_TASK_CARD_CATALOG;
+}
+
+export function buildProductionProjectMetadata(
+  taskCardId: ProductionTaskCard['id'],
+  options: {
+    voiceProfileId?: string;
+    voiceTone?: VoiceTone;
+    consistencyLock?: ProductionConsistencyLock;
+  } = {},
+): ProjectMetadataCommon & ProductionWorkflowMetadata {
+  return {
+    kind: 'video',
+    workflowMode: 'production',
+    taskCardId,
+    ...(options.voiceProfileId ? { voiceProfileId: options.voiceProfileId } : {}),
+    ...(options.voiceTone ? { voiceTone: options.voiceTone } : {}),
+    ...(options.consistencyLock ? { consistencyLock: options.consistencyLock } : {}),
+  };
 }
 
 export interface Project {
