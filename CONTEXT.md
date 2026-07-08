@@ -29,8 +29,12 @@ The project the user most recently interacted with in the Open Design UI and tha
 _Avoid_: latest project, default project
 
 **Home Composer Media Surface**:
-A Home-only composer intent that lets the prompt card expose media-specific defaults before project creation. The current media surfaces are `image`, `video`, `hyperframes`, and `audio`; they map onto the existing project kinds at submit time instead of extending the backend `ProjectKind` union.
+A Home-only composer intent that lets the prompt card expose media-specific defaults before project creation. The current media surfaces are `image`, `video`, `production`, `hyperframes`, and `audio`; they map onto the existing project kinds at submit time instead of extending the backend `ProjectKind` union.
 _Avoid_: project kind, backend kind
+
+**Production Mode**:
+A beginner-friendly Home composer path that merges script, auto-voiceover, storyboard, assets, and output into one guided video-production workflow. This slice is in scope now; Website Design mode and 3D / Blender integration are deferred.
+_Avoid_: website design mode, 3D authoring, Blender pipeline
 
 **Chip Rail**:
 The row of intent chips below the Home prompt card. A chip chooses the composer surface, default scenario plugin, default option state, and project kind stamp before the user presses Run.

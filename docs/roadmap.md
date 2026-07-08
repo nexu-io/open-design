@@ -6,6 +6,19 @@ Phased plan from "spec-only today" to "usable MVP" to "published v1." All estima
 
 ---
 
+## Current Cut Line
+
+**In scope now**
+- Production mode: beginner-friendly video production with merged script, voiceover, storyboard, assets, and output lanes.
+
+**Deferred for this slice**
+- Website Design mode
+- 3D / Blender integration
+
+This cut line keeps the first production slice shippable and testable before we widen the surface area.
+
+---
+
 ## Phase 0 — Spec finalization (current, ~3–5 days)
 
 **Goal:** get the interfaces right before writing implementation code. All decisions that are cheap to change on paper and expensive to change in code live here.
