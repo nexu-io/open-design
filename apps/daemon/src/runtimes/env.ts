@@ -83,6 +83,7 @@ export function spawnEnvForAgent(
     baseEnv,
     expandedConfiguredEnv,
   );
+  applyWindowsUserCacheEnv(env);
   if (agentId === 'amr') {
     Object.assign(env, amrVelaProfileEnv(env));
     Object.assign(env, amrAnalyticsIdentityEnv(env));
@@ -217,4 +218,51 @@ function stripKeysCaseInsensitive(
   for (const key of Object.keys(env)) {
     if (keysUpper.has(key.toUpperCase())) delete env[key];
   }
+}
+
+function applyWindowsUserCacheEnv(env: NodeJS.ProcessEnv): void {
+  if (process.platform !== 'win32') return;
+
+  // GUI-launched Windows daemons can inherit enough PATH to resolve a CLI
+  // while still missing the profile/cache variables CLIs use at startup.
+  const userProfile =
+    envValue(env, 'USERPROFILE') ||
+    envValue(env, 'HOME') ||
+    os.homedir();
+  if (!userProfile) return;
+
+  setEnvIfMissing(env, 'USERPROFILE', userProfile);
+  const localAppData =
+    envValue(env, 'LOCALAPPDATA') ||
+    path.win32.join(userProfile, 'AppData', 'Local');
+  setEnvIfMissing(env, 'LOCALAPPDATA', localAppData);
+  setEnvIfMissing(
+    env,
+    'APPDATA',
+    path.win32.join(userProfile, 'AppData', 'Roaming'),
+  );
+  const tempDir = path.win32.join(localAppData, 'Temp');
+  setEnvIfMissing(env, 'TEMP', tempDir);
+  setEnvIfMissing(env, 'TMP', tempDir);
+}
+
+function envValue(env: NodeJS.ProcessEnv, key: string): string | null {
+  const existingKey = Object.keys(env).find(
+    (candidate) => candidate.toUpperCase() === key.toUpperCase(),
+  );
+  const value = existingKey ? env[existingKey] : undefined;
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed ? (value as string) : null;
+}
+
+function setEnvIfMissing(
+  env: NodeJS.ProcessEnv,
+  key: string,
+  value: string,
+): void {
+  if (envValue(env, key)) return;
+  const existingKey = Object.keys(env).find(
+    (candidate) => candidate.toUpperCase() === key.toUpperCase(),
+  );
+  env[existingKey ?? key] = value;
 }

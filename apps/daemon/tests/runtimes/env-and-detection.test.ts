@@ -82,6 +82,26 @@ test('spawnEnvForAgent applies configured Codex env without mutating the base en
   assert.equal('CODEX_BIN' in base, false);
 });
 
+test('spawnEnvForAgent backfills Windows cache directory env for Trae CLI launches', () => {
+  const env = withPlatform('win32', () =>
+    spawnEnvForAgent(
+      'trae-cli',
+      {
+        Path: 'C:\\Windows\\System32',
+        USERPROFILE: 'C:\\Users\\ai',
+      },
+      {},
+      {},
+    ),
+  );
+
+  assert.equal(env.USERPROFILE, 'C:\\Users\\ai');
+  assert.equal(env.APPDATA, 'C:\\Users\\ai\\AppData\\Roaming');
+  assert.equal(env.LOCALAPPDATA, 'C:\\Users\\ai\\AppData\\Local');
+  assert.equal(env.TEMP, 'C:\\Users\\ai\\AppData\\Local\\Temp');
+  assert.equal(env.TMP, 'C:\\Users\\ai\\AppData\\Local\\Temp');
+});
+
 test('spawnEnvForAgent reapplies sandbox state roots after configured env overrides', () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-'));
   try {
