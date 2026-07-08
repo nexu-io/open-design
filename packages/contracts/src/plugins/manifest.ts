@@ -195,6 +195,13 @@ export const PluginManifestSchema = z.object({
         ReferenceSchema,
         z.object({ ref: z.string().optional(), primary: z.boolean().optional() }).passthrough(),
       ]).optional(),
+      brand: z
+        .object({
+          ref: z.string().optional(),
+          deliverable: z.string().optional(),
+        })
+        .passthrough()
+        .optional(),
       craft:         z.array(z.string()).optional(),
       assets:        z.array(z.string()).optional(),
       claudePlugins: z.array(ReferenceSchema).optional(),
