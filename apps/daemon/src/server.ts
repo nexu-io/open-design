@@ -5644,6 +5644,7 @@ export async function startServer({
     USER_SKILLS_DIR,
     PROMPT_TEMPLATES_DIR,
     BUNDLED_PETS_DIR,
+    BRANDS_DIR,
     MAX_BIN,
   };
   const nodeDeps = { fs, path };
@@ -6407,6 +6408,56 @@ export async function startServer({
       });
     } catch (err) {
       res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/brands', async (_req, res) => {
+    try {
+      res.json({ brands: await listBrands(BRANDS_DIR) });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/brands/:id', async (req, res) => {
+    try {
+      const brands = await listBrands(BRANDS_DIR);
+      const summary = brands.find((b) => b.id === req.params.id);
+      const body = await readBrandCore(BRANDS_DIR, req.params.id);
+      if (!summary || body === null) return res.status(404).json({ error: 'brand not found' });
+      const deliverableKey =
+        typeof req.query.deliverable === 'string' ? req.query.deliverable : undefined;
+      let deliverable: { key: string; body: string } | undefined;
+      if (deliverableKey) {
+        const dBody = await readBrandDeliverable(BRANDS_DIR, req.params.id, deliverableKey);
+        if (dBody === null) return res.status(404).json({ error: 'deliverable not found' });
+        deliverable = { key: deliverableKey, body: dBody };
+      }
+      res.json({ ...summary, body, ...(deliverable ? { deliverable } : {}) });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Brand asset bytes (logotype/character-sheet/etc referenced from brand.md
+  // and deliverable channel docs). Mirrors the /api/skills/:id/assets/*splat
+  // traversal guard above: resolve the requested path against the brand's
+  // assets/ root and reject anything that escapes it.
+  app.get('/api/brands/:id/assets/*splat', async (req, res) => {
+    try {
+      const splatParam = req.params.splat;
+      const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam || '');
+      const assetsRoot = path.resolve(BRANDS_DIR, req.params.id, 'assets');
+      const target = path.resolve(assetsRoot, relPath);
+      if (target !== assetsRoot && !target.startsWith(assetsRoot + path.sep)) {
+        return res.status(400).type('text/plain').send('invalid asset path');
+      }
+      if (!fs.existsSync(target)) {
+        return res.status(404).type('text/plain').send('asset not found');
+      }
+      await res.type(mimeFor(target)).sendFile(target);
+    } catch (err) {
+      res.status(500).type('text/plain').send(String(err));
     }
   });
 

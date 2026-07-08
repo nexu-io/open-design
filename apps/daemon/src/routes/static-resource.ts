@@ -15,6 +15,7 @@ import {
 import { listCodexPets, readCodexPetSpritesheet } from '../codex-pets.js';
 import { syncCommunityPets } from '../community-pets-sync.js';
 import { readDesignSystem } from '../design-systems.js';
+import { listBrands } from '../brands.js';
 import {
   LocalDesignSystemImportError,
   importLocalDesignSystemProject,
@@ -49,6 +50,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     USER_SKILLS_DIR,
     PROMPT_TEMPLATES_DIR,
     BUNDLED_PETS_DIR,
+    BRANDS_DIR,
   } = ctx.paths;
   const {
     listAllSkills,
@@ -372,6 +374,20 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     next();
   });
 
+  app.get('/api/brands', async (_req, res) => {
+    try {
+      res.json({ brands: await listBrands(BRANDS_DIR) });
+    } catch (err: any) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/brands/:id', (_req, _res, next) => {
+    // Detail shape (core body + optional ?deliverable body) lives in the
+    // richer route registered in server.ts; let it answer this request.
+    next();
+  });
+
   app.get('/api/prompt-templates', async (_req, res) => {
     try {
       const templates = await listPromptTemplates(PROMPT_TEMPLATES_DIR);
@@ -590,6 +606,28 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       // image bytes; same-origin web callers do not need this header.
       if (req.headers.origin === 'null') {
         res.header('Access-Control-Allow-Origin', '*');
+      }
+      await res.type(mimeFor(target)).sendFile(target);
+    } catch (err: any) {
+      res.status(500).type('text/plain').send(String(err));
+    }
+  });
+
+  // Brand asset bytes (logotype/character-sheet/etc referenced from brand.md
+  // and deliverable channel docs). Same traversal guard shape as the skills
+  // asset route above: resolve against the brand's assets/ root and reject
+  // anything that escapes it.
+  app.get('/api/brands/:id/assets/*splat', async (req, res) => {
+    try {
+      const splatParam = (req.params as { splat?: string | string[] }).splat;
+      const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam || '');
+      const assetsRoot = path.resolve(BRANDS_DIR, req.params.id, 'assets');
+      const target = path.resolve(assetsRoot, relPath);
+      if (target !== assetsRoot && !target.startsWith(assetsRoot + path.sep)) {
+        return res.status(400).type('text/plain').send('invalid asset path');
+      }
+      if (!fs.existsSync(target)) {
+        return res.status(404).type('text/plain').send('asset not found');
       }
       await res.type(mimeFor(target)).sendFile(target);
     } catch (err: any) {
