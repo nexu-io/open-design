@@ -1,31 +1,103 @@
 /*
- * Role: bodoc-iam 룩 토큰 — IAM 프리뷰/스크린샷용 :root
+ * Role: bodoc-iam 룩 토큰 — 공유 스키마 어휘로 표현한 IAM 스킨 :root
  * Notes: 브랜드 식별색(#16C5FF, #0DA5E0)의 정본 = brands/bodoc/brand.md Palette.
  *        값 변경 시 brand.md와 동기 필수 (brand-palette-sync 테스트가 검증).
+ *        시각 값은 무변 — 구 로컬 어휘(--primary/--text-*/--radius-btn...)를
+ *        packages/contracts/src/design-systems/token-schema.ts 스키마 이름으로 재매핑했을 뿐.
+ *        IAM 전용 알파 변형은 BRAND_EXTENSIONS["bodoc-iam"]에 등재된 C-확장.
  *        프로덕션 IAM 인라인 출력 시 폰트는 brands/bodoc/deliverables/iam.md의
  *        Braze 자산 문자열 블록으로 교체.
  */
 :root {
-  /* 컬러 — 솔리드 */
-  --primary:        #16C5FF;  /* 보닥 시그니처. 주 CTA·핵심 강조 1~2회만 */
-  --primary-dark:   #0DA5E0;  /* :active 눌림, hover */
-  --text-primary:   #1D2024;  /* 제목·본문 본체 */
-  --text-secondary: #7D8085;  /* 보조 설명 */
-  --text-tertiary:  #5A5E63;  /* 캡션·보조 액션. WCAG AA 4.5:1 보장 */
-  --border:         #E5E5EA;  /* divider·카드 외곽 */
-  --background:     #F5F5F5;  /* 면 분리·눌림 배경 */
-  --error:          #FF4D4D;  /* 경고·부정 신호 한정 */
-  --white:          #FFFFFF;  /* 카드·시트 표면 */
+  /* ─── Surface ─── 구 --background / --white */
+  --bg: #F5F5F5;             /* 면 분리·눌림 배경 = 페이지 캔버스 */
+  --surface: #FFFFFF;        /* 카드·시트 표면 */
+  --surface-warm: var(--surface); /* IAM은 3단 표면 없음 — surface로 접힘 */
 
-  /* 컬러 — 알파 변형 (raw rgba 인라인 금지, 항상 토큰 사용) */
-  --primary-tint:        rgba(22, 197, 255, 0.10);  /* 아이콘 배경, 시점 라벨 배경 */
-  --primary-tint-strong: rgba(22, 197, 255, 0.15);  /* 체크리스트 bullet 배경 */
-  --primary-glow:        rgba(22, 197, 255, 0.18);  /* 강조 glow pulse */
-  --overlay:             rgba(0, 0, 0, 0.45);        /* 모달·하프시트 dim */
+  /* ─── Foreground ─── 무채색 위계 3단 (구 --text-primary/-secondary/-tertiary) */
+  --fg: #1D2024;             /* 제목·본문 본체 */
+  --fg-2: #7D8085;           /* 보조 설명 (secondary tier) */
+  --muted: #5A5E63;          /* 캡션·보조 액션. WCAG AA 4.5:1 보장 */
+  --meta: var(--muted);      /* IAM은 4번째 텍스트 tier 없음 — muted로 접힘 */
 
-  /* border-radius 위계 */
-  --radius-btn:   12px;
-  --radius-card:  16px;
-  --radius-modal: 20px;
-  --radius-sheet: 20px;
+  /* ─── Border ─── 구 --border */
+  --border: #E5E5EA;         /* divider·카드 외곽 */
+  --border-soft: var(--border); /* 내부 row 구분선 별도 tier 없음 */
+
+  /* ─── Accent ─── 구 --primary / --primary-dark */
+  --accent: #16C5FF;         /* 보닥 시그니처. 주 CTA·핵심 강조 1~2회만 */
+  --accent-on: #FFFFFF;      /* accent 위 텍스트 = 흰색 */
+  --accent-hover: #0DA5E0;   /* hover — 시그니처 눌림 변형 */
+  --accent-active: #0DA5E0;  /* :active 눌림 — 시그니처 눌림 변형 */
+
+  /* ─── Semantic ─── 구 --error → --danger, success/warn은 스키마 기본값 */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #FF4D4D;         /* 경고·만기 임박 등 부정 신호 한정 */
+
+  /* ─── Typography — fonts ─── Pretendard (font-weight 300 고정) */
+  --font-display: Pretendard, "Pretendard Variable", -apple-system, sans-serif;
+  --font-body: Pretendard, "Pretendard Variable", -apple-system, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* ─── Typography — type scale ─── 1.25~1.5배 점프, base 15px */
+  --text-xs: 12px;           /* 캡션 */
+  --text-sm: 13px;
+  --text-base: 15px;         /* 본문 baseline */
+  --text-lg: 18px;
+  --text-xl: 20px;           /* IAM 헤딩 */
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+  --text-4xl: 40px;
+
+  /* ─── Typography — leading & tracking ─── 헤딩 1.1~1.35 / 본문 1.4~1.6 */
+  --leading-body: 1.5;
+  --leading-tight: 1.3;
+  --tracking-display: -0.5px; /* Bold/SemiBold letter-spacing */
+
+  /* ─── Spacing ─── 8px 그리드 (스키마 4px base 스케일 기본값) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ─── 8배수 */
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ─── 구 --radius-btn/-card/-modal/-sheet 위계 */
+  --radius-sm: 12px;         /* 버튼 (구 --radius-btn) */
+  --radius-md: 16px;         /* 카드 (구 --radius-card) */
+  --radius-lg: 20px;         /* 모달·시트 (구 --radius-modal/--radius-sheet) */
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ─── 스키마 기본값 (bodoc 미지정) */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+
+  /* ─── Focus ─── 스키마 기본값 */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ─── 스키마 기본값 */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ─── IAM 카드 폭 기준 */
+  --container-max: 400px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 20px;
+  --container-gutter-phone: 16px;
+
+  /* ─── C-확장 (BRAND_EXTENSIONS["bodoc-iam"]) ─── 알파 변형: raw rgba 인라인 금지, 항상 토큰 사용 */
+  --accent-tint: rgba(22, 197, 255, 0.10);        /* 아이콘 배경, 시점 라벨 배경 (구 --primary-tint) */
+  --accent-tint-strong: rgba(22, 197, 255, 0.15); /* 체크리스트 bullet 배경 (구 --primary-tint-strong) */
+  --accent-glow: rgba(22, 197, 255, 0.18);        /* 강조 glow pulse (구 --primary-glow) */
+  --overlay: rgba(0, 0, 0, 0.45);                 /* 모달·하프시트 dim */
 }

@@ -13,9 +13,9 @@ describe('brand palette canonical sync', () => {
     // 정본 선언 존재
     expect(brand).toContain('#16C5FF');
     expect(brand).toContain('#0DA5E0');
-    // 미러 일치
-    expect(tokens).toMatch(/--primary:\s*#16C5FF/);
-    expect(tokens).toMatch(/--primary-dark:\s*#0DA5E0/);
+    // 미러 일치 (공유 스키마 토큰명 — --accent = 시그니처, --accent-hover = 눌림 변형)
+    expect(tokens).toMatch(/--accent:\s*#16C5FF/);
+    expect(tokens).toMatch(/--accent-hover:\s*#0DA5E0/);
   });
 
   it('cardnews canon body hex matches the brand.md declaration', async () => {

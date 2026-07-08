@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bodoc IAM — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/bodoc-iam. Braze IAM default skin:
+        Pretendard light-weight type, cyan signature CTA, calm neutral hierarchy,
+        modal/card radius tiers."
+    />
+
+    <style>
+      :root {
+        /* ─── Surface ─── 구 --background / --white */
+        --bg: #F5F5F5;             /* 면 분리·눌림 배경 = 페이지 캔버스 */
+        --surface: #FFFFFF;        /* 카드·시트 표면 */
+        --surface-warm: var(--surface); /* IAM은 3단 표면 없음 — surface로 접힘 */
+
+        /* ─── Foreground ─── 무채색 위계 3단 (구 --text-primary/-secondary/-tertiary) */
+        --fg: #1D2024;             /* 제목·본문 본체 */
+        --fg-2: #7D8085;           /* 보조 설명 (secondary tier) */
+        --muted: #5A5E63;          /* 캡션·보조 액션. WCAG AA 4.5:1 보장 */
+        --meta: var(--muted);      /* IAM은 4번째 텍스트 tier 없음 — muted로 접힘 */
+
+        /* ─── Border ─── 구 --border */
+        --border: #E5E5EA;         /* divider·카드 외곽 */
+        --border-soft: var(--border); /* 내부 row 구분선 별도 tier 없음 */
+
+        /* ─── Accent ─── 구 --primary / --primary-dark */
+        --accent: #16C5FF;         /* 보닥 시그니처. 주 CTA·핵심 강조 1~2회만 */
+        --accent-on: #FFFFFF;      /* accent 위 텍스트 = 흰색 */
+        --accent-hover: #0DA5E0;   /* hover — 시그니처 눌림 변형 */
+        --accent-active: #0DA5E0;  /* :active 눌림 — 시그니처 눌림 변형 */
+
+        /* ─── Semantic ─── 구 --error → --danger, success/warn은 스키마 기본값 */
+        --success: #16a34a;
+        --warn: #eab308;
+        --danger: #FF4D4D;         /* 경고·만기 임박 등 부정 신호 한정 */
+
+        /* ─── Typography — fonts ─── Pretendard (font-weight 300 고정) */
+        --font-display: Pretendard, "Pretendard Variable", -apple-system, sans-serif;
+        --font-body: Pretendard, "Pretendard Variable", -apple-system, sans-serif;
+        --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+        /* ─── Typography — type scale ─── 1.25~1.5배 점프, base 15px */
+        --text-xs: 12px;           /* 캡션 */
+        --text-sm: 13px;
+        --text-base: 15px;         /* 본문 baseline */
+        --text-lg: 18px;
+        --text-xl: 20px;           /* IAM 헤딩 */
+        --text-2xl: 24px;
+        --text-3xl: 30px;
+        --text-4xl: 40px;
+
+        /* ─── Typography — leading & tracking ─── 헤딩 1.1~1.35 / 본문 1.4~1.6 */
+        --leading-body: 1.5;
+        --leading-tight: 1.3;
+        --tracking-display: -0.5px; /* Bold/SemiBold letter-spacing */
+
+        /* ─── Spacing ─── 8px 그리드 (스키마 4px base 스케일 기본값) */
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+
+        /* ─── Section rhythm ─── 8배수 */
+        --section-y-desktop: 96px;
+        --section-y-tablet: 64px;
+        --section-y-phone: 48px;
+
+        /* ─── Radius ─── 구 --radius-btn/-card/-modal/-sheet 위계 */
+        --radius-sm: 12px;         /* 버튼 (구 --radius-btn) */
+        --radius-md: 16px;         /* 카드 (구 --radius-card) */
+        --radius-lg: 20px;         /* 모달·시트 (구 --radius-modal/--radius-sheet) */
+        --radius-pill: 9999px;
+
+        /* ─── Elevation ─── 스키마 기본값 (bodoc 미지정) */
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+
+        /* ─── Focus ─── 스키마 기본값 */
+        --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+        /* ─── Motion ─── 스키마 기본값 */
+        --motion-fast: 150ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        /* ─── Layout ─── IAM 카드 폭 기준 */
+        --container-max: 400px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet: 20px;
+        --container-gutter-phone: 16px;
+
+        /* ─── C-확장 (BRAND_EXTENSIONS["bodoc-iam"]) ─── 알파 변형: raw rgba 인라인 금지, 항상 토큰 사용 */
+        --accent-tint: rgba(22, 197, 255, 0.10);        /* 아이콘 배경, 시점 라벨 배경 (구 --primary-tint) */
+        --accent-tint-strong: rgba(22, 197, 255, 0.15); /* 체크리스트 bullet 배경 (구 --primary-tint-strong) */
+        --accent-glow: rgba(22, 197, 255, 0.18);        /* 강조 glow pulse (구 --primary-glow) */
+        --overlay: rgba(0, 0, 0, 0.45);                 /* 모달·하프시트 dim */
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-weight: 300;
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        -webkit-font-smoothing: antialiased;
+        padding: var(--space-6);
+      }
+
+      .iam-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-6);
+        max-width: var(--container-max);
+        margin-inline: auto;
+      }
+      .iam-title {
+        font-size: var(--text-xl);
+        letter-spacing: var(--tracking-display);
+        line-height: var(--leading-tight);
+        margin: 0 0 var(--space-2);
+      }
+      .iam-body { color: var(--fg-2); margin: 0 0 var(--space-4); }
+      .iam-caption { color: var(--muted); font-size: var(--text-xs); margin: 0 0 var(--space-4); }
+      .iam-cta {
+        display: block;
+        width: 100%;
+        background: var(--accent);
+        color: var(--accent-on);
+        border: 0;
+        border-radius: var(--radius-sm);
+        padding: 14px var(--space-4);
+        font: inherit;
+        letter-spacing: var(--tracking-display);
+        cursor: pointer;
+        transition: background var(--motion-fast) var(--ease-standard);
+      }
+      .iam-cta:active { background: var(--accent-active); transform: scale(0.97); }
+      .iam-icon-chip {
+        display: inline-flex;
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-sm);
+        background: var(--accent-tint);
+        margin-bottom: var(--space-3);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="iam-card" id="iam-card">
+      <span class="iam-icon-chip" id="iam-icon"></span>
+      <h1 class="iam-title" id="iam-title">보험 점검을 시작해 보세요</h1>
+      <p class="iam-body" id="iam-body">가입한 보험을 한눈에 정리하고 놓친 보장을 확인할 수 있어요.</p>
+      <p class="iam-caption" id="iam-caption">1분이면 충분해요.</p>
+      <button class="iam-cta" id="iam-cta" type="button">내 보험 확인하기</button>
+    </div>
+  </body>
+</html>

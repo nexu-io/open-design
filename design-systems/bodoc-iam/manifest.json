@@ -8,6 +8,6 @@
   "files": {
     "design": "DESIGN.md",
     "tokens": "tokens.css",
-    "designTokens": "design-tokens.json"
+    "components": "components.html"
   }
 }

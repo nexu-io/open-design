@@ -212,6 +212,12 @@ export const BRAND_EXTENSIONS: Readonly<Record<string, readonly string[]>> = {
   default: [
     "--space-20", // 80px — used as section-y-desktop's twin; only default needs it
   ],
+  "bodoc-iam": [
+    "--accent-tint", // rgba signature-cyan 10% — icon chip / time-label background
+    "--accent-tint-strong", // rgba signature-cyan 15% — checklist bullet background
+    "--accent-glow", // rgba signature-cyan 18% — single highlight glow pulse
+    "--overlay", // rgba black 45% — modal / half-sheet dim scrim
+  ],
   openai: [
     "--space-16", // 64px — major section gap in OpenAI's DESIGN.md §5 spacing scale
   ],

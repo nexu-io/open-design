@@ -15,17 +15,17 @@
 
 | 토큰 | 의미·사용처 |
 |---|---|
-| `--primary` | 보닥 시그니처. 주 CTA·핵심 강조 1~2회만 |
-| `--primary-dark` | `:active` 눌림 상태, hover |
-| `--text-primary` | 제목·본문 본체 |
-| `--text-secondary` | 보조 설명 |
-| `--text-tertiary` | 캡션·보조 액션. WCAG AA 4.5:1 보장 (`--text-secondary`는 작은 글자 대비 미달) |
+| `--accent` | 보닥 시그니처. 주 CTA·핵심 강조 1~2회만 |
+| `--accent-hover` · `--accent-active` | `:active` 눌림 상태, hover |
+| `--fg` | 제목·본문 본체 |
+| `--fg-2` | 보조 설명 |
+| `--muted` | 캡션·보조 액션. WCAG AA 4.5:1 보장 (`--fg-2`는 작은 글자 대비 미달) |
 | `--border` | divider·카드 외곽 |
-| `--background` | 면 분리·눌림 배경 |
-| `--error` | 경고·만기 임박 등 부정 신호 한정 |
-| `--white` | 카드·시트 표면 |
+| `--bg` | 면 분리·눌림 배경 |
+| `--danger` | 경고·만기 임박 등 부정 신호 한정 |
+| `--surface` | 카드·시트 표면 |
 
-알파 변형 — **raw `rgba()` 인라인 금지, 항상 토큰 사용**: `--primary-tint`(아이콘 배경), `--primary-tint-strong`(체크리스트 bullet), `--primary-glow`(glow pulse), `--overlay`(모달·시트 dim) — 값은 tokens.css 참조.
+알파 변형 — **raw `rgba()` 인라인 금지, 항상 토큰 사용**: `--accent-tint`(아이콘 배경), `--accent-tint-strong`(체크리스트 bullet), `--accent-glow`(glow pulse), `--overlay`(모달·시트 dim) — 값은 tokens.css 참조.
 
 **절제 원칙**: primary 1~2회만, 무채색 위계 3단계(primary/secondary/tertiary)로 정보 위계 표현. 다색 사용은 AI slop(§6).
 

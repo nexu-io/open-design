@@ -1,15 +1,16 @@
 {
   "color": {
-    "primary": "#16C5FF",
-    "primaryDark": "#0DA5E0",
-    "textPrimary": "#1D2024",
-    "textSecondary": "#7D8085",
-    "textTertiary": "#5A5E63",
+    "accent": "#16C5FF",
+    "accentHover": "#0DA5E0",
+    "accentActive": "#0DA5E0",
+    "fg": "#1D2024",
+    "fg2": "#7D8085",
+    "muted": "#5A5E63",
     "border": "#E5E5EA",
-    "background": "#F5F5F5",
-    "error": "#FF4D4D",
-    "white": "#FFFFFF"
+    "bg": "#F5F5F5",
+    "danger": "#FF4D4D",
+    "surface": "#FFFFFF"
   },
-  "radius": { "btn": "12px", "card": "16px", "modal": "20px", "sheet": "20px" },
+  "radius": { "sm": "12px", "md": "16px", "lg": "20px", "pill": "9999px" },
   "note": "브랜드 식별색 정본 = brands/bodoc/brand.md Palette"
 }
