@@ -29,7 +29,7 @@ export interface MemoryConfigController {
   enabled: boolean;
   /** The four per-hook flags, in the shape the hooks panel consumes. */
   hookFlags: Record<MemoryConfigFlagKey, boolean>;
-  /** Flip the master switch (optimistic; fire-and-forget PATCH). */
+  /** Flip the master switch (optimistic; rolls back on a failed PATCH). */
   onToggleEnabled: (next: boolean) => Promise<void>;
   /** Flip one per-hook flag (optimistic; rolls back on a failed PATCH). */
   onToggleHook: (key: MemoryConfigFlagKey, next: boolean) => Promise<void>;
@@ -55,10 +55,19 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
 
   const onToggleEnabled = useCallback(
     async (next: boolean) => {
+      // Optimistic flip; keep the prior value so a rejected PATCH (the provider
+      // signals a non-2xx write with `false`) or a thrown transport error rolls
+      // the master switch back — mirroring the per-flag path below.
+      const previous = enabled;
       setEnabled(next);
-      await port.patchConfig(enabledPatch(next));
+      let ok = false;
+      try {
+        ok = await port.patchConfig(enabledPatch(next));
+      } finally {
+        if (!ok) setEnabled(previous);
+      }
     },
-    [port],
+    [enabled, port],
   );
 
   // Map each hook key to its setter so a single optimistic-set + rollback path
