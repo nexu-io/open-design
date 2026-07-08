@@ -81,4 +81,16 @@ describe('Horangdesign immersive workflow prompt', () => {
     expect(homeView).toContain('mood/community design systems');
     expect(projectRoutes).toContain("if (!resolveBody && !normalizedSkillId && initialSessionMode === 'design')");
   });
+
+  it('keeps Horang rewrite foundation and technique-library hooks wired', () => {
+    const skill = readFileSync(path.join(repoRoot, 'skills/horang-design-pro/SKILL.md'), 'utf8');
+    const body = readFileSync(path.join(repoRoot, 'design-systems/horang-immersive/DESIGN.md'), 'utf8');
+    const compactPrompt = composeSystemPrompt({ tokenDietEnabled: true });
+    expect(discovery).toContain('HORANG REWRITE FOUNDATION');
+    expect(discovery).toContain('Technique-library contract');
+    expect(compactPrompt).toContain('Technique-library hook');
+    expect(skill).toContain('Horang Rewrite Foundation v2');
+    expect(body).toContain('Horang Rewrite Canvas v2');
+  });
+
 });

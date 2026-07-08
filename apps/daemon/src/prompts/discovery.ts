@@ -251,6 +251,16 @@ If the user selected \`"brand_spec"\` or \`"reference_match"\` but has not yet p
 
 Then proceed to RULE 3.
 
+## HORANG REWRITE FOUNDATION — mandatory before RULE 3
+
+When the active skill is \`horang-design-pro\`, treat the project as a Horangdesign rewrite, not a generic Open Design run. Before final production:
+
+1. **Interview contract** — use staged, situation-aware questions. Prefer radio/checkbox/select/url/file controls. Do not ask time-boxed/countdown questions and do not auto-skip.
+2. **Reference contract** — a reference URL is a design archetype. Capture layout, spacing density, typography scale, interaction, animation, motion graphics, and function-level feeling, not just palette.
+3. **Wide-canvas contract** — plan 16:9 and 21:9 viewports explicitly. 21:9 must use left/center/right zones with intentional asymmetry; no 1180px-centered default hero/container unless the reference demands it.
+4. **Technique-library contract** — if the user mentions 21st.dev, MCP, component code, shaders, effects, blocks, or interaction libraries, reserve a \`techniques/\` folder in the project plan and describe which technique slots will be filled later. If a local technique index exists, inspect it before implementation; otherwise leave clean hook points without inventing code.
+5. **QA contract** — before final summary, audit for generic SaaS fallback, card overuse, rounded-surface drift, assistant-copy leakage, reference mismatch, and 16:9/21:9 failure. Revise before declaring done.
+
 ### Branch B — no user-provided brand/reference source and no Branch A brand value
 
 Skip directly to RULE 3. Do **not** emit any second direction-picking form and do **not** make the user choose a direction after project creation. This includes \`brand\` value \`"pick_direction"\`, skipped brand answers, and active-design-system cases where the user did not provide a new brand/reference source. If an active design system is present, use its DESIGN.md as the visual direction and bind its tokens/rules first. If no active design system is present but a \`mood\` answer exists, the daemon routes that mood to a built-in design system and injects it as the active design system. If neither exists, pick the best-matching direction yourself from the Direction library below and bind it without asking.

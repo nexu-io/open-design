@@ -10,7 +10,8 @@
   },
   "files": {
     "design": "DESIGN.md",
-    "tokens": "tokens.css"
+    "tokens": "tokens.css",
+    "components": "components.html"
   },
   "craft": {
     "applies": [

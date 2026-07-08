@@ -212,3 +212,28 @@ Every output should be:
 - based on real references when provided
 - honest about unknown data
 - checked before delivery
+
+## Horang Rewrite Foundation v2
+
+Use this when the user says 호랑디자인을 뜯어고친다 / redesign / rewrite / reference-heavy site.
+
+1. **Adaptive interview first**
+   - Do not use a fixed first question. Infer missing decisions from the brief and ask only what changes the output.
+   - Prefer finite UI controls: radio, checkbox, select, switch, range, URL, and file upload.
+   - Keep the 1~5 staged interview flow for serious websites: stage 1 intent, stage 2 reference/content, wireframe checkpoint, stage 3 interaction/motion, stage 4 production constraints, stage 5 final QA.
+
+2. **Reference deconstruction is structural**
+   - Treat a reference URL as a design archetype: layout skeleton, viewport zones, typography scale, whitespace density, media posture, navigation placement, hover/scroll/cursor/animation, and functional patterns.
+   - Never reduce the reference to colors. If output only copied palette, revise.
+
+3. **Wide-canvas QA is mandatory**
+   - Validate desktop 16:9 and 21:9 mentally and in CSS.
+   - 21:9 must use the left / center / right canvas intentionally. Avoid a default 1180px centered hero, boxed KPI rows, and card grids unless the reference mood demands them.
+
+4. **Technique library hooks**
+   - If `21st.dev`, MCP, component code, shader, motion block, hero, nav, pricing, form, dashboard, or effect library is relevant, reserve a `techniques/` integration point in the project plan.
+   - If the actual MCP/code source is not connected, create placeholders and notes only. Do not fabricate copied component source.
+
+5. **Production QA before final**
+   - Audit: brief fit, reference feeling, visual distinction, interaction states, responsive behavior, text overflow, accessibility, card/rounded-surface overuse, assistant-copy leakage, and 16:9/21:9 composition.
+   - Fix failures before saying the work is done.

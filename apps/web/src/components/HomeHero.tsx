@@ -1212,6 +1212,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       <p className="home-hero__subtitle">
         {t('homeHero.subtitlePrefix')}
       </p>
+      <div className="home-hero__horang-pipeline" aria-label="Horangdesign rewrite workflow">
+        <span><strong>01</strong> Adaptive interview</span>
+        <span><strong>02</strong> Reference deconstruction</span>
+        <span><strong>03</strong> 16:9 / 21:9 QA</span>
+        <span><strong>04</strong> Technique hooks</span>
+      </div>
 
       <div
         className={`home-hero__input-card${

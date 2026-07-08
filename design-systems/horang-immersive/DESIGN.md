@@ -104,3 +104,13 @@ Before delivery, the artifact must pass:
 - Visible copy is human, concise, and free of assistant/caveman phrasing.
 - If the user did not ask for static/정적, the website includes real motion/interaction instead of a static poster.
 - Motion vocabulary is named and tied to implementation.
+
+## Horang Rewrite Canvas v2
+
+Horang Immersive is the default visual spine for serious Horangdesign website rewrites.
+
+- **Canvas**: design for full browser surfaces, not a centered template. 16:9 must have a strong focal hierarchy; 21:9 must intentionally use left, center, and right zones.
+- **Reference fidelity**: inherit the reference site's spatial rhythm, type posture, motion feeling, and interaction grammar at feel-level. Do not merely sample colors.
+- **Structure**: prefer scene systems, editorial asymmetry, pinned/revealed sequences, layered media, and controlled scroll choreography over automatic card grids.
+- **Technique slots**: keep room for external component/effect libraries (`techniques/`) so later 21st.dev/MCP code can be inserted without redesigning the page architecture.
+- **Anti-template check**: reject generic SaaS hero, 3-column feature cards, centered stat rows, purple-blue gradient blobs, all-Inter display typography, and visible internal design metadata unless the user explicitly requests those patterns.

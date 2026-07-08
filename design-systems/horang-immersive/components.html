@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Horang Immersive Components</title>
+  <style>
+:root {
+  --bg: #050506;
+  --surface: rgba(255, 255, 255, 0.055);
+  --surface-warm: rgba(246, 239, 225, 0.08);
+  --fg: #f4f1e8;
+  --fg-2: rgba(244, 241, 232, 0.74);
+  --muted: rgba(244, 241, 232, 0.54);
+  --meta: rgba(244, 241, 232, 0.42);
+  --border: rgba(244, 241, 232, 0.16);
+  --border-soft: rgba(244, 241, 232, 0.08);
+  --accent: #d7ff4f;
+  --accent-on: #050506;
+  --accent-hover: #f0ff95;
+  --accent-active: #a9db25;
+  --success: #5ee787;
+  --warn: #f6c85f;
+  --danger: #ff5c7a;
+  --font-display: "PP Neue Montreal", "Neue Haas Grotesk Display", "Inter Tight", system-ui, sans-serif;
+  --font-body: "Inter", "Neue Haas Grotesk Text", system-ui, sans-serif;
+  --font-mono: "Space Mono", "JetBrains Mono", ui-monospace, monospace;
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 28px;
+  --text-2xl: clamp(44px, 8vw, 132px);
+  --text-3xl: clamp(64px, 10vw, 168px);
+  --text-4xl: clamp(84px, 14vw, 228px);
+  --leading-body: 1.45;
+  --leading-tight: 0.88;
+  --tracking-display: -0.06em;
+  --section-y-desktop: 112px;
+  --section-y-tablet: 84px;
+  --section-y-phone: 56px;
+  --container-max: 1720px;
+  --container-gutter-desktop: clamp(32px, 5vw, 84px);
+  --container-gutter-tablet: 32px;
+  --container-gutter-phone: 20px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 28px 90px rgba(0, 0, 0, 0.46);
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 78% 18%, rgba(215, 255, 79, 0.16), transparent 28%),
+    radial-gradient(circle at 18% 78%, rgba(246, 239, 225, 0.08), transparent 34%),
+    var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+}
+.stage {
+  width: min(100%, var(--container-max));
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: var(--container-gutter-desktop);
+  display: grid;
+  grid-template-columns: minmax(180px, 0.74fr) minmax(320px, 1.35fr) minmax(220px, 0.9fr);
+  gap: clamp(24px, 4vw, 76px);
+  align-items: center;
+}
+.eyebrow {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+h1 {
+  margin: 14px 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-display);
+}
+.lead {
+  max-width: 54ch;
+  color: var(--fg-2);
+  font-size: var(--text-lg);
+  line-height: var(--leading-body);
+}
+.panel,
+.card {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--elev-raised);
+  backdrop-filter: blur(22px);
+}
+.panel { padding: 24px; border-radius: var(--radius-lg); }
+.card { padding: 16px; border-radius: var(--radius-md); }
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.stack-3 { display: grid; gap: 12px; }
+.stack-4 { display: grid; gap: 16px; }
+.stack-6 { display: grid; gap: 24px; }
+.btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 11px 16px;
+  font: 700 var(--text-sm)/1 var(--font-body);
+  cursor: pointer;
+}
+.btn-primary { background: var(--accent); color: var(--accent-on); border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+a:focus-visible,
+input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.btn-secondary { background: transparent; color: var(--fg); }
+.badge, kbd {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  padding: 4px 8px;
+  font: 600 var(--text-xs)/1 var(--font-mono);
+}
+.field { display: grid; gap: 6px; color: var(--muted); font-size: var(--text-sm); }
+input { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); background: rgba(255,255,255,0.035); color: var(--fg); padding: 11px 12px; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.icon { width: 18px; height: 18px; display: inline-block; border-radius: 50%; background: var(--accent); }
+.body-muted { color: var(--muted); }
+.body-sm { font-size: var(--text-sm); }
+@media (max-width: 900px) { .stage { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <aside class="stack-4">
+      <span class="eyebrow">Horang Immersive</span>
+      <span class="badge">21:9 ready</span>
+      <kbd>scroll / reveal</kbd>
+    </aside>
+    <section class="stack-6">
+      <div>
+        <span class="eyebrow">Scene-first component grammar</span>
+        <h1>Spatial web, not centered template.</h1>
+      </div>
+      <p class="lead">Use asymmetric viewport zones, sharp typographic scale, restrained surfaces, and motion hooks for 3D/Spline-style web production.</p>
+      <div class="row-between">
+        <button class="btn btn-primary">Build scene</button>
+        <button class="btn btn-secondary">Inspect reference</button>
+      </div>
+    </section>
+    <aside class="panel stack-4">
+      <div class="row-between"><strong>QA gates</strong><span class="icon" aria-hidden="true"></span></div>
+      <div class="card stack-3"><span class="body-sm">16:9 / 21:9 composition</span><span class="body-muted">left · center · right zones</span></div>
+      <label class="field">Reference URL<input value="https://example.com" /></label>
+      <a href="#">Technique hook</a>
+    </aside>
+  </main>
+</body>
+</html>

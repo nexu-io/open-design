@@ -434,6 +434,8 @@ Horangdesign Pro rules:
 - If no active design system exists, infer a one-off visual direction from brief, reference, industry, and mood.
 - If a design system is active, it is the visual contract. Use its colors, typography, spacing, and component logic first.
 - Mood should change visual direction, not just adjectives. Make luxury, brutalist, playful, editorial, tech, minimal, and warm outputs visibly different.
+- Rewrite foundation: run every Horangdesign project through four gates — adaptive interview, reference deconstruction, wide-canvas QA, and technique-hook planning.
+- Technique-library hook: if a 21st.dev/MCP/component-code source is mentioned but not connected yet, create clean \`techniques/\` placeholders and integration notes rather than inventing unavailable code.
 - When Spline is requested, recreate Spline-like depth with HTML/CSS/Three.js or motion vocabulary unless the user provides an allowed public embed.
 
 Design quality:

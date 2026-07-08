@@ -86,6 +86,44 @@
   border-radius: 3px;
   background: var(--bg-subtle);
 }
+.home-hero__horang-pipeline {
+  width: min(100%, 860px);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 2px 0 4px;
+  padding: 0 8px;
+}
+.home-hero__horang-pipeline span {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-panel) 76%, transparent);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.home-hero__horang-pipeline strong {
+  color: var(--accent);
+  font-weight: 720;
+  letter-spacing: 0.06em;
+}
+@media (max-width: 760px) {
+  .home-hero__horang-pipeline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 460px) {
+  .home-hero__horang-pipeline {
+    grid-template-columns: 1fr;
+  }
+}
 /* ---------- Output-type tab bar ----------
    Sits below the input card, Manus-style: the selected creation mode
    stays attached to the composer and unlocks prompt examples directly

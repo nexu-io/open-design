@@ -1,0 +1,67 @@
+{
+  "version": "0.1.0",
+  "source": "21st.dev MCP/export pending",
+  "lastIngestedAt": null,
+  "categories": [
+    {
+      "id": "heroes",
+      "title": "Hero / landing sections",
+      "description": "Above-the-fold layouts, immersive entries, CTA blocks.",
+      "items": []
+    },
+    {
+      "id": "navigation",
+      "title": "Navigation",
+      "description": "Menus, command palettes, dock/rail navigation.",
+      "items": []
+    },
+    {
+      "id": "backgrounds",
+      "title": "Backgrounds",
+      "description": "Gradient, mesh, video, particle, and spatial backgrounds.",
+      "items": []
+    },
+    {
+      "id": "shaders",
+      "title": "Shaders / WebGL",
+      "description": "Shader effects, Three.js/WebGL visuals, canvas effects.",
+      "items": []
+    },
+    {
+      "id": "motion-scroll",
+      "title": "Motion / scroll",
+      "description": "Scroll choreography, reveal, parallax, pinned sequences.",
+      "items": []
+    },
+    {
+      "id": "forms",
+      "title": "Forms / inputs",
+      "description": "Input UX, validation, upload, selection controls.",
+      "items": []
+    },
+    {
+      "id": "pricing",
+      "title": "Pricing / conversion",
+      "description": "Pricing tables, comparison, CTA conversion blocks.",
+      "items": []
+    },
+    {
+      "id": "dashboards",
+      "title": "Dashboards / data UI",
+      "description": "Tables, charts, dense operations UI.",
+      "items": []
+    },
+    {
+      "id": "ai-chat",
+      "title": "AI chat / assistant UI",
+      "description": "Chat surfaces, prompt boxes, generation controls.",
+      "items": []
+    },
+    {
+      "id": "system-ui",
+      "title": "System UI",
+      "description": "Buttons, cards, modals, tabs, badges, layout primitives.",
+      "items": []
+    }
+  ]
+}
