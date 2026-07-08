@@ -125,14 +125,34 @@ test('checkPromptArgvBudget does not false-positive on POSIX where argv ceilings
   assert.ok(win, 'Windows must still flag a 50 KB argv prompt');
   assert.equal(win.code, 'AGENT_PROMPT_TOO_LARGE');
 
-  // POSIX still guards a genuinely enormous prompt near the per-arg ceiling,
+  // Linux still guards a genuinely enormous prompt near the per-arg ceiling,
   // so a runaway prompt fails fast with the actionable message instead of a
   // generic spawn E2BIG.
   const huge = 'x'.repeat(200_000);
   assert.ok(
     checkPromptArgvBudget(deepseek, huge, 'linux'),
-    'POSIX must still flag a 200 KB argv prompt near MAX_ARG_STRLEN',
+    'Linux must still flag a 200 KB argv prompt near MAX_ARG_STRLEN',
   );
+});
+
+// Issue #4796 follow-up: macOS has no per-arg MAX_ARG_STRLEN cap; ARG_MAX is
+// 1 MB total. The previous 100 KB POSIX floor false-positived on normal design
+// projects using Kimi (argv-only adapter) once default-router + skills +
+// conversation history reached ~100-138 KB. Darwin gets a 256 KiB ceiling,
+// while Linux/Windows keep their stricter caps.
+test('checkPromptArgvBudget uses a higher argv ceiling on darwin (#4796 follow-up)', () => {
+  const realWorld = 'x'.repeat(138_000);
+  assert.equal(
+    checkPromptArgvBudget(kimi, realWorld, 'darwin'),
+    null,
+    'darwin must allow ~138 KB argv prompts (default router + history + skills)',
+  );
+
+  const runaway = 'x'.repeat(300_000);
+  const flagged = checkPromptArgvBudget(kimi, runaway, 'darwin');
+  assert.ok(flagged, 'darwin must still flag a 300 KB runaway argv prompt');
+  assert.equal(flagged?.code, 'AGENT_PROMPT_TOO_LARGE');
+  assert.equal(flagged?.limit, 262_144);
 });
 
 test('checkPromptArgvBudget gives DeepSeek-specific guidance for large contexts', () => {

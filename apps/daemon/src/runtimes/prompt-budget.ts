@@ -19,22 +19,28 @@ function promptArgvBudgetMessage(
 
 // `maxPromptArgBytes` is sized for Windows' ~32 KB CreateProcess
 // command-line limit (see deepseek.ts). On POSIX the per-arg ceiling is far
-// higher — Linux's MAX_ARG_STRLEN is 128 KB and macOS's ARG_MAX is 256 KB
-// (total argv+env) — and the *real* Windows command-line cap is guarded
-// precisely post-buildArgs by checkWindowsCmdShim/DirectExeCommandLineBudget.
-// So applying the conservative Windows byte budget unconditionally on
-// macOS/Linux false-positives on normal projects (system prompt + DESIGN.md +
-// skills ≈ 50-70 KB) with a confusing "prompt too long" (issue #4473). On
-// POSIX we keep a much larger guard — headroom under Linux's 128 KB per-arg
-// ceiling — purely so a runaway prompt still fails fast with the actionable
-// message instead of a generic spawn E2BIG.
+// higher, but the two POSIX platforms differ:
+//   - Linux MAX_ARG_STRLEN is ~128 KB per arg.
+//   - macOS ARG_MAX is 1 MB total (argv+env) and there is no per-arg
+//     MAX_ARG_STRLEN cap, so a single 100-150 KB arg is fine.
+// The *real* Windows command-line cap is guarded precisely post-buildArgs by
+// checkWindowsCmdShim/DirectExeCommandLineBudget. Applying the conservative
+// Windows byte budget unconditionally on macOS/Linux false-positives on normal
+// projects (system prompt + DESIGN.md + skills ≈ 50-140 KB) with a confusing
+// "prompt too long" (issue #4473). We keep platform-aware guards — headroom
+// under Linux's 128 KB per-arg ceiling, and a larger darwin guard under the
+// 1 MB ARG_MAX — purely so a runaway prompt still fails fast with the
+// actionable message instead of a generic spawn E2BIG.
 const POSIX_ARGV_PROMPT_BUDGET = 100_000;
+const DARWIN_ARGV_PROMPT_BUDGET = 262_144; // 256 KiB, ~25 % of ARG_MAX
 
 function resolveArgvPromptBudget(
   maxPromptArgBytes: number,
   platform: NodeJS.Platform,
 ): number {
   if (platform === 'win32') return maxPromptArgBytes;
+  if (platform === 'darwin')
+    return Math.max(maxPromptArgBytes, DARWIN_ARGV_PROMPT_BUDGET);
   return Math.max(maxPromptArgBytes, POSIX_ARGV_PROMPT_BUDGET);
 }
 
