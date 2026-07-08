@@ -8,41 +8,32 @@ import { Icon } from './Icon';
 import { useT } from '../i18n';
 
 import { MemoryProfilePanel } from './MemoryProfilePanel';
-import { MemoryHowPanel } from '../features/memory/components/MemoryHowPanel';
-import { MemoryAdvancedModal } from '../features/memory/components/MemoryAdvancedModal';
-import { MemoryList } from '../features/memory/components/MemoryList';
-import { MemoryManualEditor } from '../features/memory/components/MemoryManualEditor';
-import { MemoryConnectedPanel } from '../features/memory/components/MemoryConnectedPanel';
+// The memory slice's public API is its barrel; the orchestrator reaches slice
+// internals only through it (ADR 0002, enforced by check-web-slice-boundaries).
 import {
+  MemoryHowPanel,
+  MemoryAdvancedModal,
+  MemoryList,
+  MemoryManualEditor,
+  MemoryConnectedPanel,
   useWiredMemoryConfig,
-  type MemoryConfigController,
-} from '../features/memory/hooks/useMemoryConfig.hooks';
-import {
   useMemoryFlash,
-  type MemoryFlashController,
-} from '../features/memory/hooks/useMemoryFlash.hooks';
-import {
   useWiredMemoryEntries,
+  useWiredMemoryExtractions,
+  useWiredMemoryConnectors,
+  useMemoryNavigation,
+  memorySourceTabs,
+  visibleExtractionsFor,
+  type MemoryConfigController,
+  type MemoryFlashController,
   type MemoryEntriesController,
   type MemoryEntriesCoordination,
-} from '../features/memory/hooks/useMemoryEntries.hooks';
-import {
-  useWiredMemoryExtractions,
   type MemoryExtractionsController,
-} from '../features/memory/hooks/useMemoryExtractions.hooks';
-import {
-  useWiredMemoryConnectors,
   type MemoryConnectorsController,
   type MemoryConnectorsCoordination,
-} from '../features/memory/hooks/useMemoryConnectors.hooks';
-import {
-  useMemoryNavigation,
   type MemoryNavigationController,
-} from '../features/memory/hooks/useMemoryNavigation.hooks';
-
-import type { MemorySectionProps } from '../features/memory/types';
-import { memorySourceTabs } from '../features/memory/formatters';
-import { visibleExtractionsFor } from '../features/memory/rules';
+  type MemorySectionProps,
+} from '../features/memory';
 import {
   subscribeMemoryEvents,
   subscribeConnectorCallback,

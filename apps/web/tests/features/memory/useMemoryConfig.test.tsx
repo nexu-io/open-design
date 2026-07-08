@@ -43,6 +43,33 @@ describe('useMemoryConfig', () => {
     expect(patchConfig).toHaveBeenCalledWith({ enabled: false });
   });
 
+  it('rolls the master switch back when the PATCH is rejected (non-2xx => false)', async () => {
+    const patchConfig = vi.fn(async () => false);
+    const { result } = renderHook(() => useMemoryConfig(makePort(patchConfig)));
+
+    expect(result.current.enabled).toBe(true);
+    await act(async () => {
+      await result.current.onToggleEnabled(false);
+    });
+
+    // Optimistic flip reverted because the daemon kept the old value.
+    expect(result.current.enabled).toBe(true);
+    expect(patchConfig).toHaveBeenCalledWith({ enabled: false });
+  });
+
+  it('rolls the master switch back and rethrows when the PATCH throws', async () => {
+    const patchConfig = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    const { result } = renderHook(() => useMemoryConfig(makePort(patchConfig)));
+
+    await act(async () => {
+      await expect(result.current.onToggleEnabled(false)).rejects.toThrow('network down');
+    });
+
+    expect(result.current.enabled).toBe(true);
+  });
+
   it('rolls a per-hook flag back when the PATCH fails', async () => {
     const patchConfig = vi.fn(async () => false);
     const { result } = renderHook(() => useMemoryConfig(makePort(patchConfig)));

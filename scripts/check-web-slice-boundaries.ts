@@ -15,7 +15,10 @@ import ts from "typescript";
 //   2. Only a slice's `dependencies.ts` may import from `providers/`. Every
 //      other feature file depends on the port, not the adapter.
 //   3. No cross-slice deep imports: a slice may import another slice only
-//      through its public barrel (`features/<other>`), never a deep file.
+//      through its public barrel (`features/<other>`), never a deep file. This
+//      also holds from OUTSIDE `features/**`: the orchestrator (and any other
+//      app file) may reach a slice only through its barrel, so the boundary the
+//      slice publishes is the boundary every consumer sees.
 //   4. One transport home per route: a route fetched inside a multi-adapter
 //      provider folder (`providers/<resource>/`) must not also be owned by a
 //      second provider folder. A plain component still fetching that route
@@ -228,6 +231,34 @@ async function checkSliceFiles(violations: Violation[]): Promise<void> {
   }
 }
 
+// Rule 3 (outside-in half): a file outside `features/**` may import a slice only
+// through its public barrel. Without this, the orchestrator could deep-import
+// slice internals and keep the canary coupled while checkSliceFiles — which only
+// walks featuresDir — reports success.
+async function checkExternalSliceImports(violations: Violation[]): Promise<void> {
+  for (const fullPath of await collectSourceFiles(webSrcDir)) {
+    if (fullPath === featuresDir || fullPath.startsWith(featuresDir + path.sep)) continue;
+    const source = await parseSourceFile(fullPath);
+    const rel = repositoryPath(fullPath);
+    for (const { specifier, node } of moduleSpecifiersOf(source)) {
+      if (!specifier.startsWith(".")) continue;
+      const resolved = path.resolve(path.dirname(fullPath), specifier);
+      if (resolved !== featuresDir && !resolved.startsWith(featuresDir + path.sep)) continue;
+      const targetSlice = sliceOf(resolved);
+      if (!targetSlice) continue; // barrel import or a loose top-level features file
+      const barrel = path.join(featuresDir, targetSlice);
+      const isBarrelImport = resolved === barrel || resolved === path.join(barrel, "index");
+      if (!isBarrelImport) {
+        violations.push({
+          filePath: rel,
+          lineNumber: lineOf(source, node.getStart(source)),
+          message: `deep import into slice \`${targetSlice}\` from outside features/ — import its public barrel \`features/${targetSlice}\` instead`,
+        });
+      }
+    }
+  }
+}
+
 async function parseSourceFile(fullPath: string): Promise<ts.SourceFile> {
   return ts.createSourceFile(
     fullPath,
@@ -296,6 +327,7 @@ async function checkTransportHomes(violations: Violation[]): Promise<void> {
 export async function checkWebSliceBoundaries(): Promise<boolean> {
   const violations: Violation[] = [];
   await checkSliceFiles(violations);
+  await checkExternalSliceImports(violations);
   await checkTransportHomes(violations);
 
   if (violations.length > 0) {
