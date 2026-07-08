@@ -7,7 +7,8 @@ description: |
   drafts a post plan with direction options, gates confirmation, produces
   one paste-ready SmartEditor HTML article in a preview shell, and
   self-reviews against channel + brand + tone rules. Works for any brand
-  whose DESIGN.md is loaded as the active design system. Use when the
+  bound to the project via its injected brand context (core + blog
+  deliverable). Use when the
   brief asks for a "네이버 블로그", "naver blog", "블로그 포스팅",
   "블로그 글", or "blog post".
 triggers:

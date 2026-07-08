@@ -8,8 +8,8 @@ description: |
   with direction options, gates confirmation, generates AI backgrounds
   (codex image_gen, cover as style anchor) and composes Korean text via
   Pillow, then self-reviews on 5 axes including a vision-based design
-  check. Works for any brand whose DESIGN.md is loaded as the active
-  design system. Use when the brief asks for a "카드뉴스", "card news",
+  check. Works for any brand bound to the project via its injected brand
+  context (core + cardnews deliverable). Use when the brief asks for a "카드뉴스", "card news",
   "인스타 카드뉴스", "인스타그램 캐러셀", or "instagram carousel".
 triggers:
   - "카드뉴스"
