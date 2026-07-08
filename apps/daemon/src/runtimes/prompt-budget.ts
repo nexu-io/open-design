@@ -25,10 +25,10 @@ function promptArgvBudgetMessage(
 // So applying the conservative Windows byte budget unconditionally on
 // macOS/Linux false-positives on normal projects (system prompt + DESIGN.md +
 // skills ≈ 50-70 KB) with a confusing "prompt too long" (issue #4473). On
-// POSIX we keep a much larger guard — headroom under Linux's 128 KB per-arg
+// POSIX we keep a much larger guard — still below Linux's 128 KiB per-arg
 // ceiling — purely so a runaway prompt still fails fast with the actionable
 // message instead of a generic spawn E2BIG.
-const POSIX_ARGV_PROMPT_BUDGET = 100_000;
+const POSIX_ARGV_PROMPT_BUDGET = 120_000;
 
 function resolveArgvPromptBudget(
   maxPromptArgBytes: number,
