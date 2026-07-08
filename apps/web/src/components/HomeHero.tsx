@@ -36,11 +36,13 @@ import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
 import {
+  trackComposerSessionModeClick,
   trackContextLinkResult,
   trackFigmaHelpModalSurfaceView,
   trackHomeChatComposerClick,
   trackProjectReferenceModalSurfaceView,
 } from '../analytics/events';
+import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import {
   chipsForGroup,
   orderedCreateChips,
@@ -234,6 +236,10 @@ interface Props {
   // no design system / template / prompt) and enters it. Omit to hide the link.
   onStartBlankProject?: () => void;
   executionSwitcher?: ReactNode;
+  // Personalized first-run starting point (spec §7). Rendered directly under
+  // the composer card — before the template section — so a brand-new user sees
+  // their recommended entry without scrolling.
+  recommendationSlot?: ReactNode;
 }
 
 type HomeMentionTab = 'all' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
@@ -357,6 +363,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onExamplePromptStatusChange,
     onStartBlankProject,
     executionSwitcher,
+    recommendationSlot,
   },
   ref,
 ) {
@@ -1936,7 +1943,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             <div className="home-hero__mode-switcher">
               <SessionModeToggle
                 mode={sessionMode}
-                onChange={onSessionModeChange}
+                onChange={(next) => {
+                  if (next !== sessionMode) {
+                    trackComposerSessionModeClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'session_mode_toggle',
+                      mode_before: sessionModeToTracking(sessionMode),
+                      mode_after: sessionModeToTracking(next),
+                    });
+                  }
+                  onSessionModeChange?.(next);
+                }}
               />
             </div>
             {executionSwitcher ? (
@@ -2008,6 +2026,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           ) : null}
         </div>
       ) : null}
+
+      {recommendationSlot}
 
       {activeCreateChip ? null : (
         <div className="home-hero__template-section" data-testid="home-hero-template-section">
@@ -3480,6 +3500,7 @@ function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): st
     case 'video': return t('homeHero.chip.videoDesc');
     case 'audio': return t('homeHero.chip.audioDesc');
     case 'hyperframes': return t('homeHero.chip.hyperframesDesc');
+    case 'webgl': return t('homeHero.chip.webglDesc');
     case 'live-artifact': return t('homeHero.chip.liveArtifactDesc');
     case 'create-brand-kit': return t('homeHero.chip.createBrandKitDesc');
     default: return '';
@@ -3649,6 +3670,11 @@ export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: 
       return hasPart('hyperframes', 'hyperframe');
     case 'live-artifact':
       return has('live-artifact') || hasPart('live-artifact');
+    case 'webgl':
+      return (
+        has('webgl', 'webgl2', 'shader', 'gpu') ||
+        hasPart('webgl', 'shader', 'gpu')
+      );
     case 'image':
       return (has('image') || hasPart('image-template')) && !hasPart('video', 'audio', 'live-artifact');
     case 'video':

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type Database from 'better-sqlite3';
+import type { AgentSessionInvalidationReason } from '@open-design/contracts';
 
 import {
   clearAgentSession,
@@ -11,16 +12,7 @@ import {
 
 type SqliteDb = Database.Database;
 
-/**
- * Why a stored session was NOT resumed this turn. `null` means it WAS resumed
- * (or there was no stored session to begin with). Surfaced for tests and
- * analytics; the daemon reseeds the full transcript for every non-null reason.
- */
-export type ResumeInvalidationReason =
-  | 'model_changed'
-  | 'cwd_changed'
-  | 'conversation_advanced'
-  | 'missing_cursor';
+export type ResumeInvalidationReason = AgentSessionInvalidationReason;
 
 export interface AgentResumeContext {
   /** Stored CLI session id to resume, or null when starting fresh. */

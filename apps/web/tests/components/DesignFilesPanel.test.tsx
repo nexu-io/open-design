@@ -383,6 +383,59 @@ describe("DesignFilesPanel preview", () => {
     expect(stats).toContain("PNG");
   });
 
+  it("does not fetch or iframe large HTML files for the Design Files thumbnail", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = renderPanel([
+      file({
+        name: "large.html",
+        kind: "html",
+        mime: "text/html",
+        size: 2 * 1024 * 1024,
+      }),
+    ]);
+
+    fireEvent.click(container.querySelector(".df-file-row .df-row-name-btn")!);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(container.querySelector(".df-preview-thumb iframe")).toBeNull();
+    expect(container.querySelector(".df-preview-placeholder")?.textContent).toContain("⟨⟩");
+  });
+
+  it("builds small HTML thumbnails asynchronously without URL-loading the iframe first", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response("<!doctype html><html><body><main>Small</main></body></html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = renderPanel([
+      file({
+        name: "small.html",
+        kind: "html",
+        mime: "text/html",
+        size: 16 * 1024,
+        mtime: 1700000000000,
+      }),
+    ]);
+
+    fireEvent.click(container.querySelector(".df-file-row .df-row-name-btn")!);
+
+    expect(container.querySelector(".df-preview-thumb iframe")).toBeNull();
+    await waitFor(() => {
+      const iframe = container.querySelector<HTMLIFrameElement>(".df-preview-thumb iframe");
+      expect(iframe).toBeTruthy();
+      expect(iframe?.getAttribute("src")).toBeNull();
+      expect(iframe?.getAttribute("srcdoc") ?? iframe?.srcdoc ?? "").toContain("Small");
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects/test-project/raw/small.html?v=1700000000000",
+      expect.any(Object),
+    );
+  });
+
   it("renders sketch files with the static sketch preview instead of a broken image", async () => {
     const fetchMock = vi.fn(
       async () =>

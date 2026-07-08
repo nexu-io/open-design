@@ -202,17 +202,6 @@ export function DesignsTab({
 					}
 					return [project.id, null] as const;
 				}
-				const html =
-					files.find((f) => (f.path ?? f.name) === "index.html") ??
-					files
-						.filter((f) => f.kind === "html")
-						.sort((a, b) => b.mtime - a.mtime)[0];
-				if (html) {
-					return [
-						project.id,
-						{ kind: "html" as const, name: html.path ?? html.name },
-					] as const;
-				}
 				const image = files
 					.filter((f) => f.kind === "image")
 					.sort((a, b) => b.mtime - a.mtime)[0];
@@ -954,15 +943,8 @@ export function DesignsTab({
 										<img className="thumb-media" src={cover.src} alt="" loading="lazy" />
 									) : cover.kind === "video" && cover.src ? (
 										<video className="thumb-media" src={cover.src} muted preload="metadata" playsInline />
-									) : cover.kind === "html" && cover.src ? (
-										<iframe
-											className="thumb-iframe"
-											src={cover.src}
-											title=""
-											loading="lazy"
-											sandbox="allow-scripts"
-											tabIndex={-1}
-										/>
+									) : cover.kind === "html" ? (
+										<span className="project-thumb-glyph">{cover.initial}</span>
 									) : (
 										<span className="project-thumb-glyph">{cover.initial}</span>
 									)}

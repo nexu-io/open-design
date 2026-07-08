@@ -1,16 +1,25 @@
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   CUSTOM_MODEL_SENTINEL,
   isCustomModel,
   renderModelOptions,
+  SearchableModelSelect,
 } from '../../src/components/modelOptions';
 import type { AgentModelOption } from '../../src/types';
 
 function renderOptions(models: AgentModelOption[]): string {
   return renderToStaticMarkup(<select>{renderModelOptions(models)}</select>);
 }
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe('renderModelOptions', () => {
   it('renders an empty model list without options', () => {
@@ -73,5 +82,35 @@ describe('isCustomModel', () => {
   it('returns true for unlisted custom ids and the custom sentinel', () => {
     expect(isCustomModel('local/my-model', models)).toBe(true);
     expect(isCustomModel(CUSTOM_MODEL_SENTINEL, models)).toBe(true);
+  });
+});
+
+describe('SearchableModelSelect', () => {
+  it('renders capability tag and cost metadata as option text', async () => {
+    render(
+      <SearchableModelSelect
+        models={[
+          {
+            id: 'deepseek-v4-flash',
+            label: 'deepseek-v4-flash',
+            inputPriceUsdPerMillion: 0.14,
+          },
+        ]}
+        value="deepseek-v4-flash"
+        onChange={vi.fn()}
+        searchPlaceholder="Search models"
+        minSearchableOptions={1}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const option = await screen.findByRole('option', { name: /^deepseek-v4-flash$/ });
+    expect(option.textContent).toContain('Lowest cost');
+    expect(option.textContent).toContain('Fast');
+    expect(option).toHaveAccessibleName('deepseek-v4-flash');
+    expect(option).toHaveAccessibleDescription('Lowest cost Fast');
+    expect(option.querySelector('[data-description]')).toBeNull();
+    expect(option.querySelector('[data-label]')).toBeNull();
   });
 });

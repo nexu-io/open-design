@@ -1,0 +1,289 @@
+---
+/*
+ * /showcase/ — curated gallery of real Open Design output.
+ *
+ * Acquisition-funnel page: evaluating users want to see what the tool
+ * actually produces before trying it. Every card is a real, shipped piece —
+ * launch sites, working prototypes, decks, published motion films — with a
+ * client-side type filter and a short "why it looks different" strip.
+ *
+ * Data + copy live in `showcase-i18n.ts` (structural work records shared
+ * across locales; copy merged over the English base per locale). Covers are
+ * committed JPEGs under `public/showcase/`; template-library cards reuse the
+ * baked preview clips already on the repo-assets CDN, and hover-play them.
+ * Per-locale routes come from `[locale]/showcase/`.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import LazyImg from '../../_components/lazy-img.astro';
+import { localeFromPath, localizedHref } from '../../i18n';
+import { getShowcaseCopy, SHOWCASE_WORKS, type ShowcaseWorkType } from '../../showcase-i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const t = getShowcaseCopy(locale);
+const href = (path: string) => localizedHref(path, locale);
+
+const TYPES: ShowcaseWorkType[] = ['landing', 'prototype', 'deck', 'video'];
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: t.meta.title,
+  description: t.meta.description,
+  url: new URL('/showcase/', Astro.site).toString(),
+  numberOfItems: SHOWCASE_WORKS.length,
+};
+
+function cardLinkLabel(work: (typeof SHOWCASE_WORKS)[number]): string | null {
+  if (!work.href) return null;
+  if (!work.external) return t.card.viewTemplate;
+  return work.href.startsWith('https://x.com/') ? t.card.viewOnX : t.card.viewLive;
+}
+---
+
+<Layout title={t.meta.title} description={t.meta.description} jsonLd={jsonLd}>
+  <header class="showcase-head">
+    <span class="label">{t.hero.label}</span>
+    <h1 class="display">{t.hero.title}</h1>
+    <p class="lead">{t.hero.lead}</p>
+  </header>
+
+  <nav class="showcase-filters" aria-label={t.hero.label}>
+    <button class="pill active" data-filter="all" type="button">{t.filters.all}</button>
+    {TYPES.map((type) => (
+      <button class="pill" data-filter={type} type="button">{t.filters[type]}</button>
+    ))}
+  </nav>
+
+  <section class="showcase-grid">
+    <ul>
+      {SHOWCASE_WORKS.map((work) => {
+        // Every work id has copy in the English base; the fallback only
+        // guards the types (noUncheckedIndexedAccess).
+        const copy = t.works[work.id] ?? { title: work.id, blurb: '' };
+        const linkLabel = cardLinkLabel(work);
+        const dest = work.href ? (work.external ? work.href : href(work.href)) : null;
+        return (
+          <li class="work-card" data-type={work.type}>
+            <div class="cover" data-video={work.hoverVideo ?? null}>
+              <LazyImg src={work.cover} alt={copy.title} width={1200} height={750} />
+              {work.replicaDemo && <span class="replica-badge">{t.card.replicaBadge}</span>}
+              <span class="type-tag">{t.filters[work.type]}</span>
+            </div>
+            <div class="meta">
+              <h2>{copy.title}</h2>
+              <p>{copy.blurb}</p>
+              <div class="foot">
+                <span class="made-with">{t.card.madeWith(work.madeWith)}</span>
+                {dest && linkLabel && (
+                  <a
+                    href={dest}
+                    {...(work.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                  >
+                    {linkLabel} ↗
+                  </a>
+                )}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  </section>
+
+  <section class="showcase-figma">
+    <span class="label">{t.figma.label}</span>
+    <h2>{t.figma.title}</h2>
+    <div class="diff-grid">
+      {t.figma.items.map((item) => (
+        <article>
+          <h3>{item.title}</h3>
+          <p>{item.body}</p>
+        </article>
+      ))}
+    </div>
+    <a class="compare-cta" href={href('/compare/')}>{t.figma.compareCta} →</a>
+  </section>
+</Layout>
+
+<style>
+  .showcase-head {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 4.5rem 1.5rem 2rem;
+    text-align: center;
+  }
+  .showcase-head .label,
+  .showcase-figma .label {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    opacity: 0.55;
+    margin-bottom: 0.9rem;
+  }
+  .showcase-head .display {
+    font-size: clamp(2rem, 5vw, 3.25rem);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0 0 1rem;
+  }
+  .showcase-head .lead {
+    font-size: 1.05rem;
+    line-height: 1.6;
+    opacity: 0.75;
+    margin: 0;
+  }
+
+  .showcase-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    padding: 0.5rem 1.5rem 2rem;
+  }
+  .showcase-filters .pill {
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.45rem 1.05rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    transition: background-color 140ms ease, color 140ms ease;
+  }
+  .showcase-filters .pill:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+  .showcase-filters .pill.active {
+    background: var(--ink, #111);
+    border-color: var(--ink, #111);
+    color: var(--paper, #fff);
+  }
+
+  .showcase-grid { max-width: 74rem; margin: 0 auto; padding: 0 1.5rem 3rem; }
+  .showcase-grid ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+    gap: 1.5rem;
+  }
+  .work-card {
+    border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: color-mix(in srgb, currentColor 2.5%, transparent);
+    transition: transform 160ms ease, box-shadow 160ms ease;
+  }
+  .work-card:hover { transform: translateY(-3px); box-shadow: 0 14px 34px rgb(0 0 0 / 0.10); }
+  .work-card[hidden] { display: none; }
+
+  .cover { position: relative; aspect-ratio: 16 / 10; overflow: hidden; }
+  .cover :global(img),
+  .cover video { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+  .cover video { position: absolute; inset: 0; opacity: 0; transition: opacity 160ms ease; }
+  .cover video.playing { opacity: 1; }
+  .replica-badge,
+  .type-tag {
+    position: absolute;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.28rem 0.6rem;
+    border-radius: 999px;
+    backdrop-filter: blur(8px);
+  }
+  .type-tag { top: 0.75rem; left: 0.75rem; background: rgb(0 0 0 / 0.62); color: #fff; }
+  .replica-badge { top: 0.75rem; right: 0.75rem; background: rgb(255 255 255 / 0.9); color: #111; }
+
+  .meta { display: flex; flex-direction: column; gap: 0.45rem; padding: 1rem 1.1rem 1.15rem; flex: 1; }
+  .meta h2 { font-size: 1.02rem; line-height: 1.3; margin: 0; letter-spacing: -0.01em; }
+  .meta p { font-size: 0.86rem; line-height: 1.55; opacity: 0.72; margin: 0; flex: 1; }
+  .meta .foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
+  }
+  .made-with { opacity: 0.55; font-weight: 600; }
+  .foot a { font-weight: 700; text-decoration: none; color: inherit; white-space: nowrap; }
+  .foot a:hover { text-decoration: underline; }
+
+  .showcase-figma {
+    max-width: 74rem;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4.5rem;
+    text-align: center;
+    border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  }
+  .showcase-figma h2 {
+    font-size: clamp(1.4rem, 3vw, 2rem);
+    letter-spacing: -0.015em;
+    margin: 0 0 1.75rem;
+  }
+  .diff-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 1.25rem;
+    text-align: left;
+  }
+  .diff-grid article {
+    border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+    border-radius: 12px;
+    padding: 1.1rem 1.2rem;
+  }
+  .diff-grid h3 { font-size: 0.95rem; margin: 0 0 0.4rem; }
+  .diff-grid p { font-size: 0.85rem; line-height: 1.55; opacity: 0.72; margin: 0; }
+  .compare-cta {
+    display: inline-block;
+    margin-top: 1.9rem;
+    font-weight: 700;
+    text-decoration: none;
+    color: inherit;
+    border-bottom: 2px solid currentColor;
+    padding-bottom: 0.1rem;
+  }
+</style>
+
+<script>
+  // Type filter — pure client-side show/hide, no routing state.
+  const pills = Array.from(document.querySelectorAll<HTMLButtonElement>('.showcase-filters .pill'));
+  const cards = Array.from(document.querySelectorAll<HTMLElement>('.work-card'));
+  for (const pill of pills) {
+    pill.addEventListener('click', () => {
+      for (const p of pills) p.classList.toggle('active', p === pill);
+      const filter = pill.dataset.filter;
+      for (const card of cards) card.hidden = filter !== 'all' && card.dataset.type !== filter;
+    });
+  }
+
+  // Hover-play for cards backed by a baked CDN clip: the <video> is created
+  // lazily on first hover so idle cards cost nothing beyond their poster.
+  for (const cover of document.querySelectorAll<HTMLElement>('.cover[data-video]')) {
+    let video: HTMLVideoElement | null = null;
+    cover.addEventListener('mouseenter', () => {
+      if (!video) {
+        video = document.createElement('video');
+        video.src = cover.dataset.video!;
+        video.muted = true;
+        video.loop = true;
+        video.playsInline = true;
+        video.preload = 'none';
+        cover.appendChild(video);
+      }
+      void video.play().then(() => video?.classList.add('playing')).catch(() => {});
+    });
+    cover.addEventListener('mouseleave', () => {
+      if (!video) return;
+      video.pause();
+      video.classList.remove('playing');
+    });
+  }
+</script>

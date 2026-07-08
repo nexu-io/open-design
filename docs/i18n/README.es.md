@@ -125,6 +125,7 @@ Dentro del Studio de un proyecto, el mismo sistema de diseño produce múltiples
 | [Cline](https://github.com/cline/cline) | ✅ Compatible | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Compatible | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Compatible | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ Compatible | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Compatible | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Compatible | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Compatible | `od mcp install hermes` |

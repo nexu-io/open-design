@@ -125,6 +125,7 @@ Im Studio eines Projekts streamt dasselbe Designsystem mehrere Artefakttypen her
 | [Cline](https://github.com/cline/cline) | ✅ Unterstützt | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Unterstützt | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Unterstützt | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ Unterstützt | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Unterstützt | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Unterstützt | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Unterstützt | `od mcp install hermes` |

@@ -2,6 +2,9 @@
 
 Design doc (human/reviewer-facing). Implementation runbooks per slice are written separately at build time.
 
+Shared contract note: the agent-agnostic session-map contract now lives in
+`specs/change/20260707-agent-session-map-contract/spec.md`.
+
 Status: proposed · Parent: #3408 · Upstream background: amr-latency-session-reuse-prompt-cache.md
 
 ## Why

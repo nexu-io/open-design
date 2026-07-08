@@ -74,6 +74,32 @@ describe('DesignsTab select mode', () => {
     });
   });
 
+  it('does not iframe HTML entry files inside project cards', () => {
+    const htmlProject: Project = {
+      ...project,
+      id: 'project-html',
+      name: 'WebGL Experience',
+      metadata: { kind: 'prototype', entryFile: 'index.html' },
+    };
+    const { container } = render(
+      <DesignsTab
+        projects={[htmlProject]}
+        skills={[]}
+        designSystems={[]}
+        onOpen={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onDelete={vi.fn()}
+        onRename={vi.fn()}
+        isActive={false}
+      />,
+    );
+
+    const thumb = container.querySelector('.project-thumb-html');
+    expect(thumb).toBeTruthy();
+    expect(thumb?.querySelector('iframe')).toBeNull();
+    expect(thumb?.querySelector('.project-thumb-glyph')).toBeTruthy();
+  });
+
   it('contains refresh failures and returns the toolbar button to idle', async () => {
     const onRefresh = vi.fn().mockRejectedValue(new Error('daemon unavailable'));
     render(
