@@ -205,31 +205,37 @@ od braze interview <braze_message_id> \
 od braze plan <braze_message_id> --plan-file - << 'EOF'
 {
   "version": "braze_plan_v1",
-  "summary": "<캠페인 한 줄 요약>",
-  "iam_format": "<modal|halfsheet|fullscreen>",
+  "summary": "<배경·가설·목적 요약>",
+  "iamFormat": "modal",
   "tone": "<톤>",
   "emphasis": ["<핵심 강조 1>", "<핵심 강조 2>"],
   "variants": [
-    { "label": "A", "angle": "<디자인 접근 A>" },
-    { "label": "B", "angle": "<디자인 접근 B>" }
+    { "label": "A", "angle": "<디자인 접근 A>", "heading": "<타이틀 영역 후킹 카피 A>", "body": "<본문 영역 카피 A>" },
+    { "label": "B", "angle": "<디자인 접근 B>", "heading": "<타이틀 영역 후킹 카피 B>", "body": "<본문 영역 카피 B>" }
   ],
   "targeting": {
     "segment": "<세그먼트 조건>",
-    "trigger_event_candidates": ["<후보 트리거 1>", "<후보 트리거 2>"],
-    "delivery_model": "action_based"
+    "triggerEvent": "session_start",
+    "deliveryModel": "action_based"
   },
   "cta": [
-    { "label": "<주 CTA 텍스트>", "deeplink": "<딥링크 또는 null>" },
-    { "label": "<보조 CTA 텍스트>", "deeplink": null }
-  ],
-  "liquid_attrs": [
-    { "liquid": "{{custom_attribute.${attr}}}", "attr": "<attr_name>", "reason": "<선정 근거>" }
+    { "label": "<주 CTA 텍스트>", "deeplink": "<딥링크>" },
+    { "label": "<보조 CTA 텍스트>" }
   ],
   "image": { "needed": false, "ratio": null, "format": "PNG" },
   "rejections": []
 }
 EOF
 ```
+
+### 카피 작성 원칙 (헤딩·본문)
+
+`heading`·`body`는 IAM의 타이틀·디스크립션 영역에 그대로 들어가는 **최종 카피**다. 기능 나열이 아니라 사용자 행동을 끌어내도록 마케팅 관점에서 후킹하게 작성한다. (브랜드 톤·금지어는 활성 브랜드 컨텍스트(Active brand + Brand deliverable context 블록)에서만 로드 — 브랜드명·`bodoc://`·attributes 하드코딩 금지.)
+
+- **헤딩(타이틀)**: 첫 3초 안에 시선을 잡는 한 문장. **사용자 이득·호기심·긴급성** 중 하나를 건다. 기능·시스템 용어 나열 금지. (예: `흩어진 내 보험, 한 번에 정리됐어요` — 이득)
+- **본문(디스크립션)**: 헤딩의 약속을 구체화 — **핵심 베네핏 1개 + 지금 행동할 이유**를 2문장 이내로. 끝이 CTA로 자연스럽게 이어지게 한다. 베네핏 2개 이상 욱여넣기 금지.
+- **개인화**: 카탈로그 내 변수로 관련성을 높인다(예: 이름·보유 상태). 변수 형식은 `references/liquid-guide.md` 기준.
+- **A/B**: variant별 카피는 서로 다른 후킹 각도(이득 vs 긴급성 등)를 검증하도록 차별화한다. 카피가 A·B 공통이면 같은 값을 양쪽에 둔다.
 
 사용자에게 기획안을 마크다운 카드로 제시:
 
@@ -243,12 +249,15 @@ EOF
 | 포맷 | <format> |
 | 톤 | <tone> |
 | 핵심 강조 | <emphasis> |
-| Variant A | <angle A> |
-| Variant B | <angle B> |
-| 트리거 이벤트 후보 | <candidates> (Braze 콘솔에서 설정) |
+| Variant A — 각도 | <angle A> |
+| Variant A — 헤딩 | <variants[0].heading> |
+| Variant A — 본문 | <variants[0].body> |
+| Variant B — 각도 | <angle B> |
+| Variant B — 헤딩 | <variants[1].heading> |
+| Variant B — 본문 | <variants[1].body> |
+| 트리거 이벤트 | <triggerEvent> (session_start / push_click / any_purchase / specific_purchase / custom_event) |
 | 주 CTA | <cta[0].label> |
 | 보조 CTA | <cta[1].label> |
-| 개인화 변수 | <liquid_attrs> |
 ```
 
 ### 자가 카피 검토 (Step 3~4 사이)
@@ -256,6 +265,9 @@ EOF
 HTML 빌드 전 기획안 카피의 톤·금지어·CTA 품질을 **Claude 자신이 자가 검토**한다. (DECISIONS.md 결정: OD critique jury 삭제 → main-agent self-review)
 
 체크 항목:
+- [ ] 모든 variant에 `heading`·`body`가 채워짐 (빈 값·플레이스홀더 금지)
+- [ ] 헤딩이 이득·호기심·긴급성 중 하나로 후킹 (기능 나열 아님)
+- [ ] 본문이 베네핏 1개 + 행동 이유, 2문장 이내, CTA로 연결됨
 - [ ] 브랜드 금지어 없음 (활성 브랜드 컨텍스트 anti-patterns 기준)
 - [ ] CTA 텍스트 = 행동 동사, 2개 이하 (BRAZE-DOMAIN §1.2)
 - [ ] Liquid 변수 형식 올바름 (`{{${}}}`/`{{custom_attribute.${}}}`), 카탈로그 내 식별자만
@@ -283,8 +295,54 @@ P0(발송 차단) 발견 시 → 기획안 수정 후 재확인. P1·P2는 평�
 </question-form>
 ```
 
-- **컨펌**: `od braze confirm <braze_message_id>` → status `plan_confirmed` → Step 4
+- **컨펌**: `od braze confirm <braze_message_id>` → status `plan_confirmed` → Step 3.5
 - **반려**: `od braze reject <braze_message_id> --reason "<사유>"` → `rejections` 누적 + 기획안 재작성
+
+---
+
+## Step 3.5 — brief.md 저작 및 저장
+
+`plan_confirmed` 수신 후, HTML 제작(Step 4) **전에** brief.md 마크다운을 저작해 저장한다.
+
+### brief.md 섹션 구조
+
+① **기본 정보**
+- 캠페인 slug, 요청일, 요청 내용 요약
+
+② **인터뷰 결정 사항**
+- 목적, 타겟, 형식, 톤, 트리거
+- 개인화 어트리뷰트 선정/제외 + **근거**
+- CTA
+
+③ **기획안**
+- 기본정보, 요약(배경·가설·목적), 타겟팅
+- 콘텐츠 — variant별로 IAM에 실제 들어가는 카피를 명시:
+  - 헤딩(타이틀 영역): `<variants[*].heading>` — A/B 각각
+  - 본문(디스크립션 영역): `<variants[*].body>` — A/B 각각
+  - CTA(주/보조), 톤, 타입
+- 트리거/스케줄, 성과지표
+
+④ **부록**
+- 개인화 변수 선정/제외 표 + 근거
+- 디자인 방향: 차용 레퍼런스, 토큰 매핑, variant 차별화
+
+### 브랜드 중립성 원칙
+
+개인화 변수·딥링크·attributes 등 **브랜드 사실은 활성 브랜드 컨텍스트(Active brand + Brand deliverable context 블록)에서만** 로드한다. `bodoc://` 식별자·브랜드명·속성을 하드코딩하지 않는다.
+
+### brief 저장
+
+```bash
+od braze brief <braze_message_id> --brief-file -
+```
+
+stdin(파이프)으로 저작한 마크다운을 전달한다. 파일 경로로 저장할 경우:
+
+```bash
+od braze brief <braze_message_id> --brief-file <path>
+```
+
+> **주의**: `od braze confirm`은 이미 Step 3에서 1회 호출했다. brief 저장 실패 시 `confirm`을 재호출하지 말고 `od braze brief` 엔드포인트만 재시도한다. confirm 중복 호출은 variant 중복을 유발한다.
 
 ---
 
@@ -503,6 +561,7 @@ od braze variant <braze_message_id> --variant <uuid-B> --status done
 A: variant-a.html (<상태>)
 B: variant-b.html (<상태>)
 기획안: braze_plan_v1 (DB)
+기획 문서: braze/<messageId>-<slug>/brief.md (디자인 프로젝트 파일)
 
 Braze 대시보드 핸드오프 필요 — REST API로 IAM 전송 불가 (BRAZE-DOMAIN §4.4)
 트리거 이벤트 설정 후보: <candidates>
