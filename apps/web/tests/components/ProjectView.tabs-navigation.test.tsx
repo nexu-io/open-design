@@ -132,6 +132,10 @@ vi.mock('../../src/components/FileWorkspace', () => ({
   },
 }));
 
+vi.mock('../../src/components/production/ProductionWorkspace', () => ({
+  ProductionWorkspace: () => <div data-testid="production-workspace" />,
+}));
+
 vi.mock('../../src/components/Loading', () => ({
   CenteredLoader: () => <div data-testid="loader" />,
 }));
@@ -457,5 +461,22 @@ describe('ProjectView tab URL hydration', () => {
 
     await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent).toBe(''));
     expect(mockedCacheTabsLocally).not.toHaveBeenCalled();
+  });
+
+  it('renders the production workspace when the project metadata is in production mode', async () => {
+    renderProjectView({
+      project: {
+        ...project,
+        metadata: {
+          kind: 'video',
+          workflowMode: 'production',
+          taskCardId: 'science-explainer',
+        } as never,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('production-workspace')).toBeInTheDocument();
+    });
   });
 });

@@ -247,6 +247,7 @@ import {
 import { producedPreviewableArtifact } from '../onboarding/first-generation';
 import { sentPrefilledPrompt } from '../onboarding/first-prompt';
 import { BrandReadyPrompt } from './BrandReadyPrompt';
+import { ProductionWorkspace } from './production/ProductionWorkspace';
 import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
 import { useProjectDetail } from '../hooks/useProjectDetail';
@@ -900,6 +901,10 @@ function clearDesignSystemAuditAutoRepair(projectId: string): void {
 
 function isDesignSystemWorkspaceMetadata(metadata: ProjectMetadata | undefined): boolean {
   return metadata?.importedFrom === 'design-system';
+}
+
+function isProductionWorkspaceMetadata(metadata: ProjectMetadata | undefined): boolean {
+  return (metadata as { workflowMode?: string } | undefined)?.workflowMode === 'production';
 }
 
 function isStoredChatAttachment(value: unknown): value is ChatAttachment {
@@ -8305,6 +8310,142 @@ export function ProjectView({
     </>
   );
 
+  const workspacePanel = isProductionWorkspaceMetadata(currentProject.metadata) ? (
+    <ProductionWorkspace
+      projectId={project.id}
+      projectName={project.name}
+      metadata={currentProject.metadata}
+      projectFiles={projectFiles}
+    />
+  ) : (
+    <FileWorkspace
+      projectId={project.id}
+      projectKind={projectKindFromMetadataToTracking(currentProject.metadata) ?? 'prototype'}
+      rootDirName={(() => {
+        const baseDir = currentProject.metadata?.baseDir;
+        return typeof baseDir === 'string'
+          ? baseDir.split(/[/\\]/).filter(Boolean).pop()
+          : undefined;
+      })()}
+      reloading={false}
+      resolvedDir={projectDetail.resolvedDir}
+      files={projectFiles}
+      liveArtifacts={liveArtifacts}
+      filesRefreshKey={filesRefresh}
+      onRefreshFiles={() => {
+        return refreshWorkspaceItems().then(() => undefined);
+      }}
+      isDeck={isDeck}
+      streaming={currentConversationActionDisabled}
+      commentQueueOnSend={commentQueueOnSend}
+      commentSendDisabled={currentConversationQueueDisabled}
+      openRequest={openRequest}
+      browserOpenRequest={browserOpenRequest}
+      pinnedBrowserTabId={projectIsProgrammaticBrandExtraction ? BRAND_BROWSER_TAB_ID : null}
+      shareRequest={shareRequest}
+      downloadRequest={downloadRequest}
+      slideNavRequest={slideNavRequest}
+      liveArtifactEvents={liveArtifactEvents}
+      designSystemActivityEvents={designSystemActivityEvents}
+      tabsState={openTabsState}
+      onTabsStateChange={persistTabsState}
+      previewComments={previewComments}
+      onSavePreviewComment={savePreviewComment}
+      onRemovePreviewComment={removePreviewComment}
+      onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
+      onBrandExtractionStopRequest={projectIsProgrammaticBrandExtraction ? handleStop : undefined}
+      onRequestBrowserUsePrompt={handleBrowserUsePrompt}
+      onPluginFolderAgentAction={handlePluginFolderAgentAction}
+      activePluginActionPaths={activePluginActionPaths}
+      preferredPreviewFile={currentProject.metadata?.entryFile ?? null}
+      autoPreviewDesignArtifacts={currentProject.metadata?.importedFrom === 'folder'}
+      focusMode={workspaceFocused}
+      onFocusModeChange={setWorkspaceFocused}
+      designSystemProject={designSystemProject}
+      designSystemBrandId={designSystemBrandId}
+      designSystemEditable={designSystemEditable}
+      defaultDesignSystemId={config.designSystemId}
+      onSetDefaultDesignSystem={onChangeDefaultDesignSystem}
+      onDesignSystemsRefresh={onDesignSystemsRefresh}
+      onCreateDesignSystemFromProject={
+        projectIsDesignSystemProject ? undefined : handleCreateDesignSystemFromProject
+      }
+      createDesignSystemFromProjectBusy={projectDesignSystemCreateStarting}
+      onDuplicateProject={onDuplicateProject ? handleDuplicateProject : undefined}
+      duplicateProjectBusy={projectDuplicateStarting}
+      onDeleteDesignSystemProject={onDeleteProject}
+      onDesignSystemNeedsWork={sendDesignSystemFeedback}
+      designSystemReview={currentProject.metadata?.designSystemReview}
+      onDesignSystemReviewDecision={persistDesignSystemReviewDecision}
+      onUseDesignSystem={onCreateProjectFromDesignSystem}
+      designSystemEditRequest={designSystemEditRequest}
+      onConnectRepo={handleConnectRepo}
+      githubConnected={githubConnected}
+      commentPortalId={commentInspectorPortalId}
+      onCommentModeChange={setCommentInspectorActive}
+      chatConfig={config}
+      chatAgentsById={agentsById}
+      chatLocale={locale}
+      conversations={conversations}
+      activeConversationId={activeConversationId}
+      onSelectConversation={handleSelectConversation}
+      onDeleteConversation={handleDeleteConversation}
+      onRenameConversation={handleRenameConversation}
+      onConversationSessionModeChange={handleConversationSessionModeChange}
+      onNewConversation={handleNewConversation}
+      activeConversationChat={activeConversationChatState}
+      onActiveContextChange={handleActiveWorkspaceContextChange}
+      onWorkspaceContextsChange={handleWorkspaceContextsChange}
+      messages={messages}
+      artifactHtml={artifact?.html}
+      conversationError={error}
+      onRetry={handleRetry}
+      onAuthorizeAndRetry={handleSwitchToAmrAndRetry}
+      onLaunchTerminalAuth={handleLaunchAntigravityOauth}
+      conversationId={activeConversationId}
+      headerActions={(
+        <>
+          <HandoffButton
+            projectId={project.id}
+            projectName={project.name}
+            projectDir={projectDetail.resolvedDir}
+            agents={agents}
+            artifactId={headerArtifact.artifact_id}
+            artifactKind={headerArtifact.artifact_kind}
+            metricsConsent={config.telemetry?.metrics === true}
+            installationId={config.installationId}
+          />
+          <EntrySettingsMenu
+            config={config}
+            onThemeChange={handleThemeChange}
+            onOpenSettings={onOpenSettings}
+            trackingPageName="artifact"
+            onTrackTriggerClick={() => {
+              trackArtifactHeaderClick(analytics.track, {
+                page_name: 'artifact',
+                area: 'artifact_header',
+                element: 'settings',
+                ...headerArtifact,
+              });
+            }}
+          />
+        </>
+      )}
+      questionForm={displayedQuestionForm}
+      questionFormPreview={displayedQuestionFormPreview}
+      questionFormKey={displayedQuestionFormKey}
+      questionFormInteractive={displayedQuestionFormActive}
+      questionFormSubmitDisabled={currentConversationActionDisabled}
+      questionFormSubmittedAnswers={displayedQuestionFormSubmittedAnswers}
+      questionsGenerating={displayedQuestionsGenerating}
+      focusQuestionsRequest={focusQuestionsRequest}
+      onSubmitQuestionForm={(text) => {
+        if (currentConversationActionDisabled) return;
+        void handleSend(text, [], [], { entryFrom: 'question_answer' });
+      }}
+    />
+  );
+
   return (
     <div className="app">
       <CritiqueTheaterMount
@@ -8526,137 +8667,7 @@ export function ProjectView({
             />
           )
         ) : null}
-        <FileWorkspace
-          projectId={project.id}
-          projectKind={projectKindFromMetadataToTracking(currentProject.metadata) ?? 'prototype'}
-          rootDirName={(() => {
-            const baseDir = currentProject.metadata?.baseDir;
-            return typeof baseDir === 'string'
-              ? baseDir.split(/[/\\]/).filter(Boolean).pop()
-              : undefined;
-          })()}
-          reloading={false}
-          resolvedDir={projectDetail.resolvedDir}
-          files={projectFiles}
-          liveArtifacts={liveArtifacts}
-          filesRefreshKey={filesRefresh}
-          onRefreshFiles={() => {
-            return refreshWorkspaceItems().then(() => undefined);
-          }}
-          isDeck={isDeck}
-          streaming={currentConversationActionDisabled}
-          commentQueueOnSend={commentQueueOnSend}
-          commentSendDisabled={currentConversationQueueDisabled}
-          openRequest={openRequest}
-          browserOpenRequest={browserOpenRequest}
-          pinnedBrowserTabId={projectIsProgrammaticBrandExtraction ? BRAND_BROWSER_TAB_ID : null}
-          shareRequest={shareRequest}
-          downloadRequest={downloadRequest}
-          slideNavRequest={slideNavRequest}
-          liveArtifactEvents={liveArtifactEvents}
-          designSystemActivityEvents={designSystemActivityEvents}
-          tabsState={openTabsState}
-          onTabsStateChange={persistTabsState}
-          previewComments={previewComments}
-          onSavePreviewComment={savePreviewComment}
-          onRemovePreviewComment={removePreviewComment}
-          onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
-          onBrandExtractionStopRequest={projectIsProgrammaticBrandExtraction ? handleStop : undefined}
-          onRequestBrowserUsePrompt={handleBrowserUsePrompt}
-          onPluginFolderAgentAction={handlePluginFolderAgentAction}
-          activePluginActionPaths={activePluginActionPaths}
-          preferredPreviewFile={currentProject.metadata?.entryFile ?? null}
-          autoPreviewDesignArtifacts={currentProject.metadata?.importedFrom === 'folder'}
-          focusMode={workspaceFocused}
-          onFocusModeChange={setWorkspaceFocused}
-          designSystemProject={designSystemProject}
-          designSystemBrandId={designSystemBrandId}
-          designSystemEditable={designSystemEditable}
-          defaultDesignSystemId={config.designSystemId}
-          onSetDefaultDesignSystem={onChangeDefaultDesignSystem}
-          onDesignSystemsRefresh={onDesignSystemsRefresh}
-          onCreateDesignSystemFromProject={
-            projectIsDesignSystemProject ? undefined : handleCreateDesignSystemFromProject
-          }
-          createDesignSystemFromProjectBusy={projectDesignSystemCreateStarting}
-          onDuplicateProject={onDuplicateProject ? handleDuplicateProject : undefined}
-          duplicateProjectBusy={projectDuplicateStarting}
-          onDeleteDesignSystemProject={onDeleteProject}
-          onDesignSystemNeedsWork={sendDesignSystemFeedback}
-          designSystemReview={currentProject.metadata?.designSystemReview}
-          onDesignSystemReviewDecision={persistDesignSystemReviewDecision}
-          onUseDesignSystem={onCreateProjectFromDesignSystem}
-          designSystemEditRequest={designSystemEditRequest}
-          onConnectRepo={handleConnectRepo}
-          githubConnected={githubConnected}
-          commentPortalId={commentInspectorPortalId}
-          onCommentModeChange={setCommentInspectorActive}
-          chatConfig={config}
-          chatAgentsById={agentsById}
-          chatLocale={locale}
-          conversations={conversations}
-          activeConversationId={activeConversationId}
-          onSelectConversation={handleSelectConversation}
-          onDeleteConversation={handleDeleteConversation}
-          onRenameConversation={handleRenameConversation}
-          onConversationSessionModeChange={handleConversationSessionModeChange}
-          onNewConversation={handleNewConversation}
-          activeConversationChat={activeConversationChatState}
-          onActiveContextChange={handleActiveWorkspaceContextChange}
-          onWorkspaceContextsChange={handleWorkspaceContextsChange}
-          messages={messages}
-          artifactHtml={artifact?.html}
-          conversationError={error}
-          onRetry={handleRetry}
-          onAuthorizeAndRetry={handleSwitchToAmrAndRetry}
-          onLaunchTerminalAuth={handleLaunchAntigravityOauth}
-          conversationId={activeConversationId}
-          headerActions={(
-            <>
-              <HandoffButton
-                projectId={project.id}
-                projectName={project.name}
-                projectDir={projectDetail.resolvedDir}
-                agents={agents}
-                artifactId={headerArtifact.artifact_id}
-                artifactKind={headerArtifact.artifact_kind}
-                metricsConsent={config.telemetry?.metrics === true}
-                installationId={config.installationId}
-              />
-              <EntrySettingsMenu
-                config={config}
-                onThemeChange={handleThemeChange}
-                onOpenSettings={onOpenSettings}
-                trackingPageName="artifact"
-                onTrackTriggerClick={() => {
-                  // Spec row 52: the settings gear in the artifact header.
-                  // Carry the active artifact so settings slices line up with
-                  // the rest of the artifact_header funnel.
-                  trackArtifactHeaderClick(analytics.track, {
-                    page_name: 'artifact',
-                    area: 'artifact_header',
-                    element: 'settings',
-                    ...headerArtifact,
-                  });
-                }}
-              />
-            </>
-          )}
-          questionForm={displayedQuestionForm}
-          questionFormPreview={displayedQuestionFormPreview}
-          questionFormKey={displayedQuestionFormKey}
-          questionFormInteractive={displayedQuestionFormActive}
-          questionFormSubmitDisabled={currentConversationActionDisabled}
-          questionFormSubmittedAnswers={displayedQuestionFormSubmittedAnswers}
-          questionsGenerating={displayedQuestionsGenerating}
-          focusQuestionsRequest={focusQuestionsRequest}
-          onSubmitQuestionForm={(text) => {
-            if (currentConversationActionDisabled) return;
-            // Submitting question-form answers is a clarification turn, not a
-            // fresh create/edit — tag entry_from so the dashboard can separate it.
-            void handleSend(text, [], [], { entryFrom: 'question_answer' });
-          }}
-        />
+        {workspacePanel}
       </div>
       {contextPluginDetails ? (
         <PluginDetailsModal
