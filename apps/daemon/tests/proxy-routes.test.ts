@@ -1922,6 +1922,62 @@ describe('API proxy routes', () => {
       });
     }
   });
+
+  // A client that disconnects (Stop / closed tab) must not keep the upstream
+  // request billing. Every upstream proxy fetch has to carry an AbortSignal
+  // tied to the client connection so the in-flight completion — and any
+  // BYOK tool loop that would otherwise fire further paid rounds — unwinds
+  // when the client goes away.
+  it('passes a client-cancellation signal to the upstream on a simple proxy stream', async () => {
+    let upstreamInit: FetchInit | undefined;
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      upstreamInit = init;
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://api.example.com/v1',
+        apiKey: 'sk-test',
+        model: 'gpt-test',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+    await res.text();
+
+    expect(upstreamInit?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('passes a client-cancellation signal to the upstream on a BYOK tool-loop stream', async () => {
+    let upstreamInit: FetchInit | undefined;
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      upstreamInit = init;
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/senseaudio/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sa-key',
+        model: 'senseaudio-s2',
+        projectId: 'test-project',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+    await res.text();
+
+    expect(upstreamInit?.signal).toBeInstanceOf(AbortSignal);
+  });
 });
 
 function sseResponse(text: string): Response {
