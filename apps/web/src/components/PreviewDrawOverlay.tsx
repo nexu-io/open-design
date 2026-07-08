@@ -913,11 +913,15 @@ export function PreviewDrawOverlay({
     }
     const wrapRect = wrap.getBoundingClientRect();
     const hostRect = host.getBoundingClientRect();
+    const hostScroll = {
+      left: host.scrollLeft,
+      top: host.scrollTop,
+    };
     const latestAnchor = anchorTimelineRef.current.at(-1) ?? null;
     const anchorRect = latestAnchor
-      ? normalizedRectToHostRect(latestAnchor.bounds, wrapRect, hostRect)
+      ? normalizedRectToHostRect(latestAnchor.bounds, wrapRect, hostRect, hostScroll)
       : captureTarget
-        ? absoluteRectToHostRect(captureTarget.position, wrapRect, hostRect)
+        ? absoluteRectToHostRect(captureTarget.position, wrapRect, hostRect, hostScroll)
         : null;
     if (!anchorRect) {
       setDockLayout({ mode: 'docked', side: null, style: previewDrawDockedStyle });
@@ -1463,11 +1467,12 @@ function normalizedRectToHostRect(
   rect: NormalizedRect,
   wrapRect: DOMRect,
   hostRect: DOMRect,
+  hostScroll: { left: number; top: number },
 ): { x: number; y: number; width: number; height: number } | null {
   if (wrapRect.width <= 0 || wrapRect.height <= 0) return null;
   return {
-    x: wrapRect.left - hostRect.left + rect.x * wrapRect.width,
-    y: wrapRect.top - hostRect.top + rect.y * wrapRect.height,
+    x: wrapRect.left - hostRect.left + hostScroll.left + rect.x * wrapRect.width,
+    y: wrapRect.top - hostRect.top + hostScroll.top + rect.y * wrapRect.height,
     width: Math.max(1, rect.width * wrapRect.width),
     height: Math.max(1, rect.height * wrapRect.height),
   };
@@ -1477,11 +1482,12 @@ function absoluteRectToHostRect(
   rect: { x: number; y: number; width: number; height: number },
   wrapRect: DOMRect,
   hostRect: DOMRect,
+  hostScroll: { left: number; top: number },
 ): { x: number; y: number; width: number; height: number } | null {
   if (wrapRect.width <= 0 || wrapRect.height <= 0) return null;
   return {
-    x: wrapRect.left - hostRect.left + rect.x,
-    y: wrapRect.top - hostRect.top + rect.y,
+    x: wrapRect.left - hostRect.left + hostScroll.left + rect.x,
+    y: wrapRect.top - hostRect.top + hostScroll.top + rect.y,
     width: Math.max(1, rect.width),
     height: Math.max(1, rect.height),
   };

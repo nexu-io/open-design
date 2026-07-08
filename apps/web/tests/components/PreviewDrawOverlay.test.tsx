@@ -587,6 +587,39 @@ describe('PreviewDrawOverlay', () => {
     });
   });
 
+  it('keeps the floating composer aligned in the portal host scroll space', async () => {
+    const { container } = render(
+      <div className="viewer-body">
+        <div className="comment-preview-layer">
+          <div className="comment-frame-clip">
+            <PreviewDrawOverlay active>
+              <iframe title="preview" />
+            </PreviewDrawOverlay>
+          </div>
+        </div>
+      </div>,
+    );
+
+    const body = container.querySelector('.viewer-body') as HTMLElement;
+    const wrap = body.querySelector('iframe')!.parentElement as HTMLElement;
+    const canvas = wrap.querySelector('canvas') as HTMLCanvasElement;
+    const dock = body.querySelector('.preview-draw-dock') as HTMLElement;
+    setElementRect(body, { left: 0, top: 0, width: 720, height: 520 });
+    setElementRect(wrap, { left: 120, top: 60, width: 320, height: 200 });
+    setElementRect(canvas, { left: 120, top: 60, width: 320, height: 200 });
+    setElementRect(dock, { left: 0, top: 0, width: 260, height: 96 });
+    Object.defineProperty(body, 'scrollLeft', { configurable: true, value: 40 });
+    Object.defineProperty(body, 'scrollTop', { configurable: true, value: 140 });
+
+    drawSelectionBox(canvas, { x: 160, y: 100 }, { x: 220, y: 150 });
+    fireEvent(window, new Event('scroll'));
+
+    await waitFor(() => expect(dock.dataset.drawLayout).toBe('floating'));
+    expect(dock.dataset.drawSide).toBe('right');
+    expect(dock.style.left).toBe('272px');
+    expect(dock.style.top).toBe('217px');
+  });
+
   it('hides draw chrome before a compositor annotation snapshot', async () => {
     const restoreCompositeMocks = installImageCompositeMocks();
     const annotation = vi.fn((event: Event) => {
