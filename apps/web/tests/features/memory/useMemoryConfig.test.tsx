@@ -84,6 +84,24 @@ describe('useMemoryConfig', () => {
     expect(patchConfig).toHaveBeenCalledWith({ profileEnabled: false });
   });
 
+  it('rolls a per-hook flag back and rethrows when the PATCH throws', async () => {
+    const patchConfig = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    const { result } = renderHook(() => useMemoryConfig(makePort(patchConfig)));
+
+    expect(result.current.hookFlags.profileEnabled).toBe(true);
+    await act(async () => {
+      await expect(result.current.onToggleHook('profileEnabled', false)).rejects.toThrow(
+        'network down',
+      );
+    });
+
+    // Optimistic set reverted even though the transport rejected instead of
+    // returning false, so the UI does not diverge from the daemon.
+    expect(result.current.hookFlags.profileEnabled).toBe(true);
+  });
+
   it('keeps a per-hook flag flipped when the PATCH succeeds', async () => {
     const { result } = renderHook(() => useMemoryConfig(makePort(vi.fn(async () => true))));
     await act(async () => {

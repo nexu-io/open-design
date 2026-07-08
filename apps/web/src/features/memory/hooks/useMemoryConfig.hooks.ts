@@ -87,9 +87,20 @@ export function useMemoryConfig(port: MemoryConfigPort): MemoryConfigController 
   const onToggleHook = useCallback(
     async (key: MemoryConfigFlagKey, next: boolean) => {
       const setter = setters[key];
-      setter(() => next);
-      const ok = await port.patchConfig(singleFlagPatch(key, next));
-      if (!ok) setter((current) => !current);
+      // Optimistic flip; capture the prior flag inside the functional update so a
+      // rejected PATCH (the provider signals a non-2xx write with `false`) or a
+      // thrown transport error restores it — mirroring onToggleEnabled above.
+      let previous = next;
+      setter((current) => {
+        previous = current;
+        return next;
+      });
+      let ok = false;
+      try {
+        ok = await port.patchConfig(singleFlagPatch(key, next));
+      } finally {
+        if (!ok) setter(() => previous);
+      }
     },
     [port, setters],
   );
