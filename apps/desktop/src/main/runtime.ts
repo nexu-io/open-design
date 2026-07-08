@@ -800,7 +800,7 @@ function createPendingHtml(): string {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Marketing AX</title>
+    <title>M-AX</title>
     <style>
       html,
       body {
@@ -880,7 +880,7 @@ export function createSplashWindow(): SplashWindowHandle {
     height: 900,
     resizable: false,
     show: true,
-    title: "Marketing AX",
+    title: "M-AX",
     width: 1280,
     webPreferences: {
       contextIsolation: true,
@@ -893,7 +893,8 @@ export function createSplashWindow(): SplashWindowHandle {
 }
 
 function resolveDesktopIconPath(): string {
-  return resolve(dirname(fileURLToPath(import.meta.url)), "../../../web/public/app-icon.png");
+  // desktop-icon.png 전용 파일 — app-icon.png는 웹 UI 브랜드 마크라 dock 아이콘과 분리
+  return resolve(dirname(fileURLToPath(import.meta.url)), "../../../web/public/desktop-icon.png");
 }
 
 function applyDockIcon(): void {
@@ -1525,7 +1526,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // mounted (see `revealWhenReady` below), so there is never a flash of the
     // web's own "Loading Marketing AX…" shell.
     show: false,
-    title: "Marketing AX",
+    title: "M-AX",
     autoHideMenuBar: true,
     ...MAC_WINDOW_CHROME,
     webPreferences: {
@@ -1539,6 +1540,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     width: 1280,
   });
+  // 웹 페이지 document.title("Marketing AX")이 창 제목을 덮어쓰지 않도록 고정 — 데스크톱 앱명은 M-AX
+  window.on("page-title-updated", (event) => event.preventDefault());
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
@@ -1575,7 +1578,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const unsubscribeUpdater = options.updater?.subscribe(() => sendUpdaterStatus()) ?? (() => undefined);
   const requireMainWindowSender = (event: Electron.IpcMainInvokeEvent): void => {
     if (event.sender !== window.webContents) {
-      throw new Error("host IPC is only available to the main Marketing AX window");
+      throw new Error("host IPC is only available to the main M-AX window");
     }
   };
   window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
