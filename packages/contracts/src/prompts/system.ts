@@ -234,12 +234,12 @@ export interface ComposeInput {
   // Free-form instructions the user set on this specific project.
   // Injected after user-level instructions and before the design system.
   projectInstructions?: string | undefined;
-  brandTitle?: string;
-  brandCoreMd?: string;
-  brandDeliverableKey?: string;
-  brandDeliverableMd?: string;
+  brandTitle?: string | undefined;
+  brandCoreMd?: string | undefined;
+  brandDeliverableKey?: string | undefined;
+  brandDeliverableMd?: string | undefined;
   /** 서브에이전트에 전달할 소스 파일 경로 안내 (데몬이 절대경로 조립) */
-  brandSourceNote?: string;
+  brandSourceNote?: string | undefined;
 }
 
 export function composeSystemPrompt({
@@ -357,14 +357,14 @@ export function composeSystemPrompt({
 
   if (brandCoreMd) {
     parts.push(
-      `## Active brand${brandTitle ? ` — ${brandTitle}` : ''}\n\n` +
+      `\n\n## Active brand${brandTitle ? ` — ${brandTitle}` : ''}\n\n` +
         `Treat the following brand context as authoritative for voice, terminology, forbidden expressions, services, sources, and the brand palette. It applies to every deliverable of this brand.` +
         `${brandSourceNote ? `\n${brandSourceNote}` : ''}\n\n${brandCoreMd}`,
     );
   }
   if (brandDeliverableMd) {
     parts.push(
-      `## Brand deliverable context${brandDeliverableKey ? ` — ${brandDeliverableKey}` : ''}\n\n` +
+      `\n\n## Brand deliverable context${brandDeliverableKey ? ` — ${brandDeliverableKey}` : ''}\n\n` +
         `Channel-specific production facts for the active deliverable. These extend the brand core; on channel-format concerns this section wins.\n\n${brandDeliverableMd}`,
     );
   }
