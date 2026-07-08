@@ -63,7 +63,7 @@ import {
   inlineMentionToken,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
-import { generateTeams, type GeneratedTeam, MODE_LABELS, MODE_ICONS } from '../utils/teamGenerator';
+import { generateTeams, type GeneratedTeam, MODE_LABELS, MODE_ICONS, ROLE_LABELS } from '../utils/teamGenerator';
 import { useWaitTeamEnabled } from './Theater';
 import { fetchAgentsCached } from '../state/agentsCache';
 import { useI18n, useT } from '../i18n';
@@ -269,6 +269,7 @@ interface HomeMentionOption {
   description: string;
   meta: string;
   pluginRecord?: InstalledPluginRecord;
+  team?: GeneratedTeam;
   disabled?: boolean;
   onPick: () => void;
 }
@@ -532,13 +533,26 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   );
   const teamMatches = useMemo(() => {
     if (!mentionActive || !waitTeamEnabled) return [];
+    const query = mentionQuery.toLowerCase();
     const teams = generateTeams(availableAgents);
     return teams
-      .filter((team) => team.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+      .filter((team) => {
+        if (!query) return true;
+        return (
+          team.name.toLowerCase().includes(query) ||
+          team.mode.toLowerCase().includes(query) ||
+          team.description.toLowerCase().includes(query) ||
+          team.assignments.some((assignment) =>
+            assignment.agentName.toLowerCase().includes(query) ||
+            assignment.role.toLowerCase().includes(query),
+          )
+        );
+      })
       .slice(0, 6);
   }, [mentionActive, mentionQuery, availableAgents, waitTeamEnabled]);
   const pickerOpen = active && mentionActive;
   useEffect(() => {
+    if (!pickerOpen || !waitTeamEnabled) return;
     if (mentionTab !== 'teams' && mentionTab !== 'all') return;
     if (availableAgents.length > 0) return;
     let cancelled = false;
@@ -561,7 +575,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     // its badge counts the previewed slice — not the full staged total — to keep
     // the count aligned with what that tab actually renders. The dedicated files
     // tab below lists every match and reports the true total.
-    { id: 'all', label: t('common.all'), count: Math.min(fileMatches.length, HOME_MENTION_ALL_TAB_PREVIEW) + pluginMatches.length + skillMatches.length + mcpMatches.length + connectorMatches.length },
+    { id: 'all', label: t('common.all'), count: Math.min(fileMatches.length, HOME_MENTION_ALL_TAB_PREVIEW) + pluginMatches.length + skillMatches.length + mcpMatches.length + connectorMatches.length + teamMatches.length },
     { id: 'files', label: t('chat.mentionTabFiles'), count: fileMatches.length },
     { id: 'plugins', label: t('entry.navPlugins'), count: pluginMatches.length },
     { id: 'skills', label: t('homeHero.skills'), count: skillMatches.length },
@@ -654,10 +668,11 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           label: t('chat.mentionTabTeams', { defaultValue: 'Teams' }),
           options: teamMatches.map((team) => ({
             id: `team-${team.id}`,
-            icon: 'users',
+            icon: (MODE_ICONS[team.mode] ?? 'grid') as IconName,
             title: team.name,
-            description: team.description,
-            meta: team.assignments.map((a) => a.agentName).join(', '),
+            description: team.description || (MODE_LABELS[team.mode] ?? team.mode),
+            meta: MODE_LABELS[team.mode] ?? team.mode,
+            team,
             onPick: () => pickTeam(team),
           })),
         }
@@ -1468,7 +1483,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             {activeTeam ? (
               <span className="home-hero__active-chip home-hero__active-chip--context" data-testid="home-hero-active-team">
                 <span className="home-hero__active-icon" aria-hidden>
-                  <Icon name="users" size={12} />
+                  <Icon name="grid" size={12} />
                 </span>
                 <span className="home-hero__active-label">{activeTeam.name}</span>
                 <button
@@ -1709,7 +1724,17 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               ) : null}
               {!visibleLoading && visiblePickerOptions.length === 0 ? (
                 <div className="home-hero__plugin-picker-empty">
-                  {mentionQuery ? (
+                  {mentionTab === 'teams' ? (
+                    waitTeamEnabled ? (
+                      mentionQuery ? (
+                        <>{t('homeHero.noTeamResults', { query: mentionQuery })}</>
+                      ) : (
+                        <>{t('homeHero.noTeamsAvailable')}</>
+                      )
+                    ) : (
+                      <>{t('homeHero.teamsDisabled')}</>
+                    )
+                  ) : mentionQuery ? (
                     <>{t('homeHero.noResults', { query: mentionQuery })}</>
                   ) : (
                     <>{t('homeHero.searchPrompt')}</>
@@ -1729,7 +1754,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                         type="button"
                         role="option"
                         aria-selected={optionIndex === selectedIndex}
-                        className={`home-hero__plugin-option${
+                        className={`home-hero__plugin-option${item.team ? ' home-hero__plugin-option--team' : ''}${
                           optionIndex === selectedIndex ? ' is-active' : ''
                         }`}
                         onMouseEnter={() => {
@@ -1745,11 +1770,33 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                         <span className="home-hero__plugin-option-icon" aria-hidden>
                           <Icon name={item.icon} size={13} />
                         </span>
-                        <span className="home-hero__plugin-option-main">
-                          <span>{item.title}</span>
-                          <span>{item.description}</span>
+                        <span className={`home-hero__plugin-option-main${item.team ? ' home-hero__team-option-main' : ''}`}>
+                          {item.team ? (
+                            <>
+                              <span className="home-hero__team-option-title">{item.title}</span>
+                              <span className="home-hero__team-option-desc">{item.description}</span>
+                              <span className="home-hero__team-members" aria-label="Team members">
+                                {item.team.assignments.map((assignment, index) => (
+                                  <span
+                                    key={`${assignment.agentType}-${assignment.role}-${index}`}
+                                    className="home-hero__team-member"
+                                  >
+                                    <span className="home-hero__team-member-role">
+                                      {ROLE_LABELS[assignment.role] ?? assignment.role}
+                                    </span>
+                                    <span className="home-hero__team-member-agent">{assignment.agentName}</span>
+                                  </span>
+                                ))}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span>{item.title}</span>
+                              <span>{item.description}</span>
+                            </>
+                          )}
                         </span>
-                        <span className="home-hero__plugin-option-meta">
+                        <span className={`home-hero__plugin-option-meta${item.team ? ' home-hero__team-mode-badge' : ''}`}>
                           {item.meta}
                         </span>
                       </button>

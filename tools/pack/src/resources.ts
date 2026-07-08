@@ -94,6 +94,11 @@ export async function copyBundledResourceTrees({
 const OD_TEAM_PACKAGE_DIR = join("packages", "multi-agent-team");
 
 function odTeamBinaryName(platform: "linux" | "mac" | "win"): string {
+  const env = goTargetEnv(platform);
+  return `odteam-${env.GOOS}-${env.GOARCH}`;
+}
+
+function runtimeOdTeamBinaryName(platform: "linux" | "mac" | "win"): string {
   return platform === "win" ? "odteam.exe" : "odteam";
 }
 
@@ -202,7 +207,6 @@ export async function copyBundledOdTeamBinary({
   workspaceRoot: string;
   requireBundled?: boolean;
 }): Promise<string | null> {
-  const binName = odTeamBinaryName(platform);
   const source = odTeamBinaryPath(workspaceRoot, platform);
   if (!existsSync(source)) {
     if (requireBundled) {
@@ -212,7 +216,8 @@ export async function copyBundledOdTeamBinary({
     }
     return null;
   }
-  const target = join(resourceRoot, "bin", binName);
+  const runtimeName = runtimeOdTeamBinaryName(platform);
+  const target = join(resourceRoot, "bin", runtimeName);
   await cp(source, target);
   if (platform !== "win") {
     await chmod(target, 0o755);

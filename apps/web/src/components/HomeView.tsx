@@ -1542,6 +1542,30 @@ export function HomeView({
     }
   }
 
+  function removeConnectorContext(connectorId: string) {
+    const connector = selectedConnectorContexts.find((item) => item.connector.id === connectorId)?.connector ?? null;
+    setSelectedConnectorContexts((current) => current.filter((item) => item.connector.id !== connectorId));
+    if (connector) {
+      setPrompt((current) => removeContextMentionsFromPrompt(current, [
+        connector.name,
+        connector.id,
+      ]));
+      setPromptEditedByUser(true);
+    }
+  }
+
+  function useConnector(connector: ConnectorDetail, nextPrompt: string) {
+    setSelectedConnectorContexts((current) => (
+      current.some((item) => item.connector.id === connector.id)
+        ? current
+        : [...current, { connector, inlineBacked: true }]
+    ));
+    setPrompt(nextPrompt);
+    setPromptEditedByUser(false);
+    setError(null);
+    focusPromptAtEnd();
+  }
+
   function useTeam(team: ChatTeamSelection, nextPrompt: string) {
     setActiveTeam(team);
     setPrompt(nextPrompt);

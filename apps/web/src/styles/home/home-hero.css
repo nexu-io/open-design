@@ -904,6 +904,88 @@
   color: var(--text-faint);
   font-size: 11px;
 }
+.home-hero__plugin-option--team {
+  align-items: flex-start;
+}
+.home-hero__plugin-option--team .home-hero__plugin-option-icon {
+  margin-top: 2px;
+  color: var(--accent);
+}
+.home-hero__team-option-main {
+  gap: 4px;
+}
+.home-hero__plugin-option-main .home-hero__team-option-title {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-hero__plugin-option-main .home-hero__team-option-desc {
+  color: var(--text-muted);
+  display: -webkit-box;
+  font-size: 11.5px;
+  line-height: 1.35;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+.home-hero__team-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+.home-hero__team-member {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  font-size: 9.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.home-hero__plugin-option:hover .home-hero__team-member,
+.home-hero__plugin-option.is-active .home-hero__team-member {
+  background: var(--bg-panel);
+}
+.home-hero__plugin-option-main .home-hero__team-member .home-hero__team-member-role {
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 650;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+.home-hero__plugin-option-main .home-hero__team-member .home-hero__team-member-agent {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-hero__team-mode-badge {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.home-hero__plugin-option:hover .home-hero__team-mode-badge,
+.home-hero__plugin-option.is-active .home-hero__team-mode-badge {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
 .home-hero__input-foot {
   position: relative;
   z-index: 30;

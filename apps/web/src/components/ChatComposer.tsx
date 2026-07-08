@@ -5739,7 +5739,7 @@ function MentionPopover({
                 optionIndex += 1;
                 const active = flat === activeIndex;
                 const modeLabel = MODE_LABELS[team.mode] ?? team.mode;
-                const modeIcon = MODE_ICONS[team.mode] ?? 'users';
+                const modeIcon = (MODE_ICONS[team.mode] ?? 'grid') as IconName;
                 return (
                   <button
                     key={`team-${team.id}`}

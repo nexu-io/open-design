@@ -423,12 +423,15 @@ describe("copyBundledOdTeamBinary", () => {
     const workspaceRoot = join(root, "workspace");
     const resourceRoot = join(root, "resources", "open-design");
     const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux";
-    const binName = platform === "win" ? "odteam.exe" : "odteam";
+    const arch = process.arch === "arm64" ? "arm64" : "amd64";
+    const goos = platform === "win" ? "windows" : platform === "mac" ? "darwin" : "linux";
+    const sourceBinName = `odteam-${goos}-${arch}`;
+    const runtimeBinName = platform === "win" ? "odteam.exe" : "odteam";
 
     try {
       const binaryDir = join(workspaceRoot, "packages", "multi-agent-team", "cmd", "odteam");
       await mkdir(binaryDir, { recursive: true });
-      const binaryPath = join(binaryDir, binName);
+      const binaryPath = join(binaryDir, sourceBinName);
       await writeFile(binaryPath, "fake binary\n", "utf8");
       if (platform !== "win") await chmod(binaryPath, 0o755);
 
@@ -439,8 +442,8 @@ describe("copyBundledOdTeamBinary", () => {
         workspaceRoot,
       });
 
-      expect(result).toBe(join(resourceRoot, "bin", binName));
-      await expect(readFile(join(resourceRoot, "bin", binName), "utf8")).resolves.toBe("fake binary\n");
+      expect(result).toBe(join(resourceRoot, "bin", runtimeBinName));
+      await expect(readFile(join(resourceRoot, "bin", runtimeBinName), "utf8")).resolves.toBe("fake binary\n");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

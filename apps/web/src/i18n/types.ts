@@ -1058,6 +1058,9 @@ export interface Dict {
   'homeHero.contextSurfaces': string;
   'homeHero.loadingContext': string;
   'homeHero.noResults': string;
+  'homeHero.noTeamResults': string;
+  'homeHero.noTeamsAvailable': string;
+  'homeHero.teamsDisabled': string;
   'homeHero.searchPrompt': string;
   'homeHero.parameters': string;
   'homeHero.details': string;
@@ -2977,7 +2980,9 @@ export interface Dict {
   'chat.mentionTabMcp': string;
   'chat.mentionTabConnectors': string;
   'chat.mentionTabFiles': string;
+  'chat.mentionTabTeams': string;
   'chat.mentionNoResults': string;
+  'chat.mentionTeamEmpty': string;
   'chat.mentionSearchPrompt': string;
   'chat.mentionSectionTabs': string;
   'chat.mentionSectionPlugins': string;

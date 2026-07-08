@@ -178,8 +178,9 @@ describe("copyResourceTree", () => {
       // Pre-build a fake odteam binary so buildOdTeamBinary skips go build in tests.
       const odteamDir = join(root, "packages", "multi-agent-team", "cmd", "odteam");
       await mkdir(odteamDir, { recursive: true });
-      await writeFile(join(odteamDir, "odteam"), "fake odteam\n", "utf8");
-      await chmod(join(odteamDir, "odteam"), 0o755);
+      const odteamArch = process.arch === "arm64" ? "arm64" : "amd64";
+      await writeFile(join(odteamDir, `odteam-darwin-${odteamArch}`), "fake odteam\n", "utf8");
+      await chmod(join(odteamDir, `odteam-darwin-${odteamArch}`), 0o755);
 
       await copyResourceTree(config, paths);
 
