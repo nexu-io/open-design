@@ -49,7 +49,7 @@ HTML IAM은 **모달·하프시트·풀스크린만** 가능.
 |---|---|
 | `PREVIEW_PLACEHOLDERS` / appboyBridge fallback `<script>` | 프리뷰 전용. 프로덕션 잔존 시 미치환·오동작 |
 | `{{${name}}}` / `{{${first_name}}}` | 미치환 발송. custom_attribute prefix 필수 |
-| 보닥 로고 삽입 | §8 |
+| 보닥 로고 삽입 | IAM 개인화·카피 규칙 |
 | "플래너" 표현 | "전문가" 강제 |
 | 슬라이드업 HTML / 하프시트 드래그 핸들 | WebView 제약 위반 |
 | id 누락 요소 | editor 역동기화 불가 |
