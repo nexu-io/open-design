@@ -17,6 +17,7 @@
   --border: #e1e5eb;
   --border-strong: #c9d0da;
   --border-soft: #edf0f4;
+  --toggle-track-off: var(--border-strong);
 
   --text: #1a1916;
   --text-strong: #0d0c0a;
@@ -111,6 +112,7 @@
   --border: #333128;
   --border-strong: #46433c;
   --border-soft: #2a2825;
+  --toggle-track-off: var(--text-soft);
 
   --text: #e8e4dc;
   --text-strong: #f2ede4;
@@ -164,6 +166,7 @@
     --border: #333128;
     --border-strong: #46433c;
     --border-soft: #2a2825;
+    --toggle-track-off: var(--text-soft);
 
     --text: #e8e4dc;
     --text-strong: #f2ede4;
