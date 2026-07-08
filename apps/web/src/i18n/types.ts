@@ -822,7 +822,11 @@ export interface Dict {
   'entry.navTasks': string;
   'entry.navPlugins': string;
   'entry.navDesignSystems': string;
+  'entry.navBrands': string;
   'entry.navIntegrations': string;
+  'brands.empty': string;
+  'brands.back': string;
+  'brands.core': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;
   'workspaceTabs.marketplace': string;

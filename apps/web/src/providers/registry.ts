@@ -1,4 +1,6 @@
 import type {
+  BrandDetail,
+  BrandSummary,
   ConnectorAuthConfigPrepareResponse,
   ConnectorDetail,
   ConnectorConnectResponse,
@@ -454,6 +456,22 @@ export async function fetchSkill(id: string): Promise<SkillDetail | null> {
 export async function fetchDesignSystems(): Promise<DesignSystemSummary[]> {
   const result = await fetchDesignSystemsResult();
   return result.ok ? result.designSystems : [];
+}
+
+// Brands registry — separate from design systems (Task 1 contract split).
+// Read-only web surface (Task 10); write/edit affordances stay CLI-only.
+export async function fetchBrands(): Promise<BrandSummary[]> {
+  const res = await fetch('/api/brands');
+  if (!res.ok) throw new Error(`brands fetch failed: ${res.status}`);
+  const json = (await res.json()) as { brands?: BrandSummary[] };
+  return json.brands ?? [];
+}
+
+export async function fetchBrand(id: string, deliverable?: string): Promise<BrandDetail> {
+  const qs = deliverable ? `?deliverable=${encodeURIComponent(deliverable)}` : '';
+  const res = await fetch(`/api/brands/${encodeURIComponent(id)}${qs}`);
+  if (!res.ok) throw new Error(`brand fetch failed: ${res.status}`);
+  return (await res.json()) as BrandDetail;
 }
 
 // Discriminated-union variant: surfaces the fetch outcome instead of

@@ -78,6 +78,7 @@ import type {
   SkillSummary,
 } from '../types';
 import { CenteredLoader } from './Loading';
+import { BrandsTab } from './BrandsTab';
 import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
@@ -379,6 +380,9 @@ function navElementForView(
       return 'design_systems';
     case 'integrations':
       return 'integrations';
+    // 'brands' has no dedicated `HomeNavClickProps.element` value in
+    // packages/contracts yet (Task 10 is web-surface only) — fall through
+    // to the same `null` guard as any other view without an analytics slot.
     default:
       return null;
   }
@@ -826,6 +830,16 @@ export function EntryShell({
                   />
                 </div>
               )}
+            </div>
+            <div data-testid="entry-view-brands" data-active={view === 'brands' ? 'true' : 'false'} {...inactiveViewProps(view === 'brands')}>
+              <div className="entry-section">
+                <header className="entry-section__head">
+                  <h1 className="entry-section__title">{t('entry.navBrands')}</h1>
+                </header>
+                <BrandsTab
+                  onOpenBrand={(id) => navigate({ kind: 'brand-detail', brandId: id })}
+                />
+              </div>
             </div>
             {view === 'integrations' ? (
               <IntegrationsView
