@@ -24,7 +24,7 @@ import { importGitHubDesignSystemProject } from '../design-systems/github-import
 import { importShadcnDesignSystemProject } from '../design-systems/shadcn-import.js';
 import { renderDesignSystemPreview } from '../design-systems/preview.js';
 import { renderDesignSystemShowcase } from '../design-systems/showcase.js';
-import { listPromptTemplates, readPromptTemplate } from '../prompt-templates.js';
+import { listPromptTemplates, readPromptTemplate } from '../media/prompt-templates.js';
 import { readAppConfig } from '../app-config.js';
 import { installFromTarget, uninstallById } from '../library-install.js';
 import type { RouteDeps } from '../server-context.js';

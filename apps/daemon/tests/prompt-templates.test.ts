@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { listPromptTemplates, readPromptTemplate } from '../src/prompt-templates.js';
+import { listPromptTemplates, readPromptTemplate } from '../src/media/prompt-templates.js';
 
 function makeTemplate(overrides: Record<string, unknown> = {}) {
   return {
