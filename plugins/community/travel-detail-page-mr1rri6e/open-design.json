@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "travel-detail-page-mr1rri6e",
+  "title": "Travel Detail Page",
+  "version": "0.1.0",
+  "description": "--- name: travel-detail-page description: Build, adapt, audit, or refactor Aurora-style travel itinerary/detail pages. Use when the user asks to preserve this website's current travel-detail format, motion, interactions,",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
