@@ -1,0 +1,405 @@
+---
+/*
+ * Customer stories index — `/stories/`
+ *
+ * Landing page for the customer-story collection (the nav "Stories" entry under
+ * Resources points here). Layout borrows the OD house style: big masthead, a
+ * "works with your stack" logo strip (AMR-style), the story card(s), and a
+ * value-prop grid — so the page reads as substantial even with one story.
+ *
+ * Stories are a small hand-maintained array — add a row when a new
+ * `/stories/<slug>` ships; promote to a content collection if it grows.
+ */
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import SiteAnalytics from '../../_components/site-analytics.astro';
+import HeaderEnhancer from '../../_components/header-enhancer.astro';
+import { Header, type HeaderProps } from '../../_components/header';
+import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
+import SeoHead from '../../_components/seo-head.astro';
+import SiteFooter from '../../_components/site-footer.astro';
+import { getCatalogCounts } from '../../_lib/catalog';
+import { getGithubRepoMeta } from '../../_lib/github';
+import {
+  getHeaderLocaleSwitcher,
+  getLocaleDefinition,
+  localeFromPath,
+  localizedHref,
+} from '../../i18n';
+import '../../globals.css';
+import '../../sub-pages.css';
+import { INDEX_UI, STORY_CARD, STORY_VP } from '../../_partials/ikigai-one-i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const localeDef = getLocaleDefinition(locale);
+const href = (path: string) => localizedHref(path, locale);
+const counts = await getCatalogCounts();
+const github = await getGithubRepoMeta();
+
+const ui = INDEX_UI[locale] ?? INDEX_UI.en!;
+const card = STORY_CARD[locale] ?? STORY_CARD.en!;
+
+const vp = STORY_VP[locale] ?? STORY_VP.en!;
+
+// Story registry. Add a row when a new `/stories/<slug>` page ships.
+const stories = [
+  {
+    slug: 'ikigai-one',
+    company: 'Ikigai One',
+    cover: '/stories/ikigai-one-cover.webp',
+    title: card.title,
+    blurb: card.blurb,
+  },
+];
+
+const title = `${ui.eyebrow} — ${ui.heading}`;
+const description = `${ui.sub} ${vp.foot}`;
+const fallbackSite = 'https://open-design.ai/';
+const ogImage = new URL('/stories/ikigai-one-cover.webp', Astro.site ?? fallbackSite).toString();
+
+// CollectionPage JSON-LD so the stories listing has structured data (parity
+// with the blog index). Lists each story as an Article.
+const collectionJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: title,
+  description,
+  url: new URL(Astro.url.pathname, Astro.site ?? fallbackSite).toString(),
+  inLanguage: localeDef.htmlLang,
+  hasPart: stories.map((s) => ({
+    '@type': 'Article',
+    headline: s.title,
+    url: new URL(href(`/stories/${s.slug}/`), Astro.site ?? fallbackSite).toString(),
+  })),
+};
+
+const headerHtml = renderToStaticMarkup(
+  createElement<HeaderProps>(Header, {
+    counts,
+    github,
+    brandHref: '/',
+    active: 'stories',
+    locale,
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname),
+  }),
+);
+---
+
+<!doctype html>
+<html lang={localeDef.htmlLang} dir={localeDef.dir}>
+  <head>
+    <meta charset='utf-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <SeoHead
+      kind='website'
+      title={title}
+      description={description}
+      pathname={Astro.url.pathname}
+      image={ogImage}
+    />
+    <script is:inline type='application/ld+json' set:html={JSON.stringify(collectionJsonLd)} />
+    <SiteAnalytics />
+  </head>
+  <body>
+    <div class='shell'>
+      <div class='site-chrome' data-chrome-headroom>
+        <Fragment set:html={headerHtml} />
+      </div>
+
+      <main class='sx-shell'>
+        <section class='sx-masthead'>
+          <div class='container'>
+            <p class='sx-kicker'>{ui.eyebrow}</p>
+            <h1 class='sx-title'>{ui.heading}</h1>
+            <p class='sx-dek'>{ui.sub}</p>
+          </div>
+        </section>
+
+        <section class='sx-feature'>
+          <div class='container'>
+            <div class='sx-grid'>
+              {stories.map((s) => (
+                <a class='sx-card' href={href(`/stories/${s.slug}/`)}>
+                  <span class='sx-media'>
+                    <img src={s.cover} alt={s.company} loading='eager' />
+                  </span>
+                  <span class='sx-copy'>
+                    <span class='sx-cat'>{s.company}</span>
+                    <h2 class='sx-card-title'>{s.title}</h2>
+                    <p class='sx-card-summary'>{s.blurb}</p>
+                    <span class='sx-cta'>{ui.readMore}</span>
+                  </span>
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section class='sx-why'>
+          <div class='container'>
+            <h2 class='sx-why-title'>{vp.heading}</h2>
+            <div class='sx-why-grid'>
+              {vp.items.map((it, i) => (
+                <div class='sx-vp'>
+                  <span class='sx-vp-num'>{`0${i + 1}`}</span>
+                  <h3 class='sx-vp-h'>{it.h}{it.badge && <span class='sx-vp-badge'>{it.badge}</span>}</h3>
+                  <p class='sx-vp-p'>{it.p}</p>
+                </div>
+              ))}
+            </div>
+            <p class='sx-why-foot'>{vp.foot}</p>
+          </div>
+        </section>
+      </main>
+
+      <SiteFooter counts={counts} locale={locale} />
+    </div>
+
+    <HeaderEnhancer />
+    <LocaleSwitcherScript />
+
+    <style>
+      .sx-shell {
+        position: relative;
+        z-index: 2;
+        padding-top: 116px;
+      }
+      .sx-shell + .sub-footer {
+        margin-top: 0;
+      }
+      .sx-masthead .container,
+      .sx-feature .container,
+      .sx-why .container {
+        max-width: 1100px;
+      }
+      .sx-masthead {
+        padding: 24px 0 6px;
+      }
+      .sx-kicker {
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--coral);
+        margin: 0 0 14px;
+      }
+      .sx-title {
+        font-family: var(--sans);
+        font-weight: 800;
+        letter-spacing: -0.028em;
+        font-size: clamp(44px, 5.2vw, 72px);
+        line-height: 0.96;
+        color: var(--ink);
+        margin: 0 0 14px;
+      }
+      .sx-dek {
+        font-family: var(--body);
+        font-size: clamp(17px, 1.6vw, 20px);
+        line-height: 1.5;
+        color: var(--ink-mute);
+        max-width: 60ch;
+        margin: 0;
+      }
+
+
+      /* Story card(s) — medium horizontal, scales to a stack when more ship */
+      .sx-feature {
+        padding: 30px 0 8px;
+      }
+      .sx-grid {
+        display: grid;
+        gap: 18px;
+      }
+      .sx-card {
+        display: grid;
+        grid-template-columns: minmax(0, 0.82fr) minmax(300px, 1.18fr);
+        min-height: 212px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--bone);
+        color: var(--ink);
+        text-decoration: none;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1),
+          box-shadow 200ms ease, border-color 200ms ease;
+      }
+      .sx-card:hover {
+        transform: translateY(-3px);
+        border-color: var(--line-hover);
+        box-shadow: 0 26px 54px -34px rgba(20, 20, 30, 0.5);
+      }
+      .sx-media {
+        position: relative;
+        overflow: hidden;
+        border-right: 1px solid var(--line);
+        background: var(--paper-warm);
+      }
+      .sx-media img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+      }
+      .sx-copy {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 11px;
+        padding: 30px 38px;
+      }
+      .sx-cat {
+        font-family: var(--sans);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--coral);
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .sx-cat::before {
+        content: '';
+        width: 18px;
+        height: 1px;
+        background: var(--coral);
+      }
+      .sx-card-title {
+        font-family: var(--serif);
+        font-weight: 500;
+        font-size: clamp(24px, 2.3vw, 32px);
+        line-height: 1.1;
+        letter-spacing: -0.016em;
+        color: var(--ink);
+        margin: 0;
+      }
+      .sx-card-summary {
+        font-family: var(--body);
+        font-size: 15px;
+        line-height: 1.5;
+        color: var(--ink-mute);
+        max-width: 52ch;
+        margin: 0;
+      }
+      .sx-cta {
+        font-family: var(--sans);
+        font-weight: 600;
+        font-size: 14px;
+        color: var(--ink);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 2px;
+        transition: gap 160ms ease, color 160ms ease;
+      }
+      .sx-card:hover .sx-cta {
+        color: var(--coral);
+        gap: 12px;
+      }
+
+      /* Why / value props */
+      .sx-why {
+        padding: 42px 0 78px;
+      }
+      .sx-why-title {
+        font-family: var(--sans);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        font-size: clamp(24px, 2.4vw, 32px);
+        color: var(--ink);
+        margin: 0 0 26px;
+      }
+      .sx-why-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 18px;
+      }
+      .sx-vp {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--bone);
+        padding: 26px 26px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .sx-vp-num {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        color: var(--coral);
+      }
+      .sx-vp-h {
+        font-family: var(--sans);
+        font-weight: 700;
+        font-size: 18px;
+        letter-spacing: -0.01em;
+        color: var(--ink);
+        margin: 0;
+      }
+      .sx-vp-badge {
+        display: inline-block;
+        margin-left: 8px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: var(--coral-tint);
+        border: 1px solid var(--coral-soft);
+        color: var(--olive);
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        vertical-align: middle;
+      }
+      .sx-vp-p {
+        font-family: var(--body);
+        font-size: 14.5px;
+        line-height: 1.55;
+        color: var(--ink-mute);
+        margin: 0;
+      }
+      .sx-why-foot {
+        margin: 26px 0 0;
+        font-family: var(--body);
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--ink-soft);
+        max-width: 74ch;
+      }
+
+      @media (max-width: 900px) {
+        .sx-card {
+          grid-template-columns: 1fr;
+        }
+        .sx-media {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+          min-height: 200px;
+          height: 210px;
+        }
+        .sx-copy {
+          padding: 26px 24px;
+        }
+        .sx-why-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 760px) {
+        .sx-shell {
+          padding-top: 98px;
+        }
+        .sx-title {
+          font-size: clamp(38px, 11vw, 48px);
+        }
+        .sx-logos-row {
+          gap: 22px;
+        }
+      }
+    </style>
+  </body>
+</html>

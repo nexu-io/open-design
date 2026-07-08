@@ -4,6 +4,7 @@ import {
   hasTweaksTemplate,
   hasUrlModeBridge,
   htmlNeedsFocusGuard,
+  htmlNeedsPoweredPreview,
   htmlNeedsSandboxShim,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
@@ -36,16 +37,20 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, editMode: true })).toBe(false);
   });
 
-  it('keeps URL-load when direct edit mode is active and the artifact owns the bridge', () => {
-    expect(shouldUrlLoadHtmlPreview({ ...base, editMode: true, urlModeBridge: true })).toBe(true);
+  it('falls back to srcDoc when direct edit mode is active even if the artifact owns a URL bridge', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, editMode: true, urlModeBridge: true })).toBe(false);
   });
 
   it('falls back to srcDoc when inspect mode is active (selection bridge required)', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, inspectMode: true })).toBe(false);
   });
 
-  it('falls back to srcDoc when draw mode is active (snapshot bridge required)', () => {
+  it('falls back to srcDoc when draw mode is active without a URL snapshot bridge', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true })).toBe(false);
+  });
+
+  it('keeps URL-load when draw mode is active and the raw route injected the snapshot bridge', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true, urlSnapshotBridge: true })).toBe(true);
   });
 
   it('falls back to srcDoc when the artifact ships the class based tweaks template', () => {
@@ -73,6 +78,7 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, forceInline: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, tweaksBridge: true, forceInline: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, urlModeBridge: true, inspectMode: true })).toBe(false);
+    expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true, urlSnapshotBridge: true, inspectMode: true })).toBe(false);
   });
 });
 
@@ -308,5 +314,50 @@ describe('htmlNeedsFocusGuard', () => {
     expect(htmlNeedsFocusGuard('// focus the element')).toBe(false);
     expect(htmlNeedsFocusGuard(':focus')).toBe(false);
     expect(htmlNeedsFocusGuard('focus-visible')).toBe(false);
+  });
+});
+
+describe('htmlNeedsPoweredPreview', () => {
+  it('returns false for empty / null input', () => {
+    expect(htmlNeedsPoweredPreview('')).toBe(false);
+    expect(htmlNeedsPoweredPreview(null)).toBe(false);
+    expect(htmlNeedsPoweredPreview(undefined)).toBe(false);
+  });
+
+  it('matches SharedArrayBuffer (needs cross-origin isolation)', () => {
+    expect(htmlNeedsPoweredPreview('const b = new SharedArrayBuffer(16);')).toBe(true);
+  });
+
+  it('matches Web Worker / SharedWorker construction', () => {
+    expect(htmlNeedsPoweredPreview("const w = new Worker('sort.js');")).toBe(true);
+    expect(htmlNeedsPoweredPreview('new SharedWorker(url)')).toBe(true);
+    expect(htmlNeedsPoweredPreview('new  Worker(blobUrl)')).toBe(true);
+  });
+
+  it('matches importScripts inside a worker', () => {
+    expect(htmlNeedsPoweredPreview("importScripts('lib.js')")).toBe(true);
+  });
+
+  it('matches WASM streaming and .wasm references', () => {
+    expect(htmlNeedsPoweredPreview('WebAssembly.instantiateStreaming(fetch(u))')).toBe(true);
+    expect(htmlNeedsPoweredPreview('WebAssembly.compileStreaming(r)')).toBe(true);
+    expect(htmlNeedsPoweredPreview('fetch("engine.wasm")')).toBe(true);
+  });
+
+  it('matches WebGL2 / OffscreenCanvas / WebGPU', () => {
+    expect(htmlNeedsPoweredPreview('canvas.getContext("webgl2")')).toBe(true);
+    expect(htmlNeedsPoweredPreview("el.getContext('webgl2', {})")).toBe(true);
+    expect(htmlNeedsPoweredPreview('new OffscreenCanvas(8, 8)')).toBe(true);
+    expect(htmlNeedsPoweredPreview('const a = navigator.gpu')).toBe(true);
+  });
+
+  it('does NOT match a plain WebGL1 canvas demo (runs fine in the opaque sandbox)', () => {
+    expect(htmlNeedsPoweredPreview("canvas.getContext('webgl')")).toBe(false);
+    expect(htmlNeedsPoweredPreview("canvas.getContext('2d')")).toBe(false);
+  });
+
+  it('does NOT match unrelated prose that mentions the words', () => {
+    expect(htmlNeedsPoweredPreview('<p>Our web worker culture is great</p>')).toBe(false);
+    expect(htmlNeedsPoweredPreview('<p>A workshop about 3D printing</p>')).toBe(false);
   });
 });

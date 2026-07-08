@@ -182,6 +182,14 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     await writeFile(path.join(dir, 'clip.mp4'), Buffer.alloc(FILE_SIZE, 0x42));
     await writeFile(path.join(dir, 'audio.mp3'), Buffer.alloc(FILE_SIZE, 0x43));
     await writeFile(path.join(dir, 'page.html'), Buffer.from('<html/>'));
+    await writeFile(
+      path.join(dir, 'large.html'),
+      Buffer.from(`<!doctype html><html><body><main>Large Preview</main>${'x'.repeat((2 * 1024 * 1024) + 256)}</body></html>`),
+    );
+    await writeFile(
+      path.join(dir, 'large-powered.html'),
+      Buffer.from(`<!doctype html><html><body>${'x'.repeat((2 * 1024 * 1024) + 256)}<script>new Worker("worker.js")</script></body></html>`),
+    );
     await writeFile(path.join(dir, 'body.html'), Buffer.from('<html><body><main>Preview</main></body></html>'));
     await writeFile(
       path.join(dir, 'bridged.html'),
@@ -214,6 +222,12 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
   const rawUrl = (name: string) => `${baseUrl}/api/projects/${projectId}/raw/${name}`;
+  const poweredUrl = (name: string) => `${baseUrl}/api/projects/${projectId}/powered/${name}`;
+  const poweredOrigin = () => {
+    const url = new URL(baseUrl);
+    url.hostname = url.hostname === '127.0.0.1' ? 'localhost' : '127.0.0.1';
+    return url.origin;
+  };
 
   it('advertises Accept-Ranges: bytes for a video file with no Range header', async () => {
     const res = await fetch(rawUrl('clip.mp4'));
@@ -262,12 +276,68 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(res.headers.get('content-range')).toBe(`bytes */${FILE_SIZE}`);
   });
 
-  it('does not stream non-media files (HTML returns full 200 without Accept-Ranges)', async () => {
+  it('does not stream small transformed HTML files (HTML returns full 200 without Accept-Ranges)', async () => {
     const res = await fetch(rawUrl('page.html'));
     expect(res.status).toBe(200);
     expect(res.headers.get('accept-ranges')).toBeNull();
     const text = await res.text();
     expect(text).toBe('<html/>');
+  });
+
+  it('returns a truncated text preview for large HTML without reading the full file', async () => {
+    const res = await fetch(`${baseUrl}/api/projects/${projectId}/text-preview/large.html?limit=64`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      text: string;
+      truncated: boolean;
+      size: number;
+      limit: number;
+      mime: string;
+      poweredPreview: {
+        required: boolean;
+        scannedBytes: number;
+        complete: boolean;
+      };
+    };
+    expect(body.text).toContain('<!doctype html>');
+    expect(body.text.length).toBeLessThanOrEqual(1024);
+    expect(body.truncated).toBe(true);
+    expect(body.size).toBeGreaterThan(2 * 1024 * 1024);
+    expect(body.limit).toBe(1024);
+    expect(body.mime).toContain('text/html');
+    expect(body.poweredPreview.required).toBe(false);
+    expect(body.poweredPreview.complete).toBe(true);
+  });
+
+  it('returns powered-preview hints even when the Worker/WASM signal is late in a large HTML file', async () => {
+    const res = await fetch(`${baseUrl}/api/projects/${projectId}/text-preview/large-powered.html?limit=64`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      text: string;
+      poweredPreview: {
+        required: boolean;
+        scannedBytes: number;
+        complete: boolean;
+      };
+    };
+    expect(body.text.length).toBeLessThanOrEqual(1024);
+    expect(body.text).not.toContain('new Worker');
+    expect(body.poweredPreview.required).toBe(true);
+    expect(body.poweredPreview.scannedBytes).toBeGreaterThan(2 * 1024 * 1024);
+  });
+
+  it('skips URL preview bridge injection for large HTML so first paint can stream', async () => {
+    const res = await fetch(`${rawUrl('large.html')}?odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`, {
+      headers: { Range: 'bytes=0-127' },
+    });
+    expect(res.status).toBe(206);
+    expect(res.headers.get('accept-ranges')).toBe('bytes');
+    expect(res.headers.get('content-range')).toMatch(/^bytes 0-127\//);
+    const html = await res.text();
+    expect(html).toContain('Large Preview');
+    expect(html).not.toContain('data-od-url-scroll-bridge');
+    expect(html).not.toContain('data-od-url-selection-bridge');
+    expect(html).not.toContain('data-od-url-snapshot-bridge');
   });
 
   it('injects the URL preview scroll bridge only when requested', async () => {
@@ -324,6 +394,62 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(html).not.toContain('href="/assets/app.css"');
     expect(html).toContain('src="dist/assets/app.js"');
     expect(html).toContain('href="dist/assets/app.css"');
+  });
+
+  it('does not expose powered preview project files to foreign browser origins through CORS', async () => {
+    const browserOrigin = new URL(baseUrl);
+    browserOrigin.hostname = browserOrigin.hostname === '127.0.0.1'
+      ? 'localhost'
+      : '127.0.0.1';
+
+    const res = await fetch(poweredUrl('page.html'), {
+      headers: { Origin: browserOrigin.origin },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('document-isolation-policy')).toBe('isolate-and-credentialless');
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+    expect(await res.text()).toBe('<html/>');
+
+    const foreign = await fetch(poweredUrl('page.html'), {
+      headers: { Origin: 'https://foreign.example' },
+    });
+    expect(foreign.status).toBe(403);
+    expect(foreign.headers.get('access-control-allow-origin')).toBeNull();
+
+    const preflight = await fetch(poweredUrl('page.html'), {
+      method: 'OPTIONS',
+      headers: {
+        Origin: browserOrigin.origin,
+        'Access-Control-Request-Method': 'GET',
+      },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('does not let the powered preview origin call normal daemon APIs', async () => {
+    const origin = poweredOrigin();
+    const poweredReferer = `${origin}/api/projects/${projectId}/powered/page.html`;
+
+    const poweredFile = await fetch(`${origin}/api/projects/${projectId}/powered/page.html`, {
+      headers: {
+        Referer: poweredReferer,
+        'Sec-Fetch-Site': 'same-origin',
+      },
+    });
+    expect(poweredFile.status).toBe(200);
+    expect(await poweredFile.text()).toBe('<html/>');
+
+    const api = await fetch(`${origin}/api/projects`, {
+      headers: {
+        Referer: poweredReferer,
+        'Sec-Fetch-Site': 'same-origin',
+      },
+    });
+    expect(api.status).toBe(403);
+    expect(await api.json()).toEqual({
+      error: 'Powered preview origin cannot access this API route',
+    });
   });
 
   it('injects scroll and selection URL preview bridges together', async () => {

@@ -29,15 +29,17 @@ export interface UrlLoadDecision {
   commentMode: boolean;
   /** Inspect mode is active — needs the srcdoc selection bridge for live tuning. */
   inspectMode?: boolean;
-  /** Direct text edit is active. Needs either srcDoc injection or an artifact-owned URL-load bridge. */
+  /** Direct text edit is active. Needs host-owned srcDoc injection for source-path round trips. */
   editMode?: boolean;
   /** The artifact has its own script that listens for edit postMessages while URL-loaded. */
   urlModeBridge?: boolean;
   /** The URL-loaded artifact response includes the comment/selection bridge. */
   urlCommentBridge?: boolean;
+  /** The URL-loaded artifact response includes the screenshot snapshot bridge. */
+  urlSnapshotBridge?: boolean;
   /** Tweaks palette popover open or palette committed — needs the palette bridge. */
   paletteActive?: boolean;
-  /** Draw annotations need the srcDoc snapshot bridge for screenshot export. */
+  /** Draw annotations need a snapshot bridge for screenshot export. */
   drawMode?: boolean;
   /**
    * Artifact ships the class based tweaks template (`.tw-panel` / `.tw-hidden`)
@@ -80,11 +82,14 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   // Inspect needs the selection bridge injected via buildSrcdoc; a raw
   // URL-loaded iframe has no listener to apply per-element overrides.
   if (d.inspectMode) return false;
-  if (d.editMode && !d.urlModeBridge) return false;
+  if (d.editMode) return false;
   // Palette tweaks need the srcDoc-side bridge — `<iframe src=URL>` has
   // no parent-injected listener to recolor against.
   if (d.paletteActive) return false;
-  if (d.drawMode) return false;
+  // Draw can stay on the URL-loaded iframe once the raw preview route has
+  // injected its snapshot bridge; otherwise fall back to srcDoc so capture
+  // still has a bridge to talk to.
+  if (d.drawMode && !d.urlSnapshotBridge) return false;
   // The class based tweaks template relies on the srcDoc tweaks bridge
   // emitting `od:tweaks-available` on mount; on the URL load path the bridge
   // is never injected, so the toolbar toggle would stay disabled even though
@@ -180,6 +185,45 @@ export function htmlNeedsFocusGuard(source: string): boolean {
   if (/\.\s*focus\s*\(/i.test(source)) return true;
   if (/\bautofocus\b/i.test(source)) return true;
   if (/<script\b[^>]*\bsrc\s*=/i.test(source)) return true;
+  return false;
+}
+
+/**
+ * Return true when the HTML source shows hallmarks of a real GPU/compute app
+ * that the default opaque-origin preview sandbox cannot run correctly: it
+ * needs same-origin Web Workers, real Web Storage, WASM, or SharedArrayBuffer
+ * (cross-origin isolation). These are the WebGL/Worker artifacts from issue
+ * #724 — Gaussian-splat viewers, ffmpeg.wasm, threaded renderers.
+ *
+ * When true, FileViewer routes the artifact through the "powered preview"
+ * path (a cross-origin-isolated iframe with allow-same-origin) instead of the
+ * opaque sandbox. Plain single-canvas WebGL1 demos are intentionally NOT
+ * matched — they already run fine under the default sandbox, and powered mode
+ * carries a (documented, opt-in) larger trust surface, so we only escalate for
+ * artifacts that genuinely need it.
+ *
+ * Pure string scan over the same `source` already fetched for preview. False
+ * positives just take the powered path (still correct, slightly larger trust
+ * surface); false negatives keep the current opaque-sandbox behavior.
+ */
+export function htmlNeedsPoweredPreview(source: string | null | undefined): boolean {
+  if (!source) return false;
+  // Hard requirement — SharedArrayBuffer only exists in a crossOriginIsolated
+  // document, which ONLY the powered path provides.
+  if (/\bSharedArrayBuffer\b/.test(source)) return true;
+  // Web Workers / SharedWorker: external-file workers throw SecurityError at an
+  // opaque origin; even blob workers commonly pair with storage/WASM here.
+  if (/\bnew\s+(?:Worker|SharedWorker)\s*\(/.test(source)) return true;
+  if (/\bimportScripts\s*\(/.test(source)) return true;
+  // WASM streaming instantiation reads a same-origin .wasm the opaque origin
+  // cannot fetch; and threaded WASM needs SAB.
+  if (/\bWebAssembly\s*\.\s*(?:instantiateStreaming|compileStreaming)\b/.test(source)) return true;
+  if (/\.wasm\b/.test(source)) return true;
+  // WebGL2 / OffscreenCanvas / WebGPU — the modern rendering stack these
+  // artifacts drive, usually from a worker.
+  if (/getContext\s*\(\s*["'`]webgl2["'`]/.test(source)) return true;
+  if (/\bOffscreenCanvas\b/.test(source)) return true;
+  if (/\bnavigator\s*\.\s*gpu\b/.test(source)) return true;
   return false;
 }
 

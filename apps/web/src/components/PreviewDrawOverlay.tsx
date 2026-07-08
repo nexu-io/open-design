@@ -11,7 +11,10 @@ import { isImeComposing } from '../utils/imeComposing';
 interface Point { x: number; y: number }
 interface Stroke { points: Point[] }
 interface NormalizedRect { x: number; y: number; width: number; height: number }
+interface Rect { x: number; y: number; width: number; height: number }
 type MarkTool = 'box' | 'pen';
+type DrawDockLayout = 'floating' | 'docked';
+type DrawDockSide = 'right' | 'left' | 'bottom' | 'top';
 interface CaptureTarget {
   filePath?: string;
   elementId?: string;
@@ -70,10 +73,38 @@ interface Props {
 const STROKE_COLOR = '#ff3b30';
 const STROKE_WIDTH = 4;
 const TARGET_COLOR = '#1677ff';
+const DRAW_DOCK_GAP = 12;
+const DRAW_DOCK_MARGIN = 16;
+const DRAW_DOCK_MIN_WIDTH = 320;
+const DRAW_DOCK_MIN_HEIGHT = 120;
 
 // Render `node` into `host` via a portal when one is provided, otherwise inline.
 function maybePortal(node: ReactNode, host: HTMLElement | null) {
   return host ? createPortal(node, host) : node;
+}
+
+function clamp(value: number, min: number, max: number) {
+  if (max < min) return min;
+  return Math.min(Math.max(value, min), max);
+}
+
+function rectsOverlap(a: Rect, b: Rect) {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function dockPlacementEquals(
+  a: { layout: DrawDockLayout; side: DrawDockSide | null; style: CSSProperties },
+  b: { layout: DrawDockLayout; side: DrawDockSide | null; style: CSSProperties },
+) {
+  return (
+    a.layout === b.layout &&
+    a.side === b.side &&
+    a.style.left === b.style.left &&
+    a.style.top === b.style.top &&
+    a.style.bottom === b.style.bottom &&
+    a.style.transform === b.style.transform &&
+    a.style.maxWidth === b.style.maxWidth
+  );
 }
 
 export function PreviewDrawOverlay({
@@ -98,7 +129,9 @@ export function PreviewDrawOverlay({
   const strokesRef = useRef<Stroke[]>([]);
   const undoneStrokesRef = useRef<Stroke[]>([]);
   const drawingRef = useRef<Stroke | null>(null);
-  const selectionBoxRef = useRef<NormalizedRect | null>(null);
+  // Box-select accumulates: each drag commits another region, so the user can
+  // mark several areas in one pass instead of one box replacing the last.
+  const selectionBoxesRef = useRef<NormalizedRect[]>([]);
   const boxDraftRef = useRef<{ start: Point; current: Point } | null>(null);
   const composingRef = useRef(false);
   const [hasInk, setHasInk] = useState(false);
@@ -106,6 +139,12 @@ export function PreviewDrawOverlay({
   const [undoCount, setUndoCount] = useState(0);
   const [redoCount, setRedoCount] = useState(0);
   const [pendingAction, setPendingAction] = useState<AnnotationAction | null>(null);
+  // The submit control is one split button: the main half runs the selected
+  // action (default 'send', so nothing changes for existing users) and the
+  // chevron opens a menu to switch to Add-to-input / Queue / Send.
+  const [submitAction, setSubmitAction] = useState<AnnotationAction>('send');
+  const [submitMenuOpen, setSubmitMenuOpen] = useState(false);
+  const submitMenuRef = useRef<HTMLDivElement | null>(null);
   // True only for the brief window while a host compositor capture is in
   // flight: hides this overlay's strokes/toolbar so they don't appear in the
   // screenshot (they're re-painted onto the result by compositeWithBackground).
@@ -122,7 +161,22 @@ export function PreviewDrawOverlay({
     action: AnnotationAction;
     message: string;
   } | null>(null);
+  const dockRef = useRef<HTMLDivElement | null>(null);
+  const [layoutRevision, setLayoutRevision] = useState(0);
+  const [dockPlacement, setDockPlacement] = useState<{
+    layout: DrawDockLayout;
+    side: DrawDockSide | null;
+    style: CSSProperties;
+  }>({
+    layout: 'docked',
+    side: null,
+    style: previewDrawDockDockedStyle,
+  });
   const sending = pendingAction !== null;
+
+  const bumpLayoutRevision = useCallback(() => {
+    setLayoutRevision((value) => value + 1);
+  }, []);
 
   const redraw = useCallback(() => {
     const cvs = canvasRef.current;
@@ -137,10 +191,11 @@ export function PreviewDrawOverlay({
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     const all = drawingRef.current ? [...strokesRef.current, drawingRef.current] : strokesRef.current;
-    const box = boxDraftRef.current
+    for (const box of selectionBoxesRef.current) drawNormalizedBox(ctx, box, cvs.width, cvs.height);
+    const draft = boxDraftRef.current
       ? normalizedRectFromPoints(boxDraftRef.current.start, boxDraftRef.current.current)
-      : selectionBoxRef.current;
-    if (box) drawNormalizedBox(ctx, box, cvs.width, cvs.height);
+      : null;
+    if (draft) drawNormalizedBox(ctx, draft, cvs.width, cvs.height);
     for (const s of all) {
       const first = s.points[0];
       if (!first) continue;
@@ -210,7 +265,7 @@ export function PreviewDrawOverlay({
 
   function syncHistoryState() {
     setHasInk(strokesRef.current.length > 0);
-    setHasBox(Boolean(selectionBoxRef.current));
+    setHasBox(selectionBoxesRef.current.length > 0);
     setUndoCount(strokesRef.current.length);
     setRedoCount(undoneStrokesRef.current.length);
   }
@@ -284,8 +339,8 @@ export function PreviewDrawOverlay({
     (e.target as Element).setPointerCapture?.(e.pointerId);
     const point = pointFromEvent(e);
     if (markTool === 'box') {
+      // Start a fresh draft on top of any already-committed boxes.
       boxDraftRef.current = { start: point, current: point };
-      selectionBoxRef.current = null;
       syncHistoryState();
       redraw();
       return;
@@ -315,7 +370,11 @@ export function PreviewDrawOverlay({
       boxDraftRef.current.current = pointFromEvent(e);
       const next = normalizedRectFromPoints(boxDraftRef.current.start, boxDraftRef.current.current);
       boxDraftRef.current = null;
-      selectionBoxRef.current = next.width >= 0.006 && next.height >= 0.006 ? next : null;
+      // Commit the drawn region; ignore accidental micro-drags (click without move).
+      if (next.width >= 0.006 && next.height >= 0.006) {
+        selectionBoxesRef.current = [...selectionBoxesRef.current, next];
+        bumpLayoutRevision();
+      }
       syncHistoryState();
       redraw();
       return;
@@ -324,6 +383,7 @@ export function PreviewDrawOverlay({
     if (drawingRef.current.points.length > 1) {
       strokesRef.current.push(drawingRef.current);
       undoneStrokesRef.current = [];
+      bumpLayoutRevision();
       syncHistoryState();
     }
     drawingRef.current = null;
@@ -343,10 +403,11 @@ export function PreviewDrawOverlay({
     strokesRef.current = [];
     undoneStrokesRef.current = [];
     drawingRef.current = null;
-    selectionBoxRef.current = null;
+    selectionBoxesRef.current = [];
     boxDraftRef.current = null;
     syncHistoryState();
     redraw();
+    bumpLayoutRevision();
   }
 
   function addExtraFiles(files: FileList | File[] | null) {
@@ -396,13 +457,46 @@ export function PreviewDrawOverlay({
     return () => window.removeEventListener('keydown', onKey, true);
   }, [previewIndex]);
 
+  // Dismiss the submit menu on outside pointer / Escape. Capture phase + stop
+  // lets Escape close the menu first without also closing the whole overlay.
+  useEffect(() => {
+    if (!submitMenuOpen) return;
+    function onPointerDown(e: MouseEvent) {
+      if (submitMenuRef.current && !submitMenuRef.current.contains(e.target as Node)) {
+        setSubmitMenuOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setSubmitMenuOpen(false);
+      }
+    }
+    window.addEventListener('mousedown', onPointerDown, true);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown, true);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [submitMenuOpen]);
+
   function undoStroke() {
     if (sending) return;
-    if (selectionBoxRef.current || boxDraftRef.current) {
-      selectionBoxRef.current = null;
+    // Discard an in-progress draft first, then pop committed boxes one at a
+    // time (most recent first) before falling back to freehand strokes.
+    if (boxDraftRef.current) {
       boxDraftRef.current = null;
       syncHistoryState();
       redraw();
+      bumpLayoutRevision();
+      onToolbarClick?.('undo');
+      return;
+    }
+    if (selectionBoxesRef.current.length > 0) {
+      selectionBoxesRef.current = selectionBoxesRef.current.slice(0, -1);
+      syncHistoryState();
+      redraw();
+      bumpLayoutRevision();
       onToolbarClick?.('undo');
       return;
     }
@@ -413,6 +507,7 @@ export function PreviewDrawOverlay({
     drawingRef.current = null;
     syncHistoryState();
     redraw();
+    bumpLayoutRevision();
   }
 
   function redoStroke() {
@@ -424,6 +519,7 @@ export function PreviewDrawOverlay({
     drawingRef.current = null;
     syncHistoryState();
     redraw();
+    bumpLayoutRevision();
   }
 
   function closeOverlay() {
@@ -435,18 +531,18 @@ export function PreviewDrawOverlay({
     strokesRef.current = [];
     undoneStrokesRef.current = [];
     drawingRef.current = null;
-    selectionBoxRef.current = null;
+    selectionBoxesRef.current = [];
     boxDraftRef.current = null;
     setExtraFiles([]);
     setPreviewIndex(null);
     syncHistoryState();
     redraw();
+    bumpLayoutRevision();
   }, [active, redraw]);
 
-  function boxBounds(): { x: number; y: number; width: number; height: number } | null {
+  function normalizedRectToCanvasRect(box: NormalizedRect): Rect | null {
     const rect = canvasRef.current?.getBoundingClientRect();
-    const box = selectionBoxRef.current;
-    if (!rect || rect.width <= 0 || rect.height <= 0 || !box) return null;
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
     return {
       x: box.x * rect.width,
       y: box.y * rect.height,
@@ -455,11 +551,32 @@ export function PreviewDrawOverlay({
     };
   }
 
-  function strokeBounds(): { x: number; y: number; width: number; height: number } | null {
+  function boxBounds(): Rect | null {
+    const boxes = selectionBoxesRef.current.map((box) => normalizedRectToCanvasRect(box)).filter((box): box is Rect => Boolean(box));
+    if (boxes.length === 0) return null;
+    // Collapse every committed box into one enclosing rect so the annotation
+    // bounds still describe a single region for the downstream capture crop.
+    const left = Math.min(...boxes.map((box) => box.x));
+    const top = Math.min(...boxes.map((box) => box.y));
+    const right = Math.max(...boxes.map((box) => box.x + box.width));
+    const bottom = Math.max(...boxes.map((box) => box.y + box.height));
+    return {
+      x: left,
+      y: top,
+      width: Math.max(1, right - left),
+      height: Math.max(1, bottom - top),
+    };
+  }
+
+  function lastBoxBounds(): Rect | null {
+    const last = selectionBoxesRef.current.at(-1);
+    return last ? normalizedRectToCanvasRect(last) : null;
+  }
+
+  function strokeRect(stroke: Stroke | null | undefined): Rect | null {
     const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
-    const points = strokesRef.current.flatMap((stroke) => stroke.points);
-    if (points.length === 0) return null;
+    const points = stroke?.points ?? [];
+    if (!rect || rect.width <= 0 || rect.height <= 0 || points.length === 0) return null;
     const xs = points.map((point) => point.x * rect.width);
     const ys = points.map((point) => point.y * rect.height);
     const minX = Math.min(...xs);
@@ -473,6 +590,19 @@ export function PreviewDrawOverlay({
       width: Math.max(1, maxX - minX + pad * 2),
       height: Math.max(1, maxY - minY + pad * 2),
     };
+  }
+
+  function strokeBounds(): Rect | null {
+    const points = strokesRef.current.flatMap((stroke) => stroke.points);
+    return strokeRect(points.length > 0 ? { points } : null);
+  }
+
+  function lastStrokeBounds(): Rect | null {
+    return strokeRect(strokesRef.current.at(-1));
+  }
+
+  function anchorBounds(): Rect | null {
+    return lastBoxBounds() ?? lastStrokeBounds() ?? captureTarget?.position ?? null;
   }
 
   function annotationBounds(): { x: number; y: number; width: number; height: number } | undefined {
@@ -606,7 +736,7 @@ export function PreviewDrawOverlay({
     const sx = snap.w / Math.max(1, rect.width);
     const sy = snap.h / Math.max(1, rect.height);
     drawCaptureTarget(ctx, sx, sy, captureTarget);
-    if (selectionBoxRef.current) drawNormalizedBox(ctx, selectionBoxRef.current, snap.w, snap.h);
+    for (const box of selectionBoxesRef.current) drawNormalizedBox(ctx, box, snap.w, snap.h);
     ctx.strokeStyle = STROKE_COLOR;
     ctx.lineWidth = STROKE_WIDTH * Math.max(sx, sy);
     ctx.lineCap = 'round';
@@ -726,6 +856,147 @@ export function PreviewDrawOverlay({
     setToolbarHost((wrapRef.current?.closest('.viewer-body') as HTMLElement | null) ?? null);
   }, [active]);
 
+  useLayoutEffect(() => {
+    if (!active) {
+      setDockPlacement((current) => (
+        current.layout === 'docked' && current.side === null && dockPlacementEquals(current, {
+          layout: 'docked',
+          side: null,
+          style: previewDrawDockDockedStyle,
+        })
+          ? current
+          : { layout: 'docked', side: null, style: previewDrawDockDockedStyle }
+      ));
+      return;
+    }
+
+    const wrap = wrapRef.current;
+    const dock = dockRef.current;
+    const host = toolbarHost ?? wrap;
+    const anchor = anchorBounds();
+    if (!wrap || !dock || !host || !anchor) {
+      setDockPlacement((current) => (
+        current.layout === 'docked' && current.side === null && current.style === previewDrawDockDockedStyle
+          ? current
+          : { layout: 'docked', side: null, style: previewDrawDockDockedStyle }
+      ));
+      return;
+    }
+
+    const hostRect = host.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const dockRect = dock.getBoundingClientRect();
+    if (
+      hostRect.width <= DRAW_DOCK_MARGIN * 2 ||
+      hostRect.height <= DRAW_DOCK_MARGIN * 2 ||
+      dockRect.width <= 0 ||
+      dockRect.height <= 0 ||
+      hostRect.width < Math.max(DRAW_DOCK_MIN_WIDTH, dockRect.width) + DRAW_DOCK_MARGIN * 2 ||
+      hostRect.height < Math.max(DRAW_DOCK_MIN_HEIGHT, dockRect.height) + DRAW_DOCK_MARGIN * 2
+    ) {
+      setDockPlacement((current) => (
+        current.layout === 'docked' && current.side === null && current.style === previewDrawDockDockedStyle
+          ? current
+          : { layout: 'docked', side: null, style: previewDrawDockDockedStyle }
+      ));
+      return;
+    }
+
+    const anchorInHost: Rect = {
+      x: wrapRect.left - hostRect.left + anchor.x,
+      y: wrapRect.top - hostRect.top + anchor.y,
+      width: anchor.width,
+      height: anchor.height,
+    };
+    const safeLeft = DRAW_DOCK_MARGIN;
+    const safeTop = DRAW_DOCK_MARGIN;
+    const safeRight = Math.max(safeLeft, hostRect.width - dockRect.width - DRAW_DOCK_MARGIN);
+    const safeBottom = Math.max(safeTop, hostRect.height - dockRect.height - DRAW_DOCK_MARGIN);
+    const centeredLeft = anchorInHost.x + anchorInHost.width / 2 - dockRect.width / 2;
+    const centeredTop = anchorInHost.y + anchorInHost.height / 2 - dockRect.height / 2;
+    const candidates: Array<{ side: DrawDockSide; left: number; top: number; fits: boolean }> = [
+      {
+        side: 'right',
+        left: anchorInHost.x + anchorInHost.width + DRAW_DOCK_GAP,
+        top: centeredTop,
+        fits: anchorInHost.x + anchorInHost.width + DRAW_DOCK_GAP + dockRect.width <= hostRect.width - DRAW_DOCK_MARGIN,
+      },
+      {
+        side: 'left',
+        left: anchorInHost.x - DRAW_DOCK_GAP - dockRect.width,
+        top: centeredTop,
+        fits: anchorInHost.x - DRAW_DOCK_GAP - dockRect.width >= DRAW_DOCK_MARGIN,
+      },
+      {
+        side: 'bottom',
+        left: centeredLeft,
+        top: anchorInHost.y + anchorInHost.height + DRAW_DOCK_GAP,
+        fits: anchorInHost.y + anchorInHost.height + DRAW_DOCK_GAP + dockRect.height <= hostRect.height - DRAW_DOCK_MARGIN,
+      },
+      {
+        side: 'top',
+        left: centeredLeft,
+        top: anchorInHost.y - DRAW_DOCK_GAP - dockRect.height,
+        fits: anchorInHost.y - DRAW_DOCK_GAP - dockRect.height >= DRAW_DOCK_MARGIN,
+      },
+    ];
+
+    let nextPlacement: { layout: DrawDockLayout; side: DrawDockSide | null; style: CSSProperties } = {
+      layout: 'docked',
+      side: null,
+      style: previewDrawDockDockedStyle,
+    };
+
+    for (const candidate of candidates) {
+      if (!candidate.fits) continue;
+      const clampedLeft = clamp(candidate.left, safeLeft, safeRight);
+      const clampedTop = clamp(candidate.top, safeTop, safeBottom);
+      const candidateRect: Rect = {
+        x: clampedLeft,
+        y: clampedTop,
+        width: dockRect.width,
+        height: dockRect.height,
+      };
+      if (rectsOverlap(candidateRect, anchorInHost)) continue;
+      nextPlacement = {
+        layout: 'floating',
+        side: candidate.side,
+        style: {
+          position: 'absolute',
+          left: `${Math.round(clampedLeft)}px`,
+          top: `${Math.round(clampedTop)}px`,
+          transform: 'none',
+          bottom: 'auto',
+          maxWidth: `${Math.max(0, hostRect.width - DRAW_DOCK_MARGIN * 2)}px`,
+        },
+      };
+      break;
+    }
+
+    setDockPlacement((current) => (dockPlacementEquals(current, nextPlacement) ? current : nextPlacement));
+  }, [
+    active,
+    toolbarHost,
+    captureTarget,
+    layoutRevision,
+    imagePreviews.length,
+    captureWarning?.message,
+  ]);
+
+  useLayoutEffect(() => {
+    if (!active || typeof ResizeObserver === 'undefined') return undefined;
+    const wrap = wrapRef.current;
+    const dock = dockRef.current;
+    const host = toolbarHost ?? wrap;
+    if (!wrap || !dock || !host) return undefined;
+    const recompute = () => setLayoutRevision((value) => value + 1);
+    const ro = new ResizeObserver(recompute);
+    ro.observe(wrap);
+    ro.observe(dock);
+    if (host !== wrap) ro.observe(host);
+    return () => ro.disconnect();
+  }, [active, toolbarHost]);
+
   const overlayPointer = active ? 'auto' : 'none';
   const showCanvas = active || hasInk || hasBox;
   const canSubmit = hasInk || hasBox || Boolean(captureTarget) || captureViewport || Boolean(note.trim()) || extraFiles.length > 0;
@@ -735,6 +1006,45 @@ export function PreviewDrawOverlay({
   const canUndo = (undoCount > 0 || hasBox) && !sending;
   const canRedo = redoCount > 0 && !sending;
   const chromeHidden = capturing || hideChrome;
+  // Each submit action's icon, labels, and enable rule, driving the split
+  // button and its dropdown. `send` is gated while a task runs (Queue and
+  // Add-to-input stay usable then); the others only need something to submit.
+  const submitOptions: {
+    action: AnnotationAction;
+    label: string;
+    pendingLabel: string;
+    title: string;
+    icon: ReactNode;
+    enabled: boolean;
+  }[] = [
+    {
+      action: 'send',
+      label: t('chat.send'),
+      pendingLabel: t('chat.annotationSending'),
+      title: sendDisabled
+        ? sendDisabledReason ?? t('chat.annotationSendDisabledReason')
+        : t('chat.send'),
+      icon: <Icon name="send" size={14} />,
+      enabled: canSend,
+    },
+    {
+      action: 'draft',
+      label: t('chat.annotationAddToInput'),
+      pendingLabel: t('chat.annotationAddingToInput'),
+      title: t('chat.annotationAddToInput'),
+      icon: <RemixIcon name="input-field" size={15} />,
+      enabled: canAddToInput,
+    },
+    {
+      action: 'queue',
+      label: t('chat.annotationQueue'),
+      pendingLabel: t('chat.annotationQueueing'),
+      title: t('chat.annotationQueue'),
+      icon: <RemixIcon name="list-check-2" size={15} />,
+      enabled: canSubmit,
+    },
+  ];
+  const currentSubmit = submitOptions.find((opt) => opt.action === submitAction) ?? submitOptions[0]!;
 
   return (
     <div
@@ -769,18 +1079,24 @@ export function PreviewDrawOverlay({
       {active ? maybePortal(
         <>
           <style>{tooltipStyle}</style>
+          <div
+            ref={dockRef}
+            className="preview-draw-dock"
+            data-draw-layout={dockPlacement.layout}
+            data-draw-side={dockPlacement.side ?? undefined}
+            style={{
+              ...previewDrawDockBaseStyle,
+              ...dockPlacement.style,
+            }}
+          >
           {captureWarning ? (
             <div
               role="status"
               aria-live="polite"
               style={{
-                position: 'absolute',
-                left: 'calc(50% - 52px)',
-                bottom: 112,
-                transform: 'translateX(-50%)',
                 display: 'flex',
                 alignItems: 'center',
-                maxWidth: 'min(420px, calc(100% - 144px))',
+                maxWidth: '100%',
                 padding: '8px 12px',
                 borderRadius: 999,
                 background: 'rgba(20,20,20,0.92)',
@@ -801,14 +1117,10 @@ export function PreviewDrawOverlay({
             <div
               aria-label={t('chat.annotationAttachedImages')}
               style={{
-                position: 'absolute',
-                left: 'calc(50% - 52px)',
-                bottom: 88,
-                transform: 'translateX(-50%)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
-                maxWidth: 'min(520px, calc(100% - 144px))',
+                maxWidth: '100%',
                 overflowX: 'auto',
                 padding: '6px 8px',
                 background: 'rgba(20,20,20,0.92)',
@@ -879,10 +1191,6 @@ export function PreviewDrawOverlay({
           <div
             className="preview-draw-toolbar"
             style={{
-              position: 'absolute',
-              left: 'calc(50% - 52px)',
-              bottom: 16,
-              transform: 'translateX(-50%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -892,7 +1200,7 @@ export function PreviewDrawOverlay({
               rowGap: 8,
               boxSizing: 'border-box',
               width: 'max-content',
-              maxWidth: 'min(760px, calc(100% - 144px))',
+              maxWidth: '100%',
               padding: '6px 8px',
               background: 'rgba(20,20,20,0.92)',
               color: '#fff',
@@ -1031,66 +1339,77 @@ export function PreviewDrawOverlay({
                 if (e.key === 'Enter') void send('queue');
               }}
             />
-            <button
-              type="button"
-              onClick={() => void send('draft')}
-              disabled={sending || !canAddToInput}
-              aria-label={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
-              title={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
-              data-tooltip={pendingAction === 'draft' ? t('chat.annotationAddingToInput') : t('chat.annotationAddToInput')}
-              className="preview-draw-icon-action"
-              style={{
-                ...drawActionButtonStyle(false),
-                opacity: canAddToInput ? 1 : 0.4,
-                cursor: sending ? 'wait' : (canAddToInput ? 'pointer' : 'not-allowed'),
-              }}
-            >
-              {pendingAction === 'draft' ? (
-                <Icon name="spinner" size={14} />
-              ) : (
-                <RemixIcon name="input-field" size={15} />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => void send('queue')}
-              disabled={sending || !canSubmit}
-              aria-label={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
-              title={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
-              data-tooltip={pendingAction === 'queue' ? t('chat.annotationQueueing') : t('chat.annotationQueue')}
-              className="preview-draw-icon-action"
-              style={{
-                ...drawActionButtonStyle(false),
-                opacity: canSubmit ? 1 : 0.4,
-                cursor: sending ? 'wait' : (canSubmit ? 'pointer' : 'not-allowed'),
-              }}
-            >
-              {pendingAction === 'queue' ? (
-                <Icon name="spinner" size={14} />
-              ) : (
-                <RemixIcon name="list-check-2" size={15} />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => void send('send')}
-              disabled={sending || !canSend}
-              aria-label={pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
-              title={sendDisabled ? sendDisabledReason : pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
-              data-tooltip={sendDisabled ? sendDisabledReason : pendingAction === 'send' ? t('chat.annotationSending') : t('chat.send')}
-              className="preview-draw-icon-action"
-              style={{
-                ...drawActionButtonStyle(true),
-                opacity: canSend ? 1 : 0.4,
-                cursor: sending ? 'wait' : (canSend ? 'pointer' : 'not-allowed'),
-              }}
-            >
-              {pendingAction === 'send' ? (
-                <Icon name="spinner" size={14} />
-              ) : (
-                <Icon name="send" size={14} />
-              )}
-            </button>
+            <div className="preview-draw-submit" ref={submitMenuRef} style={submitSplitStyle}>
+              <button
+                type="button"
+                onClick={() => void send(submitAction)}
+                disabled={sending || !currentSubmit.enabled}
+                aria-label={pendingAction === submitAction ? currentSubmit.pendingLabel : currentSubmit.label}
+                title={pendingAction === submitAction ? currentSubmit.pendingLabel : currentSubmit.title}
+                data-tooltip={pendingAction === submitAction ? currentSubmit.pendingLabel : currentSubmit.title}
+                className="preview-draw-icon-action"
+                style={{
+                  ...drawActionButtonStyle(true),
+                  width: 'auto',
+                  minWidth: 42,
+                  padding: '0 7px 0 13px',
+                  borderRadius: '999px 0 0 999px',
+                  opacity: currentSubmit.enabled ? 1 : 0.4,
+                  cursor: sending ? 'wait' : (currentSubmit.enabled ? 'pointer' : 'not-allowed'),
+                }}
+              >
+                {pendingAction === submitAction ? <Icon name="spinner" size={14} /> : currentSubmit.icon}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubmitMenuOpen((open) => !open)}
+                disabled={sending || !canSubmit}
+                aria-haspopup="menu"
+                aria-expanded={submitMenuOpen}
+                aria-label={t('chat.annotationSubmitOptions')}
+                title={t('chat.annotationSubmitOptions')}
+                style={{
+                  ...drawActionButtonStyle(true),
+                  width: 26,
+                  borderRadius: '0 999px 999px 0',
+                  borderLeft: '1px solid rgba(255,255,255,0.28)',
+                  opacity: (!sending && canSubmit) ? 1 : 0.5,
+                  cursor: sending ? 'wait' : (canSubmit ? 'pointer' : 'not-allowed'),
+                }}
+              >
+                <RemixIcon name={submitMenuOpen ? 'arrow-down-s-line' : 'arrow-up-s-line'} size={14} />
+              </button>
+              {submitMenuOpen ? (
+                <div role="menu" aria-label={t('chat.annotationSubmitOptions')} style={submitMenuStyle}>
+                  {submitOptions.map((opt) => {
+                    const itemEnabled = !sending && opt.enabled;
+                    const active = submitAction === opt.action;
+                    return (
+                      <button
+                        key={opt.action}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={active}
+                        aria-label={opt.label}
+                        disabled={itemEnabled ? undefined : true}
+                        title={opt.title}
+                        onClick={() => {
+                          setSubmitAction(opt.action);
+                          setSubmitMenuOpen(false);
+                          void send(opt.action);
+                        }}
+                        style={submitMenuItemStyle(active, itemEnabled)}
+                      >
+                        <span style={submitMenuItemIconStyle}>{opt.icon}</span>
+                        <span style={{ flex: '1 1 auto' }}>{opt.label}</span>
+                        {active ? <RemixIcon name="check-line" size={14} /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          </div>
           </div>
           </div>
           {activePreview ? createPortal(
@@ -1280,4 +1599,76 @@ const closeButtonStyle: CSSProperties = {
   ...iconButtonStyle,
   border: 'none',
   background: 'transparent',
+};
+
+// Bottom-anchored column that stacks the capture warning, attached-image
+// strip, and toolbar with real spacing. Absolute per-element `bottom` offsets
+// used to collide once the toolbar wrapped taller, so the image strip visually
+// covered the controls; a flex column keeps them apart at any height.
+const previewDrawDockBaseStyle: CSSProperties = {
+  position: 'absolute',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 8,
+  zIndex: 91,
+  pointerEvents: 'none',
+};
+
+const previewDrawDockDockedStyle: CSSProperties = {
+  left: 'calc(50% - 52px)',
+  bottom: 16,
+  transform: 'translateX(-50%)',
+  maxWidth: 'min(760px, calc(100% - 144px))',
+};
+
+const submitSplitStyle: CSSProperties = {
+  position: 'relative',
+  display: 'inline-flex',
+  alignItems: 'center',
+  flex: '0 0 auto',
+};
+
+const submitMenuStyle: CSSProperties = {
+  position: 'absolute',
+  right: 0,
+  bottom: 'calc(100% + 8px)',
+  minWidth: 184,
+  padding: 4,
+  borderRadius: 12,
+  background: 'rgba(20,20,20,0.98)',
+  border: '1px solid rgba(255,255,255,0.10)',
+  boxShadow: '0 10px 30px rgba(0,0,0,0.32)',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 2,
+  zIndex: 12,
+};
+
+function submitMenuItemStyle(active: boolean, enabled: boolean): CSSProperties {
+  return {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+    padding: '7px 9px',
+    borderRadius: 8,
+    border: 'none',
+    background: active ? 'rgba(255,255,255,0.14)' : 'transparent',
+    color: '#fff',
+    fontSize: 12.5,
+    lineHeight: 1.2,
+    textAlign: 'left',
+    whiteSpace: 'nowrap',
+    opacity: enabled ? 1 : 0.4,
+    cursor: enabled ? 'pointer' : 'not-allowed',
+  };
+}
+
+const submitMenuItemIconStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 18,
+  flex: '0 0 auto',
 };

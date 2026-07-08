@@ -35,6 +35,10 @@
 //                              (Gemini Flash, Flux, Recraft) and async
 //                              /videos submit + poll for video
 //                              (Seedance 2.0, Veo 3.1, Wan 2.7)
+//   * provider 'minimax'    → MiniMax: synchronous /v1/image_generation
+//                              for image-01 (T2I + I2I via subject_reference)
+//                              on api.minimax.io, plus TTS via the legacy
+//                              api.minimaxi.chat host
 //   * provider 'custom-image'→ user-supplied OpenAI-compatible
 //                              /v1/images/generations + /v1/images/edits
 //                              endpoints
@@ -698,6 +702,11 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'minimax' && surface === 'image') {
+      const result = await renderMinimaxImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (def.provider === 'senseaudio' && surface === 'audio') {
       const result = await renderSenseAudioTTS(ctx, credentials);
       bytes = result.bytes;
@@ -1008,14 +1017,59 @@ function parseCodexThreadId(stdout: string): string {
   throw new Error('codex imagegen did not emit a thread.started thread_id');
 }
 
-async function readCodexGeneratedImage(generatedRoot: string, threadId: string): Promise<Buffer> {
+function summarizeCodexImagegenStdout(stdout: string): string {
+  const messages: string[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const obj = JSON.parse(trimmed) as { item?: { text?: unknown }; text?: unknown };
+      const text = typeof obj.item?.text === 'string'
+        ? obj.item.text
+        : typeof obj.text === 'string'
+          ? obj.text
+          : '';
+      if (text.trim()) messages.push(text.trim());
+    } catch {
+      messages.push(trimmed);
+    }
+  }
+  return truncate(messages.join('\n'), 500);
+}
+
+function codexImagegenMissingOutputError(threadDir: string, stdout: string): Error {
+  const summary = summarizeCodexImagegenStdout(stdout);
+  const suffix = summary ? ` Codex stdout summary: ${summary}` : '';
+  if (/\bpreview[- ]only\b|without saving|without writing|does not write|no file|bez przenoszenia/i.test(summary)) {
+    return new Error(
+      `Codex imagegen completed in preview-only mode and did not write an image file under ${threadDir}. Use an API-backed image provider or a Codex CLI build that writes generated_images output.${suffix}`,
+    );
+  }
+  return new Error(
+    `Codex imagegen completed but did not write an ig_* image under ${threadDir}. Use an API-backed image provider or a Codex CLI build that writes generated_images output.${suffix}`,
+  );
+}
+
+async function readCodexGeneratedImage(
+  generatedRoot: string,
+  threadId: string,
+  stdout: string,
+): Promise<Buffer> {
   const threadDir = path.join(generatedRoot, threadId);
-  const entries = await readdir(threadDir);
+  let entries: string[];
+  try {
+    entries = await readdir(threadDir);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      throw codexImagegenMissingOutputError(threadDir, stdout);
+    }
+    throw err;
+  }
   const match = entries
     .filter((name) => /^ig_.*\.(?:png|jpe?g|webp)$/i.test(name))
     .sort()[0];
   if (!match) {
-    throw new Error(`codex imagegen produced no ig_* image in ${threadDir}`);
+    throw codexImagegenMissingOutputError(threadDir, stdout);
   }
   const imagePath = path.join(threadDir, match);
   const bytes = await readFile(imagePath);
@@ -1068,7 +1122,7 @@ async function renderCodexImage(ctx: MediaContext): Promise<RenderResult> {
   await mkdir(generatedRoot, { recursive: true });
   const { stdout } = await runCodexImagegen(ctx, generatedRoot, env);
   const threadId = parseCodexThreadId(stdout);
-  const bytes = await readCodexGeneratedImage(generatedRoot, threadId);
+  const bytes = await readCodexGeneratedImage(generatedRoot, threadId, stdout);
   const imageModel = codexImageModelLabel(ctx.model);
   return {
     bytes,
@@ -2767,6 +2821,23 @@ const MINIMAX_TTS_MODEL_MAP = {
   'minimax-tts': 'speech-02-turbo',
 } as Record<string, string>;
 
+// Image generation lives on a different host than the legacy TTS endpoint
+// (api.minimax.io vs api.minimaxi.chat). Keeping the two constants
+// separate lets existing TTS users keep their api.minimaxi.chat/v1
+// default while new image users get api.minimax.io without manual
+// configuration. The image renderer resolves baseUrl from
+// OD_MINIMAX_IMAGE_BASE_URL env -> this constant; credentials.baseUrl
+// is intentionally ignored for image (see renderMinimaxImage).
+const MINIMAX_IMAGE_DEFAULT_BASE_URL = 'https://api.minimax.io';
+
+// Map our generic catalogue id onto MiniMax's actual wire model name. Mirrors
+// the TTS pattern above: the catalog id `minimax-image-01` is shorthand for
+// "their flagship image model"; we substitute the real model name on the wire
+// so MiniMax accepts the request without exposing the user to internal naming.
+const MINIMAX_IMAGE_MODEL_MAP = {
+  'minimax-image-01': 'image-01',
+} as Record<string, string>;
+
 async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
@@ -2856,6 +2927,135 @@ async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig):
     providerNote: `minimax/${wireModel} · ${voiceId} · ${seconds}s · ${bytes.length} bytes`,
     suggestedExt: '.mp3',
   };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: MiniMax — image-01 text-to-image (synchronous, with optional
+// I2I via subject_reference).
+//
+// Docs: https://platform.minimax.io/docs/api-reference/image-generation-t2i
+// POST /v1/image_generation with a JSON body describing the prompt +
+// optional subject reference for image-to-image. Response is JSON with the
+// image base64-encoded under `data.image_base64[0]` and a `base_resp`
+// envelope that distinguishes HTTP-level from API-level failures, mirroring
+// MiniMax's TTS API.
+//
+// We always request `response_format: 'base64'` because MiniMax's default
+// URL responses expire after 24 hours — base64 persists at write time and
+// never goes stale. The wire model `image-01` is mapped from our catalog id
+// `minimax-image-01` via MINIMAX_IMAGE_MODEL_MAP.
+// ---------------------------------------------------------------------------
+
+async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY',
+    );
+  }
+  // Base URL precedence:
+  //   OD_MINIMAX_IMAGE_BASE_URL env var (operator override for proxies)
+  //   -> MINIMAX_IMAGE_DEFAULT_BASE_URL (api.minimax.io)
+  //
+  // We deliberately ignore credentials.baseUrl here. The 'minimax' provider
+  // slot is shared with TTS, whose stored baseUrl is the legacy
+  // api.minimaxi.chat/v1 host. Naively appending '/v1/image_generation'
+  // would produce https://api.minimaxi.chat/v1/v1/image_generation — a
+  // 404 against the wrong host. Adding a per-surface baseUrl to the
+  // provider schema would be a cleaner long-term fix; until then, image
+  // stays pinned to its own host and operators route via the env var.
+  const baseUrl = (
+    process.env.OD_MINIMAX_IMAGE_BASE_URL?.trim() || MINIMAX_IMAGE_DEFAULT_BASE_URL
+  ).replace(/\/+$/, '');
+  // Resolve the wire model. credentials.model wins if the user pinned a
+  // specific deployment name in Settings; otherwise we look up the
+  // ctx.wireModel in MINIMAX_IMAGE_MODEL_MAP (which translates our
+  // catalog id `minimax-image-01` to MiniMax's wire name `image-01`),
+  // falling back to ctx.wireModel itself. The map is keyed off
+  // ctx.wireModel so user aliases (OD_MEDIA_MODEL_ALIASES) pass through
+  // unchanged when they aren't in the map.
+  const wireModel = (
+    credentials.model
+    || MINIMAX_IMAGE_MODEL_MAP[ctx.wireModel]
+    || ctx.wireModel
+  ).trim();
+  const aspectRatio = minimaxImageAspectFor(ctx.aspect);
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    prompt: (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.',
+    response_format: 'base64',
+    n: 1,
+  };
+  if (aspectRatio) {
+    body.aspect_ratio = aspectRatio;
+  }
+  // I2I: when --image is supplied, pass it as subject_reference[0]. The
+  // existing resolveProjectImage() helper already returns a base64 dataUrl
+  // with a strict mime allowlist (png/jpg/jpeg/webp/gif, < 16MB).
+  if (ctx.imageRef?.dataUrl) {
+    body.subject_reference = [{
+      type: 'character',
+      image_file: ctx.imageRef.dataUrl,
+    }];
+  }
+  const resp = await fetch(`${baseUrl}/v1/image_generation`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`minimax image ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`minimax image non-JSON: ${truncate(respText, 200)}`);
+  }
+  // MiniMax wraps every response in `base_resp`; even an HTTP 200 can
+  // be a logical failure (`status_code !== 0`).
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `minimax image api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  const base64 = data?.data?.image_base64?.[0];
+  if (typeof base64 !== 'string' || !base64) {
+    throw new Error('minimax image response missing data.image_base64[0]');
+  }
+  const bytes = Buffer.from(base64, 'base64');
+  if (bytes.length === 0) {
+    throw new Error('minimax image decoded zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `minimax/${wireModel} · ${aspectRatio || '1:1'} · ${bytes.length} bytes`,
+    suggestedExt: sniffImageExt(bytes),
+  };
+}
+
+function minimaxImageAspectFor(aspect?: string): string | undefined {
+  // MiniMax's full allowlist: 1:1, 16:9, 4:3, 3:2, 2:3, 3:4, 9:16, 21:9.
+  // We accept any of these so the agent (or a future picker option) can
+  // request a wider aspect without silently falling back to 1:1.
+  // Anything outside this set is omitted from the body, letting MiniMax
+  // pick its own default rather than us round-tripping an unknown value.
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+    || aspect === '3:2'
+    || aspect === '2:3'
+    || aspect === '21:9'
+  ) {
+    return aspect;
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

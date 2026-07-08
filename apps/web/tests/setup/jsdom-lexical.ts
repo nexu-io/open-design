@@ -1,3 +1,8 @@
+// Extend vitest's expect with @testing-library/jest-dom matchers (e.g.
+// toBeInTheDocument, toHaveTextContent) so jsdom-environment tests can use
+// them without importing jest-dom in every test file.
+import '@testing-library/jest-dom/vitest';
+
 // jsdom does not implement geometry for Range/Element, but Lexical's
 // `updateDOMSelection` calls `getBoundingClientRect()` on the collapsed
 // selection target whenever the editor is the active element (to scroll it

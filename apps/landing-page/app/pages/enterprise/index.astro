@@ -1,0 +1,599 @@
+---
+/*
+ * /enterprise/ — Workspace for Teams contact-sales page.
+ *
+ * Reached from the desktop client's top-right "Workspace for Teams" chip
+ * (apps/web EntryShell) and exists to validate demand for a team / workspace
+ * edition. Left column: pitch + perks; right column: the shared lead form
+ * (`_components/enterprise-lead-form.astro`, copy in
+ * `_lib/enterprise-lead-copy.ts`) that POSTs to the `/contact-sales` Pages
+ * Function, which fans the lead out to Feishu. The /pricing "Request team
+ * access" modal renders the same component, so form changes land on both
+ * surfaces at once.
+ *
+ * Light Atelier Zero styling in lockstep with the rest of the marketing site
+ * (the reference screenshot was dark; we keep the same two-column layout but
+ * on the site's own light theme). All active locales are authored (plus the
+ * retired zh-tw); anything else falls back to en. Localized routes are
+ * produced by `[locale]/enterprise/`.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { localeFromPath, localePath } from '../../i18n';
+import EnterpriseLeadForm from '../../_components/enterprise-lead-form.astro';
+import { getEnterpriseLeadCopy } from '../../_lib/enterprise-lead-copy';
+
+const locale = localeFromPath(Astro.url.pathname);
+const c = getEnterpriseLeadCopy(locale);
+
+const DISCORD_URL = 'https://discord.gg/egq3p2Wx8';
+
+// Social-proof logo wall. Monochrome brand marks pulled at render time from the
+// Simple Icons CDN (`cdn.simpleicons.org/<slug>/<hex>`) — no committed assets,
+// and the single grey tint keeps the wall on-brand with the muted Atelier Zero
+// palette (it warms to full ink on hover). Every slug below is verified to
+// resolve on the CDN (Canva / Tencent / Figma are absent or unwanted here, so
+// the set leans on design- and product-forward brands that do resolve). Kept
+// dense (12 marks) so the wall reads full rather than sparse.
+const LOGO_TINT = '8c8c8c';
+const LOGOS: { name: string; slug: string }[] = [
+  { name: 'Google', slug: 'google' },
+  { name: 'Apple', slug: 'apple' },
+  { name: 'Xiaomi', slug: 'xiaomi' },
+  { name: 'ByteDance', slug: 'bytedance' },
+  { name: 'Spotify', slug: 'spotify' },
+  { name: 'Shopify', slug: 'shopify' },
+  { name: 'Notion', slug: 'notion' },
+  { name: 'Stripe', slug: 'stripe' },
+  { name: 'Framer', slug: 'framer' },
+  { name: 'Linear', slug: 'linear' },
+  { name: 'Vercel', slug: 'vercel' },
+  { name: 'Airbnb', slug: 'airbnb' },
+];
+const logoSrc = (slug: string) => `https://cdn.simpleicons.org/${slug}/${LOGO_TINT}`;
+
+// Use-case demos — the homepage Labs showcase, lifted wholesale: the painting
+// stage (`/lab-stage-art.webp`) with a magnifying mode Dock that swaps a
+// floating artifact card / looping video in place. CSS lives in the shared
+// `globals.css` (`.lab-stage` / `.lab-dock` / `.lab-artifact`); the interaction
+// is driven by the ported `enhanceLabDock` / `enhanceLabSwitch` enhancers in
+// the inline script below (mirrors `app/pages/index.astro`). Only 图片 / 视频
+// are localized, matching the homepage; the rest keep their English labels.
+const demoHref = (path: string) => localePath(locale, path);
+const imageLabel = locale === 'zh' ? '图片' : locale === 'zh-tw' ? '圖片' : 'Image';
+const videoLabel = locale === 'zh' ? '视频' : locale === 'zh-tw' ? '影片' : 'Video';
+const DEMO_DOCK: {
+  label: string;
+  href: string;
+  preview?: string;
+  video?: string;
+  wide?: boolean;
+}[] = [
+  { label: 'Prototype', href: demoHref('/plugins/templates/prototype/'), preview: '/lab-cards/prototype.webp?v=5' },
+  { label: 'Live Artifact', href: demoHref('/plugins/templates/live-artifact/'), preview: '/lab-cards/live-artifact.webp?v=3' },
+  { label: 'Slides', href: demoHref('/plugins/templates/deck/'), preview: '/lab-cards/slides.png?v=5' },
+  { label: imageLabel, href: demoHref('/plugins/templates/image/'), preview: '/lab-cards/quest.webp?v=1', wide: true },
+  { label: 'HyperFrames', href: demoHref('/plugins/templates/hyperframes/'), video: '/lab-hyperframes.mp4' },
+  { label: videoLabel, href: demoHref('/plugins/templates/video/'), video: '/lab-video.mp4' },
+];
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'ContactPage',
+  name: c.metaTitle,
+  description: c.metaDescription,
+  url: new URL('/enterprise/', Astro.site).toString(),
+};
+---
+
+<Layout title={c.metaTitle} description={c.metaDescription} active="enterprise" jsonLd={jsonLd}>
+  <section class="ent-page" data-od-id="enterprise">
+    <div class="ent-intro">
+      <h1 class="ent-h1">{c.h1}</h1>
+      <p class="ent-lead">{c.lead}</p>
+      <ul class="ent-perks">
+        {c.perks.map((perk) => (
+          <li class="ent-perk">
+            <span class="ent-perk__tick" aria-hidden="true">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none">
+                <path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <span>{perk}</span>
+          </li>
+        ))}
+      </ul>
+
+      {/* Discord community nudge — a friendly invite card (not a form field),
+          the whole card links to the server. */}
+      <a class="ent-discord" href={DISCORD_URL} target="_blank" rel="noopener noreferrer">
+        <span class="ent-discord__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19.27 5.33A16.6 16.6 0 0 0 15.1 4l-.2.4a14.5 14.5 0 0 1 3.7 1.19 12.7 12.7 0 0 0-10.95 0A14.6 14.6 0 0 1 11.36 4.4L11.16 4a16.6 16.6 0 0 0-4.18 1.33C4.1 9.61 3.32 13.78 3.71 17.9a16.7 16.7 0 0 0 5.06 2.56l.4-.56a9.8 9.8 0 0 1-1.6-.77l.39-.31a11.9 11.9 0 0 0 10.17 0l.4.31a9.8 9.8 0 0 1-1.61.77l.4.56a16.7 16.7 0 0 0 5.07-2.56c.46-4.78-.79-8.92-3.51-12.57ZM9.55 15.42c-.99 0-1.8-.92-1.8-2.05 0-1.12.8-2.04 1.8-2.04 1 0 1.82.93 1.8 2.04 0 1.13-.8 2.05-1.8 2.05Zm4.91 0c-.99 0-1.8-.92-1.8-2.05 0-1.12.8-2.04 1.8-2.04 1 0 1.82.93 1.8 2.04 0 1.13-.8 2.05-1.8 2.05Z"/></svg>
+        </span>
+        <span class="ent-discord__text">{c.discordLabel}</span>
+        <span class="ent-discord__cta">
+          {c.discordLinkText}
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" aria-hidden="true"><path d="M5 3h8v8M13 3 3.5 12.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        </span>
+      </a>
+
+      <div class="ent-logos">
+        <span class="ent-logos__title">{c.logosTitle}</span>
+        <div class="ent-logos__grid">
+          {LOGOS.map((logo) => (
+            <span class="ent-logos__item">
+              <img
+                class="ent-logos__img"
+                src={logoSrc(logo.slug)}
+                alt={logo.name}
+                width="88"
+                height="26"
+                loading="lazy"
+                decoding="async"
+              />
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    <div class="ent-card">
+      <EnterpriseLeadForm locale={locale} source="enterprise" pageName="enterprise" />
+    </div>
+  </section>
+
+  {/* Use-case showcase — the homepage Labs stage lifted wholesale: a painting
+      canvas with a magnifying mode Dock that swaps the floating artifact card /
+      looping video in place. Full-bleed `.lab-stage` (its centering math reads
+      50% of the enclosing `.sub-main.container` content box, same as the
+      homepage `.labs > .container`), so it must stay an unconstrained block. */}
+  <section class="ent-demos" id="labs" data-od-id="demos">
+    <div class="ent-demos__head">
+      <span class="ent-demos__title">{c.demosTitle}</span>
+      <p class="ent-demos__lead">{c.demosLead}</p>
+    </div>
+    <div class="lab-stage">
+      {/* Floating artifact card, layered over the painting; the dock swaps its
+          src and toggles `.is-visible` (see `enhanceLabSwitch`). */}
+      <img class="lab-artifact" data-lab-artifact alt="" decoding="async" />
+      {/* Video mode: the HyperFrames / 视频 tiles play this looping clip
+          instead of a still card. */}
+      <video
+        class="lab-artifact lab-artifact-video"
+        data-lab-video
+        muted
+        loop
+        playsinline
+        preload="metadata"
+        aria-hidden="true"
+      ></video>
+      {/* macOS-style magnifying Dock — proximity magnify + click/auto-cycle
+          preview swap, driven by the enhancers in the inline script. */}
+      <div class="lab-dock" data-lab-dock>
+        {DEMO_DOCK.map((item) => (
+          <a
+            class={item.wide ? 'lab-dock-item active' : 'lab-dock-item'}
+            href={item.href}
+            data-dock-item
+            data-preview-src={item.video ? undefined : item.preview}
+            data-preview-video={item.video}
+            data-preview-wide={item.wide ? '' : undefined}
+            data-preview-title={item.label}
+            aria-label={item.label}
+          >
+            <span class="lab-dock-icon" aria-hidden="true"></span>
+            <span class="lab-dock-label">{item.label}</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <script is:inline>
+
+    /* Labs showcase — ported wholesale from `app/pages/index.astro` so the
+       enterprise demo band behaves exactly like the homepage: a magnifying
+       mode Dock that swaps the floating artifact card / looping video in place,
+       auto-cycling while on screen and pausing on hover. Self-contained IIFE so
+       it runs independently of the lead form above. */
+    (() => {
+      const labPrefersWebm = (() => {
+        try {
+          const v = document.createElement('video');
+          return !!(v.canPlayType && v.canPlayType('video/webm; codecs="vp9"'));
+        } catch (e) {
+          return false;
+        }
+      })();
+      const labClipSrc = (src) =>
+        labPrefersWebm && /\.mp4$/i.test(src || '') ? src.replace(/\.mp4$/i, '.webm') : src;
+
+      // Proximity-magnify dock (macOS-style) + lazy prefetch of the video clips.
+      const enhanceLabDock = () => {
+        const dock = document.querySelector('[data-lab-dock]');
+        if (!dock) return;
+        (function prefetchLabVideos() {
+          const srcs = Array.from(dock.querySelectorAll('[data-preview-video]'))
+            .map((el) => el.getAttribute('data-preview-video'))
+            .filter(Boolean)
+            .map(labClipSrc);
+          if (srcs.length === 0) return;
+          let done = false;
+          const run = () => {
+            if (done) return;
+            done = true;
+            srcs.forEach((src) => { try { fetch(src).catch(() => {}); } catch (e) {} });
+          };
+          if ('IntersectionObserver' in window) {
+            const io = new IntersectionObserver((entries) => {
+              if (entries.some((entry) => entry.isIntersecting)) {
+                io.disconnect();
+                run();
+              }
+            }, { rootMargin: '0px 0px 100% 0px' });
+            io.observe(dock);
+          } else if ('requestIdleCallback' in window) {
+            requestIdleCallback(run, { timeout: 4000 });
+          } else {
+            setTimeout(run, 2500);
+          }
+        })();
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const items = Array.from(dock.querySelectorAll('[data-dock-item]'));
+        if (items.length === 0) return;
+        const MAX = 1.08;
+        const DIST = 104;
+        let ticking = false;
+        const apply = (cursorX) => {
+          const dockLeft = dock.getBoundingClientRect().left;
+          const x = cursorX - dockLeft;
+          for (const it of items) {
+            const center = it.offsetLeft + it.offsetWidth / 2;
+            const t = Math.max(0, 1 - Math.abs(x - center) / DIST);
+            const lift = it.classList.contains('active') ? 'translateY(-20px) ' : '';
+            it.style.transform = `${lift}scale(${(1 + (MAX - 1) * t).toFixed(3)})`;
+          }
+        };
+        dock.addEventListener('mousemove', (event) => {
+          if (ticking) return;
+          ticking = true;
+          requestAnimationFrame(() => {
+            apply(event.clientX);
+            ticking = false;
+          });
+        }, { passive: true });
+        dock.addEventListener('mouseleave', () => {
+          for (const it of items) it.style.transform = '';
+        });
+      };
+
+      // The painting is the background; each dock tile floats its artifact
+      // (`data-preview-src`) or plays its clip (`data-preview-video`) centered
+      // over it. Auto-cycles 1→6 (10s each) while the stage is on screen.
+      const enhanceLabSwitch = () => {
+        const stage = document.querySelector('.lab-stage');
+        const dock = document.querySelector('[data-lab-dock]');
+        const artifact = document.querySelector('[data-lab-artifact]');
+        const video = document.querySelector('[data-lab-video]');
+        if (!stage || !dock || !artifact) return;
+        const items = Array.from(dock.querySelectorAll('[data-dock-item]'));
+        if (items.length === 0) return;
+        const isBare = (src) => !src || src.indexOf('lab-stage-art') !== -1;
+
+        for (const it of items) {
+          const src = it.getAttribute('data-preview-src');
+          if (!isBare(src)) {
+            const pre = new Image();
+            pre.src = src;
+          }
+        }
+
+        const show = (it) => {
+          const src = it.getAttribute('data-preview-src');
+          const vsrc = it.getAttribute('data-preview-video');
+          items.forEach((x) => x.classList.toggle('active', x === it));
+          if (vsrc && video) {
+            artifact.classList.remove('is-visible');
+            const clip = labClipSrc(vsrc);
+            if (video.getAttribute('src') !== clip) video.setAttribute('src', clip);
+            video.classList.add('is-visible');
+            try {
+              video.currentTime = 0;
+              const pr = video.play();
+              if (pr && pr.catch) pr.catch(() => {});
+            } catch (_) {}
+            return;
+          }
+          if (video) {
+            video.classList.remove('is-visible');
+            try { video.pause(); } catch (_) {}
+          }
+          if (isBare(src)) {
+            artifact.classList.remove('is-visible');
+            return;
+          }
+          artifact.classList.toggle('is-wide', it.hasAttribute('data-preview-wide'));
+          artifact.setAttribute('src', src);
+          artifact.classList.add('is-visible');
+        };
+
+        const INTERVAL = 10000;
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        let idx = 0;
+        let timer = null;
+        const stop = () => {
+          if (timer) {
+            clearInterval(timer);
+            timer = null;
+          }
+        };
+        const start = () => {
+          if (reduceMotion) return;
+          stop();
+          timer = setInterval(() => {
+            idx = (idx + 1) % items.length;
+            show(items[idx]);
+          }, INTERVAL);
+        };
+
+        for (const it of items) {
+          it.addEventListener('click', (event) => {
+            event.preventDefault();
+            idx = items.indexOf(it);
+            show(it);
+            start();
+            // A real user pick (not the auto-cycle) — which use-case demo drew
+            // interest. Uses the shared PostHog delegate directly (this enhancer
+            // lives in its own IIFE, separate from the form's `track`).
+            try {
+              if (typeof window.__odTrack === 'function') {
+                window.__odTrack('demo_click', {
+                  page_name: 'enterprise',
+                  locale: (document.documentElement.lang || 'en').toLowerCase(),
+                  demo: it.getAttribute('data-preview-title') || '',
+                });
+              }
+            } catch (e) {}
+          });
+        }
+
+        show(items[0]);
+        if (!reduceMotion) {
+          stage.addEventListener('mouseenter', stop);
+          stage.addEventListener('mouseleave', start);
+          const io = new IntersectionObserver((entries) => {
+            for (const e of entries) {
+              if (e.isIntersecting) {
+                idx = 0;
+                show(items[0]);
+                start();
+              } else {
+                stop();
+              }
+            }
+          }, { threshold: 0.3 });
+          io.observe(stage);
+        }
+      };
+
+      enhanceLabDock();
+      enhanceLabSwitch();
+    })();
+  </script>
+
+  <style>
+    .ent-page {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 64px;
+      align-items: start;
+      max-width: 1080px;
+      /* The shared .sub-main top padding (140px) is sized for pages that open
+         with a plain heading; this two-column hero + form reads better pulled
+         up under the nav, so claw back most of it here only. */
+      margin-top: -96px;
+    }
+    .ent-h1 {
+      margin: 0;
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      color: var(--ink, #262626);
+    }
+    .ent-lead {
+      margin: 18px 0 0;
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--ink-soft, #434343);
+    }
+    .ent-perks {
+      list-style: none;
+      margin: 32px 0 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .ent-perk {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--ink-soft, #434343);
+    }
+    .ent-perk__tick {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      margin-top: 1px;
+      border-radius: 999px;
+      background: color-mix(in oklab, var(--bone), var(--coral) 22%);
+      color: var(--olive, #218c00);
+    }
+
+    /* ---------- social-proof logo wall ---------- */
+    .ent-logos {
+      margin-top: 40px;
+      padding-top: 28px;
+      border-top: 1px solid var(--line-soft, #f0f0f0);
+    }
+    .ent-logos__title {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-faint, #8c8c8c);
+      margin-bottom: 20px;
+    }
+    .ent-logos__grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 26px 16px;
+    }
+    .ent-logos__item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 34px;
+    }
+    .ent-logos__img {
+      max-height: 30px;
+      max-width: 100%;
+      width: auto;
+      object-fit: contain;
+      opacity: 0.75;
+      transition: opacity 0.16s ease, filter 0.16s ease;
+    }
+    .ent-logos__item:hover .ent-logos__img {
+      opacity: 1;
+      filter: brightness(0.7);
+    }
+
+    /* ---------- use-case demos (homepage Labs stage, full-bleed below the
+       form). `.ent-demos` stays an unconstrained block so the `.lab-stage`
+       full-bleed centering math reads the `.sub-main.container` content box
+       (same reference the homepage `.labs > .container` gives it). Only the
+       heading is constrained + centered. */
+    .ent-demos {
+      margin: 72px 0 24px;
+      padding-top: 48px;
+      border-top: 1px solid var(--line-soft, #f0f0f0);
+    }
+    .ent-demos__head {
+      text-align: center;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+    .ent-demos__title {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-faint, #8c8c8c);
+    }
+    .ent-demos__lead {
+      margin: 12px 0 0;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--ink-soft, #434343);
+    }
+    /* Pull the stage's own 40px top margin down a touch so it sits closer to
+       the heading than it does on the homepage (no labs-head there). */
+    .ent-demos .lab-stage {
+      margin-top: 24px;
+    }
+
+    /* ---------- form card ---------- */
+    .ent-card {
+      background: var(--bone, #fff);
+      border: 1px solid var(--line, #d9d9d9);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: var(--shadow, 0 30px 60px -30px rgba(38, 38, 38, 0.16));
+    }
+
+    /* ---------- Discord opt-in ---------- */
+    /* Left-column Discord invite — a friendly nudge card (not a form field),
+       sits between the perks list and the logo wall. The whole card links to
+       the server. */
+    .ent-discord {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 24px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid var(--line, #d9d9d9);
+      background: var(--bone, #fff);
+      text-decoration: none;
+      transition: border-color 0.16s ease, background 0.16s ease,
+        transform 0.16s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.16s ease;
+    }
+    .ent-discord:hover {
+      border-color: color-mix(in oklab, var(--line), #5865f2 55%);
+      background: color-mix(in oklab, var(--bone), #5865f2 6%);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px -14px rgba(88, 101, 242, 0.55);
+    }
+    .ent-discord__icon {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: #5865f2;
+      color: #fff;
+    }
+    .ent-discord__text {
+      flex: 1 1 auto;
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: var(--ink-soft, #434343);
+    }
+    .ent-discord__cta {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      color: #5865f2;
+    }
+
+    @media (max-width: 880px) {
+      .ent-page {
+        grid-template-columns: 1fr;
+        gap: 40px;
+        margin-top: -56px;
+      }
+      .ent-h1 {
+        font-size: 32px;
+      }
+      .ent-lead {
+        font-size: 16px;
+      }
+      .ent-demos {
+        margin-top: 56px;
+        padding-top: 40px;
+      }
+    }
+    @media (max-width: 480px) {
+      .ent-logos__grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 22px 12px;
+      }
+      .ent-card {
+        padding: 24px;
+      }
+    }
+  </style>
+</Layout>

@@ -1,0 +1,171 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode) > audio speech kind with a chosen voice 1`] = `
+"
+
+## Project metadata
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+
+- **kind**: audio
+- **audioKind**: speech
+- **audioModel**: elevenlabs
+- **durationSeconds**: 30
+- **voice**: rachel
+
+This is an **audio** project. Lock the content intent first, then dispatch via the **media generation contract** using \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface audio --audio-kind <kind> --model <audioModel> --duration <seconds>\` and add \`--voice <voice-id>\` for speech when you have a provider-specific voice id. Do NOT emit \`<artifact>\` HTML."
+`;
+
+exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode) > brand extraction project with brand ids 1`] = `
+"
+
+## Project metadata
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+
+- **kind**: brand
+- **brand extraction project**: this project was created by the Brands extractor. Treat \`brand.json\`, \`DESIGN.md\`, \`BRAND-SYSTEM.md\`, \`tokens.*.json\`, \`theme.json\`, \`kit.html\`, \`kit.dark.html\`, and \`artifacts/{landing,deck,poster,email,newsletter,form}.html\` as the source of truth. Do not restart extraction from scratch unless the user explicitly asks; explain the extracted kit, then iterate the saved files when requested.
+- **brandId**: acme
+- **brandSourceUrl**: https://acme.example
+- **brandDesignSystemId**: acme-ds"
+`;
+
+exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode) > deck with slideCount and speakerNotes 1`] = `
+"
+
+## Project metadata
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+
+- **kind**: deck
+- **slideCount**: 12
+- **speakerNotes**: true"
+`;
+
+exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode) > image kind with a reference prompt template 1`] = `
+"
+
+## Project metadata
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+
+- **kind**: image
+- **imageModel**: seedream
+- **aspectRatio**: 16:9
+- **styleNotes**: cinematic
+- **referenceTemplate**: Golden Hour Portrait
+
+This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>\`. Do NOT emit \`<artifact>\` HTML for media surfaces.
+
+### Reference prompt template — "Golden Hour Portrait"
+category: portrait · suggested model: seedream · aspect: 3:4 · tags: warm, portrait
+
+Warm, soft-lit portrait.
+
+The user picked this template as inspiration. Treat it as a structural and stylistic reference: borrow composition, palette cues, lighting language, lens/motion direction, and the level of detail. Adapt the wording to the user's actual subject and brief — do NOT generate the template subject verbatim. If a field above is unknown the user wants you to follow the template's defaults.
+
+\`\`\`text
+A portrait bathed in warm \`​\`​\`golden\`​\`​\` light
+\`\`\`
+
+Source: awesome/prompts by jane — license MIT. Preserve attribution if you echo the template language directly."
+`;
+
+exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode) > inspiration design systems and @ plugin context 1`] = `
+"
+
+## Project metadata
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+
+- **kind**: prototype
+- **platform**: web-desktop
+- **screen-file-first rule**: each distinct user-facing screen or surface MUST be delivered as its own HTML file unless the user explicitly asks for a single-page scroll or single-file artifact. Do not combine landing pages, product app screens, dashboards, history, pricing, settings, mobile app, tablet app, desktop app, or OS widget surfaces into one long page. Use \`index.html\` as a launcher/overview that links to screen files when more than one screen exists; it may summarize the product and show screen cards, but it must not contain the full design for every screen.
+- **product-realism rule**: final artifacts must look like real end-user product UI. Do not render project metadata, screen counts, target counts, state counts, "demo only" labels, "settings" panels for choosing platforms, "full design target" badges, viewport/device selector controls, theme/style knobs, platform output maps, behavior-spec sections, or design-process cards inside the product unless the user explicitly asks for a design spec/dashboard. Any navigation/tabs inside the artifact must be real product navigation, not designer controls for switching generated mockups.
+- **visual-system rule**: when the user does not specify colors, layout, or visual direction, you must still make an intentional product-appropriate visual system. Infer a palette from the product category and audience with at least: neutral surface tokens, a primary action color, a secondary/domain accent, and status colors. Avoid plain monochrome/unstyled greyscale outputs. Use tasteful gradients, illustrations, iconography, device/product mockups, and colored state moments where they clarify the product, while still avoiding generic beige/peach/pink/brown AI washes.
+- **app-specific modules rule**: include domain-specific in-app modules/components by default (cards, panels, controls, charts, lists, quick actions, status modules, mini players, checkout/cart summaries, etc. as appropriate). These are product UI modules, not OS home-screen widgets. Give each major module a clear purpose, states, and responsive behavior instead of generic card grids.
+- **CJX-ready UX rule**: the artifact must be implementation-ready, not a static screenshot. Structure CSS tokens/components/responsive sections clearly; include real JavaScript behavior for meaningful UX such as tabs, dialogs, drawers, filters, generation/copy actions, validation, playback controls, or state transitions. If keeping a self-contained \`index.html\`, put the CSS/JS in clearly labelled blocks; for complex UX, generate \`css/\` and \`js/\` files when useful.
+- **interaction-fidelity rule**: when the requested screen includes user input, generation, copying, validation, login, checkout, filtering, or any action verb, build real interactive controls for that screen. Do not substitute static text rows, prefilled-only mockups, screenshot-like device frames, or decorative state cards for editable inputs and working actions.
+- **fidelity**: (unknown — ask: wireframe vs high-fidelity)
+- **inspirationDesignSystemIds**: brand-a, brand-b — the user picked these systems as *additional* inspiration alongside the primary one. Borrow palette accents, typographic personality, or component patterns from them; don't replace the primary system's tokens.
+
+### @ plugin context
+The user selected these plugins as additive context via @ mentions. Treat them as requested references to combine with the brief; only the explicit active plugin block, if present, is the executable/pinned plugin snapshot.
+- Charts (\`p1\`) — nice charts
+- Forms (\`p2\`)"
+`;
+
+exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode) > prototype with platform, cross-platform targets, and flags 1`] = `
+"
+
+## Project metadata
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+
+- **kind**: prototype
+- **platform**: responsive
+- **platformTargets**: responsive, mobile-ios
+- **responsive web contract**: \`responsive\` means one web product experience that adapts across modern browser/device ranges, not only legacy desktop/tablet/mobile buckets. It is not an iOS app, Android app, or native tablet app target. Show responsive behavior through real product layout changes; do not render viewport labels as user-facing product content. Cover 2025–2026 breakpoints: mobile compact 360px, mobile standard 390–430px, foldable/small tablet 600–744px, tablet portrait 768–834px, tablet landscape/large tablet 1024–1180px, laptop 1280–1366px, desktop 1440–1536px, and wide 1920px. Use fluid \`clamp()\` scales, container queries where useful, and explicit layout changes at semantic thresholds. Verify no horizontal scroll at 360px, 390px, 430px, 768px, 820px, 1024px, 1366px, 1440px, and 1920px unless the brief explicitly asks for a pan/board canvas.
+- **cross-platform deliverable rule**: each selected target keeps the same product goal but MUST be delivered as its own product screen/file when more than one concrete target is selected. Use clear files such as \`landing.html\` (if enabled), \`mobile-ios.html\`, \`mobile-android.html\`, \`tablet.html\`, \`desktop.html\`, plus shared \`css/\` and \`js/\` when useful. \`index.html\` may be a launcher/overview that links to these files, but it must not be the only place where mobile/tablet/desktop designs live. Do not collapse cross-platform work into a single tabbed demo, selector UI, comparison board, platform map, or labelled documentation section inside one mock product page.
+- **screen-file-first rule**: each distinct user-facing screen or surface MUST be delivered as its own HTML file unless the user explicitly asks for a single-page scroll or single-file artifact. Do not combine landing pages, product app screens, dashboards, history, pricing, settings, mobile app, tablet app, desktop app, or OS widget surfaces into one long page. Use \`index.html\` as a launcher/overview that links to screen files when more than one screen exists; it may summarize the product and show screen cards, but it must not contain the full design for every screen.
+- **product-realism rule**: final artifacts must look like real end-user product UI. Do not render project metadata, screen counts, target counts, state counts, "demo only" labels, "settings" panels for choosing platforms, "full design target" badges, viewport/device selector controls, theme/style knobs, platform output maps, behavior-spec sections, or design-process cards inside the product unless the user explicitly asks for a design spec/dashboard. Any navigation/tabs inside the artifact must be real product navigation, not designer controls for switching generated mockups.
+- **visual-system rule**: when the user does not specify colors, layout, or visual direction, you must still make an intentional product-appropriate visual system. Infer a palette from the product category and audience with at least: neutral surface tokens, a primary action color, a secondary/domain accent, and status colors. Avoid plain monochrome/unstyled greyscale outputs. Use tasteful gradients, illustrations, iconography, device/product mockups, and colored state moments where they clarify the product, while still avoiding generic beige/peach/pink/brown AI washes.
+- **app-specific modules rule**: include domain-specific in-app modules/components by default (cards, panels, controls, charts, lists, quick actions, status modules, mini players, checkout/cart summaries, etc. as appropriate). These are product UI modules, not OS home-screen widgets. Give each major module a clear purpose, states, and responsive behavior instead of generic card grids.
+- **CJX-ready UX rule**: the artifact must be implementation-ready, not a static screenshot. Structure CSS tokens/components/responsive sections clearly; include real JavaScript behavior for meaningful UX such as tabs, dialogs, drawers, filters, generation/copy actions, validation, playback controls, or state transitions. If keeping a self-contained \`index.html\`, put the CSS/JS in clearly labelled blocks; for complex UX, generate \`css/\` and \`js/\` files when useful.
+- **interaction-fidelity rule**: when the requested screen includes user input, generation, copying, validation, login, checkout, filtering, or any action verb, build real interactive controls for that screen. Do not substitute static text rows, prefilled-only mockups, screenshot-like device frames, or decorative state cards for editable inputs and working actions.
+- **includeLandingPage**: true — create \`landing.html\` as a separate responsive marketing companion surface in addition to the selected product/app screens. Do not implement the landing page only as a section inside \`index.html\`, even for responsive-web-only projects. If there is a working product/app screen, create it as a separate file such as \`app.html\`, \`dashboard.html\`, or a domain-specific screen name. \`index.html\` should be a lightweight launcher/overview when multiple files exist. Include hero, value props, product screenshots/device mockups, proof/features, and an appropriate CTA such as waitlist, download, or contact sales.
+- **includeOsWidgets**: true — add platform-native OS home-screen / lock-screen / quick-access widget surfaces where relevant. These are outside-the-app widgets (for example iOS WidgetKit, Android home screen widget, Live Activity/lock screen, tablet glance panel), not in-app cards. Include realistic widget sizes and direct quick actions for the domain.
+- **fidelity**: high-fidelity"
+`;
+
+exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode) > prototype with unknown platform and no fidelity (asks) 1`] = `
+"
+
+## Project metadata
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+
+- **kind**: prototype
+- **platform**: (unknown — ask: responsive web, desktop web, iOS app, Android app, tablet app, or desktop app?)
+- **screen-file-first rule**: each distinct user-facing screen or surface MUST be delivered as its own HTML file unless the user explicitly asks for a single-page scroll or single-file artifact. Do not combine landing pages, product app screens, dashboards, history, pricing, settings, mobile app, tablet app, desktop app, or OS widget surfaces into one long page. Use \`index.html\` as a launcher/overview that links to screen files when more than one screen exists; it may summarize the product and show screen cards, but it must not contain the full design for every screen.
+- **product-realism rule**: final artifacts must look like real end-user product UI. Do not render project metadata, screen counts, target counts, state counts, "demo only" labels, "settings" panels for choosing platforms, "full design target" badges, viewport/device selector controls, theme/style knobs, platform output maps, behavior-spec sections, or design-process cards inside the product unless the user explicitly asks for a design spec/dashboard. Any navigation/tabs inside the artifact must be real product navigation, not designer controls for switching generated mockups.
+- **visual-system rule**: when the user does not specify colors, layout, or visual direction, you must still make an intentional product-appropriate visual system. Infer a palette from the product category and audience with at least: neutral surface tokens, a primary action color, a secondary/domain accent, and status colors. Avoid plain monochrome/unstyled greyscale outputs. Use tasteful gradients, illustrations, iconography, device/product mockups, and colored state moments where they clarify the product, while still avoiding generic beige/peach/pink/brown AI washes.
+- **app-specific modules rule**: include domain-specific in-app modules/components by default (cards, panels, controls, charts, lists, quick actions, status modules, mini players, checkout/cart summaries, etc. as appropriate). These are product UI modules, not OS home-screen widgets. Give each major module a clear purpose, states, and responsive behavior instead of generic card grids.
+- **CJX-ready UX rule**: the artifact must be implementation-ready, not a static screenshot. Structure CSS tokens/components/responsive sections clearly; include real JavaScript behavior for meaningful UX such as tabs, dialogs, drawers, filters, generation/copy actions, validation, playback controls, or state transitions. If keeping a self-contained \`index.html\`, put the CSS/JS in clearly labelled blocks; for complex UX, generate \`css/\` and \`js/\` files when useful.
+- **interaction-fidelity rule**: when the requested screen includes user input, generation, copying, validation, login, checkout, filtering, or any action verb, build real interactive controls for that screen. Do not substitute static text rows, prefilled-only mockups, screenshot-like device frames, or decorative state cards for editable inputs and working actions.
+- **fidelity**: (unknown — ask: wireframe vs high-fidelity)"
+`;
+
+exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode) > template kind with template reference files 1`] = `
+"
+
+## Project metadata
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+
+- **kind**: template
+- **platform**: (unknown — ask: responsive web, desktop web, iOS app, Android app, tablet app, or desktop app?)
+- **screen-file-first rule**: each distinct user-facing screen or surface MUST be delivered as its own HTML file unless the user explicitly asks for a single-page scroll or single-file artifact. Do not combine landing pages, product app screens, dashboards, history, pricing, settings, mobile app, tablet app, desktop app, or OS widget surfaces into one long page. Use \`index.html\` as a launcher/overview that links to screen files when more than one screen exists; it may summarize the product and show screen cards, but it must not contain the full design for every screen.
+- **product-realism rule**: final artifacts must look like real end-user product UI. Do not render project metadata, screen counts, target counts, state counts, "demo only" labels, "settings" panels for choosing platforms, "full design target" badges, viewport/device selector controls, theme/style knobs, platform output maps, behavior-spec sections, or design-process cards inside the product unless the user explicitly asks for a design spec/dashboard. Any navigation/tabs inside the artifact must be real product navigation, not designer controls for switching generated mockups.
+- **visual-system rule**: when the user does not specify colors, layout, or visual direction, you must still make an intentional product-appropriate visual system. Infer a palette from the product category and audience with at least: neutral surface tokens, a primary action color, a secondary/domain accent, and status colors. Avoid plain monochrome/unstyled greyscale outputs. Use tasteful gradients, illustrations, iconography, device/product mockups, and colored state moments where they clarify the product, while still avoiding generic beige/peach/pink/brown AI washes.
+- **app-specific modules rule**: include domain-specific in-app modules/components by default (cards, panels, controls, charts, lists, quick actions, status modules, mini players, checkout/cart summaries, etc. as appropriate). These are product UI modules, not OS home-screen widgets. Give each major module a clear purpose, states, and responsive behavior instead of generic card grids.
+- **CJX-ready UX rule**: the artifact must be implementation-ready, not a static screenshot. Structure CSS tokens/components/responsive sections clearly; include real JavaScript behavior for meaningful UX such as tabs, dialogs, drawers, filters, generation/copy actions, validation, playback controls, or state transitions. If keeping a self-contained \`index.html\`, put the CSS/JS in clearly labelled blocks; for complex UX, generate \`css/\` and \`js/\` files when useful.
+- **interaction-fidelity rule**: when the requested screen includes user input, generation, copying, validation, login, checkout, filtering, or any action verb, build real interactive controls for that screen. Do not substitute static text rows, prefilled-only mockups, screenshot-like device frames, or decorative state cards for editable inputs and working actions.
+- **animations**: true
+- **template**: Neon
+
+### Template reference — "Neon Dashboard" (a dark neon dashboard)
+These HTML snapshots are what the user wants to start FROM. Read them as a stylistic + structural reference. You may copy structure, palette, typography, and component patterns; you may adapt them to the new brief; do NOT ship them verbatim. The agent should still produce its own artifact, just one that visibly inherits this template's design language.
+
+#### \`index.html\`
+\`\`\`html
+<html><body>hi</body></html>
+\`\`\`"
+`;
+
+exports[`renderMetadataBlock (characterization via composeSystemPrompt chat-mode) > video kind with the hyperframes-html special case 1`] = `
+"
+
+## Project metadata
+These are the structured choices the user made (or skipped) when creating this project. Treat known fields as authoritative; for any field marked "(unknown — ask)" you MUST include a matching question in your turn-1 discovery form.
+
+- **kind**: video
+- **videoModel**: hyperframes-html
+- **lengthSeconds**: 5
+- **aspectRatio**: 16:9
+
+This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>\`. Do NOT emit \`<artifact>\` HTML.
+Special case: \`hyperframes-html\` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then dispatch immediately."
+`;

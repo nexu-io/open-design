@@ -331,12 +331,18 @@
   align-items: center;
   padding: 6px 12px;
   font-size: 12px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out);
 }
-.present-exit:hover { background: white; }
+.present-exit:hover { background: var(--bg-muted); }
+.present-exit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* Picker (legacy in some surfaces) */
 .picker {
@@ -892,6 +898,108 @@
 .qf-select,
 .qf-textarea {
   font-size: 13px;
+}
+.qf-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: min(100%, 280px);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.qf-range-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+.qf-range {
+  width: 100%;
+  min-width: 0;
+}
+.qf-range-value {
+  min-width: 38px;
+  padding: 3px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+.qf-color {
+  width: 44px;
+  height: 34px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+.qf-file-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.qf-file {
+  max-width: 100%;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.qf-file-summary {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.qf-switch {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  cursor: pointer;
+}
+.qf-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.qf-switch span {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  transition:
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.qf-switch span::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-sm);
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.qf-switch input:checked + span {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.qf-switch input:checked + span::after {
+  transform: translateX(16px);
+}
+.qf-switch input:focus-visible + span {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+.question-form-locked .qf-custom,
+.question-form-locked .qf-switch {
+  cursor: not-allowed;
 }
 .question-form-foot {
   display: flex;
@@ -1473,13 +1581,22 @@
   max-width: 560px;
   border-left: 1px solid var(--border);
   background: var(--bg-panel);
-  overflow: auto;
-  scrollbar-gutter: stable;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   /* Slide + fade in when "Plugin info" reveals the panel. A soft,
      slightly longer ease-out keeps it from snapping. */
   animation: ds-modal-sidebar-in 340ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* Scroll lives in the body so the collapse handle can stay pinned on the
+   sidebar seam without being buried by panel content (OPEND-418). */
+.ds-modal-sidebar-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  display: flex;
+  flex-direction: column;
 }
 @keyframes ds-modal-sidebar-in {
   from {
@@ -1538,8 +1655,8 @@
   border-radius: 8px 0 0 8px;
 }
 .ds-modal-stage-handle.is-collapse {
-  position: sticky;
   left: 0;
+  z-index: 5;
   border-left: none;
   border-radius: 0 8px 8px 0;
 }
@@ -1567,6 +1684,16 @@
   padding: 24px;
   overflow: auto;
   min-height: 0;
+}
+.ds-modal-rich-kit {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+}
+.ds-modal-rich-kit .design-kit {
+  max-width: none;
 }
 .plugin-media-stage__empty {
   color: var(--text-muted);

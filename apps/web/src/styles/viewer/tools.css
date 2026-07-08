@@ -66,7 +66,13 @@
   margin-bottom: 6px;
   font-weight: 500;
 }
-.produced-files-list { display: flex; flex-direction: column; gap: 2px; }
+.produced-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(34vh, 260px);
+  overflow-y: auto;
+}
 .produced-file {
   display: flex;
   align-items: center;
@@ -165,6 +171,10 @@
   padding-top: 0;
   border-top: none;
 }
+.plugin-action-panel > .plugin-action-card:only-child {
+  padding-top: 0;
+  border-top: none;
+}
 .plugin-action-card__main {
   display: flex;
   align-items: center;
@@ -243,6 +253,7 @@
   filter: brightness(0.85);
 }
 .plugin-action-card__notice {
+  margin-top: 8px;
   padding: 6px 8px;
   border-radius: var(--radius-sm);
   background: var(--bg-panel);
@@ -258,7 +269,7 @@
   word-break: break-all;
 }
 
-/* "Files this turn" summary — derived from Read/Write/Edit tool_use events
+/* "Files this turn" summary — derived from file operation tool_use events
    so users can scan every file the agent touched without expanding tool-
    group disclosures. Compact pill while streaming, full list once done. */
 .file-ops {
@@ -327,6 +338,8 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
+  max-height: min(34vh, 260px);
+  overflow-y: auto;
   border-top: 1px solid var(--border-soft, var(--border));
 }
 .file-ops-row {
@@ -378,6 +391,11 @@
   color: #b26500;
   border-color: color-mix(in oklab, #b26500 35%, var(--border));
   background: color-mix(in oklab, #b26500 8%, var(--bg-subtle));
+}
+.file-ops-badge--delete {
+  color: #b42318;
+  border-color: color-mix(in oklab, #b42318 35%, var(--border));
+  background: color-mix(in oklab, #b42318 8%, var(--bg-subtle));
 }
 .file-ops-row-path {
   flex: 1;
@@ -434,13 +452,15 @@
   padding: 8px 12px;
   background: #1c1b1a;
   color: #f0eee9;
+  border-radius: var(--radius-md);
   font-family: var(--mono);
   font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   max-height: 220px;
-  overflow-y: auto;
+  overflow: auto;
+  scrollbar-width: thin;
 }
 .op-bash .op-output { background: #2a2926; }
 
@@ -952,6 +972,72 @@
 }
 .image-export-format-text span {
   display: none;
+}
+.pptx-export-mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.pptx-export-mode-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  cursor: pointer;
+  transition:
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.pptx-export-mode-option:hover {
+  background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+}
+.pptx-export-mode-option.active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: var(--bg-panel);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
+}
+.pptx-export-mode-option input[type="radio"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.pptx-export-mode-option:has(input[type="radio"]:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: 2px;
+}
+.pptx-export-mode-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pptx-export-mode-title {
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.pptx-export-mode-badge {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.pptx-export-mode-desc {
+  color: color-mix(in srgb, var(--text) 58%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
 }
 .image-export-modal .modal-foot {
   padding: 14px 24px 20px;

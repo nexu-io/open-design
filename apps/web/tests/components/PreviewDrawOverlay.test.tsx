@@ -19,6 +19,50 @@ afterEach(() => {
   vi.mocked(requestPreviewSnapshot).mockClear();
 });
 
+function mockElementRect(
+  element: Element,
+  rect: Partial<DOMRect> & Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>,
+) {
+  const fullRect = {
+    x: rect.left,
+    y: rect.top,
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+    right: rect.left + rect.width,
+    bottom: rect.top + rect.height,
+    toJSON: () => ({}),
+  } as DOMRect;
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => fullRect,
+  });
+}
+
+function drawSelectionBox(
+  canvas: HTMLCanvasElement,
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+) {
+  fireEvent.pointerDown(canvas, { clientX: start.x, clientY: start.y, pointerId: 1 });
+  fireEvent.pointerMove(canvas, { clientX: end.x, clientY: end.y, pointerId: 1 });
+  fireEvent.pointerUp(canvas, { clientX: end.x, clientY: end.y, pointerId: 1 });
+}
+
+function drawPenStroke(
+  canvas: HTMLCanvasElement,
+  points: Array<{ x: number; y: number }>,
+) {
+  const [first, ...rest] = points;
+  fireEvent.pointerDown(canvas, { clientX: first!.x, clientY: first!.y, pointerId: 1 });
+  for (const point of rest) {
+    fireEvent.pointerMove(canvas, { clientX: point.x, clientY: point.y, pointerId: 1 });
+  }
+  const last = points[points.length - 1]!;
+  fireEvent.pointerUp(canvas, { clientX: last.x, clientY: last.y, pointerId: 1 });
+}
+
 function installImageCompositeMocks() {
   const originalImage = globalThis.Image;
   class MockImage {
@@ -85,16 +129,22 @@ describe('PreviewDrawOverlay', () => {
     );
 
     const canvas = container.querySelector<HTMLCanvasElement>('canvas');
+    // The warning / attached-image strip / toolbar now share one bottom-anchored
+    // dock, so the responsive positioning lives on the dock and they never
+    // overlap regardless of how tall the toolbar wraps.
+    const dock = container.querySelector<HTMLElement>('.preview-draw-dock');
     const toolbar = container.querySelector<HTMLElement>('.preview-draw-toolbar');
     const toolCluster = container.querySelector<HTMLElement>('.preview-draw-tool-cluster');
     const noteActions = container.querySelector<HTMLElement>('.preview-draw-note-actions');
     const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input');
 
     expect(canvas?.style.zIndex).toBe('80');
-    expect(toolbar?.style.zIndex).toBe('91');
+    expect(dock?.style.zIndex).toBe('91');
+    expect(dock?.dataset.drawLayout).toBe('docked');
+    expect(dock?.style.flexDirection).toBe('column');
+    expect(dock?.style.left).toBe('calc(50% - 52px)');
+    expect(dock?.style.maxWidth).toContain('100% - 144px');
     expect(toolbar?.style.flexWrap).toBe('wrap');
-    expect(toolbar?.style.left).toBe('calc(50% - 52px)');
-    expect(toolbar?.style.maxWidth).toContain('100% - 144px');
     expect(toolCluster?.style.flex).toBe('0 0 auto');
     expect(noteActions?.style.flex).toBe('1 1 360px');
     expect(noteActions?.style.minWidth).toBe('0px');
@@ -175,9 +225,12 @@ describe('PreviewDrawOverlay', () => {
       expect(input).toBeTruthy();
       fireEvent.change(input!, { target: { value: 'Please queue this note.' } });
 
+      // Send is the split button's default action; Queue and Add-to-input now
+      // live in its dropdown, opened via the chevron.
       const sendButton = getByRole('button', { name: 'Send' }) as HTMLButtonElement;
-      const queueButton = getByRole('button', { name: 'Queue' }) as HTMLButtonElement;
-      const addToInputButton = getByRole('button', { name: 'Add to input' }) as HTMLButtonElement;
+      fireEvent.click(getByRole('button', { name: 'Submit options' }));
+      const queueButton = getByRole('menuitemradio', { name: 'Queue' }) as HTMLButtonElement;
+      const addToInputButton = getByRole('menuitemradio', { name: 'Add to input' }) as HTMLButtonElement;
       expect(sendButton.disabled).toBe(true);
       expect(sendButton.title).toBe('Task running');
       expect(queueButton.disabled).toBe(false);
@@ -192,8 +245,10 @@ describe('PreviewDrawOverlay', () => {
       fireEvent.click(sendButton);
       expect(annotation).toHaveBeenCalledTimes(1);
 
+      // The dropdown stays open through this flow, so click the Queue item
+      // directly (re-clicking the chevron would just toggle it shut).
       fireEvent.change(input!, { target: { value: 'Queue another note.' } });
-      fireEvent.click(queueButton);
+      fireEvent.click(getByRole('menuitemradio', { name: 'Queue' }));
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(2));
     } finally {
       window.removeEventListener('opendesign:annotation', annotation);
@@ -218,7 +273,9 @@ describe('PreviewDrawOverlay', () => {
       expect(input).toBeTruthy();
       fireEvent.change(input!, { target: { value: 'Keep this in the input.' } });
 
-      fireEvent.click(getByRole('button', { name: 'Add to input' }));
+      // Add-to-input is now a choice in the submit dropdown.
+      fireEvent.click(getByRole('button', { name: 'Submit options' }));
+      fireEvent.click(getByRole('menuitemradio', { name: 'Add to input' }));
 
       await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
       expect(annotation.mock.calls[0]?.[0]).toMatchObject({
@@ -253,6 +310,209 @@ describe('PreviewDrawOverlay', () => {
     );
 
     await waitFor(() => expect(container.querySelector('canvas')).toBeNull());
+  });
+
+  it('accumulates multiple box selections and undoes them one at a time', () => {
+    const { container, getByRole } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 320, height: 200 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    // jsdom reports a zero-size rect; give the canvas real geometry so pointer
+    // fractions resolve to committable (non-degenerate) normalized boxes.
+    canvas.getBoundingClientRect = () =>
+      ({
+        x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const undo = getByRole('button', { name: 'Undo' }) as HTMLButtonElement;
+    expect(undo.disabled).toBe(true);
+
+    // Box-select is the default tool. Draw the first region.
+    fireEvent.pointerDown(canvas, { clientX: 10, clientY: 10, pointerId: 1 });
+    fireEvent.pointerMove(canvas, { clientX: 60, clientY: 60, pointerId: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 60, clientY: 60, pointerId: 1 });
+    expect(undo.disabled).toBe(false);
+
+    // A second region must accumulate, not replace the first.
+    fireEvent.pointerDown(canvas, { clientX: 120, clientY: 120, pointerId: 1 });
+    fireEvent.pointerMove(canvas, { clientX: 170, clientY: 170, pointerId: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 170, clientY: 170, pointerId: 1 });
+
+    // First undo removes only the latest box; one still remains.
+    fireEvent.click(undo);
+    expect(undo.disabled).toBe(false);
+    // Second undo clears the remaining box.
+    fireEvent.click(undo);
+    expect(undo.disabled).toBe(true);
+  });
+
+  it('floats the draw composer next to the latest box selection', async () => {
+    const { container } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 700, height: 320 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    const dock = container.querySelector<HTMLElement>('.preview-draw-dock')!;
+    const wrap = canvas.parentElement as HTMLElement;
+    mockElementRect(canvas, { left: 0, top: 0, width: 700, height: 320 });
+    mockElementRect(wrap, { left: 0, top: 0, width: 700, height: 320 });
+    mockElementRect(dock, { left: 0, top: 0, width: 180, height: 96 });
+
+    drawSelectionBox(canvas, { x: 80, y: 80 }, { x: 180, y: 160 });
+    await waitFor(() => expect(dock.dataset.drawLayout).toBe('floating'));
+    expect(dock.dataset.drawSide).toBe('right');
+    expect(dock.style.left).toBe('192px');
+    expect(dock.style.top).toBe('72px');
+
+    drawSelectionBox(canvas, { x: 320, y: 180 }, { x: 420, y: 260 });
+    await waitFor(() => expect(dock.style.left).toBe('432px'));
+    expect(dock.style.top).toBe('172px');
+  });
+
+  it('flips the floating composer away from the nearest clipped edge', async () => {
+    const { container, getByRole } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 700, height: 320 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    const dock = container.querySelector<HTMLElement>('.preview-draw-dock')!;
+    const wrap = canvas.parentElement as HTMLElement;
+    mockElementRect(canvas, { left: 0, top: 0, width: 700, height: 320 });
+    mockElementRect(wrap, { left: 0, top: 0, width: 700, height: 320 });
+    mockElementRect(dock, { left: 0, top: 0, width: 180, height: 96 });
+
+    drawSelectionBox(canvas, { x: 520, y: 120 }, { x: 620, y: 200 });
+    await waitFor(() => expect(dock.dataset.drawSide).toBe('left'));
+    expect(dock.style.left).toBe('328px');
+
+    fireEvent.click(getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(dock.dataset.drawLayout).toBe('docked'));
+
+    drawSelectionBox(canvas, { x: 12, y: 100 }, { x: 112, y: 180 });
+    await waitFor(() => expect(dock.dataset.drawSide).toBe('right'));
+    expect(dock.style.left).toBe('124px');
+  });
+
+  it('follows the latest pen stroke instead of the aggregate stroke bounds', async () => {
+    const { container, getByRole } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 700, height: 320 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    const dock = container.querySelector<HTMLElement>('.preview-draw-dock')!;
+    const wrap = canvas.parentElement as HTMLElement;
+    mockElementRect(canvas, { left: 0, top: 0, width: 700, height: 320 });
+    mockElementRect(wrap, { left: 0, top: 0, width: 700, height: 320 });
+    mockElementRect(dock, { left: 0, top: 0, width: 180, height: 96 });
+
+    fireEvent.click(getByRole('button', { name: 'Pen' }));
+    drawPenStroke(canvas, [{ x: 40, y: 40 }, { x: 100, y: 90 }]);
+    await waitFor(() => expect(dock.dataset.drawLayout).toBe('floating'));
+    const firstPosition = dock.style.left;
+
+    drawPenStroke(canvas, [{ x: 360, y: 200 }, { x: 420, y: 240 }, { x: 470, y: 250 }]);
+    await waitFor(() => expect(dock.style.left).not.toBe(firstPosition));
+    expect(dock.dataset.drawSide).toBe('right');
+    expect(dock.style.left).toBe('490px');
+  });
+
+  it('returns to the previous box after undo and docks after clearing all marks', async () => {
+    const { container, getByRole } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 700, height: 320 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    const dock = container.querySelector<HTMLElement>('.preview-draw-dock')!;
+    const wrap = canvas.parentElement as HTMLElement;
+    mockElementRect(canvas, { left: 0, top: 0, width: 700, height: 320 });
+    mockElementRect(wrap, { left: 0, top: 0, width: 700, height: 320 });
+    mockElementRect(dock, { left: 0, top: 0, width: 180, height: 96 });
+
+    drawSelectionBox(canvas, { x: 60, y: 70 }, { x: 160, y: 150 });
+    await waitFor(() => expect(dock.style.left).toBe('172px'));
+
+    drawSelectionBox(canvas, { x: 340, y: 100 }, { x: 440, y: 180 });
+    await waitFor(() => expect(dock.style.left).toBe('452px'));
+
+    fireEvent.click(getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(dock.style.left).toBe('172px'));
+
+    fireEvent.click(getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(dock.dataset.drawLayout).toBe('docked'));
+  });
+
+  it('keeps the input mounted and preserves its value while the floating position updates', async () => {
+    const { container, getByRole } = render(
+      <PreviewDrawOverlay active>
+        <div style={{ width: 700, height: 320 }} />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    const dock = container.querySelector<HTMLElement>('.preview-draw-dock')!;
+    const wrap = canvas.parentElement as HTMLElement;
+    mockElementRect(canvas, { left: 0, top: 0, width: 700, height: 320 });
+    mockElementRect(wrap, { left: 0, top: 0, width: 700, height: 320 });
+    mockElementRect(dock, { left: 0, top: 0, width: 180, height: 96 });
+
+    const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+    fireEvent.change(input, { target: { value: 'keep me here' } });
+    fireEvent.click(getByRole('button', { name: 'Submit options' }));
+
+    drawSelectionBox(canvas, { x: 80, y: 80 }, { x: 180, y: 160 });
+    await waitFor(() => expect(dock.dataset.drawLayout).toBe('floating'));
+
+    const inputAfter = container.querySelector<HTMLInputElement>('.preview-draw-note-input')!;
+    expect(inputAfter).toBe(input);
+    expect(inputAfter.value).toBe('keep me here');
+    expect(getByRole('menu')).toBeTruthy();
+  });
+
+  it('remembers the submit action chosen from the dropdown', async () => {
+    const annotation = vi.fn((event: Event) => {
+      const detail = (event as CustomEvent<{ ack?: (result: { ok: boolean }) => void }>).detail;
+      detail.ack?.({ ok: true });
+    });
+    window.addEventListener('opendesign:annotation', annotation);
+
+    try {
+      const { container, getByRole } = render(
+        <PreviewDrawOverlay active>
+          <div style={{ width: 320, height: 200 }} />
+        </PreviewDrawOverlay>,
+      );
+
+      const input = container.querySelector<HTMLInputElement>('.preview-draw-note-input');
+      fireEvent.change(input!, { target: { value: 'ship it' } });
+
+      // Default main action is Send.
+      expect(getByRole('button', { name: 'Send' })).toBeTruthy();
+
+      // Pick Queue from the dropdown: it runs the action and becomes the new default.
+      fireEvent.click(getByRole('button', { name: 'Submit options' }));
+      fireEvent.click(getByRole('menuitemradio', { name: 'Queue' }));
+      await waitFor(() => expect(annotation).toHaveBeenCalledTimes(1));
+      expect(annotation.mock.calls[0]?.[0]).toMatchObject({
+        detail: expect.objectContaining({ action: 'queue' }),
+      });
+
+      // The split button's default action is now Queue.
+      await waitFor(() => expect(getByRole('button', { name: 'Queue' })).toBeTruthy());
+    } finally {
+      window.removeEventListener('opendesign:annotation', annotation);
+    }
   });
 
   it('forwards wheel scrolling to the preview iframe while drawing', () => {
@@ -402,6 +662,37 @@ describe('PreviewDrawOverlay', () => {
       expect(wrap.contains(input!)).toBe(false);
       expect(body.contains(input!)).toBe(true);
     });
+  });
+
+  it('positions the floating dock in viewer-body coordinates when portaled', async () => {
+    const { container } = render(
+      <div className="viewer-body">
+        <div className="comment-preview-layer">
+          <div className="comment-frame-clip">
+            <PreviewDrawOverlay active>
+              <div style={{ width: 400, height: 280 }} />
+            </PreviewDrawOverlay>
+          </div>
+        </div>
+      </div>,
+    );
+
+    const body = container.querySelector<HTMLElement>('.viewer-body')!;
+    const canvas = container.querySelector<HTMLCanvasElement>('canvas')!;
+    const dock = body.querySelector<HTMLElement>('.preview-draw-dock')!;
+    const wrap = canvas.parentElement as HTMLElement;
+    mockElementRect(body, { left: 0, top: 0, width: 900, height: 700 });
+    mockElementRect(wrap, { left: 120, top: 160, width: 400, height: 280 });
+    mockElementRect(canvas, { left: 120, top: 160, width: 400, height: 280 });
+    mockElementRect(dock, { left: 0, top: 0, width: 180, height: 96 });
+
+    drawSelectionBox(canvas, { x: 160, y: 220 }, { x: 260, y: 300 });
+    await waitFor(() => expect(dock.dataset.drawLayout).toBe('floating'));
+    expect(dock.dataset.drawSide).toBe('right');
+    expect(dock.style.left).toBe('272px');
+    expect(dock.style.top).toBe('212px');
+    expect(body.contains(dock)).toBe(true);
+    expect(wrap.contains(dock)).toBe(false);
   });
 
   it('hides draw chrome before a compositor annotation snapshot', async () => {

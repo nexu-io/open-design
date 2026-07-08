@@ -1,0 +1,59 @@
+name: release-branch-direct-pr-guard
+# Direct PRs into a release/* branch are not allowed except from the release automation.
+# Colleagues sometimes open a PR straight into release/vX.Y.Z, bypassing main + the backport
+# flow (which is how a change is supposed to reach a release branch). This closes such a PR on
+# open / reopen / base-retarget, with guidance to merge into main and add the
+# `backport release/vX.Y.Z` label — the release bot then cherry-picks it onto the release branch.
+# The release automation accounts (open-design-release-bot, github-actions) are exempt.
+#
+# Why close (not a failing check): release/* branches have no required status checks and no
+# merge queue, so a red check would not actually block a merge — closing is the only real gate.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, edited]
+    branches:
+      - 'release/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  guard:
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close direct release PRs from non-automation authors
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          STATE: ${{ github.event.pull_request.state }}
+        run: |
+          set -euo pipefail
+          # An `edited` event can fire on an already-closed PR; only act on open ones.
+          if [ "$STATE" != "open" ]; then
+            echo "PR #$PR is $STATE — nothing to do."
+            exit 0
+          fi
+          # Release automation may open PRs into release/* (backport flow, preview bakes).
+          # String equality so the literal "[bot]" suffix is matched, not read as a glob class.
+          if [ "$AUTHOR" = "open-design-release-bot[bot]" ] || [ "$AUTHOR" = "github-actions[bot]" ]; then
+            echo "Allowed release automation author: $AUTHOR — nothing to do."
+            exit 0
+          fi
+          echo "Blocking direct release PR #$PR into $BASE by $AUTHOR"
+          body="$(printf '%s\n' \
+            '🚫 Direct PRs into release branches are not accepted.' \
+            '' \
+            'Changes reach a release branch through the **backport flow**, not by targeting `release/*` directly:' \
+            '' \
+            '1. Open your PR against **`main`** and get it merged there.' \
+            '2. Add the **`backport release/vX.Y.Z`** label to that main PR — the release bot cherry-picks it onto the release branch automatically (resolving conflicts in a draft if needed).' \
+            '' \
+            'Closing this PR. If this is a genuine release-only fix that cannot go through `main`, ask a maintainer to handle it directly.')"
+          gh pr comment "$PR" --repo "$REPO" --body "$body"
+          gh pr close "$PR" --repo "$REPO"

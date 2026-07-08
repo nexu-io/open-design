@@ -42,4 +42,10 @@ const motionHandler: ProxyHandler<object> = {
 
 const motion = new Proxy({}, motionHandler);
 
-export { AnimatePresence, MotionConfig, motion };
+// jsdom has no matchMedia; components under test always see "no reduced
+// motion" so their full animation props stay assertable.
+function useReducedMotion(): boolean {
+  return false;
+}
+
+export { AnimatePresence, MotionConfig, motion, useReducedMotion };

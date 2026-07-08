@@ -1,4 +1,4 @@
-import { accessSync, constants, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { accessSync, closeSync, constants, openSync, readdirSync, readSync, realpathSync, statSync } from 'node:fs';
 import path, { delimiter } from 'node:path';
 import { inspectAgentExecutableResolution, userToolchainBinDirs } from './executables.js';
 import type { RuntimeAgentDef } from './types.js';
@@ -164,11 +164,26 @@ function codexNativeTargetTriple(): string {
 }
 
 function looksLikeCodexNodeWrapper(filePath: string): boolean {
+  // Read only the first 64KB rather than slurping the whole file: the selected
+  // codex path can now be the native Codex.app binary (~190MB), and
+  // `readFileSync` would otherwise load all of it into a string just to sniff a
+  // shebang. A node wrapper is a tiny script, so the header is enough.
+  let fd: number | null = null;
   try {
-    const body = readFileSync(filePath, { encoding: 'utf8' }).slice(0, 64_000);
-    return /node|@openai\/codex|codex-/i.test(body);
+    fd = openSync(filePath, 'r');
+    const buffer = Buffer.alloc(64_000);
+    const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
+    return /node|@openai\/codex|codex-/i.test(buffer.toString('utf8', 0, bytesRead));
   } catch {
     return false;
+  } finally {
+    if (fd !== null) {
+      try {
+        closeSync(fd);
+      } catch {
+        // Best-effort close; nothing actionable if it fails.
+      }
+    }
   }
 }
 

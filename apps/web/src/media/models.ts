@@ -229,7 +229,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'minimax',
     label: 'MiniMax',
-    hint: 'TTS / video-01',
+    hint: 'TTS / image-01 / video-01',
     integrated: true,
     defaultBaseUrl: 'https://api.minimaxi.chat/v1',
     docsUrl: 'https://platform.minimaxi.com',
@@ -433,6 +433,17 @@ export const IMAGE_MODELS: MediaModel[] = [
     hint: 'AIHubMix · OpenAI DALL·E 3',
     provider: 'aihubmix',
     caps: ['t2i'],
+  },
+
+  // MiniMax — synchronous /v1/image_generation, Bearer auth, base_resp envelope.
+  // The wire name `image-01` is mapped from the catalog id `minimax-image-01` in
+  // the renderer (see MINIMAX_IMAGE_MODEL_MAP in apps/daemon/src/media.ts).
+  {
+    id: 'minimax-image-01',
+    label: 'image-01',
+    hint: 'MiniMax · text + image-to-image',
+    provider: 'minimax',
+    caps: ['t2i', 'i2i'],
   },
 
   // xAI Grok Imagine — text-to-image (1k/2k, 11+ aspect ratios).

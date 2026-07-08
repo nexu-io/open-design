@@ -35,6 +35,7 @@ import type {
 } from '../state/mcp';
 import { fetchAgents } from '../providers/registry';
 import type { AgentInfo } from '../types';
+import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
 
@@ -1424,7 +1425,7 @@ function McpAgentSupportBanner({ agents }: { agents: AgentInfo[] }) {
   // `available: false`). Splitting the full catalog into "Forwarded to /
   // Not forwarded to" would mention adapters the user can't even launch,
   // which is misleading. Scope the banner to installed CLIs only.
-  const installed = agents.filter((a) => a.available);
+  const installed = agents.filter((a) => a.available && isVisibleLocalCliAgent(a));
   if (installed.length === 0) return null;
   const supported = installed.filter(
     (a) => typeof a.externalMcpInjection === 'string',

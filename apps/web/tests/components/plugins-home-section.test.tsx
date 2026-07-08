@@ -27,6 +27,9 @@ function makePlugin(overrides: {
   featured?: boolean;
   mode?: string;
   kind?: 'scenario' | 'atom';
+  preview?: Record<string, unknown>;
+  assets?: string[];
+  exampleOutputs?: Array<{ path: string; title?: string }>;
 }): InstalledPluginRecord {
   return {
     id: overrides.id,
@@ -47,7 +50,10 @@ function makePlugin(overrides: {
       od: {
         kind: overrides.kind ?? 'scenario',
         ...(overrides.mode ? { mode: overrides.mode } : {}),
+        ...(overrides.preview ? { preview: overrides.preview } : {}),
         ...(overrides.featured ? { featured: true } : {}),
+        ...(overrides.assets ? { context: { assets: overrides.assets } } : {}),
+        ...(overrides.exampleOutputs ? { useCase: { exampleOutputs: overrides.exampleOutputs } } : {}),
       },
     },
     fsPath: '/tmp',
@@ -101,6 +107,7 @@ function pluginIds(): Array<string | null> {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   window.localStorage.clear();
 });
 
@@ -134,14 +141,72 @@ const sample: InstalledPluginRecord[] = [
 ];
 
 describe('PluginsHomeSection (community gallery)', () => {
-  it('keeps gallery tiles free of inline Use actions — Use lives in the detail modal', () => {
-    renderSection(sample, { cardLayout: 'gallery' });
+  it('caps the initial gallery render so template loading does not mount the full catalog at once', () => {
+    class MockIntersectionObserver {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+      takeRecords = () => [];
+    }
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
+    const manyPlugins = Array.from({ length: 30 }, (_value, index) =>
+      makePlugin({
+        id: `prototype-gallery-${index + 1}`,
+        mode: 'prototype',
+        tags: ['dashboard'],
+        preview: { type: 'html', entry: './example.html' },
+      }),
+    );
 
-    // The tile itself stays a pure preview: name button opens details,
-    // ↗ opens the example page. Use / Use with query are detail-modal
-    // affordances only.
+    renderSection(manyPlugins, {
+      cardLayout: 'gallery',
+      preferDefaultFacet: false,
+    });
+
+    expect(pluginIds()).toHaveLength(12);
+    expect(screen.getByRole('list').querySelector('.plugins-home__load-more-sentinel')).toBeTruthy();
+  });
+
+  it('surfaces gallery tile actions without restoring the heavier split Use menu', () => {
+    const onUse = vi.fn();
+    const onDuplicate = vi.fn();
+    const onOpenDetails = vi.fn();
+    renderSection([
+      makePlugin({
+        id: 'prototype-dashboard',
+        mode: 'prototype',
+        tags: ['dashboard'],
+        preview: { type: 'html', entry: './example.html' },
+      }),
+      makePlugin({
+        id: 'image-logo',
+        mode: 'image',
+        tags: ['logo'],
+        preview: { type: 'image', entry: './final/logo.png', poster: './final/logo.png' },
+      }),
+    ], {
+      cardLayout: 'gallery',
+      preferDefaultFacet: false,
+      onUse,
+      onDuplicate,
+      onOpenDetails,
+    });
+
+    // The tile overlay exposes direct actions, but keeps the richer
+    // split-menu affordance in the detail modal/rich management surface.
     expect(screen.getByTestId('plugins-home-details-prototype-dashboard')).toBeTruthy();
-    expect(screen.queryByTestId('plugins-home-use-prototype-dashboard')).toBeNull();
+    fireEvent.click(screen.getByTestId('plugins-home-use-prototype-dashboard'));
+    expect(onUse).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'prototype-dashboard' }),
+      'use',
+    );
+    expect(onOpenDetails).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('plugins-home-duplicate-prototype-dashboard'));
+    expect(onDuplicate).toHaveBeenCalledWith(expect.objectContaining({ id: 'prototype-dashboard' }));
+    expect(onOpenDetails).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('plugins-home-duplicate-image-logo')).toBeNull();
+
     expect(screen.queryByTestId('plugins-home-use-menu-prototype-dashboard')).toBeNull();
     expect(screen.queryByTestId('plugins-home-use-with-query-prototype-dashboard')).toBeNull();
   });
@@ -343,5 +408,57 @@ describe('PluginsHomeSection (category bar)', () => {
       'video-cinematic',
       'video-short',
     ]);
+  });
+});
+
+describe('PluginsHomeSection (sort toggle)', () => {
+  // Distinct timestamps so "newest" produces an observable re-order:
+  // visual appeal would lead with the poster-preview tile, freshness
+  // leads with the most recently updated record.
+  const timestamped: InstalledPluginRecord[] = [
+    {
+      ...makePlugin({
+        id: 'shiny-but-old',
+        mode: 'image',
+        tags: ['logo'],
+        preview: { type: 'image', entry: './final/logo.png', poster: './final/logo.png' },
+      }),
+      installedAt: 100,
+      updatedAt: 100,
+    },
+    {
+      ...makePlugin({ id: 'plain-but-fresh', mode: 'prototype', tags: ['dashboard'] }),
+      installedAt: 300,
+      updatedAt: 300,
+    },
+    {
+      ...makePlugin({ id: 'plain-and-mid', mode: 'prototype', tags: ['dashboard'] }),
+      installedAt: 200,
+      updatedAt: 200,
+    },
+  ];
+
+  it('defaults to hot and re-ranks by freshness when Newest is picked', () => {
+    renderSection(timestamped, { preferDefaultFacet: false });
+
+    // Hot (default): the poster-preview tile outranks the text-only ones.
+    expect(pluginIds()[0]).toBe('shiny-but-old');
+    expect(screen.getByTestId('plugins-home-sort-hot').getAttribute('aria-checked')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('plugins-home-sort-newest'));
+
+    expect(pluginIds()).toEqual(['plain-but-fresh', 'plain-and-mid', 'shiny-but-old']);
+    expect(screen.getByTestId('plugins-home-sort-newest').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('remembers the picked order across remounts', () => {
+    const first = renderSection(timestamped, { preferDefaultFacet: false });
+    fireEvent.click(screen.getByTestId('plugins-home-sort-newest'));
+    first.unmount();
+
+    renderSection(timestamped, { preferDefaultFacet: false });
+
+    expect(screen.getByTestId('plugins-home-sort-newest').getAttribute('aria-checked')).toBe('true');
+    expect(pluginIds()).toEqual(['plain-but-fresh', 'plain-and-mid', 'shiny-but-old']);
   });
 });

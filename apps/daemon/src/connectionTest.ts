@@ -34,8 +34,8 @@ import {
   mergeProxyAwareEnv,
   resolveSystemProxyEnv,
 } from '@open-design/platform';
-import { attachAcpSession } from './acp.js';
-import { attachPiRpcSession } from './pi-rpc.js';
+import { attachAcpSession } from './agent-protocol/index.js';
+import { attachPiRpcSession } from './agent-protocol/index.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
@@ -58,12 +58,15 @@ import type { AgentCliEnvPrefs } from './app-config.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
 import { resolveModelForAgent } from './runtimes/models.js';
 import { preparePromptFileForAgent, type PreparedPromptFile } from './runtimes/prompt-file.js';
+import { configuredAllowedInternalHosts } from './origin-validation.js';
 import {
+  isAllowlistedInternalHost,
   isBlockedExternalApiHostname,
   isLoopbackApiHost,
   validateBaseUrl,
   type AgentTestRequest,
   type BaseUrlValidationResult,
+  type ValidateBaseUrlOptions,
   type ConnectionTestDiagnostics,
   type ConnectionTestKind,
   type ConnectionTestPhase,
@@ -113,12 +116,18 @@ function looksLikeIpLiteral(hostname: string): boolean {
 export async function validateBaseUrlResolved(
   baseUrl: string,
   lookup: DnsLookupFn = defaultDnsLookup,
+  options: ValidateBaseUrlOptions = {},
 ): Promise<BaseUrlValidationResult> {
-  const sync = validateBaseUrl(baseUrl);
+  const sync = validateBaseUrl(baseUrl, options);
   if (sync.error || !sync.parsed) return sync;
 
   const hostname = sync.parsed.hostname.toLowerCase();
   if (isLoopbackApiHost(hostname)) return sync;
+  // Issue #3225 — an operator who trusts this hostname has opted it out of the
+  // guard entirely, so skip the resolved-IP block even though it points into
+  // private space. The sync check above already honored a literal-IP allowlist
+  // entry; this covers the hostname-that-resolves-private case.
+  if (isAllowlistedInternalHost(hostname, options.allowedInternalHosts)) return sync;
   if (looksLikeIpLiteral(hostname)) return sync;
 
   let addresses: DnsLookupAddress[];
@@ -131,12 +140,38 @@ export async function validateBaseUrlResolved(
   for (const addr of addresses) {
     const ip = String(addr.address).toLowerCase();
     if (isLoopbackApiHost(ip)) continue;
+    // A resolved address the operator explicitly allowlisted (they listed the
+    // IP rather than the hostname) is permitted; everything else in private
+    // space is still blocked.
+    if (isAllowlistedInternalHost(ip, options.allowedInternalHosts)) continue;
     if (isBlockedExternalApiHostname(ip)) {
       return { error: 'Internal IPs blocked', forbidden: true };
     }
   }
 
   return sync;
+}
+
+/**
+ * Validate a base URL that the USER deliberately configured as a provider
+ * endpoint (connection test, model discovery, BYOK chat dispatch). Identical
+ * to {@link validateBaseUrlResolved} except it honors the operator's
+ * `OD_ALLOWED_INTERNAL_HOSTS` allowlist (issue #3225), so an internally hosted
+ * gateway on an RFC1918 address can be reached when — and only when — the
+ * operator opted in.
+ *
+ * INVARIANT: use this ONLY for user-configured endpoints. URLs that arrive
+ * inside an upstream response (image/video download links) are
+ * attacker-controllable and MUST stay on the strict {@link assertExternalAssetUrl}
+ * / {@link validateBaseUrlResolved} path, which never consults the allowlist.
+ */
+export function validateUserProviderBaseUrl(
+  baseUrl: string,
+  lookup: DnsLookupFn = defaultDnsLookup,
+): Promise<BaseUrlValidationResult> {
+  return validateBaseUrlResolved(baseUrl, lookup, {
+    allowedInternalHosts: configuredAllowedInternalHosts(),
+  });
 }
 
 /**
@@ -803,6 +838,14 @@ function inspectProviderCompletion(
     };
   }
 
+  if (protocol === 'bedrock') {
+    return {
+      valid: false,
+      kind: 'unknown',
+      detail: 'AWS Bedrock BYOK connection tests need AWS credential signing, which is not supported by the current API-key smoke test.',
+    };
+  }
+
   return { valid: false };
 }
 
@@ -821,6 +864,55 @@ function statusToKind(status: number, detailText = ''): ConnectionTestKind {
   if (status === 429) return 'rate_limited';
   if (status >= 500) return 'upstream_unavailable';
   return 'unknown';
+}
+
+function isNvidiaDegradedProviderError(detailText: string): boolean {
+  return /\bDEGRADED\b/i.test(detailText) && /\bfunction\s+id\b/i.test(detailText);
+}
+
+function providerHttpErrorOverride(
+  protocol: ConnectionTestProtocol,
+  hostname: string,
+  status: number,
+  detailText: string,
+): { kind: ConnectionTestKind; detail: string } | null {
+  if (
+    protocol === 'openai' &&
+    status === 400 &&
+    hostname.toLowerCase() === 'integrate.api.nvidia.com' &&
+    isNvidiaDegradedProviderError(detailText)
+  ) {
+    return {
+      kind: 'upstream_unavailable',
+      detail:
+        'The selected NVIDIA model instance is currently unavailable at the provider. Try a different model or retry later.',
+    };
+  }
+  return null;
+}
+
+function classifyProviderHttpFailure(
+  protocol: ConnectionTestProtocol,
+  hostname: string,
+  status: number,
+  detailText: string,
+  secrets: string[],
+): { kind: ConnectionTestKind; detail: string } {
+  const redactedDetail = redactSecrets(detailText.slice(0, 240), secrets);
+  const override = providerHttpErrorOverride(
+    protocol,
+    hostname,
+    status,
+    redactedDetail,
+  );
+  if (override) return override;
+  const kind = statusToKind(status, redactedDetail);
+  const detail =
+    redactedDetail ||
+    (status === 404
+      ? 'HTTP 404 from provider; check the Base URL path.'
+      : '');
+  return { kind, detail };
 }
 
 function extractOpenAiModelIds(data: unknown): string[] {
@@ -1204,6 +1296,10 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
       };
     }
+    case 'bedrock':
+      throw new Error(
+        'AWS Bedrock BYOK requires AWS credential signing; the current provider smoke test only supports API-key based providers.',
+      );
     default:
       throw new Error(`Unknown protocol: ${(input as { protocol?: string }).protocol}`);
   }
@@ -1229,7 +1325,7 @@ export async function testProviderConnection(
   const start = Date.now();
   const model = String(input.model ?? '');
   const normalizedInput = normalizeProviderTestInput(input);
-  const validated = await validateBaseUrlResolved(normalizedInput.baseUrl);
+  const validated = await validateUserProviderBaseUrl(normalizedInput.baseUrl);
   if (validated.error || !validated.parsed) {
     const kind: ConnectionTestKind = validated.forbidden ? 'forbidden' : 'invalid_base_url';
     return {
@@ -1332,15 +1428,13 @@ export async function testProviderConnection(
         });
         latencyMs = Date.now() - start;
       } else {
-        const redactedDetail = redactSecrets(detailText.slice(0, 240), [
-          input.apiKey,
-        ]);
-        const kind = statusToKind(response.status, redactedDetail);
-        const detail =
-          redactedDetail ||
-          (response.status === 404
-            ? 'HTTP 404 from provider; check the Base URL path.'
-            : '');
+        const { kind, detail } = classifyProviderHttpFailure(
+          input.protocol,
+          validated.parsed.hostname,
+          response.status,
+          detailText,
+          [input.apiKey],
+        );
         console.warn(
           `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${kind})${detail ? ` ${detail}` : ''}`,
         );
@@ -1466,15 +1560,13 @@ export async function testProviderConnection(
     } catch {
       // Ignore — we still report the status code.
     }
-    const redactedDetail = redactSecrets(detailText.slice(0, 240), [
-      input.apiKey,
-    ]);
-    const kind = statusToKind(response.status, redactedDetail);
-    const detail =
-      redactedDetail ||
-      (response.status === 404
-        ? 'HTTP 404 from provider; check the Base URL path.'
-        : '');
+    const { kind, detail } = classifyProviderHttpFailure(
+      input.protocol,
+      validated.parsed.hostname,
+      response.status,
+      detailText,
+      [input.apiKey],
+    );
     console.warn(
       `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${kind})${detail ? ` ${detail}` : ''}`,
     );

@@ -32,6 +32,15 @@ export interface LiveArtifactRefreshSsePayload {
   error?: string;
 }
 
+export interface PlainStreamArtifactSsePayload {
+  type: 'artifact';
+  source: 'plain-stream';
+  name: string;
+  path?: string;
+  identifier?: string;
+  artifactType?: string;
+}
+
 /**
  * Emitted by the daemon on `/api/projects/:id/events` when a new
  * conversation is inserted into a project from a path the open
@@ -86,6 +95,7 @@ export type DaemonAgentPayload =
   | { type: 'thinking_start' }
   | LiveArtifactSsePayload
   | LiveArtifactRefreshSsePayload
+  | PlainStreamArtifactSsePayload
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   /**
    * Live-only incremental tool-input fragment, emitted while the model is still

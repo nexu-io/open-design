@@ -13,6 +13,8 @@ import type {
   PluginReplacementModalSurfaceViewProps,
   PluginDetailModalSurfaceViewProps,
   PluginImportModalSurfaceViewProps,
+  ProjectReferenceModalSurfaceViewProps,
+  FigmaHelpModalSurfaceViewProps,
   DesignSystemsTemplatesModalSurfaceViewProps,
   AssistantFeedbackReasonPanelSurfaceViewProps,
   QuestionsFormSurfaceViewProps,
@@ -51,6 +53,11 @@ import type {
   DesignSystemsTemplatesModalClickProps,
   DesignSystemsTemplatesModalSharePopoverClickProps,
   DesignSystemsCreateClickProps,
+  DesignSystemsPresetBrandPickerClickProps,
+  DesignSystemsPresetBrandPickerSurfaceViewProps,
+  DesignSystemEnrichClickProps,
+  DesignSystemEnrichResultProps,
+  DesignSystemEditClickProps,
   IntegrationsTabClickProps,
   IntegrationsMcpTabClickProps,
   IntegrationsConnectorsTabClickProps,
@@ -66,6 +73,10 @@ import type {
   AmrAuthResultProps,
   AmrEntryClickProps,
   RunFailedToastSurfaceViewProps,
+  HomeRecommendationClickProps,
+  HomeRecommendationSurfaceViewProps,
+  StudioOnboardingHintClickProps,
+  StudioOnboardingHintSurfaceViewProps,
   ChatPanelResourcesPopoverClickProps,
   ChatPanelMessageQueueClickProps,
   FileManagerClickProps,
@@ -80,6 +91,9 @@ import type {
   HandoffClickProps,
   PresentPopoverClickProps,
   ShareOptionPopoverClickProps,
+  FileVersionModalClickProps,
+  FileVersionModalSurfaceViewProps,
+  FileVersionRestoreResultProps,
   AssistantFeedbackButtonClickProps,
   AssistantFeedbackClickProps,
   AssistantFeedbackReasonClickProps,
@@ -107,8 +121,11 @@ import type {
   RunCreatedProps,
   RunFinishedProps,
   FileUploadResultProps,
+  ContextLinkResultProps,
   ArtifactExportResultProps,
   ArtifactDeployResultProps,
+  SketchSaveResultProps,
+  SketchExportResultProps,
   FeedbackSubmitResultProps,
   SettingsViewProps,
   SettingsCliTestResultProps,
@@ -118,6 +135,9 @@ import type {
   OnboardingClickProps,
   OnboardingRuntimeScanResultProps,
   OnboardingCompleteResultProps,
+  OnboardingPromptPrefilledProps,
+  OnboardingFirstPromptSentProps,
+  OnboardingFirstGenerationCompletedProps,
   DesignSystemSourceIngestResultProps,
   DesignSystemCreateResultProps,
   DesignSystemReviewResultProps,
@@ -203,6 +223,20 @@ export function trackPluginImportModalSurfaceView(
   send(track, 'surface_view', props);
 }
 
+export function trackProjectReferenceModalSurfaceView(
+  track: Track,
+  props: ProjectReferenceModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackFigmaHelpModalSurfaceView(
+  track: Track,
+  props: FigmaHelpModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
 export function trackAssistantFeedbackReasonPanelSurfaceView(
   track: Track,
   props: AssistantFeedbackReasonPanelSurfaceViewProps,
@@ -227,6 +261,36 @@ export function trackQuestionsFormSurfaceView(
 export function trackRunFailedToastGoAmrClick(
   track: Track,
   props: RunFailedToastClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+// Personalized first-run recommendation on Home (spec §7).
+export function trackHomeRecommendationSurfaceView(
+  track: Track,
+  props: HomeRecommendationSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackHomeRecommendationClick(
+  track: Track,
+  props: HomeRecommendationClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+// First-generation Studio hint (spec §8.3).
+export function trackStudioOnboardingHintSurfaceView(
+  track: Track,
+  props: StudioOnboardingHintSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackStudioOnboardingHintClick(
+  track: Track,
+  props: StudioOnboardingHintClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -494,6 +558,41 @@ export function trackDesignSystemsCreateClick(
   send(track, 'ui_click', props);
 }
 
+export function trackDesignSystemsPresetBrandPickerClick(
+  track: Track,
+  props: DesignSystemsPresetBrandPickerClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDesignSystemsPresetBrandPickerSurfaceView(
+  track: Track,
+  props: DesignSystemsPresetBrandPickerSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackDesignSystemEnrichClick(
+  track: Track,
+  props: DesignSystemEnrichClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackDesignSystemEnrichResult(
+  track: Track,
+  props: DesignSystemEnrichResultProps,
+): void {
+  send(track, 'design_system_enrich_result', props);
+}
+
+export function trackDesignSystemEditClick(
+  track: Track,
+  props: DesignSystemEditClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
 export function trackIntegrationsTabClick(
   track: Track,
   props: IntegrationsTabClickProps,
@@ -550,6 +649,20 @@ export function trackDesignToolboxClick(
   props: DesignToolboxClickProps,
 ): void {
   send(track, 'ui_click', props);
+}
+
+export function trackSketchSaveResult(
+  track: Track,
+  props: SketchSaveResultProps,
+): void {
+  send(track, 'sketch_save_result', props);
+}
+
+export function trackSketchExportResult(
+  track: Track,
+  props: SketchExportResultProps,
+): void {
+  send(track, 'sketch_export_result', props);
 }
 
 export function trackComposerBarClick(
@@ -672,6 +785,20 @@ export function trackShareOptionPopoverClick(
   options?: { requestId: string },
 ): void {
   send(track, 'ui_click', props, options);
+}
+
+export function trackFileVersionModalClick(
+  track: Track,
+  props: FileVersionModalClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackFileVersionModalSurfaceView(
+  track: Track,
+  props: FileVersionModalSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
 }
 
 // ---- ui_click (feedback) -------------------------------------------------
@@ -841,6 +968,13 @@ export function trackFileUploadResult(
   send(track, 'file_upload_result', props, options);
 }
 
+export function trackContextLinkResult(
+  track: Track,
+  props: ContextLinkResultProps,
+): void {
+  send(track, 'context_link_result', props);
+}
+
 export function trackArtifactExportResult(
   track: Track,
   props: ArtifactExportResultProps,
@@ -855,6 +989,13 @@ export function trackArtifactDeployResult(
   options?: { requestId?: string },
 ): void {
   send(track, 'artifact_deploy_result', props, options);
+}
+
+export function trackFileVersionRestoreResult(
+  track: Track,
+  props: FileVersionRestoreResultProps,
+): void {
+  send(track, 'file_version_restore_result', props);
 }
 
 export function trackFeedbackSubmitResult(
@@ -976,6 +1117,28 @@ export function trackOnboardingCompleteResult(
   props: OnboardingCompleteResultProps,
 ): void {
   send(track, 'onboarding_complete_result', props);
+}
+
+// First-generation funnel (spec §11.1).
+export function trackOnboardingPromptPrefilled(
+  track: Track,
+  props: OnboardingPromptPrefilledProps,
+): void {
+  send(track, 'onboarding_prompt_prefilled', props);
+}
+
+export function trackOnboardingFirstPromptSent(
+  track: Track,
+  props: OnboardingFirstPromptSentProps,
+): void {
+  send(track, 'onboarding_first_prompt_sent', props);
+}
+
+export function trackOnboardingFirstGenerationCompleted(
+  track: Track,
+  props: OnboardingFirstGenerationCompletedProps,
+): void {
+  send(track, 'onboarding_first_generation_completed', props);
 }
 
 // ---- Design-system lifecycle ---------------------------------------------

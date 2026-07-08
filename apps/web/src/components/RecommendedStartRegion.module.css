@@ -1,0 +1,218 @@
+/* Compact one-row recommendation strip. Sits between the Home hero and the
+   recent-projects rail; deliberately lighter than a full card so it doesn't
+   compete with the hero input for first-screen attention. */
+/* Delayed accordion reveal — the repo's canonical auto-height pattern
+   (grid-template-rows 0fr -> 1fr, see plugins-home home-templates-reveal).
+   The slot stays collapsed while Home paints, then expands and PUSHES the
+   template section down: displacement is the attention cue for this
+   optional entry — quieter than a glint, impossible to miss. */
+.reveal {
+  display: grid;
+  /* Match the hero composer column (720px, centered) so the strip reads as a
+     card in the same visual stack — not a full-width notice bar. */
+  width: 100%;
+  max-width: 720px;
+  align-self: center;
+  animation: recommendation-reveal 420ms cubic-bezier(0.23, 1, 0.32, 1) 600ms both;
+}
+
+.revealInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.root {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent-tint) 40%, var(--bg-panel));
+  /* Content fades in as the slot finishes opening. */
+  animation: recommendation-fade 240ms cubic-bezier(0.23, 1, 0.32, 1) 780ms both;
+}
+
+@keyframes recommendation-reveal {
+  from {
+    grid-template-rows: 0fr;
+  }
+  to {
+    grid-template-rows: 1fr;
+  }
+}
+
+@keyframes recommendation-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* One-time glint on the primary CTA once the card has settled — the same
+   "click me next" invitation home-hero's attention sheen puts on the send
+   button. Card opens (look here) -> button glints (act here), and the eye
+   picks up the neighboring cycle / all-types options on the way. */
+.primary::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 45%;
+  pointer-events: none;
+  /* Tinted glint — the light-surface variant from home-hero's attention
+     sheen; a white glint would vanish on the tinted button. */
+  background: linear-gradient(
+    105deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 28%, white),
+    transparent
+  );
+  animation: recommendation-cta-sheen 0.9s cubic-bezier(0.23, 1, 0.32, 1) 1.15s 2 both;
+}
+
+@keyframes recommendation-cta-sheen {
+  0% {
+    transform: translateX(-130%) skewX(-18deg);
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(230%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .root {
+    animation: none;
+  }
+  .primary::after {
+    animation: none;
+    content: none;
+  }
+}
+
+.icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+}
+
+/* Title + subline stack; takes the remaining width and can wrap on narrow
+   layouts without pushing the actions off-row. */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 160px;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.desc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.primary {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  /* Tinted secondary, not a solid accent fill: the composer's Send stays the
+     screen's ONE filled primary. First-time attention is carried by the
+     reveal + glint motion, not by fill weight. Same accent-secondary
+     vocabulary as NextStepActions' Share button. */
+  color: var(--accent-strong);
+  background: var(--accent-tint);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.primary:hover:not(:disabled) {
+  /* :not(:disabled) matches the global `button:hover:not(:disabled)` rule in
+     primitives.css — without it that rule repaints the background to
+     --bg-subtle. Deepen the tint on hover, same as the Share button. */
+  background: color-mix(in srgb, var(--accent-tint) 70%, var(--accent) 14%);
+  border-color: var(--accent);
+}
+
+.primary:active {
+  transform: translateY(1px);
+}
+
+/* "Try another" — quiet text action, no chrome. */
+/* Icon-only "换一换" — the label lives in title/aria-label so the row stays
+   compact enough for all three actions to share one line at 720px. */
+.change {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.change:hover:not(:disabled) {
+  /* Specificity-matches the global button:hover rule (see .primary above);
+     a soft white wash instead of its gray --bg-subtle fill. Same hover
+     treatment as .tertiary — the two text actions are peers, only their
+     resting text color separates them. */
+  color: var(--text);
+  background: color-mix(in srgb, #fff 55%, transparent);
+  border-radius: 999px;
+}
+
+/* "Browse all types" — quietest action, trailing edge. */
+.tertiary {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.tertiary:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, #fff 55%, transparent);
+  border-radius: 999px;
+}

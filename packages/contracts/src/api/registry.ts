@@ -1,6 +1,10 @@
 export interface AgentModelOption {
   id: string;
   label: string;
+  /** USD price per 1M input tokens when reported by the provider/catalog. */
+  inputPriceUsdPerMillion?: number;
+  /** USD price per 1M output tokens when reported by the provider/catalog. */
+  outputPriceUsdPerMillion?: number;
 }
 
 /**
@@ -353,6 +357,7 @@ export interface DesignSystemResponse {
 
 export interface DesignSystemProvenance {
   companyBlurb?: string;
+  sourceUrls?: string[];
   githubUrls?: string[];
   localCodeFiles?: string[];
   figFiles?: string[];

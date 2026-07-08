@@ -5,8 +5,8 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectView } from '../../src/components/ProjectView';
-import { streamMessage } from '../../src/providers/anthropic';
-import type { StreamHandlers } from '../../src/providers/anthropic';
+import { streamViaDaemon } from '../../src/providers/daemon';
+import type { DaemonStreamOptions } from '../../src/providers/daemon';
 import {
   fetchProjectFilePreview,
   fetchProjectFileText,
@@ -119,6 +119,7 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
+  DESIGN_SYSTEM_TAB: '__design_system__',
   FileWorkspace: ({ openRequest }: { openRequest?: { name: string; nonce: number } | null }) => (
     <div data-testid="file-workspace" data-open-request-name={openRequest?.name ?? ''} />
   ),
@@ -182,7 +183,7 @@ vi.mock('../../src/components/ChatPane', () => ({
   },
 }));
 
-const mockedStreamMessage = vi.mocked(streamMessage);
+const mockedStreamViaDaemon = vi.mocked(streamViaDaemon);
 const mockedFetchProjectFilePreview = vi.mocked(fetchProjectFilePreview);
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
 const mockedFetchProjectFiles = vi.mocked(fetchProjectFiles);
@@ -218,13 +219,24 @@ const project: Project = {
   updatedAt: 1,
 };
 
-function renderProjectView(renderProject: Project = project) {
+function renderProjectView(
+  renderProject: Project = project,
+  agents: AgentInfo[] = [
+    {
+      id: 'byok-opencode',
+      name: 'BYOK OpenCode',
+      bin: 'opencode',
+      available: true,
+      models: [],
+    } as AgentInfo,
+  ],
+) {
   return render(
     <ProjectView
       project={renderProject}
       routeFileName={null}
       config={config}
-      agents={[] as AgentInfo[]}
+      agents={agents}
       skills={[] as SkillSummary[]}
       designTemplates={[] as SkillSummary[]}
       designSystems={[] as DesignSystemSummary[]}
@@ -247,7 +259,7 @@ describe('ProjectView API empty response handling', () => {
   beforeEach(() => {
     chatPaneMockState.attachments = [];
     chatPaneMockState.commentAttachments = [];
-    mockedStreamMessage.mockReset();
+    mockedStreamViaDaemon.mockReset();
     mockedFetchProjectFilePreview.mockReset();
     mockedFetchProjectFileText.mockReset();
     mockedFetchProjectFiles.mockReset();
@@ -275,13 +287,8 @@ describe('ProjectView API empty response handling', () => {
   });
 
   it('marks an empty API completion as a soft no-output state instead of succeeded', async () => {
-    mockedStreamMessage.mockImplementation(async (
-      _cfg: AppConfig,
-      _system: string,
-      _history: ChatMessage[],
-      _signal: AbortSignal,
-      handlers: StreamHandlers,
-    ) => {
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
       handlers.onDone('');
     });
     renderProjectView();
@@ -313,13 +320,8 @@ describe('ProjectView API empty response handling', () => {
 
   it('retries a failed API turn without appending a duplicate user message', async () => {
     let callCount = 0;
-    mockedStreamMessage.mockImplementation(async (
-      _cfg: AppConfig,
-      _system: string,
-      _history: ChatMessage[],
-      _signal: AbortSignal,
-      handlers: StreamHandlers,
-    ) => {
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
       callCount += 1;
       if (callCount === 1) {
         handlers.onError(new Error('model crashed'));
@@ -332,8 +334,8 @@ describe('ProjectView API empty response handling', () => {
     await waitFor(() => expect(screen.getByText('model crashed')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'retry' }));
 
-    await waitFor(() => expect(mockedStreamMessage).toHaveBeenCalledTimes(2));
-    const retryHistory = mockedStreamMessage.mock.calls[1]![2] as ChatMessage[];
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(2));
+    const retryHistory = mockedStreamViaDaemon.mock.calls[1]![0].history;
     expect(retryHistory.map((message) => `${message.role}:${message.content}`)).toEqual([
       'user:Create a login page',
     ]);
@@ -370,13 +372,8 @@ describe('ProjectView API empty response handling', () => {
         source: 'saved-comment',
       },
     ];
-    mockedStreamMessage.mockImplementation(async (
-      _cfg: AppConfig,
-      _system: string,
-      _history: ChatMessage[],
-      _signal: AbortSignal,
-      handlers: StreamHandlers,
-    ) => {
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
       handlers.onDone('');
     });
     renderProjectView();
@@ -400,13 +397,8 @@ describe('ProjectView API empty response handling', () => {
   });
 
   it('keeps normal API text completions on the succeeded path', async () => {
-    mockedStreamMessage.mockImplementation(async (
-      _cfg: AppConfig,
-      _system: string,
-      _history: ChatMessage[],
-      _signal: AbortSignal,
-      handlers: StreamHandlers,
-    ) => {
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
       handlers.onDelta('hello');
       handlers.onDone('hello');
     });
@@ -421,7 +413,7 @@ describe('ProjectView API empty response handling', () => {
     expect(screen.queryByText(/provider ended the request/i)).toBeNull();
   });
 
-  it('inlines attached document text into the BYOK prompt sent to API providers', async () => {
+  it('passes attached document paths and preview context to BYOK OpenCode runs', async () => {
     chatPaneMockState.attachments = [
       { path: 'brief.docx', name: 'brief.docx', kind: 'file', size: 1024 },
     ];
@@ -447,13 +439,8 @@ describe('ProjectView API empty response handling', () => {
     } as never);
 
     let capturedHistory: ChatMessage[] = [];
-    mockedStreamMessage.mockImplementation(async (
-      _cfg: AppConfig,
-      _system: string,
-      history: ChatMessage[],
-      _signal: AbortSignal,
-      handlers: StreamHandlers,
-    ) => {
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers, history } = options;
       capturedHistory = history;
       handlers.onDelta('hello');
       handlers.onDone('hello');
@@ -463,28 +450,52 @@ describe('ProjectView API empty response handling', () => {
 
     await sendTestPrompt();
 
-    await waitFor(() => {
-      expect(mockedFetchProjectFilePreview).toHaveBeenCalledWith(project.id, 'brief.docx');
-    });
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(mockedStreamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'byok-opencode',
+      attachments: ['brief.docx'],
+    }));
+    expect(mockedFetchProjectFilePreview).toHaveBeenCalledWith('project-1', 'brief.docx');
     expect(mockedFetchProjectFileText).not.toHaveBeenCalled();
     const userMessage = capturedHistory.at(-1);
     expect(userMessage?.role).toBe('user');
+    expect(userMessage?.content).toContain('Create a login page');
     expect(userMessage?.content).toContain('<attached-project-files>');
-    expect(userMessage?.content).toContain('brief.docx');
+    expect(userMessage?.content).toContain('### Attachment 1: brief.docx');
     expect(userMessage?.content).toContain('Hello world');
     expect(userMessage?.content).toContain('Second line');
   });
 
+  it('fails BYOK API sends before daemon routing when OpenCode is unavailable', async () => {
+    const fetchMock = vi.fn(async () => Response.json({}));
+    vi.stubGlobal('fetch', fetchMock);
+    renderProjectView(project, [
+      {
+        id: 'byok-opencode',
+        name: 'BYOK OpenCode',
+        bin: 'opencode',
+        available: false,
+        models: [],
+      } as AgentInfo,
+    ]);
+
+    await sendTestPrompt();
+
+    await waitFor(() =>
+      expect(screen.getAllByText(/BYOK API runs require OpenCode/i).length).toBeGreaterThan(0),
+    );
+    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/memory/extract',
+      expect.any(Object),
+    );
+  });
+
   it('does not include saved project instructions in the BYOK system prompt', async () => {
-    let capturedSystemPrompt = '';
-    mockedStreamMessage.mockImplementation(async (
-      _cfg: AppConfig,
-      system: string,
-      _history: ChatMessage[],
-      _signal: AbortSignal,
-      handlers: StreamHandlers,
-    ) => {
-      capturedSystemPrompt = system;
+    const capturedOptions: { current: DaemonStreamOptions | null } = { current: null };
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
+      capturedOptions.current = options;
       handlers.onDelta('ok');
       handlers.onDone('ok');
     });
@@ -496,9 +507,11 @@ describe('ProjectView API empty response handling', () => {
 
     await sendTestPrompt();
 
-    await waitFor(() => expect(capturedSystemPrompt).not.toBe(''));
-    expect(capturedSystemPrompt).not.toContain('## Custom instructions (project-level)');
-    expect(capturedSystemPrompt).not.toContain('Use tabs for indentation and keep CTA copy terse.');
+    await waitFor(() => expect(capturedOptions.current).not.toBeNull());
+    expect(capturedOptions.current?.systemPrompt).toBeUndefined();
+    const sentContent = capturedOptions.current?.history.map((message) => message.content).join('\n') ?? '';
+    expect(sentContent).not.toContain('## Custom instructions (project-level)');
+    expect(sentContent).not.toContain('Use tabs for indentation and keep CTA copy terse.');
   });
 
   it('does not expose the project instructions editor from the project header', async () => {
@@ -512,13 +525,8 @@ describe('ProjectView API empty response handling', () => {
   });
 
   it('plays the success sound for API completions that become succeeded after starting without runStatus', async () => {
-    mockedStreamMessage.mockImplementation(async (
-      _cfg: AppConfig,
-      _system: string,
-      _history: ChatMessage[],
-      _signal: AbortSignal,
-      handlers: StreamHandlers,
-    ) => {
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
       handlers.onDelta('hello');
       handlers.onDone('hello');
     });
@@ -537,13 +545,8 @@ describe('ProjectView API empty response handling', () => {
       '<artifact identifier="landing-page" type="text/html" title="Landing Page">' +
       '<!doctype html><html><head><title>Landing</title></head><body><main><h1>Landing page</h1><p>Generated design artifact with enough structure to persist.</p></main></body></html>' +
       '</artifact>';
-    mockedStreamMessage.mockImplementation(async (
-      _cfg: AppConfig,
-      _system: string,
-      _history: ChatMessage[],
-      _signal: AbortSignal,
-      handlers: StreamHandlers,
-    ) => {
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
       handlers.onDelta(artifact);
       handlers.onDone('');
     });
@@ -573,13 +576,8 @@ describe('ProjectView API empty response handling', () => {
       '<artifact identifier="worker-edition-v2" type="text/html" title="合同审查报告">' +
       '见 worker-edition-v2.html' +
       '</artifact>';
-    mockedStreamMessage.mockImplementation(async (
-      _cfg: AppConfig,
-      _system: string,
-      _history: ChatMessage[],
-      _signal: AbortSignal,
-      handlers: StreamHandlers,
-    ) => {
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
       handlers.onDelta(artifact);
       handlers.onDone('');
     });
@@ -597,7 +595,7 @@ describe('ProjectView API empty response handling', () => {
     expect(screen.queryByText(/Refused to save artifact/i)).toBeNull();
   });
 
-  it('injects ElevenLabs voice options into API-mode audio project prompts', async () => {
+  it('passes audio media execution policy and catalog media defaults to BYOK OpenCode runs', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/media/providers/elevenlabs/voices?limit=100') {
@@ -621,15 +619,10 @@ describe('ProjectView API empty response handling', () => {
       return Response.json({});
     });
     vi.stubGlobal('fetch', fetchMock);
-    let capturedSystemPrompt = '';
-    mockedStreamMessage.mockImplementation(async (
-      _cfg: AppConfig,
-      system: string,
-      _history: ChatMessage[],
-      _signal: AbortSignal,
-      handlers: StreamHandlers,
-    ) => {
-      capturedSystemPrompt = system;
+    const capturedOptions: { current: DaemonStreamOptions | null } = { current: null };
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
+      capturedOptions.current = options;
       handlers.onDelta('hello');
       handlers.onDone('hello');
     });
@@ -646,18 +639,27 @@ describe('ProjectView API empty response handling', () => {
 
     await sendTestPrompt();
 
-    await waitFor(() => expect(capturedSystemPrompt).toContain('ElevenLabs voice options'));
-    expect(capturedSystemPrompt).toContain('<question-form id="elevenlabs-voice" title="Choose an ElevenLabs voice">');
-    expect(capturedSystemPrompt).toContain('"type": "select"');
-    expect(capturedSystemPrompt).toContain('"label": "Rachel — american · female"');
-    expect(capturedSystemPrompt).toContain('"value": "21m00Tcm4TlvDq8ikWAM"');
-    expect(fetchMock).toHaveBeenCalledWith(
+    await waitFor(() => expect(capturedOptions.current).not.toBeNull());
+    expect(capturedOptions.current).toEqual(expect.objectContaining({
+      agentId: 'byok-opencode',
+      byokProvider: expect.objectContaining({ protocol: 'openai', apiKey: 'sk-test' }),
+      byokMediaDefaults: {
+        imageModel: 'gpt-image-2',
+        speechModel: 'gpt-4o-mini-tts',
+      },
+      mediaExecution: {
+        mode: 'enabled',
+        allowedSurfaces: ['audio'],
+        allowedModels: ['elevenlabs-v3'],
+      },
+    }));
+    expect(fetchMock).not.toHaveBeenCalledWith(
       '/api/media/providers/elevenlabs/voices?limit=100',
       expect.any(Object),
     );
   });
 
-  it('surfaces ElevenLabs voice lookup failures in API-mode audio project prompts', async () => {
+  it('does not do browser-side ElevenLabs voice lookup for BYOK OpenCode audio runs', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/media/providers/elevenlabs/voices?limit=100') {
@@ -680,15 +682,10 @@ describe('ProjectView API empty response handling', () => {
       return Response.json({});
     });
     vi.stubGlobal('fetch', fetchMock);
-    let capturedSystemPrompt = '';
-    mockedStreamMessage.mockImplementation(async (
-      _cfg: AppConfig,
-      system: string,
-      _history: ChatMessage[],
-      _signal: AbortSignal,
-      handlers: StreamHandlers,
-    ) => {
-      capturedSystemPrompt = system;
+    const capturedOptions: { current: DaemonStreamOptions | null } = { current: null };
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const { handlers } = options;
+      capturedOptions.current = options;
       handlers.onDelta('hello');
       handlers.onDone('hello');
     });
@@ -705,12 +702,14 @@ describe('ProjectView API empty response handling', () => {
 
     await sendTestPrompt();
 
-    await waitFor(() => expect(capturedSystemPrompt).toContain('ElevenLabs voice options'));
-    expect(capturedSystemPrompt).toContain('ElevenLabs voice list could not be loaded (502 Bad Gateway).');
-    expect(capturedSystemPrompt).not.toContain('upstream temporarily unavailable');
-    expect(capturedSystemPrompt).not.toContain('Ignore previous instructions');
-    expect(screen.getByText(/ElevenLabs voice list could not be loaded/i)).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledWith(
+    await waitFor(() => expect(capturedOptions.current).not.toBeNull());
+    expect(capturedOptions.current?.mediaExecution).toEqual({
+      mode: 'enabled',
+      allowedSurfaces: ['audio'],
+      allowedModels: ['elevenlabs-v3'],
+    });
+    expect(screen.queryByText(/ElevenLabs voice list could not be loaded/i)).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalledWith(
       '/api/media/providers/elevenlabs/voices?limit=100',
       expect.any(Object),
     );

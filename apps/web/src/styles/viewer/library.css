@@ -440,9 +440,14 @@
 }
 .slash-item-desc { font-size: 11px; color: var(--text-muted); line-height: 1.35; }
 
-/* --- CJK (Chinese / Japanese / Korean) Comfort Pass --- */
-:lang(zh), :lang(zh-CN), :lang(zh-TW), :lang(ja), :lang(ko) {
+/* --- CJK (Chinese / Korean) Comfort Pass --- */
+:lang(zh), :lang(zh-CN), :lang(zh-TW), :lang(ko) {
   --sans: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Hiragino Sans GB", "Source Han Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* --- Japanese Comfort Pass --- */
+:lang(ja) {
+  --sans: "Inter", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", "Source Han Sans JP", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 /* --- Arabic & Persian Comfort Pass --- */
