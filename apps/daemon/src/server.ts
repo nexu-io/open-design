@@ -60,7 +60,7 @@ import {
   applyBakedPreviews,
   resolvePluginPreviewsDir,
   PLUGIN_PREVIEWS_ROUTE,
-} from './plugin-preview-bakes.js';
+} from './plugins/plugin-preview-bakes.js';
 import { userFacingAgentLabel } from './user-facing-agent-label.js';
 import {
   buildBrowserUseRunState,
@@ -244,7 +244,7 @@ import {
   assetCacheRewriteUrl,
   createPluginAssetCache,
   isCacheableExternalUrl,
-} from './plugin-asset-cache.js';
+} from './plugins/plugin-asset-cache.js';
 import { defaultMediaExecutionPolicy, parseMediaExecutionPolicyInput } from './media/policy.js';
 import {
   applySandboxRuntimeEnv,
