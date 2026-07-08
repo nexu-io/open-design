@@ -20,6 +20,14 @@ const mockState = vi.hoisted(() => ({
   createdResources: [] as string[],
   createdResourceCalls: 0,
   getResourceCalls: 0,
+  listedResources: [] as Array<{
+    id: string;
+    teamId: string;
+    kind: string;
+    ownerMemberId: string;
+    createdAt: string;
+    deletedAt: string | null;
+  }>,
   delayCreateResource: false,
   failPushCalls: 0,
   principalTeamId: 'team_1',
@@ -48,6 +56,7 @@ vi.mock('../src/integrations/resource-hub.js', () => ({
         deletedAt: null,
       };
     }),
+    listResources: vi.fn(async () => mockState.listedResources),
     listVersions: vi.fn(async () => mockState.versions),
     getManifest: vi.fn(async (_principal, digest) => ({
       digest,
@@ -113,6 +122,7 @@ describe('resource-sharing orchestrator', () => {
     mockState.createdResources = [];
     mockState.createdResourceCalls = 0;
     mockState.getResourceCalls = 0;
+    mockState.listedResources = [];
     mockState.delayCreateResource = false;
     mockState.failPushCalls = 0;
     mockState.principalTeamId = 'team_1';
@@ -397,6 +407,47 @@ describe('resource-sharing orchestrator', () => {
     expect(await fsp.readFile(path.join(editableDir, 'DESIGN.md'), 'utf8')).toBe(
       'local edit\n',
     );
+  });
+
+  it('hides pulled design-system storage keys from resource list mappings', async () => {
+    const orchestrator = createSharingOrchestrator({
+      db,
+      paths: {
+        RUNTIME_DATA_DIR: tempDir,
+        USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+        SKILL_ROOTS: [path.join(tempDir, 'skills')],
+      },
+    });
+    mockState.materializations.push({ 'DESIGN.md': 'team copy\n' });
+    mockState.listedResources = [
+      {
+        id: 'hub-1',
+        teamId: 'team_1',
+        kind: 'design_system',
+        ownerMemberId: 'member_1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+      },
+    ];
+
+    await orchestrator.pull('design_system', 'hub-1');
+
+    await expect(orchestrator.list()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'hub-1',
+        local: expect.objectContaining({
+          localId: 'hub-1',
+          role: 'consumer',
+          hubResourceId: 'hub-1',
+        }),
+      }),
+    ]);
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'consumer:hub-1'))
+      .toMatchObject({
+        localId: 'consumer:hub-1',
+        hubResourceId: 'hub-1',
+        role: 'consumer',
+      });
   });
 
   it('creates a team-local hub resource when sharing the same local id from another team', async () => {

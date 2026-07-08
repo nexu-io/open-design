@@ -176,7 +176,7 @@ describe('od resource CLI share/pull daemon wrappers', () => {
               deletedAt: null,
               local: {
                 kind: 'design_system',
-                localId: 'system-1',
+                localId: 'hub-1',
                 hubResourceId: 'hub-1',
                 hubTeamId: 'team-1',
                 role: 'consumer',
@@ -207,7 +207,7 @@ describe('od resource CLI share/pull daemon wrappers', () => {
 
     expect(process.exitCode).toBeUndefined();
     expect(stdout.join('')).toBe(
-      'design_system\thub-1\towner-1\tconsumer:system-1:unsynced\n' +
+      'design_system\thub-1\towner-1\tconsumer:hub-1:unsynced\n' +
         'plugin\thub-2\towner-2\t-\n',
     );
     expect(stderr.join('')).toBe('');

@@ -24,6 +24,7 @@ import {
   getSharedByHub,
   getSharedByLocal,
   listSharedForTeam,
+  type SharedResource,
   upsertShared,
 } from './store.js';
 
@@ -218,7 +219,12 @@ export function createSharingOrchestrator(deps: SharingDeps) {
       const principal = principalOrThrow();
       const remote = await client.listResources(principal);
       const local = listSharedForTeam(deps.db, principal.teamId);
-      const byHub = new Map(local.map((entry) => [entry.hubResourceId, entry]));
+      const byHub = new Map(
+        local.map((entry) => [
+          entry.hubResourceId,
+          externalizeSharedResource(entry),
+        ]),
+      );
       return remote.map((resource) => ({
         ...resource,
         local: byHub.get(resource.id) ?? null,
@@ -326,6 +332,21 @@ function canonicalizeLocalId(kind: string, localId: string): string {
 
 function consumerLocalId(hubResourceId: string): string {
   return `consumer:${hubResourceId}`;
+}
+
+function externalizeSharedResource(entry: SharedResource): SharedResource {
+  if (entry.role !== 'consumer') {
+    return entry;
+  }
+  return {
+    ...entry,
+    localId: externalConsumerLocalId(entry.localId),
+  };
+}
+
+function externalConsumerLocalId(localId: string): string {
+  const prefix = 'consumer:';
+  return localId.startsWith(prefix) ? localId.slice(prefix.length) : localId;
 }
 
 async function resolveLatestVersion(

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const routeState = vi.hoisted(() => ({
   listError: null as unknown,
+  listResponse: [] as Array<unknown>,
   allowLocalRequest: true,
   hasExplicitResourceHubConfig: true,
   publishCalls: [] as Array<{
@@ -88,7 +89,7 @@ vi.mock('../src/resource-sharing/orchestrator.js', async () => {
         if (routeState.listError) {
           throw routeState.listError;
         }
-        return [];
+        return routeState.listResponse;
       }),
     })),
   };
@@ -106,6 +107,7 @@ describe('resource routes error handling', () => {
     () =>
       new Promise<void>((resolve) => {
         routeState.listError = null;
+        routeState.listResponse = [];
         routeState.allowLocalRequest = true;
         routeState.hasExplicitResourceHubConfig = true;
         routeState.publishCalls = [];
@@ -206,6 +208,35 @@ describe('resource routes error handling', () => {
     expect(res.status).toBe(403);
     await expect(res.json()).resolves.toEqual({
       error: 'local_origin_required',
+    });
+  });
+
+  it('returns pulled resource list mappings without internal storage prefixes', async () => {
+    routeState.listResponse = [
+      {
+        id: 'hub-1',
+        teamId: 'team_1',
+        kind: 'design_system',
+        ownerMemberId: 'member_1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+        local: {
+          kind: 'design_system',
+          localId: 'hub-1',
+          hubResourceId: 'hub-1',
+          hubTeamId: 'team_1',
+          role: 'consumer',
+          lastSyncedVersion: 1,
+          updatedAt: '2026-01-01T00:01:00.000Z',
+        },
+      },
+    ];
+
+    const res = await fetch(`${baseUrl}/api/resources`);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({
+      resources: routeState.listResponse,
     });
   });
 
