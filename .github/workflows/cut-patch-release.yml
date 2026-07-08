@@ -73,17 +73,8 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          latest=$(git ls-remote --heads origin 'release/v*' \
-            | sed -E 's#.*/release/v##' \
-            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
-            | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
-          if [ -z "$latest" ]; then
-            echo "::error::No release/vX.Y.Z branch found to base a patch on."
-            exit 1
-          fi
-          major=${latest%%.*}; rest=${latest#*.}; minor=${rest%%.*}; patch=${rest#*.}
-          # The "Tuesday version" whose publish we gate on: this line's minor base.
-          MINOR_BASE="${major}.${minor}.0"
+          # Decide the final version V FIRST: a validated manual override wins,
+          # otherwise bump the patch of the highest release branch.
           if [ -n "$INPUT_VERSION" ]; then
             # Strict x.y.z, digits only — rejects shell metacharacters, newlines, etc.
             if ! printf '%s' "$INPUT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
@@ -92,9 +83,23 @@ jobs:
             fi
             V="$INPUT_VERSION"
           else
+            latest=$(git ls-remote --heads origin 'release/v*' \
+              | sed -E 's#.*/release/v##' \
+              | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+              | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+            if [ -z "$latest" ]; then
+              echo "::error::No release/vX.Y.Z branch found to base a patch on."
+              exit 1
+            fi
+            major=${latest%%.*}; rest=${latest#*.}; minor=${rest%%.*}; patch=${rest#*.}
             V="${major}.${minor}.$((patch+1))"
           fi
-          # V is now guaranteed to match ^[0-9]+\.[0-9]+\.[0-9]+$
+          # V is now guaranteed to match ^[0-9]+\.[0-9]+\.[0-9]+$.
+          # Gate on the minor base of the FINAL V — never the highest branch — so a
+          # manual `version=` on a different line is checked against ITS own minor
+          # (e.g. version=0.15.1 gates open-design-v0.15.0, not the latest 0.14.0).
+          vmajor=${V%%.*}; vrest=${V#*.}; vminor=${vrest%%.*}
+          MINOR_BASE="${vmajor}.${vminor}.0"
           echo "version=$V"                          >> "$GITHUB_OUTPUT"
           echo "branch=release/v$V"                  >> "$GITHUB_OUTPUT"
           echo "minor_base=$MINOR_BASE"              >> "$GITHUB_OUTPUT"

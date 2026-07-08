@@ -1360,6 +1360,14 @@ process.stdin.on("end", () => {
     expect(workflow).toContain('V="${major}.${minor}.$((patch+1))"');
     expect(workflow).not.toContain("minor+1");
 
+    // The guard target (MINOR_BASE) must derive from the FINAL version V, not from
+    // the highest branch — otherwise a manual `version=` on another line is gated
+    // against the wrong minor (e.g. version=0.15.1 while latest is 0.14.0 would
+    // wrongly check open-design-v0.14.0). Assert V's own major/minor drive it.
+    expect(workflow).toContain('vmajor=${V%%.*}; vrest=${V#*.}; vminor=${vrest%%.*}');
+    expect(workflow).toContain('MINOR_BASE="${vmajor}.${vminor}.0"');
+    expect(workflow).not.toContain('MINOR_BASE="${major}.${minor}.0"');
+
     // The guard reads the minor base's stable release and requires it published
     // (neither draft nor prerelease); a missing release falls back to not published.
     const guard = sectionBetween(workflow, "- name: Check the Tuesday minor is published", "# ---- Skip path");
