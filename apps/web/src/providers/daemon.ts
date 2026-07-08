@@ -1138,35 +1138,13 @@ async function consumeDaemonRun({
             const data = event.data as SseErrorPayload;
             const structuredError = daemonSseError(data);
             pendingStructuredError = structuredError;
-            // The daemon emits this error frame from the child-close handler
-            // BEFORE `finishWithRetryDecision()` runs, so a transient failure it
-            // can recover via a same-run retry is reported here first and only
-            // resolved later. `run.resumable` is also computed at that same
-            // finalize step. Read the run status ONCE to classify, and let the
-            // SSE `end` frame (always emitted on terminal) resolve in-flight
-            // runs — this has no timeout, so even a slow retry is handled:
-            //  - failed / canceled    -> surface the error now, with the
-            //    finalized `resumable` bit (set just before status flips to
-            //    failed, so a `failed` read already has it);
-            //  - status unreachable   -> surface the structured error (safe
-            //    default; never drop a real failure);
-            //  - succeeded (recovered) or still running/queued (retry in
-            //    flight) -> do NOT surface; keep consuming so the stream's
-            //    `end` frame resolves it (succeeded -> onDone; failed ->
-            //    the failure path below, carrying `end`'s resumable bit).
-            const status = await fetchChatRunStatus(runId).catch(() => null);
-            if (status && (status.status === 'failed' || status.status === 'canceled')) {
-              onRunStatus?.('failed');
-              handlers.onError(
-                markErrorResumable(structuredError, status.resumable === true),
-              );
-              return;
-            }
-            if (!status) {
-              onRunStatus?.('failed');
-              handlers.onError(structuredError);
-              return;
-            }
+            // Error frames can be emitted for a failed first attempt before the
+            // same run's retry has completed. Do not classify the run from a
+            // point-in-time status probe here: that can catch a transient
+            // failed state, surface a stale error, and disconnect before the
+            // later successful retry frames arrive. Cache the structured error
+            // and let the terminal `end` event or the post-stream status
+            // fallback below decide whether it should be surfaced.
             continue;
           }
 
@@ -1184,7 +1162,30 @@ async function consumeDaemonRun({
           }
         }
       }
-      reconnects = sawStreamProgress ? 0 : reconnects + 1;
+      let shouldResetReconnects = sawStreamProgress;
+      if (pendingStructuredError && endStatus === null) {
+        const status = await fetchChatRunStatus(runId).catch(() => null);
+        if (status && isChatRunStatus(status.status) && status.status !== 'queued' && status.status !== 'running') {
+          endStatus = status.status;
+          exitCode = status.exitCode ?? null;
+          exitSignal = status.signal ?? null;
+          serverDeclaredSuccess = status.status === 'succeeded';
+          if (status.resumable === true) endResumable = true;
+          onRunStatus?.(endStatus);
+          break;
+        }
+        if (!status) {
+          onRunStatus?.('failed');
+          handlers.onError(pendingStructuredError);
+          return;
+        }
+        // The connection closed after an error frame but before a terminal
+        // frame. If the run is still active, retry the SSE stream, but count
+        // this as a reconnect attempt instead of letting the error frame reset
+        // the budget forever.
+        shouldResetReconnects = false;
+      }
+      reconnects = shouldResetReconnects ? 0 : reconnects + 1;
     }
 
     if (endStatus === null) {
