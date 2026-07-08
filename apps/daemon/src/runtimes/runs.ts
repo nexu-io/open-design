@@ -307,11 +307,18 @@ export function createChatRunService({
     return Number.isFinite(raw) && raw > 0 ? raw : 500;
   };
 
-  const killChild = (run, signal) => {
-    if (!run.child || childHasExited(run.child)) return false;
-    if (process.platform !== 'win32' && Number.isInteger(run.processGroupId)) {
+  // Signal an EXPLICIT child + its captured process group, rather than
+  // whatever currently occupies `run.child`. Escalation timers (SIGTERM ->
+  // SIGKILL) that outlive a same-run retry MUST target the exact generation
+  // they were scheduled for: after a retry swaps `run.child` to a fresh
+  // child, signalling the shared field would kill the healthy new attempt and
+  // leave the stalled old child unreaped. Callers that legitimately want the
+  // current child use `killChild` below.
+  const signalChildProcess = (child, processGroupId, signal) => {
+    if (!child || childHasExited(child)) return false;
+    if (process.platform !== 'win32' && Number.isInteger(processGroupId)) {
       try {
-        process.kill(-run.processGroupId, signal);
+        process.kill(-processGroupId, signal);
         return true;
       } catch (err) {
         if (err?.code !== 'ESRCH') {
@@ -322,11 +329,14 @@ export function createChatRunService({
       }
     }
     try {
-      return run.child.kill(signal);
+      return child.kill(signal);
     } catch {
       return false;
     }
   };
+
+  const killChild = (run, signal) =>
+    signalChildProcess(run.child, run.processGroupId, signal);
 
   const cancelGraceMs = () => {
     const raw = Number(process.env.OD_CHAT_RUN_CANCEL_GRACE_MS || process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
@@ -481,6 +491,7 @@ export function createChatRunService({
     drop,
     signalChild: killChild,
     statusBody,
+    signalChildProcess,
     isTerminal(status) {
       return TERMINAL_RUN_STATUSES.has(status);
     },
