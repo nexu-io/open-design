@@ -425,6 +425,9 @@ export function DesignSystemPicker({
   const previewModal: ReactNode = previewModalSystem ? (
     <DesignSystemPreviewModal
       system={previewModalSystem}
+      designSystems={designSystems}
+      selectedId={selectedId}
+      onUseSystem={onChange}
       onClose={() => setPreviewModalSystem(null)}
     />
   ) : null;

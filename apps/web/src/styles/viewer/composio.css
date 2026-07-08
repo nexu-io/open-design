@@ -1403,6 +1403,19 @@
   max-width: none;
   border-radius: 0;
 }
+.ds-modal-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+.ds-modal-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 /* Two-row header: title row keeps the title/subtitle + close together at
    the top; toolbar row hosts tabs (left) and the action cluster (right).
    This split lets the title breathe even when the toolbar carries a busy
@@ -1442,7 +1455,7 @@
 .ds-modal-title {
   font-size: 16px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1506,6 +1519,31 @@
 .ds-modal-actions .share-menu > button {
   white-space: nowrap;
   flex-shrink: 0;
+}
+.ds-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+.ds-modal-navigation {
+  flex: 0 0 160px;
+  width: 160px;
+  min-width: 146px;
+  max-width: 172px;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.ds-modal-body > .ds-modal-stage {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ds-modal-fullscreen .ds-modal-navigation {
+  display: none;
 }
 .ds-modal-stage {
   flex: 1;
@@ -1864,6 +1902,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  height: 35px;
   padding: 7px 16px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--accent);
@@ -1884,8 +1923,14 @@
   transform: translateY(0.5px);
 }
 .ds-modal-primary-action:disabled {
-  cursor: progress;
+  cursor: default;
   opacity: 0.6;
+}
+.ds-modal-primary-action[aria-busy='true'] {
+  cursor: progress;
+}
+.ds-modal-primary-action--trailing {
+  order: 20;
 }
 /* Split-button variant: the "Use plugin" CTA grows a caret toggle that opens
    a menu of use-variants ("Use plugin" / "Use with query"). Mirrors the home
@@ -2043,6 +2088,16 @@
   .ds-modal { border-radius: 0; }
   .ds-modal-header { gap: 10px; padding: 12px 14px; }
   .ds-modal-actions { justify-content: flex-start; }
+  .ds-modal-shell.has-navigation { flex-direction: column; }
+  .ds-modal-navigation {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    flex: 0 0 auto;
+    max-height: 220px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
   .ds-modal-stage { flex-direction: column; }
   .ds-modal-stage.has-sidebar .ds-modal-stage-iframe { flex: 1 1 50%; }
   .ds-modal-sidebar {
