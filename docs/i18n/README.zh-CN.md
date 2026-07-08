@@ -125,6 +125,7 @@ Open Design 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agen
 | [Cline](https://github.com/cline/cline) | ✅ 支持 | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ 支持 | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ 支持 | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ 支持 | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ 支持 | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ 支持 | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 支持 | `od mcp install hermes` |

@@ -15,7 +15,7 @@
 //   - 'json'   : the agent reads a JSON config file with a known schema.
 //                We deep-merge one server entry, never clobbering the
 //                rest of the file. Used for cursor / copilot / cline /
-//                opencode / openclaw / antigravity / trae.
+//                opencode / openclaw / antigravity / kiro / trae.
 //   - 'manual' : we could not verify the agent's config path/format
 //                authoritatively (pi / hermes / vibe). We refuse to write
 //                a guessed path and instead print a ready-to-paste
@@ -41,6 +41,7 @@ export const AGENT_SLUGS = [
   'hermes',
   'cline',
   'kimi',
+  'kiro',
   'trae',
   'opencode',
 ] as const;
@@ -251,6 +252,15 @@ export function planAgentInstall(
         kind: 'json',
         slug,
         configPath: path.join(home, '.gemini', 'antigravity', 'mcp_config.json'),
+        keyPath: ['mcpServers'],
+        serverKey: serverName,
+        entry: jsonEntry(spec),
+      };
+    case 'kiro':
+      return {
+        kind: 'json',
+        slug,
+        configPath: path.join(home, '.kiro', 'settings', 'mcp.json'),
         keyPath: ['mcpServers'],
         serverKey: serverName,
         entry: jsonEntry(spec),

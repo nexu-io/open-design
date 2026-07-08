@@ -125,6 +125,7 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 | [Cline](https://github.com/cline/cline) | ✅ 지원됨 | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ 지원됨 | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ 지원됨 | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ 지원됨 | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ 지원됨 | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ 지원됨 | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 지원됨 | `od mcp install hermes` |
