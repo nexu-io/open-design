@@ -79,7 +79,7 @@ export const ru: Dict = {
   'plugins.actions.openSource': 'Открыть исходники',
   'plugins.actions.openHomepage': 'Открыть домашнюю страницу',
   'plugins.actions.openMarketplace': 'Открыть в маркетплейсе',
-  'app.brand': 'Marketing AX',
+  'app.brand': 'M-AX',
   'app.brandPill': 'Предварительная исследовательская версия',
   'app.brandSubtitle': 'от Nexu Labs',
   'app.welcomeLoading': 'Загрузка рабочего пространства…',

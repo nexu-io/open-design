@@ -79,7 +79,7 @@ export const zhCN: Dict = {
   'plugins.actions.openSource': '打开源码',
   'plugins.actions.openHomepage': '打开项目主页',
   'plugins.actions.openMarketplace': '在插件市场打开',
-  'app.brand': 'Marketing AX',
+  'app.brand': 'M-AX',
   'app.brandPill': '研究预览版',
   'app.brandSubtitle': '由 Nexu Labs 出品',
   'app.welcomeLoading': '正在加载工作区…',

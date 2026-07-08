@@ -6,7 +6,7 @@ import '../src/index.css';
 import '../src/styles/home/index.css';
 
 export const metadata: Metadata = {
-  title: 'Marketing AX',
+  title: 'M-AX',
   icons: {
     icon: '/app-icon.png',
     apple: '/app-icon.png',

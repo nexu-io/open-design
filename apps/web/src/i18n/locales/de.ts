@@ -79,7 +79,7 @@ export const de: Dict = {
   'plugins.actions.openSource': 'Quelle öffnen',
   'plugins.actions.openHomepage': 'Homepage öffnen',
   'plugins.actions.openMarketplace': 'Im Marktplatz öffnen',
-  'app.brand': 'Marketing AX',
+  'app.brand': 'M-AX',
   'app.brandPill': 'Forschungsvorschau',
   'app.brandSubtitle': 'von Nexu Labs',
   'app.welcomeLoading': 'Workspace wird geladen…',

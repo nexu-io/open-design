@@ -79,7 +79,7 @@ export const tr: Dict = {
   'plugins.actions.openSource': 'Kaynağı aç',
   'plugins.actions.openHomepage': 'Ana sayfayı aç',
   'plugins.actions.openMarketplace': 'Marketplace’te aç',
-  'app.brand': 'Marketing AX',
+  'app.brand': 'M-AX',
   'app.brandPill': 'Önizleme Araştırması',
   'app.brandSubtitle': 'Nexu Labs tarafından',
   'app.welcomeLoading': 'Çalışma alanı yükleniyor…',
