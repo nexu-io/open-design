@@ -1,0 +1,31 @@
+/*
+ * Role: bodoc-iam 룩 토큰 — IAM 프리뷰/스크린샷용 :root
+ * Notes: 브랜드 식별색(#16C5FF, #0DA5E0)의 정본 = brands/bodoc/brand.md Palette.
+ *        값 변경 시 brand.md와 동기 필수 (brand-palette-sync 테스트가 검증).
+ *        프로덕션 IAM 인라인 출력 시 폰트는 brands/bodoc/deliverables/iam.md의
+ *        Braze 자산 문자열 블록으로 교체.
+ */
+:root {
+  /* 컬러 — 솔리드 */
+  --primary:        #16C5FF;  /* 보닥 시그니처. 주 CTA·핵심 강조 1~2회만 */
+  --primary-dark:   #0DA5E0;  /* :active 눌림, hover */
+  --text-primary:   #1D2024;  /* 제목·본문 본체 */
+  --text-secondary: #7D8085;  /* 보조 설명 */
+  --text-tertiary:  #5A5E63;  /* 캡션·보조 액션. WCAG AA 4.5:1 보장 */
+  --border:         #E5E5EA;  /* divider·카드 외곽 */
+  --background:     #F5F5F5;  /* 면 분리·눌림 배경 */
+  --error:          #FF4D4D;  /* 경고·부정 신호 한정 */
+  --white:          #FFFFFF;  /* 카드·시트 표면 */
+
+  /* 컬러 — 알파 변형 (raw rgba 인라인 금지, 항상 토큰 사용) */
+  --primary-tint:        rgba(22, 197, 255, 0.10);  /* 아이콘 배경, 시점 라벨 배경 */
+  --primary-tint-strong: rgba(22, 197, 255, 0.15);  /* 체크리스트 bullet 배경 */
+  --primary-glow:        rgba(22, 197, 255, 0.18);  /* 강조 glow pulse */
+  --overlay:             rgba(0, 0, 0, 0.45);        /* 모달·하프시트 dim */
+
+  /* border-radius 위계 */
+  --radius-btn:   12px;
+  --radius-card:  16px;
+  --radius-modal: 20px;
+  --radius-sheet: 20px;
+}
