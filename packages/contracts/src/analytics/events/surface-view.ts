@@ -2,6 +2,7 @@
  * @module analytics/events/surface-view
  * surface_view event prop types and their union.
  */
+import type { TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
 import type { TrackingArtifactKind, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
 import type { DesignSystemsPresetBrandPickerSurfaceViewProps } from './ui-click.js';
 // ---- surface_view --------------------------------------------------------
@@ -149,8 +150,29 @@ export interface FileVersionModalSurfaceViewProps {
   artifact_kind: TrackingArtifactKind;
 }
 
+// Impression of the personalized first-run recommendation card on Home. Fires
+// once per exposure so the funnel can divide `enter_studio` / `change` /
+// `browse_all` clicks by how often the recommendation was actually seen.
+export interface HomeRecommendationSurfaceViewProps {
+  page_name: 'home';
+  area: 'onboarding_recommendation';
+  product_type: TrackingOnboardingProductType;
+  recommendation_id: string;
+  role?: TrackingOnboardingRole;
+  use_cases?: TrackingOnboardingUseCase[];
+}
+
+// Impression of the one-time first-generation hint in Studio (spec §8.3).
+export interface StudioOnboardingHintSurfaceViewProps {
+  page_name: 'chat_panel';
+  area: 'onboarding_first_artifact_hint';
+  hint_type: 'view_artifact';
+}
+
 export type SurfaceViewProps =
   | RunFailedToastSurfaceViewProps
+  | HomeRecommendationSurfaceViewProps
+  | StudioOnboardingHintSurfaceViewProps
   | HelpPopoverSurfaceViewProps
   | SettingsPopoverSurfaceViewProps
   | NewProjectModalSurfaceViewProps

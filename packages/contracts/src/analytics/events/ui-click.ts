@@ -4,7 +4,7 @@
  */
 import type { DesignSystemEnrichClickProps, TrackingDesignSystemEditSurface } from './design-systems.js';
 import type { TrackingPageName, TrackingSettingsPage } from './event-names.js';
-import type { OnboardingClickProps } from './onboarding.js';
+import type { OnboardingClickProps, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
 import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
 // ---- ui_click ------------------------------------------------------------
 //
@@ -194,6 +194,34 @@ export interface HomeChatComposerClickProps {
   // For `example_prompt` cards backed by a plugin preset: which preset.
   plugin_id?: string;
   plugin_type?: string;
+}
+
+// Personalized first-run recommendation on Home (spec §7). One card, three
+// actions: `enter_studio` (accept → open Studio with the first request
+// pre-filled), `change` (换一个 → cycle to another starter in the same path),
+// `browse_all` (浏览全部类型 → abandon the recommendation for the generic
+// entry). `recommendation_id` is the stable starter id; `role` / `use_cases`
+// echo the survey answers that produced the recommendation.
+export interface HomeRecommendationClickProps {
+  page_name: 'home';
+  area: 'onboarding_recommendation';
+  element: 'enter_studio' | 'change' | 'browse_all';
+  product_type: TrackingOnboardingProductType;
+  recommendation_id: string;
+  role?: TrackingOnboardingRole;
+  use_cases?: TrackingOnboardingUseCase[];
+}
+
+// One-time first-generation hint in Studio (spec §8.3). A single lightweight
+// note shown when a new user's first previewable artifact appears, pointing
+// them at view / edit / export. `open_artifact` = user acted on it; `dismiss` =
+// user closed it. `hint_type` is fixed today but kept as a field so a future
+// first-run hint can reuse the shape.
+export interface StudioOnboardingHintClickProps {
+  page_name: 'chat_panel';
+  area: 'onboarding_first_artifact_hint';
+  element: 'open_artifact' | 'dismiss';
+  hint_type: 'view_artifact';
 }
 
 export interface UpdateIndicatorClickProps {
@@ -1451,6 +1479,8 @@ export type UiClickProps =
   | ExecutionSettingsPopoverClickProps
   | SettingsPopoverClickProps
   | HomeChatComposerClickProps
+  | HomeRecommendationClickProps
+  | StudioOnboardingHintClickProps
   | UpdateIndicatorClickProps
   | NewProjectModalTabClickProps
   | NewProjectModalElementClickProps

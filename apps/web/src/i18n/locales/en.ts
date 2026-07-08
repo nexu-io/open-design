@@ -2269,6 +2269,53 @@ export const en: Dict = {
   'chat.example3Title': 'Meditation mobile prototype',
   'chat.example3Tag': 'Mobile',
   'chat.example3Prompt': 'Prototype four mobile screens for a meditation app: home, session player, progress and streaks, and sleep collection. Include onboarding states, bottom navigation, accessible controls, and gentle motion notes so the flow feels ready to test.',
+
+  'home.recommendation.eyebrow': 'Recommended for you',
+  'home.recommendation.primaryCta': 'Start creating',
+  'home.recommendation.change': 'Try another',
+  'home.recommendation.browseAll': 'All types',
+  'home.recommendation.defaultProjectName': 'New project',
+  'home.recommendation.startFailed': "Couldn't start creating. Please try again.",
+  'studio.firstArtifactHint.title': 'Your first design is ready',
+  'studio.firstArtifactHint.body': "Try editing and annotating it directly — export or share whenever you're happy.",
+  'studio.firstArtifactHint.dismiss': 'Got it',
+  'home.starter.product_ui_prototype.title': 'Start with an editable product prototype',
+  'home.starter.product_ui_prototype.desc':
+    'Based on your goal, begin with a clickable interface you can refine.',
+  'home.starter.product_ui_prototype.firstPrompt':
+    'Design an editable product prototype for [your product] with the key screens and a clear primary flow.',
+  'home.starter.product_ui_component.title': 'Start from a reusable component',
+  'home.starter.product_ui_component.desc':
+    'Build one component first, then compose it into full screens.',
+  'home.starter.product_ui_component.firstPrompt':
+    'Design a reusable [component name] component with its main states and variants.',
+  'home.starter.product_ui_lowfi.title': 'Start with a low-fidelity prototype',
+  'home.starter.product_ui_lowfi.desc':
+    'Sketch the structure first, then raise the fidelity.',
+  'home.starter.product_ui_lowfi.firstPrompt':
+    'Create a low-fidelity wireframe of the main screens for [your product].',
+  'home.starter.marketing_landing.title': 'Start with a landing page',
+  'home.starter.marketing_landing.desc': 'Turn your campaign into a landing page you can ship.',
+  'home.starter.marketing_landing.firstPrompt':
+    'Design a landing page for [your product] with a hero, key benefits, and a clear call to action.',
+  'home.starter.marketing_multivariant.title': 'Start with multiple landing variants',
+  'home.starter.marketing_multivariant.desc':
+    'Generate a few versions to compare before you commit.',
+  'home.starter.marketing_multivariant.firstPrompt':
+    'Create 3 landing page variants for [your product] with different hero messaging to compare.',
+  'home.starter.internal_dashboard.title': 'Start with an internal dashboard',
+  'home.starter.internal_dashboard.desc': 'Begin from a dashboard layout for your workflow.',
+  'home.starter.internal_dashboard.firstPrompt':
+    'Design an internal dashboard showing [key metrics] with filters and a data table.',
+  'home.starter.internal_report.title': 'Start with a report',
+  'home.starter.internal_report.desc': 'Describe the data and fields you want to see.',
+  'home.starter.internal_report.firstPrompt':
+    'Create a report page summarizing [describe the data, fields, and metrics you care about].',
+  'home.starter.general_menu.title': 'Start with your first project',
+  'home.starter.general_menu.desc':
+    "Describe what you want and we'll generate an editable first version.",
+  'home.starter.general_menu.firstPrompt':
+    'Create an editable first version of [describe what you want to make].',
   'chat.example4Title': 'Product motion video',
   'chat.example4Tag': 'Motion',
   'chat.example4Prompt': 'Create a 15-second motion video storyboard for a productivity app launch: opening hook, UI close-ups, kinetic type, feature transitions, ending logo, and CTA. Include timing, scene descriptions, camera moves, and text overlays.',

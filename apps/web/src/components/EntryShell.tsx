@@ -110,6 +110,11 @@ import {
   createPluginUseHandoff,
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
+import {
+  buildRecommendation,
+  type Recommendation,
+} from '../onboarding/recommendation';
+import type { OnboardingEntry } from '../onboarding/onboarding-entry';
 import { ONBOARDING_ARTIFACT_CHIP_IDS } from './home-hero/chips';
 import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PluginUseAction } from './plugins-home/useActions';
@@ -252,6 +257,7 @@ type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   pendingFiles?: File[];
   userWorkingDirToken?: string;
   linkedDirs?: string[] | null;
+  onboardingEntry?: OnboardingEntry;
 };
 
 function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
@@ -567,6 +573,12 @@ export function EntryShell({
     useState<CreateTab>('prototype');
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
   const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(null);
+  // Personalized first-run starting point. Computed once, in memory, when the
+  // user finishes the About-you survey with real answers (see
+  // `finishOnboarding`); null for returning users, skipped/blank surveys, and
+  // after any page refresh (deliberately not persisted, per onboarding spec
+  // §7.1). Cleared as soon as the user takes any concrete entry (spec §7.4).
+  const [onboardingRec, setOnboardingRec] = useState<Recommendation | null>(null);
   const entryMainScrollRef = useRef<HTMLElement | null>(null);
   const analytics = useAnalytics();
   const discordOnlineLabel = discordPresence
@@ -650,6 +662,9 @@ export function EntryShell({
     // is intentionally explicit so future kind-specific scenarios
     // (e.g. a deck- or image-specialized pipeline) can take over a
     // single row without touching the form.
+    // New-project modal / template / import is a concrete entry — retire any
+    // pending Home recommendation (spec §7.1 / §7.4).
+    dismissRecommendation();
     const pluginId = defaultPluginIdForMetadata(input.metadata);
     const pluginInputs = defaultPluginInputsForCreate(input, pluginId);
     return onCreateProject({
@@ -714,6 +729,11 @@ export function EntryShell({
       // auto-send, which must not re-prompt what the user just answered.
       amrGatePrechecked = true;
     }
+    // Starting from the Home composer is a concrete entry — retire the
+    // recommendation (spec §7.4). Done only once the submit actually proceeds
+    // to create (past any AMR balance gate) so a blocked/cancelled submit
+    // leaves the recommendation intact for the user.
+    dismissRecommendation();
     const summarizedName = summarizeProjectNameFromPrompt(payload.prompt);
     const head = payload.prompt.trim().split(/\s+/).slice(0, 8).join(' ');
     const firstAttachmentName = payload.attachments?.[0]?.name ?? '';
@@ -783,9 +803,61 @@ export function EntryShell({
     });
   }
 
-  function finishOnboarding() {
+  // Called when the welcome flow ends. `survey` is present on the About-you
+  // completion paths; we only build a recommendation when the user actually
+  // provided a role or use-case, so a skipped/blank survey lands on the
+  // generic Home entry (spec §6.2 / §7.1).
+  function finishOnboarding(survey?: { role: string; useCases: string[] }) {
+    if (survey && (survey.role.trim() || survey.useCases.length > 0)) {
+      setOnboardingRec(buildRecommendation(survey));
+    }
     onCompleteOnboarding();
     changeView('home');
+  }
+
+  // Drop the personalized recommendation. Fired when the user browses all
+  // types, or as soon as they take any other concrete entry, so Home never
+  // re-shows a recommendation the user has moved past (spec §7.4).
+  function dismissRecommendation() {
+    setOnboardingRec((current) => (current ? null : current));
+  }
+
+  // "进入 Studio" from the Home recommendation. Creates the project with the
+  // recommended first request pre-filled into the composer but NOT auto-sent —
+  // the user keeps control and can edit or clear it (spec §7.4 / §8.2).
+  async function handleRecommendationStart(input: {
+    name: string;
+    prompt: string;
+    metadata: ProjectMetadata;
+    onboardingEntry: OnboardingEntry;
+  }): Promise<boolean> {
+    const pluginId = defaultPluginIdForMetadata(input.metadata);
+    // Create FIRST, then tear down the recommendation only once it actually
+    // opened. Dismissing up-front turned a transient create/navigation failure
+    // into an onboarding dead-end: the user dropped back to generic Home with
+    // no way to retry the starter they just picked. On failure we keep the
+    // recommendation mounted. The onboarding entry rides along so the create
+    // success path stashes it keyed by the created project id — nothing is
+    // written on failure.
+    //
+    // Do NOT swallow the failure here: `onCreateProject` throws on real create
+    // failures, and a silent `catch` would leave the CTA looking clickable with
+    // no feedback. Let the error propagate so Home surfaces it in the same
+    // error channel the other entry actions use (HomeView owns `setError`), and
+    // return `false` for a clean no-project result so the caller can retry.
+    const ok =
+      (await onCreateProject({
+        name: input.name,
+        skillId: null,
+        designSystemId: null,
+        metadata: input.metadata,
+        pendingPrompt: input.prompt,
+        ...(pluginId ? { pluginId } : {}),
+        autoSendFirstMessage: false,
+        onboardingEntry: input.onboardingEntry,
+      })) !== false;
+    if (ok) dismissRecommendation();
+    return ok;
   }
 
   const avatarMenu = (
@@ -1025,6 +1097,9 @@ export function EntryShell({
                 skillsLoading={skillsLoading}
                 connectors={connectors}
                 promptTemplates={promptTemplates}
+                recommendation={onboardingRec}
+                onRecommendationStart={handleRecommendationStart}
+                onRecommendationDismiss={dismissRecommendation}
                 executionSwitcher={view === 'home' ? homeExecutionSwitcher : undefined}
               />
             </div>
@@ -1195,7 +1270,9 @@ function OnboardingView({
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
-  onFinish: () => void;
+  // `survey` is passed on the About-you completion paths (not on skip) so the
+  // shell can build a personalized Home recommendation.
+  onFinish: (survey?: { role: string; useCases: string[] }) => void;
   onThemeChange: (theme: AppTheme) => void;
   onGoBuild: () => void;
 }) {
@@ -1887,7 +1964,10 @@ function OnboardingView({
     }
     if (isLastStep) {
       await runOnboardingCompletion('completed_without_design_system');
-      onFinish();
+      onFinish({
+        role: profileRef.current.role,
+        useCases: profileRef.current.useCase,
+      });
       return;
     }
     emitOnboardingClick('continue', 'continue');
@@ -1955,7 +2035,10 @@ function OnboardingView({
   async function handleFinishToHome(): Promise<void> {
     if (newsletterSubmitting) return;
     await runOnboardingCompletion('completed_without_design_system');
-    onFinish();
+    onFinish({
+      role: profileRef.current.role,
+      useCases: profileRef.current.useCase,
+    });
   }
 
   async function handleFinishToBuild(): Promise<void> {

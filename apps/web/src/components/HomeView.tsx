@@ -107,6 +107,9 @@ import type { PluginUseAction } from './plugins-home/useActions';
 import { examplePresetSeedPrompt } from './plugins-home/presetSeedPrompt';
 import { localizePluginDescription } from './plugins-home/localization';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
+import { RecommendedStartRegion } from './RecommendedStartRegion';
+import type { Recommendation } from '../onboarding/recommendation';
+import type { OnboardingEntry } from '../onboarding/onboarding-entry';
 import { AnimatePresence } from 'motion/react';
 
 export interface ActivePlugin {
@@ -237,6 +240,16 @@ interface Props {
   skillsLoading?: boolean;
   connectors?: ConnectorDetail[];
   promptTemplates?: PromptTemplateSummary[];
+  // Personalized first-run starting point (spec §7). Null unless the user just
+  // finished the About-you survey this session; EntryShell owns the state.
+  recommendation?: Recommendation | null;
+  onRecommendationStart?: (input: {
+    name: string;
+    prompt: string;
+    metadata: ProjectMetadata;
+    onboardingEntry: OnboardingEntry;
+  }) => boolean | void | Promise<boolean | void>;
+  onRecommendationDismiss?: () => void;
   executionSwitcher?: ReactNode;
 }
 
@@ -307,6 +320,9 @@ export function HomeView({
   skillsLoading = false,
   connectors = EMPTY_CONNECTORS,
   promptTemplates = EMPTY_PROMPT_TEMPLATES,
+  recommendation = null,
+  onRecommendationStart,
+  onRecommendationDismiss,
   executionSwitcher,
 }: Props) {
   const { locale, t } = useI18n();
@@ -2090,6 +2106,41 @@ export function HomeView({
           void startBlankProject();
         }}
         executionSwitcher={executionSwitcher}
+        recommendationSlot={
+          recommendation && onRecommendationStart && onRecommendationDismiss ? (
+            <RecommendedStartRegion
+              recommendation={recommendation}
+              onStart={async (input) => {
+                // Route recommendation-start failures into the same Home error
+                // channel every other entry action uses, so a failed "Start
+                // creating" surfaces a visible, retryable message instead of a
+                // silent no-op. `onRecommendationStart` returns `false` for a
+                // clean no-project result and throws on real create failures;
+                // both land here as the localized error, and returning `false`
+                // lets RecommendedStartRegion drop its pending state for retry.
+                setError(null);
+                try {
+                  const ok = await onRecommendationStart(input);
+                  if (ok === false) {
+                    setError(t('home.recommendation.startFailed'));
+                    return false;
+                  }
+                  return true;
+                } catch {
+                  setError(t('home.recommendation.startFailed'));
+                  return false;
+                }
+              }}
+              onDismiss={() => {
+                onRecommendationDismiss();
+                // "浏览全部类型" must land the user somewhere concrete — open
+                // the template picker (the "all types" catalogue) instead of
+                // the strip silently vanishing (spec §7.4: 放弃推荐, 进入通用选择).
+                onOpenNewProject?.('template');
+              }}
+            />
+          ) : undefined
+        }
       />
 
       <RecentProjectsStrip

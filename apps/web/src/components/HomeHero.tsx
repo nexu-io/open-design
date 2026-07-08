@@ -236,6 +236,10 @@ interface Props {
   // no design system / template / prompt) and enters it. Omit to hide the link.
   onStartBlankProject?: () => void;
   executionSwitcher?: ReactNode;
+  // Personalized first-run starting point (spec §7). Rendered directly under
+  // the composer card — before the template section — so a brand-new user sees
+  // their recommended entry without scrolling.
+  recommendationSlot?: ReactNode;
 }
 
 type HomeMentionTab = 'all' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
@@ -359,6 +363,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onExamplePromptStatusChange,
     onStartBlankProject,
     executionSwitcher,
+    recommendationSlot,
   },
   ref,
 ) {
@@ -2021,6 +2026,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           ) : null}
         </div>
       ) : null}
+
+      {recommendationSlot}
 
       {activeCreateChip ? null : (
         <div className="home-hero__template-section" data-testid="home-hero-template-section">

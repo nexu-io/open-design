@@ -56,6 +56,51 @@ export function getSessionId(): string {
   }
 }
 
+const FIRST_SESSION_ID_KEY = 'open-design:analytics.first_session_id';
+
+// Whether the current browser session is this install's FIRST analytics
+// session. The first analytics session's `getSessionId()` value is pinned in
+// localStorage by `pinFirstSessionForCapture()`; the flag stays true for the
+// whole lifetime of that tab session (repeat calls compare against the pin
+// rather than re-deriving) and is false for every later session. Registered as
+// the `is_first_session` super property so onboarding funnels can split
+// first-run behavior from returning visits.
+//
+// This read is PURE: it never writes the pin. Persisting the pin is deferred to
+// `pinFirstSessionForCapture()`, which runs only once capture is actually
+// enabled (post-consent). Otherwise an install that first boots with analytics
+// OFF and opts in later would have its real first *analytics* session
+// mislabeled `is_first_session=false`, systematically skewing the onboarding
+// funnel split. Rollout caveat: installs that predate this marker report one
+// mislabeled `true` session on their first captured boot. Storage-denied
+// contexts report false — we'd rather under-count first sessions than throw.
+export function isFirstSession(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const pinned = window.localStorage.getItem(FIRST_SESSION_ID_KEY);
+    if (!pinned) return true;
+    return pinned === getSessionId();
+  } catch {
+    return false;
+  }
+}
+
+// Persist the first-analytics-session marker. Call this ONLY from the consented
+// analytics-init path (i.e. once `/api/analytics/config` confirms capture is
+// enabled), never on unconditional provider mount — see `isFirstSession()` for
+// why. No-op once a pin already exists, and never throws in storage-denied
+// contexts.
+export function pinFirstSessionForCapture(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (window.localStorage.getItem(FIRST_SESSION_ID_KEY)) return;
+    window.localStorage.setItem(FIRST_SESSION_ID_KEY, getSessionId());
+  } catch {
+    // Privacy mode / quota — losing the pin only risks a later session being
+    // mislabeled first; never throw out of an analytics path.
+  }
+}
+
 // Claim the next 0-based run turn index for the current browser analytics
 // session and advance the counter. Lives in sessionStorage so it shares the
 // exact lifetime of the `session_id` above — both reset together when the tab

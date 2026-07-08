@@ -80,6 +80,9 @@ import {
   trackDesignSystemApplyResult,
   trackDesignSystemEnrichClick,
   trackPageView,
+  trackOnboardingPromptPrefilled,
+  trackOnboardingFirstPromptSent,
+  trackOnboardingFirstGenerationCompleted,
 } from '../analytics/events';
 import {
   clearOnboardingSessionId,
@@ -232,6 +235,17 @@ import { SHARE_TO_COMMUNITY_PROMPT } from './share-to-community/shareToCommunity
 import { CenteredLoader } from './Loading';
 import type { SettingsSection } from './SettingsDialog';
 import { Toast } from './Toast';
+import { FirstArtifactHint } from './FirstArtifactHint';
+import {
+  consumeOnboardingEntryForProject,
+  hasSentFirstOnboardingPrompt,
+  markFirstOnboardingPromptSent,
+  hasCompletedFirstOnboardingGeneration,
+  markFirstOnboardingGenerationCompleted,
+  type OnboardingEntry,
+} from '../onboarding/onboarding-entry';
+import { producedPreviewableArtifact } from '../onboarding/first-generation';
+import { sentPrefilledPrompt } from '../onboarding/first-prompt';
 import { BrandReadyPrompt } from './BrandReadyPrompt';
 import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
@@ -1332,6 +1346,32 @@ export function ProjectView({
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
+  // Onboarding first-generation funnel (spec §11.1). Consume the pending entry
+  // (set by the Home recommendation) exactly once on mount; the refs guard the
+  // two lifecycle events so each fires only for the genuine first send / first
+  // successful generation of a recommendation-started project.
+  const onboardingEntryInitRef = useRef(false);
+  const onboardingEntryRef = useRef<OnboardingEntry | null>(null);
+  // The prompt the recommendation prefilled into the composer. Prefer the seed
+  // cached WITH the onboarding entry (it survives a reopen-before-send, whereas
+  // `project.pendingPrompt` is wiped by `onClearPendingPrompt` on the first
+  // mount); fall back to `pendingPrompt` for the very first mount / any project
+  // without a cached seed. The first-prompt-sent funnel event compares the
+  // actually-sent prompt against this seed so `has_prefilled_prompt` reflects
+  // real behavior — the user is free to edit, clear, or replace the suggestion
+  // before sending (spec §7.4 / §8.2).
+  const onboardingSeedPromptRef = useRef('');
+  if (!onboardingEntryInitRef.current) {
+    onboardingEntryInitRef.current = true;
+    onboardingEntryRef.current = consumeOnboardingEntryForProject(project.id);
+    onboardingSeedPromptRef.current =
+      onboardingEntryRef.current?.seedPrompt ?? (project.pendingPrompt ?? '').trim();
+  }
+  // The once-per-project funnel guards live in the onboarding-entry module
+  // (project-keyed), not mount-local refs: ProjectView remounts on every
+  // leave/reopen, and the entry now survives those remounts via its cache, so a
+  // mount-local guard would let the funnel events re-fire on a later
+  // conversation/run of the same project.
   const iframeKeepAlivePool = useIframeKeepAlivePool();
   const handleThemeChange = onThemeChange ?? (() => {});
   const projectDetail = useProjectDetail(project.id);
@@ -2586,6 +2626,15 @@ export function ProjectView({
     () => new Set(projectFiles.map((f) => f.name)),
     [projectFiles],
   );
+  // A previewable artifact exists once any HTML file has been produced. Gates
+  // the one-time first-generation hint (spec §8.3); the hint component owns its
+  // own once-ever "seen" budget.
+  const hasPreviewableArtifact = useMemo(() => {
+    for (const name of projectFileNames) {
+      if (name.toLowerCase().endsWith('.html')) return true;
+    }
+    return false;
+  }, [projectFileNames]);
   const activeProjectFileName = useMemo(
     () => (
       openTabsState.active && projectFileNames.has(openTabsState.active)
@@ -4789,6 +4838,33 @@ export function ProjectView({
           amrGateInFlightConversationsRef.current.delete(gateConversationId);
         }
       }
+      // First genuine send in a recommendation-started project — the
+      // send-through half of the onboarding funnel. Fires once per project (the
+      // guard is project-scoped so it survives ProjectView remounts), on the
+      // first message of the conversation (not retries). Placed AFTER the
+      // queue-only / busy / AMR balance gates above: those can abort the send
+      // without creating a run, so emitting earlier would over-count blocked
+      // attempts and then suppress the real retry via the once-only guard. By
+      // here the send is committed to creating a run.
+      if (
+        onboardingEntryRef.current &&
+        !hasSentFirstOnboardingPrompt(project.id) &&
+        !retryTarget &&
+        historyBase.length === 0
+      ) {
+        markFirstOnboardingPromptSent(project.id);
+        const entry = onboardingEntryRef.current;
+        trackOnboardingFirstPromptSent(analytics.track, {
+          entry_source: entry.source,
+          product_type: entry.productType,
+          recommendation_id: entry.recommendationId,
+          // True only when the user sent the prefilled suggestion unmodified;
+          // an edited, cleared, replaced, or starter-swapped prompt (or an
+          // attachments-only send) reports false so the send-through split
+          // stays honest.
+          has_prefilled_prompt: sentPrefilledPrompt(onboardingSeedPromptRef.current, prompt),
+        });
+      }
       setChatSeed(null);
       const runConversationId = activeConversationId;
       setError(null);
@@ -5332,6 +5408,27 @@ export function ProjectView({
                 }
               }
               const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+              // Completion half of the onboarding funnel: the first generation
+              // in a recommendation-started project that actually produced a
+              // previewable artifact. Gated on the same artifact-producing
+              // condition as the first-artifact hint (a produced `.html`), so a
+              // `succeeded` run that returned only text or a clarifying question
+              // does NOT count. Fires once.
+              if (
+                ownsCurrentRun &&
+                onboardingEntryRef.current &&
+                !hasCompletedFirstOnboardingGeneration(project.id) &&
+                finalRunStatus === 'succeeded' &&
+                producedPreviewableArtifact(produced)
+              ) {
+                markFirstOnboardingGenerationCompleted(project.id);
+                const entry = onboardingEntryRef.current;
+                trackOnboardingFirstGenerationCompleted(analytics.track, {
+                  entry_source: entry.source,
+                  product_type: entry.productType,
+                  recommendation_id: entry.recommendationId,
+                });
+              }
               const traceObjectFiles = computeTraceObjectFiles(
                 beforeFileNames,
                 nextFiles,
@@ -7510,6 +7607,23 @@ export function ProjectView({
         ? undefined
         : (initialDraft?.projectId === project.id ? initialDraft.value : undefined)
     );
+  // Home → Studio handoff confirmation (spec §11.1 onboarding_prompt_prefilled):
+  // the recommendation's first request actually reached this composer. Fires
+  // once, only for recommendation-started projects that arrived with a seed.
+  const onboardingPrefilledFiredRef = useRef(false);
+  useEffect(() => {
+    const entry = onboardingEntryRef.current;
+    if (!entry || onboardingPrefilledFiredRef.current) return;
+    if (typeof chatInitialDraft !== 'string' || chatInitialDraft.trim().length === 0) return;
+    onboardingPrefilledFiredRef.current = true;
+    trackOnboardingPromptPrefilled(analytics.track, {
+      entry_source: entry.source,
+      product_type: entry.productType,
+      recommendation_id: entry.recommendationId,
+      ...(entry.role ? { role: entry.role } : {}),
+      ...(entry.useCases && entry.useCases.length > 0 ? { use_cases: entry.useCases } : {}),
+    });
+  }, [chatInitialDraft, analytics.track]);
   const brandEnrichmentPromptSeed =
     project.pendingPrompt?.trim() ||
     (initialDraft?.projectId === project.id ? initialDraft.value.trim() : '');
@@ -8262,6 +8376,7 @@ export function ProjectView({
               shareToOpenDesignBusyMessageId={shareToOpenDesignBusyMessageId}
               forceStreamingMessageIds={forceStreamingPluginMessageIds}
               initialDraft={chatInitialDraft}
+              onboardingStarterPath={onboardingEntryRef.current?.productType ?? null}
               onOpenQuestions={openQuestionsTab}
               onContinueRemainingTasks={handleContinueRemainingTasks}
               onAssistantFeedback={handleAssistantFeedback}
@@ -8559,6 +8674,14 @@ export function ProjectView({
           initialViewId="kit"
           onClose={() => setContextDesignSystemDetails(null)}
         />
+      ) : null}
+      {/* One-time first-generation hint (spec §8.3) is scoped to the new-user
+          onboarding handoff: only projects started from the Home recommendation
+          carry a consumed `onboardingEntryRef`. Without this gate the hint
+          would surface for any returning user opening an existing HTML project
+          and burn its once-ever localStorage budget outside the intended flow. */}
+      {onboardingEntryRef.current && hasPreviewableArtifact && !currentConversationStreaming ? (
+        <FirstArtifactHint />
       ) : null}
       {amrBalanceGateBlock ? (
         <AmrBalanceDialog

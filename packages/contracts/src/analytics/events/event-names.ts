@@ -36,6 +36,7 @@ export type AnalyticsEventName =
   // Artifact
   | 'artifact_export_result'
   | 'artifact_deploy_result'
+  | 'file_version_restore_result'
   // Feedback
   | 'feedback_submit_result'
   | 'assistant_feedback_click'
@@ -48,12 +49,21 @@ export type AnalyticsEventName =
   | 'settings_byok_test_result'
   | 'settings_byok_models_fetch_result'
   | 'settings_connector_auth_result'
+  // AMR (hosted model) account auth result.
+  | 'amr_auth_result'
   // Onboarding-only result events. UI clicks + page_views inside the
   // onboarding flow reuse the generic `ui_click` / `page_view` shapes
   // with `page_name=onboarding`; the three `onboarding_*` names below
   // capture lifecycle moments that don't fit a click or a view.
   | 'onboarding_runtime_scan_result'
   | 'onboarding_complete_result'
+  // First-generation funnel (spec §11.1). Fire in Studio when the user, having
+  // arrived from the Home recommendation, actually sends their first request
+  // and when that first generation completes — the send-through and
+  // completion rates the onboarding acceptance criteria track.
+  | 'onboarding_prompt_prefilled'
+  | 'onboarding_first_prompt_sent'
+  | 'onboarding_first_generation_completed'
   // Design-system lifecycle. Clicks + page_views inside DS surfaces
   // reuse `ui_click` / `page_view`; the five names below capture
   // ingest / create / review / status / picker-apply moments.
