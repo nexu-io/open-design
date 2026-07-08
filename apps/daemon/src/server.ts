@@ -3898,14 +3898,16 @@ export async function startServer({
           stage,
           iteration,
           snapshot:       stageSnapshot,
+          runEvents:      run.events,
         });
         return {
           signals:         outcome.signals,
           critiqueSummary: outcome.critiqueSummary,
+          tokensUsed:      outcome.tokensUsed,
         };
       };
     }
-    void runPipelineForRun({
+    const pipelineDone = runPipelineForRun({
       db: dbHandle,
       runId:           run.id,
       projectId:       projectIdForRun,
@@ -3925,6 +3927,17 @@ export async function startServer({
         });
       } catch { /* ignore */ }
     });
+    void Promise.all([runs.wait(run), pipelineDone])
+      .then(() => {
+        const tokensUsed = scanRunEventsForUsageAnalytics(run.events, null, 0).total_tokens ?? null;
+        if (tokensUsed === null) return;
+        dbHandle.prepare(
+          'UPDATE run_devloop_iterations SET tokens_used = ? WHERE run_id = ?',
+        ).run(tokensUsed, run.id);
+      })
+      .catch((err) => {
+        console.warn('[plugins] devloop tokens_used reconciliation failed', err);
+      });
   };
 
   const startChatRun = async (chatBody, run) => {
