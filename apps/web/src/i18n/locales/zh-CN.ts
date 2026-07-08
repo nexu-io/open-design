@@ -1549,6 +1549,7 @@ export const zhCN: Dict = {
   "newproj.audioDurationSeconds": "{n} 秒",
   "newproj.voiceLabel": "声音",
   "newproj.voicePlaceholder": "提供商 voice id，可选",
+    'newproj.customAvatarToggle': '定义虚拟形象',
   "newproj.connectorsLabel": "连接器",
   "newproj.connectorsHint": "实时看板可以从这些数据源拉取信息。",
   "newproj.connectorsEmptyTitle": "尚未配置连接器",
