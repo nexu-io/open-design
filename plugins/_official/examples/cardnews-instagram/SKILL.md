@@ -33,7 +33,8 @@ od:
 
 브랜드-범용 채널 워크플로. 채널 기술(카드 규격·이미지 파이프라인 12룰)은
 `craft/instagram-cardnews.md`, 브랜드 사실(팔레트·훅 공식·핸들·면책·로고 에셋)은 활성
-`design-systems/<brand>/DESIGN.md`에서 로드한다. **브랜드 사실 하드코딩 금지** — 이
+브랜드 컨텍스트(system prompt의 "Active brand" + "Brand deliverable context" 블록;
+소스 파일 경로는 그 블록의 Source files 라인)에서 로드한다. **브랜드 사실 하드코딩 금지** — 이
 스킬은 채널 규약만 안다.
 
 **실행 전제** (미충족 시 정직 안내 후 중단 — 대체 생성 경로 없음): codex CLI 0.135+
@@ -42,7 +43,8 @@ od:
 
 ## 7단계
 
-1. **Intake** — 활성 `design-systems/<brand>/DESIGN.md` Read (카드뉴스 브랜드 섹션 —
+1. **Intake** — 활성 브랜드 컨텍스트(system prompt의 "Active brand" + "Brand deliverable
+   context" 블록) 확인 (카드뉴스 브랜드 섹션 —
    보이스·훅 공식·비주얼 무드·로고 에셋 경로 확인). 요청 원문 기록.
 1.5. **Topic(주제 추천 — 조건부)** — 요청에 구체 주제가 **없을 때만**(예: "카드뉴스
    하나 만들어줘"). 주제가 있으면 스킵하고 2단계 직행. `references/topic-subagent.md`
@@ -59,7 +61,7 @@ od:
    비율은 질문하지 않음 — craft 기본 4:5 고정(1:1은 사용자가 명시 요구할 때만).
 3. **Research(서브에이전트)** — dispatch 도구 있으면 **반드시** 분리:
    `references/research-subagent.md` Read 후 그 지시대로 위임(입력: 주제·키워드·독자·
-   DESIGN.md 경로·cwd). WebSearch 1차 출처 → `research.md` cwd Write → 핵심 사실
+   브랜드 컨텍스트 파일 경로(코어+채널)·cwd). WebSearch 1차 출처 → `research.md` cwd Write → 핵심 사실
    ≤10줄만 반환(SERP 덤프는 research.md에 격리). dispatch 불가 런타임은 같은 절차
    인라인. 브랜드 출처 정책 준수.
 4. **Plan/brief + 컨펌 게이트** — 기획을 폼 발행 **전에** `plan-v1.md`로 **프로젝트
@@ -81,7 +83,7 @@ od:
    **폼 취소·무응답·옵션 미선택의 모호 답변은 컨펌이 아니다** — ★ 권장안으로 암묵
    진행 금지(도그푸딩 실측 위반 패턴). 취소 사유를 1줄로 묻는 재컨펌 폼을 발행하고
    턴을 종료한다.
-5. **Produce** — `craft/instagram-cardnews.md` + 활성 DESIGN.md Read 후:
+5. **Produce** — `craft/instagram-cardnews.md` + 활성 브랜드 컨텍스트 확인 후:
    - 5a. **cards.json Write** — 카드별 텍스트 확정 (스키마 정본
      `references/card-structure.md` — 본문 줄바꿈·양쪽맞춤은 compose가 자동 처리,
      body_lines는 문장 소스만. 본문은 서술형 문단, 분량 = 렌더 5~7줄(공백 포함 약
@@ -91,18 +93,18 @@ od:
    - 5b. **표지 배경 생성** — `references/imagegen-pipeline.md` Read 후 그 지시대로
      imagegen 서브에이전트 1회 dispatch(순차 — 스타일 앵커). 프롬프트는 메인이 스캐폴드로
      전량 조립(브랜드 팔레트·비주얼 무드·portrait·no-text 필수·텍스트 영역 단순화).
-     DESIGN.md에 브랜드 레퍼런스 이미지가 등재돼 있으면 view_image 참조 필수 +
-     **캐릭터 시트(DESIGN.md 등재 시)도 함께 앵커** — 표지부터 캐릭터 정체성은
+     브랜드 cardnews 컨텍스트에 브랜드 레퍼런스 이미지가 등재돼 있으면 view_image 참조 필수 +
+     **캐릭터 시트(브랜드 cardnews 컨텍스트 등재 시)도 함께 앵커** — 표지부터 캐릭터 정체성은
      시트가 정본(imagegen-pipeline.md 앵커 우선순위).
      배경 중간산출은 전부 `{cwd}/bg/` 하위(사전 `mkdir -p` — 루트 잔존 = 글롭·위생
      문제, 삭제는 금지: 텍스트 수정 시 재생성 불필요 계약의 전제). `bg/bg-01.png`
      확인 후 진행.
    - 5c. **본문 배경 생성** — imagegen 서브에이전트 N-2개 **한 턴에 병렬 dispatch**
-     (각각 `bg/bg-01.png` + 캐릭터 시트(DESIGN.md 등재 시)를 view_image 앵커 2장으로 — "same style, same palette" + 캐릭터 고정절 + 시트 해설절). 병렬 실패
+     (각각 `bg/bg-01.png` + 캐릭터 시트(브랜드 cardnews 컨텍스트 등재 시)를 view_image 앵커 2장으로 — "same style, same palette" + 캐릭터 고정절 + 시트 해설절). 병렬 실패
      (rate limit 등) 시 순차 폴백 — 실패 카드만 재시도. dispatch 불가 런타임은 인라인
      순차. CTA는 생성 없음(표지 재사용).
    - 5d. **합성(메인 직접)** — `python3 <스킬 폴더>/scripts/compose_cards.py --spec
-     {cwd}/cards.json --out-dir {cwd} --bg-dir {cwd}/bg [--logo <DESIGN.md 로고 에셋>]` → 4:5 중앙 크롭 →
+     {cwd}/cards.json --out-dir {cwd} --bg-dir {cwd}/bg [--logo <브랜드 cardnews 컨텍스트 로고 에셋>]` → 4:5 중앙 크롭 →
      1080×1350 → 역할별 레이아웃 오버레이(고정 계약) → `<slug>-01.png` … `<slug>-NN.png`.
    - 5e. **갤러리 Write(메인 직접)** — `<slug>-preview.html`: 순수 정적 HTML — 카드
      `<img src="<slug>-NN.png">`를 index 순서로 나열, **각 카드 푸터에 라벨(`NN · 역할`) +
@@ -116,7 +118,7 @@ od:
      없음. 슬러그 정규식 `[^a-z0-9가-힣]+`(가-힣 보존).
 6. **Review(서브에이전트 검수)** — dispatch 도구 있으면 **반드시** 신선한 컨텍스트
    검수자에게 위임: `references/review-subagent.md` Read 후 지시대로(검수자가 craft·
-   DESIGN.md·brief·research·cards.json·갤러리·**카드 PNG 전장을 직접 Read — 비전 검토**).
+   브랜드 컨텍스트(코어+채널)·brief·research·cards.json·갤러리·**카드 PNG 전장을 직접 Read — 비전 검토**).
    검수자는 **report-only** — 5축(craft 채널 룰 / 디자인 / 도달 / 브랜드·톤 / 팩트체크)
    채점표와 P0/P1 목록만 반환. 수정은 메인이 반영 후 재검수 1회 — **텍스트만 수정이면
    배경 재생성 없이 compose_cards.py 재실행**. 게이트 ≥80 발행 / 60~79 수정 / <60

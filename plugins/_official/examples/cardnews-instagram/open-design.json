@@ -62,7 +62,7 @@
     ],
     "context": {
       "skills": [{ "path": "./SKILL.md" }],
-      "designSystem": { "ref": "bodoc" },
+      "brand": { "ref": "bodoc", "deliverable": "cardnews" },
       "assets": [
         "./example.html",
         "./references/card-structure.md"

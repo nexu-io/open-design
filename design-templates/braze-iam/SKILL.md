@@ -30,8 +30,8 @@ od:
 <!--
 Role: Braze Custom-HTML IAM 7단계 제작 워크플로우 — brand-agnostic OD 포트
 Key Features: <question-form> 인터뷰/컨펌, braze_plan_v1 기획안, od braze CLI 통합, Variant A/B 병렬 HTML 생성, craft/braze-custom-html.md 자가 검증
-Dependencies: 활성 brand의 DESIGN.md, BRAZE-DOMAIN.md §1·§2·§5, DATA-MODEL-BRAZE.md §0·§4, craft/braze-custom-html.md, references/ (size-patterns, format-design-guide, interaction-standard, liquid-guide)
-Notes: bodoc 브랜드 특화 사실(플래너→전문가, bodoc:// 딥링크, 특정 어트리뷰트) 하드코딩 금지. 브랜드 사실은 활성 DESIGN.md + brand context에서만 로드.
+Dependencies: 활성 브랜드 컨텍스트(system prompt의 "Active brand" + "Brand deliverable context" 블록), BRAZE-DOMAIN.md §1·§2·§5, DATA-MODEL-BRAZE.md §0·§4, craft/braze-custom-html.md, references/ (size-patterns, format-design-guide, interaction-standard, liquid-guide)
+Notes: bodoc 브랜드 특화 사실(플래너→전문가, bodoc:// 딥링크, 특정 어트리뷰트) 하드코딩 금지. 브랜드 사실은 활성 브랜드 컨텍스트(Active brand + Brand deliverable context 블록)에서만 로드.
 -->
 
 # Braze IAM — 7단계 워크플로우
@@ -46,7 +46,7 @@ Braze Custom-HTML IAM을 **브랜드-어그노스틱 워크플로우**로 제작
 - **DATA-MODEL §5.1 정합 노트**: 이 스킬의 인터뷰 4축(purpose/target/format/tone)은 DATA-MODEL-BRAZE §5.1 인터뷰 필드와 일치하도록 정합되었다. `trigger_event`는 §5.1에 필드가 존재하지만 인터뷰에서 수집하지 않음(Braze 콘솔 설정이므로); `variant_count`는 2로 고정(A/B). **다에몬 측 인터뷰 폼을 자동 생성할 경우 trigger_event와 variant_count는 skip 또는 default 처리해야 한다.**
 - **산출물 = Braze-ready Custom HTML 파일 2개 (Variant A/B)** → 대시보드 붙여넣기 핸드오프 (BRAZE-DOMAIN §4.4)
 
-> **선행 필수 — 활성 브랜드 컨텍스트 로드**: 타겟·페르소나·브랜드 보이스·금지어·딥링크 카탈로그는 Claude 사전 지식에 없는 브랜드-사내 사실이다. 추측 금지. IAM 제작 시작 시 **활성 브랜드의 `DESIGN.md`를 먼저 Read**해 정본 컨텍스트를 확보한다 (`design-systems/<brand>/DESIGN.md`).
+> **선행 필수 — 활성 브랜드 컨텍스트 확인**: 타겟·페르소나·브랜드 보이스·금지어·딥링크 카탈로그는 Claude 사전 지식에 없는 브랜드-사내 사실이다. 추측 금지. IAM 제작 시작 시 **system prompt의 "Active brand" + "Brand deliverable context" 블록**을 먼저 확인해 정본 컨텍스트를 확보한다 (소스 파일 경로는 그 블록의 Source files 라인).
 
 ---
 
@@ -79,10 +79,12 @@ OD produced-file 아티팩트 패턴 (DATA-MODEL-BRAZE §2-A):
 
 ## Step 1 — Intake (접수)
 
-활성 브랜드 컨텍스트를 로드하고 요청 원문을 기록한다.
+활성 브랜드 컨텍스트를 확인하고 요청 원문을 기록한다.
 
 ```
-Read: design-systems/<brand>/DESIGN.md
+확인: system prompt의 "Active brand" + "Brand deliverable context" 블록
+(자동 주입됨 — 별도 Read 불요; 서브에이전트에 위임할 경우에만 그 블록의
+Source files 라인이 가리키는 경로를 전달한다)
 ```
 
 로드한 후 다음 항목을 내부 확인:
@@ -157,7 +159,7 @@ Read: design-systems/<brand>/DESIGN.md
 
 **CTA 텍스트 결정**:
 - 목적에 맞는 행동 동사 (예: "지금 시작하기", "혜택 확인하기")
-- 브랜드 금지어 준수 (활성 DESIGN.md 기준)
+- 브랜드 금지어 준수 (활성 브랜드 컨텍스트 기준)
 - CTA 최대 2개 (BRAZE-DOMAIN §1.2)
 
 **트리거 이벤트 후보** (Braze 대시보드 설정용, 인터뷰하지 않음):
@@ -254,7 +256,7 @@ EOF
 HTML 빌드 전 기획안 카피의 톤·금지어·CTA 품질을 **Claude 자신이 자가 검토**한다. (DECISIONS.md 결정: OD critique jury 삭제 → main-agent self-review)
 
 체크 항목:
-- [ ] 브랜드 금지어 없음 (활성 DESIGN.md anti-patterns 기준)
+- [ ] 브랜드 금지어 없음 (활성 브랜드 컨텍스트 anti-patterns 기준)
 - [ ] CTA 텍스트 = 행동 동사, 2개 이하 (BRAZE-DOMAIN §1.2)
 - [ ] Liquid 변수 형식 올바름 (`{{${}}}`/`{{custom_attribute.${}}}`), 카탈로그 내 식별자만
 - [ ] 톤이 포맷-콘텐츠 매트릭스와 정합 (references/format-design-guide.md 기준)
@@ -420,7 +422,7 @@ brazeBridge.BridgeReady(function() {
 
 ### 브랜드 체크리스트
 
-- [ ] 브랜드 금지어 없음 (활성 DESIGN.md anti-patterns 기준)
+- [ ] 브랜드 금지어 없음 (활성 브랜드 컨텍스트 anti-patterns 기준)
 - [ ] CTA 텍스트 = 행동 동사 형식
 - [ ] 브랜드 로고 인라인 임베드 없음 (브랜드 정책 — 별도 확인)
 - [ ] raw rgba 없음 → 브랜드 토큰 사용
@@ -514,7 +516,7 @@ Braze 대시보드 핸드오프 필요 — REST API로 IAM 전송 불가 (BRAZE-
 - 트리거 이벤트는 인터뷰하지 않음 (BRAZE-DOMAIN §5.1: IAM은 SDK 커스텀 이벤트만 발화)
 - 슬라이드업 = HTML IAM으로 제작하지 말 것. §1.1은 슬라이드업이 비차단임을 확인; HTML IAM의 전체화면 WebView 동작으로 비차단 기대와 충돌(프로덕션 SDK 동작 기준). Native 슬라이드업 권장
 - `brazeBridge` 만 사용. `appboyBridge` 절대 사용하지 않음 (BRAZE-DOMAIN §2.2)
-- 브랜드 facts (페르소나, 금지어, 딥링크, 어트리뷰트)는 활성 DESIGN.md에서만 로드. 추측 금지
+- 브랜드 facts (페르소나, 금지어, 딥링크, 어트리뷰트)는 활성 브랜드 컨텍스트(Active brand + Brand deliverable context 블록)에서만 로드. 추측 금지
 - 개인화 어트리뷰트는 브랜드 카탈로그에 존재하는 식별자만 사용
 - 이미지: PNG/JPEG/GIF만. WebP 금지 (BRAZE-DOMAIN §1.3)
 - CTA ≤ 2개 (BRAZE-DOMAIN §1.2)

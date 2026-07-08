@@ -5,7 +5,7 @@ card-news set as final PNG files. Pipeline: AI-generated backgrounds (codex
 built-in `image_gen`) + deterministic Pillow text overlay (the skill's
 `scripts/compose_cards.py`). Brand-specific facts (palette, voice, hook
 formulas, logo asset path, disclaimers, account handle) belong in
-`design-systems/<brand>/DESIGN.md`, NOT here.
+`brands/<brand>/` brand context (core `brand.md` + channel deliverable), NOT here.
 
 ---
 
@@ -45,7 +45,7 @@ Generate the cover background FIRST. Every body background is generated with
 the cover image attached as a visual reference ("same style, same palette").
 Per-card unrelated styles are a fail.
 
-If the brand has a mascot/character (registered in the brand's DESIGN.md),
+If the brand has a mascot/character (registered in the brand's `brands/<brand>/` context),
 every body-background call must attach TWO view_image references: the cover
 anchor (style/palette) AND the brand character reference asset (identity),
 plus a character-lock clause ("Use the exact same character as in the
@@ -145,8 +145,8 @@ column (narrow column); a cover hook/sub or body title whose ink exceeds the
 
 ## 10. Color discipline
 
-Background prompts state the brand palette (DESIGN.md tokens); overlay text
-colors come from DESIGN.md tokens; keep text/background contrast (light text
+Background prompts state the brand palette (brand.md Palette); overlay text
+colors come from brand.md Palette; keep text/background contrast (light text
 over darkened background, or the inverse).
 
 **Checklist item (fails lint):** off-palette background; illegible

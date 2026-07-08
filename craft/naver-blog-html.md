@@ -3,7 +3,7 @@
 Brand-agnostic technical constraints for producing a paste-ready Naver SmartEditor
 blog article in HTML. Every rule grounds in observed SmartEditor paste behavior.
 Brand-specific facts (voice, categories, disclaimers, banned claims) belong in
-`design-systems/<brand>/DESIGN.md`, NOT here.
+`brands/<brand>/` brand context (core `brand.md` + blog deliverable), NOT here.
 
 > Source: ported from the bodoc `blog-cardnews/docs/blog-naver-editor-style.md`
 > style SSoT (analyzed from a real published post). Channel rules only — de-branded.
@@ -134,7 +134,7 @@ If a list would be ≥3 rows of "X → Y" mapping, use a `<table>` instead:
 
 Emoji may sit at a **heading's end** or a body/list position; keep them sparse and
 purposeful. Budget: **≤1 per heading, ≤2 per section, ≤12 per article.** Whether emoji are
-functional-only (`🔍 ⚠️ 💡 📋 ✅`) or expressive is a **brand voice** decision — see DESIGN.md.
+functional-only (`🔍 ⚠️ 💡 📋 ✅`) or expressive is a **brand voice** decision — see the brand's `brands/<brand>/` context.
 
 **Checklist item (fails lint):** >1 emoji in a heading; >12 per article; >2 in one section.
 
@@ -143,7 +143,7 @@ functional-only (`🔍 ⚠️ 💡 📋 ✅`) or expressive is a **brand voice**
 ## 11. Disclaimer last
 
 The final element is a small-print disclaimer paragraph (literal text is a brand
-fact from DESIGN.md; the style here is brand-neutral):
+fact from the brand's `brands/<brand>/` context; the style here is brand-neutral):
 
 ```html
 <p style="font-size:13px;color:#888;margin-top:24px;">…브랜드 면책 문구…</p>
@@ -158,18 +158,18 @@ fact from DESIGN.md; the style here is brand-neutral):
 Vary the opening per article (사례형 / 오해해소형 / 수치충격형 / 통념 깨기). Do NOT
 clone a fixed template like "결론부터 말씀드릴게요!".
 
-An answer-first opening *structure* (a brand-voice choice in DESIGN.md) is not a
+An answer-first opening *structure* (a brand-voice choice in the brand's `brands/<brand>/` context) is not a
 template violation — vary the hook wording, not the structure.
 
 > Not a lint rule (judgment): self-review flags a templated opener.
 
 ---
 
-## 13. Length guide (brand DESIGN.md is authoritative)
+## 13. Length guide (the brand's blog deliverable context is authoritative)
 
 Default channel target: **2,300–2,800 characters** of body text. Hard SEO floor:
-**≥1,500 characters.** If the active brand DESIGN.md specifies a different range,
-the DESIGN.md value wins.
+**≥1,500 characters.** If the active brand's blog deliverable context specifies a
+different range, that value wins.
 
 **Checklist item (fails lint):** body < 1,500 chars.
 
@@ -262,7 +262,8 @@ shell `<style>` instead of inline.
 - Avoid solo repetition of `~합니다`/`~입니다` (격식체 = data/citation/legal only).
 - 종결 어미 다양화: don't end every sentence with `~거든요`; mix `~해요·~인데요·~지만요·~네요·~보세요`.
 
-Brand-specific voice (persona, greeting, banned phrases) lives in DESIGN.md.
+Brand-specific voice (persona, greeting, banned phrases) lives in the brand's
+`brands/<brand>/` context (core `brand.md`).
 
 ---
 

@@ -113,7 +113,11 @@
         }
       ],
       "designSystem": {
-        "ref": "bodoc"
+        "ref": "bodoc-iam"
+      },
+      "brand": {
+        "ref": "bodoc",
+        "deliverable": "iam"
       },
       "assets": [
         "./example.html",
