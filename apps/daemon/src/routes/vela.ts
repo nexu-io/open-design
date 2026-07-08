@@ -34,6 +34,7 @@ import {
   clearVelaWalletSnapshotCache,
   velaWalletSnapshotReader,
 } from '../integrations/vela-wallet.js';
+import { classifyVelaLoginFailure } from '../integrations/vela-errors.js';
 import { amrModelLoadingCache } from '../runtimes/amr-model-cache.js';
 import {
   fetchVelaBillingSummary,
@@ -353,8 +354,15 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       res.status(202).json(spawned);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const status = /already running/i.test(message) ? 409 : 500;
-      res.status(status).json({ error: message });
+      // "already running" is not a failure — a login is already in flight.
+      if (/already running/i.test(message)) {
+        res.status(409).json({ error: message });
+        return;
+      }
+      // Classify the spawn failure so the UI/CLI can show a specific reason +
+      // recovery step instead of surfacing the raw daemon string (issue #426).
+      const failure = classifyVelaLoginFailure({ message });
+      res.status(500).json({ error: message, failure });
     }
   });
 

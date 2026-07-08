@@ -10,11 +10,13 @@ import type {
   TrackingAmrEntrySource,
   TrackingPageName,
 } from '@open-design/contracts/analytics';
+import type { AmrLoginFailure } from '@open-design/contracts';
 
 import { resolveAgentLaunch } from '../runtimes/launch.js';
 import { spawnEnvForAgent } from '../runtimes/env.js';
 import { getAgentDef } from '../runtimes/registry.js';
 import { resolveAmrProfile } from './vela-profile.js';
+import { resolveVelaLoginExitFailure } from './vela-errors.js';
 
 export { resolveAmrProfile } from './vela-profile.js';
 
@@ -220,6 +222,13 @@ export interface VelaLoginStatus {
   userCode?: string;
   /** True when vela warned it could not open the browser automatically. */
   browserOpenFailed?: boolean;
+  /**
+   * Classified reason the LAST sign-in attempt failed, surfaced while signed
+   * out and not currently signing in. Lets the UI/CLI replace the generic
+   * "Sign-in failed." with a specific reason + recovery step (issue #426).
+   * Absent when the last attempt succeeded or was canceled.
+   */
+  lastLoginFailure?: AmrLoginFailure;
 }
 
 export interface VelaLoginActivation {
@@ -366,6 +375,13 @@ export function readVelaLoginStatus(
   const stored = file?.profiles?.[profile];
   const storedRuntimeKey = stored?.runtimeKey?.trim() ?? '';
   if (!storedRuntimeKey) {
+    // Signed out: if the last finished attempt failed (and wasn't a benign
+    // cancel / clean exit), classify it so the UI/CLI can show a specific
+    // reason + recovery step instead of a generic "Sign-in failed."
+    const lastLoginFailure =
+      !loginInFlight && lastVelaLoginExit
+        ? resolveVelaLoginExitFailure(lastVelaLoginExit)
+        : null;
     return {
       loggedIn: false,
       loginInFlight,
@@ -373,6 +389,7 @@ export function readVelaLoginStatus(
       user: null,
       configPath,
       ...activationFields,
+      ...(lastLoginFailure ? { lastLoginFailure } : {}),
     };
   }
   const rawUser = stored?.user ?? null;
@@ -605,6 +622,24 @@ interface VelaLoginActivationCapture {
   stderr: string;
 }
 
+// The most recent finished login attempt's exit shape. Retained after the
+// child exits (unlike `activeLoginActivation`, which is nulled on cleanup) so a
+// signed-out /status read can classify WHY the last sign-in failed. Reset at
+// the start of each new spawn; `resolveVelaLoginExitFailure` treats a clean
+// exit (code 0) or a canceled attempt as "nothing to surface".
+interface VelaLoginExitRecord {
+  exitCode: number | null;
+  signal: string | null;
+  stderr: string;
+  stdout: string;
+  canceled: boolean;
+  browserOpenFailed: boolean;
+}
+let lastVelaLoginExit: VelaLoginExitRecord | null = null;
+// Set when cancelVelaLogin terminates the active login (user cancel or a
+// frontend-driven timeout) so the resulting exit is not surfaced as an error.
+let velaLoginCancelRequested = false;
+
 // Attach lifetime listeners that accumulate the child's stdout/stderr and keep
 // re-parsing the activation URL/code/warning as output streams in. Unlike
 // `waitForImmediateLoginFailure` (which only reads the first 250ms), this lives
@@ -668,6 +703,9 @@ export function cancelVelaLogin(): CancelVelaLoginResult {
       activeLoginProcs.delete(pid);
       continue;
     }
+    // Mark the attempt canceled so the imminent exit is treated as benign
+    // (user cancel or a frontend timeout), not surfaced as a sign-in failure.
+    velaLoginCancelRequested = true;
     try {
       child.kill('SIGTERM');
     } catch {
@@ -858,17 +896,47 @@ export async function spawnVelaLogin(
   if (typeof child.pid !== 'number') {
     throw new Error('failed to spawn vela login');
   }
+  // Fresh attempt: clear any prior exit/cancel bookkeeping so a stale failure
+  // can't leak into this login's /status reads.
+  lastVelaLoginExit = null;
+  velaLoginCancelRequested = false;
   activeLoginProcs.set(child.pid, child);
+  // Capture the activation URL/code/warning for the whole login (not just the
+  // 250ms startup race) so readVelaLoginStatus can surface them. Start before
+  // the exit recorders so the closure below can read the final streams and no
+  // early stdout is missed.
+  const activationCapture = beginLoginActivationCapture(child);
+  const recordExit = (code: number | null, signal: NodeJS.Signals | null) => {
+    lastVelaLoginExit = {
+      exitCode: code,
+      signal: signal ?? null,
+      stderr: activationCapture.stderr,
+      stdout: activationCapture.stdout,
+      canceled: velaLoginCancelRequested,
+      browserOpenFailed: activationCapture.activation.browserOpenFailed,
+    };
+  };
   const cleanup = () => {
     if (typeof child.pid === 'number') activeLoginProcs.delete(child.pid);
     activeLoginActivation = null;
   };
-  child.once('exit', cleanup);
-  child.once('error', cleanup);
-  // Capture the activation URL/code/warning for the whole login (not just the
-  // 250ms startup race) so readVelaLoginStatus can surface them. Start before
-  // the grace wait so no early stdout is missed.
-  const activationCapture = beginLoginActivationCapture(child);
+  child.once('exit', (code, signal) => {
+    recordExit(code, signal);
+    cleanup();
+  });
+  child.once('error', (error) => {
+    lastVelaLoginExit = {
+      exitCode: null,
+      signal: null,
+      stderr: [activationCapture.stderr, error.message]
+        .filter(Boolean)
+        .join('\n'),
+      stdout: activationCapture.stdout,
+      canceled: velaLoginCancelRequested,
+      browserOpenFailed: activationCapture.activation.browserOpenFailed,
+    };
+    cleanup();
+  });
   await waitForImmediateLoginFailure(child);
   if (deps.waitForActivation) {
     await waitForLoginActivationSteadyState(
