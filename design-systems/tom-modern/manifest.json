@@ -1,0 +1,16 @@
+{
+    "schemaVersion": "od-design-system-project/v1",
+    "id": "tom-modern",
+    "name": "Tom Modern Design",
+    "category": "Starter",
+    "description": "Editorial-technical design system. Neutral canvas, single vermillion accent, sharp corners, Geist typography, hard shadows, structured composition.",
+    "source": {
+        "type": "bundled",
+        "origin": "https://github.com/Tom-Opencart/tom-modern-html-style-rule"
+    },
+    "files": {
+        "design": "DESIGN.md",
+        "tokens": "tokens.css",
+        "components": "components.html"
+    }
+}
