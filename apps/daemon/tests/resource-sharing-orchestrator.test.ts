@@ -19,7 +19,9 @@ const mockState = vi.hoisted(() => ({
   latestVersionId: 'version_1',
   createdResources: [] as string[],
   createdResourceCalls: 0,
+  getResourceCalls: 0,
   delayCreateResource: false,
+  failPushCalls: 0,
   principalTeamId: 'team_1',
   resourceKind: 'design_system',
 }));
@@ -35,14 +37,17 @@ vi.mock('../src/integrations/resource-hub.js', () => ({
         id: mockState.createdResources.shift() ?? 'created_resource',
       };
     }),
-    getResource: vi.fn(async (_principal, resourceId) => ({
-      id: resourceId,
-      teamId: 'team_1',
-      kind: mockState.resourceKind,
-      ownerMemberId: 'member_1',
-      createdAt: '2026-01-01T00:00:00.000Z',
-      deletedAt: null,
-    })),
+    getResource: vi.fn(async (_principal, resourceId) => {
+      mockState.getResourceCalls += 1;
+      return {
+        id: resourceId,
+        teamId: 'team_1',
+        kind: mockState.resourceKind,
+        ownerMemberId: 'member_1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+      };
+    }),
     listVersions: vi.fn(async () => mockState.versions),
     getManifest: vi.fn(async (_principal, digest) => ({
       digest,
@@ -78,11 +83,17 @@ vi.mock('../src/resource-drive.js', () => ({
     return version;
   }),
   packTree: vi.fn(),
-  pushTree: vi.fn(async () => ({
-    id: 'version_pushed',
-    version: 2,
-    manifestDigest: 'digest_pushed',
-  })),
+  pushTree: vi.fn(async () => {
+    if (mockState.failPushCalls > 0) {
+      mockState.failPushCalls -= 1;
+      throw new Error('mock push failed');
+    }
+    return {
+      id: 'version_pushed',
+      version: 2,
+      manifestDigest: 'digest_pushed',
+    };
+  }),
 }));
 
 describe('resource-sharing orchestrator', () => {
@@ -101,7 +112,9 @@ describe('resource-sharing orchestrator', () => {
     mockState.latestVersionId = 'version_1';
     mockState.createdResources = [];
     mockState.createdResourceCalls = 0;
+    mockState.getResourceCalls = 0;
     mockState.delayCreateResource = false;
+    mockState.failPushCalls = 0;
     mockState.principalTeamId = 'team_1';
     mockState.resourceKind = 'design_system';
     vi.clearAllMocks();
@@ -294,6 +307,57 @@ describe('resource-sharing orchestrator', () => {
     );
   });
 
+  it('keeps a provisional owner mapping when first publish fails so retry reuses the hub resource', async () => {
+    const paths = {
+      RUNTIME_DATA_DIR: tempDir,
+      USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+      SKILL_ROOTS: [path.join(tempDir, 'skills')],
+    };
+    const editableDir = path.join(paths.USER_DESIGN_SYSTEMS_DIR, 'demo');
+    await fsp.mkdir(editableDir, { recursive: true });
+    await fsp.writeFile(path.join(editableDir, 'DESIGN.md'), 'local design\n');
+    mockState.createdResources = ['hub-retry', 'hub-leaked'];
+    mockState.failPushCalls = 1;
+    const orchestrator = createSharingOrchestrator({ db, paths });
+
+    await expect(orchestrator.share('design_system', 'demo')).rejects.toThrow(
+      'mock push failed',
+    );
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'user:demo')).toMatchObject({
+      hubResourceId: 'hub-retry',
+      role: 'owner',
+      lastSyncedVersion: null,
+    });
+
+    await expect(orchestrator.share('design_system', 'demo')).resolves.toEqual({
+      hubResourceId: 'hub-retry',
+      version: 2,
+    });
+
+    expect(mockState.createdResourceCalls).toBe(1);
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'user:demo')).toMatchObject({
+      hubResourceId: 'hub-retry',
+      role: 'owner',
+      lastSyncedVersion: 2,
+    });
+    expect(pushTree).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({ teamId: 'team_1' }),
+      'hub-retry',
+      undefined,
+      { ref: 'latest' },
+    );
+    expect(pushTree).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.objectContaining({ teamId: 'team_1' }),
+      'hub-retry',
+      undefined,
+      { ref: 'latest' },
+    );
+  });
+
   it('rejects sharing over a pulled consumer mapping with the same local id', async () => {
     const paths = {
       RUNTIME_DATA_DIR: tempDir,
@@ -430,6 +494,7 @@ describe('resource-sharing orchestrator', () => {
       status: 400,
       code: 'invalid_resource_id',
     });
+    expect(mockState.getResourceCalls).toBe(0);
     expect(materializeRef).not.toHaveBeenCalled();
   });
 

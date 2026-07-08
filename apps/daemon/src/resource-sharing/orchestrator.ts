@@ -132,9 +132,19 @@ export function createSharingOrchestrator(deps: SharingDeps) {
           );
         }
         const packed = await packTree(dir);
-        const hubResourceId =
-          existing?.hubResourceId ??
-          (await client.createResource(principal, { kind })).id;
+        let hubResourceId = existing?.hubResourceId;
+        if (!hubResourceId) {
+          hubResourceId = (await client.createResource(principal, { kind })).id;
+          upsertShared(deps.db, {
+            kind,
+            localId: canonicalLocalId,
+            hubResourceId,
+            hubTeamId: principal.teamId,
+            role: 'owner',
+            lastSyncedVersion: null,
+            updatedAt: new Date().toISOString(),
+          });
+        }
         const version = await pushTree(client, principal, hubResourceId, packed, {
           ref: 'latest',
         });
@@ -156,6 +166,7 @@ export function createSharingOrchestrator(deps: SharingDeps) {
     async pull(kind: string, hubResourceId: string) {
       const principal = principalOrThrow();
       const adapter = adapterOrThrow(kind);
+      const dir = await resolveAdapterPath(() => adapter.teamCopyDir(hubResourceId));
       const resource = await client.getResource(principal, hubResourceId);
       if (resource.kind !== kind) {
         throw new SharingError(
@@ -174,7 +185,6 @@ export function createSharingOrchestrator(deps: SharingDeps) {
           alreadyOwned: true,
         };
       }
-      const dir = await resolveAdapterPath(() => adapter.teamCopyDir(hubResourceId));
       const latest = await replaceWithMaterializedRef(
         principal,
         hubResourceId,
