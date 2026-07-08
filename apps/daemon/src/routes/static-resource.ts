@@ -15,7 +15,7 @@ import {
 import { listCodexPets, readCodexPetSpritesheet } from '../codex-pets.js';
 import { syncCommunityPets } from '../community-pets-sync.js';
 import { readDesignSystem } from '../design-systems.js';
-import { listBrands } from '../brands.js';
+import { listBrands, readBrandManifest } from '../brands.js';
 import {
   LocalDesignSystemImportError,
   importLocalDesignSystemProject,
@@ -614,11 +614,20 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   });
 
   // Brand asset bytes (logotype/character-sheet/etc referenced from brand.md
-  // and deliverable channel docs). Same traversal guard shape as the skills
-  // asset route above: resolve against the brand's assets/ root and reject
+  // and deliverable channel docs). Same shape as the skills asset route above:
+  // gate the id against the registry FIRST (as the skills route gates on
+  // findSkillById), then resolve against the brand's assets/ root and reject
   // anything that escapes it.
   app.get('/api/brands/:id/assets/*splat', async (req, res) => {
     try {
+      // readBrandManifest runs isValidBrandId internally, so a traversal id
+      // (`.`/`..`/embedded slashes) returns null and 404s BEFORE assetsRoot is
+      // built from it — otherwise a `../` id would relocate assetsRoot itself
+      // outside BRANDS_DIR and defeat the containment guard below.
+      const manifest = await readBrandManifest(BRANDS_DIR, req.params.id);
+      if (!manifest) {
+        return res.status(404).type('text/plain').send('brand not found');
+      }
       const splatParam = (req.params as { splat?: string | string[] }).splat;
       const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam || '');
       const assetsRoot = path.resolve(BRANDS_DIR, req.params.id, 'assets');

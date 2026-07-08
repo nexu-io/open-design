@@ -6441,10 +6441,19 @@ export async function startServer({
 
   // Brand asset bytes (logotype/character-sheet/etc referenced from brand.md
   // and deliverable channel docs). Mirrors the /api/skills/:id/assets/*splat
-  // traversal guard above: resolve the requested path against the brand's
-  // assets/ root and reject anything that escapes it.
+  // route above: gate the id against the registry FIRST (as the skills route
+  // gates on findSkillById), then resolve against the brand's assets/ root and
+  // reject anything that escapes it.
   app.get('/api/brands/:id/assets/*splat', async (req, res) => {
     try {
+      // readBrandManifest runs isValidBrandId internally, so a traversal id
+      // (`.`/`..`/embedded slashes) returns null and 404s BEFORE assetsRoot is
+      // built from it — otherwise a `../` id would relocate assetsRoot itself
+      // outside BRANDS_DIR and defeat the containment guard below.
+      const manifest = await readBrandManifest(BRANDS_DIR, req.params.id);
+      if (!manifest) {
+        return res.status(404).type('text/plain').send('brand not found');
+      }
       const splatParam = req.params.splat;
       const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam || '');
       const assetsRoot = path.resolve(BRANDS_DIR, req.params.id, 'assets');

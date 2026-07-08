@@ -49,4 +49,17 @@ describe('brands routes', () => {
     const evil = await fetch(`${baseUrl}/api/brands/bodoc/assets/..%2F..%2Fbodoc-iam%2FDESIGN.md`);
     expect([400, 403, 404]).toContain(evil.status);
   });
+  it('rejects id-segment traversal in the asset route (LFI guard)', async () => {
+    // `..%2F...` survives URL parsing as a single :id segment (no literal slash),
+    // so it reaches the server as req.params.id = '../design-templates/web-prototype'.
+    // Without the manifest gate, assetsRoot was resolved from this raw id and
+    // relocated OUTSIDE BRANDS_DIR onto a real assets/ dir, serving its real
+    // template.html (arbitrary-file read). The registry gate must 404 first.
+    const lfi = await fetch(
+      `${baseUrl}/api/brands/..%2Fdesign-templates%2Fweb-prototype/assets/template.html`,
+    );
+    expect([400, 403, 404]).toContain(lfi.status);
+    const lfi2 = await fetch(`${baseUrl}/api/brands/..%2F..%2Fbodoc-iam/assets/DESIGN.md`);
+    expect([400, 403, 404]).toContain(lfi2.status);
+  });
 });
