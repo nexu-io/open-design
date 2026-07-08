@@ -1581,13 +1581,22 @@
   max-width: 560px;
   border-left: 1px solid var(--border);
   background: var(--bg-panel);
-  overflow: auto;
-  scrollbar-gutter: stable;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   /* Slide + fade in when "Plugin info" reveals the panel. A soft,
      slightly longer ease-out keeps it from snapping. */
   animation: ds-modal-sidebar-in 340ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* Scroll lives in the body so the collapse handle can stay pinned on the
+   sidebar seam without being buried by panel content (OPEND-418). */
+.ds-modal-sidebar-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  display: flex;
+  flex-direction: column;
 }
 @keyframes ds-modal-sidebar-in {
   from {
@@ -1646,8 +1655,8 @@
   border-radius: 8px 0 0 8px;
 }
 .ds-modal-stage-handle.is-collapse {
-  position: sticky;
   left: 0;
+  z-index: 5;
   border-left: none;
   border-radius: 0 8px 8px 0;
 }
