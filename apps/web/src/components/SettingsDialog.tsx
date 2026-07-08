@@ -8153,6 +8153,28 @@ function CritiqueTheaterSection() {
   const waitTeamEnabled = useWaitTeamEnabled();
   const route = useRoute();
   const activeProjectId = route.kind === 'project' ? route.projectId : null;
+
+  const handleDesignJuryToggle = () => {
+    const next = !enabled;
+    trackSettingsDesignReviewClick(analytics.track, {
+      page_name: 'settings',
+      area: 'design_review',
+      element: 'enable_toggle',
+      status_before: enabled ? 'on' : 'off',
+      status_after: next ? 'on' : 'off',
+      has_active_project: activeProjectId !== null,
+    });
+    if (activeProjectId !== null) {
+      void setCritiqueTheaterEnabled(next, { projectId: activeProjectId });
+    } else {
+      void setCritiqueTheaterEnabled(next);
+    }
+  };
+
+  const handleWaitTeamToggle = () => {
+    setWaitTeamEnabled(!waitTeamEnabled);
+  };
+
   return (
     <section className="settings-section">
       <div className="section-head">
@@ -8161,74 +8183,82 @@ function CritiqueTheaterSection() {
           <p className="hint">{t('advancedDesign.settingsNavHint')}</p>
         </div>
       </div>
-      <div className="settings-subsection">
-        <h4 className="settings-subsection-title">{t('advancedDesign.designJuryTitle')}</h4>
-        <label className="field">
-          <span className="field-label">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(e) => {
-                const next = e.target.checked;
-                trackSettingsDesignReviewClick(analytics.track, {
-                  page_name: 'settings',
-                  area: 'design_review',
-                  element: 'enable_toggle',
-                  status_before: enabled ? 'on' : 'off',
-                  status_after: next ? 'on' : 'off',
-                  has_active_project: activeProjectId !== null,
-                });
-                if (activeProjectId !== null) {
-                  void setCritiqueTheaterEnabled(next, { projectId: activeProjectId });
-                } else {
-                  void setCritiqueTheaterEnabled(next);
-                }
-              }}
-            />
-            {' '}
-            {t('critiqueTheater.settingsEnabledLabel')}
-          </span>
-          <small className="hint">
-            {t('critiqueTheater.settingsEnabledDescription')}
-          </small>
-          {activeProjectId !== null ? (
-            <small className="hint">
-              {t('critiqueTheater.settingsEnabledProjectHint')}
-            </small>
-          ) : (
-            <small className="hint">
-              {t('critiqueTheater.settingsEnabledNoProjectHint')}
-            </small>
-          )}
-        </label>
-      </div>
-      <div className="settings-divider" aria-hidden="true" />
-      <div className="settings-subsection">
-        <h4 className="settings-subsection-title">{t('advancedDesign.multiAgentTitle')}</h4>
-        <label className="field">
-          <span className="field-label">
-            <input
-              type="checkbox"
-              checked={waitTeamEnabled}
-              onChange={(e) => {
-                const next = e.target.checked;
-                setWaitTeamEnabled(next);
-              }}
-            />
-            {' '}
-            {t('waiteam.settingsEnabledLabel')}
-          </span>
-          <small className="hint">
-            {t('waiteam.settingsEnabledDescription')}
-          </small>
-          {waitTeamEnabled ? (
-            <small className="hint" style={{ color: 'var(--od-color-accent, #3b82f6)' }}>
-              💡 {t('waiteam.settingsUsageHint')}
-            </small>
-          ) : null}
-        </label>
+      <div className="settings-advanced-toggle-list">
+        <AdvancedDesignToggleCard
+          title={t('advancedDesign.designJuryTitle')}
+          label={t('critiqueTheater.settingsEnabledLabel')}
+          description={t('critiqueTheater.settingsEnabledDescription')}
+          detail={
+            activeProjectId !== null
+              ? t('critiqueTheater.settingsEnabledProjectHint')
+              : t('critiqueTheater.settingsEnabledNoProjectHint')
+          }
+          checked={enabled}
+          onToggle={handleDesignJuryToggle}
+        />
+        <AdvancedDesignToggleCard
+          title={t('advancedDesign.multiAgentTitle')}
+          label={t('waiteam.settingsEnabledLabel')}
+          description={t('waiteam.settingsEnabledDescription')}
+          detail={waitTeamEnabled ? t('waiteam.settingsUsageHint') : undefined}
+          checked={waitTeamEnabled}
+          onToggle={handleWaitTeamToggle}
+          detailTone={waitTeamEnabled ? 'accent' : 'muted'}
+        />
       </div>
     </section>
+  );
+}
+
+interface AdvancedDesignToggleCardProps {
+  title: string;
+  label: string;
+  description: string;
+  detail?: string;
+  checked: boolean;
+  onToggle: () => void;
+  detailTone?: 'muted' | 'accent';
+}
+
+function AdvancedDesignToggleCard({
+  title,
+  label,
+  description,
+  detail,
+  checked,
+  onToggle,
+  detailTone = 'muted',
+}: AdvancedDesignToggleCardProps) {
+  return (
+    <div className={`settings-advanced-toggle-card${checked ? ' is-on' : ''}`}>
+      <div className="settings-advanced-toggle-copy">
+        <p className="settings-advanced-toggle-eyebrow">{title}</p>
+        <h4>{label}</h4>
+        <p>{description}</p>
+        {detail ? (
+          <p
+            className={
+              'settings-advanced-toggle-detail' +
+              (detailTone === 'accent' ? ' settings-advanced-toggle-detail--accent' : '')
+            }
+          >
+            {detail}
+          </p>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        className="settings-advanced-switch"
+        onClick={onToggle}
+      >
+        <span className="settings-advanced-switch-track" aria-hidden="true">
+          <span className="settings-advanced-switch-thumb" />
+        </span>
+        <VisuallyHidden>{label}</VisuallyHidden>
+      </button>
+    </div>
   );
 }
 
