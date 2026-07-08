@@ -6,6 +6,7 @@ import type {
 
 import {
   ResourceHubError,
+  createResourceHubClient,
   hasExplicitResourceHubConfig,
   readResourceHubPrincipal,
 } from '../../integrations/resource-hub.js';
@@ -110,6 +111,55 @@ export function registerResourceSharingRoutes(
           await orchestrator.pull(
             paramStr(req.params.kind),
             paramStr(req.params.id),
+          ),
+        );
+      } catch (error) {
+        handleError(res, error);
+      }
+    },
+  );
+
+  // Publish a hub resource's latest version as a PUBLIC snapshot. Thin wrapper
+  // over the hub (owner-gating enforced server-side). Name comes via query so
+  // this works regardless of body-parser wiring. Dev-panel E2E surface.
+  app.post(
+    '/api/resources/:id/snapshot',
+    requireLocalDaemonRequest,
+    async (req: Request, res: Response) => {
+      const principal = readResourceHubPrincipal();
+      if (!principal) {
+        res.status(400).json({ error: 'missing_principal' });
+        return;
+      }
+      try {
+        const nameRaw = req.query.name;
+        const name =
+          typeof nameRaw === 'string' && nameRaw.trim()
+            ? nameRaw.trim()
+            : 'snapshot';
+        res.json(
+          await createResourceHubClient().publishSnapshot(
+            principal,
+            paramStr(req.params.id),
+            { name, ref: 'latest' },
+          ),
+        );
+      } catch (error) {
+        handleError(res, error);
+      }
+    },
+  );
+
+  // Read a public snapshot by slug, proxied so the browser avoids CORS. The hub
+  // call itself is UNAUTHENTICATED — the public plane needs no principal.
+  app.get(
+    '/api/public-snapshots/:slug',
+    requireLocalDaemonRequest,
+    async (req: Request, res: Response) => {
+      try {
+        res.json(
+          await createResourceHubClient().getPublicSnapshot(
+            paramStr(req.params.slug),
           ),
         );
       } catch (error) {

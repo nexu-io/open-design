@@ -17,6 +17,17 @@ import { useCallback, useEffect, useState } from 'react';
 type Resource = ResourceSummary;
 type Detail = ResourceDetailResponse;
 
+interface PublicSnap {
+  slug: string;
+  name: string;
+  kind: string;
+  createdAt: string;
+  manifest: {
+    digest: string;
+    entries: { path: string; type: string; blobDigest: string | null }[];
+  } | null;
+}
+
 async function api(path: string, method = 'GET'): Promise<unknown> {
   const res = await fetch(path, { method });
   const text = await res.text();
@@ -38,6 +49,8 @@ export default function ResourcePanelPage(): React.ReactElement {
   const [shareId, setShareId] = useState('');
   const [pullKind, setPullKind] = useState('design_system');
   const [pullId, setPullId] = useState('');
+  const [viewSlug, setViewSlug] = useState('');
+  const [publicSnap, setPublicSnap] = useState<PublicSnap | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -77,6 +90,40 @@ export default function ResourcePanelPage(): React.ReactElement {
       await refresh();
     } catch (error) {
       setStatus(`pull failed: ${(error as Error).message}`);
+    }
+  };
+
+  // Publish a resource's latest version as a PUBLIC snapshot, then prefill the
+  // public viewer with the returned slug.
+  const publishSnapshot = async (id: string) => {
+    setStatus('publishing snapshot…');
+    try {
+      const r = (await api(
+        `/api/resources/${encodeURIComponent(id)}/snapshot?name=${encodeURIComponent(
+          `DevPanel ${id.slice(0, 6)}`,
+        )}`,
+        'POST',
+      )) as { slug: string };
+      setStatus(`snapshot published -> ${r.slug}`);
+      setViewSlug(r.slug);
+    } catch (error) {
+      setStatus(`snapshot failed: ${(error as Error).message}`);
+    }
+  };
+
+  // Read a public snapshot by slug — the UNAUTHENTICATED public plane (proxied
+  // through the daemon to dodge CORS, but the hub call carries no principal).
+  const viewPublic = async () => {
+    setStatus('reading public snapshot…');
+    try {
+      const r = (await api(
+        `/api/public-snapshots/${encodeURIComponent(viewSlug)}`,
+      )) as PublicSnap;
+      setPublicSnap(r);
+      setStatus(`public read ok: ${r.name}`);
+    } catch (error) {
+      setPublicSnap(null);
+      setStatus(`public read failed: ${(error as Error).message}`);
     }
   };
 
@@ -151,12 +198,54 @@ export default function ResourcePanelPage(): React.ReactElement {
               <td>{r.local ? `${r.local.role} v${r.local.lastSyncedVersion ?? '?'}` : '—'}</td>
               <td>
                 <button onClick={() => void inspect(r.id)}>inspect</button>{' '}
-                <button onClick={() => void pull(r.kind, r.id)}>pull</button>
+                <button onClick={() => void pull(r.kind, r.id)}>pull</button>{' '}
+                <button
+                  data-testid="snapshot-btn"
+                  onClick={() => void publishSnapshot(r.id)}
+                >
+                  snapshot
+                </button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      <section style={{ marginTop: 24 }}>
+        <h3>Public snapshot <small style={{ color: '#999' }}>(no auth — slug only)</small></h3>
+        <input
+          data-testid="view-slug"
+          placeholder="snapshot slug"
+          value={viewSlug}
+          onChange={(e) => setViewSlug(e.target.value)}
+          style={{ width: 320 }}
+        />
+        <button data-testid="view-public-btn" onClick={() => void viewPublic()}>
+          view public
+        </button>
+        {publicSnap && (
+          <div data-testid="public-snap" style={{ marginTop: 12 }}>
+            <p>
+              <strong>{publicSnap.name}</strong> ({publicSnap.kind}) —{' '}
+              <code>{publicSnap.slug}</code>
+            </p>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ textAlign: 'left' }}><th>path</th><th>type</th><th>blob digest</th></tr>
+              </thead>
+              <tbody>
+                {(publicSnap.manifest?.entries ?? []).map((e) => (
+                  <tr key={e.path} data-testid="public-entry">
+                    <td>{e.path}</td>
+                    <td>{e.type}</td>
+                    <td><code>{e.blobDigest ?? '—'}</code></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {detail && (
         <section data-testid="detail" style={{ marginTop: 24 }}>

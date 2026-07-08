@@ -77,6 +77,23 @@ export interface Manifest {
   entries: ManifestEntry[];
 }
 
+export interface SnapshotRecord {
+  slug: string;
+  name: string;
+  kind: string;
+  versionId: string;
+  createdAt: string;
+}
+
+// Public read shape (no team/member/resource ids — the hub omits them).
+export interface PublicSnapshot {
+  slug: string;
+  name: string;
+  kind: string;
+  createdAt: string;
+  manifest: Manifest | null;
+}
+
 export interface PublishVersionInput {
   manifestDigest: string;
   entries: ManifestEntryInput[];
@@ -402,6 +419,47 @@ export function createResourceHubClient(options: ResourceHubClientOptions = {}) 
         );
       }
       return new Uint8Array(await response.arrayBuffer());
+    },
+
+    // Publish a version as a public snapshot (authed; owner-gating is enforced
+    // server-side by the hub). Returns the opaque public slug.
+    async publishSnapshot(
+      principal: ResourceHubPrincipal,
+      resourceId: string,
+      input: { name: string; ref?: string; versionId?: string },
+    ): Promise<SnapshotRecord> {
+      return request<SnapshotRecord>(
+        principal,
+        'POST',
+        `/api/v1/resources/${encodeURIComponent(resourceId)}/snapshots`,
+        input,
+      );
+    },
+
+    // Read a public snapshot by slug. Carries NO principal/token — this
+    // faithfully exercises the hub's unauthenticated public plane.
+    async getPublicSnapshot(slug: string): Promise<PublicSnapshot> {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetchImpl(
+          new URL(
+            `/api/v1/public/snapshots/${encodeURIComponent(slug)}`,
+            config.baseUrl,
+          ),
+          { method: 'GET', signal: controller.signal },
+        );
+        const text = await response.text();
+        const payload = text ? JSON.parse(text) : {};
+        if (!response.ok) {
+          const code =
+            typeof payload?.error === 'string' ? payload.error : 'unknown';
+          throw new ResourceHubError(response.status, code, payload?.message);
+        }
+        return payload as PublicSnapshot;
+      } finally {
+        clearTimeout(timeout);
+      }
     },
   };
 }
