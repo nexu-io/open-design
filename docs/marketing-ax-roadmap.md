@@ -46,7 +46,7 @@ Notes: 상태 컬럼은 작업 진행 시 갱신 — 메이저 트랙 완료/착
 
 ## 완료 부수 트랙
 
-- **bodoc 디자인시스템 포팅** (`design-systems/bodoc/`) — brand-blind IAM 수정. DESIGN.md prose-only. (Braze IAM 종속)
+- **bodoc 디자인시스템 포팅** (`brands/bodoc/`, 스킨 DS는 `design-systems/bodoc-iam/`) — brand-blind IAM 수정. DESIGN.md prose-only. (Braze IAM 종속)
 
 ---
 

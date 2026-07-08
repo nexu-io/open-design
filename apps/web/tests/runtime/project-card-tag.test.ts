@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { BADGE_TONES } from '@marketing-ax/contracts';
-import { projectCategory, resolveProjectBadge, TONE_CLASS } from '../../src/runtime/project-card-tag';
+import { projectCategory, resolveProjectBadge, resolveProjectBrandLabel, TONE_CLASS } from '../../src/runtime/project-card-tag';
 
 const proj = (metadata: any, extra: any = {}): any => ({
   id: 'p', name: 'n', skillId: null, designSystemId: null,
@@ -30,6 +30,18 @@ describe('resolveProjectBadge', () => {
   it('TONE_CLASS covers every BADGE_TONES entry (no tuple↔map drift)', () => {
     for (const tone of BADGE_TONES) expect(TONE_CLASS[tone]).toBeTruthy();
     expect(Object.keys(TONE_CLASS).length).toBe(BADGE_TONES.length);
+  });
+});
+
+describe('resolveProjectBrandLabel', () => {
+  it('returns the brandId when present', () => {
+    expect(resolveProjectBrandLabel(proj({ kind: 'prototype' }, { brandId: 'bodoc' }))).toBe('bodoc');
+  });
+  it('returns null when brandId is absent', () => {
+    expect(resolveProjectBrandLabel(proj({ kind: 'prototype' }))).toBeNull();
+  });
+  it('returns null when brandId is an empty string', () => {
+    expect(resolveProjectBrandLabel(proj({ kind: 'prototype' }, { brandId: '' }))).toBeNull();
   });
 });
 
