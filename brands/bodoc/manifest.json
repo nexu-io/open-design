@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "od-brand/v1",
+  "id": "bodoc",
+  "title": "보닥",
+  "core": "brand.md",
+  "deliverables": {
+    "blog": { "file": "deliverables/blog.md" },
+    "cardnews": { "file": "deliverables/cardnews.md" },
+    "iam": { "file": "deliverables/iam.md", "designSystem": "bodoc-iam" }
+  }
+}
