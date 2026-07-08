@@ -12,6 +12,7 @@ import { Dialog, DialogFooter, DialogTitle } from '@open-design/components';
 import type {
   ApplyResult,
   ChatSessionMode,
+  ChatTeamSelection,
   ConnectorDetail,
   InputFieldSpec,
   McpServerConfig,
@@ -340,6 +341,7 @@ export function HomeView({
   } | null>(null);
   const [sessionMode, setSessionMode] = useState<ChatSessionMode>('design');
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
+  const [activeTeam, setActiveTeam] = useState<ChatTeamSelection | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
   const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
@@ -1520,28 +1522,15 @@ export function HomeView({
     }
   }
 
-  function useConnector(connector: ConnectorDetail, nextPrompt: string) {
-    setSelectedConnectorContexts((current) => (
-      current.some((item) => item.connector.id === connector.id)
-        ? current
-        : [...current, { connector, inlineBacked: true }]
-    ));
+  function useTeam(team: ChatTeamSelection, nextPrompt: string) {
+    setActiveTeam(team);
     setPrompt(nextPrompt);
-    setPromptEditedByUser(false);
     setError(null);
     focusPromptAtEnd();
   }
 
-  function removeConnectorContext(connectorId: string) {
-    const connector = selectedConnectorContexts.find((item) => item.connector.id === connectorId)?.connector ?? null;
-    setSelectedConnectorContexts((current) => current.filter((item) => item.connector.id !== connectorId));
-    if (connector) {
-      setPrompt((current) => removeContextMentionsFromPrompt(current, [
-        connector.name,
-        connector.id,
-      ]));
-      setPromptEditedByUser(true);
-    }
+  function clearTeam() {
+    setActiveTeam(null);
   }
 
   function queuePluginAuthoring(chipId: string | null, goal?: string) {
@@ -1955,6 +1944,7 @@ export function HomeView({
         ...(workingDirToken ? { workingDirToken } : {}),
         ...(contextLinkedDirs.length > 0 ? { linkedDirs: contextLinkedDirs } : {}),
         conversationMode: sessionMode,
+        team: activeTeam,
         ...(examplePromptToSend ? { examplePromptContext: examplePromptToSend } : {}),
       });
       if (accepted === false) {
@@ -1973,6 +1963,7 @@ export function HomeView({
       setSelectedMcpContexts([]);
       setSelectedConnectorContexts([]);
       setContextWorkspaceItems([]);
+      setActiveTeam(null);
     } catch (err) {
       // A submit handler that throws (instead of resolving false) lands on
       // the same recovery path as a rejected creation.
@@ -2061,6 +2052,9 @@ export function HomeView({
         onPickMcp={useMcpServer}
         onPickConnector={useConnector}
         onPickChip={pickChip}
+        activeTeam={activeTeam}
+        onPickTeam={useTeam}
+        onClearActiveTeam={clearTeam}
         contextItemCount={contextItemCount}
         error={error}
         workingDir={workingDir}

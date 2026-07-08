@@ -35,6 +35,7 @@ type Pool struct {
 	eventSink      EventSink             // 事件转发回调（可选）
 	projectId      string                // 运行项目上下文
 	conversationId string                // 运行会话上下文
+	mainAgentID    string                // 主 Agent，只有它的事件会进入聊天窗
 }
 
 // EventSink 由外部（如 odteam CLI）设置的回调，用于流式转发
@@ -52,6 +53,7 @@ type ManagedAgent struct {
 	client  *daemon.Client
 	workDir        string
 	onEvent        EventSink
+	isMain         bool // 是否为主 Agent，主 Agent 的事件才进入聊天窗
 	// 运行上下文，传递给 daemon /api/chat
 	projectId      string
 	conversationId string
@@ -187,6 +189,7 @@ func (p *Pool) registerAgent(spec config.AgentSpec, dc *daemon.Client) {
 		cancel:  cancel,
 		client:  dc,
 		workDir: p.workDir,
+		isMain:  p.mainAgentID == spec.ID,
 	}
 
 	subCh := p.bus.Subscribe(spec.ID, 50)
@@ -274,7 +277,8 @@ func (ma *ManagedAgent) executeTask(task *TaskAssignment) *TaskResult {
 	for evt := range eventCh {
 		// 流式转发：将每个 daemon SSE 事件通过回调传递给外部消费者
 		// （如 odteam CLI），使其能实时输出到 stdout 供 daemon 转发。
-		if ma.onEvent != nil {
+		// 仅主 Agent 的事件进入聊天窗，避免非主 Agent 消息 flooding。
+		if ma.onEvent != nil && ma.isMain {
 			ma.onEvent(ma.Spec.ID, evt.Type, evt.Data)
 		}
 		switch evt.Type {
@@ -609,6 +613,18 @@ func (p *Pool) ListRuntimes() []protocol.AgentRuntime {
 // SetDaemonAddr 动态设置 daemon 地址（CLI 启动时调用）
 func SetDaemonAddr(addr string) {
 	DaemonAddr = addr
+}
+
+// SetMainAgent 设置主 Agent ID。只有主 Agent 的 SSE 事件会被转发
+// 到前端聊天窗，其它 Agent 的事件会被静默消费，避免多 Agent 同时
+// 输出导致聊天窗卡顿。
+func (p *Pool) SetMainAgent(id string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mainAgentID = id
+	for _, ma := range p.agents {
+		ma.isMain = ma.Spec.ID == id
+	}
 }
 
 // SetEventSink 设置事件转发回调。已在 pool 中的 agent 和后续

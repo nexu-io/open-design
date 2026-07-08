@@ -42,14 +42,19 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  align-content: flex-start;
-  flex-wrap: wrap;
   gap: 4px;
   min-height: 0;
   padding: 6px;
   background: var(--bg-subtle);
   border-bottom: 1px solid var(--border-soft);
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.mention-tabs::-webkit-scrollbar { display: none; }
 .mention-tab {
   flex: 0 0 auto;
   display: inline-flex;

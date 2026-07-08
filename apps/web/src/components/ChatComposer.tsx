@@ -91,6 +91,7 @@ import {
   mentionTokenPresent,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
+import { fetchAgentsCached } from '../state/agentsCache';
 import { generateTeams, type GeneratedTeam, MODE_LABELS, MODE_DESCRIPTIONS, MODE_ICONS, ROLE_LABELS } from '../utils/teamGenerator';
 import { useWaitTeamEnabled } from './Theater';
 import { workspaceContextLinkedDir, workspaceContextLinkedDirs } from './workspace-context';
@@ -716,7 +717,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       saveComposerDraft(draftStorageKey, draft);
     }, [draftStorageKey, draft]);
 
-    // Scan local CLI agents and generate preset teams when waiteam is enabled.
+    // Reuse the cached local CLI scan (populated by onboarding / App startup)
+    // so opening the @-mention popover doesn't block on a fresh 20s scan.
     useEffect(() => {
       if (!waitTeamEnabled) {
         setGeneratedTeams([]);
@@ -724,11 +726,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         return;
       }
       let cancelled = false;
-      void fetch('/api/agents')
-        .then((res) => res.json())
-        .then((data: { agents?: Array<{ id: string; name: string; available: boolean }> }) => {
+      void fetchAgentsCached()
+        .then((agents) => {
           if (cancelled) return;
-          const agents = data.agents ?? [];
           setAvailableAgents(agents);
           const teams = generateTeams(agents);
           if (!cancelled) setGeneratedTeams(teams);

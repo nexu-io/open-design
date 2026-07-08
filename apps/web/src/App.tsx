@@ -14,7 +14,7 @@ import {
   projectKindFromMetadataToTracking,
   fidelityToTracking,
 } from '@open-design/contracts/analytics';
-import type { AmrModelsResponse, ChatSessionMode, RunContextSelection } from '@open-design/contracts';
+import type { AmrModelsResponse, ChatSessionMode, ChatTeamSelection, RunContextSelection } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
 import { EntryView } from './components/EntryView';
 import type { IntegrationTab } from './components/IntegrationsView';
@@ -57,6 +57,7 @@ import {
   uploadProjectFiles,
   replaceProjectWorkingDir,
 } from './providers/registry';
+import { writeAgentsCache } from './state/agentsCache';
 import {
   RUNS_CHANGED_EVENT,
   fetchAmrModels,
@@ -131,6 +132,7 @@ type AppCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   pluginInputs?: Record<string, unknown>;
   initialRunContext?: RunContextSelection | null;
   conversationMode?: ChatSessionMode;
+  team?: ChatTeamSelection | null;
   autoSendFirstMessage?: boolean;
   requestId?: string;
   pendingFiles?: File[];
@@ -819,22 +821,24 @@ function AppInner() {
         signal: agentStreamAbort.signal,
         onAgent: (agent) => {
           if (cancelled || !isCurrentAgentStreamRequest(agentRequestId)) return;
-          setAgents((current) =>
-            mergeAmrModelsIntoAgents(
+          setAgents((current) => {
+            const next = mergeAmrModelsIntoAgents(
               upsertAgent(current, agent),
               amrModelsRef.current,
-            ),
-          );
+            );
+            writeAgentsCache(next);
+            return next;
+          });
         },
       })
         .then((list) => {
           if (cancelled || !isCurrentAgentStreamRequest(agentRequestId)) return;
-          setAgents(
-            mergeAmrModelsIntoAgents(
-              orderAgentsByRegistry(list),
-              amrModelsRef.current,
-            ),
+          const next = mergeAmrModelsIntoAgents(
+            orderAgentsByRegistry(list),
+            amrModelsRef.current,
           );
+          setAgents(next);
+          writeAgentsCache(next);
         })
         .catch((err) => {
           if (
@@ -1555,6 +1559,16 @@ function AppInner() {
           } else {
             window.sessionStorage.removeItem(
               `od:auto-send-context:${result.project.id}`,
+            );
+          }
+          if (input.team && input.team.id) {
+            window.sessionStorage.setItem(
+              `od:auto-send-team:${result.project.id}`,
+              JSON.stringify(input.team),
+            );
+          } else {
+            window.sessionStorage.removeItem(
+              `od:auto-send-team:${result.project.id}`,
             );
           }
         } catch {

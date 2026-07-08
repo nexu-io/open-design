@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ApplyResult,
   ChatSessionMode,
+  ChatTeamSelection,
   InstalledPluginRecord,
   ProjectKind,
   ProjectMetadata,
@@ -59,6 +60,9 @@ export interface PluginLoopSubmit {
   // it. Null/absent for web picks (gate inactive) or no selection.
   workingDirToken?: string | null;
   conversationMode?: ChatSessionMode;
+  // Multi-agent team selected via @team mention on Home. Carried to the
+  // first auto-sent message so the daemon routes through odteam.
+  team?: ChatTeamSelection | null;
   // Files staged on Home before the project exists. App uploads them
   // into the created project's Design Files before the first auto-send.
   attachments?: File[];

@@ -698,6 +698,7 @@ export function EntryShell({
       ...(payload.pluginInputs ? { pluginInputs: payload.pluginInputs } : {}),
       ...(payload.initialRunContext ? { initialRunContext: payload.initialRunContext } : {}),
       ...(payload.conversationMode ? { conversationMode: payload.conversationMode } : {}),
+      ...(payload.team ? { team: payload.team } : {}),
       ...(payload.attachments && payload.attachments.length > 0
         ? { pendingFiles: payload.attachments }
         : {}),

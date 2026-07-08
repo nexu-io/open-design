@@ -30,6 +30,8 @@ import type {
   InstalledPluginRecord,
   McpServerConfig,
   WorkspaceContextItem,
+  AgentInfo,
+  ChatTeamSelection,
 } from '@open-design/contracts';
 import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
@@ -59,6 +61,9 @@ import {
   inlineMentionToken,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
+import { generateTeams, type GeneratedTeam, MODE_LABELS, MODE_ICONS } from '../utils/teamGenerator';
+import { useWaitTeamEnabled } from './Theater';
+import { fetchAgentsCached } from '../state/agentsCache';
 import { useI18n, useT } from '../i18n';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import {
@@ -207,6 +212,12 @@ interface Props {
   connectorOptions?: ConnectorDetail[];
   pendingPluginId: string | null;
   pendingChipId: string | null;
+  // Local CLI agents used to generate @-mention WaitTeams entries.
+  // Currently selected team from the @-mention popover. Rendering as a chip
+  // lets the user see and clear it before sending.
+  activeTeam?: ChatTeamSelection | null;
+  onPickTeam?: (team: ChatTeamSelection, nextPrompt: string) => void;
+  onClearActiveTeam?: () => void;
   submitDisabled?: boolean;
   // True while the submitted run is still creating its project/conversation
   // (#4082). Distinct from `submitDisabled`: it swaps the send button into a
@@ -236,7 +247,7 @@ interface Props {
   executionSwitcher?: ReactNode;
 }
 
-type HomeMentionTab = 'all' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
+type HomeMentionTab = 'all' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors' | 'teams';
 
 // In the combined "All" overview, every surface is capped to a handful of top
 // matches so no single section floods the picker. The dedicated "Design files"
@@ -335,6 +346,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     connectorOptions = EMPTY_CONNECTOR_OPTIONS,
     pendingPluginId,
     pendingChipId,
+    activeTeam = null,
+    onPickTeam = () => undefined,
+    onClearActiveTeam = () => undefined,
     submitDisabled = false,
     submitting = false,
     onPickPlugin,
@@ -399,6 +413,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // getContextMention regex) + the caret box the popover anchors to.
   const [mentionTrigger, setMentionTrigger] = useState<{ query: string } | null>(null);
   const [caretRect, setCaretRect] = useState<CaretRect | null>(null);
+  const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([]);
+  const [agentsLoadingForTeams, setAgentsLoadingForTeams] = useState(false);
+  const waitTeamEnabled = useWaitTeamEnabled();
   // The scenario the placeholder carousel is currently showing. A Send on an
   // empty composer submits THIS scenario's text + template (see handleSend).
   const [carouselScenario, setCarouselScenario] = useState<PlaceholderScenario | null>(null);
@@ -506,7 +523,32 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         : [],
     [connectorOptions, mentionActive, mentionQuery],
   );
+  const teamMatches = useMemo(() => {
+    if (!mentionActive || !waitTeamEnabled) return [];
+    const teams = generateTeams(availableAgents);
+    return teams
+      .filter((team) => team.name.toLowerCase().includes(mentionQuery.toLowerCase()))
+      .slice(0, 6);
+  }, [mentionActive, mentionQuery, availableAgents, waitTeamEnabled]);
   const pickerOpen = active && mentionActive;
+  useEffect(() => {
+    if (mentionTab !== 'teams' && mentionTab !== 'all') return;
+    if (availableAgents.length > 0) return;
+    let cancelled = false;
+    setAgentsLoadingForTeams(true);
+    void fetchAgentsCached()
+      .then((list) => {
+        if (cancelled) return;
+        setAvailableAgents(list);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailableAgents([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAgentsLoadingForTeams(false);
+      });
+    return () => { cancelled = true; };
+  }, [waitTeamEnabled, pickerOpen, mentionTab, availableAgents.length]);
   const tabs: Array<{ id: HomeMentionTab; label: string; count: number }> = [
     // The All overview previews at most HOME_MENTION_ALL_TAB_PREVIEW files, so
     // its badge counts the previewed slice — not the full staged total — to keep
@@ -518,12 +560,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     { id: 'skills', label: t('homeHero.skills'), count: skillMatches.length },
     { id: 'mcp', label: 'MCP', count: mcpMatches.length },
     { id: 'connectors', label: 'Connectors', count: connectorMatches.length },
+    { id: 'teams', label: t('chat.mentionTabTeams', { defaultValue: 'Teams' }), count: teamMatches.length },
   ];
   const showFiles = mentionTab === 'all' || mentionTab === 'files';
   const showPlugins = mentionTab === 'all' || mentionTab === 'plugins';
   const showSkills = mentionTab === 'all' || mentionTab === 'skills';
   const showMcp = mentionTab === 'all' || mentionTab === 'mcp';
   const showConnectors = mentionTab === 'all' || mentionTab === 'connectors';
+  const showTeams = mentionTab === 'all' || mentionTab === 'teams';
   const visibleSections: HomeMentionSection[] = [
     showFiles
       ? {
@@ -597,13 +641,28 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           })),
         }
       : null,
+    showTeams
+      ? {
+          id: 'teams',
+          label: t('chat.mentionTabTeams', { defaultValue: 'Teams' }),
+          options: teamMatches.map((team) => ({
+            id: `team-${team.id}`,
+            icon: 'users',
+            title: team.name,
+            description: team.description,
+            meta: team.assignments.map((a) => a.agentName).join(', '),
+            onPick: () => pickTeam(team),
+          })),
+        }
+      : null,
   ].filter((section): section is HomeMentionSection => Boolean(section?.options.length));
   const visiblePickerOptions = visibleSections.flatMap((section) => section.options);
   const visibleLoading =
-    (mentionTab === 'all' && (pluginsLoading || skillsLoading || mcpLoading)) ||
+    (mentionTab === 'all' && (pluginsLoading || skillsLoading || mcpLoading || agentsLoadingForTeams)) ||
     (mentionTab === 'plugins' && pluginsLoading) ||
     (mentionTab === 'skills' && skillsLoading) ||
-    (mentionTab === 'mcp' && mcpLoading);
+    (mentionTab === 'mcp' && mcpLoading) ||
+    (mentionTab === 'teams' && agentsLoadingForTeams);
   const promptMentionEntities = useMemo(
     () =>
       buildHomeMentionEntities({
@@ -617,6 +676,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         selectedPluginContexts,
         stagedFiles,
         skillOptions,
+        activeTeam,
       }),
     [
       activePluginRecord,
@@ -629,6 +689,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       selectedPluginContexts,
       stagedFiles,
       skillOptions,
+      activeTeam,
     ],
   );
   const fieldByName = useMemo(
@@ -929,6 +990,17 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPickConnector(connector, next);
   }
 
+  function pickTeam(team: GeneratedTeam) {
+    const token = inlineMentionToken(team.name);
+    const next = insertHomeMention(token, {
+      id: team.id,
+      kind: 'team',
+      label: team.name,
+      token,
+    });
+    onPickTeam(team, next);
+  }
+
   function insertInlineMentionSeparator() {
     const current = editorRef.current?.getText() ?? prompt;
     if (current.trim() && !/\s$/.test(current)) {
@@ -1193,6 +1265,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     stagedFiles.length > 0 ||
     showActivePluginRow ||
     Boolean(activeSkillTitle) ||
+    Boolean(activeTeam) ||
     contextOnlyPlugins.length > 0 ||
     contextOnlyMcpServers.length > 0 ||
     contextOnlyConnectors.length > 0 ||
@@ -1380,6 +1453,28 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   aria-label={t('homeHero.clearActiveSkill')}
                   title={t('homeHero.clearActiveSkill')}
                   data-tooltip={t('homeHero.clearActiveSkill')}
+                >
+                  <Icon name="close" size={9} />
+                </button>
+              </span>
+            ) : null}
+            {activeTeam ? (
+              <span className="home-hero__active-chip home-hero__active-chip--context" data-testid="home-hero-active-team">
+                <span className="home-hero__active-icon" aria-hidden>
+                  <Icon name="users" size={12} />
+                </span>
+                <span className="home-hero__active-label">{activeTeam.name}</span>
+                <button
+                  type="button"
+                  className="home-hero__active-clear od-tooltip"
+                  onClick={() => {
+                    const next = stripHomeMentionToken(prompt, activeTeam.name);
+                    if (next !== prompt) onPromptChange(next);
+                    onClearActiveTeam();
+                  }}
+                  aria-label={t('chat.removeAria', { name: activeTeam.name })}
+                  title={t('common.close')}
+                  data-tooltip={t('common.close')}
                 >
                   <Icon name="close" size={9} />
                 </button>
@@ -2401,6 +2496,7 @@ function buildHomeMentionEntities({
   selectedPluginContexts,
   stagedFiles,
   skillOptions,
+  activeTeam,
 }: {
   activePluginRecord: InstalledPluginRecord | null;
   activeSkillId: string | null;
@@ -2412,6 +2508,7 @@ function buildHomeMentionEntities({
   selectedPluginContexts: InstalledPluginRecord[];
   stagedFiles: File[];
   skillOptions: SkillSummary[];
+  activeTeam: ChatTeamSelection | null;
 }): InlineMentionEntity[] {
   const entities: InlineMentionEntity[] = [];
   for (const item of contextWorkspaceItems) {
@@ -2522,6 +2619,15 @@ function buildHomeMentionEntities({
         title: `Connector: ${connector.name}`,
       });
     }
+  }
+  if (activeTeam) {
+    entities.push({
+      id: activeTeam.id,
+      kind: 'team',
+      label: activeTeam.name,
+      token: inlineMentionToken(activeTeam.name),
+      title: `Team: ${activeTeam.name}`,
+    });
   }
   return entities;
 }

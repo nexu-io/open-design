@@ -160,6 +160,7 @@ import type {
   BrandStatus,
   ChatAnalyticsEntryFrom,
   ChatSessionMode,
+  ChatTeamSelection,
   InstalledPluginRecord,
   RunContextSelection,
   WorkspaceContextItem,
@@ -782,6 +783,10 @@ function autoSendContextKey(projectId: string): string {
   return `od:auto-send-context:${projectId}`;
 }
 
+function autoSendTeamKey(projectId: string): string {
+  return `od:auto-send-team:${projectId}`;
+}
+
 function designSystemAuditAutoRepairKey(projectId: string): string {
   return `od:design-system-audit-auto-repair:${projectId}`;
 }
@@ -811,12 +816,34 @@ function readAutoSendContext(projectId: string): RunContextSelection | null {
   }
 }
 
+function readAutoSendTeam(projectId: string): ChatTeamSelection | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(autoSendTeamKey(projectId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      typeof (parsed as Record<string, unknown>).id === 'string' &&
+      Array.isArray((parsed as Record<string, unknown>).assignments)
+    ) {
+      return parsed as ChatTeamSelection;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function clearAutoSendSession(projectId: string): void {
   if (typeof window === 'undefined') return;
   try {
     window.sessionStorage.removeItem(autoSendFirstMessageKey(projectId));
     window.sessionStorage.removeItem(autoSendAttachmentsKey(projectId));
     window.sessionStorage.removeItem(autoSendContextKey(projectId));
+    window.sessionStorage.removeItem(autoSendTeamKey(projectId));
   } catch {
     /* ignore */
   }
@@ -7294,6 +7321,7 @@ export function ProjectView({
   const autoSendSeedRef = useRef<string | null>(null);
   const autoSendAttachmentsRef = useRef<ChatAttachment[] | null>(null);
   const autoSendContextRef = useRef<RunContextSelection | null>(null);
+  const autoSendTeamRef = useRef<ChatTeamSelection | null>(null);
   const autoSendFirstMessageRef = useRef(false);
   if (autoSendSeedRef.current === null) {
     let isAutoSend = false;
@@ -7308,6 +7336,7 @@ export function ProjectView({
     autoSendSeedRef.current = isAutoSend ? (project.pendingPrompt ?? '') : '';
     autoSendAttachmentsRef.current = isAutoSend ? readAutoSendAttachments(project.id) : [];
     autoSendContextRef.current = isAutoSend ? readAutoSendContext(project.id) : null;
+    autoSendTeamRef.current = isAutoSend ? readAutoSendTeam(project.id) : null;
   }
   const initialWorkspaceContexts = autoSendContextRef.current?.workspaceItems ?? [];
   const brandEnrichmentEligibleForProject =
@@ -7936,7 +7965,14 @@ export function ProjectView({
     }
     clearAutoSendSession(project.id);
     autoSendAttachmentsRef.current = [];
-    void handleSend(seed, attachments, [], context ? { context } : undefined);
+    const autoSendMeta: ProjectChatSendMeta | undefined =
+      context || autoSendTeamRef.current
+        ? {
+            ...(context ? { context } : {}),
+            ...(autoSendTeamRef.current ? { team: autoSendTeamRef.current } : {}),
+          }
+        : undefined;
+    void handleSend(seed, attachments, [], autoSendMeta);
   }, [
     activeConversationId,
     messagesInitialized,

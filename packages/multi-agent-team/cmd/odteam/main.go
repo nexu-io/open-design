@@ -98,11 +98,16 @@ func main() {
 	}
 	os.MkdirAll(filepath.Join(workDir, "artifacts"), 0755)
 
+	// 指定主 Agent：只有主 Agent 的 SSE 事件会进入前端聊天窗，
+	// 避免多 Agent 同时输出导致聊天窗卡顿。
+	mainAgentID := selectMainAgentID(req.Team.Assignments)
+
 	// 发送 team_start 事件
 	emitEvent("team_start", map[string]any{
-		"mode":     cfg.Team.Mode,
-		"agents":   len(cfg.Team.Agents),
-		"teamName": cfg.Team.Name,
+		"mode":        cfg.Team.Mode,
+		"agents":      len(cfg.Team.Agents),
+		"teamName":    cfg.Team.Name,
+		"mainAgentId": mainAgentID,
 	})
 
 	// 创建通信总线和 Agent 池
@@ -112,6 +117,10 @@ func main() {
 
 	// 设置运行上下文（projectId / conversationId 传给 daemon /api/chat）
 	pool.SetRunContext(req.ProjectId, req.ConversationId)
+
+	if mainAgentID != "" {
+		pool.SetMainAgent(mainAgentID)
+	}
 
 	// 设置事件回调：把 daemon SSE 事件流式转发到 stdout
 	pool.SetEventSink(func(agentID, eventType string, data []byte) {
@@ -170,6 +179,21 @@ func main() {
 	if !allSuccess {
 		os.Exit(1)
 	}
+}
+
+// selectMainAgentID 从 assignments 中选出主 Agent。
+// 优先选择 synthesizer/coordinator 角色，否则选择最后一位 Agent
+//（串行/继承/互补模式下通常是最终输出者）。
+func selectMainAgentID(assignments []teamAssignment) string {
+	for _, a := range assignments {
+		if a.Role == "synthesizer" || a.Role == "coordinator" {
+			return a.AgentId
+		}
+	}
+	if len(assignments) > 0 {
+		return assignments[len(assignments)-1].AgentId
+	}
+	return ""
 }
 
 // buildTeamConfig 从 teamRequest 构建 TeamConfig
