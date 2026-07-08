@@ -2604,6 +2604,12 @@ export interface Dict {
   'fileViewer.markTool': string;
   'fileViewer.boxSelect': string;
   'fileViewer.screenshot': string;
+  'fileViewer.openFolder': string;
+  'fileViewer.openFolderFailed': string;
+  'fileViewer.openFolderWebFallback': string;
+  'fileViewer.copyCaption': string;
+  'fileViewer.copyCaptionDone': string;
+  'fileViewer.copyCaptionFailed': string;
   'manualEdit.layers': string;
   'manualEdit.editableCount': string;
   'manualEdit.hiddenBadge': string;

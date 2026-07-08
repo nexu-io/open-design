@@ -25,8 +25,13 @@
   .ph-cover { background:linear-gradient(180deg,#3d5a80 30%,#1b2a41 100%); }
   .ph-body  { background:linear-gradient(180deg,#40618c 0%,#2a3f5c 100%); }
   .ph-cta   { background:linear-gradient(180deg,#31486b 0%,#131c2b 100%); align-items:center; justify-content:center; text-align:center; }
-  .caption { background:#fff; border:1px solid var(--line); border-radius:8px; padding:24px 22px; font-size:14px; white-space:pre-wrap; }
-  .caption-label { font-size:12px; color:var(--sub); text-transform:uppercase; letter-spacing:.04em; margin:0 0 8px; }
+  .caption { background:#fff; border:1px solid var(--line); border-radius:8px; padding:24px 22px; font-size:14px; }
+  .caption pre { margin:0; font:inherit; white-space:pre-wrap; }
+  .caption-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 8px; }
+  .caption-label { font-size:12px; color:var(--sub); text-transform:uppercase; letter-spacing:.04em; margin:0; }
+  .caption-copy { font-size:12px; color:var(--sub); background:none; border:1px solid var(--line); border-radius:6px; padding:4px 10px; cursor:pointer; }
+  .caption-copy:hover { color:#111; border-color:#bbb; }
+  .tags { margin-top:14px; color:#2f6fdf; }
 </style>
 </head>
 <body>
@@ -41,8 +46,9 @@
       <figure class="card"><div class="ph ph-body"><div class="hook">청구 전 체크 3가지</div><div class="small">진단서 · 영수증 · 세부내역서</div></div><figcaption>04 · 본문 (체크리스트) · <a href="환절기-비염-보험금-04.png" download>다운로드</a></figcaption></figure>
       <figure class="card"><div class="ph ph-cta"><div class="hook">@brand_handle</div><div class="small">저장해두고 청구 전에 확인하세요</div></div><figcaption>05 · CTA (표지 배경 재사용) · <a href="환절기-비염-보험금-05.png" download>다운로드</a></figcaption></figure>
     </div>
-    <p class="caption-label">캡션 · 해시태그 (복사용)</p>
-    <div class="caption">"환절기 비염, 보험금 될까?"
+    <section class="caption">
+    <div class="caption-head"><p class="caption-label">캡션 · 해시태그 (복사용)</p><button type="button" class="caption-copy" onclick="copyCaption(this)">캡션 복사</button></div>
+    <pre>"환절기 비염, 보험금 될까?"
 콧물·재채기로 병원 다녀온 분들, 생각보다 많죠 🤧
 
 📊 비염도 실비 청구 대상 (건강보험심사평가원)
@@ -66,9 +72,46 @@
 —
 다음 콘텐츠는 도수치료 실비 기준. @brand_handle 팔로우하고 받아보세요 ✨
 
-📌 출처: 건강보험심사평가원 · 금융감독원
-
-#실비보험 #비염 #보험금청구 #실손보험 #환절기</div>
+📌 출처: 건강보험심사평가원 · 금융감독원</pre>
+    <div class="tags">#실비보험 #비염 #보험금청구 #실손보험 #환절기</div>
+    </section>
+    <script>
+    // 캡션 복사 — 샌드박스 iframe(allow-same-origin 없음)에선 clipboard API가
+    // 막혀서 선택 + execCommand('copy')만 동작한다. 이 함수가 갤러리 유일 JS.
+    function copyCaption(btn){
+      var section = btn.closest('.caption');
+      var pre = section.querySelector('pre');
+      var tags = section.querySelector('.tags');
+      var text = pre ? pre.textContent.trim() : '';
+      if (tags && tags.textContent.trim()) text += '\n\n' + tags.textContent.trim();
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) {}
+      ta.remove();
+      var prev = btn.textContent;
+      btn.textContent = ok ? '복사됨 ✓' : '복사 실패';
+      setTimeout(function(){ btn.textContent = prev; }, 2000);
+      captionToast(ok ? '캡션이 클립보드에 복사되었습니다' : '복사 실패 — 텍스트를 직접 선택해 주세요', ok);
+    }
+    // 하단 고정 토스트 — 호스트 앱 밖(단독 공유)에서도 피드백이 보이도록 iframe 안에서 직접 렌더.
+    function captionToast(msg, ok){
+      var old = document.getElementById('caption-toast');
+      if (old) old.remove();
+      var el = document.createElement('div');
+      el.id = 'caption-toast';
+      el.setAttribute('role', 'status');
+      el.textContent = msg;
+      el.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);padding:10px 18px;border-radius:10px;font-size:13px;color:#fff;background:' + (ok ? '#1f2937' : '#b91c1c') + ';box-shadow:0 4px 16px rgba(0,0,0,.18);z-index:9999;';
+      document.body.appendChild(el);
+      setTimeout(function(){ el.remove(); }, 2200);
+    }
+    </script>
   </div>
 </body>
 </html>

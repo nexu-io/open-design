@@ -107,7 +107,12 @@ od:
    - 5e. **갤러리 Write(메인 직접)** — `<slug>-preview.html`: 순수 정적 HTML — 카드
      `<img src="<slug>-NN.png">`를 index 순서로 나열, **각 카드 푸터에 라벨(`NN · 역할`) +
      개별 다운로드 앵커 `<a href="<slug>-NN.png" download>다운로드</a>`** + `.caption`
-     블록 1개(캡션 전문 + 해시태그 줄, 복사용 텍스트). JS 없음. 웹 런타임 코드 변경
+     블록 1개: `<section class="caption">` 안에 헤더 행(제목 + `.caption-copy` 복사
+     버튼) → `<pre>` 캡션 전문 → `.tags` 해시태그 줄. JS는 캡션 복사 인라인 스크립트
+     1개만 허용(임시 textarea 선택 → `document.execCommand('copy')` — 프리뷰 iframe이
+     `allow-same-origin` 없는 샌드박스라 clipboard API 불가 — + 결과 피드백은 버튼
+     라벨 스왑과 하단 고정 토스트를 iframe 안에서 직접 렌더, example.html의
+     `copyCaption`/`captionToast` 그대로 복제) — 그 외 JS 없음. 웹 런타임 코드 변경
      없음. 슬러그 정규식 `[^a-z0-9가-힣]+`(가-힣 보존).
 6. **Review(서브에이전트 검수)** — dispatch 도구 있으면 **반드시** 신선한 컨텍스트
    검수자에게 위임: `references/review-subagent.md` Read 후 지시대로(검수자가 craft·
@@ -119,7 +124,8 @@ od:
    자가검수(같은 채점표).
 7. **Handoff** — 파일 경로 보고 + 안내: `<slug>-preview.html`로 카드 순서·모양 확인 →
    `<slug>-NN.png` N장을 그대로 인스타그램 캐러셀로 업로드(순서 = 파일명 순). 캡션·
-   해시태그는 갤러리 `.caption` 블록에서 복사. **발행 후 `publish-history.md`에
+   해시태그는 갤러리 `.caption` 블록의 복사 버튼(또는 뷰어 툴바 캡션 복사 아이콘)으로
+   복사. **발행 후 `publish-history.md`에
    `| 날짜 | 주제 | 핵심소재 |` 1줄을 직접 추가하라고 안내**한다(스킬이 자동 append
    하지 않음 — 발행은 스킬 밖 사건).
 

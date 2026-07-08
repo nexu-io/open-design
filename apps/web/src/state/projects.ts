@@ -55,6 +55,20 @@ export async function getProject(id: string): Promise<Project | null> {
   }
 }
 
+// 프로젝트 작업 디렉토리(resolvedDir)만 필요할 때 — 데스크톱 브릿지 없는
+// 웹 폴백에서 "폴더 경로 안내" 토스트에 쓰인다. 서버가 resolveProjectDir로
+// 계산한 값이라 클라이언트는 경로를 재구성하지 않는다.
+export async function getProjectResolvedDir(id: string): Promise<string | null> {
+  try {
+    const resp = await fetch(`/api/projects/${encodeURIComponent(id)}`);
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { resolvedDir?: string };
+    return json.resolvedDir ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createProject(input: {
   name: string;
   projectLocationId?: string;

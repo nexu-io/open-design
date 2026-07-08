@@ -82,6 +82,7 @@ import {
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { isNaverBlogHtml, copyNaverStyledHtml } from '../runtime/naver-clipboard';
 import { isBrazeIamHtml } from '../runtime/braze-clipboard';
+import { extractCardnewsCaption } from '../runtime/cardnews-caption';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { shouldConsumeSlideNav } from '../runtime/slide-nav';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
@@ -93,7 +94,8 @@ import {
   parseForceInline,
   shouldUrlLoadHtmlPreview,
 } from './file-viewer-render-mode';
-import { saveTemplate } from '../state/projects';
+import { getProjectResolvedDir, saveTemplate } from '../state/projects';
+import { useTerminalLaunch } from '../hooks/useTerminalLaunch';
 import type {
   LiveArtifactEventItem,
   LiveArtifact,
@@ -7367,6 +7369,28 @@ function HtmlViewer({
     }
   }, [captureExportImageSnapshot, t]);
 
+  // 프로젝트 폴더 열기 — 데스크톱 호스트는 shell.openPath 브릿지(파인더 오픈),
+  // 웹은 OS 폴더를 열 수 없어 resolvedDir 경로 안내 토스트로 폴백.
+  const terminalLauncher = useTerminalLaunch();
+  const handleOpenProjectFolder = useCallback(async () => {
+    if (terminalLauncher.isHost) {
+      const launched = await terminalLauncher.open(projectId);
+      if (!launched.ok) {
+        setExportToast({ message: t('fileViewer.openFolderFailed'), tone: 'error' });
+      }
+      return;
+    }
+    const resolvedDir = await getProjectResolvedDir(projectId);
+    if (resolvedDir) {
+      setExportToast({
+        message: `${t('fileViewer.openFolderWebFallback')} ${resolvedDir}`,
+        tone: 'default',
+      });
+    } else {
+      setExportToast({ message: t('fileViewer.openFolderFailed'), tone: 'error' });
+    }
+  }, [terminalLauncher, projectId, t]);
+
   // 네이버 블로그 산출물(나눔고딕 + 인용구2 마커)일 때만 "네이버용 서식 복사" 노출.
   const isNaverPost = useMemo(
     () => typeof source === 'string' && isNaverBlogHtml(source),
@@ -7399,6 +7423,23 @@ function HtmlViewer({
       naverCopyInFlightRef.current = false;
     }
   }, [source, t]);
+
+  // cardnews 갤러리(.caption 섹션 + 캡션 pre)일 때만 "캡션 복사" 노출 —
+  // 추출 결과가 곧 게이트(null 이면 버튼 숨김)라 복사할 게 없는 버튼이 뜨지 않는다.
+  const cardnewsCaption = useMemo(
+    () => (typeof source === 'string' ? extractCardnewsCaption(source) : null),
+    [source],
+  );
+
+  const handleCopyCaption = useCallback(async () => {
+    if (!cardnewsCaption) return;
+    const ok = await copyToClipboard(cardnewsCaption);
+    setExportToast(
+      ok
+        ? { message: t('fileViewer.copyCaptionDone'), tone: 'success' }
+        : { message: t('fileViewer.copyCaptionFailed'), tone: 'error' },
+    );
+  }, [cardnewsCaption, t]);
 
   // Braze Custom-HTML IAM 산출물(brazeBridge 마커)일 때만 "소스 복사" 노출.
   const isBrazePost = useMemo(
@@ -8121,6 +8162,18 @@ function HtmlViewer({
         <div className="viewer-toolbar-actions">
           {showPreviewToolbarControls ? (
             <>
+              <button
+                type="button"
+                className="viewer-action viewer-action-icon od-tooltip"
+                data-testid="open-project-folder-button"
+                data-tooltip={t('fileViewer.openFolder')}
+                data-tooltip-placement="bottom"
+                title={t('fileViewer.openFolder')}
+                aria-label={t('fileViewer.openFolder')}
+                onClick={handleOpenProjectFolder}
+              >
+                <RemixIcon name="folder-open-line" size={15} />
+              </button>
               {mode === 'preview' ? (
                 <button
                   type="button"
@@ -8133,6 +8186,20 @@ function HtmlViewer({
                   onClick={handleCopyScreenshot}
                 >
                   <RemixIcon name="screenshot-2-line" size={15} />
+                </button>
+              ) : null}
+              {cardnewsCaption !== null && mode === 'preview' ? (
+                <button
+                  type="button"
+                  className="viewer-action viewer-action-icon od-tooltip"
+                  data-testid="copy-caption-button"
+                  data-tooltip={t('fileViewer.copyCaption')}
+                  data-tooltip-placement="bottom"
+                  title={t('fileViewer.copyCaption')}
+                  aria-label={t('fileViewer.copyCaption')}
+                  onClick={handleCopyCaption}
+                >
+                  <RemixIcon name="file-copy-line" size={15} />
                 </button>
               ) : null}
               {isNaverPost && mode === 'preview' ? (
