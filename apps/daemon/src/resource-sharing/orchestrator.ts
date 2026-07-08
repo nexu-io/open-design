@@ -190,11 +190,11 @@ export function createSharingOrchestrator(deps: SharingDeps) {
         hubResourceId,
         dir,
       );
-      // Idempotent: same PK (kind, hubResourceId) updates the consumer row on
-      // re-pull, so the (hub_team_id, hub_resource_id) unique index never trips.
+      // Idempotent: the namespaced consumer key updates the consumer row on
+      // re-pull without occupying the editable local-id namespace.
       upsertShared(deps.db, {
         kind,
-        localId: hubResourceId,
+        localId: consumerLocalId(hubResourceId),
         hubResourceId,
         hubTeamId: principal.teamId,
         role: 'consumer',
@@ -322,6 +322,10 @@ function canonicalizeLocalId(kind: string, localId: string): string {
     return localId;
   }
   return `user:${localId}`;
+}
+
+function consumerLocalId(hubResourceId: string): string {
+  return `consumer:${hubResourceId}`;
 }
 
 async function resolveLatestVersion(

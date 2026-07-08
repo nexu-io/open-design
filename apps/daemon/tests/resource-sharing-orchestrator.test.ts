@@ -214,7 +214,12 @@ describe('resource-sharing orchestrator', () => {
       alreadyOwned: false,
     });
     expect(
-      getSharedByLocal(db, 'team_1', 'design_system', 'hub_design_system')
+      getSharedByLocal(
+        db,
+        'team_1',
+        'design_system',
+        'consumer:hub_design_system',
+      )
         ?.lastSyncedVersion,
     ).toBe(2);
   });
@@ -358,7 +363,7 @@ describe('resource-sharing orchestrator', () => {
     );
   });
 
-  it('rejects sharing over a pulled consumer mapping with the same local id', async () => {
+  it('keeps pulled design-system mappings out of the editable local-id namespace', async () => {
     const paths = {
       RUNTIME_DATA_DIR: tempDir,
       USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
@@ -366,20 +371,29 @@ describe('resource-sharing orchestrator', () => {
     };
     const orchestrator = createSharingOrchestrator({ db, paths });
     mockState.materializations.push({ 'DESIGN.md': 'team copy\n' });
+    mockState.createdResources = ['local-hub-1'];
 
     await orchestrator.pull('design_system', 'hub-1');
     const editableDir = path.join(paths.USER_DESIGN_SYSTEMS_DIR, 'hub-1');
     await fsp.mkdir(editableDir, { recursive: true });
     await fsp.writeFile(path.join(editableDir, 'DESIGN.md'), 'local edit\n');
 
-    await expect(
-      orchestrator.share('design_system', 'hub-1'),
-    ).rejects.toMatchObject({
-      status: 409,
-      code: 'consumer_mapping_conflict',
+    await expect(orchestrator.share('design_system', 'hub-1')).resolves.toEqual({
+      hubResourceId: 'local-hub-1',
+      version: 2,
     });
-    expect(packTree).not.toHaveBeenCalled();
-    expect(pushTree).not.toHaveBeenCalled();
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'consumer:hub-1'))
+      .toMatchObject({
+        hubResourceId: 'hub-1',
+        role: 'consumer',
+      });
+    expect(getSharedByLocal(db, 'team_1', 'design_system', 'user:hub-1'))
+      .toMatchObject({
+        hubResourceId: 'local-hub-1',
+        role: 'owner',
+      });
+    expect(packTree).toHaveBeenCalledWith(editableDir);
+    expect(pushTree).toHaveBeenCalled();
     expect(await fsp.readFile(path.join(editableDir, 'DESIGN.md'), 'utf8')).toBe(
       'local edit\n',
     );
@@ -552,6 +566,46 @@ describe('resource-sharing orchestrator', () => {
     expect(pushTree).toHaveBeenCalled();
   });
 
+  it('keeps pulled skill mappings out of the editable local-id namespace', async () => {
+    const skillRoot = path.join(tempDir, 'skills');
+    const localSkillDir = path.join(skillRoot, 'foo');
+    await fsp.mkdir(localSkillDir, { recursive: true });
+    await fsp.writeFile(
+      path.join(localSkillDir, 'SKILL.md'),
+      '---\nname: foo\n---\n# Local skill\n',
+    );
+    const orchestrator = createSharingOrchestrator({
+      db,
+      paths: {
+        RUNTIME_DATA_DIR: tempDir,
+        USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+        SKILL_ROOTS: [skillRoot],
+      },
+    });
+    mockState.resourceKind = 'skill';
+    mockState.materializations.push({ 'SKILL.md': '# Team copy\n' });
+    mockState.createdResources = ['local-skill-hub'];
+
+    await expect(orchestrator.pull('skill', 'foo')).resolves.toMatchObject({
+      alreadyOwned: false,
+      version: 1,
+    });
+    await expect(orchestrator.share('skill', 'foo')).resolves.toEqual({
+      hubResourceId: 'local-skill-hub',
+      version: 2,
+    });
+
+    expect(getSharedByLocal(db, 'team_1', 'skill', 'consumer:foo')).toMatchObject({
+      hubResourceId: 'foo',
+      role: 'consumer',
+    });
+    expect(getSharedByLocal(db, 'team_1', 'skill', 'foo')).toMatchObject({
+      hubResourceId: 'local-skill-hub',
+      role: 'owner',
+    });
+    expect(packTree).toHaveBeenCalledWith(localSkillDir);
+  });
+
   it('shares a derived example skill id through the parent skill directory', async () => {
     const skillRoot = path.join(tempDir, 'skills');
     const parentSkillDir = path.join(skillRoot, 'parent-skill');
@@ -621,6 +675,58 @@ describe('resource-sharing orchestrator', () => {
     });
     expect(packTree).toHaveBeenCalledWith(bundledPluginDir);
     expect(pushTree).toHaveBeenCalled();
+  });
+
+  it('keeps pulled plugin mappings out of the editable local-id namespace', async () => {
+    const localPluginDir = path.join(tempDir, 'plugins', 'foo');
+    await fsp.mkdir(localPluginDir, { recursive: true });
+    await fsp.writeFile(
+      path.join(localPluginDir, 'open-design.json'),
+      JSON.stringify({ name: 'foo', version: '1.0.0' }),
+    );
+    upsertInstalledPlugin(db, {
+      id: 'foo',
+      title: 'Local Plugin',
+      version: '1.0.0',
+      sourceKind: 'local',
+      source: localPluginDir,
+      trust: 'trusted',
+      capabilitiesGranted: [],
+      manifest: { name: 'foo', version: '1.0.0' },
+      fsPath: localPluginDir,
+      installedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    const orchestrator = createSharingOrchestrator({
+      db,
+      paths: {
+        RUNTIME_DATA_DIR: tempDir,
+        USER_DESIGN_SYSTEMS_DIR: path.join(tempDir, 'design-systems'),
+        SKILL_ROOTS: [path.join(tempDir, 'skills')],
+      },
+    });
+    mockState.resourceKind = 'plugin';
+    mockState.materializations.push({ 'open-design.json': '{"name":"team"}\n' });
+    mockState.createdResources = ['local-plugin-hub'];
+
+    await expect(orchestrator.pull('plugin', 'foo')).resolves.toMatchObject({
+      alreadyOwned: false,
+      version: 1,
+    });
+    await expect(orchestrator.share('plugin', 'foo')).resolves.toEqual({
+      hubResourceId: 'local-plugin-hub',
+      version: 2,
+    });
+
+    expect(getSharedByLocal(db, 'team_1', 'plugin', 'consumer:foo')).toMatchObject({
+      hubResourceId: 'foo',
+      role: 'consumer',
+    });
+    expect(getSharedByLocal(db, 'team_1', 'plugin', 'foo')).toMatchObject({
+      hubResourceId: 'local-plugin-hub',
+      role: 'owner',
+    });
+    expect(packTree).toHaveBeenCalledWith(localPluginDir);
   });
 });
 
