@@ -582,6 +582,19 @@ for (const id of ids) {
     const html = await (await fetch(`${BASE_URL}/api/plugins/${encodeURIComponent(id)}/preview`)).text();
     hash = createHash('sha256').update(html).update(` ${BAKE_VERSION} ${motionMap[id] || ''}`).digest('hex').slice(0, 16);
   } catch {}
+  // No fingerprint -> no bake. Rendering anyway used to persist an entry with
+  // `hash: null` and un-fingerprinted keys — metadata the reuse skip can never
+  // match again (and the manifest guard rejects). A failed fingerprint fetch
+  // is an infrastructure error: report it, fail strict mode, and leave any
+  // committed entry untouched for the next sweep to refresh.
+  if (!hash) {
+    skip += 1;
+    const reason = 'error preview fingerprint fetch failed';
+    console.log(`  ~ ${id}: skip (${reason})`);
+    report.skipped.push({ id, reason });
+    report.errors.push(id);
+    continue;
+  }
   const prev = previews[id];
   // In CI the unchanged clips already live on R2 (not on disk), so PREVIEW_REMOTE
   // trusts the manifest hash without a local-file check; locally we also confirm
