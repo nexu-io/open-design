@@ -4711,6 +4711,17 @@ export async function startServer({
     const CLARIFYING_QUESTION_BUFFER_CAP = 256 * 1024;
     let clarifyingQuestionText = '';
     let visibleAssistantText = '';
+    // Reply text handed to the background memory extractor at child-close.
+    // Captures the GUARDED, visible reply from BOTH channels a run can emit on:
+    // structured agents' `agent` `text_delta` (Claude/Codex/Gemini/Copilot/ACP/
+    // qoder/pi-rpc) and the plain/BYOK/antigravity family's `stdout` chunks. So
+    // every agent family contributes its actual reply, and none leak raw
+    // transport frames (system:init, stream_event, hooks). Kept separate from
+    // `visibleAssistantText` so the filesystem empty-output guard that reads
+    // that variable keeps its text_delta-only semantics. Bounded — the
+    // extractor only needs the head of the reply.
+    const MEMORY_REPLY_CAP = 32 * 1024;
+    let memoryReplyText = '';
     const send = (event, data) => {
       const lifecycleMarkers = runLifecycleMarkersForStreamEvent(event, data);
       if (lifecycleMarkers.firstModelEventType) {
@@ -4741,6 +4752,22 @@ export async function startServer({
         typeof data.delta === 'string'
       ) {
         visibleAssistantText += data.delta;
+      }
+      // Accumulate the visible reply for the memory extractor from whichever
+      // channel this agent family uses: `agent` text_delta (structured streams)
+      // or `stdout` chunks (plain/BYOK/antigravity). Both carry already-guarded,
+      // user-visible text, so this never captures thinking, tool traffic, or raw
+      // transport frames.
+      if (memoryReplyText.length < MEMORY_REPLY_CAP) {
+        const replyPiece =
+          event === 'agent' && data && data.type === 'text_delta' && typeof data.delta === 'string'
+            ? data.delta
+            : event === 'stdout' && data && typeof data.chunk === 'string'
+              ? data.chunk
+              : '';
+        if (replyPiece) {
+          memoryReplyText = (memoryReplyText + replyPiece).slice(0, MEMORY_REPLY_CAP);
+        }
       }
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
@@ -5986,22 +6013,15 @@ export async function startServer({
       agentStdoutTail = `${agentStdoutTail}${chunk}`.slice(-2000);
     });
 
-    // ---- Memory: assistant-reply buffer for LLM extraction --------------
-    // Capture up to 32 KiB of raw stdout. The LLM extractor (fired in the
-    // close handler) trims further; we only need enough to ground the
-    // model. Multiple `on('data')` listeners coexist — the wrapper-stream
-    // handlers below also subscribe and that's fine.
-    const MEMORY_BUFFER_CAP = 32 * 1024;
-    let memoryAssistantBuffer = '';
-    child.stdout.on('data', (chunk) => {
-      if (memoryAssistantBuffer.length >= MEMORY_BUFFER_CAP) return;
-      memoryAssistantBuffer += String(chunk);
-      if (memoryAssistantBuffer.length > MEMORY_BUFFER_CAP) {
-        memoryAssistantBuffer = memoryAssistantBuffer.slice(0, MEMORY_BUFFER_CAP);
-      }
-    });
+    // ---- Memory: assistant-reply capture for LLM extraction --------------
+    // Hand the extractor the guarded, rendered reply (`memoryReplyText`, fed
+    // through `send()` from either the `agent` text_delta or the `stdout`
+    // channel), NOT the child's raw stdout. For stream-json agents (Claude Code)
+    // raw stdout is JSONL transport — system:init, stream_event thinking deltas,
+    // hook_started/hook_response frames — none of which is the reply; mining it
+    // produced empty extractions that, near-identical across a build's re-fires,
+    // caused the same turn to be re-analyzed dozens of times.
     child.on('close', () => {
-      const captured = memoryAssistantBuffer;
       const userMsg = typeof message === 'string' ? message : '';
       // Forward the chat agent id so memory-llm.pickProvider can
       // constrain its auto-pick to the chat protocol's family — keeps
@@ -6012,9 +6032,19 @@ export async function startServer({
         projectRoot: PROJECT_ROOT,
         chatAgentId: typeof agentId === 'string' ? agentId : null,
         chatModel: typeof safeModel === 'string' ? safeModel : null,
+        // Scope the extractor's duplicate-turn de-dup to this conversation, so a
+        // re-fired turn collapses but an identical (message, reply) in another
+        // conversation is still examined.
+        conversationId: run.conversationId ?? null,
       };
       void import('./memory-llm.js')
         .then(({ extractWithLLM, distillAnnotationsToMemory }) => {
+          // Read the reply HERE, in the post-import microtask, not in the
+          // synchronous close handler: the Claude stream flush is a later
+          // 'close' listener, so deferring the read lets flush() emit the reply's
+          // final buffered frame first and a reply that ends without a trailing
+          // newline isn't truncated.
+          const captured = memoryReplyText;
           const generalPass = extractWithLLM(
             RUNTIME_DATA_DIR,
             {
