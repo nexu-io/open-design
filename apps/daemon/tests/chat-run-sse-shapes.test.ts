@@ -169,6 +169,8 @@ describe('startChatRun SSE event shapes (golden)', () => {
   let server: http.Server;
   let baseUrl: string;
   const originalPath = process.env.PATH;
+  const originalDataDir = process.env.OD_DATA_DIR;
+  const originalAgentHome = process.env.OD_AGENT_HOME;
 
   beforeAll(async () => {
     // Isolate BEFORE importing the server module: server.ts resolves
@@ -188,6 +190,16 @@ describe('startChatRun SSE event shapes (golden)', () => {
 
   afterAll(async () => {
     if (server) await new Promise<void>((res) => server.close(() => res()));
+    // Restore the process-level daemon env this suite overrode in beforeAll.
+    // setup.ts installs one shared OD_DATA_DIR for the whole Vitest process and
+    // server.ts resolves RUNTIME_DATA_DIR from it at module-import time; leaving
+    // our temp dirs set would point a later serially-run route test (which reads
+    // process.env.OD_DATA_DIR while importing the cached server module) at this
+    // suite's now-removed directory, making the daemon suite order-dependent.
+    if (originalDataDir === undefined) delete process.env.OD_DATA_DIR;
+    else process.env.OD_DATA_DIR = originalDataDir;
+    if (originalAgentHome === undefined) delete process.env.OD_AGENT_HOME;
+    else process.env.OD_AGENT_HOME = originalAgentHome;
   });
 
   afterEach(() => {
