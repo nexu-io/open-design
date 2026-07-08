@@ -17,7 +17,7 @@ import {
   listInstalledPlugins,
   resolvePluginSnapshot,
 } from './plugins/index.js';
-import { pickDesignSystemId } from './plugins/apply.js';
+import { pickBrandBinding, pickDesignSystemId } from './plugins/apply.js';
 import { resolveRoutedPluginId } from './plugins/prompt-routing.js';
 import { connectorService } from './connectors/service.js';
 import type { RouteDeps } from './server-context.js';
@@ -823,6 +823,16 @@ export function resolveStampDesignSystemId(
   return manifest ? pickDesignSystemId(manifest) : undefined;
 }
 
+// 배지 플러그인의 브랜드 바인딩 해석 — resolveStampDesignSystemId와 대칭
+export function resolveStampBrandBinding(
+  db: Parameters<typeof getInstalledPlugin>[0],
+  pluginId: string | null | undefined,
+): { brandId?: string; deliverable?: string } {
+  if (!pluginId) return {};
+  const manifest = getInstalledPlugin(db, pluginId)?.manifest;
+  return manifest ? pickBrandBinding(manifest) : {};
+}
+
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
@@ -1261,6 +1271,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           if (pinnedValidation.ok) effectiveDesignSystemId = pinnedValidation.id;
         }
       }
+      const stampedBrand = resolveStampBrandBinding(db, effectiveBadgePluginId);
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
@@ -1323,6 +1334,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           name: name.trim(),
           skillId: normalizedSkillId,
           designSystemId: effectiveDesignSystemId,
+          brandId: stampedBrand.brandId,
+          brandDeliverable: stampedBrand.deliverable,
           pendingPrompt: pendingPrompt || null,
           metadata: projectMetadata,
           customInstructions:

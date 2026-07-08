@@ -159,6 +159,9 @@ export function applyPlugin(input: ApplyInput): ApplyComputed {
   if (skillRef) projectMetadata.skillId = skillRef;
   const dsId = pickDesignSystemId(manifest, input.activeProjectDesignSystem);
   if (dsId) projectMetadata.designSystemId = dsId;
+  const brandBinding = pickBrandBinding(manifest);
+  if (brandBinding.brandId) projectMetadata.brandId = brandBinding.brandId;
+  if (brandBinding.deliverable) projectMetadata.brandDeliverable = brandBinding.deliverable;
   const craftRequires = getManifestContextCraft(manifest);
   if (craftRequires.length > 0) projectMetadata.craftRequires = craftRequires;
 
@@ -326,6 +329,19 @@ export function pickDesignSystemId(
   if (ds && typeof ds.ref === 'string' && ds.ref.trim()) return ds.ref.trim();
   if (ds && active?.id) return active.id;
   return undefined;
+}
+
+// 매니페스트의 브랜드 바인딩 — designSystem.ref와 대칭인 brand 레일의 출발점
+export function pickBrandBinding(
+  manifest: PluginManifest,
+): { brandId?: string; deliverable?: string } {
+  const brand = manifest.od?.context?.brand;
+  const brandId = typeof brand?.ref === 'string' && brand.ref.trim() ? brand.ref.trim() : undefined;
+  const deliverable =
+    typeof brand?.deliverable === 'string' && brand.deliverable.trim()
+      ? brand.deliverable.trim()
+      : undefined;
+  return { ...(brandId ? { brandId } : {}), ...(deliverable ? { deliverable } : {}) };
 }
 
 // Plugin prompt block renderer. Lives in
