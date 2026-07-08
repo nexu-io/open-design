@@ -52,6 +52,12 @@ describe('brands registry', () => {
     expect(brandDeliverableDefaultDesignSystem(manifest, 'blog')).toBeUndefined();
     expect(brandDeliverableDefaultDesignSystem(null, 'iam')).toBeUndefined();
   });
+  it('rejects path-traversal brand ids', async () => {
+    // 검증이 없으면 'ghost/../acme'는 root/acme로 해석되어 CORE가 읽힘 — 게이트가 실제로 막는지 확인
+    expect(await readBrandCore(root, 'ghost/../acme')).toBeNull();
+    expect(await readBrandManifest(root, '..')).toBeNull();
+    expect(await readBrandDeliverable(root, 'ghost/../acme', 'blog')).toBeNull();
+  });
   it('ignores non-brand directories and missing roots', async () => {
     await fs.mkdir(path.join(root, 'not-a-brand'));
     const brands = await listBrands(root);

@@ -17,8 +17,17 @@ export interface BrandManifestFile {
   deliverables?: Record<string, { file: string; designSystem?: string }>;
 }
 
+// 경로 traversal 차단 — HTTP 라우트가 req.params.id를 직접 전달하므로 모듈 경계에서 게이트 (design-systems.ts stripPrefixAndValidateId와 동일 관례)
+function isValidBrandId(id: string): boolean {
+  if (typeof id !== 'string') return false;
+  if (!/^[a-zA-Z0-9._-]+$/.test(id)) return false;
+  if (id === '.' || id === '..') return false;
+  return true;
+}
+
 // manifest.json 파싱 — 형식 불량 디렉토리는 조용히 스킵(레지스트리 관례)
 export async function readBrandManifest(root: string, id: string): Promise<BrandManifestFile | null> {
+  if (!isValidBrandId(id)) return null;
   try {
     const raw = await fs.readFile(path.join(root, id, 'manifest.json'), 'utf8');
     const parsed = JSON.parse(raw) as BrandManifestFile;
