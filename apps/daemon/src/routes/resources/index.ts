@@ -1,7 +1,9 @@
 import type { Express, Request, RequestHandler, Response } from 'express';
 import type {
+  PublicSnapshotResponse,
   ResourceDetailResponse,
   ResourceListResponse,
+  ResourceSnapshotRecord,
 } from '@open-design/contracts';
 
 import {
@@ -137,13 +139,13 @@ export function registerResourceSharingRoutes(
           typeof nameRaw === 'string' && nameRaw.trim()
             ? nameRaw.trim()
             : 'snapshot';
-        res.json(
+        const response: ResourceSnapshotRecord =
           await createResourceHubClient().publishSnapshot(
             principal,
             paramStr(req.params.id),
             { name, ref: 'latest' },
-          ),
-        );
+          );
+        res.json(response);
       } catch (error) {
         handleError(res, error);
       }
@@ -157,11 +159,11 @@ export function registerResourceSharingRoutes(
     requireLocalDaemonRequest,
     async (req: Request, res: Response) => {
       try {
-        res.json(
+        const response: PublicSnapshotResponse =
           await createResourceHubClient().getPublicSnapshot(
             paramStr(req.params.slug),
-          ),
-        );
+          );
+        res.json(response);
       } catch (error) {
         handleError(res, error);
       }

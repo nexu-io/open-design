@@ -272,4 +272,86 @@ describe('od resource CLI share/pull daemon wrappers', () => {
     });
     expect(stderr.join('')).toBe('');
   });
+
+  it('posts snapshot publish to the daemon route with a name and supports JSON output', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          slug: 'snap-1',
+          name: 'Launch review',
+          kind: 'design_system',
+          versionId: 'version-1',
+          createdAt: '2026-07-08T06:00:00.000Z',
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await runResource([
+      'snapshot',
+      'hub-1',
+      '--name',
+      'Launch review',
+      '--daemon-url',
+      'http://127.0.0.1:7456/',
+      '--json',
+    ]);
+
+    expect(process.exitCode).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:7456/api/resources/hub-1/snapshot?name=Launch%20review',
+      { method: 'POST' },
+    );
+    expect(JSON.parse(stdout.join(''))).toMatchObject({
+      slug: 'snap-1',
+      name: 'Launch review',
+      kind: 'design_system',
+    });
+    expect(stderr.join('')).toBe('');
+  });
+
+  it('gets a public snapshot from the daemon route and prints entries', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          slug: 'snap-1',
+          name: 'Launch review',
+          kind: 'design_system',
+          createdAt: '2026-07-08T06:00:00.000Z',
+          manifest: {
+            digest: 'sha256:abc',
+            entries: [
+              {
+                path: 'tokens.json',
+                type: 'file',
+                executable: false,
+                blobDigest: 'sha256:def',
+                symlinkTarget: null,
+              },
+            ],
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await runResource([
+      'public-snapshot',
+      'snap-1',
+      '--daemon-url',
+      'http://127.0.0.1:7456',
+    ]);
+
+    expect(process.exitCode).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:7456/api/public-snapshots/snap-1',
+      { method: 'GET' },
+    );
+    expect(stdout.join('')).toBe(
+      'design_system\tsnap-1\tLaunch review\n' +
+        'manifest\tsha256:abc\t1 entries\n' +
+        'entry\tfile\ttokens.json\tsha256:def\n',
+    );
+    expect(stderr.join('')).toBe('');
+  });
 });

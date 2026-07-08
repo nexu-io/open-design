@@ -6,6 +6,12 @@ const routeState = vi.hoisted(() => ({
   listError: null as unknown,
   allowLocalRequest: true,
   hasExplicitResourceHubConfig: true,
+  publishCalls: [] as Array<{
+    principal: unknown;
+    resourceId: string;
+    input: unknown;
+  }>,
+  publicSnapshotCalls: [] as string[],
 }));
 
 vi.mock('../src/integrations/resource-hub.js', () => {
@@ -24,6 +30,39 @@ vi.mock('../src/integrations/resource-hub.js', () => {
     ResourceHubError,
     createResourceHubClient: vi.fn(() => ({
       isConfigured: () => true,
+      publishSnapshot: vi.fn(
+        async (principal: unknown, resourceId: string, input: unknown) => {
+          routeState.publishCalls.push({ principal, resourceId, input });
+          return {
+            slug: 'snap-1',
+            name: 'Launch review',
+            kind: 'design_system',
+            versionId: 'version-1',
+            createdAt: '2026-07-08T06:00:00.000Z',
+          };
+        },
+      ),
+      getPublicSnapshot: vi.fn(async (slug: string) => {
+        routeState.publicSnapshotCalls.push(slug);
+        return {
+          slug,
+          name: 'Launch review',
+          kind: 'design_system',
+          createdAt: '2026-07-08T06:00:00.000Z',
+          manifest: {
+            digest: 'sha256:abc',
+            entries: [
+              {
+                path: 'tokens.json',
+                type: 'file',
+                executable: false,
+                blobDigest: 'sha256:def',
+                symlinkTarget: null,
+              },
+            ],
+          },
+        };
+      }),
     })),
     hasExplicitResourceHubConfig: vi.fn(
       () => routeState.hasExplicitResourceHubConfig,
@@ -69,6 +108,8 @@ describe('resource routes error handling', () => {
         routeState.listError = null;
         routeState.allowLocalRequest = true;
         routeState.hasExplicitResourceHubConfig = true;
+        routeState.publishCalls = [];
+        routeState.publicSnapshotCalls = [];
         const app = express();
         registerResourceSharingRoutes(app, {
           db: {} as never,
@@ -178,5 +219,47 @@ describe('resource routes error handling', () => {
       configured: false,
       principalAvailable: true,
     });
+  });
+
+  it('publishes public snapshots through the hub client with the workspace principal', async () => {
+    const res = await fetch(
+      `${baseUrl}/api/resources/hub-1/snapshot?name=Launch%20review`,
+      { method: 'POST' },
+    );
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      slug: 'snap-1',
+      name: 'Launch review',
+      kind: 'design_system',
+      versionId: 'version-1',
+    });
+    expect(routeState.publishCalls).toEqual([
+      {
+        principal: {
+          memberId: 'member_1',
+          teamId: 'team_1',
+          role: 'member',
+          lifecycleState: null,
+        },
+        resourceId: 'hub-1',
+        input: { name: 'Launch review', ref: 'latest' },
+      },
+    ]);
+  });
+
+  it('reads public snapshots through the unauthenticated hub public plane', async () => {
+    const res = await fetch(`${baseUrl}/api/public-snapshots/snap-1`);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      slug: 'snap-1',
+      name: 'Launch review',
+      manifest: {
+        digest: 'sha256:abc',
+        entries: [{ path: 'tokens.json', blobDigest: 'sha256:def' }],
+      },
+    });
+    expect(routeState.publicSnapshotCalls).toEqual(['snap-1']);
   });
 });

@@ -4,9 +4,11 @@ import {
   readResourceHubPrincipal,
 } from './integrations/resource-hub.js';
 import type {
+  PublicSnapshotResponse,
   ResourceDetailResponse,
   ResourceListResponse,
   ResourceLocalMapping,
+  ResourceSnapshotRecord,
 } from '@open-design/contracts';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { materializeRef, packTree, pushTree } from './resource-drive.js';
@@ -29,6 +31,10 @@ const USAGE = `Usage:
                                                 Pull a team resource through the daemon
   od resource detail <resource-id> [--json] [--daemon-url <url>]
                                                 Inspect versions and latest manifest through the daemon
+  od resource snapshot <resource-id> [--name <name>] [--json] [--daemon-url <url>]
+                                                Publish latest version as a public snapshot through the daemon
+  od resource public-snapshot <slug> [--json] [--daemon-url <url>]
+                                                Read a public snapshot through the daemon
 
 Environment (dev/local, provisional until link B lands the member table):
   OD_RESOURCE_HUB_URL / OD_RESOURCE_HUB_TOKEN
@@ -318,6 +324,89 @@ async function runDetail(args: string[]): Promise<void> {
   }
 }
 
+async function runSnapshot(args: string[]): Promise<void> {
+  const { positionals, flags } = parseFlags(args);
+  const resourceId = positionals[0];
+  if (!resourceId) {
+    console.error(
+      'usage: od resource snapshot <resource-id> [--name <name>] [--json] [--daemon-url <url>]',
+    );
+    process.exitCode = 1;
+    return;
+  }
+  try {
+    const flagUrl = flags.get('daemon-url');
+    const baseUrl = await resolveDaemonUrl(
+      flagUrl === undefined ? {} : { flagUrl },
+    );
+    const name = flags.get('name') ?? 'snapshot';
+    const response = await fetch(
+      endpoint(
+        baseUrl,
+        `/api/resources/${encodeURIComponent(resourceId)}/snapshot?name=${encodeURIComponent(name)}`,
+      ),
+      { method: 'POST' },
+    );
+    const payload = await readDaemonJson(response);
+    if (!response.ok) {
+      throw new Error(daemonErrorMessage(response.status, payload));
+    }
+    const snapshot = payload as ResourceSnapshotRecord;
+    if (flags.has('json')) {
+      writeJson(snapshot);
+      return;
+    }
+    console.log(
+      `snapshot ${resourceId} -> ${snapshot.slug} (${snapshot.name})`,
+    );
+  } catch (error) {
+    reportError(error);
+  }
+}
+
+async function runPublicSnapshot(args: string[]): Promise<void> {
+  const { positionals, flags } = parseFlags(args);
+  const slug = positionals[0];
+  if (!slug) {
+    console.error(
+      'usage: od resource public-snapshot <slug> [--json] [--daemon-url <url>]',
+    );
+    process.exitCode = 1;
+    return;
+  }
+  try {
+    const flagUrl = flags.get('daemon-url');
+    const baseUrl = await resolveDaemonUrl(
+      flagUrl === undefined ? {} : { flagUrl },
+    );
+    const response = await fetch(
+      endpoint(baseUrl, `/api/public-snapshots/${encodeURIComponent(slug)}`),
+      { method: 'GET' },
+    );
+    const payload = await readDaemonJson(response);
+    if (!response.ok) {
+      throw new Error(daemonErrorMessage(response.status, payload));
+    }
+    const snapshot = payload as PublicSnapshotResponse;
+    if (flags.has('json')) {
+      writeJson(snapshot);
+      return;
+    }
+    const entries = snapshot.manifest?.entries ?? [];
+    console.log(`${snapshot.kind}\t${snapshot.slug}\t${snapshot.name}`);
+    console.log(
+      `manifest\t${snapshot.manifest?.digest ?? 'none'}\t${entries.length} entries`,
+    );
+    for (const entry of entries) {
+      console.log(
+        `entry\t${entry.type}\t${entry.path}\t${entry.blobDigest ?? entry.symlinkTarget ?? ''}`,
+      );
+    }
+  } catch (error) {
+    reportError(error);
+  }
+}
+
 export async function runResource(args: string[]): Promise<void> {
   const sub = args[0];
   const rest = args.slice(1);
@@ -339,6 +428,12 @@ export async function runResource(args: string[]): Promise<void> {
       return;
     case 'detail':
       await runDetail(rest);
+      return;
+    case 'snapshot':
+      await runSnapshot(rest);
+      return;
+    case 'public-snapshot':
+      await runPublicSnapshot(rest);
       return;
     case undefined:
     case 'help':

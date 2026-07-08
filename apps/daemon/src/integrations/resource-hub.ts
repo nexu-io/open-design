@@ -9,9 +9,13 @@
 // principal is an open topology decision (services/api authenticates the daemon
 // and resolves the principal, vs internal-token forwarding). It currently
 // attaches whatever env-configured credentials it has; swapping schemes changes
-// only buildAuthHeaders. Shared DTOs will move to @open-design/contracts once
-// the platform publishes the canonical resource contracts; the local types
-// below are provisional.
+// only buildAuthHeaders. Hub-only request shapes stay local until the platform
+// publishes canonical resource contracts.
+
+import type {
+  PublicSnapshotResponse,
+  ResourceSnapshotRecord,
+} from '@open-design/contracts';
 
 const DEFAULT_RESOURCE_HUB_URL = 'http://127.0.0.1:18080';
 const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
@@ -75,23 +79,6 @@ export interface ManifestEntry {
 export interface Manifest {
   digest: string;
   entries: ManifestEntry[];
-}
-
-export interface SnapshotRecord {
-  slug: string;
-  name: string;
-  kind: string;
-  versionId: string;
-  createdAt: string;
-}
-
-// Public read shape (no team/member/resource ids — the hub omits them).
-export interface PublicSnapshot {
-  slug: string;
-  name: string;
-  kind: string;
-  createdAt: string;
-  manifest: Manifest | null;
 }
 
 export interface PublishVersionInput {
@@ -427,8 +414,8 @@ export function createResourceHubClient(options: ResourceHubClientOptions = {}) 
       principal: ResourceHubPrincipal,
       resourceId: string,
       input: { name: string; ref?: string; versionId?: string },
-    ): Promise<SnapshotRecord> {
-      return request<SnapshotRecord>(
+    ): Promise<ResourceSnapshotRecord> {
+      return request<ResourceSnapshotRecord>(
         principal,
         'POST',
         `/api/v1/resources/${encodeURIComponent(resourceId)}/snapshots`,
@@ -438,7 +425,7 @@ export function createResourceHubClient(options: ResourceHubClientOptions = {}) 
 
     // Read a public snapshot by slug. Carries NO principal/token — this
     // faithfully exercises the hub's unauthenticated public plane.
-    async getPublicSnapshot(slug: string): Promise<PublicSnapshot> {
+    async getPublicSnapshot(slug: string): Promise<PublicSnapshotResponse> {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
@@ -456,7 +443,7 @@ export function createResourceHubClient(options: ResourceHubClientOptions = {}) 
             typeof payload?.error === 'string' ? payload.error : 'unknown';
           throw new ResourceHubError(response.status, code, payload?.message);
         }
-        return payload as PublicSnapshot;
+        return payload as PublicSnapshotResponse;
       } finally {
         clearTimeout(timeout);
       }

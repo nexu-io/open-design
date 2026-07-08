@@ -47,6 +47,22 @@ export interface ResourceManifest {
   entries: ResourceManifestEntry[];
 }
 
+export interface ResourceSnapshotRecord {
+  slug: string;
+  name: string;
+  kind: string;
+  versionId: string;
+  createdAt: string;
+}
+
+export interface PublicSnapshotResponse {
+  slug: string;
+  name: string;
+  kind: string;
+  createdAt: string;
+  manifest: ResourceManifest | null;
+}
+
 export interface ResourceListResponse {
   resources: ResourceSummary[];
 }

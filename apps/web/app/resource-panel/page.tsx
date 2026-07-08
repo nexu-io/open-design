@@ -8,6 +8,7 @@
 // directory at cleanup, together with the tools-serve resource-hub fixture.
 
 import type {
+  PublicSnapshotResponse,
   ResourceDetailResponse,
   ResourceListResponse,
   ResourceSummary,
@@ -16,17 +17,6 @@ import { useCallback, useEffect, useState } from 'react';
 
 type Resource = ResourceSummary;
 type Detail = ResourceDetailResponse;
-
-interface PublicSnap {
-  slug: string;
-  name: string;
-  kind: string;
-  createdAt: string;
-  manifest: {
-    digest: string;
-    entries: { path: string; type: string; blobDigest: string | null }[];
-  } | null;
-}
 
 async function api(path: string, method = 'GET'): Promise<unknown> {
   const res = await fetch(path, { method });
@@ -50,7 +40,8 @@ export default function ResourcePanelPage(): React.ReactElement {
   const [pullKind, setPullKind] = useState('design_system');
   const [pullId, setPullId] = useState('');
   const [viewSlug, setViewSlug] = useState('');
-  const [publicSnap, setPublicSnap] = useState<PublicSnap | null>(null);
+  const [publicSnap, setPublicSnap] =
+    useState<PublicSnapshotResponse | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -118,7 +109,7 @@ export default function ResourcePanelPage(): React.ReactElement {
     try {
       const r = (await api(
         `/api/public-snapshots/${encodeURIComponent(viewSlug)}`,
-      )) as PublicSnap;
+      )) as PublicSnapshotResponse;
       setPublicSnap(r);
       setStatus(`public read ok: ${r.name}`);
     } catch (error) {
