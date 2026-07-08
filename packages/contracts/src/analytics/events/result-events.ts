@@ -448,6 +448,32 @@ export interface ArtifactExportResultProps {
   project_kind: TrackingProjectKind | null;
 }
 
+// Fired when the user explicitly clicks "Save" in the Excalidraw sketch editor
+// — NOT the background autosave (which carries no user intent and is not
+// tracked). `result` is 'success' once the sketch file is persisted, 'failed'
+// on a write error. Together with `sketch_export_result` this is the
+// completion signal for the sketch flow that starts at `new_sketch`.
+export interface SketchSaveResultProps {
+  page_name: 'file_manager';
+  area: 'sketch_editor';
+  result: TrackingExportResult;
+  error_code?: string;
+  project_id: string;
+}
+
+// Fired when the user exports a sketch to a PNG from the sketch editor, which
+// writes the image into the project's files — the sketch's real "output" (the
+// drawing becomes a project asset that can then be attached to a run). This is
+// the strongest completion signal for the sketch flow. `result` is 'success'
+// once the PNG is written, 'failed' on a write error.
+export interface SketchExportResultProps {
+  page_name: 'file_manager';
+  area: 'sketch_editor';
+  result: TrackingExportResult;
+  error_code?: string;
+  project_id: string;
+}
+
 export type TrackingDeployProvider = 'vercel' | 'cloudflare_pages';
 
 // Fired from the deploy modal when a real publish attempt resolves — NOT when

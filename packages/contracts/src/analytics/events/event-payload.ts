@@ -5,7 +5,7 @@
 import type { DesignSystemApplyResultProps, DesignSystemCreateResultProps, DesignSystemEnrichResultProps, DesignSystemReviewResultProps, DesignSystemSourceIngestResultProps, DesignSystemStatusResultProps } from './design-systems.js';
 import type { OnboardingCompleteResultProps, OnboardingRuntimeScanResultProps } from './onboarding.js';
 import type { PageViewProps } from './page-view.js';
-import type { ArtifactDeployResultProps, ArtifactExportResultProps, AssistantFeedbackClickProps, AssistantFeedbackReasonClickProps, AssistantFeedbackReasonSubmitProps, AssistantFeedbackReasonViewProps, ContextLinkResultProps, FeedbackSubmitResultProps, FileUploadResultProps, FileVersionRestoreResultProps, LangfuseReportResultProps, PackagedRuntimeFailedProps, PluginImportResultProps, PluginReplacementResultProps, ProjectCreateResultProps, RunCreatedProps, RunFinishedProps, RunRetryAttemptedProps, RunRetryFinishedProps, SettingsByokModelsFetchResultProps, SettingsByokTestResultProps, SettingsCliTestResultProps, SettingsConnectorAuthResultProps, SettingsViewProps, UpdateApplyObservedProps, UpdateInstallResultProps } from './result-events.js';
+import type { ArtifactDeployResultProps, ArtifactExportResultProps, AssistantFeedbackClickProps, AssistantFeedbackReasonClickProps, AssistantFeedbackReasonSubmitProps, AssistantFeedbackReasonViewProps, ContextLinkResultProps, FeedbackSubmitResultProps, FileUploadResultProps, FileVersionRestoreResultProps, LangfuseReportResultProps, PackagedRuntimeFailedProps, PluginImportResultProps, PluginReplacementResultProps, ProjectCreateResultProps, RunCreatedProps, RunFinishedProps, RunRetryAttemptedProps, RunRetryFinishedProps, SettingsByokModelsFetchResultProps, SettingsByokTestResultProps, SettingsCliTestResultProps, SettingsConnectorAuthResultProps, SettingsViewProps, SketchExportResultProps, SketchSaveResultProps, UpdateApplyObservedProps, UpdateInstallResultProps } from './result-events.js';
 import type { SurfaceViewProps } from './surface-view.js';
 import type { AmrAuthResultProps, UiClickProps } from './ui-click.js';
 // ---- Discriminated union of all event payloads ---------------------------
@@ -29,6 +29,8 @@ export type AnalyticsEventPayload =
   | { event: 'context_link_result'; props: ContextLinkResultProps }
   | { event: 'artifact_export_result'; props: ArtifactExportResultProps }
   | { event: 'artifact_deploy_result'; props: ArtifactDeployResultProps }
+  | { event: 'sketch_save_result'; props: SketchSaveResultProps }
+  | { event: 'sketch_export_result'; props: SketchExportResultProps }
   | { event: 'file_version_restore_result'; props: FileVersionRestoreResultProps }
   | { event: 'feedback_submit_result'; props: FeedbackSubmitResultProps }
   | { event: 'assistant_feedback_click'; props: AssistantFeedbackClickProps }

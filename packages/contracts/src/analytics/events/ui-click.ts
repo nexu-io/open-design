@@ -931,6 +931,10 @@ export interface FileManagerClickProps {
   area: 'file_manager';
   element:
     | 'new_sketch'
+    // Opening an existing .sketch.json from the Design Files list — the
+    // "come back to an earlier sketch" re-engagement entry (distinct from
+    // `new_sketch` which creates a fresh one).
+    | 'open_sketch'
     | 'new_browser'
     | 'create_design_system'
     | 'create_design_system_from_project'

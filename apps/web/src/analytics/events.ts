@@ -120,6 +120,8 @@ import type {
   ContextLinkResultProps,
   ArtifactExportResultProps,
   ArtifactDeployResultProps,
+  SketchSaveResultProps,
+  SketchExportResultProps,
   FeedbackSubmitResultProps,
   SettingsViewProps,
   SettingsCliTestResultProps,
@@ -610,6 +612,20 @@ export function trackDesignToolboxClick(
   props: DesignToolboxClickProps,
 ): void {
   send(track, 'ui_click', props);
+}
+
+export function trackSketchSaveResult(
+  track: Track,
+  props: SketchSaveResultProps,
+): void {
+  send(track, 'sketch_save_result', props);
+}
+
+export function trackSketchExportResult(
+  track: Track,
+  props: SketchExportResultProps,
+): void {
+  send(track, 'sketch_export_result', props);
 }
 
 export function trackComposerBarClick(

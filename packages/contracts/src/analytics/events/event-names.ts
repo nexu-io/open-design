@@ -63,7 +63,10 @@ export type AnalyticsEventName =
   | 'design_system_status_result'
   | 'design_system_apply_result'
   // AI optimize (deep enrichment) of a programmatically-extracted DS.
-  | 'design_system_enrich_result';
+  | 'design_system_enrich_result'
+  // Manual save / PNG export from the Excalidraw sketch editor.
+  | 'sketch_save_result'
+  | 'sketch_export_result';
 
 // ---- Pages ---------------------------------------------------------------
 

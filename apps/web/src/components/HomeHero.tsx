@@ -36,11 +36,13 @@ import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { useAnalytics } from '../analytics/provider';
 import {
+  trackComposerSessionModeClick,
   trackContextLinkResult,
   trackFigmaHelpModalSurfaceView,
   trackHomeChatComposerClick,
   trackProjectReferenceModalSurfaceView,
 } from '../analytics/events';
+import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import {
   chipsForGroup,
   orderedCreateChips,
@@ -1936,7 +1938,18 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             <div className="home-hero__mode-switcher">
               <SessionModeToggle
                 mode={sessionMode}
-                onChange={onSessionModeChange}
+                onChange={(next) => {
+                  if (next !== sessionMode) {
+                    trackComposerSessionModeClick(analytics.track, {
+                      page_name: 'home',
+                      area: 'chat_composer',
+                      element: 'session_mode_toggle',
+                      mode_before: sessionModeToTracking(sessionMode),
+                      mode_after: sessionModeToTracking(next),
+                    });
+                  }
+                  onSessionModeChange?.(next);
+                }}
               />
             </div>
             {executionSwitcher ? (
