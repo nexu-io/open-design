@@ -365,6 +365,7 @@ function navElementForView(
   | 'automations'
   | 'plugins'
   | 'design_systems'
+  | 'brands'
   | 'integrations'
   | null {
   switch (next) {
@@ -378,11 +379,10 @@ function navElementForView(
       return 'plugins';
     case 'design-systems':
       return 'design_systems';
+    case 'brands':
+      return 'brands';
     case 'integrations':
       return 'integrations';
-    // 'brands' has no dedicated `HomeNavClickProps.element` value in
-    // packages/contracts yet (Task 10 is web-surface only) — fall through
-    // to the same `null` guard as any other view without an analytics slot.
     default:
       return null;
   }

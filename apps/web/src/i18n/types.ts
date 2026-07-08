@@ -827,6 +827,7 @@ export interface Dict {
   'brands.empty': string;
   'brands.back': string;
   'brands.core': string;
+  'brands.loadFailed': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;
   'workspaceTabs.marketplace': string;
@@ -1939,6 +1940,7 @@ export interface Dict {
   'ds.tokens': string;
   'ds.specToggle': string;
   'ds.specLoading': string;
+  'ds.detailLoadFailed': string;
 
   // Avatar menu (project topbar)
   'avatar.title': string;

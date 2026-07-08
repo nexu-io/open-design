@@ -2433,4 +2433,35 @@ describe('DesignSystemDetailView', () => {
       }),
     );
   });
+
+  it('shows a back button and an error message instead of a dead end when the fetch fails', async () => {
+    const config: AppConfig = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: '',
+      model: '',
+      agentId: 'agent-1',
+      agentModels: {},
+      skillId: null,
+      designSystemId: null,
+    };
+    const onBack = vi.fn();
+
+    mocks.fetchDesignSystem.mockResolvedValue(null);
+
+    render(
+      <DesignSystemDetailView
+        id="user:missing-design-system"
+        selectedId="user:missing-design-system"
+        config={config}
+        agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}
+        onBack={onBack}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
 });

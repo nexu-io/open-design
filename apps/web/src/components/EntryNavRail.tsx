@@ -173,7 +173,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }
           onClick={() => selectView('brands')}
           testId="entry-nav-brands"
         >
-          <Icon name="grid" size={18} />
+          <Icon name="tag" size={18} />
         </NavButton>
         <NavButton
           active={view === 'plugins'}
