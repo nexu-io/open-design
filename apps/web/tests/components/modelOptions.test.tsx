@@ -120,10 +120,12 @@ describe('SearchableModelSelect', () => {
     fireEvent.click(screen.getByRole('combobox'));
 
     const option = await screen.findByRole('option', { name: /^deepseek-v4-flash$/ });
-    expect(option.textContent).toContain('Lowest cost');
-    expect(option.textContent).toContain('Fast');
+    expect(option.textContent).toContain('Low cost');
+    expect(option.textContent).toContain('Standard');
     expect(option.getAttribute('aria-labelledby')).toBeTruthy();
     expect(option.getAttribute('aria-describedby')).toBeTruthy();
+    expect(option).toHaveAccessibleName('deepseek-v4-flash');
+    expect(option).toHaveAccessibleDescription('Low cost Standard');
     expect(option.querySelector('[data-description]')).toBeNull();
     expect(option.querySelector('[data-label]')).toBeNull();
   });

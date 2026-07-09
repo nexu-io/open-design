@@ -1866,29 +1866,17 @@
   color: var(--accent-strong);
   background: var(--accent-tint);
 }
-.model-select-searchable__value-badge[data-tag='fast'],
-.model-select-searchable__option-badge[data-tag='fast'] {
-  --model-tag-color: #39a9a2;
-}
-.model-select-searchable__value-badge[data-tag='value'],
-.model-select-searchable__option-badge[data-tag='value'] {
-  --model-tag-color: #5b9f6d;
-}
-.model-select-searchable__value-badge[data-tag='balanced'],
-.model-select-searchable__option-badge[data-tag='balanced'] {
+.model-select-searchable__value-badge[data-tag='standard'],
+.model-select-searchable__option-badge[data-tag='standard'] {
   --model-tag-color: #90887a;
 }
-.model-select-searchable__value-badge[data-tag='reasoning'],
-.model-select-searchable__option-badge[data-tag='reasoning'] {
+.model-select-searchable__value-badge[data-tag='advanced'],
+.model-select-searchable__option-badge[data-tag='advanced'] {
   --model-tag-color: #bf8a34;
 }
-.model-select-searchable__value-badge[data-tag='premium'],
-.model-select-searchable__option-badge[data-tag='premium'] {
+.model-select-searchable__value-badge[data-tag='bestQuality'],
+.model-select-searchable__option-badge[data-tag='bestQuality'] {
   --model-tag-color: #c77858;
-}
-.model-select-searchable__value-badge[data-tag='coding'],
-.model-select-searchable__option-badge[data-tag='coding'] {
-  --model-tag-color: #758bd0;
 }
 .model-select-searchable__empty {
   padding: 12px 10px;
@@ -3761,23 +3749,14 @@
   opacity: 0.88;
   flex: 0 0 auto;
 }
-.onboarding-view__select-badge[data-tag='fast'] {
-  --model-tag-color: #39a9a2;
-}
-.onboarding-view__select-badge[data-tag='value'] {
-  --model-tag-color: #5b9f6d;
-}
-.onboarding-view__select-badge[data-tag='balanced'] {
+.onboarding-view__select-badge[data-tag='standard'] {
   --model-tag-color: #90887a;
 }
-.onboarding-view__select-badge[data-tag='reasoning'] {
+.onboarding-view__select-badge[data-tag='advanced'] {
   --model-tag-color: #bf8a34;
 }
-.onboarding-view__select-badge[data-tag='premium'] {
+.onboarding-view__select-badge[data-tag='bestQuality'] {
   --model-tag-color: #c77858;
-}
-.onboarding-view__select-badge[data-tag='coding'] {
-  --model-tag-color: #758bd0;
 }
 
 .onboarding-view__select-trigger.has-value {

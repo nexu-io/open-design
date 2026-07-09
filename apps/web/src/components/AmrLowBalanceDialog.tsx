@@ -9,7 +9,7 @@ import {
   attributedAmrUrl,
   recordAmrEntry,
 } from '../analytics/amr-attribution';
-import { amrConsoleUrlForProfile } from '../runtime/amr-guidance';
+import { amrConsoleUrlForProfile, amrPlansUrlForProfile } from '../runtime/amr-guidance';
 import { setAmrLowBalanceWarnOptedOut } from '../runtime/amr-balance-gate';
 import { formatVelaBalanceUsd } from '../providers/daemon';
 import { Icon } from './Icon';
@@ -20,6 +20,8 @@ export type AmrLowBalanceDecision = 'proceed' | 'recharge' | 'dismiss';
 interface Props {
   /** Raw wallet balance string from the warning snapshot. */
   balanceUsd: string | null;
+  /** Billing plan tier; free accounts get an upgrade CTA instead of top-up copy. */
+  plan?: string | null;
   /** Open Design Cloud profile from the warning snapshot; picks the console origin. */
   profile: string | null;
   /** Which surface warned — keys the amr_entry attribution on the recharge click. */
@@ -39,6 +41,7 @@ interface Props {
 // for every future soft warning. Hard blocks ignore the opt-out by design.
 export function AmrLowBalanceDialog({
   balanceUsd,
+  plan,
   profile,
   entrySource,
   metricsConsent,
@@ -49,6 +52,13 @@ export function AmrLowBalanceDialog({
   const analytics = useAnalytics();
   const optOutRef = useRef<HTMLInputElement>(null);
   const formattedBalance = formatVelaBalanceUsd(balanceUsd) ?? '';
+  const isFreePlan = plan?.trim().toLowerCase() === 'free';
+  const primaryActionUrl = isFreePlan
+    ? amrPlansUrlForProfile(profile)
+    : amrConsoleUrlForProfile(profile);
+  const primaryActionLabel = isFreePlan
+    ? t('chat.amrBalanceGate.plansCta')
+    : t('chat.amrLowBalance.rechargeCta');
   const commitOptOut = () => {
     if (optOutRef.current?.checked) setAmrLowBalanceWarnOptedOut();
   };
@@ -66,7 +76,7 @@ export function AmrLowBalanceDialog({
       installationId,
     });
     window.open(
-      attributedAmrUrl(amrConsoleUrlForProfile(profile), attribution, deviceId),
+      attributedAmrUrl(primaryActionUrl, attribution, deviceId),
       '_blank',
       'noopener,noreferrer',
     );
@@ -81,6 +91,14 @@ export function AmrLowBalanceDialog({
       className={styles.panel}
       data-testid="amr-low-balance-dialog"
     >
+      <button
+        type="button"
+        className={styles.closeButton}
+        onClick={() => decide('dismiss')}
+        aria-label={t('common.close')}
+      >
+        <Icon name="close" size={14} />
+      </button>
       <div className={styles.iconBadge} aria-hidden>
         <Icon name="info" size={22} />
       </div>
@@ -107,7 +125,7 @@ export function AmrLowBalanceDialog({
             onClick={openWalletAndPark}
             data-testid="amr-low-balance-dialog-recharge"
           >
-            {t('chat.amrLowBalance.rechargeCta')}
+            {primaryActionLabel}
           </Button>
         </div>
       </div>

@@ -1,6 +1,49 @@
 import { describe, expect, it } from 'vitest';
 
-import { getModelCostTier } from '../../src/components/modelCapabilityTags';
+import {
+  getModelCapabilityTag,
+  getModelCostTier,
+} from '../../src/components/modelCapabilityTags';
+
+describe('model capability tags', () => {
+  it('maps the nominated best-quality models to Best Quality', () => {
+    for (const id of [
+      'claude-fable-5',
+      'claude-opus-4-8',
+      'gpt5.5pro',
+      'grok-4.5',
+      'gemini-3.1-pro-preview',
+    ]) {
+      expect(getModelCapabilityTag({ id, label: id })).toBe('bestQuality');
+    }
+  });
+
+  it('maps the nominated advanced models to Advanced', () => {
+    for (const id of [
+      'claude-opus-4.7',
+      'claude-opus-4-6-thinking',
+      'claude-sonnet-5',
+      'openrouter/deepseek-v4-pro',
+      'gpt-5.5',
+      'kimi-k2.7-code',
+      'opencode-go/qwen3.7-max',
+      'glm-5.2',
+    ]) {
+      expect(getModelCapabilityTag({ id, label: id })).toBe('advanced');
+    }
+  });
+
+  it('maps other real models to Standard and leaves non-model options untagged', () => {
+    expect(getModelCapabilityTag({ id: 'deepseek-v4-flash', label: 'deepseek-v4-flash' }))
+      .toBe('standard');
+    expect(getModelCapabilityTag({ id: 'gpt-4o-mini', label: 'gpt-4o-mini' }))
+      .toBe('standard');
+    expect(getModelCapabilityTag({ id: 'default', label: 'Default' }))
+      .toBeNull();
+    expect(getModelCapabilityTag({ id: '__custom__', label: 'Custom (type below)…' }))
+      .toBeNull();
+  });
+});
 
 describe('model cost tiers', () => {
   it('uses input price per 1M tokens instead of model-name heuristics', () => {

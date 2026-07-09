@@ -99,6 +99,7 @@ import { UpdaterPopup } from './UpdaterPopup';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
 import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import { checkAmrBalanceGate } from '../runtime/amr-balance-gate';
+import { resolveAmrLowBalancePlan } from '../runtime/amr-low-balance-plan';
 import { GithubStarBadge } from './GithubStarBadge';
 import {
   formatDiscordPresenceCount,
@@ -547,7 +548,11 @@ export function EntryShell({
   // resolves the promise the submit handler is awaiting ('proceed' continues
   // the very same create-and-run).
   const [amrLowBalanceWarn, setAmrLowBalanceWarn] = useState<
-    { snapshot: AmrWalletSnapshot; resolve: (decision: AmrLowBalanceDecision) => void } | null
+    {
+      snapshot: AmrWalletSnapshot;
+      plan: string | null;
+      resolve: (decision: AmrLowBalanceDecision) => void;
+    } | null
   >(null);
   useEffect(() => {
     if (view !== 'design-systems') return;
@@ -725,8 +730,9 @@ export function EntryShell({
         // Hold THIS submit while the reminder waits for a decision; 'proceed'
         // resumes the same create-and-run below, so HomeView's normal accept
         // path (draft clearing, context consumption) still applies.
+        const plan = await resolveAmrLowBalancePlan(gate.snapshot);
         const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
-          setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
+          setAmrLowBalanceWarn({ snapshot: gate.snapshot, plan, resolve });
         });
         setAmrLowBalanceWarn(null);
         if (decision !== 'proceed') return 'blocked' as const;
@@ -1065,6 +1071,7 @@ export function EntryShell({
             {amrLowBalanceWarn ? (
               <AmrLowBalanceDialog
                 balanceUsd={amrLowBalanceWarn.snapshot.balanceUsd}
+                plan={amrLowBalanceWarn.plan}
                 profile={amrLowBalanceWarn.snapshot.profile}
                 entrySource="home_low_balance_warn_recharge"
                 metricsConsent={config.telemetry?.metrics === true}
