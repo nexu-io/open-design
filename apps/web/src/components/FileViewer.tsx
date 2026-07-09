@@ -9464,10 +9464,9 @@ function HtmlViewer({
     if (providerId === DISPLAYDEV_PROVIDER_ID) {
       const shouldClearToken = Boolean(deployConfig?.tokenMask) && !token;
       const currentDeployment = deployResult || deployment;
-      const accessSettingsUnavailable =
+      const isAuthenticatedUpdate =
         currentDeployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
-        currentDeployment.displayDev?.mode === 'authenticated' &&
-        !displayDevAccessSettingsForDeployment(currentDeployment);
+        currentDeployment.displayDev?.mode === 'authenticated';
       const existingDisplayDev = deployConfig?.displayDev;
       return {
         providerId,
@@ -9475,13 +9474,13 @@ function HtmlViewer({
         ...(shouldClearToken ? { clearToken: true } : {}),
         displayDev: {
           defaultArtifactName: displayDevArtifactName.trim(),
-          defaultVisibility: accessSettingsUnavailable
+          defaultVisibility: isAuthenticatedUpdate
             ? existingDisplayDev?.defaultVisibility || 'company'
             : displayDevVisibility,
-          defaultSharedWith: accessSettingsUnavailable
+          defaultSharedWith: isAuthenticatedUpdate
             ? existingDisplayDev?.defaultSharedWith || []
             : displayDevDefaultSharedWithFromForm(),
-          defaultShowBranding: accessSettingsUnavailable
+          defaultShowBranding: isAuthenticatedUpdate
             ? existingDisplayDev?.defaultShowBranding || 'inherit'
             : displayDevShowBranding,
         },
