@@ -2028,7 +2028,6 @@ function OnboardingView({
     setRuntime('byok');
     onModeChange('api');
     if (restoredConfig) {
-      onApiModelChange(restoredConfig.model);
       persistOnboardingConfig(restoredConfig);
     }
     setConnectExpanded('byok');

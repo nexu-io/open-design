@@ -1887,7 +1887,31 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
+    (props.onConfigPersist as ReturnType<typeof vi.fn>).mockClear();
+    (props.onApiModelChange as ReturnType<typeof vi.fn>).mockClear();
     fireEvent.click(screen.getByRole('button', { name: /Bring your own key/i }));
+
+    await waitFor(() => {
+      expect(props.onConfigPersist).toHaveBeenCalledTimes(1);
+    });
+    expect(props.onApiModelChange).not.toHaveBeenCalled();
+    expect((props.onConfigPersist as ReturnType<typeof vi.fn>).mock.calls[0]?.[0])
+      .toMatchObject({
+        apiProtocol: 'openai',
+        apiCredentialSource: 'user',
+        apiKey: 'openai-key',
+        baseUrl: 'https://openai-proxy.example.com',
+        model: 'openai-model',
+        apiProtocolConfigs: {
+          openai: {
+            apiCredentialSource: 'user',
+            apiKey: 'openai-key',
+            baseUrl: 'https://openai-proxy.example.com',
+            model: 'openai-model',
+            apiProviderBaseUrl: null,
+          },
+        },
+      });
 
     await waitFor(() => {
       expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe('openai-key');

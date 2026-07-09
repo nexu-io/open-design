@@ -33,7 +33,11 @@ import {
 } from '../integrations/aihubmix.js';
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
-import type { ConnectionTestProtocol } from '@open-design/contracts/api/connectionTest';
+import type {
+  ConnectionTestKind,
+  ConnectionTestProtocol,
+  ConnectionTestResponse,
+} from '@open-design/contracts/api/connectionTest';
 import type { ProxyStreamRequest } from '@open-design/contracts';
 import {
   proxyDispatcherRequestInit,
@@ -105,6 +109,38 @@ function deploymentRouteRunMetadataBody(
 function deploymentProxyRunMetadataBody(proxyBody: Partial<ProxyStreamRequest>): Record<string, unknown> {
   const body = proxyBody as Record<string, unknown>;
   return deploymentRouteRunMetadataBody(body, 'proxy', 'chat-completion');
+}
+
+type DeploymentConnectionFailureCode =
+  Exclude<DeploymentProviderRunMetadataResult, { ok: true }>['code'];
+
+function deploymentConnectionFailureKind(
+  status: number,
+  code: DeploymentConnectionFailureCode,
+  message: string,
+): ConnectionTestKind {
+  if (code === 'UNAUTHORIZED') return 'auth_failed';
+  if (code === 'FORBIDDEN') return 'forbidden';
+  if (code === 'RATE_LIMITED') return 'rate_limited';
+  if (status === 504) return 'timeout';
+  if (status >= 500 || code === 'UPSTREAM_UNAVAILABLE') return 'upstream_unavailable';
+  if (/base URL|run-session URL|URL is invalid/i.test(message)) return 'invalid_base_url';
+  return 'unknown';
+}
+
+function deploymentConnectionFailureResponse(
+  failure: Exclude<DeploymentProviderRunMetadataResult, { ok: true }>,
+  model: unknown,
+  start: number,
+): ConnectionTestResponse {
+  return {
+    ok: false,
+    kind: deploymentConnectionFailureKind(failure.status, failure.code, failure.message),
+    latencyMs: Date.now() - start,
+    ...(typeof model === 'string' && model.trim() ? { model: model.trim() } : {}),
+    status: failure.status,
+    detail: failure.message,
+  };
 }
 
 function isProviderProtocol(value: unknown): value is ConnectionTestProtocol {
@@ -350,6 +386,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     req.on('close', abortIfRequestAborted);
     res.on('close', abortIfResponseClosed);
     const body = req.body || {};
+    const start = Date.now();
     try {
       if (body.mode === 'provider') {
         const protocol = body.protocol;
@@ -372,6 +409,9 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         if (credentialSource === 'deployment') {
           const resolved = resolveDeploymentProviderProfile(protocol);
           if (!resolved.ok) {
+            if (protocol === 'openai') {
+              return res.json(deploymentConnectionFailureResponse(resolved, body.model, start));
+            }
             return sendApiError(res, resolved.status, resolved.code, resolved.message);
           }
           effectiveBaseUrl = resolved.profile.baseUrl;
@@ -413,7 +453,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             controller.signal,
           );
           if (!runMetadata.ok) {
-            return sendApiError(res, runMetadata.status, runMetadata.code, runMetadata.message);
+            return res.json(deploymentConnectionFailureResponse(runMetadata, body.model, start));
           }
           metadata = runMetadata.metadata;
         }
