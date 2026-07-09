@@ -22,6 +22,26 @@ Create a default fully qualified app name.
 {{- end }}
 
 {{/*
+Name of the Secret holding the API token.
+Uses config.existingSecret when set (externally-managed, e.g. via External Secrets),
+otherwise the chart-managed Secret named after the fullname.
+*/}}
+{{- define "open-design.secretName" -}}
+{{- if .Values.config.existingSecret }}
+{{- .Values.config.existingSecret }}
+{{- else }}
+{{- include "open-design.fullname" . }}
+{{- end }}
+{{- end }}
+
+{{/*
+Key within the API token Secret. Defaults to OD_API_TOKEN.
+*/}}
+{{- define "open-design.secretKey" -}}
+{{- .Values.config.existingSecretKey | default "OD_API_TOKEN" }}
+{{- end }}
+
+{{/*
 Create chart name and version as used by the chart label.
 */}}
 {{- define "open-design.chart" -}}

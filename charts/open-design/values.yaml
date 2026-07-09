@@ -19,7 +19,16 @@ config:
   nodeOptions: "--max-old-space-size=192"
   webPort: 7456
   bindHost: "127.0.0.1"
+  # API authentication token. Ignored when config.existingSecret is set.
+  # Required (non-empty) otherwise — the chart fails rendering if both are empty.
   apiToken: "secure-default-token-change-me"
+  # Source the API token from an existing, externally-managed Secret (e.g. one
+  # created by the External Secrets Operator) instead of letting the chart
+  # create its own Secret from config.apiToken. When set, config.apiToken is
+  # ignored and the chart renders no Secret of its own.
+  existingSecret: ""
+  # Key inside the Secret (both chart-managed and existingSecret) holding the token.
+  existingSecretKey: "OD_API_TOKEN"
 
 service:
   type: ClusterIP
