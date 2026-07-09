@@ -685,12 +685,20 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       : null,
   ].filter((section): section is HomeMentionSection => Boolean(section?.options.length));
   const visiblePickerOptions = visibleSections.flatMap((section) => section.options);
+  // When the teams tab is active but agents haven't been loaded yet,
+  // treat it as loading even before the useEffect sets agentsLoadingForTeams.
+  // This prevents a flash of "no results" on the first render frame.
+  const teamsEffectivelyLoading =
+    (mentionTab === 'teams' || mentionTab === 'all') &&
+    waitTeamEnabled &&
+    availableAgents.length === 0 &&
+    !agentsLoadingForTeams;
   const visibleLoading =
-    (mentionTab === 'all' && (pluginsLoading || skillsLoading || mcpLoading || agentsLoadingForTeams)) ||
+    (mentionTab === 'all' && (pluginsLoading || skillsLoading || mcpLoading || agentsLoadingForTeams || teamsEffectivelyLoading)) ||
     (mentionTab === 'plugins' && pluginsLoading) ||
     (mentionTab === 'skills' && skillsLoading) ||
     (mentionTab === 'mcp' && mcpLoading) ||
-    (mentionTab === 'teams' && agentsLoadingForTeams);
+    (mentionTab === 'teams' && (agentsLoadingForTeams || teamsEffectivelyLoading));
   const promptMentionEntities = useMemo(
     () =>
       buildHomeMentionEntities({
@@ -1809,7 +1817,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   )}
                 </div>
               ) : null}
-              {showTeams && mentionTab === 'teams' ? (
+              {showTeams && mentionTab === 'teams' && (teamMatches.length > 0 || agentsLoadingForTeams) ? (
                 <div className="home-hero__team-sub-tabs mention-team-tabs" role="tablist">
                   <button
                     role="tab"

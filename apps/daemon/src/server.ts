@@ -4064,6 +4064,10 @@ export async function startServer({
       });
   };
 
+  // Map runId → team child stdin, kept open so the frontend can send
+  // proceed (skip/continue) commands during multi-agent parallel execution.
+  const teamStdinMap = new Map<string, import('stream').Writable>();
+
   const startChatRun = async (chatBody, run) => {
     const lifecycle = createRunLifecycleTracer(run);
     lifecycle.mark('chat_run_started');
@@ -5003,8 +5007,20 @@ export async function startServer({
       run.child = teamChild;
       let teamStdoutBuf = '';
       let teamStderrTail = '';
-      teamChild.stdin.write(JSON.stringify(teamReq));
-      teamChild.stdin.end();
+      // Write JSON request as a single line so odteam's bufio.Scanner can read
+      // it, then keep stdin open for control commands (skip/continue).
+      teamChild.stdin.write(JSON.stringify(teamReq) + '\n');
+      // Register team stdin so the frontend can send proceed commands.
+      let teamStdinOpen = true;
+      teamStdinMap.set(run.id, teamChild.stdin);
+      const cleanupTeamStdin = () => {
+        if (!teamStdinOpen) return;
+        teamStdinOpen = false;
+        teamStdinMap.delete(run.id);
+        if (!teamChild.stdin.destroyed) {
+          try { teamChild.stdin.end(); } catch {}
+        }
+      };
       teamChild.stdout.on('data', (chunk) => {
         teamStdoutBuf += chunk.toString();
         const lines = teamStdoutBuf.split('\n');
@@ -5056,6 +5072,7 @@ export async function startServer({
         send('stderr', { chunk: text });
       });
       teamChild.on('error', (err) => {
+        cleanupTeamStdin();
         cleanupTeamWorkDir(teamWorkDir);
         send('error', createSseErrorPayload(
           'AGENT_EXECUTION_FAILED',
@@ -5064,6 +5081,7 @@ export async function startServer({
         design.runs.finish(run, 'failed', 1, null);
       });
       teamChild.on('close', (code, signal) => {
+        cleanupTeamStdin();
         // Flush any remaining buffered stdout
         if (teamStdoutBuf.trim()) {
           try {
@@ -7941,6 +7959,24 @@ export async function startServer({
       pinAssistantMessageOnRunCreate,
       reconcileAssistantMessageOnRunEnd,
     },
+  });
+
+  // ── Team proceed endpoint ──────────────────────────────────────
+  // When a multi-agent team is running in parallel mode, the frontend
+  // can send a "proceed" command to skip remaining agents and present
+  // the collective intent from already-completed agents. The daemon
+  // writes {"command":"proceed"} to the odteam process's stdin, which
+  // cancels the remaining goroutines and returns partial results.
+  app.post('/api/runs/:id/team-proceed', (req: ApiRequest, res: ApiResponse) => {
+    const runId = routeParamId(req);
+    if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
+    const stdin = teamStdinMap.get(runId);
+    if (stdin && !stdin.destroyed) {
+      stdin.write('{"command":"proceed"}\n');
+      res.json({ ok: true });
+    } else {
+      res.json({ ok: false, reason: 'stdin not available or already closed' });
+    }
   });
 
   // Each routine fire resolves an agent, prepares project/conversation state,

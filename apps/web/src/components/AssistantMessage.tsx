@@ -855,6 +855,15 @@ function AssistantMessageImpl({
             return <StatusPill key={i} label={b.label} detail={b.detail} />;
           }
           if (b.kind === "team-progress") {
+            const handleSkip = async () => {
+              const rid = message.runId;
+              if (!rid) return;
+              try {
+                await fetch(`/api/runs/${rid}/team-proceed`, { method: "POST" });
+              } catch {
+                /* daemon may already be cleaning up */
+              }
+            };
             return (
               <TeamProgressView
                 key="team-progress"
@@ -862,6 +871,8 @@ function AssistantMessageImpl({
                 mode={b.mode}
                 agents={b.agents}
                 allDone={b.allDone}
+                onSkip={handleSkip}
+                skipBusy={false}
               />
             );
           }

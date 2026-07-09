@@ -15,6 +15,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -60,10 +61,17 @@ type cliEvent struct {
 }
 
 func main() {
+	// 使用单一 bufio.Scanner 读取 stdin，避免 json.Decoder 内部缓冲
+	// 与 scanner 之间的数据竞争。第一行是初始 JSON 请求，后续行是控制命令。
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		emitError("failed to read stdin")
+		os.Exit(1)
+	}
+
 	var req teamRequest
-	dec := json.NewDecoder(os.Stdin)
-	if err := dec.Decode(&req); err != nil {
-		emitError(fmt.Sprintf("failed to read stdin: %v", err))
+	if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
+		emitError(fmt.Sprintf("failed to parse request: %v", err))
 		os.Exit(1)
 	}
 
@@ -83,6 +91,22 @@ func main() {
 		emitError("team.assignments must not be empty")
 		os.Exit(1)
 	}
+
+	// 后台读取 stdin 控制命令（如 {"command":"proceed"}），用于前端跳过/继续。
+	// daemon 在发送初始请求后保持 stdin 打开，前端触发跳过时 daemon 写入
+	// 控制命令到此 stdin，odteam 收到后取消剩余 Agent 并返回部分结果。
+	skipCh := make(chan struct{})
+	go func() {
+		for scanner.Scan() {
+			var cmd struct {
+				Command string `json:"command"`
+			}
+			if json.Unmarshal(scanner.Bytes(), &cmd) == nil && cmd.Command == "proceed" {
+				close(skipCh)
+				return
+			}
+		}
+	}()
 
 	// 从 team.assignments 构建 TeamConfig
 	cfg := buildTeamConfig(&req)
@@ -149,7 +173,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	results, execErr := runScheduler(ctx, cfg.Team.Mode, pool, b, plan)
+	results, execErr := runScheduler(ctx, cfg.Team.Mode, pool, b, plan, skipCh)
 
 	// 发送每个任务的结果事件
 	for _, r := range results {
@@ -263,6 +287,7 @@ func runScheduler(
 	pool *agent.Pool,
 	b *bus.CommunicationBus,
 	plan *scheduler.ExecutionPlan,
+	skipCh <-chan struct{},
 ) ([]*scheduler.TaskResult, error) {
 	switch mode {
 	case "inheritance":
@@ -276,6 +301,7 @@ func runScheduler(
 		return s.Execute(ctx, plan)
 	case "parallel":
 		s := scheduler.NewParallelScheduler(pool, b)
+		s.SetSkipChannel(skipCh)
 		return s.Execute(ctx, plan)
 	case "serial":
 		s := scheduler.NewSerialScheduler(pool, b)

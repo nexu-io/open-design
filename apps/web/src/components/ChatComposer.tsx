@@ -5702,7 +5702,7 @@ function MentionPopover({
             })}
           </>
         ) : null}
-        {showTeams && (teams.length > 0 || tab === 'teams') ? (
+        {showTeams && teams.length > 0 ? (
           <>
             {/* Sub-mode toggle: Recommended / Custom */}
             <div className="mention-team-tabs" role="tablist">

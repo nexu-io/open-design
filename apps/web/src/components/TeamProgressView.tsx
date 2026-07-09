@@ -17,6 +17,11 @@ interface Props {
   mode?: string;
   agents: TeamAgentState[];
   allDone?: boolean;
+  /** Callback when user clicks skip/continue during parallel execution.
+   *  Only rendered when not allDone and at least one agent has completed. */
+  onSkip?: () => void;
+  /** True while the skip request is in flight. Disables the button. */
+  skipBusy?: boolean;
 }
 
 const MODE_ICON_MAP: Record<string, IconName> = {
@@ -93,6 +98,8 @@ export const TeamProgressView = memo(function TeamProgressView({
   mode,
   agents,
   allDone,
+  onSkip,
+  skipBusy,
 }: Props) {
   if (agents.length === 0) return null;
 
@@ -103,6 +110,16 @@ export const TeamProgressView = memo(function TeamProgressView({
   const progress =
     totalCount > 0 ? Math.round(((doneCount + failedCount) / totalCount) * 100) : 0;
   const modeIcon: IconName = (mode && MODE_ICON_MAP[mode]) ? MODE_ICON_MAP[mode] : "grid";
+
+  // Show skip/continue when: not all done, some agents are running, and
+  // at least one agent has already completed (we have partial results).
+  // In parallel mode especially, this prevents the user from being stuck
+  // waiting for all agents when a collective intent is already available.
+  const skipAvailable =
+    !allDone &&
+    onSkip &&
+    runningCount > 0 &&
+    doneCount > 0;
 
   return (
     <div className={`team-progress-panel${allDone ? " team-progress-done" : ""}`}>
