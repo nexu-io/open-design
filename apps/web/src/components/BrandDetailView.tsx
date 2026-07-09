@@ -10,6 +10,7 @@ import type { BrandDetail } from '@marketing-ax/contracts';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
 import { useI18n } from '../i18n';
 import { fetchBrand } from '../providers/registry';
+import { brandAccentFallback } from './brand-accent';
 import styles from './BrandDetailView.module.css';
 
 interface Props {
@@ -51,7 +52,7 @@ export function BrandDetailView({ brandId, onBack }: Props) {
   if (!detail) return <div className="tab-panel" data-testid="brand-detail" />;
 
   const p = detail.presentation;
-  const primary = detail.primaryColor ?? detail.palette?.[0]?.value ?? '#1E86FA';
+  const primary = detail.primaryColor ?? detail.palette?.[0]?.value ?? brandAccentFallback(detail.id);
   const swatches = [
     ...(detail.palette?.map((e) => e.value) ?? []),
     ...(p?.neutralPalette ?? []),

@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import type { BrandSummary } from '@marketing-ax/contracts';
 import { useI18n } from '../i18n';
 import { fetchBrands } from '../providers/registry';
+import { brandAccentFallback } from './brand-accent';
 import styles from './BrandsTab.module.css';
 
 interface Props {
@@ -53,7 +54,7 @@ export function BrandsTab({ onOpenBrand }: Props) {
                 <div className={styles.cardHead}>
                   <div
                     className={styles.tile}
-                    style={{ background: brand.primaryColor ?? '#1E86FA' }}
+                    style={{ background: brand.primaryColor ?? brandAccentFallback(brand.id) }}
                   >
                     {brand.title.slice(0, 1)}
                   </div>
