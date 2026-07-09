@@ -180,7 +180,12 @@ jobs:
           git config user.email 'open-design-release-bot[bot]@users.noreply.github.com'
           git switch -c "$BRANCH"
           ( cd apps/packaged && npm pkg set version="$VERSION" )
-          git commit -am "chore(release): v$VERSION"
+          # main leads stable by exactly this patch in steady state (finalize-release
+          # bumps main to X.Y.(Z+1) after X.Y.Z ships), so apps/packaged is often
+          # already at $VERSION and the bump is a no-op. --allow-empty commits a
+          # release marker anyway instead of dying on "nothing to commit"; either way
+          # the branch is cut + pushed, which is what triggers notify-release-feishu.
+          git commit --allow-empty -am "chore(release): v$VERSION"
           git push origin "$BRANCH"   # App token push -> triggers notify-release-feishu (prerelease + Feishu)
 
       - name: Create backport label
