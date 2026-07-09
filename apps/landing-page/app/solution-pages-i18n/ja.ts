@@ -847,6 +847,134 @@ export const JA: SolutionLocaleCopy = {
       { href: '/solutions/engineering/', label: 'エンジニアリングのための Open Design' },
     ],
   },
+  htmlToPpt: {
+    title: 'HTML to PPT — Open Design で HTML を編集可能な PowerPoint に変える',
+    description:
+      '無料でオープンソースの HTML-to-PPT ワークフロー。コーディングエージェントが洗練された HTML 資料を組み立て、本物の編集可能な .pptx をエクスポートします。すべてはすでに使っているエージェントの中で完結します。クラウドコンバーターも、フラットなスライド画像も、ロックされたエクスポートもありません。HTML も PowerPoint も、あなたが所有するファイルです。',
+    breadcrumb: 'HTML to PPT',
+    label: 'ツール · HTML to PPT',
+    heading: 'エージェントの中で HTML to PPT',
+    lead: 'HTML ページ、markdown ドキュメント、あるいはプロンプトだけがありますか？コーディングエージェントにそれをきれいな HTML 資料へ組み立てさせ、本物の編集可能な PowerPoint をエクスポートしましょう。スライドごとのスクリーンショットではなく、編集し続けられるネイティブな図形とテキストです。HTML がソースで、.pptx はあなたのもの。プレゼンし、引き渡し、所有できます。',
+    heroImageAlt:
+      'コーディングエージェントの中で HTML 資料が編集可能な PowerPoint ファイルに変換される様子を、緑の選択ボックスで囲んで描いたエディトリアルなイラスト',
+    tldrTitle: '一言で言うと',
+    tldrBody:
+      'ほとんどの HTML-to-PPT コンバーターは、ページを編集できない静的なスライド画像に潰してしまいます。Open Design はコーディングエージェントの中で資料を HTML として組み立て、本物の編集可能な .pptx をエクスポートします。ネイティブなテキストと図形、あなたのデザインシステム、シート単位の課金なし、ベンダーロックなし。',
+    stepsTitle: 'HTML to PPT の仕組み',
+    steps: [
+      {
+        title: 'HTML、ドキュメント、またはプロンプトから始める',
+        body: 'エージェントに HTML ページ、markdown ドキュメント、あるいは資料の説明を渡します。Open Design が適切なスキルを読み込み、エージェントは生のマークアップだけでなく、見出し・セクション・データといった構造と意図を読み取ります。',
+        imageAlt: 'HTML と markdown ドキュメントがコーディングエージェントに手渡されるイラスト',
+      },
+      {
+        title: 'きれいな HTML 資料を組み立てる',
+        body: 'エージェントは、無題のボックスの羅列ではなく、既成のテーマ（ピッチデック、プロダクトローンチ、エディトリアル、テクニカル）を使い、一貫した書体・グリッド・カラーの本物のデザインシステム上に、コンテンツを HTML 資料としてレイアウトします。',
+        imageAlt: 'HTML コンテンツがデザインされたスライドの連なりになるイラスト',
+      },
+      {
+        title: '編集可能な .pptx をエクスポートする',
+        body: 'Open Design の pptx-generator が HTML 資料を本物の PowerPoint に変換します。ネイティブな図形、編集可能なテキスト、変更し続けられるチャートを備え、スライドごとのフラットな画像ではなく HTML-to-PPTX の忠実度を監査します。',
+        imageAlt: 'HTML 資料が編集可能な PowerPoint ファイルにエクスポートされるイラスト',
+      },
+      {
+        title: 'スライドを所有し引き渡す',
+        body: 'HTML と .pptx はあなたのリポジトリに置かれ、完全にあなたのものです。.pptx を PowerPoint や Keynote で開き、ブラウザからプレゼンし、あるいはエージェントで反復し続けられます。クラウドロックインも、HTML と資料の間での描き直しもありません。',
+        imageAlt: '緑の選択フレームに収まり、引き渡しの準備が整った完成スライドのイラスト',
+      },
+    ],
+    tableTitle: 'Open Design と一般的な HTML-to-PPT コンバーターの比較',
+    tableColCapability: '必要なこと',
+    tableColWithOd: 'Open Design なら',
+    tableColWithout: '一般的な HTML-to-PPT コンバーター',
+    tableRows: [
+      {
+        capability: '出発点',
+        withOd: 'HTML、ドキュメント、またはプロンプト — すでに動かしているエージェントの中で',
+        without: '別のクラウドコンバーターに HTML を貼り付ける',
+      },
+      {
+        capability: 'スライドの品質',
+        withOd: '本物のデザインシステムと既成テーマから生まれるきれいな HTML 資料',
+        without: 'ページをボックスごとにそのまま描画したもの',
+      },
+      {
+        capability: '編集可能な出力',
+        withOd: '本物の .pptx — ネイティブで編集可能なテキストと図形',
+        without: '変更できないフラットなスライド画像',
+      },
+      {
+        capability: 'エクスポート後の反復',
+        withOd: '会話で磨き、いつでも再生成して再エクスポート',
+        without: '固まった一度きりのファイル',
+      },
+      {
+        capability: '出力の所有',
+        withOd: 'HTML と .pptx のファイルがあなたのリポジトリに、完全にあなたのもの',
+        without: '相手のエディターやエクスポートクレジットに縛られる',
+      },
+      {
+        capability: 'コストとロックイン',
+        withOd: 'オープンソース、自分の鍵を持ち込み、ローカルで動作',
+        without: 'ファイル単位・クレジット単位のサブスク、ベンダーホスト型',
+      },
+    ],
+    featuresTitle: '資料に変えられるもの',
+    features: [
+      { title: 'HTML ページを PPT へ', body: 'HTML ページやエクスポートを編集可能な PowerPoint 資料に変えます。', thumb: 'example-html-ppt-pitch-deck' },
+      { title: 'Markdown を PPT へ', body: 'エージェントに markdown ドキュメントを渡すと、きれいな資料と .pptx が得られます。', thumb: 'example-html-ppt-course-module' },
+      { title: 'プロンプトから資料へ', body: 'トークの内容を説明すると、エージェントがスライドを起こして .pptx をエクスポートします。', thumb: 'example-html-ppt-product-launch' },
+      { title: 'ピッチデック', body: '強いストーリーときれいなデータスライドを備えた投資家向け・営業向けの資料。', thumb: 'example-html-ppt-pitch-deck' },
+      { title: 'プレゼンターモード', body: '編集可能な PowerPoint にもエクスポートできる Reveal 風の HTML 資料。', thumb: 'example-html-ppt-presenter-mode-reveal' },
+      { title: 'どんなビジュアルの好みにも', body: 'エディトリアル、大胆、ミニマル — テーマが .pptx まで一貫して行き渡ります。', thumb: 'example-deck-guizang-editorial' },
+    ],
+    galleryTitle: '始められるスライドテンプレート',
+    galleryLead:
+      'Open Design がレンダリングした本物の資料で、編集可能な .pptx にエクスポートできる状態です。コンテンツに近いテーマを選び、あなたのバリエーションを説明すると、エージェントが資料を組み立て、所有できる PowerPoint を手渡します。',
+    gallery: [
+      { thumb: 'deck-pitch', caption: 'ピッチデック' },
+      { thumb: 'deck-product-launch', caption: 'プロダクトローンチ資料' },
+      { thumb: 'deck-data-graph', caption: 'ダークなデータグラフ資料' },
+      { thumb: 'deck-gradient', caption: 'グラデーションのキーノート' },
+      { thumb: 'deck-blueprint', caption: 'テクニカルなブループリント資料' },
+      { thumb: 'deck-course', caption: 'コースモジュール資料' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '資料テンプレートを見る',
+    faqTitle: 'HTML to PPT に関するよくある質問',
+    faq: [
+      {
+        q: 'Open Design はどうやって HTML を PPT に変えますか？',
+        a: 'コーディングエージェントがコンテンツをきれいな HTML 資料に組み立て、次に Open Design の pptx-generator スキルがそれを本物の編集可能な .pptx にエクスポートします。スライドごとのフラットな画像ではなく、ネイティブな図形とテキストで、HTML-to-PPTX の忠実度を監査済みです。',
+      },
+      {
+        q: 'HTML を編集可能な PowerPoint に変換できますか？',
+        a: 'はい。.pptx にはネイティブで編集可能なテキストと図形が含まれ、PowerPoint や Keynote で変更し続けられます。スクリーンショットではありません。エージェントの中でソース資料を反復し続け、いつでも再エクスポートすることもできます。',
+      },
+      {
+        q: 'Claude Code で動きますか？',
+        a: 'はい。「claude html to ppt」はまさにこのワークフローです。Claude Code で動かすほか、Codex、Cursor Agent、Gemini CLI などでも動かせます。プロバイダーの鍵は自分で持ち込み、あなたのためにホストされるものは何もありません。',
+      },
+      {
+        q: '無料ですか？',
+        a: 'はい。Open Design はオープンソースで、あなたがすでに使っているコーディングエージェントの中で自分の鍵を使って動きます。HTML-to-PPT ワークフローにファイル単位・クレジット単位の課金はありません。',
+      },
+      {
+        q: 'スライドを生成することとの違いは何ですか？',
+        a: '資料の生成はふつうプロンプトやアウトラインから始まりますが、HTML to PPT はすでに手元にある HTML や markdown から始まり、編集可能な .pptx エクスポートに重点を置きます。どちらも同じ Open Design の資料エンジンを使います。アウトラインを起点とするフローについてはスライドのユースケースをご覧ください。',
+      },
+    ],
+    ctaTitle: '次の HTML 資料を編集可能な PPT に変える',
+    ctaBody:
+      'リポジトリにスターを付け、Open Design をインストールして、HTML — あるいはプロンプト — を、すでに使っているエージェントの中で、きれいな資料と本物の編集可能な .pptx に変えましょう。',
+    relatedTitle: '関連ツールとガイド',
+    related: [
+      { href: '/solutions/slides/', label: 'プレゼン資料を生成する' },
+      { href: '/solutions/design-to-code/', label: 'Open Design でデザインからコードへ' },
+      { href: '/plugins/templates/', label: '資料テンプレートを見る' },
+      { href: '/solutions/marketing/', label: 'マーケティングのための Open Design' },
+    ],
+  },
   aiPrototypeGenerator: {
     title: 'AI プロトタイプジェネレーター — プロンプトからクリック可能なプロトタイプ、そしてコードへ',
     description:
@@ -1349,8 +1477,8 @@ export const JA: SolutionLocaleCopy = {
         a: 'いいえ。エージェントはグリッド、文字サイズの体系、ビジュアル階層を備えた本物の資料テンプレートを適用するので、スライドは自動入力されたものではなく、デザインされて見えます。',
       },
       {
-        q: 'クライアント向けに PowerPoint にエクスポートできますか？',
-        a: 'はい。資料はプレゼン元の HTML に加えて PPTX と PDF にエクスポートできるので、相手が期待するどんな形式にも合わせられます。',
+        q: '編集可能な PowerPoint にエクスポートできますか？',
+        a: 'はい。Open Design の pptx-generator が資料を本物の .pptx にエクスポートします。ネイティブで編集可能なテキストと図形を備え、フラットなスライド画像ではなく HTML-to-PPTX の忠実度を監査済みです。加えて PDF と、プレゼン元となる HTML も得られます。変換を起点とするフローについては HTML to PPT ツールをご覧ください。',
       },
       {
         q: 'どのエージェントを使えますか？',
@@ -1360,6 +1488,13 @@ export const JA: SolutionLocaleCopy = {
     ctaTitle: '次の資料を今夜作る',
     ctaBody:
       'リポジトリにスターを付け、Open Design をインストールして、あなたのアウトラインを、すでに使っているエージェントの中で、デザインされた資料に変えましょう。',
+    relatedTitle: '関連ツールとガイド',
+    related: [
+      { href: '/solutions/html-to-ppt/', label: 'Open Design で HTML から PPT へ' },
+      { href: '/solutions/design-to-code/', label: 'Open Design でデザインからコードへ' },
+      { href: '/plugins/templates/', label: '資料テンプレートを見る' },
+      { href: '/solutions/marketing/', label: 'マーケティングのための Open Design' },
+    ],
   },
   image: {
     title: 'Open Design + Claude Code でブランドに沿ったグラフィックを生成する',
