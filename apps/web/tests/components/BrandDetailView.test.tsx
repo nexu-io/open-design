@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BrandDetail } from '@marketing-ax/contracts';
 
 import { BrandDetailView } from '../../src/components/BrandDetailView';
+import { fetchBrand } from '../../src/providers/registry';
 
 const detail: BrandDetail = {
   id: 'bodoc',
@@ -57,5 +58,14 @@ describe('BrandDetailView', () => {
     await waitFor(() => expect(screen.getByText('블로그')).toBeTruthy());
     fireEvent.click(screen.getByText('블로그'));
     await waitFor(() => expect(screen.getByText(/blog body/)).toBeTruthy());
+  });
+
+  it('shows a back button and an error alert instead of a dead end when the fetch fails', async () => {
+    vi.mocked(fetchBrand).mockRejectedValueOnce(new Error('boom'));
+    const onBack = vi.fn();
+    render(<BrandDetailView brandId="bodoc" onBack={onBack} />);
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button'));
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 });
