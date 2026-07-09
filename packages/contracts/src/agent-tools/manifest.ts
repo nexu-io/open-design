@@ -3,7 +3,7 @@
 // a large registry. Pure types only: no runtime logic, no imports from
 // apps/daemon/browser/React. The MCP-congruent `tools/list` analog.
 
-import type { AgentToolDescriptor, AgentToolSurface } from './descriptor.js';
+import type { AgentToolDescriptor } from './descriptor.js';
 import { AGENT_ACTIONS_PROTOCOL_VERSION } from './actions.js';
 
 /**
@@ -30,8 +30,16 @@ export interface AgentToolManifest {
 export interface AgentToolSearchQuery {
   /** Free-text match over tool name/description. Omitted = match all. */
   query?: string;
-  /** Restrict to one surface (only browser view tools, or only api capabilities). */
-  surface?: AgentToolSurface;
+  /**
+   * Restrict to a surface. Search is the PULL path over the persistent registry,
+   * which holds only `api`-surface tools — browser availability is PUSH-advertised
+   * per-session and is never searched (see the RFC "Advertisement axis — PUSH vs
+   * PULL"). So `'api'` is the only searchable surface: the field exists to document
+   * that scope and to stay forward-compatible if a future surface becomes
+   * persistently searchable. Browser-tool discovery needs live session scope this
+   * query deliberately does not carry.
+   */
+  surface?: 'api';
   /** Page size. The registry clamps to its own maximum. */
   limit?: number;
   /** Opaque forward cursor from a previous {@link AgentToolSearchResult.nextCursor}. */
