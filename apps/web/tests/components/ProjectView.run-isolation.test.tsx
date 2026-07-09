@@ -1719,6 +1719,7 @@ describe('ProjectView conversation run isolation', () => {
         baseUrl: 'http://localhost:11434',
         requiresApiKey: false,
         apiVersion: '',
+        model: 'llama3.2',
       },
       model: 'llama3.2',
     }));
@@ -1752,6 +1753,7 @@ describe('ProjectView conversation run isolation', () => {
         baseUrl: 'http://127.0.0.1:8000/v1',
         requiresApiKey: false,
         apiVersion: '',
+        model: 'model',
       },
       model: 'model',
     }));
