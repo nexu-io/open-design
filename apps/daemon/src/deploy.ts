@@ -328,34 +328,26 @@ function normalizeDisplayDevConfigHints(input: unknown, fallback: DisplayDevConf
       : typeof prior.defaultArtifactName === 'string'
         ? prior.defaultArtifactName.trim()
         : '';
-  const rawVisibility =
-    typeof source.defaultVisibility === 'string'
-      ? source.defaultVisibility
-      : typeof prior.defaultVisibility === 'string'
-        ? prior.defaultVisibility
-        : '';
-  const defaultVisibility =
-    rawVisibility === 'public' || rawVisibility === 'company' || rawVisibility === 'private'
-      ? rawVisibility
+  const hasDefaultVisibilityInput = Object.prototype.hasOwnProperty.call(source, 'defaultVisibility');
+  const defaultVisibility = hasDefaultVisibilityInput
+    ? displayDevVisibilityFromInput(source.defaultVisibility, 'defaultVisibility')
+    : typeof prior.defaultVisibility === 'string'
+      ? displayDevVisibilityFromInput(prior.defaultVisibility, 'defaultVisibility')
       : undefined;
-  const rawSharedWith = Array.isArray(source.defaultSharedWith)
-    ? source.defaultSharedWith
+  const hasDefaultSharedWithInput = Object.prototype.hasOwnProperty.call(source, 'defaultSharedWith');
+  const rawSharedWith = hasDefaultSharedWithInput
+    ? displayDevStringArrayFromInput(source.defaultSharedWith, 'defaultSharedWith')
     : Array.isArray(prior.defaultSharedWith)
-      ? prior.defaultSharedWith
+      ? displayDevStringArrayFromInput(prior.defaultSharedWith, 'defaultSharedWith')
       : [];
   const defaultSharedWith = rawSharedWith
-    .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim())
     .filter(Boolean);
-  const rawShowBranding =
-    typeof source.defaultShowBranding === 'string'
-      ? source.defaultShowBranding
-      : typeof prior.defaultShowBranding === 'string'
-        ? prior.defaultShowBranding
-        : '';
-  const defaultShowBranding =
-    rawShowBranding === 'inherit' || rawShowBranding === 'show' || rawShowBranding === 'hide'
-      ? rawShowBranding
+  const hasDefaultShowBrandingInput = Object.prototype.hasOwnProperty.call(source, 'defaultShowBranding');
+  const defaultShowBranding = hasDefaultShowBrandingInput
+    ? displayDevShowBrandingFromInput(source.defaultShowBranding, 'defaultShowBranding')
+    : typeof prior.defaultShowBranding === 'string'
+      ? displayDevShowBrandingFromInput(prior.defaultShowBranding, 'defaultShowBranding')
       : undefined;
   return {
     ...(defaultArtifactName ? { defaultArtifactName } : {}),
@@ -393,23 +385,28 @@ function normalizeDisplayDevDeploySelection(input: unknown): DisplayDevDeploySel
   };
 }
 
-function displayDevVisibilityFromInput(value: unknown): DisplayDevDeploySelection['visibility'] {
+function displayDevVisibilityFromInput(value: unknown, field = 'visibility'): DisplayDevDeploySelection['visibility'] {
   if (value === 'public' || value === 'company' || value === 'private') return value;
-  throw new DeployError('display.dev visibility must be "public", "company", or "private".', 400);
+  throw new DeployError(`display.dev ${field} must be "public", "company", or "private".`, 400);
 }
 
-function displayDevShowBrandingFromInput(value: unknown): DisplayDevDeploySelection['showBranding'] {
+function displayDevShowBrandingFromInput(value: unknown, field = 'showBranding'): DisplayDevDeploySelection['showBranding'] {
   if (value === 'inherit' || value === 'show' || value === 'hide') return value;
-  throw new DeployError('display.dev showBranding must be "inherit", "show", or "hide".', 400);
+  throw new DeployError(`display.dev ${field} must be "inherit", "show", or "hide".`, 400);
 }
 
 function displayDevSharedWithFromInput(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    if (value.every((item) => typeof item === 'string')) return value;
-    throw new DeployError('display.dev sharedWith must contain only strings.', 400);
-  }
+  if (Array.isArray(value)) return displayDevStringArrayFromInput(value, 'sharedWith');
   if (typeof value === 'string') return value.split(',');
   throw new DeployError('display.dev sharedWith must be a string or an array of strings.', 400);
+}
+
+function displayDevStringArrayFromInput(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new DeployError(`display.dev ${field} must be an array of strings.`, 400);
+  }
+  if (value.every((item) => typeof item === 'string')) return value;
+  throw new DeployError(`display.dev ${field} must contain only strings.`, 400);
 }
 
 function displayDevDefaultArtifactName(entry: DeployFile, projectId: string) {

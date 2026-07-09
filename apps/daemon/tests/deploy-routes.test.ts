@@ -135,6 +135,38 @@ describe('deploy provider routes', () => {
         },
       });
 
+      const invalidDisplayDefaultCases: Array<[Record<string, unknown>, string]> = [
+        [
+          { defaultVisibility: 'publik' },
+          'display.dev defaultVisibility must be "public", "company", or "private".',
+        ],
+        [
+          { defaultShowBranding: 'sometimes' },
+          'display.dev defaultShowBranding must be "inherit", "show", or "hide".',
+        ],
+        [
+          { defaultSharedWith: ['ok@example.com', 123] },
+          'display.dev defaultSharedWith must contain only strings.',
+        ],
+      ];
+      for (const [displayDev, message] of invalidDisplayDefaultCases) {
+        const invalidDefaultResp = await fetch(`${baseUrl}/api/deploy/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            providerId: DISPLAYDEV_PROVIDER_ID,
+            displayDev,
+          }),
+        });
+        expect(invalidDefaultResp.status).toBe(400);
+        expect(await invalidDefaultResp.json()).toMatchObject({
+          error: {
+            code: 'BAD_REQUEST',
+            message,
+          },
+        });
+      }
+
       await writeFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), JSON.stringify({
         token: 'dsp_live_secret',
         apiUrl: 'api.display.test:3331',

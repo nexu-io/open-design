@@ -312,6 +312,34 @@ describe('deploy config', () => {
     }
   });
 
+  it.each([
+    ['defaultVisibility', { defaultVisibility: 'publik' }, /defaultVisibility must be/i],
+    ['defaultShowBranding', { defaultShowBranding: 'sometimes' }, /defaultShowBranding must be/i],
+    ['defaultSharedWith scalar', { defaultSharedWith: 'team@example.com' }, /defaultSharedWith must be an array/i],
+    ['defaultSharedWith entry', { defaultSharedWith: ['team@example.com', 123] }, /defaultSharedWith must contain only strings/i],
+  ])('rejects malformed display.dev defaults on write: %s', async (_field, displayDev, message) => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-config-test-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      await expect(writeDisplayDevConfig({
+        displayDev,
+      })).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringMatching(message),
+      });
+
+      expect(await readDisplayDevConfig()).toMatchObject({
+        token: '',
+        apiUrl: 'https://api.display.dev',
+      });
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
   it('rejects malformed saved display.dev API URLs on read', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-config-test-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
@@ -325,6 +353,30 @@ describe('deploy config', () => {
       await expect(readDisplayDevConfig()).rejects.toMatchObject({
         status: 400,
         message: 'display.dev API URL must be a valid HTTP or HTTPS URL.',
+      });
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects malformed saved display.dev defaults on read', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-config-test-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      await writeFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), JSON.stringify({
+        token: 'dsp_live_secret',
+        apiUrl: 'https://api.display.dev',
+        displayDev: {
+          defaultVisibility: 'publik',
+        },
+      }));
+
+      await expect(readDisplayDevConfig()).rejects.toMatchObject({
+        status: 400,
+        message: 'display.dev defaultVisibility must be "public", "company", or "private".',
       });
     } finally {
       if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
