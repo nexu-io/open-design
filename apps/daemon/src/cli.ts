@@ -65,6 +65,7 @@ const MEDIA_GENERATE_STRING_FLAGS = new Set([
   'audio-kind',
   'composition-dir',
   'image',
+  'images',
   'daemon-url',
   'language',
 ]);
@@ -820,6 +821,15 @@ async function runMediaGenerate(rawArgs) {
     process.exit(2);
   }
 
+  let imageRefs;
+  try {
+    imageRefs = mediaReferenceImagesFromArgs(rawArgs);
+  } catch (err) {
+    console.error(err.message);
+    printMediaHelp();
+    process.exit(2);
+  }
+
   const body = {
     surface,
     model: flags.model,
@@ -829,9 +839,10 @@ async function runMediaGenerate(rawArgs) {
     voice: flags.voice,
     audioKind: flags['audio-kind'],
     compositionDir: flags['composition-dir'],
-    image: flags.image,
+    image: imageRefs.image,
     language: flags.language,
   };
+  if (imageRefs.images.length > 0) body.images = imageRefs.images;
   if (flags.length != null) body.length = Number(flags.length);
   if (flags.duration != null) body.duration = Number(flags.duration);
   if (flags['prompt-influence'] != null) body.promptInfluence = Number(flags['prompt-influence']);
@@ -1079,6 +1090,57 @@ function parseFlags(argv, opts = {}) {
   return out;
 }
 
+function collectStringFlagValues(argv, key) {
+  const out = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!a || !a.startsWith('--')) continue;
+    const eq = a.indexOf('=');
+    const flagKey = eq >= 0 ? a.slice(2, eq) : a.slice(2);
+    if (flagKey !== key) continue;
+    if (eq >= 0) {
+      out.push(a.slice(eq + 1));
+      continue;
+    }
+    const next = argv[i + 1];
+    if (next == null) {
+      throw new Error(`flag --${key} requires a value`);
+    }
+    out.push(next);
+    i++;
+  }
+  return out;
+}
+
+function parseMediaImagesFlagValue(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  if (raw.startsWith('[')) {
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error('--images must be a JSON string array or a comma-separated list');
+    }
+    if (!Array.isArray(parsed) || !parsed.every((item) => typeof item === 'string')) {
+      throw new Error('--images JSON must be an array of strings');
+    }
+    return parsed.map((item) => item.trim()).filter(Boolean);
+  }
+  return raw.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function mediaReferenceImagesFromArgs(argv) {
+  const repeatedImages = collectStringFlagValues(argv, 'image')
+    .map((item) => String(item).trim())
+    .filter(Boolean);
+  const images = collectStringFlagValues(argv, 'images').flatMap(parseMediaImagesFlagValue);
+  return {
+    image: repeatedImages[0],
+    images: [...repeatedImages.slice(1), ...images],
+  };
+}
+
 function positionalArgs(argv, stringFlags = new Set()) {
   const out = [];
   for (let i = 0; i < argv.length; i++) {
@@ -1132,6 +1194,13 @@ Common options:
                             future image-edit endpoints). Daemon reads
                             the file from the project, base64-encodes
                             it, and forwards it to the upstream API.
+                            Repeat --image to pass multiple references;
+                            the first value is primary and the rest are
+                            forwarded as additional references.
+  --images <json|csv>       Additional reference images as a JSON string
+                            array or comma-separated list. Volcengine
+                            image generation also accepts remote http(s)
+                            reference URLs here.
   --daemon-url <url>
 
 Output: a single line of JSON: {"file": { name, size, kind, mime, ... }}

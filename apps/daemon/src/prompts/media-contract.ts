@@ -348,6 +348,11 @@ showed it crashed).
   the current dispatcher writes a single preview image plus metadata. Do not
   promise editable layer files unless the returned media JSON includes an
   explicit layer manifest or supporting layer assets.
+  Seedream 5.0 Pro also accepts multiple reference images: repeat
+  \`--image <project-relative-path-or-url>\` or pass \`--images '["ref1","ref2"]'\`
+  to \`"$OD_NODE_BIN" "$OD_BIN" media generate\`. The first repeated
+  \`--image\` value is the primary reference; remaining values are forwarded
+  as additional references.
 - **video**:   ${VIDEO_IDS}
   Image-to-video (i2v): the Volcengine Seedance family
   (\`doubao-seedance-2-0-260128\`, \`doubao-seedance-2-0-fast-260128\`,

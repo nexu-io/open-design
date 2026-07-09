@@ -208,6 +208,120 @@ describe('CLI startup boundaries', () => {
     ]);
   });
 
+  it('forwards multiple media reference images through the CLI request body', async () => {
+    let resolveGenerateBody!: (body: unknown) => void;
+    let rejectGenerateBody!: (error: Error) => void;
+    const generateBody = new Promise<unknown>((resolve, reject) => {
+      resolveGenerateBody = resolve;
+      rejectGenerateBody = reject;
+    });
+    const server = http.createServer((req, res) => {
+      let raw = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => {
+        raw += chunk;
+      });
+      req.on('end', () => {
+        if (req.method === 'POST' && req.url === '/api/projects/project-1/media/generate') {
+          const body = JSON.parse(raw);
+          resolveGenerateBody(body);
+          res.writeHead(202, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ taskId: 'task-1', status: 'queued' }));
+          return;
+        }
+        if (req.method === 'POST' && req.url === '/api/media/tasks/task-1/wait') {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({
+            status: 'done',
+            nextSince: 1,
+            progress: [],
+            file: {
+              name: 'seedream.png',
+              size: 12,
+              kind: 'image',
+              mime: 'image/png',
+              warnings: [],
+            },
+          }));
+          return;
+        }
+        res.writeHead(404, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'unexpected request' }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    const daemonUrl = `http://127.0.0.1:${port}`;
+
+    const child = spawn(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        cliEntry,
+        'media',
+        'generate',
+        '--project',
+        'project-1',
+        '--surface',
+        'image',
+        '--model',
+        'doubao-seedream-5-0-pro-260628',
+        '--prompt',
+        'swap the clothing from reference 2 onto reference 1',
+        '--image',
+        'person.png',
+        '--image',
+        'outfit.png',
+        '--images',
+        'background.png,https://example.com/style.png',
+        '--daemon-url',
+        daemonUrl,
+      ],
+      {
+        cwd: daemonRoot,
+        env: { ...process.env },
+      },
+    );
+    let childOutput = '';
+    child.stdout.on('data', (chunk: Buffer) => {
+      childOutput += chunk.toString('utf8');
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      childOutput += chunk.toString('utf8');
+    });
+    child.once('exit', (code, signal) => {
+      rejectGenerateBody(new Error(`media CLI exited before request body was captured: code=${code} signal=${signal}; output:\n${childOutput}`));
+    });
+
+    try {
+      const body = await Promise.race([
+        generateBody,
+        new Promise<never>((_, reject) => {
+          const timer = setTimeout(() => reject(new Error(`timed out waiting for media generate body; output:\n${childOutput}`)), 10_000);
+          timer.unref?.();
+        }),
+      ]);
+      expect(body).toEqual(
+        expect.objectContaining({
+          surface: 'image',
+          model: 'doubao-seedream-5-0-pro-260628',
+          prompt: 'swap the clothing from reference 2 onto reference 1',
+          image: 'person.png',
+          images: [
+            'outfit.png',
+            'background.png',
+            'https://example.com/style.png',
+          ],
+        }),
+      );
+    } finally {
+      await terminateChild(child);
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('prints AMR status JSON from the daemon status endpoint without wallet fallback', async () => {
     const seen: Array<{ method: string | undefined; url: string | undefined }> = [];
     const server = http.createServer((req, res) => {
