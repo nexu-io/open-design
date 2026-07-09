@@ -1,6 +1,6 @@
 // Phase 4 / spec §23.3.5 — bundled plugin boot walker.
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -113,6 +113,48 @@ describe('registerBundledPlugins', () => {
     await registerBundledPlugins({ db, bundledRoot: tmpRoot });
     await registerBundledPlugins({ db, bundledRoot: tmpRoot });
     expect(listInstalledPlugins(db).length).toBe(1);
+  });
+
+  // Regression for: this walker re-runs every daemon boot, and each run
+  // stamps a fresh `now` onto every record it builds. A re-registration that
+  // changes nothing must not bump `installedAt`/`updatedAt` — otherwise every
+  // restart resets the whole bundled catalog's freshness to the same instant,
+  // which is exactly what broke the Community gallery's "Newest" sort (it
+  // orders by `updatedAt`).
+  it('preserves installedAt/updatedAt across a no-op re-registration', async () => {
+    const folder = path.join(tmpRoot, 'atoms', 'sample');
+    await mkdir(folder, { recursive: true });
+    await writeFile(path.join(folder, 'open-design.json'), SAMPLE_MANIFEST('sample'));
+    await writeFile(path.join(folder, 'SKILL.md'), SAMPLE_SKILL('sample'));
+
+    const nowSpy = vi.spyOn(Date, 'now');
+    nowSpy.mockReturnValue(1_000);
+    await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+    const [first] = listInstalledPlugins(db);
+    expect(first?.installedAt).toBe(1_000);
+    expect(first?.updatedAt).toBe(1_000);
+
+    // Simulate a later boot with nothing on disk changed.
+    nowSpy.mockReturnValue(2_000);
+    await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+    const [second] = listInstalledPlugins(db);
+    expect(second?.installedAt).toBe(1_000);
+    expect(second?.updatedAt).toBe(1_000);
+
+    // A genuine content change (version bump) at a later boot DOES refresh
+    // updatedAt — the guard only skips no-op re-registrations.
+    await writeFile(
+      path.join(folder, 'open-design.json'),
+      SAMPLE_MANIFEST('sample').replace('"0.1.0"', '"0.2.0"'),
+    );
+    nowSpy.mockReturnValue(3_000);
+    await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+    const [third] = listInstalledPlugins(db);
+    expect(third?.installedAt).toBe(1_000);
+    expect(third?.updatedAt).toBe(3_000);
+    expect(third?.version).toBe('0.2.0');
+
+    nowSpy.mockRestore();
   });
 
   it('returns empty result when bundledRoot does not exist', async () => {

@@ -25,6 +25,7 @@ import { promises as fsp } from 'node:fs';
 import type Database from 'better-sqlite3';
 import {
   deleteInstalledPlugin,
+  getInstalledPlugin,
   resolvePluginFolder,
   upsertInstalledPlugin,
   type RegistryRoots,
@@ -167,7 +168,24 @@ async function registerOne(args: {
     args.warnings.push(`bundled plugin ${args.folderId} failed to parse: ${probe.errors.join('; ')}`);
     return;
   }
-  const record = withMarketplaceProvenance(probe.record, args.input.marketplaceProvenance);
+  let record = withMarketplaceProvenance(probe.record, args.input.marketplaceProvenance);
+  // This walker re-runs on every daemon boot (it's how bundled plugins pick up
+  // an upgrade without a boot flag), so `record` always carries a fresh
+  // `installedAt`/`updatedAt` stamped at construction time (registry.ts). If
+  // nothing about this plugin actually changed since last boot, keep the
+  // existing timestamps instead of overwriting them with "now" — otherwise
+  // every restart resets the ENTIRE bundled catalog's `updatedAt` to the same
+  // instant, which collapses the Community gallery's "Newest" sort (it orders
+  // by `updatedAt`) into whatever order ties fall back to, instead of real
+  // recency.
+  const existing = getInstalledPlugin(args.input.db, record.id);
+  if (
+    existing &&
+    existing.version === record.version &&
+    JSON.stringify(existing.manifest) === JSON.stringify(record.manifest)
+  ) {
+    record = { ...record, installedAt: existing.installedAt, updatedAt: existing.updatedAt };
+  }
   upsertInstalledPlugin(args.input.db, record);
   args.seenFolderIds.add(record.id);
   args.out.push(record);
