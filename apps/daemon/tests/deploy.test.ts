@@ -1078,7 +1078,7 @@ describe('deployToDisplayDev', () => {
   });
 
   it('preserves display.dev access settings when updating an owned artifact without overrides', async () => {
-    const calls: Array<{ url: string; method?: string; auth?: string | null; body?: FormData }> = [];
+    const calls: Array<{ url: string; method?: string; auth?: string | null; ifMatch?: string | null; body?: FormData }> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url =
         typeof input === 'string'
@@ -1086,19 +1086,32 @@ describe('deployToDisplayDev', () => {
           : input instanceof Request
             ? input.url
             : String(input);
+      const headers = init?.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
+        ? init.headers as Record<string, string>
+        : {};
+      const method = init?.method || 'GET';
       calls.push({
         url,
-        ...(init?.method ? { method: init.method } : {}),
-        auth: init?.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
-          ? (init.headers as Record<string, string>).Authorization ?? null
-          : null,
+        method,
+        auth: headers.Authorization ?? null,
+        ifMatch: headers['If-Match'] ?? null,
         ...(init?.body instanceof FormData ? { body: init.body } : {}),
       });
-      if (url.endsWith('/v1/artifacts/owned1234')) {
+      if (method === 'GET' && url.endsWith('/v1/artifacts/owned1234')) {
         return new Response(JSON.stringify({
           shortId: 'owned1234',
           url: 'https://display.dsp.so/owned1234-demo',
-          version: 2,
+          currentVersion: 2,
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json', etag: '"v2"' },
+        });
+      }
+      if (method === 'PUT' && url.endsWith('/v1/artifacts/owned1234')) {
+        return new Response(JSON.stringify({
+          shortId: 'owned1234',
+          url: 'https://display.dsp.so/owned1234-demo',
+          version: 3,
         }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -1134,18 +1147,25 @@ describe('deployToDisplayDev', () => {
 
     expect(calls[0]).toMatchObject({
       url: 'https://api.display.dev/v1/artifacts/owned1234',
+      method: 'GET',
+      auth: 'Bearer dsp_live_secret',
+      ifMatch: null,
+    });
+    expect(calls[1]).toMatchObject({
+      url: 'https://api.display.dev/v1/artifacts/owned1234',
       method: 'PUT',
       auth: 'Bearer dsp_live_secret',
+      ifMatch: '"v2"',
     });
-    expect(calls[0]?.body?.get('name')).toBeNull();
-    expect(calls[0]?.body?.get('visibility')).toBeNull();
-    expect(calls[0]?.body?.get('sharedWith')).toBeNull();
-    expect(calls[0]?.body?.get('clearSharedWith')).toBeNull();
-    expect(calls[0]?.body?.get('showBranding')).toBeNull();
+    expect(calls[1]?.body?.get('name')).toBeNull();
+    expect(calls[1]?.body?.get('visibility')).toBeNull();
+    expect(calls[1]?.body?.get('sharedWith')).toBeNull();
+    expect(calls[1]?.body?.get('clearSharedWith')).toBeNull();
+    expect(calls[1]?.body?.get('showBranding')).toBeNull();
   });
 
   it('clears display.dev shared recipients when updating an owned artifact with an empty share list', async () => {
-    const calls: Array<{ url: string; method?: string; auth?: string | null; body?: FormData }> = [];
+    const calls: Array<{ url: string; method?: string; auth?: string | null; ifMatch?: string | null; body?: FormData }> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url =
         typeof input === 'string'
@@ -1153,19 +1173,32 @@ describe('deployToDisplayDev', () => {
           : input instanceof Request
             ? input.url
             : String(input);
+      const headers = init?.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
+        ? init.headers as Record<string, string>
+        : {};
+      const method = init?.method || 'GET';
       calls.push({
         url,
-        ...(init?.method ? { method: init.method } : {}),
-        auth: init?.headers && typeof init.headers === 'object' && !Array.isArray(init.headers)
-          ? (init.headers as Record<string, string>).Authorization ?? null
-          : null,
+        method,
+        auth: headers.Authorization ?? null,
+        ifMatch: headers['If-Match'] ?? null,
         ...(init?.body instanceof FormData ? { body: init.body } : {}),
       });
-      if (url.endsWith('/v1/artifacts/owned1234')) {
+      if (method === 'GET' && url.endsWith('/v1/artifacts/owned1234')) {
         return new Response(JSON.stringify({
           shortId: 'owned1234',
           url: 'https://display.dsp.so/owned1234-demo',
-          version: 2,
+          currentVersion: 2,
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json', etag: '"v2"' },
+        });
+      }
+      if (method === 'PUT' && url.endsWith('/v1/artifacts/owned1234')) {
+        return new Response(JSON.stringify({
+          shortId: 'owned1234',
+          url: 'https://display.dsp.so/owned1234-demo',
+          version: 3,
         }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -1202,13 +1235,20 @@ describe('deployToDisplayDev', () => {
 
     expect(calls[0]).toMatchObject({
       url: 'https://api.display.dev/v1/artifacts/owned1234',
+      method: 'GET',
+      auth: 'Bearer dsp_live_secret',
+      ifMatch: null,
+    });
+    expect(calls[1]).toMatchObject({
+      url: 'https://api.display.dev/v1/artifacts/owned1234',
       method: 'PUT',
       auth: 'Bearer dsp_live_secret',
+      ifMatch: '"v2"',
     });
-    expect(calls[0]?.body?.get('sharedWith')).toBeNull();
-    expect(calls[0]?.body?.get('clearSharedWith')).toBe('true');
-    expect(calls[0]?.body?.get('visibility')).toBe('private');
-    expect(calls[0]?.body?.get('showBranding')).toBeNull();
+    expect(calls[1]?.body?.get('sharedWith')).toBeNull();
+    expect(calls[1]?.body?.get('clearSharedWith')).toBe('true');
+    expect(calls[1]?.body?.get('visibility')).toBe('private');
+    expect(calls[1]?.body?.get('showBranding')).toBeNull();
   });
 
   it('rejects HTML previews with referenced assets before publishing to display.dev', async () => {

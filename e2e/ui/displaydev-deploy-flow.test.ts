@@ -23,7 +23,7 @@ test('Share menu deploys an HTML preview to display.dev anonymously and shows th
       fileName,
       '<!doctype html><html><body><main><h1>display.dev E2E Preview</h1></main></body></html>',
     );
-    await configureDisplayDevApiUrl(page, displayDev.baseUrl);
+    await configureAnonymousDisplayDevApiUrl(page, displayDev.baseUrl);
 
     await page.goto(`/projects/${projectId}/conversations/${conversationId}`, { waitUntil: 'domcontentloaded' });
     await waitForLoadingToClear(page);
@@ -43,9 +43,9 @@ test('Share menu deploys an HTML preview to display.dev anonymously and shows th
     await expect(resultBlock.getByRole('link', { name: displayDev.previewUrl })).toBeVisible();
     await expect(resultBlock.getByRole('link', { name: displayDev.claimUrl })).toBeVisible();
     await expect
-      .poll(() => displayDev.publishes.length, { timeout: T.medium })
+      .poll(() => displayDev.artifactRequests.length, { timeout: T.medium })
       .toBe(1);
-    expect(displayDev.publishes[0]).toMatchObject({
+    expect(displayDev.artifactRequests[0]).toMatchObject({
       method: 'POST',
       path: '/v1/public/artifacts',
       authorization: '',
@@ -55,11 +55,74 @@ test('Share menu deploys an HTML preview to display.dev anonymously and shows th
   }
 });
 
+test('Share menu redeploys an authenticated display.dev preview with the current base version', async ({ page }) => {
+  const displayDev = await createDisplayDevMock();
+  const projectId = `displaydev-auth-e2e-${Date.now()}`;
+  const fileName = 'displaydev-auth-preview.html';
+
+  try {
+    const { conversationId } = await createProjectViaApi(page, projectId, 'display.dev authenticated deploy E2E');
+    await seedHtmlArtifact(
+      page,
+      projectId,
+      fileName,
+      '<!doctype html><html><body><main><h1>display.dev Auth E2E Preview</h1></main></body></html>',
+    );
+    await configureAuthenticatedDisplayDev(page, displayDev.baseUrl);
+
+    await page.goto(`/projects/${projectId}/conversations/${conversationId}`, { waitUntil: 'domcontentloaded' });
+    await waitForLoadingToClear(page);
+    await expect(page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'display.dev Auth E2E Preview' })).toBeVisible();
+
+    await page.getByRole('button', { name: /^Share$/ }).click();
+    await page.getByRole('menuitem', { name: /Deploy to display\.dev/i }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', { name: 'Deploy to display.dev' })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Deploy to display.dev' }).click();
+    await expect(dialog.locator('.deploy-result-block').getByRole('link', { name: displayDev.previewUrl })).toBeVisible();
+
+    await dialog.getByLabel('Visibility').selectOption('private');
+    await dialog.getByLabel('Share with').fill('qa@example.com');
+    await dialog.getByRole('button', { name: 'Redeploy to display.dev' }).click();
+
+    await expect
+      .poll(() => displayDev.artifactRequests.map((request) => `${request.method} ${request.path}`), { timeout: T.medium })
+      .toEqual([
+        'POST /v1/artifacts',
+        'GET /v1/artifacts/e2eDisplayDev',
+        'PUT /v1/artifacts/e2eDisplayDev',
+      ]);
+    expect(displayDev.artifactRequests[1]).toMatchObject({
+      method: 'GET',
+      authorization: 'Bearer dsp_live_secret',
+      ifMatch: '',
+    });
+    expect(displayDev.artifactRequests[2]).toMatchObject({
+      method: 'PUT',
+      authorization: 'Bearer dsp_live_secret',
+      ifMatch: '"v1"',
+    });
+  } finally {
+    await displayDev.close();
+  }
+});
+
 async function createDisplayDevMock() {
-  const publishes: Array<{ method: string; path: string; authorization: string }> = [];
+  const artifactRequests: Array<{ method: string; path: string; authorization: string; ifMatch: string }> = [];
   let baseUrl = '';
+  let currentVersion = 0;
   const previewPath = '/preview/e2e-displaydev';
   const claimUrl = 'https://app.display.dev/claim?code=e2e-displaydev';
+
+  const recordArtifactRequest = (req: IncomingMessage, path: string) => {
+    artifactRequests.push({
+      method: req.method || '',
+      path,
+      authorization: req.headers.authorization || '',
+      ifMatch: typeof req.headers['if-match'] === 'string' ? req.headers['if-match'] : '',
+    });
+  };
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || '/', baseUrl || 'http://127.0.0.1');
@@ -71,17 +134,59 @@ async function createDisplayDevMock() {
     }
 
     if (req.method === 'POST' && url.pathname === '/v1/public/artifacts') {
-      publishes.push({
-        method: req.method,
-        path: url.pathname,
-        authorization: req.headers.authorization || '',
-      });
+      recordArtifactRequest(req, url.pathname);
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({
         shortId: 'e2eDisplayDev',
         url: `${baseUrl}${previewPath}`,
         claimUrl,
         expiresAt: '2026-07-01T00:00:00.000Z',
+      }));
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/v1/artifacts') {
+      recordArtifactRequest(req, url.pathname);
+      currentVersion = 1;
+      res.writeHead(201, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        shortId: 'e2eDisplayDev',
+        url: `${baseUrl}${previewPath}`,
+        version: currentVersion,
+        name: 'display.dev authenticated deploy E2E',
+      }));
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/v1/artifacts/e2eDisplayDev') {
+      recordArtifactRequest(req, url.pathname);
+      res.writeHead(200, { 'content-type': 'application/json', etag: `"v${currentVersion}"` });
+      res.end(JSON.stringify({
+        shortId: 'e2eDisplayDev',
+        url: `${baseUrl}${previewPath}`,
+        currentVersion,
+      }));
+      return;
+    }
+
+    if (req.method === 'PUT' && url.pathname === '/v1/artifacts/e2eDisplayDev') {
+      recordArtifactRequest(req, url.pathname);
+      if (req.headers['if-match'] !== `"v${currentVersion}"`) {
+        res.writeHead(428, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({
+          error: 'precondition_required',
+          message: 'Republishing requires a base version. Fetch the latest artifact version, then publish with that base version.',
+          details: { current_version: currentVersion },
+        }));
+        return;
+      }
+      currentVersion += 1;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        shortId: 'e2eDisplayDev',
+        url: `${baseUrl}${previewPath}`,
+        version: currentVersion,
+        name: 'display.dev authenticated deploy E2E',
       }));
       return;
     }
@@ -96,7 +201,7 @@ async function createDisplayDevMock() {
     baseUrl,
     claimUrl,
     previewUrl: `${baseUrl}${previewPath}`,
-    publishes,
+    artifactRequests,
     close: () => closeServer(server),
   };
 }
@@ -143,11 +248,23 @@ async function seedHtmlArtifact(page: Page, projectId: string, fileName: string,
   expect(response.ok(), await response.text()).toBeTruthy();
 }
 
-async function configureDisplayDevApiUrl(page: Page, apiUrl: string) {
+async function configureAnonymousDisplayDevApiUrl(page: Page, apiUrl: string) {
   const response = await page.request.put('/api/deploy/config', {
     data: {
       providerId: 'displaydev-self',
       apiUrl,
+      clearToken: true,
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+}
+
+async function configureAuthenticatedDisplayDev(page: Page, apiUrl: string) {
+  const response = await page.request.put('/api/deploy/config', {
+    data: {
+      providerId: 'displaydev-self',
+      apiUrl,
+      token: 'dsp_live_secret',
     },
   });
   expect(response.ok(), await response.text()).toBeTruthy();

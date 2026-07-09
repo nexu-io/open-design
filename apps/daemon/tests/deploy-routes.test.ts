@@ -449,6 +449,7 @@ describe('deploy provider routes', () => {
       }> = [];
       const createAuthHeaders: string[] = [];
       const updateAuthHeaders: string[] = [];
+      const updateIfMatchHeaders: string[] = [];
       const authHeader = (headers: RequestInit['headers'] | undefined) => {
         if (!headers) return '';
         if (headers instanceof Headers) return headers.get('Authorization') || '';
@@ -458,6 +459,17 @@ describe('deploy provider routes', () => {
         }
         const value = (headers as Record<string, string | undefined>).Authorization
           || (headers as Record<string, string | undefined>).authorization;
+        return value || '';
+      };
+      const requestHeader = (headers: RequestInit['headers'] | undefined, name: string) => {
+        if (!headers) return '';
+        if (headers instanceof Headers) return headers.get(name) || '';
+        if (Array.isArray(headers)) {
+          const found = headers.find(([key]) => key?.toLowerCase() === name.toLowerCase());
+          return typeof found?.[1] === 'string' ? found[1] : '';
+        }
+        const value = (headers as Record<string, string | undefined>)[name]
+          || (headers as Record<string, string | undefined>)[name.toLowerCase()];
         return value || '';
       };
       const realFetch = globalThis.fetch;
@@ -481,9 +493,20 @@ describe('deploy provider routes', () => {
             headers: { 'content-type': 'application/json' },
           });
         }
+        if (url.endsWith('/v1/artifacts/owned1234') && method === 'GET') {
+          return new Response(JSON.stringify({
+            shortId: 'owned1234',
+            url: 'https://display.dsp.so/owned1234-demo',
+            currentVersion: 1,
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json', etag: '"v1"' },
+          });
+        }
         if (url.endsWith('/v1/artifacts/owned1234') && method === 'PUT') {
           if (!(init?.body instanceof FormData)) throw new Error('Expected FormData body');
           updateAuthHeaders.push(authHeader(init?.headers));
+          updateIfMatchHeaders.push(requestHeader(init?.headers, 'If-Match'));
           updateBodies.push({
             name: init.body.get('name'),
             visibility: init.body.get('visibility'),
@@ -551,6 +574,7 @@ describe('deploy provider routes', () => {
         }]);
         expect(createAuthHeaders).toEqual(['Bearer dsp_live_secret']);
         expect(updateAuthHeaders).toEqual(['Bearer dsp_live_secret']);
+        expect(updateIfMatchHeaders).toEqual(['"v1"']);
       } finally {
         vi.unstubAllGlobals();
       }

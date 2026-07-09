@@ -784,7 +784,7 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
   {
     id: DISPLAYDEV_PROVIDER_ID,
     labelKey: 'fileViewer.displayDevProvider',
-    tokenLink: 'https://display.dev/docs',
+    tokenLink: 'https://app.display.dev/settings/api-keys',
     tokenLinkKey: 'fileViewer.displayDevApiKeyGetLink',
     tokenPlaceholderKey: 'fileViewer.displayDevApiKeyPlaceholder',
     tokenLabelKey: 'fileViewer.displayDevApiKey',

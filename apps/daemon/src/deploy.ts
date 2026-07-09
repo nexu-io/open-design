@@ -444,6 +444,16 @@ function displayDevAuthorization(config: DeployConfig) {
   return token ? `Bearer ${token}` : '';
 }
 
+function displayDevHeaders(auth: string, extra: Record<string, string> = {}) {
+  return {
+    ...(auth ? { Authorization: auth } : {}),
+    'X-Client-Source': 'od-deploy-provider@0.8.0',
+    'X-Actor-Type': 'human',
+    'X-Actor-Name': 'open-design/0.8.0',
+    ...extra,
+  };
+}
+
 // Walk the entry HTML and any referenced CSS, producing the full set of
 // files that would be uploaded for a deploy along with the lists of
 // missing and invalid references. Does not throw on a partial result so
@@ -834,6 +844,9 @@ export async function deployToDisplayDev(input: { config: DeployConfig; files: D
     }
   }
 
+  const baseVersion = shouldUpdate
+    ? await fetchDisplayDevCurrentVersion(apiUrl, auth, priorShortId)
+    : undefined;
   const resp = await fetch(
     shouldUpdate
       ? `${apiUrl}/v1/artifacts/${encodeURIComponent(priorShortId)}`
@@ -842,12 +855,7 @@ export async function deployToDisplayDev(input: { config: DeployConfig; files: D
         : `${apiUrl}/v1/public/artifacts`,
     {
       method: shouldUpdate ? 'PUT' : 'POST',
-      headers: {
-        ...(auth ? { Authorization: auth } : {}),
-        'X-Client-Source': 'od-deploy-provider@0.8.0',
-        'X-Actor-Type': 'human',
-        'X-Actor-Name': 'open-design/0.8.0',
-      },
+      headers: displayDevHeaders(auth, baseVersion ? { 'If-Match': `"v${baseVersion}"` } : {}),
       body,
     },
   );
@@ -888,6 +896,31 @@ export async function deployToDisplayDev(input: { config: DeployConfig; files: D
     reachableAt: link.reachableAt,
     providerMetadata,
   };
+}
+
+async function fetchDisplayDevCurrentVersion(apiUrl: string, auth: string, shortId: string) {
+  const resp = await fetch(`${apiUrl}/v1/artifacts/${encodeURIComponent(shortId)}`, {
+    method: 'GET',
+    headers: displayDevHeaders(auth),
+  });
+  const json = await readDisplayDevJson(resp);
+  if (!resp.ok) throw displayDevError(json, resp.status);
+
+  const version =
+    Number.isInteger(json.currentVersion)
+      ? json.currentVersion
+      : Number.isInteger(json.version)
+        ? json.version
+        : displayDevVersionFromEtag(resp.headers.get('etag'));
+  if (typeof version !== 'number' || version < 1) {
+    throw new DeployError('display.dev did not return the current artifact version.', 502, json);
+  }
+  return version;
+}
+
+function displayDevVersionFromEtag(etag: string | null) {
+  const match = etag?.match(/^"v([1-9]\d*)"$/u);
+  return match ? Number(match[1]) : undefined;
 }
 
 function normalizeDeploymentLinkStatus(status: unknown): DeployLinkStatus {
