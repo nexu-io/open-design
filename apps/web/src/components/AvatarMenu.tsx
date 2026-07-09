@@ -333,7 +333,7 @@ export function AvatarMenu({
         title={t('avatar.title')}
         aria-label={t('avatar.title')}
       >
-        {currentAgent ? (
+        {config.mode === 'daemon' && currentAgent ? (
           <AgentIcon id={currentAgent.id} size={20} />
         ) : (
           <RemixIcon name="link" size={20} />

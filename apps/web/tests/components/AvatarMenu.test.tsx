@@ -116,6 +116,46 @@ describe('AvatarMenu', () => {
     vi.clearAllMocks();
   });
 
+  // Regression for: the composer's compact provider trigger kept showing the
+  // last-used local CLI agent's icon after switching to `Use API · BYOK`,
+  // because the icon was picked purely from `currentAgent` (derived from
+  // `config.agentId`) without checking `config.mode` — the same check every
+  // other mode-aware element in this file (and InlineModelSwitcher's chip)
+  // already makes.
+  it('shows the BYOK glyph, not the stale CLI agent icon, once mode switches to api', () => {
+    const trigger = () => screen.getByRole('button', { name: 'avatar.title' });
+
+    const { rerender } = render(
+      <AvatarMenu
+        config={baseConfig}
+        agents={[codexAgent, claudeAgent]}
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onRefreshAgents={vi.fn()}
+      />,
+    );
+    expect(trigger().querySelector('img.agent-icon')).toBeTruthy();
+    expect(trigger().querySelector('.ri-link')).toBeNull();
+
+    rerender(
+      <AvatarMenu
+        config={{ ...baseConfig, mode: 'api' }}
+        agents={[codexAgent, claudeAgent]}
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onRefreshAgents={vi.fn()}
+      />,
+    );
+    expect(trigger().querySelector('img.agent-icon')).toBeNull();
+    expect(trigger().querySelector('.ri-link')).toBeTruthy();
+  });
+
   it('opens execution settings when Local CLI is selected while the daemon is offline', () => {
     const onOpenSettings = vi.fn();
     renderMenu({
