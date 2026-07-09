@@ -4944,6 +4944,13 @@ export async function startServer({
       run.error = null;
       run.errorCode = null;
       run.stdinOpen = false;
+      // Any run-scoped state that a single attempt writes and that later feeds
+      // terminal classification must be cleared before the next attempt spawns,
+      // or the prior attempt's verdict leaks forward. turnCompletedCleanly is
+      // set by a clean `turn_end` (applyClaudeStreamJsonRunBookkeeping); without
+      // this reset, a clean-but-empty attempt 1 would vouch for a crashed
+      // attempt 2, classifying the run 'succeeded' off a stale flag.
+      run.turnCompletedCleanly = false;
       lifecycle.resetForAttempt(run.retryAttemptCount ?? 0);
       run.analyticsTelemetry = {
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,
