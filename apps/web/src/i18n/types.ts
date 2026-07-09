@@ -1941,6 +1941,9 @@ export interface Dict {
   'ds.specToggle': string;
   'ds.specLoading': string;
   'ds.detailLoadFailed': string;
+  'ds.back': string;
+  'ds.detailLoading': string;
+  'ds.detailLoadingHint': string;
 
   // Avatar menu (project topbar)
   'avatar.title': string;
