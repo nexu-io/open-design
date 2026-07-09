@@ -8,13 +8,23 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import type { BrandSummary, BrandPaletteEntry } from '@marketing-ax/contracts';
+import type { BrandSummary, BrandPaletteEntry, BrandPresentation } from '@marketing-ax/contracts';
 
 export interface BrandManifestFile {
   id: string;
   title: string;
   core?: string;
-  deliverables?: Record<string, { file: string; designSystem?: string }>;
+  deliverables?: Record<string, { file: string; designSystem?: string; label?: string }>;
+  presentation?: BrandPresentation;
+}
+
+// manifest deliverable label 맵 — 라벨 지정분만 (표시 전용)
+export function deliverableLabelMap(m: BrandManifestFile): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(m.deliverables ?? {})) {
+    if (v.label) out[k] = v.label;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 // 경로 traversal 차단 — HTTP 라우트가 req.params.id를 직접 전달하므로 모듈 경계에서 게이트 (design-systems.ts stripPrefixAndValidateId와 동일 관례)
@@ -51,10 +61,19 @@ export async function listBrands(root: string): Promise<BrandSummary[]> {
     if (!entry.isDirectory()) continue;
     const manifest = await readBrandManifest(root, entry.name);
     if (!manifest) continue;
+    const p = manifest.presentation;
+    const core = await readBrandCore(root, entry.name);
+    const palette = core ? parseBrandPalette(core) : undefined;
+    const labels = deliverableLabelMap(manifest);
     brands.push({
       id: manifest.id,
       title: manifest.title,
       deliverables: Object.keys(manifest.deliverables ?? {}),
+      ...(p?.subtitle ? { subtitle: p.subtitle } : {}),
+      ...(p?.tagline ? { tagline: p.tagline } : {}),
+      ...(p?.toneLabel ? { toneLabel: p.toneLabel } : {}),
+      ...(palette?.[0] ? { primaryColor: palette[0].value } : {}),
+      ...(labels ? { deliverableLabels: labels } : {}),
     });
   }
   return brands.sort((a, b) => a.id.localeCompare(b.id));

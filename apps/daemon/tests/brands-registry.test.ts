@@ -25,24 +25,45 @@ beforeEach(async () => {
       title: 'Acme',
       core: 'brand.md',
       deliverables: {
-        blog: { file: 'deliverables/blog.md' },
-        iam: { file: 'deliverables/iam.md', designSystem: 'acme-iam' },
+        blog: { file: 'deliverables/blog.md', label: 'Blog' },
+        iam: { file: 'deliverables/iam.md', designSystem: 'acme-iam', label: 'Acme IAM' },
+      },
+      presentation: {
+        subtitle: 'Widgets',
+        tagline: 'Acme makes widgets.',
+        toneLabel: 'bold',
       },
     }),
   );
-  await fs.writeFile(path.join(dir, 'brand.md'), 'CORE');
+  await fs.writeFile(
+    path.join(dir, 'brand.md'),
+    '# Acme\n\n## Palette\n\n| 이름 | 값 | 용도 |\n|---|---|---|\n| primary | `#123456` | x |\n',
+  );
   await fs.writeFile(path.join(dir, 'deliverables/blog.md'), 'BLOG');
   await fs.writeFile(path.join(dir, 'deliverables/iam.md'), 'IAM');
 });
 afterEach(() => fs.rm(root, { recursive: true, force: true }));
 
 describe('brands registry', () => {
-  it('lists brands with deliverable keys', async () => {
+  it('lists brands with display fields and deliverable keys', async () => {
     const brands = await listBrands(root);
-    expect(brands).toEqual([{ id: 'acme', title: 'Acme', deliverables: ['blog', 'iam'] }]);
+    expect(brands).toEqual([
+      {
+        id: 'acme',
+        title: 'Acme',
+        deliverables: ['blog', 'iam'],
+        subtitle: 'Widgets',
+        tagline: 'Acme makes widgets.',
+        toneLabel: 'bold',
+        primaryColor: '#123456',
+        deliverableLabels: { blog: 'Blog', iam: 'Acme IAM' },
+      },
+    ]);
   });
   it('reads core and deliverable bodies', async () => {
-    expect(await readBrandCore(root, 'acme')).toBe('CORE');
+    expect(await readBrandCore(root, 'acme')).toBe(
+      '# Acme\n\n## Palette\n\n| 이름 | 값 | 용도 |\n|---|---|---|\n| primary | `#123456` | x |\n',
+    );
     expect(await readBrandDeliverable(root, 'acme', 'blog')).toBe('BLOG');
     expect(await readBrandDeliverable(root, 'acme', 'nope')).toBeNull();
     expect(await readBrandCore(root, 'ghost')).toBeNull();
