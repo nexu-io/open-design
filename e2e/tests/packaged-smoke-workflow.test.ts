@@ -1390,6 +1390,10 @@ process.stdin.on("end", () => {
     expect(workflow).toContain("ref: main");
     expect(workflow).toContain("token: ${{ steps.app.outputs.token }}");
     expect(workflow).toContain('git push origin "$BRANCH"');
+    // The version bump is a no-op whenever main already leads stable by this exact
+    // patch (apps/packaged == $VERSION), so the release commit MUST tolerate an empty
+    // tree — otherwise `git commit` dies on "nothing to commit" and no branch is cut.
+    expect(workflow).toContain('git commit --allow-empty -am "chore(release): v$VERSION"');
 
     // The notice card is a standalone poster with the same signed-webhook contract.
     expect(notice).toContain("msg_type: \"interactive\"");
