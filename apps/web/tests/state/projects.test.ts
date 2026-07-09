@@ -5,6 +5,7 @@ import {
   createProject,
   createPluginShareProject,
   importClaudeDesignZip,
+  importProjectZip,
   importFolderProject,
   installGeneratedPluginFolder,
   listProjects,
@@ -237,6 +238,70 @@ describe('importClaudeDesignZip', () => {
       'Unable to unpack Claude export.',
     );
     expect(fetchMock).toHaveBeenCalledWith(
+      '/api/import/claude-design',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.any(FormData),
+      }),
+    );
+  });
+});
+
+describe('importProjectZip', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('falls back to the legacy Claude ZIP importer for unsupported project bundles', async () => {
+    const imported = {
+      project: {
+        id: 'project-1',
+        name: 'Legacy import',
+        skillId: null,
+        designSystemId: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      conversationId: 'conversation-1',
+      entryFile: 'index.html',
+    };
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      if (input === '/api/import/project') {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: 'PROJECT_BUNDLE_UNSUPPORTED',
+              message: 'missing Open Design project bundle manifest',
+            },
+          }),
+          { status: 400, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (input === '/api/import/claude-design') {
+        return new Response(
+          JSON.stringify(imported),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const file = new File(['legacy-zip-bytes'], 'legacy-claude.zip', {
+      type: 'application/zip',
+    });
+
+    await expect(importProjectZip(file)).resolves.toEqual(imported);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/import/project',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.any(FormData),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
       '/api/import/claude-design',
       expect.objectContaining({
         method: 'POST',

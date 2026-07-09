@@ -287,6 +287,24 @@ async function readJsonEntry<T>(zip: JSZip, name: string): Promise<T> {
   return JSON.parse(await entry.async('string')) as T;
 }
 
+function unsupportedProjectBundleError(message = 'expected an Open Design project bundle') {
+  const err = new Error(message) as Error & { code?: string };
+  err.code = 'PROJECT_BUNDLE_UNSUPPORTED';
+  return err;
+}
+
+async function readBundleManifest(zip: JSZip): Promise<Row> {
+  const entry = zip.file('manifest.json');
+  if (!entry) {
+    throw unsupportedProjectBundleError('missing Open Design project bundle manifest');
+  }
+  try {
+    return JSON.parse(await entry.async('string')) as Row;
+  } catch {
+    throw unsupportedProjectBundleError('unreadable Open Design project bundle manifest');
+  }
+}
+
 function importMetadata(project: Row, originalName: string): Record<string, unknown> {
   return {
     ...(sanitizedMetadata(project.metadata) ?? {}),
@@ -309,11 +327,9 @@ function chooseEntryFile(files: string[], metadata: unknown): string | null {
 
 export async function importOpenDesignProjectBundle(options: ImportProjectBundleOptions) {
   const zip = await JSZip.loadAsync(options.buffer);
-  const manifest = await readJsonEntry<Row>(zip, 'manifest.json');
+  const manifest = await readBundleManifest(zip);
   if (manifest.schema !== OPEN_DESIGN_PROJECT_BUNDLE_SCHEMA) {
-    const err = new Error('expected an Open Design project bundle') as Error & { code?: string };
-    err.code = 'PROJECT_BUNDLE_UNSUPPORTED';
-    throw err;
+    throw unsupportedProjectBundleError();
   }
 
   const sourceProject = await readJsonEntry<Row>(zip, 'db/project.json');

@@ -144,4 +144,21 @@ describe('Open Design project bundle import/export', () => {
     expect(tabs.tabs).toEqual(['index.html']);
     expect(tabs.active).toBe('index.html');
   });
+
+  it('marks zips without an Open Design manifest as unsupported bundles', async () => {
+    const db = openDatabase(root, { dataDir });
+    const zip = new JSZip();
+    zip.file('index.html', '<!doctype html>legacy export');
+    const buffer = await zip.generateAsync({ type: 'nodebuffer' });
+
+    await expect(importOpenDesignProjectBundle({
+      db,
+      projectsRoot,
+      buffer,
+      originalName: 'legacy-claude.zip',
+      randomId: () => 'new-id',
+    })).rejects.toMatchObject({
+      code: 'PROJECT_BUNDLE_UNSUPPORTED',
+    });
+  });
 });
