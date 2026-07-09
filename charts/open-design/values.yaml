@@ -112,6 +112,20 @@ hpa:
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
 
+# Extra environment variables for the main open-design container.
+# extraEnv: inline env entries (name/value or valueFrom).
+# extraEnvFrom: pull whole ConfigMaps/Secrets (e.g. an External-Secrets-managed
+# Secret whose keys are the env var names).
+# Example:
+#   extraEnvFrom:
+#     - secretRef:
+#         name: open-design-app-secrets
+#   extraEnv:
+#     - name: SOME_FLAG
+#       value: "true"
+extraEnv: []
+extraEnvFrom: []
+
 nodeSelector: {}
 affinity: {}
 tolerations: []

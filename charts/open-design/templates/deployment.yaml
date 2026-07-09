@@ -67,12 +67,18 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "open-design.fullname" . }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           env:
             - name: OD_API_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ include "open-design.fullname" . }}
                   key: OD_API_TOKEN
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             exec:

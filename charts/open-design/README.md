@@ -73,6 +73,8 @@ This chart adheres to strict security defaults:
 | `config.webPort`       | Web server listening port                                                                                     | `7456`                               |
 | `config.bindHost`      | Host to bind the web server to                                                                                | `"127.0.0.1"`                        |
 | `config.apiToken`      | API authentication token (must be changed from default)                                                       | `"secure-default-token-change-me"`   |
+| `extraEnv`             | Extra environment variables for the main container (list of `name`/`value` or `valueFrom` entries)            | `[]`                                 |
+| `extraEnvFrom`         | Extra `envFrom` sources for the main container (e.g. a `secretRef` to an External-Secrets-managed Secret)      | `[]`                                 |
 
 ### Auth Proxy Parameters
 
