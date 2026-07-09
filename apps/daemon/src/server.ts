@@ -171,6 +171,7 @@ import {
 import {
   brandDeliverableDefaultDesignSystem,
   listBrands,
+  parseBrandPalette,
   readBrandCore,
   readBrandDeliverable,
   readBrandManifest,
@@ -6413,7 +6414,17 @@ export async function startServer({
 
   app.get('/api/brands', async (_req, res) => {
     try {
-      res.json({ brands: await listBrands(BRANDS_DIR) });
+      const brands = await listBrands(BRANDS_DIR);
+      // 브랜드별 프로젝트 수 1쿼리 집계 후 병합 (레지스트리는 파일, 카운트는 DB — route에서 합침)
+      const counts = new Map<string, number>();
+      for (const row of db
+        .prepare(
+          `SELECT brand_id AS id, COUNT(*) AS n FROM projects WHERE brand_id IS NOT NULL GROUP BY brand_id`,
+        )
+        .all() as Array<{ id: string; n: number }>) {
+        counts.set(row.id, row.n);
+      }
+      res.json({ brands: brands.map((b) => ({ ...b, projectCount: counts.get(b.id) ?? 0 })) });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
@@ -6433,7 +6444,19 @@ export async function startServer({
         if (dBody === null) return res.status(404).json({ error: 'deliverable not found' });
         deliverable = { key: deliverableKey, body: dBody };
       }
-      res.json({ ...summary, body, ...(deliverable ? { deliverable } : {}) });
+      const manifest = await readBrandManifest(BRANDS_DIR, req.params.id);
+      const palette = parseBrandPalette(body);
+      const countRow = db
+        .prepare(`SELECT COUNT(*) AS n FROM projects WHERE brand_id = ?`)
+        .get(req.params.id) as { n: number } | undefined;
+      res.json({
+        ...summary,
+        body,
+        projectCount: countRow?.n ?? 0,
+        ...(deliverable ? { deliverable } : {}),
+        ...(palette ? { palette } : {}),
+        ...(manifest?.presentation ? { presentation: manifest.presentation } : {}),
+      });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }

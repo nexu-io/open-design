@@ -62,4 +62,35 @@ describe('brands routes', () => {
     const lfi2 = await fetch(`${baseUrl}/api/brands/..%2F..%2Fbodoc-iam/assets/DESIGN.md`);
     expect([400, 403, 404]).toContain(lfi2.status);
   });
+  it('list route returns display fields and a project count', async () => {
+    const res = await fetch(`${baseUrl}/api/brands`);
+    expect(res.ok).toBe(true);
+    const json = (await res.json()) as {
+      brands: Array<{
+        id: string;
+        subtitle?: string;
+        primaryColor?: string;
+        projectCount?: number;
+        deliverableLabels?: Record<string, string>;
+      }>;
+    };
+    const bodoc = json.brands.find((b) => b.id === 'bodoc');
+    expect(bodoc?.subtitle).toBe('보험 앱');
+    expect(bodoc?.primaryColor).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    expect(typeof bodoc?.projectCount).toBe('number');
+    expect(bodoc?.deliverableLabels).toMatchObject({ iam: 'Braze IAM' });
+  });
+  it('detail route returns palette and presentation', async () => {
+    const res = await fetch(`${baseUrl}/api/brands/bodoc`);
+    expect(res.ok).toBe(true);
+    const json = (await res.json()) as {
+      palette?: Array<{ value: string }>;
+      presentation?: { typography?: { family?: string } };
+      projectCount?: number;
+    };
+    expect(Array.isArray(json.palette)).toBe(true);
+    expect(json.palette?.[0]).toHaveProperty('value');
+    expect(json.presentation?.typography?.family).toBe('Pretendard');
+    expect(typeof json.projectCount).toBe('number');
+  });
 });

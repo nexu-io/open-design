@@ -15,7 +15,7 @@ import {
 import { listCodexPets, readCodexPetSpritesheet } from '../codex-pets.js';
 import { syncCommunityPets } from '../community-pets-sync.js';
 import { readDesignSystem } from '../design-systems.js';
-import { listBrands, readBrandManifest } from '../brands.js';
+import { readBrandManifest } from '../brands.js';
 import {
   LocalDesignSystemImportError,
   importLocalDesignSystemProject,
@@ -374,12 +374,11 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     next();
   });
 
-  app.get('/api/brands', async (_req, res) => {
-    try {
-      res.json({ brands: await listBrands(BRANDS_DIR) });
-    } catch (err: any) {
-      res.status(500).json({ error: String(err) });
-    }
+  app.get('/api/brands', (_req, _res, next) => {
+    // List shape (projectCount merged from the projects table) lives in the
+    // richer route registered in server.ts; let it answer this request —
+    // mirrors the /api/brands/:id and /api/design-systems/:id deferrals below.
+    next();
   });
 
   app.get('/api/brands/:id', (_req, _res, next) => {
