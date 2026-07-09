@@ -1575,6 +1575,15 @@ type DisplayDevAccessSettings = {
   showBranding: DisplayDevShowBranding;
 };
 
+function initialDisplayDevDeployTouched() {
+  return {
+    name: false,
+    visibility: false,
+    sharedWith: false,
+    showBranding: false,
+  };
+}
+
 function displayDevAccessSettingsForDeployment(
   deployment: WebDeploymentInfo | null | undefined,
 ): DisplayDevAccessSettings | null {
@@ -8083,12 +8092,7 @@ function HtmlViewer({
   const [displayDevVisibility, setDisplayDevVisibility] = useState<DisplayDevVisibility>('company');
   const [displayDevSharedWith, setDisplayDevSharedWith] = useState('');
   const [displayDevShowBranding, setDisplayDevShowBranding] = useState<DisplayDevShowBranding>('inherit');
-  const [displayDevDeployTouched, setDisplayDevDeployTouched] = useState({
-    name: false,
-    visibility: false,
-    sharedWith: false,
-    showBranding: false,
-  });
+  const [displayDevDeployTouched, setDisplayDevDeployTouched] = useState(initialDisplayDevDeployTouched);
   const deployProviderLoadSeqRef = useRef(0);
   const deployProviderLoadingRef = useRef(false);
   const deployTokenInputRef = useRef<HTMLInputElement | null>(null);
@@ -9424,12 +9428,7 @@ function HtmlViewer({
     setDisplayDevVisibility(displayDevAccessSettings?.visibility || matchingConfig?.displayDev?.defaultVisibility || 'company');
     setDisplayDevSharedWith((displayDevAccessSettings?.sharedWith || matchingConfig?.displayDev?.defaultSharedWith || []).join(', '));
     setDisplayDevShowBranding(displayDevAccessSettings?.showBranding || matchingConfig?.displayDev?.defaultShowBranding || 'inherit');
-    setDisplayDevDeployTouched({
-      name: false,
-      visibility: false,
-      sharedWith: false,
-      showBranding: false,
-    });
+    setDisplayDevDeployTouched(initialDisplayDevDeployTouched());
   }
 
   function cloudflareConfigHintsFromForm() {
@@ -14312,7 +14311,6 @@ function HtmlViewer({
     const isAuthenticatedUpdate =
       currentDeployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
       currentDeployment.displayDev?.mode === 'authenticated';
-    const hasCurrentAccessSettings = Boolean(displayDevAccessSettingsForDeployment(currentDeployment));
     const name = displayDevArtifactName.trim();
     const sharedWith = displayDevSharedWithFromForm();
     if (!isAuthenticatedUpdate) {
@@ -14326,17 +14324,12 @@ function HtmlViewer({
     }
     const selection: WebDisplayDevDeploySelection = {};
     if (displayDevDeployTouched.name && name) selection.name = name;
-    if (!hasCurrentAccessSettings) {
-      selection.visibility = displayDevVisibility;
-      if (displayDevVisibility === 'private') selection.sharedWith = sharedWith;
-      else selection.sharedWith = [];
-      selection.showBranding = displayDevShowBranding;
-    } else if (displayDevDeployTouched.visibility) {
+    if (displayDevDeployTouched.visibility) {
       selection.visibility = displayDevVisibility;
       if (displayDevVisibility !== 'private') selection.sharedWith = [];
     }
-    if (hasCurrentAccessSettings && displayDevVisibility === 'private' && displayDevDeployTouched.sharedWith) selection.sharedWith = sharedWith;
-    if (hasCurrentAccessSettings && displayDevDeployTouched.showBranding) selection.showBranding = displayDevShowBranding;
+    if (displayDevVisibility === 'private' && displayDevDeployTouched.sharedWith) selection.sharedWith = sharedWith;
+    if (displayDevDeployTouched.showBranding) selection.showBranding = displayDevShowBranding;
     return Object.keys(selection).length > 0 ? selection : undefined;
   }
 
@@ -14432,13 +14425,23 @@ function HtmlViewer({
         displayDevSelection,
         workspaceContext,
       );
+      const deploySucceeded = deployResultState(next.status) !== 'failed';
+      if (deployProviderId === DISPLAYDEV_PROVIDER_ID && deploySucceeded) {
+        const displayDevAccessSettings = displayDevAccessSettingsForDeployment(next);
+        if (displayDevAccessSettings) {
+          setDisplayDevVisibility(displayDevAccessSettings.visibility);
+          setDisplayDevSharedWith(displayDevAccessSettings.sharedWith.join(', '));
+          setDisplayDevShowBranding(displayDevAccessSettings.showBranding);
+        }
+        setDisplayDevDeployTouched(initialDisplayDevDeployTouched());
+      }
       setDeploymentsByProvider((current) => ({
         ...current,
         [next.providerId]: next,
       }));
       setDeployment(next);
       setDeployResult(next);
-      if (deployResultState(next.status) !== 'failed') {
+      if (deploySucceeded) {
         fireDeployResult('success');
         setDeploySavedToast({
           message: t('fileViewer.deploySuccessToast'),
@@ -15609,7 +15612,6 @@ function HtmlViewer({
   const activeDisplayDev = activeDeployment?.providerId === DISPLAYDEV_PROVIDER_ID
     ? activeDeployment.displayDev
     : undefined;
-  const activeDisplayDevAccessSettings = displayDevAccessSettingsForDeployment(activeDeployment);
   const hasDisplayDevApiKey = deployProviderId === DISPLAYDEV_PROVIDER_ID && Boolean(deployToken.trim());
   const displayDevApiKeyHint = hasDisplayDevApiKey
     ? t('fileViewer.displayDevApiKeyClearHint')
@@ -15617,9 +15619,7 @@ function HtmlViewer({
   const displayDevDeployHint = (() => {
     if (deployProviderId !== DISPLAYDEV_PROVIDER_ID) return '';
     if (activeDisplayDev?.mode === 'authenticated') {
-      return activeDisplayDevAccessSettings
-        ? t('fileViewer.displayDevDeployOwnedHint')
-        : t('fileViewer.displayDevDeployAuthenticatedCreateHint');
+      return t('fileViewer.displayDevDeployOwnedHint');
     }
     if (activeDisplayDev?.mode === 'anonymous' && hasDisplayDevApiKey) {
       return t('fileViewer.displayDevDeployAnonymousWithKeyHint');

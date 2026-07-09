@@ -5937,7 +5937,7 @@ describe('FileViewer SVG artifacts', () => {
     const modalDeployments = new Promise<Response>((resolve) => {
       resolveModalDeployments = resolve;
     });
-    const deployRequest: { body?: Record<string, unknown> } = {};
+    const deployRequests: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       const method = init?.method || (input instanceof Request ? input.method : 'GET');
@@ -5962,7 +5962,7 @@ describe('FileViewer SVG artifacts', () => {
         }), { status: 200 });
       }
       if (url === '/api/projects/project-1/deploy' && method === 'POST') {
-        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        deployRequests.push(JSON.parse(String(init?.body || '{}')) as Record<string, unknown>);
         return new Response(JSON.stringify({
           id: 'displaydev-deploy',
           projectId: 'project-1',
@@ -6034,13 +6034,13 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(redeployButton);
 
     await waitFor(() => {
-      expect(deployRequest.body).toBeDefined();
+      expect(deployRequests).toHaveLength(1);
     });
-    expect(deployRequest.body).toMatchObject({
+    expect(deployRequests[0]).toMatchObject({
       providerId: 'displaydev-self',
       fileName: 'index.html',
     });
-    expect(deployRequest.body).not.toHaveProperty('displayDev');
+    expect(deployRequests[0]).not.toHaveProperty('displayDev');
   });
 
   it('keeps the anonymous display.dev claim URL visible when an API key is configured', async () => {
@@ -6257,7 +6257,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
     const configRequest: { body?: Record<string, unknown> } = {};
-    const deployRequest: { body?: Record<string, unknown> } = {};
+    const deployRequests: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       const method = init?.method || (input instanceof Request ? input.method : 'GET');
@@ -6286,7 +6286,7 @@ describe('FileViewer SVG artifacts', () => {
         }), { status: 200 });
       }
       if (url === '/api/projects/project-1/deploy' && method === 'POST') {
-        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        deployRequests.push(JSON.parse(String(init?.body || '{}')) as Record<string, unknown>);
         return new Response(JSON.stringify({
           id: 'displaydev-deploy',
           projectId: 'project-1',
@@ -6325,13 +6325,13 @@ describe('FileViewer SVG artifacts', () => {
 
     await waitFor(() => {
       expect(configRequest.body).toBeDefined();
-      expect(deployRequest.body).toBeDefined();
+      expect(deployRequests).toHaveLength(1);
     });
     expect(configRequest.body).toMatchObject({
       providerId: 'displaydev-self',
       token: 'dsp_live_secret',
     });
-    expect(deployRequest.body).toMatchObject({
+    expect(deployRequests[0]).toMatchObject({
       providerId: 'displaydev-self',
       fileName: 'index.html',
       displayDev: {
@@ -6339,7 +6339,7 @@ describe('FileViewer SVG artifacts', () => {
         showBranding: 'inherit',
       },
     });
-    expect((deployRequest.body?.displayDev as Record<string, unknown>).sharedWith).toBeUndefined();
+    expect((deployRequests[0]?.displayDev as Record<string, unknown>).sharedWith).toBeUndefined();
     expect((await screen.findAllByText('https://app.display.dev/owned-demo')).length).toBeGreaterThan(0);
     expect(screen.queryByText('Claim URL')).toBeNull();
   });
@@ -6366,7 +6366,7 @@ describe('FileViewer SVG artifacts', () => {
       defaultShowBranding: 'inherit',
     };
     const configRequest: { body?: Record<string, unknown> } = {};
-    const deployRequest: { body?: Record<string, unknown> } = {};
+    const deployRequests: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       const method = init?.method || (input instanceof Request ? input.method : 'GET');
@@ -6397,7 +6397,7 @@ describe('FileViewer SVG artifacts', () => {
         }), { status: 200 });
       }
       if (url === '/api/projects/project-1/deploy' && method === 'POST') {
-        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        deployRequests.push(JSON.parse(String(init?.body || '{}')) as Record<string, unknown>);
         return new Response(JSON.stringify({
           id: 'displaydev-deploy',
           projectId: 'project-1',
@@ -6436,7 +6436,7 @@ describe('FileViewer SVG artifacts', () => {
 
     await waitFor(() => {
       expect(configRequest.body).toBeDefined();
-      expect(deployRequest.body).toBeDefined();
+      expect(deployRequests).toHaveLength(1);
     });
     expect(configRequest.body).toMatchObject({
       providerId: 'displaydev-self',
@@ -6444,7 +6444,7 @@ describe('FileViewer SVG artifacts', () => {
         defaultVisibility: 'private',
       },
     });
-    expect(deployRequest.body).toMatchObject({
+    expect(deployRequests[0]).toMatchObject({
       providerId: 'displaydev-self',
       displayDev: {
         visibility: 'private',
@@ -6477,7 +6477,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
     const configRequest: { body?: Record<string, unknown> } = {};
-    const deployRequest: { body?: Record<string, unknown> } = {};
+    const deployRequests: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       const method = init?.method || (input instanceof Request ? input.method : 'GET');
@@ -6512,7 +6512,7 @@ describe('FileViewer SVG artifacts', () => {
         }), { status: 200 });
       }
       if (url === '/api/projects/project-1/deploy' && method === 'POST') {
-        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        deployRequests.push(JSON.parse(String(init?.body || '{}')) as Record<string, unknown>);
         return new Response(JSON.stringify({
           id: 'displaydev-deploy',
           projectId: 'project-1',
@@ -6553,7 +6553,7 @@ describe('FileViewer SVG artifacts', () => {
 
     await waitFor(() => {
       expect(configRequest.body).toBeDefined();
-      expect(deployRequest.body).toBeDefined();
+      expect(deployRequests).toHaveLength(1);
     });
     expect(configRequest.body).toMatchObject({
       providerId: 'displaydev-self',
@@ -6562,14 +6562,14 @@ describe('FileViewer SVG artifacts', () => {
         defaultSharedWith: [],
       },
     });
-    expect(deployRequest.body).toMatchObject({
+    expect(deployRequests[0]).toMatchObject({
       providerId: 'displaydev-self',
       displayDev: {
         visibility: 'company',
         showBranding: 'inherit',
       },
     });
-    expect((deployRequest.body?.displayDev as Record<string, unknown>).sharedWith).toBeUndefined();
+    expect((deployRequests[0]?.displayDev as Record<string, unknown>).sharedWith).toBeUndefined();
   });
 
   it('clears display.dev recipients when an owned private redeploy leaves private visibility', async () => {
@@ -6588,7 +6588,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
     const configRequest: { body?: Record<string, unknown> } = {};
-    const deployRequest: { body?: Record<string, unknown> } = {};
+    const deployRequests: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       const method = init?.method || (input instanceof Request ? input.method : 'GET');
@@ -6645,7 +6645,7 @@ describe('FileViewer SVG artifacts', () => {
         }), { status: 200 });
       }
       if (url === '/api/projects/project-1/deploy' && method === 'POST') {
-        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        deployRequests.push(JSON.parse(String(init?.body || '{}')) as Record<string, unknown>);
         return new Response(JSON.stringify({
           id: 'displaydev-deploy',
           projectId: 'project-1',
@@ -6685,10 +6685,10 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
 
     await waitFor(() => {
-      expect(deployRequest.body).toBeDefined();
+      expect(deployRequests).toHaveLength(1);
     });
     expect(configRequest.body).toBeUndefined();
-    expect(deployRequest.body?.displayDev).toEqual({
+    expect(deployRequests[0]?.displayDev).toEqual({
       visibility: 'company',
       sharedWith: [],
     });
@@ -6709,7 +6709,7 @@ describe('FileViewer SVG artifacts', () => {
         exports: ['html'],
       },
     });
-    const deployRequest: { body?: Record<string, unknown> } = {};
+    const deployRequests: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       const method = init?.method || (input instanceof Request ? input.method : 'GET');
@@ -6751,7 +6751,7 @@ describe('FileViewer SVG artifacts', () => {
         }), { status: 200 });
       }
       if (url === '/api/projects/project-1/deploy' && method === 'POST') {
-        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        deployRequests.push(JSON.parse(String(init?.body || '{}')) as Record<string, unknown>);
         return new Response(JSON.stringify({
           id: 'displaydev-deploy',
           projectId: 'project-1',
@@ -6789,13 +6789,13 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
 
     await waitFor(() => {
-      expect(deployRequest.body).toBeDefined();
+      expect(deployRequests).toHaveLength(1);
     });
-    expect(deployRequest.body).toMatchObject({
+    expect(deployRequests[0]).toMatchObject({
       providerId: 'displaydev-self',
       fileName: 'index.html',
     });
-    expect(deployRequest.body?.displayDev).toBeUndefined();
+    expect(deployRequests[0]?.displayDev).toBeUndefined();
   });
 
   it.each([
@@ -6927,7 +6927,7 @@ describe('FileViewer SVG artifacts', () => {
         exports: ['html'],
       },
     });
-    const deployRequest: { body?: Record<string, unknown> } = {};
+    const deployRequests: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       const method = init?.method || (input instanceof Request ? input.method : 'GET');
@@ -6966,7 +6966,7 @@ describe('FileViewer SVG artifacts', () => {
         }), { status: 200 });
       }
       if (url === '/api/projects/project-1/deploy' && method === 'POST') {
-        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        deployRequests.push(JSON.parse(String(init?.body || '{}')) as Record<string, unknown>);
         return new Response(JSON.stringify({
           id: 'displaydev-deploy',
           projectId: 'project-1',
@@ -7004,17 +7004,27 @@ describe('FileViewer SVG artifacts', () => {
     expect((screen.getByLabelText('Share with') as HTMLInputElement).value).toBe('stale@example.com');
     expect(screen.getByLabelText('Show branding')).not.toBeDisabled();
     expect((screen.getByLabelText('Show branding') as HTMLSelectElement).value).toBe('hide');
-    expect(screen.getByText('Publishes to your display.dev organization using the access settings below.')).toBeInTheDocument();
-    expect(screen.queryByText('Redeploys keep existing display.dev access settings unless you change them here.')).toBeNull();
+    expect(screen.getByText('Redeploys keep existing display.dev access settings unless you change them here.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
 
     await waitFor(() => {
-      expect(deployRequest.body).toBeDefined();
+      expect(deployRequests).toHaveLength(1);
     });
-    expect(deployRequest.body?.displayDev).toEqual({
-      visibility: 'private',
-      sharedWith: ['stale@example.com'],
-      showBranding: 'hide',
+    expect(deployRequests[0]?.displayDev).toBeUndefined();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Redeploy to display.dev/i })).toBeEnabled();
+    });
+    fireEvent.change(screen.getByLabelText('Show branding'), {
+      target: { value: 'show' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
+
+    await waitFor(() => {
+      expect(deployRequests).toHaveLength(2);
+    });
+    expect(deployRequests[1]?.displayDev).toEqual({
+      showBranding: 'show',
     });
   });
 
@@ -7034,7 +7044,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
     const configRequest: { body?: Record<string, unknown> } = {};
-    const deployRequest: { body?: Record<string, unknown> } = {};
+    const deployRequests: Array<Record<string, unknown>> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       const method = init?.method || (input instanceof Request ? input.method : 'GET');
@@ -7089,7 +7099,7 @@ describe('FileViewer SVG artifacts', () => {
         }), { status: 200 });
       }
       if (url === '/api/projects/project-1/deploy' && method === 'POST') {
-        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        deployRequests.push(JSON.parse(String(init?.body || '{}')) as Record<string, unknown>);
         return new Response(JSON.stringify({
           id: 'displaydev-deploy',
           projectId: 'project-1',
@@ -7128,12 +7138,22 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
 
     await waitFor(() => {
-      expect(deployRequest.body).toBeDefined();
+      expect(deployRequests).toHaveLength(1);
     });
     expect(configRequest.body).toBeUndefined();
-    expect(deployRequest.body?.displayDev).toEqual({
+    expect(deployRequests[0]?.displayDev).toEqual({
       visibility: 'private',
     });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Redeploy to display.dev/i })).toBeEnabled();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
+
+    await waitFor(() => {
+      expect(deployRequests).toHaveLength(2);
+    });
+    expect(deployRequests[1]?.displayDev).toBeUndefined();
   });
 
   it('keeps the display.dev clear-recipient signal after toggling private visibility away and back', async () => {

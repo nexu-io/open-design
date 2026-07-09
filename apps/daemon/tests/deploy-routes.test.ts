@@ -508,6 +508,7 @@ describe('deploy provider routes', () => {
       expect(saveResp.status).toBe(200);
 
       let artifactGetCalls = 0;
+      let currentVersion = 1;
       const updateBodies: Array<{
         visibility: unknown;
         sharedWith: unknown[];
@@ -526,10 +527,11 @@ describe('deploy provider routes', () => {
         const method = init?.method || (input instanceof Request ? input.method : 'GET');
         if (url.startsWith(baseUrl)) return realFetch(input, init);
         if (url.endsWith('/v1/artifacts') && method === 'POST') {
+          currentVersion = 1;
           return new Response(JSON.stringify({
             shortId: 'owned1234',
             url: 'https://display.dsp.so/owned1234-demo',
-            version: 1,
+            version: currentVersion,
           }), {
             status: 201,
             headers: { 'content-type': 'application/json' },
@@ -546,13 +548,13 @@ describe('deploy provider routes', () => {
           return new Response(JSON.stringify({
             shortId: 'owned1234',
             url: 'https://display.dsp.so/owned1234-demo',
-            currentVersion: artifactGetCalls === 2 ? 1 : 2,
+            currentVersion,
             visibility: 'private',
             sharedWith: ['fallback@example.com'],
             showBranding: false,
           }), {
             status: 200,
-            headers: { 'content-type': 'application/json', etag: `"v${artifactGetCalls === 2 ? 1 : 2}"` },
+            headers: { 'content-type': 'application/json', etag: `"v${currentVersion}"` },
           });
         }
         if (url.endsWith('/v1/artifacts/owned1234') && method === 'PUT') {
@@ -568,10 +570,11 @@ describe('deploy provider routes', () => {
             clearSharedWith: init.body.get('clearSharedWith'),
             showBranding: init.body.get('showBranding'),
           });
+          currentVersion += 1;
           return new Response(JSON.stringify({
             shortId: 'owned1234',
             url: 'https://display.dsp.so/owned1234-demo',
-            version: 2,
+            version: currentVersion,
           }), {
             status: 200,
             headers: { 'content-type': 'application/json' },
@@ -606,6 +609,27 @@ describe('deploy provider routes', () => {
         expect(body.displayDev).not.toHaveProperty('visibility');
         expect(body.displayDev).not.toHaveProperty('showBranding');
 
+        const plainRedeployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: DISPLAYDEV_PROVIDER_ID,
+          }),
+        });
+        const plainRedeployText = await plainRedeployResp.text();
+        expect(plainRedeployResp.status, plainRedeployText).toBe(200);
+        expect(updateBodies).toEqual([{
+          visibility: null,
+          sharedWith: [],
+          clearSharedWith: null,
+          showBranding: null,
+        }]);
+        expect(updateHeaders).toEqual([{
+          authorization: 'Bearer dsp_live_secret',
+          ifMatch: '"v1"',
+        }]);
+
         const repairResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -631,17 +655,31 @@ describe('deploy provider routes', () => {
             showBranding: 'hide',
           },
         });
-        expect(artifactGetCalls).toBe(3);
-        expect(updateBodies).toEqual([{
-          visibility: 'private',
-          sharedWith: ['fallback@example.com'],
-          clearSharedWith: null,
-          showBranding: 'hide',
-        }]);
-        expect(updateHeaders).toEqual([{
-          authorization: 'Bearer dsp_live_secret',
-          ifMatch: '"v1"',
-        }]);
+        expect(artifactGetCalls).toBe(5);
+        expect(updateBodies).toEqual([
+          {
+            visibility: null,
+            sharedWith: [],
+            clearSharedWith: null,
+            showBranding: null,
+          },
+          {
+            visibility: 'private',
+            sharedWith: ['fallback@example.com'],
+            clearSharedWith: null,
+            showBranding: 'hide',
+          },
+        ]);
+        expect(updateHeaders).toEqual([
+          {
+            authorization: 'Bearer dsp_live_secret',
+            ifMatch: '"v1"',
+          },
+          {
+            authorization: 'Bearer dsp_live_secret',
+            ifMatch: '"v2"',
+          },
+        ]);
       } finally {
         vi.unstubAllGlobals();
       }
