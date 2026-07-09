@@ -1032,6 +1032,81 @@ describe('POST /api/test/connection provider mode', () => {
     });
   });
 
+  it('reports invalid deployment provider run-session config in the connection-test envelope', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'not a url',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const fetchMock = passThroughOrUpstream((url) => {
+        throw new Error(`unexpected egress to ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'provider',
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: false,
+        kind: 'invalid_base_url',
+        model: 'gpt-routed',
+        status: 400,
+        detail: 'Deployment provider run-session URL is invalid.',
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it('reports deployment provider run-session bootstrap failures in the connection-test envelope', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const seen: string[] = [];
+      const fetchMock = passThroughOrUpstream((url) => {
+        seen.push(url);
+        if (url === 'https://authority.example.test/api/runs') {
+          return jsonResponse({ error: 'unavailable' }, { status: 503 });
+        }
+        throw new Error(`unexpected provider egress to ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'provider',
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: false,
+        kind: 'upstream_unavailable',
+        model: 'gpt-routed',
+        status: 503,
+        detail: 'Deployment provider run session failed: 503',
+      });
+      expect(seen).toEqual(['https://authority.example.test/api/runs']);
+    });
+  });
+
   it('uses fresh deployment provider fallback ids for repeated connection-test attempts', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
