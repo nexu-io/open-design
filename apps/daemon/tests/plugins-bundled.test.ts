@@ -157,6 +157,42 @@ describe('registerBundledPlugins', () => {
     nowSpy.mockRestore();
   });
 
+  // Regression for review feedback on #5362: SKILL.md's markdown body never
+  // makes it into the parsed manifest (adaptAgentSkill keeps only frontmatter
+  // fields), so a body-only edit with no frontmatter/version bump must still
+  // be treated as a real change — otherwise updatedAt stays frozen forever
+  // for a plugin whose SKILL.md instructions keep getting updated.
+  it('advances updatedAt when only SKILL.md changes, with no version bump', async () => {
+    const folder = path.join(tmpRoot, 'atoms', 'sample');
+    await mkdir(folder, { recursive: true });
+    await writeFile(path.join(folder, 'open-design.json'), SAMPLE_MANIFEST('sample'));
+    await writeFile(path.join(folder, 'SKILL.md'), SAMPLE_SKILL('sample'));
+
+    const nowSpy = vi.spyOn(Date, 'now');
+    nowSpy.mockReturnValue(1_000);
+    await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+    const [first] = listInstalledPlugins(db);
+    expect(first?.updatedAt).toBe(1_000);
+
+    // Edit only SKILL.md's body — same frontmatter, same version, same
+    // open-design.json — and confirm the parsed manifest is unaffected before
+    // asserting on updatedAt (otherwise this test wouldn't actually probe the
+    // gap: a manifest-derived field changing would trivially pass too).
+    const editedSkill = `${SAMPLE_SKILL('sample')}\nRewritten instructions body.\n`;
+    await writeFile(path.join(folder, 'SKILL.md'), editedSkill);
+    nowSpy.mockReturnValue(2_000);
+    const result = await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+    expect(JSON.stringify(result.registered[0]?.manifest)).toBe(
+      JSON.stringify(first?.manifest),
+    );
+
+    const [second] = listInstalledPlugins(db);
+    expect(second?.installedAt).toBe(1_000);
+    expect(second?.updatedAt).toBe(2_000);
+
+    nowSpy.mockRestore();
+  });
+
   it('returns empty result when bundledRoot does not exist', async () => {
     const result = await registerBundledPlugins({
       db,

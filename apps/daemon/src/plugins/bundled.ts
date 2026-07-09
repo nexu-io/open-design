@@ -21,6 +21,7 @@
 // daemon upgrade".
 
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import type Database from 'better-sqlite3';
 import {
@@ -139,6 +140,46 @@ function pruneRemovedBundledPlugins(
   return pruned;
 }
 
+// The exact files resolvePluginFolder() reads to build a bundled plugin's
+// manifest (registry.ts). Hashing their raw bytes — not the parsed manifest
+// object — catches a SKILL.md prose edit that resolvePluginFolder discards:
+// adaptAgentSkill() only carries frontmatter fields into the manifest, so a
+// change to SKILL.md's markdown body (with no frontmatter/version bump)
+// would otherwise leave the manifest comparison blind to it (issue #5362
+// review).
+const BUNDLED_DIGEST_RELATIVE_PATHS = [
+  'open-design.json',
+  'SKILL.md',
+  path.join('.claude-plugin', 'plugin.json'),
+];
+
+async function computeBundledContentDigest(folder: string): Promise<string> {
+  const hash = createHash('sha256');
+  for (const rel of BUNDLED_DIGEST_RELATIVE_PATHS) {
+    let content: Buffer;
+    try {
+      content = await fsp.readFile(path.join(folder, rel));
+    } catch {
+      content = Buffer.alloc(0);
+    }
+    // Prefix each file's bytes with its name so "SKILL.md empty, plugin.json
+    // has X" can't hash the same as "SKILL.md has X, plugin.json empty".
+    hash.update(rel).update('\0').update(content).update('\0');
+  }
+  return hash.digest('hex');
+}
+
+function getBundledContentDigest(db: SqliteDb, id: string): string | null {
+  const row = db
+    .prepare(`SELECT bundled_content_digest FROM installed_plugins WHERE id = ?`)
+    .get(id) as { bundled_content_digest: string | null } | undefined;
+  return row?.bundled_content_digest ?? null;
+}
+
+function setBundledContentDigest(db: SqliteDb, id: string, digest: string): void {
+  db.prepare(`UPDATE installed_plugins SET bundled_content_digest = ? WHERE id = ?`).run(digest, id);
+}
+
 async function registerOne(args: {
   folder: string;
   folderId: string;
@@ -178,15 +219,20 @@ async function registerOne(args: {
   // instant, which collapses the Community gallery's "Newest" sort (it orders
   // by `updatedAt`) into whatever order ties fall back to, instead of real
   // recency.
+  //
+  // "Changed" is decided by a digest of the plugin's raw on-disk files, not
+  // by comparing the parsed manifest/version: SKILL.md's markdown body never
+  // makes it into the manifest object (adaptAgentSkill keeps only frontmatter
+  // fields), so a prose-only SKILL.md edit would be invisible to a
+  // manifest-equality check while still being a real content change.
   const existing = getInstalledPlugin(args.input.db, record.id);
-  if (
-    existing &&
-    existing.version === record.version &&
-    JSON.stringify(existing.manifest) === JSON.stringify(record.manifest)
-  ) {
+  const contentDigest = await computeBundledContentDigest(args.folder);
+  const existingDigest = existing ? getBundledContentDigest(args.input.db, record.id) : null;
+  if (existing && existingDigest === contentDigest) {
     record = { ...record, installedAt: existing.installedAt, updatedAt: existing.updatedAt };
   }
   upsertInstalledPlugin(args.input.db, record);
+  setBundledContentDigest(args.input.db, record.id, contentDigest);
   args.seenFolderIds.add(record.id);
   args.out.push(record);
 }
