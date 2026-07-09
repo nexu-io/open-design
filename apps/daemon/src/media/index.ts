@@ -95,7 +95,7 @@ import {
 const execFile = promisify(execFileCb);
 type ProviderConfig = { apiKey?: string; baseUrl?: string; model?: string };
 type ProgressFn = (message: string) => void;
-type ImageRef = { path: string; abs: string; mime: string; size: number; dataUrl: string };
+type ImageRef = { path: string; abs: string; mime: string; size: number; dataUrl: string; remote?: boolean };
 type MediaRequestInit = Pick<RequestInit, 'dispatcher'>;
 type MediaContext = {
   surface: MediaSurface;
@@ -140,8 +140,42 @@ type MediaContext = {
   imageRefs: ImageRef[];
   projectRoot: string;
 };
-type RenderResult = { bytes: Buffer; providerNote: string; suggestedExt?: string };
-type JsonRecord = Record<string, unknown>;
+type RenderResult = {
+  bytes: Buffer;
+  providerNote: string;
+  suggestedExt?: string;
+  metadata?: JsonRecord | undefined;
+};
+export type JsonRecord = Record<string, unknown>;
+
+export type MediaSupportingFile = {
+  name: string;
+  size: number;
+  kind: string;
+  mime: string;
+  role?: string | undefined;
+  metadata?: JsonRecord | undefined;
+};
+
+export type MediaGeneratedFile = {
+  name: string;
+  size: number;
+  mtime: number;
+  kind: string;
+  mime: string;
+  model: string;
+  surface: MediaSurface;
+  providerNote: string;
+  providerId: string;
+  providerError: string | null;
+  usedStubFallback: boolean;
+  intentionalStub: boolean;
+  metadata?: JsonRecord | undefined;
+  supportingFiles?: MediaSupportingFile[] | undefined;
+  warnings: string[];
+};
+
+const SEEDREAM_5_PRO_MODEL_ID = 'doubao-seedream-5-0-pro-260628';
 
 function isRecord(value: unknown): value is JsonRecord {
   return value !== null && typeof value === 'object';
@@ -203,10 +237,37 @@ function stubsAllowed() {
  * Without this guard, an agent (or a hallucinated arg) could ask the
  * daemon to upload `/etc/passwd` to a paid model.
  */
-async function resolveProjectImage(rel: unknown, projectDir: string): Promise<ImageRef | null> {
+function isHttpImageUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+async function resolveProjectImage(
+  rel: unknown,
+  projectDir: string,
+  options: { allowRemoteUrl?: boolean } = {},
+): Promise<ImageRef | null> {
   if (typeof rel !== 'string' || !rel.trim()) return null;
+  const raw = rel.trim();
+  if (isHttpImageUrl(raw)) {
+    if (!options.allowRemoteUrl) {
+      throw new Error('--image URL references are only supported for Volcengine image generation; use a project file path for this model.');
+    }
+    return {
+      path: raw,
+      abs: raw,
+      mime: 'image/url',
+      size: 0,
+      dataUrl: raw,
+      remote: true,
+    };
+  }
   const projectRootResolved = path.resolve(projectDir);
-  const abs = path.resolve(projectRootResolved, rel.trim());
+  const abs = path.resolve(projectRootResolved, raw);
   if (
     abs !== projectRootResolved &&
     !abs.startsWith(projectRootResolved + path.sep)
@@ -251,7 +312,7 @@ async function resolveProjectImage(rel: unknown, projectDir: string): Promise<Im
     );
   }
   return {
-    path: rel.trim(),
+    path: raw,
     abs,
     mime,
     size: bytes.length,
@@ -311,14 +372,14 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
  * @param {string} [args.voice]
  * @param {string} [args.audioKind]
  * @param {string} [args.language]
- * @returns {Promise<{ name: string, size: number, mtime: number, kind: string, mime: string, model: string, surface: string, providerNote: string, providerId: string }>}
+ * @returns {Promise<MediaGeneratedFile>}
  */
 export async function generateMedia(args: {
   projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
   prompt?: string; output?: string; aspect?: string; length?: number; duration?: number; voice?: string;
   audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
   compositionDir?: string; image?: string; images?: string[]; onProgress?: ProgressFn; requestInit?: MediaRequestInit;
-}) {
+}): Promise<MediaGeneratedFile> {
   const {
     projectRoot,
     projectsRoot,
@@ -435,7 +496,9 @@ export async function generateMedia(args: {
   const clampedDuration = usesProviderSpecificAudioDuration
     ? duration
     : durationClamp.value;
-  const warnings = [lengthClamp.warning, durationClamp.warning].filter(Boolean);
+  const warnings = [lengthClamp.warning, durationClamp.warning].filter(
+    (warning): warning is string => Boolean(warning),
+  );
 
   const dir = await ensureProject(projectsRoot, projectId);
   const safeOut = sanitizeName(
@@ -449,7 +512,8 @@ export async function generateMedia(args: {
   // stays inside the project, and turn it into a base64 data URL the
   // upstream APIs accept directly. Renderers consume `ctx.imageRef`
   // and decide how to splice the data URL into their request.
-  const imageRef = await resolveProjectImage(image, dir);
+  const allowRemoteImageUrl = def.provider === 'volcengine' && surface === 'image';
+  const imageRef = await resolveProjectImage(image, dir, { allowRemoteUrl: allowRemoteImageUrl });
 
   // Multi-image support: resolve additional images from the `images`
   // array param. The first resolved image (imageRef) is the primary
@@ -458,7 +522,7 @@ export async function generateMedia(args: {
   const imageRefs: ImageRef[] = [];
   if (imageRef) imageRefs.push(imageRef);
   for (const imgPath of extraImages) {
-    const ref = await resolveProjectImage(imgPath, dir);
+    const ref = await resolveProjectImage(imgPath, dir, { allowRemoteUrl: allowRemoteImageUrl });
     if (ref && !imageRefs.some((r) => r.abs === ref.abs)) {
       imageRefs.push(ref);
     }
@@ -511,6 +575,7 @@ export async function generateMedia(args: {
   let bytes: Buffer;
   let providerNote: string;
   let suggestedExt: string | undefined;
+  let metadata: JsonRecord | undefined;
   let providerId = def.provider;
   // Tracks whether the bytes came from a real provider call or from the
   // stub fallback. Surfaces in the response so the CLI/agent can tell a
@@ -609,6 +674,7 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+      metadata = result.metadata;
     } else if (def.provider === 'grok' && surface === 'image') {
       const result = await renderGrokImage(ctx, credentials);
       bytes = result.bytes;
@@ -816,6 +882,7 @@ export async function generateMedia(args: {
     providerError,
     usedStubFallback,
     intentionalStub,
+    metadata,
     warnings,
   };
 }
@@ -1420,6 +1487,92 @@ function openaiSizeFor(model: string, aspect?: string): string {
   return '1024x1024';
 }
 
+function modelSupportsLayeredImageOutput(ctx: MediaContext): boolean {
+  return (
+    ctx.model === SEEDREAM_5_PRO_MODEL_ID ||
+    ctx.modelDef.output?.layered === true ||
+    ctx.modelDef.caps?.includes('layers') === true
+  );
+}
+
+function volcengineImagePrompt(ctx: MediaContext, size: string): string {
+  const prompt = ctx.prompt || 'A high-quality reference image.';
+  if (!modelSupportsLayeredImageOutput(ctx) || size !== '2K' || !ctx.aspect) {
+    return prompt;
+  }
+  return `${prompt}\nAspect ratio: ${ctx.aspect}.`;
+}
+
+function volcengineImageSizeFor(ctx: MediaContext): string {
+  if (modelSupportsLayeredImageOutput(ctx)) {
+    // Seedream 5.0 Pro supports resolution tokens (`1K`, `2K`) and asks for
+    // aspect hints in natural language. Use the highest documented bucket.
+    return '2K';
+  }
+  return openaiSizeFor(ctx.model, ctx.aspect);
+}
+
+function volcengineImageOutputFormatFor(ctx: MediaContext): 'png' | undefined {
+  // Seedream 5.0 Pro's design/layer workflows rely on preserving transparent
+  // pixels. The official Ark docs expose `output_format` for Pro/Lite only.
+  return modelSupportsLayeredImageOutput(ctx) ? 'png' : undefined;
+}
+
+function volcengineImageResponseFormatFor(ctx: MediaContext): 'url' | 'b64_json' {
+  // The Pro examples use URL responses. The daemon downloads the URL
+  // immediately, avoiding a large inline JSON payload without exposing the
+  // user to the provider URL's short lifetime.
+  return modelSupportsLayeredImageOutput(ctx) ? 'url' : 'b64_json';
+}
+
+function volcengineImageReferencePayload(ctx: MediaContext): string | string[] | undefined {
+  if (ctx.imageRefs.length === 0) return undefined;
+  const maxRefs = modelSupportsLayeredImageOutput(ctx) ? 10 : 14;
+  if (ctx.imageRefs.length > maxRefs) {
+    throw new Error(`volcengine/${ctx.wireModel} accepts at most ${maxRefs} reference images; got ${ctx.imageRefs.length}`);
+  }
+  const refs = ctx.imageRefs.map((ref) => ref.dataUrl);
+  return refs.length === 1 ? refs[0] : refs;
+}
+
+function volcengineImageMetadata(
+  ctx: MediaContext,
+  entry: JsonRecord,
+  response: JsonRecord,
+  request: {
+    size: string;
+    responseFormat: string;
+    stream?: boolean | undefined;
+    watermark?: boolean | undefined;
+    outputFormat?: string | undefined;
+  },
+): JsonRecord | undefined {
+  const metadata: JsonRecord = {
+    modelFamily: 'seedream',
+    request: {
+      size: request.size,
+      responseFormat: request.responseFormat,
+      ...(typeof request.stream === 'boolean' ? { stream: request.stream } : {}),
+      ...(typeof request.watermark === 'boolean' ? { watermark: request.watermark } : {}),
+      ...(request.outputFormat ? { outputFormat: request.outputFormat } : {}),
+      ...(ctx.imageRefs.length > 0 ? { referenceImages: ctx.imageRefs.length } : {}),
+    },
+  };
+  if (modelSupportsLayeredImageOutput(ctx)) {
+    metadata.capabilities = { layeredOutput: true };
+  }
+  const output: JsonRecord = {};
+  if (typeof entry.output_format === 'string') output.format = entry.output_format;
+  if (typeof entry.size === 'string') output.size = entry.size;
+  if (Object.keys(output).length > 0) metadata.output = output;
+  const responseInfo: JsonRecord = {};
+  if (typeof response.model === 'string') responseInfo.model = response.model;
+  if (typeof response.created === 'number') responseInfo.created = response.created;
+  if (Object.keys(responseInfo).length > 0) metadata.response = responseInfo;
+  if (isRecord(response.usage)) metadata.usage = response.usage;
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
 const OPENAI_TTS_VOICES = new Set([
   'alloy',
   'ash',
@@ -1688,16 +1841,27 @@ async function renderVolcengineImage(ctx: MediaContext, credentials: ProviderCon
     throw new Error('no Volcengine Ark API key — configure it in Settings or set ARK_API_KEY');
   }
   const baseUrl = (credentials.baseUrl || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
+  const layeredOutput = modelSupportsLayeredImageOutput(ctx);
+  const size = volcengineImageSizeFor(ctx);
+  const outputFormat = volcengineImageOutputFormatFor(ctx);
+  const responseFormat = volcengineImageResponseFormatFor(ctx);
 
-  const body = {
+  const body: Record<string, unknown> = {
     model: ctx.wireModel,
-    prompt: ctx.prompt || 'A high-quality reference image.',
-    response_format: 'b64_json',
+    prompt: volcengineImagePrompt(ctx, size),
+    response_format: responseFormat,
     // openaiSizeFor branches on the catalog id (gpt-image-* vs dall-e-*
     // accept different size enums), so it must NOT see the post-alias
     // wire name. lefarcen + codex P2 on PR #1309.
-    size: openaiSizeFor(ctx.model, ctx.aspect),
+    size,
   };
+  if (outputFormat) {
+    body.output_format = outputFormat;
+    body.stream = false;
+    body.watermark = false;
+  }
+  const referencePayload = volcengineImageReferencePayload(ctx);
+  if (referencePayload) body.image = referencePayload;
   const resp = await fetch(`${baseUrl}/images/generations`, withMediaRequestInit(ctx, {
     method: 'POST',
     headers: {
@@ -1722,16 +1886,24 @@ async function renderVolcengineImage(ctx: MediaContext, credentials: ProviderCon
   if (entry.b64_json) {
     bytes = Buffer.from(entry.b64_json, 'base64');
   } else if (entry.url) {
-    const imgResp = await fetch(entry.url, withMediaRequestInit(ctx));
+    const imgResp = await assertAndFetchExternalAsset(entry.url, withMediaRequestInit(ctx));
     if (!imgResp.ok) throw new Error(`volcengine image fetch ${imgResp.status}`);
     bytes = Buffer.from(await imgResp.arrayBuffer());
   } else {
     throw new Error('volcengine image response missing b64_json/url');
   }
+  const entryRecord = isRecord(entry) ? entry : {};
   return {
     bytes,
-    providerNote: `volcengine/${ctx.wireModel} · ${ctx.aspect} · ${bytes.length} bytes`,
-    suggestedExt: '.png',
+    providerNote: `volcengine/${ctx.wireModel} · ${ctx.aspect} · ${size}${outputFormat ? `/${outputFormat}` : ''}${layeredOutput ? ' · layer-capable' : ''} · ${bytes.length} bytes`,
+    suggestedExt: entryRecord.output_format === 'jpeg' ? '.jpg' : '.png',
+    metadata: volcengineImageMetadata(ctx, entryRecord, data, {
+      size,
+      responseFormat,
+      stream: typeof body.stream === 'boolean' ? body.stream : undefined,
+      watermark: typeof body.watermark === 'boolean' ? body.watermark : undefined,
+      outputFormat,
+    }),
   };
 }
 

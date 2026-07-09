@@ -96,6 +96,42 @@ describe('NewProjectPanel media provider badges', () => {
     expect(screen.getByTestId('model-picker-option-codex-gpt-image-2')).toBeTruthy();
   });
 
+  it('labels Seedream 5.0 Pro as layer-capable in the image model picker', () => {
+    render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+        mediaProviders={{
+          volcengine: {
+            apiKey: '',
+            apiKeyConfigured: true,
+            apiKeyTail: '5678',
+            baseUrl: '',
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+
+    const option = screen.getByTestId('model-picker-option-doubao-seedream-5-0-pro-260628');
+    expect(option.textContent).toContain('Layers');
+
+    fireEvent.change(screen.getByTestId('model-picker-search'), {
+      target: { value: 'layered' },
+    });
+
+    expect(screen.getByTestId('model-picker-option-doubao-seedream-5-0-pro-260628')).toBeTruthy();
+    expect(screen.queryByTestId('model-picker-option-doubao-seedream-3-0-t2i-250415')).toBeNull();
+  });
+
   it('uses Codex subscription as the no-key image fallback', async () => {
     const onCreate = vi.fn();
     render(

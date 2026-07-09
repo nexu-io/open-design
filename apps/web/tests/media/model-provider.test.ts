@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { mediaModelProviderId } from '../../src/media/models';
+import { findMediaModel, mediaModelProviderId } from '../../src/media/models';
 
 // mediaModelProviderId is the decision core of ProjectView's BYOK seed guard
 // (byokModelSeedForProtocol): the project's creation-time model is only carried
@@ -24,8 +24,16 @@ describe('mediaModelProviderId', () => {
     // SenseAudio run this !== 'senseaudio', so the guard drops the seed and the
     // user's Settings default is kept.
     expect(mediaModelProviderId('gpt-image-2')).toBe('openai');
+    expect(mediaModelProviderId('doubao-seedream-5-0-pro-260628')).toBe('volcengine');
     expect(mediaModelProviderId('senseaudio-image-2.0-260319')).toBe('senseaudio');
     expect(mediaModelProviderId('senseaudio-tts')).toBe('senseaudio');
+  });
+
+  it('marks Seedream 5.0 Pro as layer-capable without moving it to SenseAudio', () => {
+    const model = findMediaModel('doubao-seedream-5-0-pro-260628');
+    expect(model?.provider).toBe('volcengine');
+    expect(model?.caps).toContain('layers');
+    expect(model?.output?.layered).toBe(true);
   });
 
   it('returns undefined for unknown ids', () => {

@@ -1011,7 +1011,7 @@ async function validateLocalOpenAiModel(
 function isSenseAudioNonChatModel(model: string): boolean {
   return (
     model.startsWith('senseaudio-image-') ||
-    model.startsWith('doubao-seedream-') ||
+    (model.startsWith('doubao-seedream-') && model !== 'doubao-seedream-5-0-pro-260628') ||
     model === 'sensenova-u1-fast' ||
     model.startsWith('doubao-seedance-') ||
     model.startsWith('senseaudio-asr-') ||

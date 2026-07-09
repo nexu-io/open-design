@@ -794,6 +794,11 @@
   border-radius: var(--radius-xs);
   margin-left: 6px;
 }
+.model-picker .ds-picker-item .ds-picker-item-badge.layer {
+  border-color: color-mix(in srgb, #0f8b6c 28%, transparent);
+  background: color-mix(in srgb, #0f8b6c 11%, transparent);
+  color: #0f725b;
+}
 .model-picker .ds-picker-group-head {
   position: sticky;
   top: 0;

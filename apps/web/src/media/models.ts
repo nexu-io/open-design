@@ -317,6 +317,11 @@ export interface MediaModel {
    * the dispatcher to decide which provider call to make.
    */
   caps?: string[];
+  /** Optional output traits exposed by the provider/model. */
+  output?: {
+    /** Model can return layer-aware image assets once the daemon/UI consume them. */
+    layered?: boolean;
+  };
   /** Marks the default-checked card per surface in the picker. */
   default?: boolean;
 }
@@ -392,6 +397,14 @@ export const IMAGE_MODELS: MediaModel[] = [
     hint: 'ByteDance · image edit',
     provider: 'volcengine',
     caps: ['i2i'],
+  },
+  {
+    id: 'doubao-seedream-5-0-pro-260628',
+    label: 'seedream-5.0-pro',
+    hint: 'ByteDance · design-aware layers',
+    provider: 'volcengine',
+    caps: ['t2i', 'i2i', 'layers'],
+    output: { layered: true },
   },
 
   // SenseAudio — synchronous /v1/image/sync, Bearer auth, reference URL or data URI.

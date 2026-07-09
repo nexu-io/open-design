@@ -2537,6 +2537,10 @@ export function supportedModels(surface: 'image' | 'video' | 'audio', models: Me
   });
 }
 
+function modelHasLayerOutput(model: MediaModel): boolean {
+  return model.output?.layered === true || model.caps?.includes('layers') === true;
+}
+
 function MediaModelCards({
   label,
   models,
@@ -2624,6 +2628,7 @@ function MediaModelCards({
             m.id.toLowerCase().includes(q) ||
             m.label.toLowerCase().includes(q) ||
             m.hint.toLowerCase().includes(q) ||
+            (modelHasLayerOutput(m) && 'layers layered layer-capable'.includes(q)) ||
             g.providerLabel.toLowerCase().includes(q)
           );
         }),
@@ -2745,6 +2750,9 @@ function MediaModelCards({
                               <span className="ds-picker-item-badge">
                                 {t('newproj.modelRecommended')}
                               </span>
+                            ) : null}
+                            {modelHasLayerOutput(model) ? (
+                              <span className="ds-picker-item-badge layer">Layers</span>
                             ) : null}
                           </span>
                           <span className="ds-picker-item-sub">{model.hint}</span>

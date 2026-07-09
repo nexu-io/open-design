@@ -344,6 +344,10 @@ showed it crashed).
 ### Allowed model IDs (per surface)
 
 - **image**:   ${IMAGE_IDS}
+  Seedream 5.0 Pro (\`doubao-seedream-5-0-pro-260628\`) is layer-capable, but
+  the current dispatcher writes a single preview image plus metadata. Do not
+  promise editable layer files unless the returned media JSON includes an
+  explicit layer manifest or supporting layer assets.
 - **video**:   ${VIDEO_IDS}
   Image-to-video (i2v): the Volcengine Seedance family
   (\`doubao-seedance-2-0-260128\`, \`doubao-seedance-2-0-fast-260128\`,
