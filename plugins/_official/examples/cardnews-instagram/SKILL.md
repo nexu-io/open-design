@@ -93,9 +93,10 @@ od:
    - 5b. **표지 배경 생성** — `references/imagegen-pipeline.md` Read 후 그 지시대로
      imagegen 서브에이전트 1회 dispatch(순차 — 스타일 앵커). 프롬프트는 메인이 스캐폴드로
      전량 조립(브랜드 팔레트·비주얼 무드·portrait·no-text 필수·텍스트 영역 단순화).
-     브랜드 cardnews 컨텍스트에 브랜드 레퍼런스 이미지가 등재돼 있으면 view_image 참조 필수 +
-     **캐릭터 시트(브랜드 cardnews 컨텍스트 등재 시)도 함께 앵커** — 표지부터 캐릭터 정체성은
-     시트가 정본(imagegen-pipeline.md 앵커 우선순위).
+     표지 view_image 앵커 = **캐릭터 시트(브랜드 cardnews 컨텍스트 등재 시)뿐** — 표지부터
+     캐릭터 정체성은 시트가 정본(imagegen-pipeline.md 앵커 우선순위). 브랜드 무드
+     레퍼런스 이미지는 시트와 다른 체형의 캐릭터를 담고 있으면 view_image에 넣지 않고
+     라이팅·구도 워딩으로만 반영한다(imagegen-pipeline.md 일반 가드 룰).
      배경 중간산출은 전부 `{cwd}/bg/` 하위(사전 `mkdir -p` — 루트 잔존 = 글롭·위생
      문제, 삭제는 금지: 텍스트 수정 시 재생성 불필요 계약의 전제). `bg/bg-01.png`
      확인 후 진행.
