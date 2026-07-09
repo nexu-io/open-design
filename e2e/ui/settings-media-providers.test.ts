@@ -465,6 +465,82 @@ test.describe('Settings media providers flows', () => {
     expect(JSON.stringify(runBodies[0])).not.toContain('sk-openai-run-secret');
   });
 
+  test('[P1] MiniMax image-01 is carried into the first daemon run without leaking provider keys', async ({ page }) => {
+    test.setTimeout(60_000);
+
+    await seedSettingsBase(page);
+
+    const projectId = 'configured-minimax-image-run-project';
+    const conversationId = 'configured-minimax-image-run-conversation';
+    const runBodies: Array<Record<string, unknown>> = [];
+    await routeBootstrapApis(page, {
+      projectCreate: async (route) => {
+        const body = route.request().postDataJSON() as Record<string, unknown>;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            project: {
+              id: projectId,
+              name: body.name ?? 'Configured MiniMax image run',
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              metadata: body.metadata ?? {},
+            },
+            conversationId,
+          }),
+        });
+      },
+      runProject: {
+        id: projectId,
+        conversationId,
+        name: 'Configured MiniMax image run',
+        metadata: { kind: 'image', imageModel: 'minimax-image-01' },
+        runBodies,
+      },
+    });
+
+    const dialog = await openMediaSettings(page);
+    await dialog.getByLabel('MiniMax API key').fill('minimax-image-secret');
+    await page.waitForFunction(
+      ({ key }) => {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return false;
+        const parsed = JSON.parse(raw);
+        return parsed.mediaProviders?.minimax?.apiKey === 'minimax-image-secret';
+      },
+      { key: STORAGE_KEY },
+    );
+    await dialog.getByRole('button', { name: /Close/i }).click();
+    await expect(dialog).toHaveCount(0);
+
+    await openNewProjectModal(page);
+    await page.getByTestId('new-project-tab-media').click();
+    await page.getByTestId('new-project-media-surface-image').click();
+    await page.getByTestId('new-project-name').fill('Configured MiniMax image run');
+    await page.getByTestId('model-picker-trigger').click();
+    const minimaxGroup = page.locator('.ds-picker-group').filter({ has: page.getByText('MiniMax', { exact: true }) });
+    await expect(minimaxGroup).toContainText('Configured');
+    await minimaxGroup.getByTestId('model-picker-option-minimax-image-01').click();
+    await page.getByTestId('create-project').click();
+
+    await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`));
+    await page.getByTestId('chat-composer-input').fill('Generate a launch poster using MiniMax image-01.');
+    await page.getByTestId('chat-send').click();
+
+    await expect.poll(() => runBodies.length, { timeout: 10_000 }).toBe(1);
+    expect(runBodies[0]).toMatchObject({
+      projectId,
+      conversationId,
+      mediaExecution: {
+        mode: 'enabled',
+        allowedSurfaces: ['image'],
+        allowedModels: ['minimax-image-01'],
+      },
+    });
+    expect(JSON.stringify(runBodies[0])).not.toContain('minimax-image-secret');
+  });
+
   test('[P1] configured video media model is carried into the first daemon run without leaking provider keys', async ({ page }) => {
     test.setTimeout(60_000);
 

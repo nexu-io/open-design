@@ -1041,6 +1041,89 @@ test('[P1] project detail composer context actions emit analytics event fields',
   expect(raw).toContain('local-code');
 });
 
+test('[P1] Open Design Cloud hard balance gate blocks a project send before a daemon run starts', async ({ page }) => {
+  test.setTimeout(60_000);
+
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        json: {
+          config: {
+            mode: 'daemon',
+            apiKey: '',
+            baseUrl: 'https://api.anthropic.com',
+            model: 'claude-sonnet-4-5',
+            agentId: 'amr',
+            skillId: null,
+            designSystemId: null,
+            onboardingCompleted: true,
+            privacyDecisionAt: 1,
+            telemetry: { metrics: false, content: false, artifactManifest: false },
+            agentModels: {},
+            agentCliEnv: {},
+          },
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await routeAgents(page, [
+    ...AGENTS,
+    {
+      id: 'amr',
+      name: 'Open Design Cloud',
+      bin: 'amr',
+      available: true,
+      version: 'cloud',
+      models: [{ id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' }],
+    },
+  ]);
+  await page.route('**/api/integrations/vela/wallet**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'available',
+        profile: 'local',
+        user: { id: 'amr-balance-user', email: 'blocked@example.com', plan: 'free' },
+        balanceUsd: '0.00',
+        updatedAt: '2026-07-09T00:00:00.000Z',
+        fetchedAt: '2026-07-09T00:00:00.000Z',
+        stale: false,
+        source: 'vela_api',
+      }),
+    });
+  });
+  await page.route('**/api/runs', async (route) => {
+    runRequestBodies.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"should-not-start"}',
+    });
+  });
+
+  await page.goto('/');
+  await createProject(page, 'AMR balance gate project send');
+  await expectWorkspaceReady(page);
+
+  const input = page.getByTestId('chat-composer-input');
+  await input.fill('Start a cloud run that should be blocked before the daemon run.');
+  await page.getByTestId('chat-send').click();
+
+  const dialog = page.getByTestId('amr-balance-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('$0.00');
+  await expect(dialog.getByTestId('amr-balance-dialog-plans')).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(runRequestBodies).toHaveLength(0);
+  await expect(page.getByTestId('chat-queued-send-strip')).toContainText(
+    'Start a cloud run that should be blocked',
+  );
+});
+
 test('[P0] @critical project detail composer agent menu lets the user switch Local CLI agents and models', async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto('/');

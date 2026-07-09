@@ -792,6 +792,94 @@ test('[P0] upstream outages keep Retry available without promoting AMR', async (
   await expect(page.getByText(/Model call failed/i)).toHaveCount(0);
 });
 
+test('[P1] zh-CN run failure guidance shows actionable copy and expandable raw source', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('open-design:locale', 'zh-CN');
+    window.localStorage.setItem('open-design:locale-source', 'manual');
+  });
+  await stubCatalogsEmpty(page);
+  await stubRuntimeAgents(page);
+
+  const config = {
+    mode: 'daemon',
+    apiKey: '',
+    baseUrl: '',
+    model: '',
+    agentId: 'codex',
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    privacyDecisionAt: 1,
+    mediaProviders: {},
+    agentModels: {
+      codex: { model: 'default', reasoning: 'default' },
+    },
+    agentCliEnv: {
+      codex: codexRuntime.env,
+    },
+  };
+  await seedBrowserConfig(page, config);
+  await putAppConfig(page, config);
+
+  const projectId = `prompt-too-large-ui-${Date.now()}`.replace(/[^A-Za-z0-9._-]/g, '-');
+  const { conversationId } = await createProjectViaApi(page, projectId, 'Prompt too large guidance');
+
+  const userMsgRes = await page.request.put(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages/u-${projectId}`,
+    {
+      data: {
+        role: 'user',
+        content: 'please build with a very large attachment set',
+        createdAt: Date.now() - 2_000,
+      },
+    },
+  );
+  expect(userMsgRes.ok(), `upsert user msg: ${await userMsgRes.text()}`).toBeTruthy();
+
+  const rawDetail = 'context window exceeded: estimated 250000 tokens for this run.';
+  const assistantMsgRes = await page.request.put(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages/a-${projectId}`,
+    {
+      data: {
+        role: 'assistant',
+        content: '',
+        agentId: 'codex',
+        agentName: 'Codex CLI',
+        runId: `run-${projectId}`,
+        runStatus: 'failed',
+        createdAt: Date.now() - 1_000,
+        startedAt: Date.now() - 1_000,
+        preTurnFileNames: [],
+        events: [
+          {
+            kind: 'status',
+            label: 'error',
+            detail: rawDetail,
+            code: 'AGENT_PROMPT_TOO_LARGE',
+          },
+        ],
+      },
+    },
+  );
+  expect(assistantMsgRes.ok(), `upsert assistant msg: ${await assistantMsgRes.text()}`).toBeTruthy();
+
+  await gotoProject(page, projectId);
+
+  const card = runErrorCard(page);
+  await expect(card).toContainText('内容过长', { timeout: T.long });
+  await expect(card).toContainText('本轮输入超出了模型的上下文上限');
+  await expect(page.getByRole('button', { name: /^重试$/ }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Switch to Open Design & retry/i })).toHaveCount(0);
+
+  const sourceToggle = card.locator('.run-error__source-bar');
+  await expect(sourceToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(sourceToggle).toHaveAccessibleName(/展开报错源码/);
+  await sourceToggle.click();
+  await expect(sourceToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(sourceToggle).toHaveAccessibleName(/收起报错源码/);
+  await expect(card.locator('.run-error__source-full')).toContainText(rawDetail);
+});
+
 test('[P0] antigravity rate limits offer terminal model switching without promoting AMR', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
