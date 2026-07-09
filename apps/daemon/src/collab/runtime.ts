@@ -19,6 +19,10 @@ import {
   createResourceHubPublishAdapterFromEnv,
 } from './resource-hub-publish-adapter.js';
 import {
+  projectResourceIdFor,
+  type VelaTeamProjectCatalogClient,
+} from '../integrations/vela-team-projects.js';
+import {
   contextHasTeamIdentity,
   createVelaCliResourceAdapter,
   shouldUseVelaCliResourceTransport,
@@ -74,6 +78,12 @@ export interface CreateCollabRuntimeOptions {
   workspaceContext?: WorkspaceContextProvider;
   /** Team-resource state provider. Defaults to a dev provider until wired to the hub. */
   teamResources?: TeamResourceStateProvider;
+  /**
+   * Vela-owned team-project catalog. The resource hub stores bytes/versions; the
+   * catalog is the member-discovery index for projects shared from another
+   * daemon. Missing config degrades through the client as a no-op.
+   */
+  teamProjectCatalog?: VelaTeamProjectCatalogClient;
   /** Fired after a project is published so the caller can notify online members. */
   onPublished?: (result: { projectId: string; version: number; reason: string }) => void;
   /** Fired when a project's presence set changes (join/leave). */
@@ -121,6 +131,29 @@ export function createCollabRuntime(options: CreateCollabRuntimeOptions = {}): C
   // projectId → the member who shared it (the single writer). Members compare
   // this to their own id to know whether they view the project read-only.
   const owners = new Map<string, string>();
+  async function markTeamProject(
+    projectId: string,
+    syncState: 'pending_upload' | 'synced' | 'failed',
+  ) {
+    const principal = contextToResourceHubPrincipal(await workspaceContext.current({}));
+    if (!principal) return;
+    await options.teamProjectCatalog?.upsert(
+      {
+        projectId,
+        resourceId: projectResourceIdFor(projectId),
+        syncState,
+      },
+      principal,
+    );
+  }
+  function markTeamProjectSoon(
+    projectId: string,
+    syncState: 'pending_upload' | 'synced' | 'failed',
+  ) {
+    void markTeamProject(projectId, syncState).catch((error) => {
+      options.onError?.({ projectId, error });
+    });
+  }
   // Always track the published head + sync state so members can poll them; also
   // forward to any caller-supplied callback. (exactOptionalPropertyTypes forbids
   // assigning an explicit `undefined` to an optional property, hence we always
@@ -130,12 +163,14 @@ export function createCollabRuntime(options: CreateCollabRuntimeOptions = {}): C
     onPublished: (result) => {
       published.set(result.projectId, result.version);
       syncStates.set(result.projectId, 'synced');
+      markTeamProjectSoon(result.projectId, 'synced');
       options.onPublished?.(result);
     },
     onError: (result) => {
       // A failed publish leaves the prior head standing; surface it as a
       // recoverable sync state rather than wedging the project.
       syncStates.set(result.projectId, 'sync_failed');
+      markTeamProjectSoon(result.projectId, 'failed');
       options.onError?.(result);
     },
   };
@@ -159,6 +194,7 @@ export function createCollabRuntime(options: CreateCollabRuntimeOptions = {}): C
       // Pending until the publish confirms (onPublished → 'synced' / onError →
       // 'sync_failed'). Flushing at a run boundary publishes the stable state.
       syncStates.set(projectId, 'pending_upload');
+      markTeamProjectSoon(projectId, 'pending_upload');
       scheduler.notifyChanged(projectId, 'share');
       scheduler.runBoundary(projectId);
     },

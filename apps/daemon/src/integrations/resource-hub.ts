@@ -158,6 +158,28 @@ export function readResourceHubPrincipal(
   };
 }
 
+export function buildResourceHubAuthHeaders(
+  principal: ResourceHubPrincipal,
+  config: ResourceHubConfig,
+): Record<string, string> {
+  // Seam: the final scheme (services/api-issued scoped token vs internal-token
+  // forwarding) is undecided. For now forward the principal under the header
+  // contract the hub's auth seam consumes, gated by the internal token.
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'x-workspace-member-id': principal.memberId,
+    'x-workspace-team-id': principal.teamId,
+    'x-workspace-role': principal.role,
+  };
+  if (principal.lifecycleState) {
+    headers['x-workspace-lifecycle-state'] = principal.lifecycleState;
+  }
+  if (config.internalToken) {
+    headers['x-internal-token'] = config.internalToken;
+  }
+  return headers;
+}
+
 interface ResourceHubClientOptions {
   config?: ResourceHubConfig;
   fetch?: FetchLike;
@@ -168,27 +190,6 @@ export function createResourceHubClient(options: ResourceHubClientOptions = {}) 
   const config = options.config ?? readResourceHubConfig();
   const fetchImpl = options.fetch ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
-
-  function buildAuthHeaders(
-    principal: ResourceHubPrincipal,
-  ): Record<string, string> {
-    // Seam: the final scheme (services/api-issued scoped token vs internal-token
-    // forwarding) is undecided. For now forward the principal under the header
-    // contract the hub's auth seam consumes, gated by the internal token.
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-      'x-workspace-member-id': principal.memberId,
-      'x-workspace-team-id': principal.teamId,
-      'x-workspace-role': principal.role,
-    };
-    if (principal.lifecycleState) {
-      headers['x-workspace-lifecycle-state'] = principal.lifecycleState;
-    }
-    if (config.internalToken) {
-      headers['x-internal-token'] = config.internalToken;
-    }
-    return headers;
-  }
 
   async function request<T>(
     principal: ResourceHubPrincipal,
@@ -201,7 +202,7 @@ export function createResourceHubClient(options: ResourceHubClientOptions = {}) 
     try {
       const response = await fetchImpl(new URL(path, config.baseUrl), {
         method,
-        headers: buildAuthHeaders(principal),
+        headers: buildResourceHubAuthHeaders(principal, config),
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal: controller.signal,
       });

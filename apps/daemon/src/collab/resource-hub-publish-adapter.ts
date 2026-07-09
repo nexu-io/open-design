@@ -7,6 +7,7 @@ import {
   type ResourceHubClient,
   type ResourceHubPrincipal,
 } from '../integrations/resource-hub.js';
+import { projectResourceIdFor } from '../integrations/vela-team-projects.js';
 import { materializeRef, packTree, pushTree } from '../resource-drive.js';
 import type { ResourcePublishAdapter } from './publish-scheduler.js';
 
@@ -56,7 +57,7 @@ export function createResourceHubPublishAdapter(
 ): ResourcePublishAdapter {
   const { client, getPrincipal, resolveProjectDir } = options;
   const resolvePullDir = options.resolvePullDir ?? resolveProjectDir;
-  const resourceIdFor = options.resourceIdFor ?? ((projectId: string) => `project-${projectId}`);
+  const resourceIdFor = options.resourceIdFor ?? projectResourceIdFor;
   const kind = options.kind ?? PROJECT_KIND;
 
   // The resource must exist before a version is published. Get-or-create keeps

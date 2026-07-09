@@ -261,6 +261,76 @@ describe('workspace project routes', () => {
     }
   });
 
+  it('merges Vela team-project catalog entries as read-only member-discovery projects', async () => {
+    const localProjectId = `workspace-local-${Date.now()}`;
+    const remoteProjectId = `workspace-remote-${Date.now()}`;
+    const teamProjectCatalog = {
+      list: vi.fn(async () => [
+        {
+          id: `catalog-${remoteProjectId}`,
+          workspaceId,
+          projectId: remoteProjectId,
+          resourceId: `project-${remoteProjectId}`,
+          ownerMemberId: 'member-owner',
+          displayName: 'Remote shared project',
+          syncState: 'synced',
+          lastSyncedVersionId: 'version-1',
+          createdAt: new Date(10).toISOString(),
+          updatedAt: new Date(20).toISOString(),
+          access: {
+            canView: true,
+            canComment: true,
+            canEdit: false,
+            frozen: false,
+          },
+        },
+      ]),
+      upsert: vi.fn(),
+    };
+    const app = express();
+    app.use(express.json());
+    registerProjectRoutes(app, workspaceProjectRouteDeps({
+      workspaceId,
+      projectId: localProjectId,
+      dbDeleteProject: vi.fn(),
+      removeProjectDir: vi.fn(),
+      teamProjectCatalog,
+    }));
+    const routeServer = await listen(app);
+    try {
+      const resp = await fetch(`${routeServer.url}/api/workspaces/${workspaceId}/projects?view=team`, {
+        headers: headers('member-viewer'),
+      });
+      expect(resp.status).toBe(200);
+      const body = await resp.json() as { projects: Array<any> };
+      expect(teamProjectCatalog.list).toHaveBeenCalledWith({
+        memberId: 'member-viewer',
+        teamId: workspaceId,
+        role: 'member',
+        lifecycleState: 'active',
+      });
+      expect(body.projects).toHaveLength(1);
+      expect(body.projects[0]).toMatchObject({
+        id: remoteProjectId,
+        name: 'Remote shared project',
+        visibility: 'team',
+        resourceState: 'active',
+        createdByWorkspaceMemberId: 'member-owner',
+        resourceHubResourceId: `project-${remoteProjectId}`,
+        syncState: 'synced',
+        currentUserAccess: {
+          canOpen: true,
+          canRename: false,
+          canDelete: false,
+          canMoveToPersonal: false,
+          canExport: true,
+        },
+      });
+    } finally {
+      await close(routeServer.server);
+    }
+  });
+
   it('blocks moving frozen team projects back to personal', async () => {
     const projectId = `workspace-frozen-${Date.now()}`;
     await createProject(projectId, 'Frozen project');
@@ -328,11 +398,13 @@ function workspaceProjectRouteDeps({
   projectId,
   dbDeleteProject,
   removeProjectDir,
+  teamProjectCatalog,
 }: {
   workspaceId: string;
   projectId: string;
   dbDeleteProject: ReturnType<typeof vi.fn>;
   removeProjectDir: ReturnType<typeof vi.fn>;
+  teamProjectCatalog?: unknown;
 }) {
   const now = 1;
   const project = {
@@ -428,6 +500,7 @@ function workspaceProjectRouteDeps({
       validateProjectSkillId: async () => ({ ok: true, id: null }),
     },
     collabSync: { requestTeamShare: noop },
+    teamProjectCatalog,
   } as unknown as Parameters<typeof registerProjectRoutes>[1];
 }
 

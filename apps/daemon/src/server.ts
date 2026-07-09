@@ -582,6 +582,7 @@ import { registerTeamResourceShareRoutes } from './routes/team-resource-share.js
 import { createCollabRuntime } from './collab/runtime.js';
 import { createTeamResourceShareService } from './collab/team-resource-share.js';
 import { contextToResourceHubPrincipal } from './collab/resource-hub-publish-adapter.js';
+import { velaTeamProjectCatalogClient } from './integrations/vela-team-projects.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
 import {
   assembleExample,
@@ -3812,6 +3813,7 @@ export async function startServer({
   // stub. resolveProjectDir lets the hub adapter pack/land managed projects.
   const collab = createCollabRuntime({
     resolveProjectDir: (projectId) => resolveProjectDir(PROJECTS_DIR, projectId),
+    teamProjectCatalog: velaTeamProjectCatalogClient,
   });
   registerCollabPresenceRoutes(app, { collab });
   registerCollabSyncRoutes(app, { collab });
@@ -4352,6 +4354,7 @@ export async function startServer({
     // C-lane sync seam for D's project-visibility routes: a personal→team move
     // calls requestTeamShare on success to publish the project for the team.
     collabSync: { requestTeamShare: (projectId, ownerMemberId) => collab.requestTeamShare(projectId, ownerMemberId) },
+    teamProjectCatalog: velaTeamProjectCatalogClient,
   });
   registerTerminalRoutes(app, {
     db,

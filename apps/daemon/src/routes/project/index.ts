@@ -11,6 +11,7 @@ import {
   type ProjectFileVersionPromptSource,
   type ProjectFileVersionSource,
   type ProjectFileVersionWarning,
+  type ProjectSyncState,
 } from '@open-design/contracts';
 import { readMeta as readBrandMeta } from '../../brands/store.js';
 import { createProjectArtifactFile } from '../../artifacts/create.js';
@@ -53,8 +54,16 @@ import {
 import { auditDesignSystemPackage } from '../../tools-connectors-cli.js';
 import { parseOrchestratorWorkspace } from '../../workspace-contract.js';
 import { registerProjectConversationRoutes } from './conversations.js';
+import {
+  velaProjectSyncStateToProject,
+  type VelaTeamProjectCatalogClient,
+  type VelaTeamProjectRecord,
+} from '../../integrations/vela-team-projects.js';
+import type { ResourceHubPrincipal } from '../../integrations/resource-hub.js';
 
-export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation' | 'collabSync'> {}
+export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation' | 'collabSync'> {
+  teamProjectCatalog?: VelaTeamProjectCatalogClient;
+}
 
 function projectDetailResolvedDir(
   projectsRoot: string,
@@ -1147,7 +1156,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { subscribeFileEvents, activeProjectEventSinks } = ctx.events;
   const { randomId } = ctx.ids;
   const { validateProjectDesignSystemId, validateProjectSkillId } = ctx.validation;
-  const { collabSync } = ctx;
+  const { collabSync, teamProjectCatalog } = ctx;
   type WorkspaceProjectContext = {
     workspaceId: string;
     appUserId: string;
@@ -1273,6 +1282,89 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       metadata,
       project,
     };
+  }
+  function workspaceProjectPrincipal(ctx: WorkspaceProjectContext): ResourceHubPrincipal {
+    return {
+      memberId: ctx.workspaceMemberId,
+      teamId: ctx.workspaceId,
+      role: ctx.role,
+      lifecycleState: ctx.lifecycleState,
+    };
+  }
+  function msFromIso(value: string): number {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : Date.now();
+  }
+  function accessForRemoteTeamProject(remote: VelaTeamProjectRecord, ctx: WorkspaceProjectContext) {
+    const frozen = remote.access.frozen || isWorkspaceLocked(ctx);
+    const canView = remote.access.canView && !frozen && ctx.memberStatus === 'active';
+    const canEdit = remote.access.canEdit && !frozen && ctx.canWriteSyncedFiles && ctx.memberStatus === 'active';
+    const disabledReason = frozen
+      ? isWorkspaceLocked(ctx)
+        ? 'workspace_locked'
+        : 'resource_frozen'
+      : canView
+        ? undefined
+        : 'permission_denied';
+    return {
+      canOpen: canView,
+      canRename: canEdit,
+      canDelete: canEdit,
+      canDuplicate: canEdit,
+      canMoveToTeam: false,
+      canMoveToPersonal: canEdit,
+      canExport: canView,
+      canSendTo: canView,
+      canRestoreVersion: canEdit,
+      ...(disabledReason ? { disabledReason } : {}),
+    };
+  }
+  function remoteTeamProjectSummary(
+    remote: VelaTeamProjectRecord,
+    ctx: WorkspaceProjectContext,
+  ) {
+    const createdAt = msFromIso(remote.createdAt);
+    const updatedAt = msFromIso(remote.updatedAt);
+    const syncState: ProjectSyncState = velaProjectSyncStateToProject(remote.syncState);
+    const resourceState = remote.access.frozen || isWorkspaceLocked(ctx) ? 'frozen' : 'active';
+    const name = remote.displayName?.trim() || remote.projectId;
+    const project = {
+      id: remote.projectId,
+      name,
+      skillId: null,
+      designSystemId: null,
+      createdAt,
+      updatedAt,
+    };
+    return {
+      id: remote.projectId,
+      name,
+      workspaceId: ctx.workspaceId,
+      visibility: 'team',
+      resourceState,
+      createdByWorkspaceMemberId: remote.ownerMemberId,
+      updatedByWorkspaceMemberId: remote.ownerMemberId,
+      resourceHubResourceId: remote.resourceId,
+      cloudTombstonedAt: null,
+      currentUserAccess: accessForRemoteTeamProject(remote, ctx),
+      syncState,
+      createdAt,
+      updatedAt,
+      project,
+    };
+  }
+  async function listRemoteTeamProjectSummaries(localRows: any[], ctx: WorkspaceProjectContext) {
+    if (!teamProjectCatalog) return [];
+    const localProjectIds = new Set(localRows.map((row) => row.id));
+    try {
+      const remoteProjects = await teamProjectCatalog.list(workspaceProjectPrincipal(ctx));
+      return remoteProjects
+        .filter((project) => project.access.canView)
+        .filter((project) => !localProjectIds.has(project.projectId))
+        .map((project) => remoteTeamProjectSummary(project, ctx));
+    } catch {
+      return [];
+    }
   }
   function ensureWorkspaceProjection(project: any, ctx: WorkspaceProjectContext, visibility = 'personal') {
     const existing = getWorkspaceProject(db, ctx.workspaceId, project.id);
@@ -1598,8 +1690,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const owner = typeof req.query.owner === 'string' ? req.query.owner : 'all';
       const visibility = typeof req.query.visibility === 'string' ? req.query.visibility : 'all';
       const rows = listWorkspaceProjects(db, ctx.workspaceId);
-      const projects = rows
-        .map((row: any) => normalizeWorkspaceProjectRow(row, ctx))
+      const mergedProjects = [
+        ...rows.map((row: any) => normalizeWorkspaceProjectRow(row, ctx)),
+        ...(await listRemoteTeamProjectSummaries(rows, ctx)),
+      ];
+      const projects = mergedProjects
         .filter((project: any) => {
           if (view === 'drafts') {
             return project.visibility === 'personal' && project.createdByWorkspaceMemberId === ctx.workspaceMemberId;
