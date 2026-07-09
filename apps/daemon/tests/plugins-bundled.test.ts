@@ -193,6 +193,40 @@ describe('registerBundledPlugins', () => {
     nowSpy.mockRestore();
   });
 
+  // Regression for further review feedback on #5362: a bundled plugin's
+  // runtime behavior is served from far more than open-design.json/SKILL.md
+  // (see discoverPluginHtmlAssets in routes/plugins/assets.ts, and manifest
+  // preview-media paths like od.preview.poster/video/gif). Editing a preview
+  // asset with no manifest/SKILL.md change at all must still advance
+  // updatedAt, or "Newest" stays wrong for asset-only bundled updates.
+  it('advances updatedAt when only a preview asset changes, with no manifest or SKILL.md edit', async () => {
+    const folder = path.join(tmpRoot, 'atoms', 'sample');
+    await mkdir(path.join(folder, 'preview'), { recursive: true });
+    await writeFile(path.join(folder, 'open-design.json'), SAMPLE_MANIFEST('sample'));
+    await writeFile(path.join(folder, 'SKILL.md'), SAMPLE_SKILL('sample'));
+    await writeFile(path.join(folder, 'preview', 'index.html'), '<p>v1 preview</p>');
+
+    const nowSpy = vi.spyOn(Date, 'now');
+    nowSpy.mockReturnValue(1_000);
+    await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+    const [first] = listInstalledPlugins(db);
+    expect(first?.updatedAt).toBe(1_000);
+
+    // Edit only the preview asset — open-design.json and SKILL.md untouched.
+    await writeFile(path.join(folder, 'preview', 'index.html'), '<p>v2 preview, redesigned</p>');
+    nowSpy.mockReturnValue(2_000);
+    const result = await registerBundledPlugins({ db, bundledRoot: tmpRoot });
+    expect(JSON.stringify(result.registered[0]?.manifest)).toBe(
+      JSON.stringify(first?.manifest),
+    );
+
+    const [second] = listInstalledPlugins(db);
+    expect(second?.installedAt).toBe(1_000);
+    expect(second?.updatedAt).toBe(2_000);
+
+    nowSpy.mockRestore();
+  });
+
   it('returns empty result when bundledRoot does not exist', async () => {
     const result = await registerBundledPlugins({
       db,

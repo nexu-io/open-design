@@ -140,30 +140,53 @@ function pruneRemovedBundledPlugins(
   return pruned;
 }
 
-// The exact files resolvePluginFolder() reads to build a bundled plugin's
-// manifest (registry.ts). Hashing their raw bytes — not the parsed manifest
-// object — catches a SKILL.md prose edit that resolvePluginFolder discards:
-// adaptAgentSkill() only carries frontmatter fields into the manifest, so a
-// change to SKILL.md's markdown body (with no frontmatter/version bump)
-// would otherwise leave the manifest comparison blind to it (issue #5362
-// review).
-const BUNDLED_DIGEST_RELATIVE_PATHS = [
-  'open-design.json',
-  'SKILL.md',
-  path.join('.claude-plugin', 'plugin.json'),
-];
+// Recursively list every file under `dir`, relative to `root`. Bundled
+// plugin folders are curated content directories (no node_modules/.git), so
+// a plain recursive walk is cheap — no need to special-case anything.
+async function listFilesRecursive(root: string, dir: string): Promise<string[]> {
+  let entries;
+  try {
+    entries = await fsp.readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const entry of entries) {
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...(await listFilesRecursive(root, abs)));
+    } else if (entry.isFile()) {
+      out.push(path.relative(root, abs));
+    }
+  }
+  return out;
+}
 
+// Hashes EVERY file under a bundled plugin's folder, not just
+// open-design.json/SKILL.md. A bundled plugin's runtime behavior is served
+// from far more than its manifest: /api/plugins/:id/preview discovers HTML
+// under assets/, public/, dist/, examples/, preview/, templates/ (see
+// discoverPluginHtmlAssets in routes/plugins/assets.ts), and Community cards
+// render preview media (od.preview.poster/video/gif) from arbitrary
+// manifest-referenced paths. Hardcoding "the files we know matter today"
+// would just be next month's whack-a-mole as new preview/asset consumers get
+// added — hashing the whole tree is the version of this check that doesn't
+// need updating every time. Paths are sorted before hashing so the digest is
+// independent of readdir's (platform-dependent) enumeration order.
 async function computeBundledContentDigest(folder: string): Promise<string> {
   const hash = createHash('sha256');
-  for (const rel of BUNDLED_DIGEST_RELATIVE_PATHS) {
+  const relPaths = (await listFilesRecursive(folder, folder))
+    .map((p) => p.split(path.sep).join('/'))
+    .sort();
+  for (const rel of relPaths) {
     let content: Buffer;
     try {
-      content = await fsp.readFile(path.join(folder, rel));
+      content = await fsp.readFile(path.join(folder, ...rel.split('/')));
     } catch {
       content = Buffer.alloc(0);
     }
-    // Prefix each file's bytes with its name so "SKILL.md empty, plugin.json
-    // has X" can't hash the same as "SKILL.md has X, plugin.json empty".
+    // Prefix each file's bytes with its path so "a.txt empty, b.txt has X"
+    // can't hash the same as "a.txt has X, b.txt empty".
     hash.update(rel).update('\0').update(content).update('\0');
   }
   return hash.digest('hex');
