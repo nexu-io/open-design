@@ -741,22 +741,29 @@ export function EntryShell({
                 className="brand-chip"
                 onClick={() => changeView('brands')}
                 title={currentBrand ? currentBrand.title : t('entry.navBrands')}
+                aria-label={currentBrand ? currentBrand.title : t('entry.navBrands')}
                 data-testid="entry-brand-chip"
               >
-                <span
-                  className="brand-chip__tile"
-                  aria-hidden
-                  style={{
-                    background: currentBrand
-                      ? currentBrand.primaryColor ?? brandAccentFallback(currentBrand.id)
-                      : 'var(--border-strong, var(--border))',
-                  }}
-                >
-                  {currentBrand ? currentBrand.title.slice(0, 1) : ''}
-                </span>
-                <span className="brand-chip__label">
-                  {currentBrand ? currentBrand.title : t('entry.navBrands')}
-                </span>
+                {currentBrand?.iconUrl ? (
+                  <img
+                    className="brand-chip__img"
+                    src={currentBrand.iconUrl}
+                    alt=""
+                    aria-hidden
+                  />
+                ) : (
+                  <span
+                    className="brand-chip__tile"
+                    aria-hidden
+                    style={{
+                      background: currentBrand
+                        ? currentBrand.primaryColor ?? brandAccentFallback(currentBrand.id)
+                        : 'var(--border-strong, var(--border))',
+                    }}
+                  >
+                    {currentBrand ? currentBrand.title.slice(0, 1) : ''}
+                  </span>
+                )}
               </button>
             </div>
             <UpdaterPopup />

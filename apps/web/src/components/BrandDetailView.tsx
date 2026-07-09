@@ -84,9 +84,13 @@ export function BrandDetailView({ brandId, onBack }: Props) {
       </div>
 
       <div className={styles.hero}>
-        <div className={styles.tile} style={{ background: primary }}>
-          {detail.title.slice(0, 1)}
-        </div>
+        {detail.iconUrl ? (
+          <img className={styles.tile} src={detail.iconUrl} alt="" aria-hidden />
+        ) : (
+          <div className={styles.tile} style={{ background: primary }}>
+            {detail.title.slice(0, 1)}
+          </div>
+        )}
         <div>
           <h1 className={styles.heroTitle}>{detail.title}</h1>
           {p?.subtitle && <p className={styles.heroSubtitle}>{p.subtitle}</p>}

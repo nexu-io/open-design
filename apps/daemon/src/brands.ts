@@ -73,6 +73,9 @@ export async function listBrands(root: string): Promise<BrandSummary[]> {
       ...(p?.tagline ? { tagline: p.tagline } : {}),
       ...(p?.toneLabel ? { toneLabel: p.toneLabel } : {}),
       ...(palette?.[0] ? { primaryColor: palette[0].value } : {}),
+      ...(p?.icon
+        ? { iconUrl: `/api/brands/${manifest.id}/assets/${p.icon}` }
+        : {}),
       ...(labels ? { deliverableLabels: labels } : {}),
     });
   }
