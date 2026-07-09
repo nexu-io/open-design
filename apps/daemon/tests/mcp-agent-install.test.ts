@@ -28,8 +28,9 @@ describe('agent slug guard', () => {
   it('accepts every documented slug and rejects others', () => {
     for (const s of AGENT_SLUGS) expect(isAgentSlug(s)).toBe(true);
     expect(isAgentSlug('not-an-agent')).toBe(false);
-    expect(AGENT_SLUGS).toHaveLength(14);
+    expect(AGENT_SLUGS).toHaveLength(15);
     expect(isAgentSlug('kiro')).toBe(true);
+    expect(isAgentSlug('reasonix')).toBe(true);
   });
 });
 
@@ -55,6 +56,19 @@ describe('CLI-driven agents', () => {
     expect(plan.addArgv).toContain('--env');
     expect(plan.addArgv).toContain('OD_DATA_DIR=/home/u/.open-design');
     expect(plan.addArgv.slice(-SPEC.args.length - 2)).toEqual(['--', SPEC.command, ...SPEC.args]);
+  });
+
+  it('reasonix uses its native mcp add/remove/get commands', () => {
+    const plan = planAgentInstall('reasonix', SPEC, ctx());
+    if (plan.kind !== 'cli') throw new Error('expected cli');
+    expect(plan.bin).toBe('reasonix');
+    expect(plan.addArgv).toEqual([
+      'mcp', 'add', 'open-design',
+      '--env', 'OD_DATA_DIR=/home/u/.open-design',
+      SPEC.command, ...SPEC.args,
+    ]);
+    expect(plan.removeArgv).toEqual(['mcp', 'remove', 'open-design']);
+    expect(plan.getArgv).toEqual(['mcp', 'get', 'open-design']);
   });
 
 });
