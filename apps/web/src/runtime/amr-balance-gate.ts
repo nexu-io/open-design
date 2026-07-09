@@ -29,7 +29,7 @@ export const AMR_HARD_BLOCK_BALANCE_USD = 0;
  * distribution of AMR_INSUFFICIENT_BALANCE failures tells you where this
  * line should actually sit.
  */
-export const AMR_LOW_BALANCE_WARN_USD = 4;
+export const AMR_LOW_BALANCE_WARN_USD = 2;
 
 const LOW_BALANCE_WARN_OPTOUT_KEY = 'open-design:amr-low-balance-warn-optout:v1';
 
