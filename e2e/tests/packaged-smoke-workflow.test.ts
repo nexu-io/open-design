@@ -29,6 +29,12 @@ const bakePreviewsAutomergeWorkflowPath = join(
   "bake-plugin-previews-automerge.yml",
 );
 const bakePreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
+const bakePreviewsReleaseWorkflowPath = join(
+  workspaceRoot,
+  ".github",
+  "workflows",
+  "bake-plugin-previews-release.yml",
+);
 const finalizeReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "finalize-release.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
@@ -812,6 +818,32 @@ process.stdin.on("end", () => {
     //    to a live-main base (fetching refs/heads/main as the parent) fails here.
     expect(workflow).toContain('git checkout -B "$BRANCH"');
     expect(workflow).not.toContain("git/ref/heads/main");
+  });
+
+  it("[P2] keeps the release-cut bake pushing its manifest as a ruleset bypass bot", async () => {
+    // release/** is guarded by the "Protected branches (preview/*, release/v*)" ruleset whose
+    // pull_request rule rejects a direct push (GH013) unless the pusher is a bypass actor. The
+    // release-cut bake writes the authoritative manifest straight onto the release branch, so it
+    // must push as open-design-bot — a bypass actor on that ruleset — not github-actions[bot],
+    // which is NOT and gets rejected (this stranded release/v0.14.2's manifest). These three auth
+    // invariants only work together; a refactor that drops any one silently reintroduces the
+    // GH013 regression, so lock them here rather than rely on YAML review.
+    const workflow = await readFile(bakePreviewsReleaseWorkflowPath, "utf8");
+
+    // 1. Checkout must NOT persist GITHUB_TOKEN: its http.extraheader would override the inline bot
+    //    token on push and re-authenticate as github-actions[bot] (the same override fixed in the
+    //    post-merge bake — #5357).
+    expect(workflow).toContain("persist-credentials: false");
+    // 2. The run mints an open-design-bot token via the BOT_APP_* creds — the App that IS a bypass
+    //    actor on the release ruleset. RELEASE_BOT_APP_ID (used by the post-merge bake) is a
+    //    different App and is NOT a bypass actor, so pin the correct credentials, not just the
+    //    generic token action.
+    expect(workflow).toContain("actions/create-github-app-token");
+    expect(workflow).toContain("secrets.BOT_APP_CLIENT_ID");
+    expect(workflow).toContain("secrets.BOT_APP_PRIVATE_KEY");
+    // 3. The manifest push goes through the explicit tokenized URL with that bot token, so it
+    //    authenticates as the bypass actor rather than the checkout's default credential.
+    expect(workflow).toContain("x-access-token:${BOT_TOKEN}");
   });
 
   it("[P2] keeps PR and merge queue CI separated by hot/full validation mode", async () => {
