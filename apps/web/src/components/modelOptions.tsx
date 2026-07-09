@@ -47,12 +47,22 @@ export function renderModelOptions(models: AgentModelOption[]) {
       </>
     );
   }
-  // Sort each group's items alphabetically and sort groups by provider name
+  // Sort each group's items alphabetically by the same label that
+  // `renderModelOptions` actually renders (strips a matching `${provider}/`
+  // prefix), so a mixed group appears in the same order to users.
   const sortedGroups = Array.from(groups.entries()).sort(([a], [b]) =>
     a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0,
   );
-  for (const [, items] of sortedGroups) {
-    items.sort(ALPHA_BY_LABEL);
+  for (const [provider, items] of sortedGroups) {
+    items.sort((a, b) => {
+      const strip = (m: AgentModelOption) =>
+        m.label.startsWith(`${provider}/`)
+          ? m.label.slice(provider.length + 1)
+          : m.label;
+      const la = strip(a).toLowerCase();
+      const lb = strip(b).toLowerCase();
+      return la < lb ? -1 : la > lb ? 1 : 0;
+    });
   }
   return (
     <>
