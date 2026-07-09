@@ -292,3 +292,23 @@ export interface OnboardingFirstGenerationCompletedProps {
   recommendation_id: string;
 }
 
+// The loop-closing steps of a recommendation-started first project. Recorded
+// session-side, scoped to the created project id, as the user reaches each
+// moment; `onboarding_completed` fires once, when the loop actually closes with
+// a delivery (export / share) IN THAT SAME project.
+export type TrackingOnboardingFirstLoopStep =
+  | 'prompt_sent'
+  | 'generated'
+  | 'artifact_viewed'
+  | 'delivered';
+
+// Fired once when the first-generation loop closes (spec §11.1: 用户完成首次
+// 生成闭环时). `completed_steps` carries every loop step observed for that
+// project this session, in the order they were first reached.
+export interface OnboardingCompletedProps {
+  entry_source: 'home_recommendation';
+  product_type: TrackingOnboardingProductType;
+  recommendation_id: string;
+  completed_steps: TrackingOnboardingFirstLoopStep[];
+}
+

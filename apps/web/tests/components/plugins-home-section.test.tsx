@@ -107,6 +107,7 @@ function pluginIds(): Array<string | null> {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   window.localStorage.clear();
 });
 
@@ -140,6 +141,32 @@ const sample: InstalledPluginRecord[] = [
 ];
 
 describe('PluginsHomeSection (community gallery)', () => {
+  it('caps the initial gallery render so template loading does not mount the full catalog at once', () => {
+    class MockIntersectionObserver {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+      takeRecords = () => [];
+    }
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
+    const manyPlugins = Array.from({ length: 30 }, (_value, index) =>
+      makePlugin({
+        id: `prototype-gallery-${index + 1}`,
+        mode: 'prototype',
+        tags: ['dashboard'],
+        preview: { type: 'html', entry: './example.html' },
+      }),
+    );
+
+    renderSection(manyPlugins, {
+      cardLayout: 'gallery',
+      preferDefaultFacet: false,
+    });
+
+    expect(pluginIds()).toHaveLength(12);
+    expect(screen.getByRole('list').querySelector('.plugins-home__load-more-sentinel')).toBeTruthy();
+  });
+
   it('surfaces gallery tile actions without restoring the heavier split Use menu', () => {
     const onUse = vi.fn();
     const onDuplicate = vi.fn();

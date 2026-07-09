@@ -247,6 +247,7 @@ import {
 } from '../onboarding/onboarding-entry';
 import { producedPreviewableArtifact } from '../onboarding/first-generation';
 import { sentPrefilledPrompt } from '../onboarding/first-prompt';
+import { beginFirstLoop, recordFirstLoopStep } from '../onboarding/first-loop';
 import { BrandReadyPrompt } from './BrandReadyPrompt';
 import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
@@ -1393,6 +1394,11 @@ export function ProjectView({
     onboardingEntryRef.current = consumeOnboardingEntryForProject(project.id);
     onboardingSeedPromptRef.current =
       onboardingEntryRef.current?.seedPrompt ?? (project.pendingPrompt ?? '').trim();
+    // Pin the first-loop ledger for THIS project so later delivery taps (the
+    // FileViewer share/export path) can close the loop by project id without
+    // prop plumbing. Project-scoped, so an unrelated project's delivery never
+    // closes this loop.
+    if (onboardingEntryRef.current) beginFirstLoop(project.id, onboardingEntryRef.current);
   }
   // The once-per-project funnel guards live in the onboarding-entry module
   // (project-keyed), not mount-local refs: ProjectView remounts on every
@@ -2662,6 +2668,16 @@ export function ProjectView({
     }
     return false;
   }, [projectFileNames]);
+  // First-loop ledger: the artifact reaching the preview is the 查看 step of the
+  // loop (spec §8.3). Recorded once per project; a no-op for any project not
+  // started from a recommendation.
+  const firstLoopViewedRef = useRef(false);
+  useEffect(() => {
+    if (!hasPreviewableArtifact || firstLoopViewedRef.current) return;
+    if (!onboardingEntryRef.current) return;
+    firstLoopViewedRef.current = true;
+    recordFirstLoopStep(analytics.track, 'artifact_viewed', project.id);
+  }, [hasPreviewableArtifact, analytics.track, project.id]);
   const activeProjectFileName = useMemo(
     () => (
       openTabsState.active && projectFileNames.has(openTabsState.active)
@@ -3830,12 +3846,20 @@ export function ProjectView({
               : artifactFromStandaloneHtml(replayedContent);
             let recoveredExistingArtifact: ProjectFile | null = null;
             if (artifactToPersist?.html) {
+              const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
               const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
-              recoveredExistingArtifact = findExistingArtifactProjectFile(
-                artifactToPersist,
-                nextFiles,
-                { minMtime: runStartedAt },
-              );
+              recoveredExistingArtifact =
+                await findSameTurnWriteForRecoveredArtifact({
+                  artifact: artifactToPersist,
+                  sourceText: replayedContent,
+                  producedFiles: producedBeforeFallback,
+                  readProjectText: readProjectHtml,
+                }) ??
+                findExistingArtifactProjectFile(
+                  artifactToPersist,
+                  nextFiles,
+                  { minMtime: runStartedAt },
+                );
               if (recoveredExistingArtifact) {
                 savedArtifactRef.current = recoveredExistingArtifact.name;
                 requestOpenFile(recoveredExistingArtifact.name);
@@ -4092,19 +4116,18 @@ export function ProjectView({
                 if (artifactToPersist?.html) {
                   const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                   const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
-                  recoveredExistingArtifact = findExistingArtifactProjectFile(
-                    artifactToPersist,
-                    nextFiles,
-                    { minMtime: runStartedAt },
-                  ) ?? await findSameTurnHtmlWriteForRecoveredArtifact({
-                    artifactHtml: resolvePersistedArtifactHtml({
-                      artifactHtml: artifactToPersist.html,
-                      identifier: artifactToPersist.identifier,
+                  recoveredExistingArtifact =
+                    await findSameTurnWriteForRecoveredArtifact({
+                      artifact: artifactToPersist,
                       sourceText: replayedContent,
-                    }),
-                    producedFiles: producedBeforeFallback,
-                    readProjectHtml,
-                  });
+                      producedFiles: producedBeforeFallback,
+                      readProjectText: readProjectHtml,
+                    }) ??
+                    findExistingArtifactProjectFile(
+                      artifactToPersist,
+                      nextFiles,
+                      { minMtime: runStartedAt },
+                    );
                   if (recoveredExistingArtifact) {
                     savedArtifactRef.current = recoveredExistingArtifact.name;
                     requestOpenFile(recoveredExistingArtifact.name);
@@ -4183,11 +4206,19 @@ export function ProjectView({
                     );
                     const runStartedAt =
                       latestRunStatus?.createdAt || message.startedAt || message.createdAt;
-                    let recoveredExistingArtifact = findExistingArtifactProjectFile(
-                      artifactToPersist,
-                      nextFiles,
-                      { minMtime: runStartedAt },
-                    );
+                    const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                    let recoveredExistingArtifact =
+                      await findSameTurnWriteForRecoveredArtifact({
+                        artifact: artifactToPersist,
+                        sourceText: replayedContent,
+                        producedFiles: producedBeforeFallback,
+                        readProjectText: readProjectHtml,
+                      }) ??
+                      findExistingArtifactProjectFile(
+                        artifactToPersist,
+                        nextFiles,
+                        { minMtime: runStartedAt },
+                      );
                     if (recoveredExistingArtifact) {
                       savedArtifactRef.current = recoveredExistingArtifact.name;
                       requestOpenFile(recoveredExistingArtifact.name);
@@ -4535,11 +4566,19 @@ export function ProjectView({
           );
           const runStartedAt =
             latestRunStatus?.createdAt || message.startedAt || message.createdAt;
-          let recoveredExistingArtifact = findExistingArtifactProjectFile(
-            artifactToPersist,
-            nextFiles,
-            { minMtime: runStartedAt },
-          );
+          const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+          let recoveredExistingArtifact =
+            await findSameTurnWriteForRecoveredArtifact({
+              artifact: artifactToPersist,
+              sourceText,
+              producedFiles: producedBeforeFallback,
+              readProjectText: readProjectHtml,
+            }) ??
+            findExistingArtifactProjectFile(
+              artifactToPersist,
+              nextFiles,
+              { minMtime: runStartedAt },
+            );
           if (recoveredExistingArtifact) {
             savedArtifactRef.current = recoveredExistingArtifact.name;
             requestOpenFile(recoveredExistingArtifact.name);
@@ -4891,6 +4930,7 @@ export function ProjectView({
           // stays honest.
           has_prefilled_prompt: sentPrefilledPrompt(onboardingSeedPromptRef.current, prompt),
         });
+        recordFirstLoopStep(analytics.track, 'prompt_sent', project.id);
       }
       setChatSeed(null);
       const runConversationId = activeConversationId;
@@ -5417,18 +5457,27 @@ export function ProjectView({
                 : artifactFromStandaloneHtml(finalText);
               if (artifactToPersist?.html) {
                 const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
-                const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
-                  artifactHtml: resolvePersistedArtifactHtml({
-                    artifactHtml: artifactToPersist.html,
-                    identifier: artifactToPersist.identifier,
-                    sourceText: finalText,
-                  }),
-                  producedFiles: producedBeforeFallback,
-                  readProjectHtml,
-                });
-                if (sameTurnHtmlWrite) {
-                  savedArtifactRef.current = sameTurnHtmlWrite.name;
-                  requestOpenFile(sameTurnHtmlWrite.name);
+                const sameTurnArtifactWrite =
+                  await findSameTurnNonHtmlWriteForRecoveredArtifact({
+                    artifact: artifactToPersist,
+                    producedFiles: producedBeforeFallback,
+                    readProjectText: readProjectHtml,
+                  });
+                const sameTurnHtmlWrite = sameTurnArtifactWrite
+                  ? null
+                  : await findSameTurnHtmlWriteForRecoveredArtifact({
+                      artifactHtml: resolvePersistedArtifactHtml({
+                        artifactHtml: artifactToPersist.html,
+                        identifier: artifactToPersist.identifier,
+                        sourceText: finalText,
+                      }),
+                      producedFiles: producedBeforeFallback,
+                      readProjectHtml,
+                    });
+                const sameTurnWrite = sameTurnArtifactWrite ?? sameTurnHtmlWrite;
+                if (sameTurnWrite) {
+                  savedArtifactRef.current = sameTurnWrite.name;
+                  requestOpenFile(sameTurnWrite.name);
                 } else {
                   await persistArtifact(artifactToPersist, nextFiles, finalText);
                   nextFiles = await refreshProjectFiles();
@@ -5455,6 +5504,7 @@ export function ProjectView({
                   product_type: entry.productType,
                   recommendation_id: entry.recommendationId,
                 });
+                recordFirstLoopStep(analytics.track, 'generated', project.id);
               }
               const traceObjectFiles = computeTraceObjectFiles(
                 beforeFileNames,
@@ -8793,12 +8843,17 @@ export function ProjectView({
   );
 }
 
-function artifactExtensionFor(art: Artifact): '.html' | '.jsx' | '.tsx' {
+function artifactExtensionFor(art: Artifact): '.html' | '.jsx' | '.tsx' | '.css' | '.svg' | '.md' {
   const type = (art.artifactType || '').toLowerCase();
   const identifier = (art.identifier || '').toLowerCase();
   if (type.includes('tsx') || identifier.endsWith('.tsx')) return '.tsx';
   if (type.includes('jsx') || type.includes('react') || identifier.endsWith('.jsx')) {
     return '.jsx';
+  }
+  if (type.includes('css') || identifier.endsWith('.css')) return '.css';
+  if (type.includes('svg') || identifier.endsWith('.svg')) return '.svg';
+  if (type.includes('markdown') || type === 'md' || identifier.endsWith('.md')) {
+    return '.md';
   }
   return '.html';
 }
@@ -8824,6 +8879,12 @@ function artifactBaseNameFor(art: Artifact): string {
       .replace(/^-+|-+$/g, '')
       .slice(0, 60) || 'artifact'
   );
+}
+
+function artifactFileNamePattern(baseName: string, ext: string): RegExp {
+  const escapedBaseName = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedExt = ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escapedBaseName}(?:-\\d+)?${escapedExt}$`);
 }
 
 export function findExistingArtifactProjectFile(
@@ -8856,7 +8917,89 @@ export function findExistingArtifactProjectFile(
     if (manifestMatches[0]) return manifestMatches[0];
   }
 
-  return currentRunFiles.find((file) => file.name === candidateFileName) ?? null;
+  if (ext === '.html') {
+    const exactNameMatch = currentRunFiles.find((file) => file.name === candidateFileName);
+    if (exactNameMatch) return exactNameMatch;
+  }
+  return null;
+}
+
+export function findExistingNonHtmlArtifactProjectFile(
+  art: Artifact,
+  projectFiles: ProjectFile[],
+  options: { minMtime?: number } = {},
+): ProjectFile | null {
+  if (artifactExtensionFor(art) === '.html') return null;
+  return findExistingArtifactProjectFile(art, projectFiles, options);
+}
+
+export async function findSameTurnNonHtmlWriteForRecoveredArtifact({
+  artifact,
+  producedFiles,
+  readProjectText,
+}: {
+  artifact: Artifact;
+  producedFiles: readonly ProjectFile[];
+  readProjectText: (name: string) => Promise<string | null>;
+}): Promise<ProjectFile | null> {
+  const ext = artifactExtensionFor(artifact);
+  if (ext === '.html') return null;
+
+  const baseName = artifactBaseNameFor(artifact);
+  const candidateFileName = `${baseName}${ext}`;
+  const namePattern = artifactFileNamePattern(baseName, ext);
+  const identifier = artifact.identifier || '';
+  const candidates = producedFiles
+    .filter((file) => {
+      if (identifier && file.artifactManifest?.metadata?.identifier === identifier) {
+        return file.name.toLowerCase().endsWith(ext);
+      }
+      return file.name === candidateFileName || namePattern.test(file.name);
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+
+  const expected = normalizeProjectTextForArtifactComparison(artifact.html);
+  for (const file of candidates) {
+    const text = await readProjectText(file.name);
+    if (text === null) continue;
+    const actual = normalizeProjectTextForArtifactComparison(text);
+    if (actual === expected) return file;
+  }
+  return null;
+}
+
+async function findSameTurnWriteForRecoveredArtifact({
+  artifact,
+  sourceText,
+  producedFiles,
+  readProjectText,
+}: {
+  artifact: Artifact;
+  sourceText: string;
+  producedFiles: readonly ProjectFile[];
+  readProjectText: (name: string) => Promise<string | null>;
+}): Promise<ProjectFile | null> {
+  const nonHtmlWrite = await findSameTurnNonHtmlWriteForRecoveredArtifact({
+    artifact,
+    producedFiles,
+    readProjectText,
+  });
+  if (nonHtmlWrite || artifactExtensionFor(artifact) !== '.html') return nonHtmlWrite;
+  return findSameTurnHtmlWriteForRecoveredArtifact({
+    artifactHtml: resolvePersistedArtifactHtml({
+      artifactHtml: artifact.html,
+      identifier: artifact.identifier,
+      sourceText,
+    }),
+    producedFiles,
+    readProjectHtml: readProjectText,
+  });
+}
+
+function normalizeProjectTextForArtifactComparison(value: string | null | undefined): string {
+  return String(value || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n');
 }
 
 function filterProjectFilesByMinMtime(

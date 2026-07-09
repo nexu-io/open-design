@@ -1,0 +1,103 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-webgl-depth-gallery",
+  "title": "Depth Gallery",
+  "title_i18n": {
+    "zh-CN": "深度画廊",
+    "zh-TW": "深度畫廊",
+    "ja": "デプスギャラリー",
+    "ko": "뎁스 갤러리",
+    "de": "Tiefen-Galerie",
+    "fr": "Galerie en profondeur",
+    "ru": "Галерея глубины",
+    "es": "Galería de profundidad",
+    "pt-BR": "Galeria de profundidade",
+    "en": "Depth Gallery"
+  },
+  "version": "0.1.0",
+  "description": "A scroll-reactive 3D image gallery in Three.js: Z-stacked images crossfade over per-image mood backgrounds with velocity breath, a glowing cursor trail and an editorial CMYK/RGB/HEX/PMS color card.",
+  "description_i18n": {
+    "zh-CN": "基于 Three.js 的滚动响应式 3D 图廊：沿 Z 轴堆叠的图片交叉淡入，配每图情绪背景、速度呼吸、发光光标拖尾与编辑感 CMYK/RGB/HEX/PMS 色卡。",
+    "zh-TW": "基於 Three.js 的滾動響應式 3D 圖廊：Z 軸堆疊圖片交叉淡入，配情緒背景、速度呼吸、發光游標拖尾與 CMYK/RGB/HEX/PMS 色卡。",
+    "en": "A scroll-reactive 3D image gallery in Three.js: Z-stacked images crossfade over per-image mood backgrounds with velocity breath, a glowing cursor trail and an editorial CMYK/RGB/HEX/PMS color card."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "credits": [
+    {
+      "role": "effect",
+      "name": "Houmahani Kane / Codrops",
+      "license": "MIT"
+    },
+    {
+      "role": "imagery",
+      "name": "Lummi.ai"
+    }
+  ],
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/webgl-depth-gallery",
+  "tags": [
+    "example",
+    "first-party",
+    "gallery",
+    "3d",
+    "webgl",
+    "three.js",
+    "scroll",
+    "images",
+    "powered-preview",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a scroll-reactive 3D image gallery: Z-stacked images that crossfade over per-image mood backgrounds, with velocity breath, a cursor trail and a CMYK/RGB/HEX/PMS color card.",
+        "zh-CN": "构建滚动响应式 3D 图廊：沿 Z 轴堆叠、交叉淡入的图片，配每图情绪背景、速度呼吸、光标拖尾与 CMYK/RGB/HEX/PMS 色卡。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      }
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

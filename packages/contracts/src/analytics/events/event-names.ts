@@ -64,6 +64,7 @@ export type AnalyticsEventName =
   | 'onboarding_prompt_prefilled'
   | 'onboarding_first_prompt_sent'
   | 'onboarding_first_generation_completed'
+  | 'onboarding_completed'
   // Design-system lifecycle. Clicks + page_views inside DS surfaces
   // reuse `ui_click` / `page_view`; the five names below capture
   // ingest / create / review / status / picker-apply moments.

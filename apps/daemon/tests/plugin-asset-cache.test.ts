@@ -21,7 +21,7 @@ import {
   createValidatingLookup,
   isCacheableExternalUrl,
   isPrivateAddress,
-} from '../src/plugin-asset-cache.js';
+} from '../src/plugins/plugin-asset-cache.js';
 
 describe('isCacheableExternalUrl', () => {
   it('accepts absolute http(s) media urls', () => {

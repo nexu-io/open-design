@@ -1116,6 +1116,10 @@ export interface Dict {
   'homeHero.chip.videoDesc': string;
   'homeHero.chip.audioDesc': string;
   'homeHero.chip.hyperframesDesc': string;
+  'homeHero.chip.webgl': string;
+  'homeHero.chip.webglDesc': string;
+  'homeHero.chip.worker': string;
+  'homeHero.chip.workerDesc': string;
   'homeHero.chip.liveArtifactDesc': string;
   'homeHero.chip.createBrandKitDesc': string;
   'homeHero.chip.prototypeNext': string;
@@ -1655,6 +1659,7 @@ export interface Dict {
   'automations.openResult': string;
   'automations.run': string;
   'automations.runNowTitle': string;
+  'automations.targetCreateEachRun': string;
   'automations.history': string;
   'automations.hideHistory': string;
   'automations.edit': string;
@@ -1680,6 +1685,7 @@ export interface Dict {
   'automations.runHistoryEmpty': string;
   'automations.runHistoryTitle': string;
   'automations.runHistoryLatest': string;
+  'automations.promptPlaceholder': string;
   'automations.crystallize': string;
   'automations.crystallizing': string;
   'automations.crystallizeTitle': string;

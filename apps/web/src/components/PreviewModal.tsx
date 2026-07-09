@@ -1108,7 +1108,7 @@ export function PreviewModal({
               >
                 <span aria-hidden="true">›</span>
               </button>
-              {sidebar.content}
+              <div className="ds-modal-sidebar-body">{sidebar.content}</div>
             </aside>
           ) : null}
         </div>

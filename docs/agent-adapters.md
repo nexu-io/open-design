@@ -244,6 +244,28 @@ The adapter declares which strategy to use via `capabilities().nativeSkillLoadin
 - Models: ships `deepseek-v4-pro` and `deepseek-v4-flash` as fallback hints (1M-token context windows, native thinking-mode streaming). Users can paste any other id (e.g. `nvidia-nim/deepseek-v4-pro`, `fireworks/deepseek-v4-flash`) via the Settings dialog's custom-model input.
 - **Gotcha — auth state is not auto-detected.** DeepSeek TUI reads its API key from `~/.deepseek/config.toml` or `DEEPSEEK_API_KEY`. If the user hasn't run `deepseek auth set --provider deepseek` (or set the env var), the first run errors out with a non-actionable message. Detection currently only reports `available: true` based on the binary being on PATH; surface auth state via `deepseek doctor --json` in a follow-up.
 
+### 5.13 Plain stream artifact handoff
+
+Adapters with `streamFormat: 'plain'` do not expose structured file-write tool calls to the daemon. Their stdout is still a valid artifact handoff when the model emits Anthropic-style source blocks:
+
+```html
+<artifact identifier="landing-page" type="text/html" title="Landing page">
+<!doctype html>
+<html>...</html>
+</artifact>
+```
+
+At run completion, the daemon scans the captured plain stdout for `<artifact>` blocks with supported text types and writes them through the normal project artifact path:
+
+| Artifact type | Project file |
+|---|---|
+| `text/html` or `html` | `<identifier>.html` |
+| `text/css` or `css` | `<identifier>.css` |
+| `image/svg+xml` or `svg` | `<identifier>.svg` |
+| `text/markdown`, `text/x-markdown`, `markdown`, or `md` | `<identifier>.md` |
+
+The identifier is slugged before use, collisions receive `-2`, `-3`, etc., and outputs without a supported `<artifact>` block are left unchanged. This daemon-side extraction keeps headless runs and web-attached runs aligned: the project file exists even when no browser is present to parse the chat stream.
+
 ## 6. Capability-driven UI
 
 The web UI reads `agents.capabilities()` and disables features that the active adapter can't support:

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createClaudeStreamHandler } from '../../src/runtimes/claude-stream.js';
 import { createCopilotStreamHandler } from '../../src/copilot-stream.js';
-import { mapPiRpcEvent } from '../../src/pi-rpc.js';
+import { mapPiRpcEvent } from '../../src/agent-protocol/index.js';
 import { createToolLoopGuard } from '../../src/tool-loop-guard.js';
 
 describe('structured agent stream fixtures', () => {

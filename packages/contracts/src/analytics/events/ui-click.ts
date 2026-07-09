@@ -4,7 +4,7 @@
  */
 import type { DesignSystemEnrichClickProps, TrackingDesignSystemEditSurface } from './design-systems.js';
 import type { TrackingPageName, TrackingSettingsPage } from './event-names.js';
-import type { OnboardingClickProps, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
+import type { OnboardingClickProps, TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
 import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
 // ---- ui_click ------------------------------------------------------------
 //
@@ -222,6 +222,11 @@ export interface StudioOnboardingHintClickProps {
   area: 'onboarding_first_artifact_hint';
   element: 'open_artifact' | 'dismiss';
   hint_type: 'view_artifact';
+  // First-loop stage the hint belongs to and, for feature-specific hints
+  // (spec §8.7), the capability being surfaced. Optional so the current
+  // single view-stage hint stays source-compatible.
+  studio_stage?: TrackingOnboardingFirstLoopStep;
+  feature_id?: string;
 }
 
 export interface UpdateIndicatorClickProps {
