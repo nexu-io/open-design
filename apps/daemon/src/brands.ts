@@ -8,7 +8,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import type { BrandSummary } from '@marketing-ax/contracts';
+import type { BrandSummary, BrandPaletteEntry } from '@marketing-ax/contracts';
 
 export interface BrandManifestFile {
   id: string;
@@ -90,4 +90,30 @@ export function brandDeliverableDefaultDesignSystem(
 ): string | undefined {
   if (!manifest || !key) return undefined;
   return manifest.deliverables?.[key]?.designSystem;
+}
+
+// brand.md의 '## Palette' 섹션 마크다운 테이블을 파싱 — 정체색 정본 파생(manifest 미러 회피).
+// 방어적: 헤딩/테이블 없으면 undefined (UI가 팔레트 카드 숨김).
+export function parseBrandPalette(core: string): BrandPaletteEntry[] | undefined {
+  const lines = core.split(/\r?\n/);
+  const start = lines.findIndex((l) => /^##\s+Palette\b/.test(l.trim()));
+  if (start === -1) return undefined;
+  const rows: BrandPaletteEntry[] = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = (lines[i] ?? '').trim();
+    if (/^##\s/.test(line)) break; // 다음 섹션
+    if (!line.startsWith('|')) {
+      if (rows.length) break; // 테이블 종료
+      continue; // 헤딩~테이블 사이 텍스트 스킵
+    }
+    const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+    if (cells.length < 2) continue;
+    const name = cells[0] ?? '';
+    if (/^-+$/.test(name.replace(/\s/g, ''))) continue; // 구분선 |---|
+    const value = (cells[1] ?? '').replace(/`/g, '').trim();
+    if (!/^#[0-9a-fA-F]{3,8}$/.test(value)) continue; // 헤더행·비색 행 스킵
+    const usage = cells[2];
+    rows.push(usage ? { name, value, usage } : { name, value }); // exactOptionalPropertyTypes — undefined는 명시 대입 대신 키 생략
+  }
+  return rows.length ? rows : undefined;
 }
