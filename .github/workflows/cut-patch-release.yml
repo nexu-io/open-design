@@ -200,3 +200,23 @@ jobs:
             --color 0E8A16 \
             --description "Backport this fix to release/v$VERSION" \
             --force
+
+      # Post an immediate "branch cut" card so the team is notified the moment the
+      # patch branch exists, without waiting ~20-40 min for notify-release-feishu to
+      # finish the prerelease build. The download card still follows from that build.
+      # feishu-notice.ts only imports node:crypto, so the setup-node above suffices.
+      - name: Notify Feishu that the branch was cut
+        if: steps.guard.outputs.published == 'true'
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
+          NOTICE_TITLE: "🌿 已切出 release 分支 v${{ steps.ver.outputs.version }}(小版本 patch)"
+          NOTICE_TEMPLATE: "green"
+          NOTICE_BODY: |
+            **分支**:[`release/v${{ steps.ver.outputs.version }}`](${{ github.server_url }}/${{ github.repository }}/tree/release/v${{ steps.ver.outputs.version }})(从 main 切出,小版本 / patch)
+
+            **Backport label**:`backport release/v${{ steps.ver.outputs.version }}` —— 要回灌到这个版本的修复,给 PR 打这个 label。
+
+            Prerelease 打包已开始(约 20–40 分钟);完成后会再发一张带各平台下载链接的卡片。
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts
