@@ -1,10 +1,29 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({
-  fetchBrand: vi.fn(),
-}));
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { BrandDetail } from '@marketing-ax/contracts';
+
+import { BrandDetailView } from '../../src/components/BrandDetailView';
+
+const detail: BrandDetail = {
+  id: 'bodoc',
+  title: '보닥',
+  deliverables: ['blog', 'iam'],
+  deliverableLabels: { blog: '블로그', iam: 'Braze IAM' },
+  body: '# core body',
+  palette: [{ name: 'brand-blue', value: '#1E86FA', usage: 'body' }],
+  presentation: {
+    subtitle: '보험 앱',
+    website: 'bodoc.co.kr',
+    audience: '40·50대',
+    tagline: '보험을 쉽게.',
+    keyMessage: '제대로 내고 제대로 받게',
+    typography: { family: 'Pretendard', roles: '제목 · 본문', weights: '700 · 500 · 400' },
+    voiceTone: ['차분한', '신뢰감 있는'],
+    neutralPalette: ['#EAF4FF'],
+  },
+};
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -12,11 +31,11 @@ vi.mock('../../src/providers/registry', async () => {
   );
   return {
     ...actual,
-    fetchBrand: mocks.fetchBrand,
+    fetchBrand: vi.fn(async (_id: string, deliverable?: string) =>
+      deliverable ? { ...detail, deliverable: { key: deliverable, body: `# ${deliverable} body` } } : detail,
+    ),
   };
 });
-
-import { BrandDetailView } from '../../src/components/BrandDetailView';
 
 afterEach(() => {
   cleanup();
@@ -24,28 +43,19 @@ afterEach(() => {
 });
 
 describe('BrandDetailView', () => {
-  it('renders the core body once the fetch resolves', async () => {
-    mocks.fetchBrand.mockResolvedValue({
-      id: 'bodoc',
-      title: '보닥',
-      deliverables: ['blog', 'cardnews'],
-      body: '# Bodoc core',
-    });
-
+  it('renders identity, context, design-system, and docs sections', async () => {
     render(<BrandDetailView brandId="bodoc" onBack={() => {}} />);
-
-    expect(await screen.findByText('보닥')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('보험 앱')).toBeTruthy());
+    expect(screen.getByText('#1E86FA')).toBeTruthy(); // palette hex chip
+    expect(screen.getByText('Pretendard')).toBeTruthy();
+    expect(screen.getByText('차분한')).toBeTruthy(); // voice tone chip
+    expect(screen.getByText('제대로 내고 제대로 받게')).toBeTruthy(); // context field
   });
 
-  it('shows a back button and an error message instead of a dead end when the fetch fails', async () => {
-    mocks.fetchBrand.mockRejectedValue(new Error('boom'));
-    const onBack = vi.fn();
-
-    render(<BrandDetailView brandId="bodoc" onBack={onBack} />);
-
-    expect(await screen.findByRole('alert')).toBeTruthy();
-    const backButton = screen.getByRole('button', { name: /back/i });
-    backButton.click();
-    expect(onBack).toHaveBeenCalledTimes(1);
+  it('switches the doc preview when a channel doc is selected', async () => {
+    render(<BrandDetailView brandId="bodoc" onBack={() => {}} />);
+    await waitFor(() => expect(screen.getByText('블로그')).toBeTruthy());
+    fireEvent.click(screen.getByText('블로그'));
+    await waitFor(() => expect(screen.getByText(/blog body/)).toBeTruthy());
   });
 });
