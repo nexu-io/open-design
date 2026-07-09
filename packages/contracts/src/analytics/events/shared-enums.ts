@@ -143,6 +143,7 @@ export type TrackingCliProviderId =
   | 'github_copilot_cli'
   | 'pi'
   | 'kilo'
+  | 'kimchi'
   | 'amr'
   | 'other';
 

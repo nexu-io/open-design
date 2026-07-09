@@ -251,8 +251,8 @@ function chatProtocolFromAgentId(agentId) {
   if (id === 'claude') return 'anthropic';
   if (id === 'gemini') return 'google';
   // Codex, OpenCode, Qwen, DeepSeek, Kimi, Copilot, Pi, Kiro, Kilo,
-  // Vibe, Devin, Hermes, Cursor-Agent, Qoder all use the OpenAI chat-
-  // completions wire format.
+  // Vibe, Devin, Hermes, Cursor-Agent, Qoder, Kimchi all use the
+  // OpenAI chat-completions wire format.
   if (
     id === 'codex'
     || id === 'opencode'
@@ -268,6 +268,7 @@ function chatProtocolFromAgentId(agentId) {
     || id === 'hermes'
     || id === 'cursor-agent'
     || id === 'qoder'
+    || id === 'kimchi'
   ) {
     return 'openai';
   }

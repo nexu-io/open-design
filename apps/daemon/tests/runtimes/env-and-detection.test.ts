@@ -420,6 +420,7 @@ test('resolveAgentExecutable supports configured binary overrides for non-Codex 
     ['deepseek', 'deepseek', 'DEEPSEEK_BIN'],
     ['trae-cli', 'traecli', 'TRAE_CLI_BIN'],
     ['aider', 'aider', 'AIDER_BIN'],
+    ['kimchi', 'kimchi', 'KIMCHI_BIN'],
   ];
   const dir = mkdtempSync(join(tmpdir(), 'od-agent-bin-overrides-'));
   try {
