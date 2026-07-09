@@ -61,6 +61,7 @@ This chart adheres to strict security defaults:
 | `image.repository` | Open Design image repository              | `ghcr.io/nexu-io/od`        |
 | `image.pullPolicy` | Image pull policy                         | `IfNotPresent`               |
 | `image.tag`        | Image tag (overrides AppVersion)          | `latest`                     |
+| `imagePullSecrets` | Image pull secrets for private registries (secrets must exist in the release namespace) | `[]` |
 
 ### Application Configuration
 

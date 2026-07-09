@@ -9,6 +9,13 @@ image:
   pullPolicy: IfNotPresent
   tag: "latest"
 
+# Image pull secrets for private registries (e.g. a mirrored image on a private Harbor/ECR).
+# The referenced secret(s) must already exist in the release namespace.
+# Example:
+#   imagePullSecrets:
+#     - name: my-registry-credential
+imagePullSecrets: []
+
 config:
 # The runtime environment for the Node.js process. 
 # Must be either "production" or "development". 
