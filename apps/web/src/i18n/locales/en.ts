@@ -393,6 +393,7 @@ export const en: Dict = {
   'settings.amrBalance': 'Balance',
   'settings.amrPlan': 'Plan',
   'settings.amrUpgrade': 'Upgrade',
+  'settings.amrModelUpgradeHint': 'Upgrade to use',
   'settings.amrLoginErrorCompact': 'Sign-in failed.',
   'settings.advanced': 'Advanced',
   'settings.amrLogin': 'Sign in',

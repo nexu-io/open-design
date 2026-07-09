@@ -393,6 +393,7 @@ export const esES: Dict = {
   'settings.amrBalance': 'Saldo',
   'settings.amrPlan': 'Plan',
   'settings.amrUpgrade': 'Mejorar',
+  'settings.amrModelUpgradeHint': 'Mejora para usarlo',
   'settings.amrLoginErrorCompact': 'Error al iniciar sesión en Open Design.',
   'settings.advanced': 'Avanzado',
   'settings.amrLogin': 'Iniciar sesión',

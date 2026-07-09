@@ -393,6 +393,7 @@ export const fr: Dict = {
   'settings.amrBalance': 'Solde',
   'settings.amrPlan': 'Forfait',
   'settings.amrUpgrade': 'Mettre à niveau',
+  'settings.amrModelUpgradeHint': 'Mettre à niveau pour l’utiliser',
   'settings.amrLoginErrorCompact': 'Échec de la connexion Open Design.',
   'settings.advanced': 'Avancé',
   'settings.amrLogin': 'Se connecter',

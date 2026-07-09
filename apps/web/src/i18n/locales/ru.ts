@@ -393,6 +393,7 @@ export const ru: Dict = {
   'settings.amrBalance': 'Баланс',
   'settings.amrPlan': 'Тариф',
   'settings.amrUpgrade': 'Улучшить',
+  'settings.amrModelUpgradeHint': 'Обновите, чтобы использовать',
   'settings.amrLoginErrorCompact': 'Не удалось войти в Open Design.',
   'settings.advanced': 'Дополнительно',
   'settings.amrLogin': 'Войти',

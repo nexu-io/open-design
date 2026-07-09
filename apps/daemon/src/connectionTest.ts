@@ -56,7 +56,6 @@ import {
 import { aihubmixHeaders } from './integrations/aihubmix.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
-import { resolveModelForAgent } from './runtimes/models.js';
 import { preparePromptFileForAgent, type PreparedPromptFile } from './runtimes/prompt-file.js';
 import { configuredAllowedInternalHosts } from './origin-validation.js';
 import {
@@ -76,7 +75,19 @@ import {
   type ProviderTestRequest,
 } from '@open-design/contracts/api/connectionTest';
 import { googleGenerateContentUrl } from './integrations/google-models.js';
-import { resolveAmrProfile } from './integrations/vela.js';
+import { readVelaCredentialRevision, resolveAmrProfile } from './integrations/vela.js';
+import { amrModelLoadingCache } from './runtimes/amr-model-cache.js';
+import { buildAmrModelCacheKey } from './runtimes/amr-model-probe.js';
+import {
+  fetchVelaPresetModels,
+  fetchVelaRemoteModelsWithRetry,
+} from './runtimes/defs/amr.js';
+import {
+  getRememberedLiveModels,
+  preferFreshLiveModels,
+  resolveDefaultModelFromOptions,
+  resolveModelForAgent,
+} from './runtimes/models.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -1880,12 +1891,9 @@ function attachAgentStreamHandlers(
       child,
       prompt,
       cwd,
-      // Same substitution as the chat-run path in server.ts — adapters whose
-      // CLI rejects the synthetic 'default' (e.g. AMR / vela, which forces
-      // session/set_model before session/prompt) need the def's first
-      // concrete fallback id here too, otherwise Test connection deadlocks
-      // on the same `session/set_model must be called before session/prompt`
-      // error the chat-run path already handles.
+      // Same substitution as the chat-run path in server.ts: omitted models can
+      // resolve to a concrete fallback, while an explicit 'default' is preserved
+      // so ACP runtimes can use their upstream configured default.
       model: resolveModelForAgent(def as never, model ?? null, modelEnv, liveModelScope),
       mcpServers: [],
       send,
@@ -1963,11 +1971,41 @@ async function prepareOpenCodeConnectionTestCwd(tempDir: string): Promise<void> 
   }
 }
 
+async function resolveConnectionTestModelForAgent(
+  def: RuntimeAgentDef,
+  requestedModel: string | null,
+  env: NodeJS.ProcessEnv,
+  liveModelScope: string | null,
+  launchPath?: string | null,
+): Promise<string | null> {
+  const resolved = resolveModelForAgent(def, requestedModel, env, liveModelScope);
+  if (def.id !== 'amr' || resolved !== 'default' || !launchPath) return resolved;
+
+  try {
+    const cacheKey = buildAmrModelCacheKey({
+      launchPath,
+      env,
+      credentialRevision: readVelaCredentialRevision(env),
+    });
+    const catalog = await amrModelLoadingCache.get(cacheKey, {
+      fetchPreset: () => fetchVelaPresetModels(launchPath, env),
+      fetchRemote: () => fetchVelaRemoteModelsWithRetry(launchPath, env),
+    });
+    const liveModels = preferFreshLiveModels(
+      catalog.models ?? [],
+      getRememberedLiveModels(def.id, liveModelScope),
+    );
+    return resolveDefaultModelFromOptions(liveModels) ?? resolved;
+  } catch {
+    return resolved;
+  }
+}
+
 async function testAgentConnectionInternal(
   input: AgentConnectionInput,
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
-  const model =
+  let model =
     typeof input.model === 'string' && input.model.trim()
       ? input.model.trim()
       : 'default';
@@ -2221,6 +2259,13 @@ async function testAgentConnectionInternal(
       ...baseEnv,
       ...(mmdRouteLaunchEnv || {}),
     }, executableResolution);
+    model = await resolveConnectionTestModelForAgent(
+      def,
+      model,
+      env,
+      liveModelScope,
+      executableResolution.launchPath,
+    ) ?? model;
     const auth = await probeAgentAuthStatus(def, executableResolution.launchPath, env);
     if (auth?.status === 'missing') {
       // Preflight auth probe runs after binary resolution but before the
@@ -2278,7 +2323,7 @@ async function testAgentConnectionInternal(
       child,
       SMOKE_PROMPT,
       tempDir,
-      input.model,
+      model,
       env,
       liveModelScope,
       sink.send,

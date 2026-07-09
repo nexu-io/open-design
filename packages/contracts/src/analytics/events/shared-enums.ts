@@ -64,6 +64,7 @@ export type TrackingAmrEntrySource =
   | 'handoff_amr_website'
   | 'chat_error_authorize_retry'
   | 'chat_error_recharge'
+  | 'chat_error_upgrade'
   | 'chat_balance_gate_upgrade'
   | 'home_balance_gate_upgrade'
   | 'chat_low_balance_warn_recharge'
@@ -182,6 +183,7 @@ export type TrackingRunFailureCategory =
   | 'auth'
   | 'rate_limit'
   | 'insufficient_balance'
+  | 'entitlement_required'
   | 'model_unavailable'
   | 'prompt_too_large'
   | 'upstream_unavailable'
@@ -201,6 +203,7 @@ export type TrackingRunFailureDetail =
   | 'workspace_credits_exhausted'
   | 'rate_limit_429'
   | 'amr_insufficient_balance'
+  | 'amr_tier_upgrade_required'
   | 'model_not_found'
   | 'model_not_supported'
   | 'model_disabled'
@@ -291,6 +294,7 @@ export type TrackingRunFailureUserAction =
   | 'retry'
   | 'login'
   | 'recharge'
+  | 'upgrade'
   | 'switch_model'
   | 'reduce_context'
   | 'install_cli'
@@ -418,4 +422,3 @@ export type TrackingFileSizeBucket =
   | '1_10mb'
   | '10_100mb'
   | '100mb_plus';
-

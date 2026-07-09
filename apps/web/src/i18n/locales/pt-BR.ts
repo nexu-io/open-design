@@ -393,6 +393,7 @@ export const ptBR: Dict = {
   'settings.amrBalance': 'Saldo',
   'settings.amrPlan': 'Plano',
   'settings.amrUpgrade': 'Fazer upgrade',
+  'settings.amrModelUpgradeHint': 'Faça upgrade para usar',
   'settings.amrLoginErrorCompact': 'Falha no login do Open Design.',
   'settings.advanced': 'Avançado',
   'settings.amrLogin': 'Entrar',

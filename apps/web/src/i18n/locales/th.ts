@@ -393,6 +393,7 @@ export const th: Dict = {
   'settings.amrBalance': 'ยอดคงเหลือ',
   'settings.amrPlan': 'แพ็กเกจ',
   'settings.amrUpgrade': 'อัปเกรด',
+  'settings.amrModelUpgradeHint': 'อัปเกรดเพื่อใช้งาน',
   'settings.amrLoginErrorCompact': 'การลงชื่อเข้าใช้ Open Design ล้มเหลว',
   'settings.advanced': 'ขั้นสูง',
   'settings.amrLogin': 'ลงชื่อเข้าใช้',

@@ -393,6 +393,7 @@ export const ko: Dict = {
   'settings.amrBalance': '잔액',
   'settings.amrPlan': '플랜',
   'settings.amrUpgrade': '업그레이드',
+  'settings.amrModelUpgradeHint': '업그레이드 후 사용',
   'settings.amrLoginErrorCompact': 'Open Design 로그인에 실패했습니다.',
   'settings.advanced': '고급',
   'settings.amrLogin': '로그인',

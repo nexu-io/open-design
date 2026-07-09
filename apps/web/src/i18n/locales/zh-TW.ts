@@ -3894,6 +3894,7 @@ export const zhTW: Dict = {
   'settings.amrBalance': '餘額',
   'settings.amrPlan': '方案',
   'settings.amrUpgrade': '升級',
+  'settings.amrModelUpgradeHint': '升級後使用',
   'settings.updateCheck': '檢查更新',
   'settings.updateNow': '立即更新',
   'settings.updateRecheck': '重新檢查',

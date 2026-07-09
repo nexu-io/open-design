@@ -393,6 +393,7 @@ export const it: Dict = {
   'settings.amrBalance': 'Saldo',
   'settings.amrPlan': 'Piano',
   'settings.amrUpgrade': 'Esegui upgrade',
+  'settings.amrModelUpgradeHint': 'Esegui upgrade per usarlo',
   'settings.amrLoginErrorCompact': 'Accesso Open Design non riuscito.',
   'settings.advanced': 'Avanzate',
   'settings.amrLogin': 'Accedi',

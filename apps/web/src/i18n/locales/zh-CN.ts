@@ -3888,6 +3888,7 @@ export const zhCN: Dict = {
   'settings.amrBalance': '余额',
   'settings.amrPlan': '套餐',
   'settings.amrUpgrade': '升级',
+  'settings.amrModelUpgradeHint': '升级后使用',
   'settings.updateCheck': '检查更新',
   'settings.updateNow': '立即更新',
   'settings.updateRecheck': '重新检查',

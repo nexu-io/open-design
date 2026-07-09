@@ -233,6 +233,124 @@ describe('AMR (vela) ACP session resume — full server cycle', () => {
     expect(await readInvocations(logPath)).toEqual(['new', 'load']);
   });
 
+  it('resolves an explicit default model to the live catalog default before spawning AMR', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-explicit-default-bin-'));
+    const logPath = path.join(binDir, 'invocations.jsonl');
+    const bin = await writeVelaWrapper(binDir, 'vela-explicit-default', {
+      logPath,
+      logSetModel: true,
+      requireSetModel: true,
+    });
+
+    clearTelemetryEnv();
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'amr',
+      agentCliEnv: { amr: { VELA_BIN: bin } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const conversationId = await createConversation(started.url);
+
+    expect((await sendRunAndWait(started.url, conversationId, 'use account default', 'default')).status)
+      .toBe('succeeded');
+    expect((await sendRunAndWait(started.url, conversationId, 'use account default again', 'default')).status)
+      .toBe('succeeded');
+
+    expect(await readInvocations(logPath)).toEqual([
+      'new',
+      'set_model:deepseek-v4-flash',
+      'load',
+      'set_model:deepseek-v4-flash',
+    ]);
+  });
+
+  it('uses the catalog default model for omitted AMR model selections, skipping disabled catalog heads', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-catalog-default-bin-'));
+    const logPath = path.join(binDir, 'invocations.jsonl');
+    const presetCatalog = JSON.stringify({
+      source: 'preset',
+      data: [
+        { id: 'deepseek-v4-flash', enabled: false },
+        { id: 'kimi-k2.6', default: true },
+        { id: 'glm-5.1' },
+      ],
+    });
+    const remoteCatalog = JSON.stringify({
+      source: 'remote',
+      data: [
+        { id: 'deepseek-v4-flash', enabled: false },
+        { id: 'kimi-k2.6', default: true },
+        { id: 'glm-5.1' },
+      ],
+    });
+    const bin = await writeVelaWrapper(binDir, 'vela-catalog-default', {
+      logPath,
+      logSetModel: true,
+      modelPresetJson: presetCatalog,
+      modelListJson: remoteCatalog,
+    });
+
+    clearTelemetryEnv();
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'amr',
+      agentCliEnv: { amr: { VELA_BIN: bin } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const conversationId = await createConversation(started.url);
+
+    expect((await sendRunAndWait(started.url, conversationId, 'use catalog default')).status)
+      .toBe('succeeded');
+
+    expect(await readInvocations(logPath)).toEqual(['new', 'set_model:kimi-k2.6']);
+  });
+
+  it('rejects explicit AMR default when every catalog model is disabled', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-locked-default-bin-'));
+    const logPath = path.join(binDir, 'invocations.jsonl');
+    const lockedCatalog = JSON.stringify({
+      source: 'preset',
+      data: [
+        { id: 'deepseek-v4-flash', enabled: false },
+        { id: 'kimi-k2.6', enabled: false },
+      ],
+    });
+    const lockedRemoteCatalog = JSON.stringify({
+      source: 'remote',
+      data: [
+        { id: 'deepseek-v4-flash', enabled: false },
+        { id: 'kimi-k2.6', enabled: false },
+      ],
+    });
+    const bin = await writeVelaWrapper(binDir, 'vela-locked-default', {
+      logPath,
+      logSetModel: true,
+      requireSetModel: true,
+      modelPresetJson: lockedCatalog,
+      modelListJson: lockedRemoteCatalog,
+    });
+
+    clearTelemetryEnv();
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'amr',
+      agentCliEnv: { amr: { VELA_BIN: bin } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const conversationId = await createConversation(started.url);
+    const run = await sendRunAndWait(started.url, conversationId, 'use account default', 'default');
+
+    expect(run.status).toBe('failed');
+    expect(run.errorCode).toBe('AMR_MODEL_UNAVAILABLE');
+    expect(await readInvocations(logPath)).toEqual([]);
+  });
+
   it('reseeds a fresh session (no resume) when the model changes between turns', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-modelchange-bin-'));
     const logPath = path.join(binDir, 'invocations.jsonl');
@@ -270,18 +388,35 @@ describe('AMR (vela) ACP session resume — full server cycle', () => {
 async function writeVelaWrapper(
   dir: string,
   name: string,
-  opts: { logPath: string; resumeFailed?: boolean; omitHandle?: boolean },
+  opts: {
+    logPath: string;
+    resumeFailed?: boolean;
+    omitHandle?: boolean;
+    logSetModel?: boolean;
+    requireSetModel?: boolean;
+    modelPresetJson?: string;
+    modelListJson?: string;
+  },
 ): Promise<string> {
   const bin = path.join(dir, name);
   const lines = [
     '#!/bin/sh',
     `export FAKE_VELA_INVOCATION_LOG=${JSON.stringify(opts.logPath)}`,
-    // Isolate the resume cycle from the set_model gate; the strict-set_model
-    // contract is covered by amr-acp-integration.test.ts.
-    'export FAKE_VELA_REQUIRE_SET_MODEL=0',
   ];
+  if (opts.requireSetModel !== true) {
+    // Isolate most resume-cycle tests from the set_model gate; individual
+    // default-model regressions opt back into the production-shaped strict gate.
+    lines.push('export FAKE_VELA_REQUIRE_SET_MODEL=0');
+  }
   if (opts.resumeFailed) lines.push('export FAKE_VELA_RESUME_FAILED=1');
   if (opts.omitHandle) lines.push('export FAKE_VELA_OMIT_OPENCODE_SESSION_ID=1');
+  if (opts.logSetModel) lines.push('export FAKE_VELA_LOG_SET_MODEL=1');
+  if (opts.modelPresetJson) {
+    lines.push(`export FAKE_VELA_MODEL_PRESET_JSON=${JSON.stringify(opts.modelPresetJson)}`);
+  }
+  if (opts.modelListJson) {
+    lines.push(`export FAKE_VELA_MODEL_LIST_JSON=${JSON.stringify(opts.modelListJson)}`);
+  }
   lines.push(`exec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE_VELA)} "$@"`, '');
   await writeFile(bin, lines.join('\n'), 'utf8');
   await chmod(bin, 0o755);

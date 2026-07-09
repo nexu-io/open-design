@@ -119,6 +119,7 @@ import { ONBOARDING_ARTIFACT_CHIP_IDS } from './home-hero/chips';
 import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
+import { defaultAgentModelId, effectiveAgentModelChoice } from './agentModelSelection';
 import { AgentIcon } from './AgentIcon';
 import {
   getModelCapabilityTag,
@@ -1417,7 +1418,8 @@ function OnboardingView({
   const amrSelectedAndSignedOut = runtime === 'amr' && !amrSignedIn;
   const selectedAgent = visibleAgents.find((agent) => agent.id === config.agentId) ?? null;
   const selectedAgentChoice = selectedAgent ? (config.agentModels?.[selectedAgent.id] ?? {}) : {};
-  const selectedAgentTestModel = selectedAgentChoice.model ?? selectedAgent?.models?.[0]?.id ?? '';
+  const normalizedSelectedAgentChoice = effectiveAgentModelChoice(selectedAgent, selectedAgentChoice) ?? selectedAgentChoice;
+  const selectedAgentTestModel = normalizedSelectedAgentChoice.model ?? defaultAgentModelId(selectedAgent) ?? '';
   const selectedAgentTestReasoning = selectedAgentChoice.reasoning ?? '';
   const agentTestInputKey = [
     selectedAgent?.id ?? '',
@@ -2650,7 +2652,7 @@ function OnboardingView({
                     daemonLive={daemonLive}
                     selectedAgentId={config.agentId}
                     selectedAgent={selectedAgent}
-                    selectedModel={selectedAgentChoice.model ?? selectedAgent?.models?.[0]?.id ?? ''}
+                    selectedModel={normalizedSelectedAgentChoice.model ?? defaultAgentModelId(selectedAgent) ?? ''}
                     modelOptions={agentModelOptions}
                     scanStatus={cliScanStatus}
                     onRefresh={() => void scanCliAgents()}

@@ -380,6 +380,7 @@ export interface Dict {
   'settings.amrBalance': string;
   'settings.amrPlan': string;
   'settings.amrUpgrade': string;
+  'settings.amrModelUpgradeHint': string;
   'settings.amrLoginErrorCompact': string;
   'settings.apiSection': string;
   'settings.quickFillProvider': string;

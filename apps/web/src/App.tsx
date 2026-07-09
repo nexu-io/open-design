@@ -768,20 +768,31 @@ function AppInner() {
   // unmounted before their poll settled.
   useEffect(() => {
     let cancelled = false;
-    const sync = async () => {
-      const status = await fetchVelaLoginStatus();
+    const sync = async (options: { refresh?: boolean } = {}) => {
+      const status = await fetchVelaLoginStatus(options);
       if (!cancelled && status) setAmrLoginStatus(status);
+      if (!cancelled && status?.loggedIn === true && options.refresh) {
+        restartAmrPolling();
+      }
     };
     void sync();
     const onStatusEvent = () => {
       void sync();
     };
+    const onReturnToApp = () => {
+      if (document.visibilityState === 'hidden') return;
+      void sync({ refresh: true });
+    };
     window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+    window.addEventListener('focus', onReturnToApp);
+    document.addEventListener('visibilitychange', onReturnToApp);
     return () => {
       cancelled = true;
       window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+      window.removeEventListener('focus', onReturnToApp);
+      document.removeEventListener('visibilitychange', onReturnToApp);
     };
-  }, [daemonLive]);
+  }, [daemonLive, restartAmrPolling]);
 
   useEffect(() => {
     analytics.setUserId(

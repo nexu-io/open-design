@@ -16,6 +16,9 @@ vi.mock('../src/integrations/vela-errors.js', () => ({
     if (value.includes('authentication required') || value.includes('not authenticated') || value.includes('unauthorized')) {
       return { code: 'AMR_AUTH_REQUIRED' as const };
     }
+    if (value.includes('tier_model_not_entitled') || value.includes('tier_request_kind_not_entitled')) {
+      return { code: 'AMR_TIER_UPGRADE_REQUIRED' as const };
+    }
     return null;
   },
 }));
@@ -1202,6 +1205,36 @@ describe('classifyRunFailure — AMR/vela reclassification out of execution_fail
     expect(result?.failure_category).toBe('insufficient_balance');
     expect(result?.failure_detail).toBe('amr_insufficient_balance');
     expect(result?.user_action).toBe('recharge');
+  });
+
+  it('classifies structured AMR tier entitlement failures as upgrade-required analytics', () => {
+    const result = classify(
+      'AMR_TIER_UPGRADE_REQUIRED',
+      'AMR tier upgrade required',
+    );
+
+    expect(result).toMatchObject({
+      failure_category: 'entitlement_required',
+      failure_detail: 'amr_tier_upgrade_required',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'upgrade',
+    });
+  });
+
+  it('classifies raw AMR tier entitlement texts as upgrade-required analytics', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'HTTP 403 [code=tier_model_not_entitled] model access denied for current tier',
+    );
+
+    expect(result).toMatchObject({
+      failure_category: 'entitlement_required',
+      failure_detail: 'amr_tier_upgrade_required',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'upgrade',
+    });
   });
 
   it('classifies a Chinese 429 rate-limit text as a retryable rate_limit_429', () => {

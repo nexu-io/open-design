@@ -393,6 +393,7 @@ export const tr: Dict = {
   'settings.amrBalance': 'Bakiye',
   'settings.amrPlan': 'Plan',
   'settings.amrUpgrade': 'Yükselt',
+  'settings.amrModelUpgradeHint': 'Kullanmak için yükselt',
   'settings.amrLoginErrorCompact': 'Open Design oturum açma başarısız oldu.',
   'settings.advanced': 'Gelişmiş',
   'settings.amrLogin': 'Oturum aç',

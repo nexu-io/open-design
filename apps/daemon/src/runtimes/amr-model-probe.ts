@@ -6,11 +6,35 @@ import {
 } from '../agents.js';
 import { agentCliEnvForAgent, type readAppConfig } from '../app-config.js';
 import { readVelaCredentialRevision } from '../integrations/vela.js';
+import type { VelaCredentialRevision } from '../integrations/vela.js';
 
 export interface ResolveAmrModelProbeDeps {
   dataDir: string;
   env: NodeJS.ProcessEnv;
   readAppConfig: typeof readAppConfig;
+}
+
+export interface BuildAmrModelCacheKeyInput {
+  launchPath: string;
+  env: NodeJS.ProcessEnv;
+  credentialRevision: VelaCredentialRevision;
+}
+
+export function buildAmrModelCacheKey({
+  launchPath,
+  env,
+  credentialRevision,
+}: BuildAmrModelCacheKeyInput): string {
+  return JSON.stringify({
+    launchPath,
+    home: env.HOME ?? env.USERPROFILE ?? '',
+    openDesignAmrProfile: env.OPEN_DESIGN_AMR_PROFILE ?? '',
+    velaProfile: env.VELA_PROFILE ?? '',
+    velaLinkUrl: env.VELA_LINK_URL ?? '',
+    velaRuntimeKey: env.VELA_RUNTIME_KEY ?? '',
+    velaOpencodeBin: env.VELA_OPENCODE_BIN ?? '',
+    credentialRevision,
+  });
 }
 
 export async function resolveAmrModelProbe({
@@ -38,14 +62,9 @@ export async function resolveAmrModelProbe({
     agentLaunch,
   );
   const credentialRevision = readVelaCredentialRevision(baseEnv, configuredEnv);
-  const cacheKey = JSON.stringify({
+  const cacheKey = buildAmrModelCacheKey({
     launchPath,
-    home: env.HOME ?? env.USERPROFILE ?? '',
-    openDesignAmrProfile: env.OPEN_DESIGN_AMR_PROFILE ?? '',
-    velaProfile: env.VELA_PROFILE ?? '',
-    velaLinkUrl: env.VELA_LINK_URL ?? '',
-    velaRuntimeKey: env.VELA_RUNTIME_KEY ?? '',
-    velaOpencodeBin: env.VELA_OPENCODE_BIN ?? '',
+    env,
     credentialRevision,
   });
   return { launchPath, env, configuredEnv, cacheKey };

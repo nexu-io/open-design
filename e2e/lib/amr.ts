@@ -10,6 +10,7 @@ export type FakeVelaOptions = {
   failBalanceAtPromptOnce?: boolean;
   failModelListInvalidApiKey?: boolean;
   requireLoginConfig?: boolean;
+  requireSetModel?: boolean;
   sessionId?: string;
 };
 
@@ -101,6 +102,7 @@ const BALANCE_FAIL = ${options.failBalanceAtPrompt === true ? 'true' : 'false'};
 const BALANCE_FAIL_ONCE = ${options.failBalanceAtPromptOnce === true ? 'true' : 'false'};
 const MODEL_LIST_INVALID_API_KEY = ${options.failModelListInvalidApiKey === true ? 'true' : 'false'};
 const REQUIRE_LOGIN = ${options.requireLoginConfig === false ? 'false' : 'true'};
+const REQUIRE_SET_MODEL = ${options.requireSetModel === false ? 'false' : 'true'};
 
 function writeMessage(obj) {
   stdout.write(JSON.stringify(obj) + '\\n');
@@ -241,7 +243,7 @@ function handle(msg) {
   }
   if (method === 'session/prompt') {
     const sid = (params && params.sessionId) || SESSION_ID;
-    if (!sessionsWithModel.has(sid)) {
+    if (REQUIRE_SET_MODEL && !sessionsWithModel.has(sid)) {
       writeError(id, 'session/set_model must be called before session/prompt');
       return;
     }

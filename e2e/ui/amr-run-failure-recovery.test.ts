@@ -999,6 +999,7 @@ async function setupAmrWorkspace(
       ? { failModelListInvalidApiKey: options.failModelListInvalidApiKey }
       : {}),
     ...(options.requireLoginConfig !== undefined ? { requireLoginConfig: options.requireLoginConfig } : {}),
+    requireSetModel: false,
   });
   await mkdir(homeDir, { recursive: true });
   if (options.seedLoginConfig !== false) {

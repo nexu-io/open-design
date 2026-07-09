@@ -393,6 +393,7 @@ export const pl: Dict = {
   'settings.amrBalance': 'Saldo',
   'settings.amrPlan': 'Plan',
   'settings.amrUpgrade': 'Ulepsz',
+  'settings.amrModelUpgradeHint': 'Ulepsz, aby użyć',
   'settings.amrLoginErrorCompact': 'Logowanie Open Design nie powiodło się.',
   'settings.advanced': 'Zaawansowane',
   'settings.amrLogin': 'Zaloguj się',

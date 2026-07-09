@@ -393,6 +393,7 @@ export const ja: Dict = {
   'settings.amrBalance': '残高',
   'settings.amrPlan': 'プラン',
   'settings.amrUpgrade': 'アップグレード',
+  'settings.amrModelUpgradeHint': 'アップグレード後に利用',
   'settings.amrLoginErrorCompact': 'Open Design へのサインインに失敗しました。',
   'settings.advanced': '詳細設定',
   'settings.amrLogin': 'サインイン',

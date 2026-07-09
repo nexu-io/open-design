@@ -393,6 +393,7 @@ export const id: Dict = {
   'settings.amrBalance': 'Saldo',
   'settings.amrPlan': 'Paket',
   'settings.amrUpgrade': 'Tingkatkan',
+  'settings.amrModelUpgradeHint': 'Upgrade untuk memakai',
   'settings.amrLoginErrorCompact': 'Proses masuk Open Design gagal.',
   'settings.advanced': 'Lanjutan',
   'settings.amrLogin': 'Masuk',

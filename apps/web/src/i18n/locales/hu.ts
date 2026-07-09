@@ -393,6 +393,7 @@ export const hu: Dict = {
   'settings.amrBalance': 'Egyenleg',
   'settings.amrPlan': 'Csomag',
   'settings.amrUpgrade': 'Frissítés',
+  'settings.amrModelUpgradeHint': 'Frissíts a használathoz',
   'settings.amrLoginErrorCompact': 'Az Open Design bejelentkezés sikertelen.',
   'settings.advanced': 'Speciális',
   'settings.amrLogin': 'Bejelentkezés',

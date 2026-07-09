@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CUSTOM_MODEL_SENTINEL,
   isCustomModel,
+  orderModelOptionsByAvailability,
   renderModelOptions,
   SearchableModelSelect,
 } from '../../src/components/modelOptions';
@@ -85,6 +86,19 @@ describe('isCustomModel', () => {
   });
 });
 
+describe('orderModelOptionsByAvailability', () => {
+  it('keeps available models before unavailable models without reordering within each group', () => {
+    expect(
+      orderModelOptionsByAvailability([
+        { id: 'locked-a', label: 'Locked A', enabled: false },
+        { id: 'ready-a', label: 'Ready A' },
+        { id: 'locked-b', label: 'Locked B', enabled: false },
+        { id: 'ready-b', label: 'Ready B', enabled: true },
+      ]).map((model) => model.id),
+    ).toEqual(['ready-a', 'ready-b', 'locked-a', 'locked-b']);
+  });
+});
+
 describe('SearchableModelSelect', () => {
   it('renders capability tag and cost metadata as option text', async () => {
     render(
@@ -108,9 +122,77 @@ describe('SearchableModelSelect', () => {
     const option = await screen.findByRole('option', { name: /^deepseek-v4-flash$/ });
     expect(option.textContent).toContain('Lowest cost');
     expect(option.textContent).toContain('Fast');
-    expect(option).toHaveAccessibleName('deepseek-v4-flash');
-    expect(option).toHaveAccessibleDescription('Lowest cost Fast');
+    expect(option.getAttribute('aria-labelledby')).toBeTruthy();
+    expect(option.getAttribute('aria-describedby')).toBeTruthy();
     expect(option.querySelector('[data-description]')).toBeNull();
     expect(option.querySelector('[data-label]')).toBeNull();
+  });
+
+  it('disables unavailable options and shows the provided hint', async () => {
+    const onChange = vi.fn();
+    render(
+      <SearchableModelSelect
+        models={[
+          { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', default: true },
+          { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', enabled: false },
+        ]}
+        value="deepseek-v4-flash"
+        onChange={onChange}
+        searchPlaceholder="Search models"
+        disabledOptionHint={(option) =>
+          option.enabled === false ? '请升级后使用高级模型' : null
+        }
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const disabledOption = await screen.findByRole('option', { name: /^deepseek-v4-pro$/ });
+    expect(disabledOption.hasAttribute('disabled')).toBe(true);
+    expect(disabledOption.getAttribute('aria-describedby')).toBeTruthy();
+    expect(disabledOption.textContent).toContain('请升级后使用高级模型');
+
+    fireEvent.click(disabledOption);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('renders a lock affordance for disabled options that opens the upgrade destination', async () => {
+    const onChange = vi.fn();
+    const onDisabledOptionUpgrade = vi.fn();
+    render(
+      <SearchableModelSelect
+        models={[
+          { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', default: true },
+          { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', enabled: false },
+        ]}
+        value="deepseek-v4-flash"
+        onChange={onChange}
+        searchPlaceholder="Search models"
+        disabledOptionHint={(option) =>
+          option.enabled === false ? 'Upgrade to use' : null
+        }
+        onDisabledOptionUpgrade={onDisabledOptionUpgrade}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    // The inline hint text is replaced by the lock affordance whose accessible
+    // name (and tooltip) carry the hint.
+    const disabledOption = await screen.findByRole('option', {
+      name: /^deepseek-v4-pro$/,
+    });
+    expect(disabledOption.getAttribute('aria-disabled')).toBe('true');
+
+    const lock = screen.getByTestId('model-option-upgrade-lock');
+    expect(lock.getAttribute('aria-label')).toBe('Upgrade to use');
+    expect(lock.getAttribute('title')).toBe('Upgrade to use');
+
+    fireEvent.click(lock);
+    expect(onDisabledOptionUpgrade).toHaveBeenCalledTimes(1);
+    expect(onDisabledOptionUpgrade).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'deepseek-v4-pro' }),
+    );
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

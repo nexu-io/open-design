@@ -393,6 +393,7 @@ export const fa: Dict = {
   'settings.amrBalance': 'موجودی',
   'settings.amrPlan': 'طرح',
   'settings.amrUpgrade': 'ارتقا',
+  'settings.amrModelUpgradeHint': 'برای استفاده ارتقا دهید',
   'settings.amrLoginErrorCompact': 'ورود به Open Design ناموفق بود.',
   'settings.advanced': 'پیشرفته',
   'settings.amrLogin': 'ورود',

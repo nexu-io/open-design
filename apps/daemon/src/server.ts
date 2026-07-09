@@ -181,6 +181,7 @@ import {
   getRememberedLiveModels,
   preferFreshLiveModels,
   rememberLiveModels,
+  resolveDefaultModelFromOptions,
   resolveModelForAgent,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
@@ -4561,14 +4562,10 @@ export async function startServer({
     let capturedSessionId: string | null = null;
     // --- Model resolution hoisted above the resume-identity guard ---
     // The guard (and the persisted `agent_sessions.model`) must key off the
-    // CONCRETE model actually launched, not the raw request token: a user who
-    // picked `default` would otherwise store `default`/null, so changing the
-    // effective default between turns would still pass the guard and resume the
-    // old upstream session under the wrong model (#4704, reported by @nettee).
-    // resolveModelForAgent is hoisted here; the AMR `default`->live-catalog
-    // rewrite is mirrored below so `safeModel` is final before the guard. The
-    // preflight further down stays authoritative for auth/availability and
-    // re-runs the (cached, idempotent) resolution.
+    // model identity actually requested for this turn. Explicit `default` is
+    // kept as a real identity because ACP runtimes can leave model selection to
+    // the upstream session's own configured default; omitted models may still
+    // resolve to an available fallback below.
     let configuredAgentEnv = {};
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
@@ -4593,6 +4590,11 @@ export async function startServer({
       process.env,
       requestedLiveModelScope,
     );
+    const hasDefaultModelEnvOverride = Boolean(
+      def.defaultModelEnvVar &&
+      typeof process.env[def.defaultModelEnvVar] === 'string' &&
+      process.env[def.defaultModelEnvVar]?.trim(),
+    );
     const safeReasoning =
       typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
@@ -4601,10 +4603,10 @@ export async function startServer({
     const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
     const resolvedBin = agentLaunch.selectedPath;
     if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
-      // Concretize a default/empty model to the live catalog's first entry, the
-      // same rewrite the AMR preflight applies — done here only so the resume
-      // guard sees the launched model. Read-only + cached (hot on follow-up
-      // turns); the preflight below remains the authoritative gate.
+      // Concretize omitted/default AMR model requests to the live catalog
+      // default before the resume guard. The AMR preflight below applies the
+      // same rewrite before spawn; keeping this earlier copy aligned prevents
+      // stored concrete session models from comparing against raw `default`.
       try {
         const resumeProbe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
         const resumeCatalog = await amrModelLoadingCache.get(resumeProbe.cacheKey, {
@@ -4618,8 +4620,18 @@ export async function startServer({
         const resumeModelIds = new Set(resumeLiveModels.map((c) => c?.id).filter(Boolean));
         const askedForDefault =
           typeof model !== 'string' || !model.trim() || model.trim().toLowerCase() === 'default';
-        if (!safeModel || safeModel === 'default' || (askedForDefault && !resumeModelIds.has(safeModel))) {
-          safeModel = resumeLiveModels[0]?.id ?? safeModel ?? null;
+        const defaultRunModel = resolveDefaultModelFromOptions(resumeLiveModels);
+        if (
+          !safeModel ||
+          safeModel === 'default' ||
+          (
+            askedForDefault &&
+            !hasDefaultModelEnvOverride &&
+            defaultRunModel &&
+            (!resumeModelIds.has(safeModel) || safeModel !== defaultRunModel)
+          )
+        ) {
+          safeModel = defaultRunModel ?? safeModel ?? null;
           agentOptions.model = safeModel;
         }
       } catch {
@@ -5391,17 +5403,24 @@ export async function startServer({
       );
       // A request that came in as 'default'/empty is normally pre-resolved to a
       // concrete id via the agent-wide cached model order; if it still is not,
-      // adopt the first catalog entry so the spawn layer always has a real id.
+      // adopt the catalog's enabled default so the spawn layer always has a
+      // usable real id.
       const userAskedForDefault =
         typeof model !== 'string' ||
         !model.trim() ||
         model.trim().toLowerCase() === 'default';
+      const defaultRunModel = resolveDefaultModelFromOptions(liveModels);
       if (
         !safeModel ||
         safeModel === 'default' ||
-        (userAskedForDefault && !liveModelIds.has(safeModel))
+        (
+          userAskedForDefault &&
+          !hasDefaultModelEnvOverride &&
+          defaultRunModel &&
+          (!liveModelIds.has(safeModel) || safeModel !== defaultRunModel)
+        )
       ) {
-        safeModel = liveModels[0]?.id ?? safeModel ?? null;
+        safeModel = defaultRunModel ?? (safeModel === 'default' ? null : safeModel ?? null);
         agentOptions.model = safeModel;
       }
       if (liveModelIds.size === 0) {
