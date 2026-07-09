@@ -1,10 +1,11 @@
-import { mkdir, readFile, readdir, writeFile, lstat } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import JSZip from 'jszip';
 import type Database from 'better-sqlite3';
 import {
   getProject,
+  deleteProject,
   insertConversation,
   insertProject,
   setTabs,
@@ -453,6 +454,31 @@ function chooseEntryFile(files: string[], metadata: unknown): string | null {
   return files.find((file) => file.toLowerCase().endsWith('.html')) ?? null;
 }
 
+async function pathExists(name: string): Promise<boolean> {
+  try {
+    await lstat(name);
+    return true;
+  } catch (err: any) {
+    if (err?.code === 'ENOENT') return false;
+    throw err;
+  }
+}
+
+async function assertImportTargetAvailable(db: Db, targetRoot: string, projectId: string): Promise<void> {
+  if (getProject(db, projectId)) {
+    throw new Error(`project id already exists: ${projectId}`);
+  }
+  if (await pathExists(targetRoot)) {
+    throw new Error(`project directory already exists: ${projectId}`);
+  }
+}
+
+async function createImportTempRoot(projectsRoot: string, projectId: string): Promise<string> {
+  const tempParent = path.join(projectsRoot, '.tmp-project-bundle-imports');
+  await mkdir(tempParent, { recursive: true });
+  return mkdtemp(path.join(tempParent, `${projectId}-`));
+}
+
 export async function importOpenDesignProjectBundle(options: ImportProjectBundleOptions) {
   const bundleEntries = readBoundedBundleEntries(options.buffer);
   const manifest = readBundleManifest(bundleEntries);
@@ -476,109 +502,128 @@ export async function importOpenDesignProjectBundle(options: ImportProjectBundle
   const projectId = options.randomId();
   const now = Date.now();
   const targetRoot = projectDir(options.projectsRoot, projectId);
-  await mkdir(targetRoot, { recursive: true });
+  await assertImportTargetAvailable(options.db, targetRoot, projectId);
+  const tempRoot = await createImportTempRoot(options.projectsRoot, projectId);
 
   const fileNames: string[] = [];
-  for (const [name, body] of bundleEntries.entries()) {
-    if (!name.startsWith('files/')) continue;
-    const relPath = assertSafeBundlePath(name.slice('files/'.length));
-    const target = path.resolve(targetRoot, relPath);
-    const rootWithSep = `${path.resolve(targetRoot)}${path.sep}`;
-    if (target !== path.resolve(targetRoot) && !target.startsWith(rootWithSep)) {
-      throw new Error(`unsafe project bundle path: ${name}`);
-    }
-    await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, body);
-    fileNames.push(relPath);
-  }
-
-  const metadata = importMetadata(sourceProject, options.originalName);
-  const project = options.db.transaction(() => {
-    const inserted = insertProject(options.db, {
-      id: projectId,
-      name:
-        typeof sourceProject.name === 'string' && sourceProject.name.trim()
-          ? sourceProject.name.trim()
-          : options.originalName.replace(/\.zip$/i, '') || 'Imported project',
-      skillId: typeof sourceProject.skillId === 'string' ? sourceProject.skillId : null,
-      designSystemId:
-        typeof sourceProject.designSystemId === 'string'
-          ? sourceProject.designSystemId
-          : null,
-      pendingPrompt:
-        typeof sourceProject.pendingPrompt === 'string'
-          ? sourceProject.pendingPrompt
-          : null,
-      metadata,
-      customInstructions:
-        typeof sourceProject.customInstructions === 'string'
-          ? sourceProject.customInstructions
-          : null,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const conversationIdMap = new Map<string, string>();
-    for (const conv of conversations) {
-      if (!conv || typeof conv.id !== 'string') continue;
-      const nextId = options.randomId();
-      conversationIdMap.set(conv.id, nextId);
-      insertConversation(options.db, {
-        id: nextId,
-        projectId,
-        title: typeof conv.title === 'string' ? conv.title : null,
-        sessionMode: conv.sessionMode,
-        createdAt: typeof conv.createdAt === 'number' ? conv.createdAt : now,
-        updatedAt: typeof conv.updatedAt === 'number' ? conv.updatedAt : now,
-      });
+  let projectInserted = false;
+  try {
+    for (const [name, body] of bundleEntries.entries()) {
+      if (!name.startsWith('files/')) continue;
+      const relPath = assertSafeBundlePath(name.slice('files/'.length));
+      const target = path.resolve(tempRoot, relPath);
+      const rootWithSep = `${path.resolve(tempRoot)}${path.sep}`;
+      if (target !== path.resolve(tempRoot) && !target.startsWith(rootWithSep)) {
+        throw new Error(`unsafe project bundle path: ${name}`);
+      }
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, body);
+      fileNames.push(relPath);
     }
 
-    for (const message of [...messages].sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))) {
-      if (!message || typeof message.conversationId !== 'string') continue;
-      const conversationId = conversationIdMap.get(message.conversationId);
-      if (!conversationId) continue;
-      upsertMessage(options.db, conversationId, {
-        ...message,
-        id: options.randomId(),
-        runId: undefined,
-        runStatus: undefined,
-        lastRunEventId: undefined,
-      });
-    }
-
-    if (tabs?.state?.state && typeof tabs.state.state === 'object') {
-      setTabs(options.db, projectId, tabs.state.state as any);
-    } else if (Array.isArray(tabs?.tabs) && tabs.tabs.length > 0) {
-      const tabNames = tabs.tabs
-        .map((tab) => (typeof tab.name === 'string' ? tab.name : ''))
-        .filter(Boolean);
-      const active = tabs.tabs.find((tab) => tab.isActive)?.name ?? tabNames[0] ?? null;
-      setTabs(options.db, projectId, tabNames, active);
-    } else {
-      const entryFile = chooseEntryFile(fileNames, metadata);
-      setTabs(options.db, projectId, entryFile ? [entryFile] : [], entryFile);
-    }
-
-    if (conversationIdMap.size === 0) {
-      const conversationId = options.randomId();
-      insertConversation(options.db, {
-        id: conversationId,
-        projectId,
-        title: 'Imported project',
-        sessionMode: 'design',
+    const metadata = importMetadata(sourceProject, options.originalName);
+    const project = options.db.transaction(() => {
+      const inserted = insertProject(options.db, {
+        id: projectId,
+        name:
+          typeof sourceProject.name === 'string' && sourceProject.name.trim()
+            ? sourceProject.name.trim()
+            : options.originalName.replace(/\.zip$/i, '') || 'Imported project',
+        skillId: typeof sourceProject.skillId === 'string' ? sourceProject.skillId : null,
+        designSystemId:
+          typeof sourceProject.designSystemId === 'string'
+            ? sourceProject.designSystemId
+            : null,
+        pendingPrompt:
+          typeof sourceProject.pendingPrompt === 'string'
+            ? sourceProject.pendingPrompt
+            : null,
+        metadata,
+        customInstructions:
+          typeof sourceProject.customInstructions === 'string'
+            ? sourceProject.customInstructions
+            : null,
         createdAt: now,
         updatedAt: now,
       });
-      conversationIdMap.set('', conversationId);
+
+      const conversationIdMap = new Map<string, string>();
+      for (const conv of conversations) {
+        if (!conv || typeof conv.id !== 'string') continue;
+        const nextId = options.randomId();
+        conversationIdMap.set(conv.id, nextId);
+        insertConversation(options.db, {
+          id: nextId,
+          projectId,
+          title: typeof conv.title === 'string' ? conv.title : null,
+          sessionMode: conv.sessionMode,
+          createdAt: typeof conv.createdAt === 'number' ? conv.createdAt : now,
+          updatedAt: typeof conv.updatedAt === 'number' ? conv.updatedAt : now,
+        });
+      }
+
+      for (const message of [...messages].sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))) {
+        if (!message || typeof message.conversationId !== 'string') continue;
+        const conversationId = conversationIdMap.get(message.conversationId);
+        if (!conversationId) continue;
+        upsertMessage(options.db, conversationId, {
+          ...message,
+          id: options.randomId(),
+          runId: undefined,
+          runStatus: undefined,
+          lastRunEventId: undefined,
+        });
+      }
+
+      if (tabs?.state?.state && typeof tabs.state.state === 'object') {
+        setTabs(options.db, projectId, tabs.state.state as any);
+      } else if (Array.isArray(tabs?.tabs) && tabs.tabs.length > 0) {
+        const tabNames = tabs.tabs
+          .map((tab) => (typeof tab.name === 'string' ? tab.name : ''))
+          .filter(Boolean);
+        const active = tabs.tabs.find((tab) => tab.isActive)?.name ?? tabNames[0] ?? null;
+        setTabs(options.db, projectId, tabNames, active);
+      } else {
+        const entryFile = chooseEntryFile(fileNames, metadata);
+        setTabs(options.db, projectId, entryFile ? [entryFile] : [], entryFile);
+      }
+
+      if (conversationIdMap.size === 0) {
+        const conversationId = options.randomId();
+        insertConversation(options.db, {
+          id: conversationId,
+          projectId,
+          title: 'Imported project',
+          sessionMode: 'design',
+          createdAt: now,
+          updatedAt: now,
+        });
+        conversationIdMap.set('', conversationId);
+      }
+
+      return {
+        project: inserted ?? getProject(options.db, projectId),
+        conversationId: conversationIdMap.values().next().value as string,
+        entryFile: chooseEntryFile(fileNames, metadata),
+        files: fileNames,
+      };
+    })();
+    projectInserted = true;
+
+    if (await pathExists(targetRoot)) {
+      throw new Error(`project directory already exists: ${projectId}`);
     }
-
-    return {
-      project: inserted ?? getProject(options.db, projectId),
-      conversationId: conversationIdMap.values().next().value as string,
-      entryFile: chooseEntryFile(fileNames, metadata),
-      files: fileNames,
-    };
-  })();
-
-  return project;
+    await rename(tempRoot, targetRoot);
+    return project;
+  } catch (err) {
+    await rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+    if (projectInserted) {
+      try {
+        deleteProject(options.db, projectId);
+      } catch {
+        // Best-effort rollback for the DB row inserted before the final move.
+      }
+    }
+    throw err;
+  }
 }

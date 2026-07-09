@@ -39,6 +39,27 @@ describe('Open Design project bundle import/export', () => {
     if (root) rmSync(root, { recursive: true, force: true });
   });
 
+  async function minimalProjectBundle(options: {
+    name?: string;
+    conversations?: unknown[];
+    files?: Record<string, string | Buffer>;
+  } = {}): Promise<Buffer> {
+    const zip = new JSZip();
+    zip.file('manifest.json', JSON.stringify({
+      schema: OPEN_DESIGN_PROJECT_BUNDLE_SCHEMA,
+    }));
+    zip.file('db/project.json', JSON.stringify({
+      id: 'source-project',
+      name: options.name ?? 'Imported project',
+    }));
+    zip.file('db/conversations.json', JSON.stringify(options.conversations ?? []));
+    zip.file('db/messages.json', '[]');
+    for (const [name, body] of Object.entries(options.files ?? { 'index.html': '<!doctype html>incoming' })) {
+      zip.file(`files/${name}`, body);
+    }
+    return zip.generateAsync({ type: 'nodebuffer' });
+  }
+
   it('round-trips project files, conversations, messages, and tabs into a new project', async () => {
     const db = openDatabase(root, { dataDir });
     const sourceProjectId = 'source-project';
@@ -189,5 +210,72 @@ describe('Open Design project bundle import/export', () => {
       originalName: 'oversized.zip',
       randomId: () => 'new-id',
     })).rejects.toThrow('project bundle file too large: files/large.bin');
+  });
+
+  it('does not overwrite an existing project directory when the generated project id collides', async () => {
+    const db = openDatabase(root, { dataDir });
+    const existingRoot = path.join(projectsRoot, 'existing-project');
+    await mkdir(existingRoot, { recursive: true });
+    await writeFile(path.join(existingRoot, 'index.html'), '<!doctype html>existing');
+    insertProject(db, {
+      id: 'existing-project',
+      name: 'Existing project',
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    await expect(importOpenDesignProjectBundle({
+      db,
+      projectsRoot,
+      buffer: await minimalProjectBundle({
+        files: { 'index.html': '<!doctype html>incoming' },
+      }),
+      originalName: 'incoming.zip',
+      randomId: () => 'existing-project',
+    })).rejects.toThrow('project id already exists: existing-project');
+
+    expect(await readFile(path.join(existingRoot, 'index.html'), 'utf8')).toBe('<!doctype html>existing');
+  });
+
+  it('cleans up the extracted files when the database transaction rolls back', async () => {
+    const db = openDatabase(root, { dataDir });
+    insertProject(db, {
+      id: 'existing-project',
+      name: 'Existing project',
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    insertConversation(db, {
+      id: 'existing-conversation',
+      projectId: 'existing-project',
+      title: 'Existing conversation',
+      sessionMode: 'design',
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const ids = ['new-project', 'existing-conversation'];
+
+    await expect(importOpenDesignProjectBundle({
+      db,
+      projectsRoot,
+      buffer: await minimalProjectBundle({
+        conversations: [{
+          id: 'source-conversation',
+          title: 'Imported conversation',
+          sessionMode: 'design',
+          createdAt: 2,
+          updatedAt: 2,
+        }],
+      }),
+      originalName: 'incoming.zip',
+      randomId: () => ids.shift() ?? 'unused-id',
+    })).rejects.toThrow();
+
+    expect(getProject(db, 'new-project')).toBeNull();
+    expect(existsSync(path.join(projectsRoot, 'new-project'))).toBe(false);
   });
 });
