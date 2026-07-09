@@ -76,17 +76,42 @@ describe('run event-buffer truncation vs artifact verdict (unit)', () => {
     expect(ledger.artifactPaths.size).toBe(0);
   });
 
-  it('pairs a tool_result that arrives before its tool_use', () => {
+  it('does not accumulate unbounded state for ordinary non-write tool results', () => {
     const ledger = createRunSideEffectLedger();
-    foldEventIntoRunSideEffectLedger(ledger, {
-      event: 'agent',
-      data: { type: 'tool_result', toolUseId: 'toolu_1', isError: false },
-    });
+    // A long tool-heavy run: thousands of Read/Bash/Grep calls, each a
+    // tool_use + tool_result pair. None are write/edit tools, so none should
+    // leave anything behind in the ledger's pending map — otherwise this fix
+    // would reintroduce unbounded per-run growth on the same long-run path it
+    // is meant to harden.
+    for (let i = 0; i < 5_000; i++) {
+      const id = `toolu_read_${i}`;
+      foldEventIntoRunSideEffectLedger(ledger, {
+        event: 'agent',
+        data: { type: 'tool_use', id, name: 'Read', input: { file_path: `src/file${i}.ts` } },
+      });
+      foldEventIntoRunSideEffectLedger(ledger, {
+        event: 'agent',
+        data: { type: 'tool_result', toolUseId: id, isError: false },
+      });
+    }
+    expect(ledger.pendingWritePathById.size).toBe(0);
+    expect(sideEffectsFromLedger(ledger).artifactWriteSeen).toBe(false);
+    expect(ledger.toolCallSeen).toBe(true);
+  });
+
+  it('an artifact write pairs and clears its pending entry once resolved', () => {
+    const ledger = createRunSideEffectLedger();
     foldEventIntoRunSideEffectLedger(ledger, {
       event: 'agent',
       data: { type: 'tool_use', id: 'toolu_1', name: 'Write', input: { file_path: 'index.html' } },
     });
+    foldEventIntoRunSideEffectLedger(ledger, {
+      event: 'agent',
+      data: { type: 'tool_result', toolUseId: 'toolu_1', isError: false },
+    });
     expect(sideEffectsFromLedger(ledger).artifactWriteSeen).toBe(true);
+    // No lingering pending state after a write pairs with its result.
+    expect(ledger.pendingWritePathById.size).toBe(0);
   });
 
   it('runSideEffectsForRun falls back to scanning run.events when no ledger', () => {

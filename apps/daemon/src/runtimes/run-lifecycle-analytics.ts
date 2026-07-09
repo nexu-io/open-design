@@ -146,10 +146,13 @@ export interface RunSideEffectLedger {
   artifactPaths: Set<string>;
   designSystemFileWritten: boolean;
   previewModulePaths: Set<string>;
-  // tool_use / tool_result can arrive in either order and arbitrarily far
-  // apart; hold the unpaired half here so pairing survives truncation.
+  // Only WRITE/EDIT tool_use ids awaiting their tool_result live here, and each
+  // is removed the moment its result arrives. A tool_result cannot precede its
+  // tool_use within a run, so we never need to buffer results — an ordinary
+  // (non-write) tool_result finds nothing pending and is dropped, keeping this
+  // map bounded by the small number of outstanding artifact writes rather than
+  // by the run's total tool_result count.
   pendingWritePathById: Map<string, string>;
-  pendingResultIsErrorById: Map<string, boolean>;
 }
 
 export function createRunSideEffectLedger(): RunSideEffectLedger {
@@ -162,21 +165,7 @@ export function createRunSideEffectLedger(): RunSideEffectLedger {
     designSystemFileWritten: false,
     previewModulePaths: new Set(),
     pendingWritePathById: new Map(),
-    pendingResultIsErrorById: new Map(),
   };
-}
-
-function resolveWritePairing(ledger: RunSideEffectLedger, toolUseId: string) {
-  const path = ledger.pendingWritePathById.get(toolUseId);
-  if (path === undefined) return;
-  if (!ledger.pendingResultIsErrorById.has(toolUseId)) return;
-  const isError = ledger.pendingResultIsErrorById.get(toolUseId) === true;
-  ledger.pendingWritePathById.delete(toolUseId);
-  ledger.pendingResultIsErrorById.delete(toolUseId);
-  if (isError) return;
-  if (isArtifactPath(path)) ledger.artifactPaths.add(path);
-  if (isDesignSystemFile(path)) ledger.designSystemFileWritten = true;
-  if (isPreviewModulePath(path)) ledger.previewModulePaths.add(path);
 }
 
 export function foldEventIntoRunSideEffectLedger(
@@ -209,12 +198,18 @@ export function foldEventIntoRunSideEffectLedger(
     const id = readToolUseId(data);
     if (!path || !id) return;
     ledger.pendingWritePathById.set(id, path);
-    resolveWritePairing(ledger, id);
   } else if (data.type === 'tool_result' && event === 'agent') {
     const id = readToolResultId(data);
     if (!id) return;
-    ledger.pendingResultIsErrorById.set(id, readToolResultIsError(data));
-    resolveWritePairing(ledger, id);
+    const path = ledger.pendingWritePathById.get(id);
+    // Non-write tool_result (Read/Bash/Grep/…): nothing pending, drop it — this
+    // is what keeps the ledger bounded on long tool-heavy runs.
+    if (path === undefined) return;
+    ledger.pendingWritePathById.delete(id);
+    if (readToolResultIsError(data)) return; // a failed write does not count
+    if (isArtifactPath(path)) ledger.artifactPaths.add(path);
+    if (isDesignSystemFile(path)) ledger.designSystemFileWritten = true;
+    if (isPreviewModulePath(path)) ledger.previewModulePaths.add(path);
   }
 }
 
