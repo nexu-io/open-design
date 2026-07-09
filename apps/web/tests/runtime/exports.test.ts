@@ -17,6 +17,7 @@ import {
   exportProjectAsHtml,
   exportProjectAsPdf,
   exportProjectAsPptx,
+  exportProjectAsZip,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
   planDeckImageCapture,
@@ -806,6 +807,39 @@ describe('binary project/design-system downloads', () => {
     expect(ok).toBe(true);
     expect(fetch).toHaveBeenCalledWith('/api/projects/project-1/archive?root=system');
     expect(capturedFilename).toBe('system.zip');
+  });
+
+  it('falls back to a single-file zip for plain project archive failures', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('daemon down', { status: 503 })));
+
+    await exportProjectAsZip({
+      projectId: 'project-1',
+      filePath: 'ui/index.html',
+      fallbackHtml: '<main>fallback</main>',
+      fallbackTitle: 'Fallback Project',
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/projects/project-1/archive?root=ui');
+    expect(capturedFilename).toBe('Fallback-Project.zip');
+    expect(capturedBlob).toBeDefined();
+  });
+
+  it('rejects instead of downloading a fallback zip when conversation bundle export fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('daemon down', { status: 503 })));
+
+    await expect(exportProjectAsZip({
+      projectId: 'project-1',
+      filePath: 'ui/index.html',
+      fallbackHtml: '<main>fallback</main>',
+      fallbackTitle: 'Fallback Project',
+      includeConversations: true,
+    })).rejects.toThrow('archive request failed (503)');
+
+    expect(fetch).toHaveBeenCalledWith('/api/projects/project-1/archive?includeConversations=1');
+    expect(capturedBlob).toBeUndefined();
+    expect(capturedFilename).toBeUndefined();
   });
 });
 

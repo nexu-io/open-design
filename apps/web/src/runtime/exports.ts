@@ -832,7 +832,9 @@ export function exportReactComponentAsZip(
 // active file's project-relative path; if it lives inside a top-level
 // directory we scope the archive to that directory, otherwise we ask the
 // daemon for the whole project. Falls back to the in-memory single-file
-// ZIP on any failure so the action never silently no-ops.
+// ZIP on plain archive failures so the action never silently no-ops. Project
+// bundle exports must fail fast because the single-file ZIP fallback cannot
+// preserve conversations.
 export async function exportProjectAsZip(opts: {
   projectId: string;
   filePath: string;
@@ -852,6 +854,10 @@ export async function exportProjectAsZip(opts: {
     const blob = await resp.blob();
     triggerDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
   } catch (err) {
+    if (opts.includeConversations) {
+      console.warn('[exportProjectAsZip] project bundle export failed:', err);
+      throw err;
+    }
     console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
     exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
   }
