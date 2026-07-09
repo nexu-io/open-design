@@ -1,0 +1,2578 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Antidote — Stop LLM Context Rot Before It Costs You the Repo</title>
+  <meta name="description" content="A repo-native skillset that stops LLM context rot. For ADHD-vibe coders who are done babysitting their agent." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:      oklch(12% 0.005 260);
+      --surface: oklch(18% 0.01 260);
+      --fg:      oklch(96% 0.005 260);
+      --muted:   oklch(62% 0.02 260);
+      --border:  oklch(25% 0.015 260);
+      --accent:  oklch(74% 0.28 145);
+      --accent-dim: oklch(74% 0.28 145 / 0.12);
+      --signal:     oklch(76% 0.13 220);
+      --danger:     oklch(62% 0.18 25);
+
+      --font-display: 'Space Grotesk', 'Helvetica Now Display', -apple-system, system-ui, sans-serif;
+      --font-body:    'Inter', -apple-system, system-ui, sans-serif;
+      --font-mono:    'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace;
+
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 18px;
+      --radius-pill: 999px;
+
+      --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font: 17px/1.6 var(--font-body);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      position: relative;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        linear-gradient(oklch(96% 0.005 260 / 0.015) 1px, transparent 1px) 0 0 / 64px 64px;
+      mask-image: linear-gradient(to bottom, black 0%, black 55%, transparent 100%);
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .container {
+      width: min(1200px, calc(100% - 40px));
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Skip link */
+    .skip-link {
+      position: absolute;
+      top: -48px;
+      left: 16px;
+      z-index: 200;
+      height: 40px;
+      padding: 0 18px;
+      display: flex;
+      align-items: center;
+      background: var(--accent);
+      color: var(--bg);
+      border-radius: var(--radius-sm);
+      font: 600 14px/1 var(--font-body);
+      transition: top 0.18s var(--ease-out);
+    }
+
+    .skip-link:focus { top: 16px; }
+
+    /* Typography */
+    .eyebrow {
+      font: 600 11px/1 var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+
+    .eyebrow.accent { color: var(--accent); }
+    .eyebrow.signal { color: var(--signal); }
+    .eyebrow.danger { color: var(--danger); }
+
+    h1, h2, h3 {
+      font-family: var(--font-display);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.02;
+    }
+
+    h1 { font-size: clamp(56px, 10vw, 120px); }
+    h2 { font-size: clamp(36px, 5.5vw, 64px); }
+    h3 { font-size: clamp(22px, 2.5vw, 28px); letter-spacing: -0.02em; }
+
+    p { color: var(--muted); max-width: 58ch; }
+
+    .mono { font-family: var(--font-mono); }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 50px;
+      padding: 0 26px;
+      border-radius: var(--radius-pill);
+      font: 600 15px/1 var(--font-body);
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: transform 0.14s var(--ease-out), box-shadow 0.14s, background 0.14s, border-color 0.14s;
+      white-space: nowrap;
+    }
+
+    .btn:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px var(--accent-dim);
+      border-color: var(--accent);
+    }
+
+    .btn:active { transform: translateY(1px); }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+      box-shadow: 0 0 24px oklch(74% 0.28 145 / 0.22);
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 0 44px oklch(74% 0.28 145 / 0.32);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--fg);
+    }
+
+    .btn-ghost:hover { background: var(--surface); border-color: oklch(96% 0.005 260 / 0.18); }
+
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    /* Nav */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      background: oklch(12% 0.005 260 / 0.88);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 70px;
+    }
+
+    .logo {
+      font: 700 22px/1 var(--font-display);
+      letter-spacing: -0.04em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-mark {
+      width: 30px;
+      height: 30px;
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: grid;
+      place-items: center;
+      color: var(--fg);
+      font: 700 18px/1 var(--font-display);
+    }
+
+    .nav-menu-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--fg);
+      cursor: pointer;
+    }
+
+    .nav-menu-toggle:hover { background: var(--surface); }
+    .nav-menu-toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-dim); border-color: var(--accent); }
+
+    .nav-menu-toggle[aria-expanded="true"] { background: var(--surface); }
+
+    .nav-links {
+      display: none;
+      gap: 32px;
+      font: 500 14px/1 var(--font-body);
+      color: var(--muted);
+    }
+
+    .nav-links a { padding: 6px 0; border-bottom: 1px solid transparent; }
+    .nav-links a:hover { color: var(--fg); }
+    .nav-links a:focus-visible { outline: none; color: var(--fg); border-bottom-color: var(--accent); }
+
+    .nav-links.open {
+      display: flex;
+      flex-direction: column;
+      position: absolute;
+      top: 71px;
+      left: 0;
+      right: 0;
+      padding: 20px;
+      background: oklch(12% 0.005 260 / 0.98);
+      border-bottom: 1px solid var(--border);
+      gap: 16px;
+    }
+
+    .nav-cta { display: none; }
+    .nav-links.open .nav-cta { display: inline-flex; }
+
+    /* Hero */
+    .hero {
+      padding: 100px 0 90px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-grid {
+      display: grid;
+      gap: 56px;
+      align-items: center;
+    }
+
+    .hero h1 {
+      max-width: 15ch;
+    }
+
+    .hero h1 span {
+      color: var(--accent);
+      text-shadow: 0 0 40px oklch(74% 0.28 145 / 0.22);
+    }
+
+    .hero-sub {
+      margin-top: 26px;
+      font: 600 22px/1.35 var(--font-display);
+      letter-spacing: -0.02em;
+      color: var(--fg);
+      max-width: 46ch;
+    }
+
+    .hero-lead {
+      margin-top: 24px;
+      font-size: 18px;
+      line-height: 1.65;
+      max-width: 56ch;
+    }
+
+    .hero-form {
+      margin-top: 42px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .hero-form input {
+      flex: 1 1 260px;
+      height: 54px;
+      padding: 0 22px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--fg);
+      font: 16px/1 var(--font-body);
+      outline: none;
+    }
+
+    .hero-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+
+    .hero-form .btn { height: 54px; padding: 0 30px; }
+
+    .hero-meta {
+      margin-top: 18px;
+      font: 13px/1.5 var(--font-mono);
+      color: var(--muted);
+    }
+
+    .form-message {
+      flex-basis: 100%;
+      font: 14px/1.5 var(--font-body);
+      color: var(--fg);
+      padding: 12px 16px;
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: none;
+    }
+
+    .form-message.success { border-color: var(--accent); color: var(--accent); display: block; }
+    .form-message.error { border-color: var(--danger); color: var(--danger); display: block; }
+
+    .hero-visual {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      padding: 28px;
+      min-height: 340px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 24px 70px oklch(0% 0 0 / 0.35);
+    }
+
+    .code-header {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--border); }
+    .dot.y { background: var(--signal); box-shadow: 0 0 10px var(--signal); }
+    .dot.b { background: var(--muted); }
+
+    pre {
+      font: 14px/1.7 var(--font-mono);
+      color: var(--muted);
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .kw { color: var(--signal); }
+    .str { color: var(--signal); }
+    .comment { color: oklch(45% 0.02 260); }
+    .num { color: var(--muted); }
+
+    /* Trust bar */
+    .trust {
+      padding: 28px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: oklch(14% 0.008 260);
+    }
+
+    .trust-list {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px 32px;
+      list-style: none;
+      font: 13px/1 var(--font-mono);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .trust-list li { display: flex; align-items: center; gap: 8px; }
+    .trust-list li::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--signal);
+    }
+
+    /* Section spacing */
+    section {
+      padding: 110px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .section-head {
+      display: grid;
+      gap: 18px;
+      margin-bottom: 60px;
+    }
+
+    .section-head p { max-width: 60ch; }
+    .section-head.small { margin-bottom: 40px; }
+    .section-head.small h2,
+    .section-head.small h3 { font-size: clamp(28px, 4vw, 40px); }
+
+    /* Spiral */
+    .spiral-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .spiral-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 32px 28px;
+      background: var(--surface);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .spiral-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--border);
+    }
+
+    .spiral-card.danger::before { background: var(--danger); }
+    .spiral-card.warn::before { background: oklch(70% 0.16 85); }
+    .spiral-card.accent::before { background: var(--accent); }
+
+    .spiral-card .week {
+      font: 600 12px/1 var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .spiral-card h3 {
+      font-size: 24px;
+      margin-bottom: 12px;
+      color: var(--fg);
+    }
+
+    .spiral-card p {
+      font-size: 15px;
+      line-height: 1.55;
+      margin: 0;
+      max-width: none;
+    }
+
+    .spiral-arrow {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font: 600 18px/1 var(--font-mono);
+    }
+
+    /* Diagnosis */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .stat-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 34px;
+      background: var(--surface);
+      transition: border-color 0.18s var(--ease-out), transform 0.18s var(--ease-out);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card:hover { border-color: oklch(74% 0.28 145 / 0.35); transform: translateY(-3px); }
+
+    .stat-card .num {
+      font: 700 52px/1 var(--font-display);
+      color: var(--signal);
+      letter-spacing: -0.03em;
+      transition: color 0.18s;
+    }
+
+    .stat-card:hover .num { color: var(--accent); }
+
+    .stat-card h3 {
+      margin: 20px 0 10px;
+      font-size: 20px;
+    }
+
+    .stat-card p { font-size: 15px; line-height: 1.55; }
+
+    .stat-source {
+      display: block;
+      margin-top: 18px;
+      font: 12px/1.4 var(--font-mono);
+      color: oklch(45% 0.02 260);
+      font-style: normal;
+    }
+
+    .diagnosis-summary {
+      margin-top: 52px;
+      border: 1px solid var(--border);
+      border-top: 3px solid var(--accent);
+      border-radius: var(--radius-lg);
+      padding: 42px;
+      background: linear-gradient(180deg, var(--surface) 0%, oklch(15% 0.01 260) 100%);
+      display: grid;
+      grid-template-columns: minmax(300px, 1fr) 1.5fr;
+      gap: 42px;
+      align-items: start;
+    }
+
+    .diagnosis-summary .summary-lead .eyebrow { margin-bottom: 16px; }
+
+    .diagnosis-summary .summary-lead h3 {
+      font: 700 40px/1.05 var(--font-display);
+      letter-spacing: -0.02em;
+      margin: 0;
+    }
+
+    .diagnosis-summary .summary-body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .diagnosis-summary .summary-body p {
+      margin: 0;
+      max-width: none;
+      font-size: 17px;
+      line-height: 1.6;
+    }
+
+    .diagnosis-summary .summary-body p:first-child {
+      font-size: 19px;
+      color: var(--fg);
+    }
+
+    .diagnosis-summary .summary-body p:last-child { color: var(--muted); }
+
+    /* Cost section */
+    .cost-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      align-items: stretch;
+    }
+
+    .cost-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 32px;
+      background: var(--surface);
+    }
+
+    .cost-card h4 {
+      font: 700 18px/1.2 var(--font-display);
+      color: var(--fg);
+      margin-bottom: 12px;
+      letter-spacing: -0.01em;
+    }
+
+    .cost-card p {
+      font-size: 15px;
+      line-height: 1.55;
+      margin: 0;
+      max-width: none;
+    }
+
+    /* Skillset */
+    .skill-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 36px;
+    }
+
+    .tab {
+      height: 42px;
+      padding: 0 20px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font: 500 14px/1 var(--font-body);
+      cursor: pointer;
+      transition: color 0.14s, background 0.14s, border-color 0.14s, box-shadow 0.14s;
+    }
+
+    .tab:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px var(--accent-dim);
+      border-color: var(--accent);
+    }
+
+    .tab[aria-selected="true"] {
+      background: var(--surface);
+      border-color: oklch(96% 0.005 260 / 0.28);
+      color: var(--fg);
+    }
+
+    .tab:hover { color: var(--fg); }
+
+    .skill-panel {
+      display: none;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 44px;
+      align-items: start;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 44px;
+      background: var(--surface);
+    }
+
+    .skill-panel.active { display: grid; }
+
+    .skill-panel h3 { margin-bottom: 18px; font-size: 32px; }
+    .skill-panel p { margin-bottom: 28px; }
+
+    .skill-list {
+      list-style: none;
+      display: grid;
+      gap: 16px;
+    }
+
+    .skill-list li {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      font-size: 15px;
+      color: var(--muted);
+    }
+
+    .skill-list li::before {
+      content: '→';
+      color: var(--signal);
+      font-family: var(--font-mono);
+      font-weight: 700;
+    }
+
+    .skill-code {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg);
+      padding: 28px;
+      overflow-x: auto;
+    }
+
+    /* Skill library */
+    .skill-lib-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .skill-lib-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 30px;
+      background: var(--surface);
+      transition: border-color 0.18s var(--ease-out), transform 0.18s var(--ease-out);
+    }
+
+    .skill-lib-card:hover {
+      border-color: oklch(74% 0.28 145 / 0.35);
+      transform: translateY(-3px);
+    }
+
+    .skill-lib-card .problem {
+      font: 600 11px/1 var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--danger);
+      margin-bottom: 14px;
+    }
+
+    .skill-lib-card h4 {
+      font: 700 20px/1.2 var(--font-display);
+      color: var(--fg);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+
+    .skill-lib-card p {
+      font-size: 15px;
+      line-height: 1.55;
+      margin: 0;
+      max-width: none;
+    }
+
+    /* How it works */
+    .how-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      position: relative;
+    }
+
+    .how-step {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 38px 32px;
+      background: var(--surface);
+      position: relative;
+    }
+
+    .how-step::after {
+      content: '';
+      position: absolute;
+      top: 54px;
+      right: -24px;
+      width: 24px;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .how-step:last-child::after { display: none; }
+
+    .how-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--signal);
+      color: var(--bg);
+      font: 700 14px/1 var(--font-mono);
+      margin-bottom: 22px;
+    }
+
+    .how-step h3 {
+      font-size: 22px;
+      margin-bottom: 12px;
+      color: var(--fg);
+    }
+
+    .how-step p {
+      font-size: 15px;
+      line-height: 1.55;
+      margin: 0;
+      max-width: none;
+    }
+
+    .how-cta {
+      margin-top: 44px;
+      text-align: center;
+    }
+
+    /* Personas */
+    .persona-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .persona-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 34px;
+      background: var(--surface);
+    }
+
+    .persona-card .role {
+      font: 600 11px/1 var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--signal);
+      margin-bottom: 14px;
+    }
+
+    .persona-card h4 {
+      font: 700 22px/1.2 var(--font-display);
+      color: var(--fg);
+      margin-bottom: 12px;
+      letter-spacing: -0.01em;
+    }
+
+    .persona-card p {
+      font-size: 15px;
+      line-height: 1.55;
+      margin-bottom: 16px;
+      max-width: none;
+    }
+
+    .persona-card .pain {
+      font: 500 15px/1.5 var(--font-body);
+      color: var(--fg);
+      border-left: 2px solid var(--accent);
+      padding-left: 16px;
+      margin: 0;
+      max-width: none;
+    }
+
+    /* Karpathy */
+    .karpathy-intro p { max-width: 64ch; }
+
+    .sw-timeline {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 70px;
+      position: relative;
+    }
+
+    .sw-step {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 32px;
+      background: var(--surface);
+      position: relative;
+    }
+
+    .sw-step::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      right: -24px;
+      width: 24px;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .sw-step:last-child::after { display: none; }
+
+    .sw-version {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 32px;
+      padding: 0 12px;
+      border-radius: var(--radius-pill);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      font: 700 13px/1 var(--font-mono);
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+
+    .sw-version.accent {
+      background: var(--accent);
+      color: var(--bg);
+      border-color: var(--accent);
+    }
+
+    .sw-step h4 {
+      font: 700 18px/1.2 var(--font-display);
+      color: var(--fg);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+
+    .sw-step p {
+      font-size: 15px;
+      line-height: 1.55;
+      margin: 0;
+      max-width: none;
+    }
+
+    .karpathy-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 60px;
+      align-items: start;
+    }
+
+    .quote-large {
+      border-left: 2px solid var(--signal);
+      padding-left: 28px;
+      margin: 36px 0;
+    }
+
+    .quote-large blockquote {
+      font: 600 26px/1.25 var(--font-display);
+      letter-spacing: -0.02em;
+      color: var(--fg);
+      margin-bottom: 12px;
+    }
+
+    .quote-large cite {
+      font: 13px/1.4 var(--font-mono);
+      color: var(--muted);
+      font-style: normal;
+    }
+
+    .karpathy-grid > div > p {
+      font-size: 17px;
+      line-height: 1.6;
+      margin: 24px 0;
+    }
+
+    .karpathy-cards {
+      display: grid;
+      gap: 16px;
+    }
+
+    .k-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 28px;
+      background: var(--surface);
+    }
+
+    .k-card h4 {
+      font: 700 17px/1.2 var(--font-display);
+      color: var(--fg);
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+
+    .k-card p {
+      font-size: 15px;
+      line-height: 1.5;
+      margin: 0;
+      max-width: none;
+    }
+
+    .vibe-vs-agentic {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      margin-top: 60px;
+    }
+
+    .vibe-vs-agentic-header,
+    .vibe-vs-agentic-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .vibe-vs-agentic-header > div {
+      padding: 18px 28px;
+      font: 700 14px/1 var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: var(--surface);
+      color: var(--fg);
+    }
+
+    .vibe-vs-agentic-header > div:first-child {
+      border-right: 1px solid var(--border);
+      color: var(--danger);
+    }
+
+    .vibe-vs-agentic-body > div {
+      padding: 28px;
+      font: 14px/1.8 var(--font-mono);
+      color: var(--muted);
+      background: var(--bg);
+    }
+
+    .vibe-vs-agentic-body > div:first-child { border-right: 1px solid var(--border); }
+
+    .playbook {
+      margin-top: 80px;
+      padding-top: 60px;
+      border-top: 1px solid var(--border);
+    }
+
+    .playbook-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      align-items: stretch;
+    }
+
+    .playbook-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 30px;
+      background: var(--surface);
+    }
+
+    .playbook-num {
+      display: block;
+      font: 700 14px/1 var(--font-mono);
+      color: var(--signal);
+      margin-bottom: 14px;
+    }
+
+    .playbook-card h4 {
+      font: 700 18px/1.2 var(--font-display);
+      color: var(--fg);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+
+    .playbook-card p {
+      font-size: 15px;
+      line-height: 1.55;
+      margin: 0;
+      max-width: none;
+    }
+
+    /* Repo */
+    .repo-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 60px;
+      align-items: center;
+    }
+
+    .repo-grid h2 { margin-bottom: 20px; }
+    .repo-grid > div > p { margin-bottom: 28px; max-width: 52ch; }
+
+    .repo-files {
+      margin-top: 44px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .repo-file {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg);
+      font-size: 14px;
+    }
+
+    .repo-file .mono { color: var(--fg); }
+    .repo-file strong { color: var(--muted); font-weight: 500; }
+
+    .repo-block {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .repo-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    .repo-path {
+      font: 500 13px/1 var(--font-mono);
+      color: var(--fg);
+    }
+
+    .repo-body {
+      padding: 24px;
+      overflow-x: auto;
+    }
+
+    .repo-body pre { font-size: 13px; }
+
+    /* Deliverables */
+    .deliverable-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .deliverable-card {
+      display: flex;
+      gap: 18px;
+      align-items: flex-start;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 26px;
+      background: var(--surface);
+    }
+
+    .deliverable-check {
+      flex: 0 0 24px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--signal);
+      color: var(--bg);
+      display: grid;
+      place-items: center;
+    }
+
+    .deliverable-check svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .deliverable-card h4 {
+      font: 700 17px/1.2 var(--font-display);
+      color: var(--fg);
+      margin-bottom: 6px;
+      letter-spacing: -0.01em;
+    }
+
+    .deliverable-card p {
+      font-size: 15px;
+      line-height: 1.5;
+      margin: 0;
+      max-width: none;
+    }
+
+    .kit-banner {
+      margin-top: 44px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 28px 34px;
+      background: var(--surface);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .kit-banner p {
+      font: 600 18px/1.35 var(--font-display);
+      color: var(--fg);
+      letter-spacing: -0.01em;
+      margin: 0;
+      max-width: none;
+    }
+
+    .kit-banner span {
+      color: var(--muted);
+      font: 14px/1.5 var(--font-body);
+    }
+
+    /* Quotes */
+    .quote-feature {
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius-md);
+      padding: 44px;
+      background: var(--surface);
+      margin-bottom: 24px;
+    }
+
+    .quote-feature blockquote {
+      font: 600 32px/1.2 var(--font-display);
+      letter-spacing: -0.02em;
+      color: var(--fg);
+      margin-bottom: 18px;
+    }
+
+    .quote-feature cite {
+      font: 14px/1.4 var(--font-mono);
+      color: var(--muted);
+      font-style: normal;
+    }
+
+    .quote-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .quote-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 28px;
+      background: var(--surface);
+    }
+
+    .quote-card blockquote {
+      font: 500 16px/1.5 var(--font-body);
+      color: var(--fg);
+      margin-bottom: 16px;
+    }
+
+    .quote-card cite {
+      font: 12px/1.4 var(--font-mono);
+      color: var(--muted);
+      font-style: normal;
+    }
+
+    /* FAQ */
+    .faq-list {
+      display: grid;
+      gap: 12px;
+      max-width: 820px;
+    }
+
+    .faq-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .faq-question {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 22px 26px;
+      background: transparent;
+      border: none;
+      color: var(--fg);
+      font: 600 17px/1.3 var(--font-display);
+      letter-spacing: -0.01em;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .faq-question:hover { color: var(--accent); }
+    .faq-question:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent-dim); }
+
+    .faq-icon {
+      flex: 0 0 18px;
+      width: 18px;
+      height: 18px;
+      position: relative;
+    }
+
+    .faq-icon::before,
+    .faq-icon::after {
+      content: '';
+      position: absolute;
+      background: currentColor;
+      transition: transform 0.2s var(--ease-out);
+    }
+
+    .faq-icon::before {
+      width: 12px;
+      height: 2px;
+      top: 8px;
+      left: 3px;
+    }
+
+    .faq-icon::after {
+      width: 2px;
+      height: 12px;
+      top: 3px;
+      left: 8px;
+    }
+
+    .faq-item.open .faq-icon::after { transform: scaleY(0); }
+
+    .faq-answer {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.25s var(--ease-out);
+    }
+
+    .faq-answer-inner {
+      padding: 0 26px 24px;
+    }
+
+    .faq-answer-inner p {
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0;
+      max-width: none;
+    }
+
+    /* Guarantee */
+    .guarantee-box {
+      border: 1px solid var(--border);
+      border-top: 3px solid var(--accent);
+      border-radius: var(--radius-md);
+      padding: 48px;
+      background: var(--surface);
+      text-align: center;
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    .guarantee-box h3 {
+      font-size: 32px;
+      margin: 16px 0 18px;
+    }
+
+    .guarantee-box p {
+      margin: 0 auto 28px;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* VS */
+    .vs-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      align-items: stretch;
+    }
+
+    .vs-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 32px;
+      background: var(--surface);
+    }
+
+    .vs-card.antidote {
+      border-color: var(--accent);
+      background: linear-gradient(180deg, var(--surface) 0%, oklch(16% 0.02 145) 100%);
+    }
+
+    .vs-type {
+      font: 600 11px/1 var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    .vs-card.antidote .vs-type { color: var(--accent); }
+
+    .vs-card h4 {
+      font: 700 20px/1.2 var(--font-display);
+      color: var(--fg);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+
+    .vs-card ul {
+      list-style: none;
+      display: grid;
+      gap: 12px;
+    }
+
+    .vs-card li {
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--muted);
+      padding-left: 20px;
+      position: relative;
+    }
+
+    .vs-card li::before {
+      content: '—';
+      position: absolute;
+      left: 0;
+      color: var(--border);
+    }
+
+    .vs-card.antidote li::before { color: var(--accent); }
+
+    /* Recap */
+    .recap-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .recap-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 28px;
+      background: var(--surface);
+      text-align: center;
+    }
+
+    .recap-num {
+      font: 700 14px/1 var(--font-mono);
+      color: var(--signal);
+      margin-bottom: 14px;
+    }
+
+    .recap-label {
+      font: 600 16px/1.3 var(--font-display);
+      color: var(--fg);
+      letter-spacing: -0.01em;
+    }
+
+    /* CTA */
+    .cta {
+      padding: 110px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      position: relative;
+    }
+
+    .cta .container { position: relative; z-index: 1; }
+    .cta h2 { margin-bottom: 20px; }
+    .cta p { margin: 0 auto 36px; }
+
+    .cta-form {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .cta-form input {
+      flex: 1 1 260px;
+      max-width: 340px;
+      height: 54px;
+      padding: 0 22px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--fg);
+      font: 16px/1 var(--font-body);
+      outline: none;
+    }
+
+    .cta-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+    .cta-form .btn { height: 54px; padding: 0 30px; }
+
+    .cta-guarantee {
+      margin-top: 24px;
+      font: 13px/1.5 var(--font-mono);
+      color: var(--muted);
+    }
+
+    /* Footer */
+    .footer {
+      padding: 52px 0;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 24px;
+    }
+
+    .footer-links a:hover { color: var(--fg); }
+    .footer-links a:focus-visible { outline: none; color: var(--fg); border-bottom: 1px solid var(--accent); }
+
+    /* Section CTA */
+    .section-cta {
+      margin-top: 42px;
+    }
+
+    /* Responsive */
+    @media (min-width: 900px) {
+      .hero-grid { grid-template-columns: 1.1fr 1fr; }
+      .nav-links { display: flex; }
+      .nav-menu-toggle { display: none; }
+      .nav-links .nav-cta { display: none; }
+      .nav > .container > .nav-cta { display: inline-flex; }
+    }
+
+    @media (max-width: 1023px) {
+      .playbook-grid { grid-template-columns: repeat(2, 1fr); }
+      .skill-lib-grid { grid-template-columns: repeat(2, 1fr); }
+      .vs-grid { grid-template-columns: repeat(2, 1fr); }
+      .cost-grid { grid-template-columns: repeat(2, 1fr); }
+      .persona-grid { grid-template-columns: repeat(2, 1fr); }
+      .deliverable-grid { grid-template-columns: 1fr; }
+      .recap-grid { grid-template-columns: repeat(2, 1fr); }
+      .spiral-grid { grid-template-columns: repeat(2, 1fr); }
+      .how-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 699px) {
+      .playbook-grid { grid-template-columns: 1fr; }
+      .skill-lib-grid { grid-template-columns: 1fr; }
+      .vs-grid { grid-template-columns: 1fr; }
+      .cost-grid { grid-template-columns: 1fr; }
+      .persona-grid { grid-template-columns: 1fr; }
+      .recap-grid { grid-template-columns: 1fr; }
+      .spiral-grid { grid-template-columns: 1fr; }
+      .how-grid { grid-template-columns: 1fr; }
+      .how-step::after { display: none; }
+    }
+
+    @media (max-width: 899px) {
+      .skill-panel,
+      .repo-grid,
+      .karpathy-grid,
+      .vibe-vs-agentic-body,
+      .vibe-vs-agentic-header { grid-template-columns: 1fr; }
+      .vibe-vs-agentic-body > div:first-child,
+      .vibe-vs-agentic-header > div:first-child { border-right: 0; border-bottom: 1px solid var(--border); }
+      h1 { font-size: clamp(46px, 13vw, 78px); }
+      .hero { padding-top: 72px; }
+      .quote-large blockquote { font-size: 22px; }
+      .quote-feature { padding: 34px; }
+      .quote-feature blockquote { font-size: 26px; }
+      .quote-grid { grid-template-columns: 1fr; }
+      .section-head { margin-bottom: 44px; }
+      .nav-links.open .nav-cta { margin-top: 8px; }
+      .sw-step::after,
+      .how-step::after { display: none; }
+      .sw-timeline { gap: 16px; margin-bottom: 50px; }
+      .playbook { margin-top: 60px; padding-top: 50px; }
+      .diagnosis-summary { grid-template-columns: 1fr; gap: 24px; padding: 30px; }
+      .diagnosis-summary .summary-lead h3 { font-size: 30px; }
+      section { padding: 80px 0; }
+      .guarantee-box { padding: 34px; }
+      .kit-banner { flex-direction: column; align-items: flex-start; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <nav class="nav" data-od-id="nav" aria-label="Primary">
+    <div class="container">
+      <a href="#" class="logo" data-od-id="nav-logo">
+        <span class="logo-mark" aria-hidden="true">A</span>
+        Antidote
+      </a>
+
+      <button class="nav-menu-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="Open navigation menu" data-od-id="nav-menu-toggle">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <line x1="3" y1="6" x2="19" y2="6" />
+          <line x1="3" y1="11" x2="19" y2="11" />
+          <line x1="3" y1="16" x2="19" y2="16" />
+        </svg>
+      </button>
+
+      <div class="nav-links" id="nav-links" data-od-id="nav-links">
+        <a href="#spiral">The spiral</a>
+        <a href="#diagnosis">Why it hurts</a>
+        <a href="#skillset">The fix</a>
+        <a href="#how">How it works</a>
+        <a href="#karpathy">Karpathy</a>
+        <a href="#repo">Repo</a>
+        <a href="#vs">Why us</a>
+        <a href="#faq">FAQ</a>
+        <a href="#cta" class="btn btn-ghost nav-cta" data-od-id="nav-cta">Get the skillset</a>
+      </div>
+
+      <a href="#cta" class="btn btn-ghost nav-cta" data-od-id="nav-cta-desktop">Get the skillset</a>
+    </div>
+  </nav>
+
+  <main id="main">
+    <header class="hero" data-od-id="hero">
+      <div class="container hero-grid">
+        <div>
+          <p class="eyebrow" data-od-id="hero-eyebrow">Stop context rot before it costs you the repo</p>
+          <h1 data-od-id="hero-headline">Your LLM <span>has AuDHD.</span></h1>
+          <p class="hero-sub" data-od-id="hero-sub">It ships broken code with confidence. It forgets your stack by turn three. And three weeks from now, it will act like your codebase is a stranger.</p>
+          <p class="hero-lead" data-od-id="hero-lead">
+            You did not start vibe coding to become a babysitter. But here you are: re-explaining constraints, reverting "fixes," and copying rules into every prompt. Antidote is the repo-shaped skillset that turns your agent from a brilliant amnesiac into a reliable teammate. Plain files. Progressive skills. Ground truth that persists.
+          </p>
+          <form class="hero-form" data-od-id="hero-form" novalidate>
+            <input type="email" placeholder="dev@yourproject.com" required aria-label="Email for early access" data-od-id="hero-email" />
+            <button type="submit" class="btn btn-primary" data-od-id="hero-submit">Get the antidote scaffold</button>
+            <span class="form-message" role="status" aria-live="polite" data-od-id="hero-form-message"></span>
+          </form>
+          <p class="hero-meta" data-od-id="hero-meta">No spam. Just the repo scaffold + 12 SKILL.md files when we ship.</p>
+        </div>
+
+        <div class="hero-visual" data-od-id="hero-visual">
+          <div class="code-header">
+            <span class="dot y" aria-hidden="true"></span>
+            <span class="dot b" aria-hidden="true"></span>
+            <span class="dot" aria-hidden="true"></span>
+          </div>
+          <pre data-od-id="hero-code"><span class="comment">// your agent's actual cognitive profile</span>
+<span class="kw">class</span> LLM {
+  attention = <span class="str">"uninhibited"</span>;
+  memory    = <span class="str">"context window"</span>;
+  time      = <span class="str">"eternal present"</span>;
+  focus     = <span class="kw">await</span> scaffold();
+}
+
+<span class="comment">// the antidote: external structure</span>
+<span class="kw">import</span> { context, focus, memory, time } <span class="kw">from</span> <span class="str">"@antidote/skills"</span>;
+<span class="kw">await</span> agent.run({ scaffold: <span class="str">"strict"</span> });</pre>
+          <div class="code-header" style="justify-content: flex-end; margin-bottom: 0;">
+            <span class="mono" style="font-size: 12px; color: var(--muted);">context.json · 4.7 KB</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="trust" data-od-id="trust-bar">
+      <div class="container">
+        <ul class="trust-list">
+          <li>Stanford NLP</li>
+          <li>Karpathy's Software 3.0</li>
+          <li>Barkley EF Model</li>
+          <li>12-skill scaffold</li>
+          <li>Git-native</li>
+          <li>Progressive disclosure</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="spiral" id="spiral" data-od-id="spiral">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow danger">The context spiral</p>
+          <h2>You are not bad at prompting. You are missing a memory system.</h2>
+          <p>Every vibe-coded repo follows the same arc. The agent is fast, then fragile, then forgetful, then dangerous. By the time you notice, you are already rebuilding.</p>
+        </div>
+
+        <div class="spiral-grid" data-od-id="spiral-grid">
+          <article class="spiral-card accent" data-od-id="spiral-1">
+            <p class="week">Week 1</p>
+            <h3>The high</h3>
+            <p>Your agent ships a working prototype in an afternoon. It feels like having a senior engineer who never sleeps. You tweet about it.</p>
+          </article>
+          <article class="spiral-card warn" data-od-id="spiral-2">
+            <p class="week">Week 2</p>
+            <h3>Whack-a-mole</h3>
+            <p>Every "fix" breaks something else. It refactors files you told it not to touch. It adds a dependency you explicitly banned. You start copying rules into every prompt.</p>
+          </article>
+          <article class="spiral-card warn" data-od-id="spiral-3">
+            <p class="week">Week 4</p>
+            <h3>Amnesia</h3>
+            <p>New chat, who dis? The agent asks about your architecture again. It rewrites your coworker's pattern. It cannot find the decision you made three turns ago.</p>
+          </article>
+          <article class="spiral-card danger" data-od-id="spiral-4">
+            <p class="week">Month 3</p>
+            <h3>The rewrite</h3>
+            <p>You spend a weekend reading your own codebase like a stranger. The agent has become an expensive junior who needs constant supervision. Vibe coding is now slower than typing.</p>
+          </article>
+        </div>
+
+        <div class="diagnosis-summary" style="margin-top: 44px;">
+          <div class="summary-lead">
+            <p class="eyebrow">The diagnosis</p>
+            <h3>You did not hire a bad engineer.<br>You hired a brilliant one with no working memory.</h3>
+          </div>
+          <div class="summary-body">
+            <p>The agent is not lazy. It is structurally unable to keep your whole project in working memory — and every long prompt, every new chat, every "just fix it" erodes the context it does have.</p>
+            <p>Antidote turns your repo into an external brain. Rules, decisions, and constraints live in files the agent reads before every turn. The spiral stops because the context stops rotting.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="diagnosis" id="diagnosis" data-od-id="diagnosis">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">The science</p>
+          <h2>This is not a metaphor. It is the same failure mode.</h2>
+          <p>LLMs and AuDHD brains share a cognitive profile: high connectivity, low inhibition, patchy time perception, and a working memory that needs external scaffolding. Here is the evidence.</p>
+        </div>
+
+        <div class="stat-grid" data-od-id="stat-grid">
+          <article class="stat-card" data-od-id="stat-card-catattack">
+            <div class="num">300%</div>
+            <h3>Noise wins over signal</h3>
+            <p>Injecting one irrelevant fact into a reasoning prompt increased incorrect answers by over 300% in DeepSeek R1 and OpenAI o1. The models attended to the noise because they have no inhibitory gate.</p>
+            <cite class="stat-source">Liu et al. / Computerworld, 2024</cite>
+          </article>
+          <article class="stat-card" data-od-id="stat-card-lost">
+            <div class="num">−30%</div>
+            <h3>The middle dies</h3>
+            <p>Stanford's 2023 study found performance collapsed by over 30% when critical instructions were buried mid-context — the same positional decay ADHD brains experience when instructions pile up.</p>
+            <cite class="stat-source">Liu et al., Stanford NLP, 2023</cite>
+          </article>
+          <article class="stat-card" data-od-id="stat-card-time">
+            <div class="num">4.3/100</div>
+            <h3>Time is a foreign language</h3>
+            <p>State-of-the-art models score as low as 4.3 out of 100 on temporal perception, with 500–1000% error margins when predicting task duration. Like ADHD time blindness, LLMs live in the eternal present.</p>
+            <cite class="stat-source">Tan, Tan &amp; Soatto, 2026</cite>
+          </article>
+          <article class="stat-card" data-od-id="stat-card-confab">
+            <div class="num">d=0.69+</div>
+            <h3>It confabulates to save face</h3>
+            <p>Adults with ADHD produce significantly higher rates of false memories in DRM paradigms. Both ADHD brains and LLMs over-rely on gist, filling gaps with plausible pattern-completed narratives.</p>
+            <cite class="stat-source">Soliman &amp; Elfar, <em>Journal of Attention Disorders</em>, 2017</cite>
+          </article>
+          <article class="stat-card" data-od-id="stat-card-monotropism">
+            <div class="num">1,110</div>
+            <h3>One tunnel, no door</h3>
+            <p>The Monotropism Questionnaire, validated on 1,110 participants, correlates strongly with both Autism and ADHD. LLMs are synthetic monotropes: brilliant inside one tunnel, brittle when context-switched.</p>
+            <cite class="stat-source">Murray, Lesser &amp; Lawson, 2005</cite>
+          </article>
+          <article class="stat-card" data-od-id="stat-card-context">
+            <div class="num">∞</div>
+            <h3>Context rots for free</h3>
+            <p>Every unbounded chat session drifts. Without a repo holding ground truth, agents overwrite earlier constraints with newer ones — selective forgetting at zero marginal cost.</p>
+            <cite class="stat-source">AI Workflow Standardization Framework</cite>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="cost" id="cost" data-od-id="cost">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow danger">The bill</p>
+          <h2>Context rot is silently billing you every day.</h2>
+          <p>It does not arrive as one catastrophic failure. It bleeds out in micro-transactions: the re-explanation, the reverted refactor, the "wait, why did we do it this way?" You are not paying with money yet. You are paying with momentum you cannot recover.</p>
+        </div>
+
+        <div class="cost-grid" data-od-id="cost-grid">
+          <article class="cost-card" data-od-id="cost-time">
+            <h4>Time you cannot invoice</h4>
+            <p>Re-explaining architecture, re-stating constraints, re-discovering decisions you made three turns ago. Every forgotten rule becomes a meeting that should have been a file read.</p>
+          </article>
+          <article class="cost-card" data-od-id="cost-quality">
+            <h4>Code you cannot trust</h4>
+            <p>Agents rewrite working code to match the last thing they heard. Guardrails slip. Style guides evaporate. The diff grows faster than the feature.</p>
+          </article>
+          <article class="cost-card" data-od-id="cost-momentum">
+            <h4>Momentum you cannot recover</h4>
+            <p>Context switching kills deep work. When your agent switches with you, you spend the first twenty minutes of every session reconstructing state instead of shipping.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="skillset" id="skillset" data-od-id="skillset">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow accent">The fix</p>
+          <h2>Finally. Skills that remember so you do not have to.</h2>
+          <p>Stop pasting prompts into chat. Antidote turns your repo into a cognitive prosthetic: files that load only when the task matches, rules that inject at the point of generation, and memory that lives in git — not in a chat window that disappears.</p>
+        </div>
+
+        <div class="skill-tabs" role="tablist" aria-label="Skill tabs" data-od-id="skill-tabs">
+          <button class="tab" role="tab" aria-selected="true" aria-controls="skill-context" id="tab-context" data-target="skill-context" data-od-id="tab-context" tabindex="0">Context Lock</button>
+          <button class="tab" role="tab" aria-selected="false" aria-controls="skill-focus" id="tab-focus" data-target="skill-focus" data-od-id="tab-focus" tabindex="-1">Focus Rails</button>
+          <button class="tab" role="tab" aria-selected="false" aria-controls="skill-memory" id="tab-memory" data-target="skill-memory" data-od-id="tab-memory" tabindex="-1">External Memory</button>
+          <button class="tab" role="tab" aria-selected="false" aria-controls="skill-time" id="tab-time" data-target="skill-time" data-od-id="tab-time" tabindex="-1">Time Anchors</button>
+        </div>
+
+        <div class="skill-panel active" id="skill-context" role="tabpanel" aria-labelledby="tab-context" data-od-id="panel-context">
+          <div>
+            <h3>Context Lock</h3>
+            <p>Your agent forgets constraints by turn three. Context Lock re-injects the rules exactly where generation happens, with verification against project ground truth.</p>
+            <ul class="skill-list">
+              <li>Point-of-performance prompt injection</li>
+              <li>Per-task constraint manifests</li>
+              <li>Auto-verification against project ground truth</li>
+            </ul>
+          </div>
+          <div class="skill-code">
+            <pre><span class="comment">// antidote/context.lock</span>
+<span class="kw">export const</span> contextLock = {
+  rules: <span class="str">"CLAUDE.md"</span>,
+  scope: <span class="str">"before_generation"</span>,
+  priority: <span class="str">"recency_bias"</span>,
+  verify: <span class="kw">true</span>
+};</pre>
+          </div>
+        </div>
+
+        <div class="skill-panel" id="skill-focus" role="tabpanel" aria-labelledby="tab-focus" data-od-id="panel-focus" hidden>
+          <div>
+            <h3>Focus Rails</h3>
+            <p>It chases side-quests. Focus Rails is body-doubling for agents: topic boundaries, monotropic session contracts, and automatic rejection of off-task requests.</p>
+            <ul class="skill-list">
+              <li>Topic-boundary detection</li>
+              <li>Monotropic session contracts</li>
+              <li>Distraction rejection prompts</li>
+            </ul>
+          </div>
+          <div class="skill-code">
+            <pre><span class="comment">// antidote/focus.rails</span>
+<span class="kw">export const</span> focusRails = {
+  tunnel: <span class="str">"current_task"</span>,
+  on_drift: <span class="str">"reject_and_return"</span>,
+  max_side_quests: <span class="num">0</span>
+};</pre>
+          </div>
+        </div>
+
+        <div class="skill-panel" id="skill-memory" role="tabpanel" aria-labelledby="tab-memory" data-od-id="panel-memory" hidden>
+          <div>
+            <h3>External Memory</h3>
+            <p>Your chat history is not a memory system. External Memory moves decisions, todos, and brand rules into repo-native files the agent retrieves by task.</p>
+            <ul class="skill-list">
+              <li>Markdown + YAML memory files</li>
+              <li>Granular retrieval by task and scope</li>
+              <li>Atomic micro-steps instead of mega-prompts</li>
+            </ul>
+          </div>
+          <div class="skill-code">
+            <pre><span class="comment">// antidote/memory.recall</span>
+<span class="kw">export const</span> memoryRecall = {
+  decisions: <span class="str">"memory/decisions.md"</span>,
+  todos: <span class="str">"memory/todos.md"</span>,
+  brand: <span class="str">"memory/brand-spec.md"</span>,
+  chunk: <span class="str">"decision"</span>
+};</pre>
+          </div>
+        </div>
+
+        <div class="skill-panel" id="skill-time" role="tabpanel" aria-labelledby="tab-time" data-od-id="panel-time" hidden>
+          <div>
+            <h3>Time Anchors</h3>
+            <p>Deadlines are abstract until they are not. Time Anchors stamp every prompt with explicit now/deadline/cadence so time blindness stops shipping as a bug.</p>
+            <ul class="skill-list">
+              <li>Timestamped context headers</li>
+              <li>Relative-time calculators</li>
+              <li>Prospective planning checklists</li>
+            </ul>
+          </div>
+          <div class="skill-code">
+            <pre><span class="comment">// antidote/time.anchor</span>
+<span class="kw">export const</span> timeAnchor = {
+  now: <span class="str">"2026-07-09T06:12Z"</span>,
+  deadline: <span class="str">"2026-07-16T23:59Z"</span>,
+  remaining: <span class="str">"7 days, 17 hours"</span>,
+  cadence: <span class="str">"daily_check_in"</span>
+};</pre>
+          </div>
+        </div>
+
+        <div class="section-cta" data-od-id="skillset-cta">
+          <a href="#skill-library" class="btn btn-primary">See all 12 skills</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="skill-library" id="skill-library" data-od-id="skill-library">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">The complete kit</p>
+          <h2>12 skills. Every failure mode. One repo.</h2>
+          <p>Each skill is a progressive-disclosure file that loads only when the task matches. You do not paste prompts. You commit architecture.</p>
+        </div>
+
+        <div class="skill-lib-grid" data-od-id="skill-lib-grid">
+          <article class="skill-lib-card" data-od-id="lib-context-lock">
+            <p class="problem">Forgets constraints mid-task</p>
+            <h4>Context Lock</h4>
+            <p>Re-injects rules at the point of generation so the agent cannot silently drop guardrails.</p>
+          </article>
+          <article class="skill-lib-card" data-od-id="lib-focus-rails">
+            <p class="problem">Chases side-quests</p>
+            <h4>Focus Rails</h4>
+            <p>Body-doubles the agent inside a monotropic tunnel and rejects off-task requests automatically.</p>
+          </article>
+          <article class="skill-lib-card" data-od-id="lib-external-memory">
+            <p class="problem">Loses decisions across turns</p>
+            <h4>External Memory</h4>
+            <p>Moves state out of chat history into repo-native files retrieved by task, not by recency.</p>
+          </article>
+          <article class="skill-lib-card" data-od-id="lib-time-anchors">
+            <p class="problem">Time-blind planning</p>
+            <h4>Time Anchors</h4>
+            <p>Stamps every prompt with now/deadline/cadence so deadlines stop arriving as surprises.</p>
+          </article>
+          <article class="skill-lib-card" data-od-id="lib-agents-router">
+            <p class="problem">Wrong agent mode selected</p>
+            <h4>AGENTS.md Router</h4>
+            <p>Routes the agent to the right skill set and mode based on file path and task intent.</p>
+          </article>
+          <article class="skill-lib-card" data-od-id="lib-claude-compass">
+            <p class="problem">Global guardrails missing</p>
+            <h4>CLAUDE.md Compass</h4>
+            <p>One file for architecture, constraints, imports, and success criteria — read before any code.</p>
+          </article>
+          <article class="skill-lib-card" data-od-id="lib-llm-wiki">
+            <p class="problem">Same question, different answers</p>
+            <h4>LLM Wiki</h4>
+            <p>Canonical definitions for domain terms, conventions, and prior decisions the agent can cite.</p>
+          </article>
+          <article class="skill-lib-card" data-od-id="lib-bounded-contexts">
+            <p class="problem">Feature creep across modules</p>
+            <h4>Bounded Contexts</h4>
+            <p>Keeps each skill scoped to its module so the agent stops leaking logic across boundaries.</p>
+          </article>
+          <article class="skill-lib-card" data-od-id="lib-think-before-code">
+            <p class="problem">Jumps straight to implementation</p>
+            <h4>Think Before Code</h4>
+            <p>Forces task interpretation, assumptions, and trade-offs before any file is touched.</p>
+          </article>
+          <article class="skill-lib-card" data-od-id="lib-surgical-changes">
+            <p class="problem">Reformats the whole repo</p>
+            <h4>Surgical Changes</h4>
+            <p>Restricts edits to targeted files and forbids renames, reorgs, or stylistic drift.</p>
+          </article>
+          <article class="skill-lib-card" data-od-id="lib-goal-driven">
+            <p class="problem">No exit criteria</p>
+            <h4>Goal-Driven Loop</h4>
+            <p>Defines a testable success criterion before execution and runs verification before commit.</p>
+          </article>
+          <article class="skill-lib-card" data-od-id="lib-mechanical-backpressure">
+            <p class="problem">No verification gate</p>
+            <h4>Mechanical Backpressure</h4>
+            <p>Runs tests, lint, and type checks after every change; blocks commits on failure.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="how" id="how" data-od-id="how">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">How it works</p>
+          <h2>Install a memory system in three commits.</h2>
+          <p>No new SaaS. No API keys. No framework to learn. Just files that load in the right order — so your agent reads the spec before it reads your prompt.</p>
+        </div>
+
+        <div class="how-grid" data-od-id="how-grid">
+          <div class="how-step" data-od-id="how-step-1">
+            <span class="how-num">1</span>
+            <h3>Commit the scaffold</h3>
+            <p>Copy the Antidote folder into your repo. AGENTS.md routes the agent. CLAUDE.md sets global guardrails. SPEC.md holds ground truth.</p>
+          </div>
+          <div class="how-step" data-od-id="how-step-2">
+            <span class="how-num">2</span>
+            <h3>Load only what you need</h3>
+            <p>Progressive disclosure means each SKILL.md stays out of context until its metadata matches the task. No bloat. No selective forgetting.</p>
+          </div>
+          <div class="how-step" data-od-id="how-step-3">
+            <span class="how-num">3</span>
+            <h3>Run with ground truth</h3>
+            <p>Every agent pass reads the same context.json, memory files, and constraint manifests. Decisions persist. Drift dies.</p>
+          </div>
+        </div>
+
+        <div class="how-cta" data-od-id="how-cta">
+          <a href="#repo" class="btn btn-primary">Get the repo scaffold</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="personas" id="personas" data-od-id="personas">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Who it's for</p>
+          <h2>If your brain needs scaffolding, your repo does too.</h2>
+          <p>Antidote is built for anyone who thinks fast, connects hard, and loses the thread. That includes the agent you are paying to code.</p>
+        </div>
+
+        <div class="persona-grid" data-od-id="persona-grid">
+          <article class="persona-card" data-od-id="persona-solo">
+            <p class="role">Solo founder / indie hacker</p>
+            <h4>You are the whole team.</h4>
+            <p>You context-switch between product, marketing, and infrastructure. Your agent switches with you. Without a shared brain, every session starts from zero.</p>
+            <p class="pain">"I keep re-explaining my own stack."</p>
+          </article>
+          <article class="persona-card" data-od-id="persona-team">
+            <p class="role">Engineering team</p>
+            <h4>You ship through agents now.</h4>
+            <p>Multiple developers prompt the same codebase. Each agent invents its own conventions. Ground truth lives in slack threads instead of files.</p>
+            <p class="pain">"The agent reverted my coworker's pattern because nobody wrote it down."</p>
+          </article>
+          <article class="persona-card" data-od-id="persona-agency">
+            <p class="role">Consultant / agency</p>
+            <h4>You parachute into repos.</h4>
+            <p>Every client has different rules, dependencies, and sacred cows. You cannot afford to discover them by breaking them.</p>
+            <p class="pain">"I asked the agent to refactor and it deleted the client's weird auth flow."</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="karpathy" id="karpathy" data-od-id="karpathy">
+      <div class="container">
+        <div class="section-head karpathy-intro">
+          <p class="eyebrow">Software 3.0</p>
+          <h2>Karpathy saw this coming. Your repo is the only thing that can fix it.</h2>
+          <p>English is the hottest programming language. But English without context is just confident noise. Agentic engineering only works when the agent can reason inside a spec that does not evaporate between chats.</p>
+        </div>
+
+        <div class="sw-timeline" data-od-id="sw-timeline">
+          <div class="sw-step" data-od-id="sw-step-1">
+            <span class="sw-version">1.0</span>
+            <h4>Explicit rules</h4>
+            <p>Humans write every instruction in Python, C++, or JS. Deterministic, readable, and bounded by human logic.</p>
+          </div>
+          <div class="sw-step" data-od-id="sw-step-2">
+            <span class="sw-version">2.0</span>
+            <h4>Learned weights</h4>
+            <p>Datasets + architectures + gradient descent compile behavior into high-dimensional parameters for perception tasks.</p>
+          </div>
+          <div class="sw-step" data-od-id="sw-step-3">
+            <span class="sw-version accent">3.0</span>
+            <h4>Natural language runtime</h4>
+            <p>LLMs become general-purpose differentiable computers programmed in English. Context is the compiler.</p>
+          </div>
+        </div>
+
+        <div class="karpathy-grid">
+          <div>
+            <div class="quote-large" data-od-id="quote-karpathy-language">
+              <blockquote>“The hottest new programming language is English.”</blockquote>
+              <cite>— Andrej Karpathy on Software 3.0</cite>
+            </div>
+
+            <p>English is the runtime, but context is the compiler. Without a repo that holds the spec, the decisions, and the constraints, your agent is just another dopamine-drunk brain trying to guess what you meant.</p>
+
+            <div class="quote-large" data-od-id="quote-karpathy-outsourcing">
+              <blockquote>“You can outsource your thinking, but you can't outsource your understanding.”</blockquote>
+              <cite>— Karpathy's warning on agentic engineering</cite>
+            </div>
+
+            <p>Karpathy calls the modern LLM "jagged intelligence": brilliant at pattern matching, brittle at sequential logic. The antidote is not more prompting. It is context engineering — explicit handoffs, bounded tasks, and mechanical verification.</p>
+
+            <div class="quote-large" data-od-id="quote-karpathy-vibe">
+              <blockquote>“Vibe coding is passé. The future is agentic engineering.”</blockquote>
+              <cite>— Karpathy, Sequoia Ascent 2026</cite>
+            </div>
+          </div>
+
+          <div class="karpathy-cards" data-od-id="karpathy-cards">
+            <div class="k-card" data-od-id="k-card-spec">
+              <h4>CLAUDE.md + SPEC.md</h4>
+              <p>Agent-native documentation that tells the model the architecture, ports, constraints, and success criteria before it writes a single line.</p>
+            </div>
+            <div class="k-card" data-od-id="k-card-jagged">
+              <h4>Jagged intelligence</h4>
+              <p>LLMs are spiky. Brilliant at pattern matching, brittle at sequential logic. The skillset wraps the spikes in verification loops and micro-steps.</p>
+            </div>
+            <div class="k-card" data-od-id="k-card-context">
+              <h4>Context engineering</h4>
+              <p>Prompt engineering is dead for agents. Context engineering is what works: clear handoffs, trimmed history, and structured metadata between agent passes.</p>
+            </div>
+            <div class="k-card" data-od-id="k-card-verify">
+              <h4>Verify before merge</h4>
+              <p>Every change runs through a validation gate. No Δ ≤ 0 survives. The same mechanical discipline that keeps AutoResearch from collapsing into vibe loops.</p>
+            </div>
+            <div class="k-card" data-od-id="k-card-thin">
+              <h4>Thin harness, fat skills</h4>
+              <p>Garry Tan's architectural rule: keep the orchestrator tiny, push all intelligence into skill files. The skillset is the fat-skill layer your repo was missing.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="vibe-vs-agentic" data-od-id="vibe-vs-agentic">
+          <div class="vibe-vs-agentic-header">
+            <div>Vibe coding</div>
+            <div>Agentic engineering</div>
+          </div>
+          <div class="vibe-vs-agentic-body">
+            <div>
+              <span class="comment">// chat → patch → chat → patch</span><br>
+              <span class="kw">while</span> (true) {<br>
+              &nbsp;&nbsp;<span class="kw">await</span> chat(<span class="str">"fix it"</span>);<br>
+              &nbsp;&nbsp;context_rot++;<br>
+              }
+            </div>
+            <div>
+              <span class="comment">// spec → plan → verify → commit</span><br>
+              <span class="kw">while</span> (goal.unmet) {<br>
+              &nbsp;&nbsp;<span class="kw">await</span> plan.read(<span class="str">"fix_plan.md"</span>);<br>
+              &nbsp;&nbsp;<span class="kw">await</span> verify();<br>
+              &nbsp;&nbsp;<span class="kw">await</span> commit();<br>
+              }
+            </div>
+          </div>
+        </div>
+
+        <div class="playbook" data-od-id="playbook">
+          <div class="section-head small">
+            <p class="eyebrow signal">Agentic engineering playbook</p>
+            <h3>The six non-negotiables</h3>
+          </div>
+          <div class="playbook-grid">
+            <div class="playbook-card" data-od-id="playbook-think">
+              <span class="playbook-num">01</span>
+              <h4>Think before coding</h4>
+              <p>State the task interpretation explicitly. Surface assumptions and trade-offs before editing files. Ask one clarifying question if guessing introduces extreme risk.</p>
+            </div>
+            <div class="playbook-card" data-od-id="playbook-simple">
+              <span class="playbook-num">02</span>
+              <h4>Simplicity first</h4>
+              <p>Write the smallest code possible. Avoid unrequested features, configurability, or custom abstractions. Deletions are restricted; wildcard deletes are blocked.</p>
+            </div>
+            <div class="playbook-card" data-od-id="playbook-surgical">
+              <span class="playbook-num">03</span>
+              <h4>Surgical changes</h4>
+              <p>Restrict changes to targeted files. Never reformat, rename, or reorganize adjacent code. Match local formatting and clean up only your own unused imports.</p>
+            </div>
+            <div class="playbook-card" data-od-id="playbook-verify">
+              <span class="playbook-num">04</span>
+              <h4>Verify before merge</h4>
+              <p>Run the test suite, linter, and type checker after every change. If verification fails, revert and replan. Green checks are the only acceptable exit state.</p>
+            </div>
+            <div class="playbook-card" data-od-id="playbook-goal">
+              <span class="playbook-num">05</span>
+              <h4>Goal-driven execution</h4>
+              <p>Establish an explicit, testable success criterion before running code. Run verification checks locally. Summarize changes clearly before checkpoint commits.</p>
+            </div>
+            <div class="playbook-card" data-od-id="playbook-context">
+              <span class="playbook-num">06</span>
+              <h4>Context handoffs</h4>
+              <p>Pass structured metadata between agent passes, not raw chat logs. Update memory files after each turn so the next pass starts from ground truth.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="repo" id="repo" data-od-id="repo">
+      <div class="container repo-grid">
+        <div>
+          <p class="eyebrow">Repo as prosthetic</p>
+          <h2>Your repo becomes the external brain your agent was born without.</h2>
+          <p>Every agent pass reads the same context.json, memory files, and constraint manifests. Decisions persist. Drift dies. You stop re-explaining yourself in every single chat.</p>
+          <a href="#cta" class="btn btn-primary" data-od-id="repo-cta">Get the scaffold</a>
+
+          <div class="repo-files" data-od-id="repo-files">
+            <div class="repo-file"><span class="mono">AGENTS.md</span><strong>Thin router for the agent</strong></div>
+            <div class="repo-file"><span class="mono">CLAUDE.md</span><strong>Global guardrails + @-imports</strong></div>
+            <div class="repo-file"><span class="mono">SPEC.md</span><strong>Ground-truth constraints</strong></div>
+            <div class="repo-file"><span class="mono">context.json</span><strong>Injection order + rules</strong></div>
+            <div class="repo-file"><span class="mono">memory/</span><strong>Decisions, todos, brand</strong></div>
+            <div class="repo-file"><span class="mono">skills/</span><strong>Progressive-disclosure SKILL.md files</strong></div>
+            <div class="repo-file"><span class="mono">.cursor/rules/</span><strong>Deterministic .mdc triggers</strong></div>
+          </div>
+        </div>
+
+        <div class="repo-block" data-od-id="repo-block">
+          <div class="repo-toolbar">
+            <span class="repo-path">.antidote/context.json</span>
+            <span class="mono" style="font-size: 12px; color: var(--muted);">JSON</span>
+          </div>
+          <div class="repo-body">
+  <pre>{
+    <span class="k">"project"</span>: <span class="str">"my-app"</span>,
+    <span class="k">"constraints"</span>: [<span class="str">"no_new_deps"</span>, <span class="str">"ts_first"</span>],
+    <span class="k">"memory"</span>: {
+      <span class="k">"decisions"</span>: <span class="str">"memory/decisions.md"</span>,
+      <span class="k">"todos"</span>: <span class="str">"memory/todos.md"</span>,
+      <span class="k">"style"</span>: <span class="str">"memory/brand-spec.md"</span>
+    },
+    <span class="k">"inject_order"</span>: [<span class="str">"rules"</span>, <span class="str">"memory"</span>, <span class="str">"task"</span>],
+    <span class="k">"verify"</span>: <span class="kw">true</span>
+  }</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="deliverables" id="deliverables" data-od-id="deliverables">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">What you get</p>
+          <h2>The complete early-access kit.</h2>
+          <p>Not a course. Not a community. A working repo architecture you can commit today — and every skill file you need to make it stick.</p>
+        </div>
+
+        <div class="deliverable-grid" data-od-id="deliverable-grid">
+          <article class="deliverable-card" data-od-id="deliverable-scaffold">
+            <span class="deliverable-check"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="5 12 10 17 19 8"/></svg></span>
+            <div>
+              <h4>Repo scaffold</h4>
+              <p>AGENTS.md, CLAUDE.md, SPEC.md, context.json, and the folder structure that holds ground truth.</p>
+            </div>
+          </article>
+          <article class="deliverable-card" data-od-id="deliverable-skills">
+            <span class="deliverable-check"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="5 12 10 17 19 8"/></svg></span>
+            <div>
+              <h4>12 SKILL.md files</h4>
+              <p>Every skill ships as a progressive-disclosure file with Discovery, Activation, and Execution tiers.</p>
+            </div>
+          </article>
+          <article class="deliverable-card" data-od-id="deliverable-memory">
+            <span class="deliverable-check"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="5 12 10 17 19 8"/></svg></span>
+            <div>
+              <h4>Memory templates</h4>
+              <p>Decisions, todos, brand-spec, and runbook templates the agent can read and update.</p>
+            </div>
+          </article>
+          <article class="deliverable-card" data-od-id="deliverable-cursor">
+            <span class="deliverable-check"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="5 12 10 17 19 8"/></svg></span>
+            <div>
+              <h4>.cursor/rules</h4>
+              <p>Deterministic .mdc triggers so Cursor loads the right skill automatically by file path.</p>
+            </div>
+          </article>
+          <article class="deliverable-card" data-od-id="deliverable-updates">
+            <span class="deliverable-check"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="5 12 10 17 19 8"/></svg></span>
+            <div>
+              <h4>Skill updates</h4>
+              <p>New skills and refinements shipped as git-diffs you can review, not black-box prompt changes.</p>
+            </div>
+          </article>
+          <article class="deliverable-card" data-od-id="deliverable-guide">
+            <span class="deliverable-check"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="5 12 10 17 19 8"/></svg></span>
+            <div>
+              <h4>Onboarding guide</h4>
+              <p>A 10-minute setup guide that teaches your agent to read the scaffold before it reads your prompt.</p>
+            </div>
+          </article>
+        </div>
+
+        <div class="kit-banner" data-od-id="kit-banner">
+          <div>
+            <p>One kit. Everything your agent needs to remember.</p>
+            <span>12 skills · 7 scaffold files · 4 memory templates · 1 agent runbook. No subscriptions. No platform lock-in. Commit them and your agent changes behavior on the next turn.</span>
+          </div>
+          <a href="#cta" class="btn btn-primary">Join early access</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="quotes" id="quotes" data-od-id="quotes">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Evidence</p>
+          <h2>You are not imagining the drift.</h2>
+        </div>
+
+        <div class="quote-feature" data-od-id="quote-feature-barkley">
+          <blockquote>“The rules of behavior must be placed precisely where the behavior is needed.”</blockquote>
+          <cite>— Dr. Russell Barkley, <em>ADHD Executive Function &amp; Self-Regulation</em></cite>
+        </div>
+
+        <div class="quote-grid">
+          <article class="quote-card" data-od-id="quote-working-memory">
+            <blockquote>“ADHD is fundamentally a disorder of performance and working memory rather than a simple deficit of attention.”</blockquote>
+            <cite>— Barkley model of executive functioning; meta-analyses Cohen’s <em>d</em> = 0.69–0.74</cite>
+          </article>
+          <article class="quote-card" data-od-id="quote-memory">
+            <blockquote>“Memory cannot be treated as an infinite, flawless transcript; it must be managed as a highly constrained, easily degraded resource.”</blockquote>
+            <cite>— Liu et al., <em>Lost in the Middle: How Language Models Use Long Contexts</em>, Stanford 2023</cite>
+          </article>
+          <article class="quote-card" data-od-id="quote-confab">
+            <blockquote>“LLMs do not hallucinate; rather, they confabulate — generating plausible narratives to mask a lack of underlying truth.”</blockquote>
+            <cite>— PLOS Digital Health, 2023; <em>Hallucination or Confabulation?</em></cite>
+          </article>
+          <article class="quote-card" data-od-id="quote-progressive">
+            <blockquote>“Rather than forcing a language model to ingest every operational rule simultaneously, modern architectural frameworks rely on progressive disclosure.”</blockquote>
+            <cite>— AI Workflow Standardization Framework, 2026</cite>
+          </article>
+          <article class="quote-card" data-od-id="quote-monotropism">
+            <blockquote>“The autistic mind functions as an interest system where attention is pulled into an attention tunnel.”</blockquote>
+            <cite>— Murray, Lesser &amp; Lawson, Monotropism theory, 2005; MQ cohort <em>n</em> = 1,110</cite>
+          </article>
+          <article class="quote-card" data-od-id="quote-explicit">
+            <blockquote>“What neurotypical society pathologizes as ‘oversharing’ or ‘being too literal’ is the exact methodology required to ground a language model in reality.”</blockquote>
+            <cite>— Autistic communication research / LLM alignment, 2024</cite>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="vs" id="vs" data-od-id="vs">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Competitor-proof</p>
+          <h2>DeepChat gives you a chat. Antidote gives you a brain.</h2>
+          <p>DeepChat is a slick AI assistant: chat, images, video, fast replies. It is good at one-turn magic. It is not built to remember your repo next month. If you are vibe-coding a real product, you do not need another chat window. You need a context architecture that survives past this session.</p>
+        </div>
+
+        <div class="vs-grid" data-od-id="vs-grid">
+          <article class="vs-card" data-od-id="vs-deepchat">
+            <p class="vs-type">DeepChat</p>
+            <h4>A consumer AI assistant</h4>
+            <ul>
+              <li>Chat, image, and video generation in one window</li>
+              <li>Great for one-off tasks and quick answers</li>
+              <li>Cannot see your repo or persist project rules</li>
+            </ul>
+          </article>
+          <article class="vs-card" data-od-id="vs-prompt-libs">
+            <p class="vs-type">Prompt libraries</p>
+            <h4>A pile of copy-paste prompts</h4>
+            <ul>
+              <li>Flat text, no context management</li>
+              <li>Bloats the context window</li>
+              <li>Cannot verify against project truth</li>
+            </ul>
+          </article>
+          <article class="vs-card antidote" data-od-id="vs-antidote">
+            <p class="vs-type">Antidote</p>
+            <h4>Repo-native context architecture</h4>
+            <ul>
+              <li>Plain files, any agent can read them</li>
+              <li>Progressive disclosure keeps context lean</li>
+              <li>Ground truth lives in your git history</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="guarantee" id="guarantee" data-od-id="guarantee">
+      <div class="container">
+        <div class="guarantee-box" data-od-id="guarantee-box">
+          <p class="eyebrow signal">Risk reversal</p>
+          <h3>If your agent is not more reliable after the first three commits, keep the scaffold and walk away.</h3>
+          <p>We are not selling a course or a community. We are selling files that either change how your agent behaves or they do not. If they do not, you keep everything. No charge. No guilt. No platform to cancel.</p>
+          <a href="#cta" class="btn btn-primary">Get early access</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="recap" data-od-id="recap">
+      <div class="container">
+        <div class="section-head small">
+          <p class="eyebrow">What changes</p>
+          <h3>From vibe loop to agentic loop.</h3>
+        </div>
+        <div class="recap-grid" data-od-id="recap-grid">
+          <div class="recap-item" data-od-id="recap-1">
+            <div class="recap-num">01</div>
+            <div class="recap-label">Re-explaining stops</div>
+          </div>
+          <div class="recap-item" data-od-id="recap-2">
+            <div class="recap-num">02</div>
+            <div class="recap-label">Rules persist in git</div>
+          </div>
+          <div class="recap-item" data-od-id="recap-3">
+            <div class="recap-num">03</div>
+            <div class="recap-label">Verification runs first</div>
+          </div>
+          <div class="recap-item" data-od-id="recap-4">
+            <div class="recap-num">04</div>
+            <div class="recap-label">Context window stays lean</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="faq" id="faq" data-od-id="faq">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">FAQ</p>
+          <h2>Objections we would have.</h2>
+          <p>If you are still reading, you are probably wondering about one of these.</p>
+        </div>
+
+        <div class="faq-list" data-od-id="faq-list">
+          <div class="faq-item" data-od-id="faq-1">
+            <button class="faq-question" aria-expanded="false" data-od-id="faq-q-1">
+              Is this just a prompt library?
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">
+                <p>No. Prompt libraries dump text into context and hope. Antidote changes the environment the agent reasons inside: files that load by task, ground truth that persists in git, and verification gates that run before every commit. The prompts are a side effect of the architecture.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" data-od-id="faq-2">
+            <button class="faq-question" aria-expanded="false" data-od-id="faq-q-2">
+              Do I need to use Claude / Cursor / a specific agent?
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">
+                <p>No. The scaffold is plain Markdown, JSON, and SKILL.md files. Any agent that can read files can use it. We include .cursor/rules for deterministic Cursor triggers, but the same files work with Claude Code, Codex, Gemini CLI, or whatever ships next month.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" data-od-id="faq-3">
+            <button class="faq-question" aria-expanded="false" data-od-id="faq-q-3">
+              Will this slow me down?
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">
+                <p>It slows the first turn. Every turn after that is faster because the agent already knows the rules. The real slowdown is re-explaining constraints, reverting bad refactors, and debugging code that violated decisions you forgot you made.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" data-od-id="faq-4">
+            <button class="faq-question" aria-expanded="false" data-od-id="faq-q-4">
+              What if my project is small?
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">
+                <p>Small projects rot fastest because there is no architecture to catch the drift. A minimal scaffold pays for itself the first time the agent almost deletes your auth flow or adds a dependency you explicitly banned.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" data-od-id="faq-5">
+            <button class="faq-question" aria-expanded="false" data-od-id="faq-q-5">
+              How is this different from DeepChat, Custom GPTs, or Gems?
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">
+                <p>DeepChat, Custom GPTs, and Gems live inside a chat window. They cannot see your repo, cannot run your tests, and forget instructions after a few turns. Antidote lives in your git history. It is ground truth, not a chat wrapper.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="faq-item" data-od-id="faq-6">
+            <button class="faq-question" aria-expanded="false" data-od-id="faq-q-6">
+              Is this only for people with ADHD?
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer">
+              <div class="faq-answer-inner">
+                <p>No. The scaffolding helps anyone who works with LLMs. We use the AuDHD frame because it explains the model's failure modes better than any corporate AI glossary: attention without inhibition, memory without persistence, time without horizon. If that sounds like your agent, you need the antidote.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta" id="cta" data-od-id="cta">
+      <div class="container">
+        <p class="eyebrow signal">Stop the spiral</p>
+        <h2>Get the antidote before your next commit.</h2>
+        <p>Join early access. Get the repo scaffold + all 12 SKILL.md files. Turn your agent into a teammate that remembers the rules.</p>
+        <form class="cta-form" novalidate data-od-id="cta-form">
+          <input type="email" placeholder="dev@yourproject.com" required aria-label="Email for early access" data-od-id="cta-email" />
+          <button type="submit" class="btn btn-primary" data-od-id="cta-submit">Get the antidote scaffold</button>
+          <span class="form-message" role="status" aria-live="polite" data-od-id="cta-form-message"></span>
+        </form>
+        <p class="cta-guarantee">No credit card required. Unsubscribe anytime. Built for brains that need structure.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" data-od-id="footer">
+    <div class="logo">
+      <span class="logo-mark" aria-hidden="true">A</span>
+      Antidote
+    </div>
+    <div class="footer-links">
+      <a href="#spiral">The spiral</a>
+      <a href="#diagnosis">Why it hurts</a>
+      <a href="#skillset">The fix</a>
+      <a href="#how">How it works</a>
+      <a href="#karpathy">Karpathy</a>
+      <a href="#repo">Repo</a>
+      <a href="#vs">Why us</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <p class="mono">Built for brains that need structure.</p>
+  </footer>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // Mobile nav
+      var menuToggle = document.querySelector('.nav-menu-toggle');
+      var navLinks = document.getElementById('nav-links');
+
+      if (menuToggle && navLinks) {
+        menuToggle.addEventListener('click', function () {
+          var expanded = menuToggle.getAttribute('aria-expanded') === 'true';
+          menuToggle.setAttribute('aria-expanded', String(!expanded));
+          navLinks.classList.toggle('open', !expanded);
+          menuToggle.setAttribute('aria-label', expanded ? 'Open navigation menu' : 'Close navigation menu');
+        });
+
+        navLinks.querySelectorAll('a').forEach(function (link) {
+          link.addEventListener('click', function () {
+            menuToggle.setAttribute('aria-expanded', 'false');
+            navLinks.classList.remove('open');
+            menuToggle.setAttribute('aria-label', 'Open navigation menu');
+          });
+        });
+      }
+
+      // Skill tabs with keyboard support
+      var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+      var panels = Array.prototype.slice.call(document.querySelectorAll('.skill-panel'));
+
+      function activate(targetId) {
+        panels.forEach(function (p) {
+          var isActive = p.id === targetId;
+          p.classList.toggle('active', isActive);
+          p.hidden = !isActive;
+        });
+        tabs.forEach(function (t) {
+          var selected = t.dataset.target === targetId;
+          t.setAttribute('aria-selected', String(selected));
+          t.tabIndex = selected ? 0 : -1;
+          if (selected) t.focus();
+        });
+      }
+
+      tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+          activate(tab.dataset.target);
+        });
+
+        tab.addEventListener('keydown', function (e) {
+          var index = tabs.indexOf(tab);
+          var nextIndex;
+
+          if (e.key === 'ArrowRight') {
+            nextIndex = (index + 1) % tabs.length;
+          } else if (e.key === 'ArrowLeft') {
+            nextIndex = (index - 1 + tabs.length) % tabs.length;
+          } else if (e.key === 'Home') {
+            nextIndex = 0;
+          } else if (e.key === 'End') {
+            nextIndex = tabs.length - 1;
+          } else {
+            return;
+          }
+
+          e.preventDefault();
+          activate(tabs[nextIndex].dataset.target);
+        });
+      });
+
+      // FAQ accordion
+      var faqItems = Array.prototype.slice.call(document.querySelectorAll('.faq-item'));
+
+      faqItems.forEach(function (item) {
+        var question = item.querySelector('.faq-question');
+        var answer = item.querySelector('.faq-answer');
+
+        question.addEventListener('click', function () {
+          var isOpen = item.classList.contains('open');
+
+          faqItems.forEach(function (other) {
+            other.classList.remove('open');
+            other.querySelector('.faq-question').setAttribute('aria-expanded', 'false');
+            other.querySelector('.faq-answer').style.maxHeight = null;
+          });
+
+          if (!isOpen) {
+            item.classList.add('open');
+            question.setAttribute('aria-expanded', 'true');
+            answer.style.maxHeight = answer.scrollHeight + 'px';
+          }
+        });
+      });
+
+      // Form handling
+      function wireForm(formSelector) {
+        var form = document.querySelector(formSelector);
+        if (!form) return;
+
+        var input = form.querySelector('input[type="email"]');
+        var submit = form.querySelector('button[type="submit"]');
+        var message = form.querySelector('.form-message');
+
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+
+          if (!input.value || !input.validity.valid) {
+            message.textContent = 'Please enter a valid email address.';
+            message.className = 'form-message error';
+            input.focus();
+            return;
+          }
+
+          submit.disabled = true;
+          submit.textContent = 'Joining…';
+
+          // Simulate async submission
+          setTimeout(function () {
+            submit.disabled = false;
+            submit.textContent = 'Joined';
+            message.textContent = 'Locked in. Early access list confirmed for ' + input.value;
+            message.className = 'form-message success';
+            input.value = '';
+
+            setTimeout(function () {
+              submit.textContent = 'Get the antidote scaffold';
+            }, 2000);
+          }, 600);
+        });
+      }
+
+      wireForm('.hero-form');
+      wireForm('.cta-form');
+    })();
+  </script>
+</body>
+</html>
