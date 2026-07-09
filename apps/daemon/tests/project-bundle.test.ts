@@ -194,6 +194,38 @@ describe('Open Design project bundle import/export', () => {
     })).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('scopes bundled project files to the requested archive root', async () => {
+    const db = openDatabase(root, { dataDir });
+    const sourceProjectId = 'scoped-source';
+    const sourceRoot = path.join(projectsRoot, sourceProjectId);
+    await mkdir(path.join(sourceRoot, 'subapp'), { recursive: true });
+    await mkdir(path.join(sourceRoot, 'sibling'), { recursive: true });
+    await writeFile(path.join(sourceRoot, 'subapp', 'index.html'), '<!doctype html>subapp');
+    await writeFile(path.join(sourceRoot, 'sibling', 'secret.html'), '<!doctype html>sibling');
+    insertProject(db, {
+      id: sourceProjectId,
+      name: 'Scoped Source',
+      skillId: null,
+      designSystemId: null,
+      metadata: { kind: 'prototype' },
+      createdAt: 100,
+      updatedAt: 200,
+    });
+
+    const exported = await buildOpenDesignProjectBundle({
+      db,
+      projectsRoot,
+      projectId: sourceProjectId,
+      root: 'subapp',
+      metadata: getProject(db, sourceProjectId)?.metadata,
+    });
+    const zip = await JSZip.loadAsync(exported.buffer);
+
+    expect(Object.keys(zip.files)).toContain('files/index.html');
+    expect(Object.keys(zip.files)).not.toContain('files/subapp/index.html');
+    expect(Object.keys(zip.files)).not.toContain('files/sibling/secret.html');
+  });
+
   it('marks zips without an Open Design manifest as unsupported bundles', async () => {
     const db = openDatabase(root, { dataDir });
     const zip = new JSZip();

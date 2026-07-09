@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import JSZip from 'jszip';
@@ -31,6 +31,7 @@ interface BuildProjectBundleOptions {
   db: Db;
   projectsRoot: string;
   projectId: string;
+  root?: string;
   metadata?: unknown;
 }
 
@@ -126,6 +127,25 @@ async function assertBundleProjectRoot(dir: string): Promise<void> {
     err.code = 'ENOTDIR';
     throw err;
   }
+}
+
+async function resolveBundleProjectRoot(projectRoot: string, root: unknown): Promise<string> {
+  if (typeof root !== 'string' || root.trim().length === 0) return projectRoot;
+  const relRoot = assertSafeBundlePath(root);
+  const target = path.resolve(projectRoot, relRoot);
+  const rootWithSep = `${path.resolve(projectRoot)}${path.sep}`;
+  if (target !== path.resolve(projectRoot) && !target.startsWith(rootWithSep)) {
+    throw new Error(`unsafe project bundle root: ${root}`);
+  }
+  const [projectReal, targetReal] = await Promise.all([
+    realpath(projectRoot),
+    realpath(target),
+  ]);
+  const realWithSep = `${projectReal}${path.sep}`;
+  if (targetReal !== projectReal && !targetReal.startsWith(realWithSep)) {
+    throw new Error(`project bundle root escapes project dir: ${root}`);
+  }
+  return targetReal;
 }
 
 function assertSafeBundlePath(name: string): string {
@@ -280,8 +300,10 @@ export async function buildOpenDesignProjectBundle(options: BuildProjectBundleOp
     options.metadata,
   );
   await assertBundleProjectRoot(projectRoot);
+  const bundleRoot = await resolveBundleProjectRoot(projectRoot, options.root);
+  await assertBundleProjectRoot(bundleRoot);
   const fileEntries: BundleFileEntry[] = [];
-  await collectBundleFiles(projectRoot, '', fileEntries);
+  await collectBundleFiles(bundleRoot, '', fileEntries);
 
   const conversations = bundleConversations(options.db, options.projectId);
   const messages = bundleMessages(options.db, conversations.map((conv) => String(conv.id)));

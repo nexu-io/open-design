@@ -837,7 +837,7 @@ describe('binary project/design-system downloads', () => {
       includeConversations: true,
     })).rejects.toThrow('archive request failed (503)');
 
-    expect(fetch).toHaveBeenCalledWith('/api/projects/project-1/archive?includeConversations=1');
+    expect(fetch).toHaveBeenCalledWith('/api/projects/project-1/archive?root=ui&includeConversations=1');
     expect(capturedBlob).toBeUndefined();
     expect(capturedFilename).toBeUndefined();
   });

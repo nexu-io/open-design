@@ -844,7 +844,7 @@ export async function exportProjectAsZip(opts: {
 }): Promise<void> {
   const root = archiveRootFromFilePath(opts.filePath);
   const params = new URLSearchParams();
-  if (root && !opts.includeConversations) params.set('root', root);
+  if (root) params.set('root', root);
   if (opts.includeConversations) params.set('includeConversations', '1');
   const query = params.toString();
   const url = `/api/projects/${encodeURIComponent(opts.projectId)}/archive${query ? `?${query}` : ''}`;

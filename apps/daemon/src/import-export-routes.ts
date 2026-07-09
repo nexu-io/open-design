@@ -843,6 +843,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
           projectsRoot: PROJECTS_DIR,
           projectId: req.params.id,
           metadata: project.metadata,
+          root,
         });
         const fileSlug = sanitizeArchiveFilename(project.name || req.params.id) || 'project';
         const filename = `${fileSlug}.zip`;
