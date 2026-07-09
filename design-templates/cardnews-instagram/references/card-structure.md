@@ -31,7 +31,7 @@ N. **CTA (cta)** — 계정 핸들 + 팔로우/저장 유도 서브 문구(+브�
   "body_layout": "basic",
   "cards": [
     { "index": 1, "role": "cover", "sub": "놓치기 쉬운 실비 청구", "hook_lines": ["환절기 비염,", "보험금 될까?"] },
-    { "index": 2, "role": "body", "title_lines": ["결론부터,", "됩니다"], "body_lines": ["환절기 비염도 J30 진단 코드를 받으면 실비 청구 대상이에요.", "통원 진료비와 약제비 모두 해당되고, 병원과 약국 영수증만 챙기면 앱에서 바로 청구할 수 있어요.", "자기부담금 공제 후 남는 금액이 지급되니 진료 후 영수증은 버리지 말고 모아 두세요.", "청구 기한은 3년이라 지난 진료분도 소급 청구가 됩니다."], "bg": { "shot": "mid", "angle": "eye", "placement": "right", "view": "front", "locale": "약국 카운터 앞" } },
+    { "index": 2, "role": "body", "title_lines": ["결론부터,", "됩니다"], "body_lines": ["환절기 비염도 J30 진단 코드를 받으면 실비 청구 대상이에요.", "통원 진료비와 약제비 모두 해당되고, 병원과 약국 영수증만 챙기면 앱에서 바로 청구할 수 있어요.", "자기부담금 공제 후 남는 금액이 지급되니 진료 후 영수증은 버리지 말고 모아 두세요.", "청구 기한은 3년이라 지난 진료분도 소급 청구가 됩니다."], "bg": { "shot": "mid", "angle": "eye", "placement": "right", "view": "front", "pose": "point", "expression": "happy", "locale": "약국 카운터 앞" } },
     { "index": 3, "role": "cta", "handle": "@brand_handle", "sub": "저장해두고 청구 전에 확인하세요" }
   ],
   "caption": "…8블록 캡션 전문…",
@@ -51,6 +51,9 @@ N. **CTA (cta)** — 계정 핸들 + 팔로우/저장 유도 서브 문구(+브�
   "배경 구도 플랜" 절이 정본. **compose_cards.py는 이 필드를 읽지 않는다**(미지
   필드 무시) — 소비자는 imagegen 프롬프트 조립(imagegen-pipeline.md)과
   검수(review-subagent.md).
+  `shot`·`angle`·`placement`·`view`·`locale`은 본문 필수. `pose`·`expression`은 **선택**
+  (브랜드 cardnews 컨텍스트에 캐릭터 시트가 등재된 경우만 의미 — 생략 시 기본형 idle·neutral
+  상당으로 렌더). 시트 미등재 브랜드는 두 필드를 넣지 않는다.
 - CTA 카드 배경 = `bg-01.png` 재사용(재생성 없음 — 생성 호출 N-1회).
 - `body_layout`(선택, 최상위): 본문 레이아웃 옵션 — `"basic"`(기본값, 생략 가능)만
   구현. `"free"`(자유형)는 예약 — compose가 명시 에러로 거부한다(후속 트랙).
@@ -69,6 +72,8 @@ N. **CTA (cta)** — 계정 핸들 + 팔로우/저장 유도 서브 문구(+브�
 | `placement` | `"left"` \| `"center"` \| `"right"` | 프레임 가로 1/3 기준 캐릭터 위치 |
 | `view` | `"front"` \| `"three-quarter"` | 완전 측면·뒷모습 금지 — 눈·입이 보여야 카드 간 캐릭터 일관성 검증 가능 |
 | `locale` | 자유 서술 1줄(한국어) | 주제 관련 실사 장소 — 프롬프트 조립 시 영어로 번역돼 Subject에 반영 |
+| `pose` | `"idle"` \| `"point"` \| `"hold-prop"` \| `"crouch"` \| `"sit"` (선택) | 시트 포즈 섹션 매핑 — idle=IDLE, point=팔 뻗어 가리키기(ACTIONS), hold-prop=소품 들기(ACTIONS), crouch=웅크려 들여다보기, sit=앉기(SITTING). 시트 미등재 브랜드는 생략 |
+| `expression` | `"neutral"` \| `"happy"` \| `"surprised"` \| `"worried"` \| `"wink"` (선택) | 시트 표정 매핑 — neutral=기본, happy=기쁨, surprised=놀람, worried=걱정, wink=윙크 |
 
 **다양성 제약** — cards.json 확정 시점에 데이터로 체크, 위반 시 스스로 재배정 후 진행:
 
@@ -76,11 +81,17 @@ N. **CTA (cta)** — 계정 핸들 + 팔로우/저장 유도 서브 문구(+브�
 2. 세트 내 동일 튜플 최대 2회
 3. 본문 3장 이상이면 shot·angle·placement 각 축에 2종 이상 값 등장
 4. `locale` 동일 최대 2회
+5. `pose`·`expression`을 쓰면 각 축: 인접 본문 카드 간 동일 금지 + 세트 내 2종 이상.
+6. `locale` 강화 — 문자열 상이만으로 불충분. 서로 다른 **공간/셋팅**이어야 하며, 동일
+   배경 지배요소(예: 큰 창가·같은 방)가 세트를 지배하면 위반. `close-up` 카드는 창·광원이
+   프레임 지배요소가 되지 않게(소품·캐릭터가 프레임을 채운다).
 
 **선택 기준 = 콘텐츠 매칭**: 카드 메시지에 어울리는 조합을 고른다(경고 →
 클로즈업·로우앵글, 보관 팁 → 냉장고 앞 미드샷, 요약 → 하이앵글 등). 제약은
 하한선이지 순번별 로테이션 표가 아니다. 라이팅 무드는 세트 앵커가 소유
 (imagegen-pipeline.md) — locale이 바뀌어도 세트 톤은 묶인다.
+(경고 → `worried`/`surprised` + 클로즈업·로우앵글, 핵심 답 → `neutral`/`happy`, 보관·
+체크 → `point`/`crouch` + 소품 인터랙션.)
 
 ## 캡션 8블록 템플릿 (정본 — craft 룰 11이 참조)
 
