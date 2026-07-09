@@ -20,12 +20,14 @@ export const kimchiAgentDef = {
   versionProbeTimeoutMs: 15_000,
   fetchModels: async (resolvedBin, env) => {
     try {
-      const { stderr } = await execAgentFile(resolvedBin, ["--list-models"], {
+      // Unlike pi (which prints to stderr), kimchi outputs the TSV table
+      // to stdout. Stderr carries config permission warnings only.
+      const { stdout } = await execAgentFile(resolvedBin, ["--list-models"], {
         env,
         timeout: 60_000,
         maxBuffer: 8 * 1024 * 1024,
       });
-      const parsed = parsePiModels(stderr);
+      const parsed = parsePiModels(stdout);
       if (!parsed || parsed.length === 0) return null;
       return parsed;
     } catch {
@@ -34,7 +36,7 @@ export const kimchiAgentDef = {
   },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
-    { id: "kimi-k2.6", label: "kimi-k2.6" },
+    { id: "kimi-k2.7", label: "kimi-k2.7" },
     { id: "minimax-m3", label: "minimax-m3" },
     { id: "deepseek-v4-flash", label: "deepseek-v4-flash" },
   ],
