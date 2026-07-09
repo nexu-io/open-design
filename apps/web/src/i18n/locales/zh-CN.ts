@@ -2956,6 +2956,7 @@ export const zhCN: Dict = {
   "fileViewer.exportPptxHint": "请求代理将此设计转换为 PPTX。",
   "fileViewer.exportPptxNa": "此处暂不支持导出 PPTX。",
   "fileViewer.exportZip": "下载为 .zip",
+  "fileViewer.includeConversations": "包含对话",
   "fileViewer.exportHtml": "导出为独立 HTML",
   "fileViewer.exportMd": "导出为 Markdown",
   "fileViewer.exportImage": "导出为图片",

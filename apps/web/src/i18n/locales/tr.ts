@@ -2741,6 +2741,7 @@ export const tr: Dict = {
   'fileViewer.exportPptxHint': 'Bu tasarımı PPTX’e dönüştürmesi için ajana bir istek yollayın.',
   'fileViewer.exportPptxNa': 'PPTX dışa aktarma burada mevcut değil.',
   'fileViewer.exportZip': 'ZIP olarak indir',
+  'fileViewer.includeConversations': 'Sohbetleri dahil et',
   'fileViewer.exportHtml': 'Tekil HTML olarak dışa aktar',
   'fileViewer.exportMd': 'Markdown olarak dışa aktar',
   'fileViewer.exportImage': 'Görsel olarak dışa aktar',

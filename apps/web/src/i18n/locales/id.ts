@@ -2741,6 +2741,7 @@ export const id: Dict = {
   'fileViewer.exportPptxHint': 'Buat deck terlebih dahulu untuk mengekspor PPTX.',
   'fileViewer.exportPptxNa': 'PPTX tidak tersedia',
   'fileViewer.exportZip': 'Ekspor ZIP',
+  'fileViewer.includeConversations': 'Sertakan percakapan',
   'fileViewer.exportHtml': 'Ekspor HTML',
   'fileViewer.exportMd': 'Ekspor Markdown',
   'fileViewer.exportImage': 'Ekspor gambar',

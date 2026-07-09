@@ -2741,6 +2741,7 @@ export const ru: Dict = {
   'fileViewer.exportPptxHint': 'Отправьте запрос агенту для конвертации этого дизайна в PPTX.',
   'fileViewer.exportPptxNa': 'Экспорт PPTX здесь недоступен.',
   'fileViewer.exportZip': 'Скачать как .zip',
+  'fileViewer.includeConversations': 'Включить диалоги',
   'fileViewer.exportHtml': 'Экспорт как HTML',
   'fileViewer.exportMd': 'Экспорт в Markdown',
   'fileViewer.exportImage': 'Экспорт как изображение',

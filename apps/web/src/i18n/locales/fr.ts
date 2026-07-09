@@ -2741,6 +2741,7 @@ export const fr: Dict = {
   'fileViewer.exportPptxHint': 'Envoyez une requête à l\'agent pour convertir ce design en PPTX.',
   'fileViewer.exportPptxNa': 'L\'export PPTX n\'est pas disponible ici.',
   'fileViewer.exportZip': 'Télécharger en .zip',
+  'fileViewer.includeConversations': 'Inclure les conversations',
   'fileViewer.exportHtml': 'Exporter en HTML autonome',
   'fileViewer.exportMd': 'Exporter en Markdown',
   'fileViewer.exportImage': 'Exporter en image',

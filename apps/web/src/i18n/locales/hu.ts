@@ -2741,6 +2741,7 @@ export const hu: Dict = {
   'fileViewer.exportPptxHint': 'Küldj kérést az ügynöknek, hogy alakítsa át ezt a designt PPTX-szé.',
   'fileViewer.exportPptxNa': 'A PPTX export itt nem elérhető.',
   'fileViewer.exportZip': 'Letöltés .zip-ként',
+  'fileViewer.includeConversations': 'Beszélgetések belefoglalása',
   'fileViewer.exportHtml': 'Exportálás önálló HTML-ként',
   'fileViewer.exportMd': 'Exportálás Markdown-ként',
   'fileViewer.exportImage': 'Exportálás képként',

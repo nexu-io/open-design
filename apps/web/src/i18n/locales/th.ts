@@ -2741,6 +2741,7 @@ export const th: Dict = {
   'fileViewer.exportPptxHint': 'ส่งข้อมูลเพื่อให้ทำการแปลเอกสารเป็น PPTX',
   'fileViewer.exportPptxNa': 'งาน PPTX ไม่สามารถดึงออกในจุดนี้ได้',
   'fileViewer.exportZip': 'สูบทั้งหมดมาในรูป .zip',
+  'fileViewer.includeConversations': 'รวมบทสนทนา',
   'fileViewer.exportHtml': 'เอาไปแค่รูปไฟล์ HTML',
   'fileViewer.exportMd': 'แปลงข้อความแบบฉบับเป็น Markdown',
   'fileViewer.exportImage': 'ส่งออกเป็นรูปภาพ',

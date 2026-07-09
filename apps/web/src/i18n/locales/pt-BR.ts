@@ -2741,6 +2741,7 @@ export const ptBR: Dict = {
   'fileViewer.exportPptxHint': 'Envie uma solicitação ao agente para converter este design em PPTX.',
   'fileViewer.exportPptxNa': 'Exportação PPTX não está disponível aqui.',
   'fileViewer.exportZip': 'Baixar como .zip',
+  'fileViewer.includeConversations': 'Incluir conversas',
   'fileViewer.exportHtml': 'Exportar como HTML independente',
   'fileViewer.exportMd': 'Exportar como Markdown',
   'fileViewer.exportImage': 'Exportar como imagem',

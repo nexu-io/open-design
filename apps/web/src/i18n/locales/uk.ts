@@ -2741,6 +2741,7 @@ export const uk: Dict = {
   'fileViewer.exportPptxHint': 'Надішліть запит агентові для перетворення цього дизайну на PPTX.',
   'fileViewer.exportPptxNa': 'Експорт PPTX недоступний тут.',
   'fileViewer.exportZip': 'Завантажити як .zip',
+  'fileViewer.includeConversations': 'Включити розмови',
   'fileViewer.exportHtml': 'Експортувати як самостійний HTML',
   'fileViewer.exportMd': 'Експортувати як Markdown',
   'fileViewer.exportImage': 'Експортувати як зображення',

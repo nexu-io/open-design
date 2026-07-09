@@ -2741,6 +2741,7 @@ export const fa: Dict = {
   'fileViewer.exportPptxHint': 'یک درخواست به عامل برای تبدیل این طرح به PPTX ارسال کنید.',
   'fileViewer.exportPptxNa': 'صادرکردن PPTX اینجا در دسترس نیست.',
   'fileViewer.exportZip': 'دانلود به صورت .zip',
+  'fileViewer.includeConversations': 'شامل گفتگوها',
   'fileViewer.exportHtml': 'صادرکردن به HTML مستقل',
   'fileViewer.exportMd': 'صادرکردن به صورت Markdown',
   'fileViewer.exportImage': 'صادرکردن به صورت تصویر',

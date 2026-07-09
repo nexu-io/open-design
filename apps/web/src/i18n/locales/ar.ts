@@ -2741,6 +2741,7 @@ export const ar: Dict = {
   'fileViewer.exportPptxHint': 'أرسل طلباً للوكيل لتحويل هذا التصميم إلى PPTX.',
   'fileViewer.exportPptxNa': 'تصدير PPTX غير متوفر هنا.',
   'fileViewer.exportZip': 'تحميل كـ zip.',
+  'fileViewer.includeConversations': 'تضمين المحادثات',
   'fileViewer.exportHtml': 'تصدير كـ HTML مستقل',
   'fileViewer.exportMd': 'تصدير كـ Markdown',
   'fileViewer.exportImage': 'تصدير كصورة',

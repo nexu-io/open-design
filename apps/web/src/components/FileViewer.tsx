@@ -5437,6 +5437,7 @@ function HtmlViewer({
   // Latest per-slide capture progress for the programmatic exporters, read by
   // the loading-toast ticker in fireShareExport to render elapsed time + ETA.
   const exportProgressRef = useRef<{ done: number; total: number } | null>(null);
+  const [zipIncludeConversations, setZipIncludeConversations] = useState(false);
   // Shared helper for the share menu: emit studio_click share_option on
   // entry and artifact_export_result on resolution. Sync exports report
   // success immediately after the call returns; async exports get .then
@@ -10716,12 +10717,24 @@ function HtmlViewer({
                         filePath: file.name,
                         fallbackHtml: source ?? '',
                         fallbackTitle: exportTitle,
+                        includeConversations: zipIncludeConversations,
                       }));
                     }}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-zip-line" size={15} /></span>
                     <span>{t('fileViewer.exportZip')}</span>
                   </button>
+                  <label
+                    className="share-menu-checkbox"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={zipIncludeConversations}
+                      onChange={(event) => setZipIncludeConversations(event.currentTarget.checked)}
+                    />
+                    <span>{t('fileViewer.includeConversations')}</span>
+                  </label>
                   <button
                     type="button"
                     className="share-menu-item"

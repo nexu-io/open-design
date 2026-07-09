@@ -94,7 +94,7 @@ import {
   deleteProject as deleteProjectApi,
   duplicateProject,
   getProject,
-  importClaudeDesignZip,
+  importProjectZip,
   importFolderProject,
   listProjects,
   listTemplates,
@@ -1743,7 +1743,7 @@ function AppInner() {
     file: File,
   ): Promise<ImportClaudeDesignOutcome> => {
     try {
-      const result = await importClaudeDesignZip(file);
+      const result = await importProjectZip(file);
       rememberLocalProject(result.project.id);
       setProjects((curr) => [
         result.project,
@@ -1752,7 +1752,7 @@ function AppInner() {
       navigate({
         kind: 'project',
         projectId: result.project.id,
-        fileName: result.entryFile,
+        fileName: result.entryFile ?? null,
       });
       return { ok: true };
     } catch (err) {

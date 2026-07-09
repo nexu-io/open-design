@@ -287,6 +287,54 @@ export async function importClaudeDesignZip(
   };
 }
 
+export async function importOpenDesignProjectZip(
+  file: File,
+): Promise<{ project: Project; conversationId: string; entryFile: string | null }> {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch('/api/import/project', {
+    method: 'POST',
+    body: form,
+  });
+  if (!resp.ok) {
+    const payload = await resp.json().catch(() => null);
+    const rawError = payload != null && typeof payload === 'object'
+      ? (payload as { error?: unknown }).error
+      : null;
+    const code =
+      rawError && typeof rawError === 'object' && 'code' in rawError
+        ? String((rawError as { code?: unknown }).code ?? '')
+        : '';
+    const message =
+      typeof rawError === 'string'
+        ? rawError
+        : rawError && typeof rawError === 'object' && 'message' in rawError
+          ? String((rawError as { message?: unknown }).message ?? '')
+          : `Import failed (${resp.status})`;
+    const error = new Error(message) as Error & { code?: string };
+    if (code) error.code = code;
+    throw error;
+  }
+  return (await resp.json()) as {
+    project: Project;
+    conversationId: string;
+    entryFile: string | null;
+  };
+}
+
+export async function importProjectZip(
+  file: File,
+): Promise<{ project: Project; conversationId: string; entryFile: string | null }> {
+  try {
+    return await importOpenDesignProjectZip(file);
+  } catch (err) {
+    if ((err as { code?: string })?.code !== 'PROJECT_BUNDLE_UNSUPPORTED') {
+      throw err;
+    }
+    return importClaudeDesignZip(file);
+  }
+}
+
 // ---------- templates ----------
 
 export async function listTemplates(): Promise<ProjectTemplate[]> {

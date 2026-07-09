@@ -838,11 +838,14 @@ export async function exportProjectAsZip(opts: {
   filePath: string;
   fallbackHtml: string;
   fallbackTitle: string;
+  includeConversations?: boolean;
 }): Promise<void> {
   const root = archiveRootFromFilePath(opts.filePath);
-  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/archive${
-    root ? `?root=${encodeURIComponent(root)}` : ''
-  }`;
+  const params = new URLSearchParams();
+  if (root && !opts.includeConversations) params.set('root', root);
+  if (opts.includeConversations) params.set('includeConversations', '1');
+  const query = params.toString();
+  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/archive${query ? `?${query}` : ''}`;
   try {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`archive request failed (${resp.status})`);

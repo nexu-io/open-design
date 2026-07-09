@@ -17,6 +17,10 @@ import {
   readSlideFiles,
   type BuildDeckRenderInputOptions,
 } from './deck-export.js';
+import {
+  buildOpenDesignProjectBundle,
+  importOpenDesignProjectBundle,
+} from './project-bundle.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from './reasoning-egress.js';
 import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
 import { parseOrchestratorWorkspace } from './workspace-contract.js';
@@ -98,6 +102,37 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       } catch (err: any) {
         if (req.file?.path) fs.promises.unlink(req.file.path).catch(() => {});
         res.status(400).json({ error: String(err) });
+      }
+    },
+  );
+
+  app.post(
+    '/api/import/project',
+    importUpload.single('file'),
+    async (req, res) => {
+      try {
+        if (!req.file) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'zip file required');
+        }
+        const originalName = req.file.originalname || 'Open Design project.zip';
+        if (!/\.zip$/i.test(originalName)) {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'expected a .zip file');
+        }
+        const imported = await importOpenDesignProjectBundle({
+          db,
+          projectsRoot: PROJECTS_DIR,
+          buffer: await readFile(req.file.path),
+          originalName,
+          randomId,
+        });
+        return res.json(imported);
+      } catch (err: any) {
+        const code = err?.code === 'PROJECT_BUNDLE_UNSUPPORTED'
+          ? 'PROJECT_BUNDLE_UNSUPPORTED'
+          : 'BAD_REQUEST';
+        return sendApiError(res, 400, code, String(err?.message || err));
+      } finally {
+        if (req.file?.path) fs.promises.unlink(req.file.path).catch(() => {});
       }
     },
   );
@@ -797,6 +832,27 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     try {
       const root = typeof req.query?.root === 'string' ? req.query.root : '';
       const project = getProject(db, req.params.id);
+      if (req.query?.includeConversations === '1' || req.query?.includeConversations === 'true') {
+        if (!project) {
+          return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        }
+        const { buffer } = await buildOpenDesignProjectBundle({
+          db,
+          projectsRoot: PROJECTS_DIR,
+          projectId: req.params.id,
+          metadata: project.metadata,
+        });
+        const fileSlug = sanitizeArchiveFilename(project.name || req.params.id) || 'project';
+        const filename = `${fileSlug}.zip`;
+        const asciiFallback =
+          filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+        );
+        return res.send(buffer);
+      }
       const { buffer, baseName } = await buildProjectArchive(
         PROJECTS_DIR,
         req.params.id,
