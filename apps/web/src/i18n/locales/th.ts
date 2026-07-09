@@ -3448,6 +3448,8 @@ export const th: Dict = {
   'fileViewer.savingConfig': 'คอยจัดระเบียบให้…',
   'fileViewer.deployConfigSaveFailed': 'จำคำสั่งเชื่อมระบบฝั่ง Vercel เข้ามาไม่ได้',
   'fileViewer.deployFailed': 'เกิดความล้มเหลวกับการเรียกตัว Deployment ขอไปปรับเครื่องมือ Vercel ใหม่แล้วลองซ้ำนะ',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': 'ปรับเปลี่ยนและนำตั้งค่าเซฟไม่ได้บนฝั่งผู้บริการ {provider}',
   'fileViewer.deployProviderFailed': 'โฮสต์ไม่ติดสำหรับตัวผู้ดำเนินการ {provider} เช็คการควบคุมดูอีกรอบก่อนเถอะ',
   'fileViewer.deployResultLabel': 'ที่อยู่แบบ URL ซึ่งอัพลง',

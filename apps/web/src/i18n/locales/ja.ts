@@ -3448,6 +3448,8 @@ export const ja: Dict = {
   'fileViewer.savingConfig': '保存中…',
   'fileViewer.deployConfigSaveFailed': 'Vercel の設定を保存できませんでした。',
   'fileViewer.deployFailed': 'デプロイに失敗しました。Vercel の設定を確認して再試行してください。',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': '{provider} の設定を保存できませんでした。',
   'fileViewer.deployProviderFailed': '{provider} のデプロイに失敗しました。設定を確認して再試行してください。',
   'fileViewer.deployResultLabel': 'デプロイ URL',

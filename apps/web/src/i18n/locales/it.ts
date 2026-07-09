@@ -3448,6 +3448,8 @@ export const it: Dict = {
   'fileViewer.savingConfig': 'Salvataggio…',
   'fileViewer.deployConfigSaveFailed': 'Impossibile salvare le impostazioni Vercel.',
   'fileViewer.deployFailed': 'Distribuzione fallita. Controlla le impostazioni Vercel e riprova.',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': 'Impossibile salvare le impostazioni {provider}.',
   'fileViewer.deployProviderFailed': 'Distribuzione {provider} fallita. Controlla le impostazioni e riprova.',
   'fileViewer.deployResultLabel': 'URL distribuito',

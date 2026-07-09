@@ -3448,6 +3448,8 @@ export const id: Dict = {
   'fileViewer.savingConfig': 'Menyimpan konfigurasi...',
   'fileViewer.deployConfigSaveFailed': 'Gagal menyimpan konfigurasi deploy.',
   'fileViewer.deployFailed': 'Deploy gagal.',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': 'Tidak dapat menyimpan pengaturan {provider}.',
   'fileViewer.deployProviderFailed': 'Deploy {provider} gagal. Periksa pengaturan dan coba lagi.',
   'fileViewer.deployResultLabel': 'Hasil deploy',

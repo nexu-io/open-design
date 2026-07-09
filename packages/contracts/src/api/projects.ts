@@ -867,15 +867,20 @@ export interface DisplayDevDeploySelection {
   showBranding?: 'inherit' | 'show' | 'hide';
 }
 
-export interface DisplayDevDeploymentInfo {
-  shortId?: string;
-  mode: 'anonymous' | 'authenticated';
-  claimUrl?: string;
-  expiresAt?: string;
-  visibility?: 'public' | 'company' | 'private';
-  sharedWith?: string[];
-  showBranding?: 'inherit' | 'show' | 'hide';
-}
+export type DisplayDevDeploymentInfo =
+  | {
+      mode: 'anonymous';
+      shortId?: string;
+      claimUrl?: string;
+      expiresAt?: string;
+    }
+  | {
+      mode: 'authenticated';
+      shortId: string;
+      visibility: 'public' | 'company' | 'private';
+      sharedWith: string[];
+      showBranding: 'inherit' | 'show' | 'hide';
+    };
 
 export type DeploymentLinkStatus =
   | 'ready'

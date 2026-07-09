@@ -3448,6 +3448,8 @@ export const pl: Dict = {
   'fileViewer.savingConfig': 'Zapisywanie…',
   'fileViewer.deployConfigSaveFailed': 'Nie udało się zapisać ustawień Vercel.',
   'fileViewer.deployFailed': 'Wdrożenie nie powiodło się. Sprawdź ustawienia Vercel i spróbuj ponownie.',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': 'Nie udało się zapisać ustawień {provider}.',
   'fileViewer.deployProviderFailed': 'Wdrożenie na {provider} nie powiodło się. Sprawdź ustawienia i spróbuj ponownie.',
   'fileViewer.deployResultLabel': 'Wdrożony URL',

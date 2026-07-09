@@ -52,6 +52,10 @@ type DisplayDevAccessSettings = {
   sharedWith: string[];
   showBranding: 'inherit' | 'show' | 'hide';
 };
+type DisplayDevCurrentArtifact = {
+  version: number;
+  accessSettings: DisplayDevAccessSettings;
+};
 type DeployFile = { file: string; data: Buffer | Uint8Array | string; contentType?: string; sourcePath?: string };
 type DeployFilePlan = { entryPath: string; html: string; files: DeployFile[]; missing: string[]; invalid: string[] };
 type DeployOptions = {
@@ -324,8 +328,9 @@ function normalizeCloudflarePagesConfigHints(input: unknown, fallback: Cloudflar
 }
 
 function normalizeDisplayDevConfigHints(input: unknown, fallback: DisplayDevConfigHints = {}): DisplayDevConfigHints {
-  const hasSource = Boolean(input && typeof input === 'object');
-  const source = (hasSource ? input : {}) as JsonObject;
+  const inputObject = displayDevObjectFromInput(input);
+  const hasSource = Boolean(inputObject);
+  const source = (inputObject ?? {}) as JsonObject;
   const prior = (!hasSource && fallback && typeof fallback === 'object' ? fallback : {}) as DisplayDevConfigHints;
   const defaultArtifactName =
     typeof source.defaultArtifactName === 'string'
@@ -363,8 +368,9 @@ function normalizeDisplayDevConfigHints(input: unknown, fallback: DisplayDevConf
 }
 
 function normalizeDisplayDevDeploySelection(input: unknown): DisplayDevDeploySelection {
-  if (!input || typeof input !== 'object') return {};
-  const source = input as JsonObject;
+  const inputObject = displayDevObjectFromInput(input);
+  if (!inputObject) return {};
+  const source = inputObject as JsonObject;
   const name = typeof source.name === 'string' ? source.name.trim() : '';
   const hasVisibilityInput = Object.prototype.hasOwnProperty.call(source, 'visibility');
   const visibility = hasVisibilityInput
@@ -388,6 +394,12 @@ function normalizeDisplayDevDeploySelection(input: unknown): DisplayDevDeploySel
     ...(hasSharedWithInput && sharedWith.length === 0 ? { clearSharedWith: true } : {}),
     ...(showBranding ? { showBranding } : {}),
   };
+}
+
+function displayDevObjectFromInput(input: unknown): JsonObject | null {
+  if (input == null) return null;
+  if (typeof input === 'object' && !Array.isArray(input)) return input as JsonObject;
+  throw new DeployError('display.dev settings must be an object.', 400);
 }
 
 function displayDevVisibilityFromInput(value: unknown, field = 'visibility'): DisplayDevDeploySelection['visibility'] {
@@ -863,6 +875,12 @@ export async function deployToDisplayDev(input: { config: DeployConfig; files: D
       : undefined;
   const priorShortId = typeof priorDisplayDev?.shortId === 'string' ? priorDisplayDev.shortId : '';
   const shouldUpdate = Boolean(auth && priorShortId && priorDisplayDev?.mode === 'authenticated');
+  if (shouldUpdate && selection.visibility && selection.visibility !== 'private' && selection.sharedWith?.length) {
+    throw new DeployError('display.dev sharedWith requires private visibility.', 400);
+  }
+  const currentArtifact = shouldUpdate
+    ? await fetchDisplayDevCurrentArtifact(apiUrl, auth, priorShortId)
+    : undefined;
   const body = new FormData();
   const data = Buffer.from(entry.data);
   body.append(
@@ -877,6 +895,10 @@ export async function deployToDisplayDev(input: { config: DeployConfig; files: D
   if (name) body.append('name', name);
   if (auth) {
     if (shouldUpdate) {
+      const effectiveVisibility = selection.visibility || currentArtifact?.accessSettings.visibility;
+      if (selection.sharedWith?.length && effectiveVisibility !== 'private') {
+        throw new DeployError('display.dev sharedWith requires private visibility.', 400);
+      }
       if (selection.visibility) body.append('visibility', selection.visibility);
       if (selection.sharedWith?.length) {
         for (const email of selection.sharedWith) body.append('sharedWith', email);
@@ -886,6 +908,9 @@ export async function deployToDisplayDev(input: { config: DeployConfig; files: D
       if (selection.showBranding) body.append('showBranding', selection.showBranding);
     } else {
       const visibility = selection.visibility || config?.displayDev?.defaultVisibility || 'company';
+      if (visibility !== 'private' && selection.sharedWith?.length) {
+        throw new DeployError('display.dev sharedWith requires private visibility.', 400);
+      }
       body.append('visibility', visibility);
       const sharedWith = visibility === 'private'
         ? selection.sharedWith?.length
@@ -900,10 +925,8 @@ export async function deployToDisplayDev(input: { config: DeployConfig; files: D
     }
   }
 
-  const baseVersion = shouldUpdate
-    ? await fetchDisplayDevCurrentVersion(apiUrl, auth, priorShortId)
-    : undefined;
-  const resp = await fetch(
+  const baseVersion = currentArtifact?.version;
+  const resp = await displayDevFetch(
     shouldUpdate
       ? `${apiUrl}/v1/artifacts/${encodeURIComponent(priorShortId)}`
       : auth
@@ -954,8 +977,12 @@ export async function deployToDisplayDev(input: { config: DeployConfig; files: D
   };
 }
 
-async function fetchDisplayDevCurrentVersion(apiUrl: string, auth: string, shortId: string) {
-  const resp = await fetch(`${apiUrl}/v1/artifacts/${encodeURIComponent(shortId)}`, {
+async function fetchDisplayDevCurrentArtifact(
+  apiUrl: string,
+  auth: string,
+  shortId: string,
+): Promise<DisplayDevCurrentArtifact> {
+  const resp = await displayDevFetch(`${apiUrl}/v1/artifacts/${encodeURIComponent(shortId)}`, {
     method: 'GET',
     headers: displayDevHeaders(auth),
   });
@@ -971,7 +998,10 @@ async function fetchDisplayDevCurrentVersion(apiUrl: string, auth: string, short
   if (typeof version !== 'number' || version < 1) {
     throw new DeployError('display.dev did not return the current artifact version.', 502, json);
   }
-  return version;
+  return {
+    version,
+    accessSettings: displayDevAccessSettingsFromArtifact(json),
+  };
 }
 
 export async function fetchDisplayDevArtifactAccessSettings(
@@ -987,7 +1017,7 @@ export async function fetchDisplayDevArtifactAccessSettings(
     throw new DeployError('display.dev API key is required to read access settings.', 400);
   }
   const apiUrl = validateDisplayDevApiUrl(config?.apiUrl);
-  const resp = await fetch(`${apiUrl}/v1/artifacts/${encodeURIComponent(normalizedShortId)}`, {
+  const resp = await displayDevFetch(`${apiUrl}/v1/artifacts/${encodeURIComponent(normalizedShortId)}`, {
     method: 'GET',
     headers: displayDevHeaders(auth),
   });
@@ -999,6 +1029,19 @@ export async function fetchDisplayDevArtifactAccessSettings(
 function displayDevVersionFromEtag(etag: string | null) {
   const match = etag?.match(/^"v([1-9]\d*)"$/u);
   return match ? Number(match[1]) : undefined;
+}
+
+async function displayDevFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (err) {
+    throw new DeployError(
+      'display.dev is unreachable.',
+      502,
+      { reason: err instanceof Error ? err.message : String(err) },
+      'UPSTREAM_UNAVAILABLE',
+    );
+  }
 }
 
 function normalizeDeploymentLinkStatus(status: unknown): DeployLinkStatus {
@@ -2310,7 +2353,13 @@ async function readDisplayDevJson(resp: Response): Promise<JsonObject> {
   try {
     return await resp.json() as JsonObject;
   } catch {
-    throw new DeployError('display.dev returned a non-JSON response.', resp.status || 502);
+    const status = resp.status || 502;
+    throw new DeployError(
+      'display.dev returned a non-JSON response.',
+      displayDevRouteStatusForStatus(status),
+      undefined,
+      displayDevApiErrorCodeForStatus(status),
+    );
   }
 }
 
@@ -2320,7 +2369,27 @@ function displayDevError(json: JsonObject, status: number) {
     json?.error?.message ||
     (typeof json?.error === 'string' ? json.error : '') ||
     `display.dev publish failed (${status}).`;
-  return new DeployError(message, status, json);
+  return new DeployError(
+    message,
+    displayDevRouteStatusForStatus(status),
+    json,
+    displayDevApiErrorCodeForStatus(status),
+  );
+}
+
+function displayDevApiErrorCodeForStatus(status: number) {
+  if (status === 401) return 'UNAUTHORIZED';
+  if (status === 403) return 'FORBIDDEN';
+  if (status === 409 || status === 412) return 'CONFLICT';
+  if (status === 413) return 'PAYLOAD_TOO_LARGE';
+  if (status === 422) return 'VALIDATION_FAILED';
+  if (status === 429) return 'RATE_LIMITED';
+  if (status === 404 || status >= 500) return 'UPSTREAM_UNAVAILABLE';
+  return 'BAD_REQUEST';
+}
+
+function displayDevRouteStatusForStatus(status: number) {
+  return status === 404 ? 502 : status;
 }
 
 async function readCloudflareJson(resp: Response): Promise<JsonObject> {

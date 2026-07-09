@@ -3448,6 +3448,8 @@ export const ko: Dict = {
   'fileViewer.savingConfig': '설정 저장 중…',
   'fileViewer.deployConfigSaveFailed': 'Vercel 설정을 저장하지 못했습니다.',
   'fileViewer.deployFailed': '배포 실패. Vercel 설정을 확인하고 다시 시도해 주세요.',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': '{provider} 설정을 저장하지 못했습니다.',
   'fileViewer.deployProviderFailed': '{provider} 배포에 실패했습니다. 설정을 확인하고 다시 시도해 주세요.',
   'fileViewer.deployResultLabel': '배포된 URL',

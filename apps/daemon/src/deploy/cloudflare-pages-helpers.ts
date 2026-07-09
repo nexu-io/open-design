@@ -71,26 +71,30 @@ export function publicDeployment(deployment: unknown): unknown {
   const { providerMetadata: _providerMetadata, ...publicShape } = deployment as DeploymentLike;
   const displayDev = asRecord((deployment as DeploymentLike).providerMetadata?.displayDev);
   if (displayDev) {
-    const mode = displayDev.mode === 'authenticated' ? 'authenticated' : 'anonymous';
-    (publicShape as DeploymentLike).displayDev = {
-      ...(typeof displayDev.shortId === 'string' ? { shortId: displayDev.shortId } : {}),
-      mode,
-      ...(mode === 'anonymous' && typeof displayDev.claimUrl === 'string'
-        ? { claimUrl: displayDev.claimUrl }
-        : {}),
-      ...(mode === 'anonymous' && typeof displayDev.expiresAt === 'string'
-        ? { expiresAt: displayDev.expiresAt }
-        : {}),
-      ...(isDisplayDevVisibility(displayDev.visibility)
-        ? { visibility: displayDev.visibility }
-        : {}),
-      ...(isStringArray(displayDev.sharedWith)
-        ? { sharedWith: displayDev.sharedWith.map((item) => item.trim()).filter(Boolean) }
-        : {}),
-      ...(isDisplayDevShowBranding(displayDev.showBranding)
-        ? { showBranding: displayDev.showBranding }
-        : {}),
-    };
+    if (displayDev.mode === 'authenticated') {
+      const shortId = typeof displayDev.shortId === 'string' ? displayDev.shortId.trim() : '';
+      const visibility = isDisplayDevVisibility(displayDev.visibility) ? displayDev.visibility : null;
+      const sharedWith = isStringArray(displayDev.sharedWith)
+        ? displayDev.sharedWith.map((item) => item.trim()).filter(Boolean)
+        : null;
+      const showBranding = isDisplayDevShowBranding(displayDev.showBranding) ? displayDev.showBranding : null;
+      if (shortId && visibility && sharedWith && showBranding) {
+        (publicShape as DeploymentLike).displayDev = {
+          mode: 'authenticated',
+          shortId,
+          visibility,
+          sharedWith,
+          showBranding,
+        };
+      }
+    } else {
+      (publicShape as DeploymentLike).displayDev = {
+        ...(typeof displayDev.shortId === 'string' ? { shortId: displayDev.shortId } : {}),
+        mode: 'anonymous',
+        ...(typeof displayDev.claimUrl === 'string' ? { claimUrl: displayDev.claimUrl } : {}),
+        ...(typeof displayDev.expiresAt === 'string' ? { expiresAt: displayDev.expiresAt } : {}),
+      };
+    }
   }
   return publicShape;
 }

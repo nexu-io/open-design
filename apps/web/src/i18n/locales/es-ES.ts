@@ -3448,6 +3448,8 @@ export const esES: Dict = {
   'fileViewer.savingConfig': 'Guardando…',
   'fileViewer.deployConfigSaveFailed': 'No se pudo guardar la configuración de Vercel.',
   'fileViewer.deployFailed': 'El despliegue falló. Revisa la configuración de Vercel e inténtalo de nuevo.',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': 'No se pudo guardar la configuración de {provider}.',
   'fileViewer.deployProviderFailed': 'El despliegue en {provider} falló. Revisa la configuración e inténtalo de nuevo.',
   'fileViewer.deployResultLabel': 'URL desplegada',

@@ -312,7 +312,9 @@ describe('deploy config', () => {
     }
   });
 
-  const invalidDisplayDefaultCases: Array<[string, Record<string, unknown>, RegExp]> = [
+  const invalidDisplayDefaultCases: Array<[string, unknown, RegExp]> = [
+    ['displayDev string', 'bad', /settings must be an object/i],
+    ['displayDev array', [], /settings must be an object/i],
     ['defaultVisibility', { defaultVisibility: 'publik' }, /defaultVisibility must be/i],
     ['defaultShowBranding', { defaultShowBranding: 'sometimes' }, /defaultShowBranding must be/i],
     ['defaultSharedWith scalar', { defaultSharedWith: 'team@example.com' }, /defaultSharedWith must be an array/i],
@@ -325,7 +327,7 @@ describe('deploy config', () => {
     process.env.OD_USER_STATE_DIR = stateRoot;
     try {
       await expect(writeDisplayDevConfig({
-        displayDev,
+        displayDev: displayDev as never,
       })).rejects.toMatchObject({
         status: 400,
         message: expect.stringMatching(message),
@@ -892,10 +894,14 @@ describe('deployToDisplayDev', () => {
   });
 
   it.each([
+    ['displayDev string', 'bad', /settings must be an object/i],
+    ['displayDev array', [], /settings must be an object/i],
     ['visibility', { visibility: 'publik' }, /visibility must be/i],
     ['showBranding', { showBranding: 'sometimes' }, /showBranding must be/i],
     ['sharedWith scalar', { sharedWith: 123 }, /sharedWith must be/i],
     ['sharedWith entry', { sharedWith: ['team@example.com', 123] }, /sharedWith must contain only strings/i],
+    ['sharedWith without private visibility', { sharedWith: ['team@example.com'] }, /sharedWith requires private visibility/i],
+    ['sharedWith with public visibility', { visibility: 'public', sharedWith: ['team@example.com'] }, /sharedWith requires private visibility/i],
   ])('rejects invalid display.dev deploy selection: %s', async (_field, displayDev, message) => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -910,6 +916,97 @@ describe('deployToDisplayDev', () => {
       message: expect.stringMatching(message),
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects display.dev owned updates that send recipients with non-private visibility', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(deployToDisplayDev({
+      config: { token: 'Bearer dsp_live_secret', apiUrl: 'https://api.display.dev' },
+      files: [{ file: 'index.html', sourcePath: 'index.html', data: '<!doctype html><h1>Hello</h1>', contentType: 'text/html' }],
+      projectId: 'project-1',
+      priorMetadata: {
+        displayDev: {
+          mode: 'authenticated',
+          shortId: 'owned1234',
+        },
+      },
+      displayDev: {
+        visibility: 'public',
+        sharedWith: ['team@example.com'],
+      },
+    })).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringMatching(/sharedWith requires private visibility/i),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects display.dev owned updates that send recipients when the current artifact is non-private', async () => {
+    const calls: Array<{ url: string; method?: string }> = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method = init?.method || 'GET';
+      calls.push({ url, method });
+      if (method === 'GET' && url.endsWith('/v1/artifacts/owned1234')) {
+        return new Response(JSON.stringify({
+          shortId: 'owned1234',
+          url: 'https://display.dsp.so/owned1234-demo',
+          currentVersion: 2,
+          visibility: 'company',
+          sharedWith: [],
+          showBranding: null,
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json', etag: '"v2"' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(deployToDisplayDev({
+      config: { token: 'Bearer dsp_live_secret', apiUrl: 'https://api.display.dev' },
+      files: [{ file: 'index.html', sourcePath: 'index.html', data: '<!doctype html><h1>Hello</h1>', contentType: 'text/html' }],
+      projectId: 'project-1',
+      priorMetadata: {
+        displayDev: {
+          mode: 'authenticated',
+          shortId: 'owned1234',
+        },
+      },
+      displayDev: {
+        sharedWith: ['team@example.com'],
+      },
+    })).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringMatching(/sharedWith requires private visibility/i),
+    });
+    expect(calls).toEqual([
+      { url: 'https://api.display.dev/v1/artifacts/owned1234', method: 'GET' },
+    ]);
+  });
+
+  it('maps display.dev network failures to upstream unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('fetch failed');
+    }));
+
+    await expect(deployToDisplayDev({
+      config: { token: '', apiUrl: 'https://api.display.dev' },
+      files: [{ file: 'index.html', sourcePath: 'index.html', data: '<!doctype html><h1>Hello</h1>', contentType: 'text/html' }],
+      projectId: 'project-1',
+    })).rejects.toMatchObject({
+      status: 502,
+      code: 'UPSTREAM_UNAVAILABLE',
+      message: 'display.dev is unreachable.',
+    });
   });
 
   it('publishes authenticated artifacts with visibility fields', async () => {
@@ -1177,6 +1274,9 @@ describe('deployToDisplayDev', () => {
           shortId: 'owned1234',
           url: 'https://display.dsp.so/owned1234-demo',
           currentVersion: 2,
+          visibility: 'private',
+          sharedWith: ['alice@example.com'],
+          showBranding: null,
         }), {
           status: 200,
           headers: { 'content-type': 'application/json', etag: '"v2"' },
@@ -1239,6 +1339,57 @@ describe('deployToDisplayDev', () => {
     expect(calls[1]?.body?.get('showBranding')).toBeNull();
   });
 
+  it('maps stale display.dev owned update responses to conflict', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method = init?.method || 'GET';
+      if (method === 'GET' && url.endsWith('/v1/artifacts/owned1234')) {
+        return new Response(JSON.stringify({
+          shortId: 'owned1234',
+          url: 'https://display.dsp.so/owned1234-demo',
+          currentVersion: 2,
+          visibility: 'company',
+          sharedWith: [],
+          showBranding: null,
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json', etag: '"v2"' },
+        });
+      }
+      if (method === 'PUT' && url.endsWith('/v1/artifacts/owned1234')) {
+        return new Response(JSON.stringify({
+          message: 'Republishing requires a base version.',
+        }), {
+          status: 412,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(deployToDisplayDev({
+      config: { token: 'Bearer dsp_live_secret', apiUrl: 'https://api.display.dev' },
+      files: [{ file: 'index.html', sourcePath: 'index.html', data: '<!doctype html><h1>Hello</h1>', contentType: 'text/html' }],
+      projectId: 'project-1',
+      priorMetadata: {
+        displayDev: {
+          mode: 'authenticated',
+          shortId: 'owned1234',
+        },
+      },
+    })).rejects.toMatchObject({
+      status: 412,
+      code: 'CONFLICT',
+      message: 'Republishing requires a base version.',
+    });
+  });
+
   it('clears display.dev shared recipients when updating an owned artifact with an empty share list', async () => {
     const calls: Array<{ url: string; method?: string; auth?: string | null; ifMatch?: string | null; body?: FormData }> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -1264,6 +1415,9 @@ describe('deployToDisplayDev', () => {
           shortId: 'owned1234',
           url: 'https://display.dsp.so/owned1234-demo',
           currentVersion: 2,
+          visibility: 'private',
+          sharedWith: ['old@example.com'],
+          showBranding: null,
         }), {
           status: 200,
           headers: { 'content-type': 'application/json', etag: '"v2"' },

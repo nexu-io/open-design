@@ -3448,6 +3448,8 @@ export const uk: Dict = {
   'fileViewer.savingConfig': 'Збереження…',
   'fileViewer.deployConfigSaveFailed': 'Не вдалося зберегти налаштування Vercel.',
   'fileViewer.deployFailed': 'Розгортання не вдалося. Перевірте налаштування Vercel та спробуйте ще раз.',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': 'Не вдалося зберегти налаштування {provider}.',
   'fileViewer.deployProviderFailed': 'Розгортання на {provider} не вдалося. Перевірте налаштування й спробуйте ще раз.',
   'fileViewer.deployResultLabel': 'URL розгортання',

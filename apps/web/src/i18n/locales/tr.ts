@@ -3448,6 +3448,8 @@ export const tr: Dict = {
   'fileViewer.savingConfig': 'Kaydediliyor…',
   'fileViewer.deployConfigSaveFailed': 'Vercel ayarları kaydedilemedi.',
   'fileViewer.deployFailed': 'Yayınlama başarısız oldu. Vercel ayarlarınızı kontrol edin ve yeniden deneyin.',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': '{provider} ayarları kaydedilemedi.',
   'fileViewer.deployProviderFailed': '{provider} yayını başarısız oldu. Ayarları kontrol edip yeniden deneyin.',
   'fileViewer.deployResultLabel': 'Yayınlanmış URL',

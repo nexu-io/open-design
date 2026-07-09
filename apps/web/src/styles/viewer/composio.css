@@ -144,6 +144,16 @@
   margin: 0;
   color: var(--red);
 }
+.deploy-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--red) 28%, var(--border));
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--red) 6%, var(--bg-panel));
+}
 .deploy-result-block {
   overflow: hidden;
   border: 1px solid var(--border);

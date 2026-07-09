@@ -4308,6 +4308,8 @@ export interface Dict {
   'fileViewer.savingConfig': string;
   'fileViewer.deployConfigSaveFailed': string;
   'fileViewer.deployFailed': string;
+  'fileViewer.deploymentsLoadFailed': string;
+  'fileViewer.deploymentsLoadRetry': string;
   'fileViewer.deployProviderConfigSaveFailed': string;
   'fileViewer.deployProviderFailed': string;
   'fileViewer.deployResultLabel': string;

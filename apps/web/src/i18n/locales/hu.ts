@@ -3448,6 +3448,8 @@ export const hu: Dict = {
   'fileViewer.savingConfig': 'Mentés…',
   'fileViewer.deployConfigSaveFailed': 'A Vercel beállítások nem menthetők.',
   'fileViewer.deployFailed': 'A telepítés sikertelen. Ellenőrizd a Vercel beállításokat, és próbáld újra.',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': 'A {provider} beállításai nem menthetők.',
   'fileViewer.deployProviderFailed': 'A {provider} telepítés sikertelen. Ellenőrizd a beállításokat, és próbáld újra.',
   'fileViewer.deployResultLabel': 'Telepített URL',

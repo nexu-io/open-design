@@ -3448,6 +3448,8 @@ export const ptBR: Dict = {
   'fileViewer.savingConfig': 'Salvando…',
   'fileViewer.deployConfigSaveFailed': 'Não foi possível salvar as configurações da Vercel.',
   'fileViewer.deployFailed': 'Falha na implantação. Verifique as configurações da Vercel e tente novamente.',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': 'Não foi possível salvar as configurações de {provider}.',
   'fileViewer.deployProviderFailed': 'A implantação em {provider} falhou. Verifique as configurações e tente novamente.',
   'fileViewer.deployResultLabel': 'URL implantada',

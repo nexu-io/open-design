@@ -3448,6 +3448,8 @@ export const ar: Dict = {
   'fileViewer.savingConfig': 'جاري الحفظ...',
   'fileViewer.deployConfigSaveFailed': 'تعذر حفظ إعدادات Vercel.',
   'fileViewer.deployFailed': 'فشل النشر. تحقق من إعدادات Vercel وحاول مرة أخرى.',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': 'تعذر حفظ إعدادات {provider}.',
   'fileViewer.deployProviderFailed': 'فشل النشر إلى {provider}. تحقق من الإعدادات وحاول مرة أخرى.',
   'fileViewer.deployResultLabel': 'رابط النشر',

@@ -3448,6 +3448,8 @@ export const ru: Dict = {
   'fileViewer.savingConfig': 'Сохранение…',
   'fileViewer.deployConfigSaveFailed': 'Не удалось сохранить настройки Vercel.',
   'fileViewer.deployFailed': 'Развёртывание не удалось. Проверьте настройки Vercel и попробуйте снова.',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': 'Не удалось сохранить настройки {provider}.',
   'fileViewer.deployProviderFailed': 'Развёртывание на {provider} не удалось. Проверьте настройки и попробуйте снова.',
   'fileViewer.deployResultLabel': 'URL развёрнутого сайта',

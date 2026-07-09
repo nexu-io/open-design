@@ -3651,6 +3651,8 @@ export const zhCN: Dict = {
   "fileViewer.savingConfig": "保存中…",
   "fileViewer.deployConfigSaveFailed": "保存 Vercel 设置失败。",
   "fileViewer.deployFailed": "部署失败，请检查 Vercel 设置后重试。",
+  "fileViewer.deploymentsLoadFailed": "无法加载部署。发布前请重试。",
+  "fileViewer.deploymentsLoadRetry": "重试",
   "fileViewer.deployProviderConfigSaveFailed": "无法保存 {provider} 设置。",
   "fileViewer.deployProviderFailed": "{provider} 部署失败。请检查设置后重试。",
   "fileViewer.deployResultLabel": "部署链接",

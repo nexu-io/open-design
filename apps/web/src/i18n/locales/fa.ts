@@ -3448,6 +3448,8 @@ export const fa: Dict = {
   'fileViewer.savingConfig': 'در حال ذخیره…',
   'fileViewer.deployConfigSaveFailed': 'ذخیره تنظیمات Vercel ممکن نبود.',
   'fileViewer.deployFailed': 'استقرار ناموفق بود. تنظیمات Vercel را بررسی و دوباره تلاش کنید.',
+  'fileViewer.deploymentsLoadFailed': 'Could not load deployments. Retry before publishing.',
+  'fileViewer.deploymentsLoadRetry': 'Retry',
   'fileViewer.deployProviderConfigSaveFailed': 'ذخیره تنظیمات {provider} ممکن نبود.',
   'fileViewer.deployProviderFailed': 'استقرار روی {provider} ناموفق بود. تنظیمات را بررسی و دوباره تلاش کنید.',
   'fileViewer.deployResultLabel': 'URL مستقرشده',

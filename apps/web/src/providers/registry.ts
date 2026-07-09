@@ -1806,17 +1806,18 @@ export async function fetchProjectDeployments(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<WebDeploymentInfo[]> {
-  try {
-    const resp = await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/deployments`,
-      workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
-    );
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as ProjectDeploymentsResponse;
-    return (json.deployments ?? []) as WebDeploymentInfo[];
-  } catch {
-    return [];
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/deployments`,
+    workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
+  );
+  if (!resp.ok) {
+    const payload = (await resp.json().catch(() => null)) as
+      | { error?: { message?: string }; message?: string }
+      | null;
+    throw new Error(payload?.error?.message || payload?.message || `Could not load deployments (${resp.status})`);
   }
+  const json = (await resp.json()) as ProjectDeploymentsResponse;
+  return (json.deployments ?? []) as WebDeploymentInfo[];
 }
 
 export async function deployProjectFile(

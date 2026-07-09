@@ -1591,20 +1591,27 @@ function displayDevAccessSettingsForDeployment(
     return null;
   }
   const displayDev = deployment.displayDev;
-  if (!isDisplayDevVisibility(displayDev.visibility) || !isDisplayDevShowBranding(displayDev.showBranding)) {
+  if (
+    !isDisplayDevVisibility(displayDev.visibility) ||
+    !Array.isArray(displayDev.sharedWith) ||
+    !isDisplayDevShowBranding(displayDev.showBranding)
+  ) {
     return null;
   }
-  if (displayDev.visibility === 'private' && !Array.isArray(displayDev.sharedWith)) {
-    return null;
-  }
-  const sharedWith = Array.isArray(displayDev.sharedWith)
-    ? displayDev.sharedWith.map((item) => item.trim()).filter(Boolean)
-    : [];
+  const sharedWith = displayDev.sharedWith.map((item) => item.trim()).filter(Boolean);
   return {
     visibility: displayDev.visibility,
     sharedWith,
     showBranding: displayDev.showBranding,
   };
+}
+
+function displayDevAuthenticatedDeploymentMissingAccessSettings(
+  deployment: WebDeploymentInfo | null | undefined,
+): boolean {
+  return deployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
+    deployment.displayDev?.mode === 'authenticated' &&
+    !displayDevAccessSettingsForDeployment(deployment);
 }
 
 function isDisplayDevVisibility(value: unknown): value is DisplayDevVisibility {
@@ -8073,10 +8080,12 @@ function HtmlViewer({
   const [deployPhase, setDeployPhase] = useState<'idle' | 'deploying' | 'preparing-link'>('idle');
   const [savingDeployConfig, setSavingDeployConfig] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
+  const [deployProviderLoadError, setDeployProviderLoadError] = useState<string | null>(null);
   const [deployResult, setDeployResult] = useState<WebDeployProjectFileResponse | null>(null);
   const [copiedDeployLink, setCopiedDeployLink] = useState<string | null>(null);
   const [deployProviderId, setDeployProviderId] = useState<WebDeployProviderId>(DEFAULT_DEPLOY_PROVIDER_ID);
   const [deployTarget, setDeployTarget] = useState<'preview' | 'production'>('production');
+  const deploymentsLoadFailedMessage = t('fileViewer.deploymentsLoadFailed');
   const [deployProviderLoading, setDeployProviderLoading] = useState(false);
   const [projectSocialShare, setProjectSocialShare] = useState<SocialShareResponse | null>(null);
   const [deployToken, setDeployToken] = useState('');
@@ -9395,11 +9404,39 @@ function HtmlViewer({
     const next: Partial<Record<WebDeployProviderId, WebDeploymentInfo>> = {};
     for (const option of DEPLOY_PROVIDER_OPTIONS) {
       const deploymentForProvider = items
-        .filter((item) => item.fileName === file.name && item.providerId === option.id && item.url?.trim())
+        .filter((item) =>
+          item.fileName === file.name &&
+          item.providerId === option.id &&
+          item.url?.trim() &&
+          !displayDevAuthenticatedDeploymentMissingAccessSettings(item))
         .sort(compareDeploymentsByNewest)[0];
       if (deploymentForProvider) next[option.id] = deploymentForProvider;
     }
     return next;
+  }
+
+  function deploymentMapForCurrentFileFromMap(
+    items: Partial<Record<WebDeployProviderId, WebDeploymentInfo>>,
+  ) {
+    return deploymentMapForCurrentFile(Object.values(items).filter(Boolean));
+  }
+
+  function clearDisplayDevDeploymentState(message?: string) {
+    setDeploymentsByProvider((current) => {
+      const next = { ...current };
+      delete next[DISPLAYDEV_PROVIDER_ID];
+      return next;
+    });
+    setDeployment((current) => current?.providerId === DISPLAYDEV_PROVIDER_ID ? null : current);
+    setDeployResult((current) => current?.providerId === DISPLAYDEV_PROVIDER_ID ? null : current);
+    if (message) setDeployProviderLoadError(message);
+  }
+
+  function displayDevDeploymentMissingAccessSettingsForCurrentFile(items: WebDeploymentInfo[]) {
+    return items.some((item) => (
+      item.fileName === file.name &&
+      displayDevAuthenticatedDeploymentMissingAccessSettings(item)
+    ));
   }
 
   function syncDeployFormFromConfig(
@@ -9531,28 +9568,67 @@ function HtmlViewer({
     deployProviderLoadingRef.current = true;
     setDeployProviderLoading(true);
     setDeployProviderId(providerId);
+    setDeployProviderLoadError(null);
     try {
-      const deployments = await fetchProjectDeployments(projectId, workspaceContext);
-      const nextDeploymentsByProvider = deploymentMapForCurrentFile(deployments);
+      const config = await fetchDeployConfig(providerId);
+      let deploymentsLoadError: unknown = null;
+      let nextDeploymentsByProvider: Partial<Record<WebDeployProviderId, WebDeploymentInfo>> = {};
+      let displayDevMissingAccessSettings = false;
+      try {
+        const deployments = await fetchProjectDeployments(projectId, workspaceContext);
+        displayDevMissingAccessSettings = displayDevDeploymentMissingAccessSettingsForCurrentFile(deployments);
+        nextDeploymentsByProvider = deploymentMapForCurrentFile(deployments);
+      } catch (err) {
+        deploymentsLoadError = err;
+      }
       const exactDeployment = nextDeploymentsByProvider[providerId] ?? null;
-      const fallbackDeployment = options?.fallbackToExisting
+      const fallbackDeployment = options?.fallbackToExisting && providerId !== DISPLAYDEV_PROVIDER_ID
         ? Object.values(nextDeploymentsByProvider)[0] ?? null
         : null;
       const currentDeployment = exactDeployment ?? fallbackDeployment;
+      if (
+        providerId === DISPLAYDEV_PROVIDER_ID &&
+        displayDevMissingAccessSettings
+      ) {
+        deploymentsLoadError = new Error(deploymentsLoadFailedMessage);
+      }
       // Use the explicit providerId for config/form so a fallback deployment from
       // another provider only fills the existing-URL display, never the form/credentials.
-      const config = await fetchDeployConfig(providerId);
       if (requestSeq !== deployProviderLoadSeqRef.current) {
         return { config: null, currentDeployment: null };
       }
       syncDeployFormFromConfig(providerId, config, currentDeployment ?? null);
-      setDeploymentsByProvider(nextDeploymentsByProvider);
-      setDeployment(currentDeployment ?? null);
-      setDeployResult(currentDeployment ?? null);
+      if (deploymentsLoadError) {
+        if (providerId === DISPLAYDEV_PROVIDER_ID) {
+          clearDisplayDevDeploymentState(
+            deploymentsLoadError instanceof Error
+              ? deploymentsLoadError.message
+              : deploymentsLoadFailedMessage,
+          );
+        } else {
+          const preservedDeployments = deploymentMapForCurrentFileFromMap(deploymentsByProvider);
+          const preservedDeployment = preservedDeployments[providerId] ?? null;
+          setDeploymentsByProvider(preservedDeployments);
+          setDeployment(preservedDeployment);
+          setDeployResult(preservedDeployment);
+        }
+      } else {
+        setDeploymentsByProvider(nextDeploymentsByProvider);
+        setDeployment(currentDeployment ?? null);
+        setDeployResult(currentDeployment ?? null);
+      }
       if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID && config?.configured) {
         void loadCloudflareZones(config, { requestSeq });
       }
       return { config, currentDeployment };
+    } catch (err) {
+      if (requestSeq === deployProviderLoadSeqRef.current) {
+        setDeployProviderLoadError(err instanceof Error ? err.message : deploymentsLoadFailedMessage);
+        setDeploymentsByProvider({});
+        setDeployment(null);
+        setDeployResult(null);
+      }
+      return { config: null, currentDeployment: null };
     } finally {
       if (requestSeq === deployProviderLoadSeqRef.current) {
         deployProviderLoadingRef.current = false;
@@ -9903,23 +9979,61 @@ function HtmlViewer({
   useEffect(() => {
     if (!workspaceActive) return;
     const requestSeq = ++deploymentsLoadSeqRef.current;
+    const providerRequestSeq = deployProviderLoadSeqRef.current;
     let cancelled = false;
-    setDeployResult(null);
+    const currentFileDeployments = deploymentMapForCurrentFileFromMap(deploymentsByProvider);
+    const currentDeployment = currentFileDeployments[deployProviderId] ?? null;
+    setDeploymentsByProvider(currentFileDeployments);
+    setDeployment(currentDeployment);
+    setDeployResult(currentDeployment);
     setDeployError(null);
+    setDeployProviderLoadError(null);
     setCopiedDeployLink(null);
     setDeployPhase('idle');
+    if (deployProviderLoadingRef.current) {
+      return () => {
+        cancelled = true;
+      };
+    }
     void fetchProjectDeployments(projectId, workspaceContext).then((items) => {
-      if (cancelled || deploymentsLoadSeqRef.current !== requestSeq) return;
+      if (
+        cancelled ||
+        requestSeq !== deploymentsLoadSeqRef.current ||
+        providerRequestSeq !== deployProviderLoadSeqRef.current ||
+        deployProviderLoadingRef.current
+      ) return;
+      const displayDevMissingAccessSettings = displayDevDeploymentMissingAccessSettingsForCurrentFile(items);
       const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
       const current = nextDeploymentsByProvider[deployProviderId] ?? null;
+      if (deployProviderId === DISPLAYDEV_PROVIDER_ID && displayDevMissingAccessSettings) {
+        clearDisplayDevDeploymentState(deploymentsLoadFailedMessage);
+        return;
+      }
       setDeploymentsByProvider(nextDeploymentsByProvider);
       setDeployment(current ?? null);
       setDeployResult(current ?? null);
+    }).catch((err) => {
+      if (
+        cancelled ||
+        requestSeq !== deploymentsLoadSeqRef.current ||
+        providerRequestSeq !== deployProviderLoadSeqRef.current ||
+        deployProviderLoadingRef.current
+      ) return;
+      if (deployProviderId === DISPLAYDEV_PROVIDER_ID) {
+        clearDisplayDevDeploymentState(err instanceof Error ? err.message : deploymentsLoadFailedMessage);
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, deployProviderId, workspaceActive, workspaceContext]);
+  }, [
+    projectId,
+    file.name,
+    deployProviderId,
+    deploymentsLoadFailedMessage,
+    workspaceActive,
+    workspaceContext,
+  ]);
 
   // A retained HtmlViewer stays mounted while the user visits Design Files and
   // comes back, so its initial deployment snapshot can legitimately be older
@@ -14233,6 +14347,7 @@ function HtmlViewer({
     setDeployModalOpen(true);
     setDeployModalIntent(intent);
     setDeployError(null);
+    setDeployProviderLoadError(null);
     setDeployActionToast(null);
     setCopiedDeployLink(null);
     setDeployPhase('idle');
@@ -14242,14 +14357,19 @@ function HtmlViewer({
   async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
     if (nextProviderId === deployProviderId) return;
     setDeployError(null);
+    setDeployProviderLoadError(null);
     setDeployPhase('idle');
     await loadDeployProvider(nextProviderId);
   }
 
   async function saveDeployConfig() {
     if (deployProviderLoadingRef.current) return null;
+    const wasDisplayDevLoadBlocked = deployProviderId === DISPLAYDEV_PROVIDER_ID && Boolean(deployProviderLoadError);
     setSavingDeployConfig(true);
     setDeployError(null);
+    if (!wasDisplayDevLoadBlocked) {
+      setDeployProviderLoadError(null);
+    }
     setDeployActionToast(null);
     try {
       if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
@@ -14267,13 +14387,31 @@ function HtmlViewer({
         throw new Error(t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
       }
       syncDeployFormFromConfig(deployProviderId, config, deployResult || deployment);
-      if (deployProviderId === DISPLAYDEV_PROVIDER_ID && deployToken.trim() && deployToken.trim() !== deployConfig?.tokenMask) {
-        const items = await fetchProjectDeployments(projectId);
-        const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
-        const current = nextDeploymentsByProvider[DISPLAYDEV_PROVIDER_ID] ?? null;
-        setDeploymentsByProvider(nextDeploymentsByProvider);
-        setDeployment(current);
-        setDeployResult(current);
+      const shouldReloadDisplayDevDeployments =
+        deployProviderId === DISPLAYDEV_PROVIDER_ID &&
+        (wasDisplayDevLoadBlocked || (deployToken.trim() && deployToken.trim() !== deployConfig?.tokenMask));
+      if (shouldReloadDisplayDevDeployments) {
+        try {
+          const items = await fetchProjectDeployments(projectId);
+          const displayDevMissingAccessSettings = displayDevDeploymentMissingAccessSettingsForCurrentFile(items);
+          const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
+          const current = nextDeploymentsByProvider[DISPLAYDEV_PROVIDER_ID] ?? null;
+          if (displayDevMissingAccessSettings) {
+            throw new Error(deploymentsLoadFailedMessage);
+          }
+          setDeploymentsByProvider(nextDeploymentsByProvider);
+          setDeployment(current);
+          setDeployResult(current);
+          setDeployProviderLoadError(null);
+        } catch (err) {
+          const preservedDeployments = deploymentMapForCurrentFileFromMap(deploymentsByProvider);
+          delete preservedDeployments[DISPLAYDEV_PROVIDER_ID];
+          setDeploymentsByProvider(preservedDeployments);
+          setDeployment(null);
+          setDeployResult(null);
+          setDeployProviderLoadError(err instanceof Error ? err.message : deploymentsLoadFailedMessage);
+          return null;
+        }
       }
       if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
         await loadCloudflareZones(config);
@@ -14335,9 +14473,11 @@ function HtmlViewer({
 
   async function deployToSelectedProvider() {
     if (deployProviderLoadingRef.current) return;
+    if (deployProviderLoadError && deployProviderId === DISPLAYDEV_PROVIDER_ID) return;
     setDeploying(true);
     setDeployPhase('deploying');
     setDeployError(null);
+    setDeployProviderLoadError(null);
     setDeployActionToast(null);
     setCopiedDeployLink(null);
     // Real-deploy analytics: report success only after the provider actually
@@ -14425,6 +14565,13 @@ function HtmlViewer({
         displayDevSelection,
         workspaceContext,
       );
+      if (
+        deployProviderId === DISPLAYDEV_PROVIDER_ID &&
+        displayDevAuthenticatedDeploymentMissingAccessSettings(next)
+      ) {
+        clearDisplayDevDeploymentState(deploymentsLoadFailedMessage);
+        throw new Error(deploymentsLoadFailedMessage);
+      }
       const deploySucceeded = deployResultState(next.status) !== 'failed';
       if (deployProviderId === DISPLAYDEV_PROVIDER_ID && deploySucceeded) {
         const displayDevAccessSettings = displayDevAccessSettingsForDeployment(next);
@@ -14466,6 +14613,9 @@ function HtmlViewer({
         setDeployActionToast(message);
         deployTokenInputRef.current?.focus();
       } else {
+        if (deployProviderId === DISPLAYDEV_PROVIDER_ID) {
+          clearDisplayDevDeploymentState(message);
+        }
         setDeployError(message);
       }
       fireDeployResult(
@@ -14485,6 +14635,13 @@ function HtmlViewer({
     setDeployPhase('preparing-link');
     try {
       const next = await checkDeploymentLink(projectId, current.id, workspaceContext);
+      if (
+        deployProviderId === DISPLAYDEV_PROVIDER_ID &&
+        displayDevAuthenticatedDeploymentMissingAccessSettings(next)
+      ) {
+        clearDisplayDevDeploymentState(deploymentsLoadFailedMessage);
+        return;
+      }
       setDeploymentsByProvider((items) => ({
         ...items,
         [next.providerId]: next,
@@ -14492,7 +14649,11 @@ function HtmlViewer({
       setDeployment(next);
       setDeployResult(next);
     } catch (err) {
-      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployFailed'));
+      const message = err instanceof Error ? err.message : t('fileViewer.deployFailed');
+      if (deployProviderId === DISPLAYDEV_PROVIDER_ID) {
+        clearDisplayDevDeploymentState(message);
+      }
+      setDeployError(message);
     } finally {
       setDeployPhase('idle');
     }
@@ -15612,6 +15773,7 @@ function HtmlViewer({
   const activeDisplayDev = activeDeployment?.providerId === DISPLAYDEV_PROVIDER_ID
     ? activeDeployment.displayDev
     : undefined;
+  const displayDevProviderLoadBlocked = deployProviderId === DISPLAYDEV_PROVIDER_ID && Boolean(deployProviderLoadError);
   const hasDisplayDevApiKey = deployProviderId === DISPLAYDEV_PROVIDER_ID && Boolean(deployToken.trim());
   const displayDevApiKeyHint = hasDisplayDevApiKey
     ? t('fileViewer.displayDevApiKeyClearHint')
@@ -15646,7 +15808,9 @@ function HtmlViewer({
     selectedCloudflareZone && normalizedCloudflarePrefix
       ? `${normalizedCloudflarePrefix}.${selectedCloudflareZone.name}`
       : '';
-  const deployResultCards: DeployResultCard[] = activeCloudflarePages
+  const deployResultCards: DeployResultCard[] = displayDevProviderLoadBlocked
+    ? []
+    : activeCloudflarePages
     ? (() => {
         const cards: DeployResultCard[] = [];
         const pagesDevUrl = activeCloudflarePages.pagesDev?.url || activeDeployedUrl;
@@ -18358,7 +18522,21 @@ function HtmlViewer({
                     <span className="field-hint">{displayDevApiKeyHint}</span>
                   ) : null}
                 </div>
-                {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                {displayDevProviderLoadBlocked ? (
+                  <div className="deploy-load-error" role="alert">
+                    <p className="deploy-error">{deployProviderLoadError}</p>
+                    <button
+                      type="button"
+                      className="viewer-action"
+                      disabled={deployProviderLoading}
+                      onClick={() => {
+                        void loadDeployProvider(DISPLAYDEV_PROVIDER_ID);
+                      }}
+                    >
+                      {t('fileViewer.deploymentsLoadRetry')}
+                    </button>
+                  </div>
+                ) : deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
                   <>
                     <div className="deploy-field-grid single-field">
                       <label>
@@ -18519,7 +18697,7 @@ function HtmlViewer({
                 </div>
               )}
               {deployHint ? <p className="hint">{deployHint}</p> : null}
-              {deployError ? <p className="deploy-error">{deployError}</p> : null}
+              {deployError ? <p className="deploy-error" role="alert">{deployError}</p> : null}
               {!deployError
                 && deployPhase === 'idle'
                 && deployResultCards.length > 0
@@ -18620,7 +18798,7 @@ function HtmlViewer({
               <button
                 type="button"
                 className="viewer-action primary"
-                disabled={deployProviderLoading || deploying || savingDeployConfig || deployPhase !== 'idle'}
+                disabled={displayDevProviderLoadBlocked || deployProviderLoading || deploying || savingDeployConfig || deployPhase !== 'idle'}
                 onClick={() => {
                   void deployToSelectedProvider();
                 }}
