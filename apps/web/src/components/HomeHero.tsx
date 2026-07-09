@@ -63,7 +63,7 @@ import {
   inlineMentionToken,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
-import { generateTeams, type GeneratedTeam, MODE_LABELS, MODE_ICONS, ROLE_LABELS } from '../utils/teamGenerator';
+import { generateTeams, type GeneratedTeam, MODE_LABELS, MODE_DESCRIPTIONS, MODE_ICONS, ROLE_LABELS } from '../utils/teamGenerator';
 import { useWaitTeamEnabled } from './Theater';
 import { fetchAgentsCached } from '../state/agentsCache';
 import { useI18n, useT } from '../i18n';
@@ -423,6 +423,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const [caretRect, setCaretRect] = useState<CaretRect | null>(null);
   const [availableAgents, setAvailableAgents] = useState<AgentInfo[]>([]);
   const [agentsLoadingForTeams, setAgentsLoadingForTeams] = useState(false);
+  const [teamSubMode, setTeamSubMode] = useState<'recommended' | 'custom'>('recommended');
+  const [teamBuilderMode, setTeamBuilderMode] = useState('parallel');
+  const [teamBuilderName, setTeamBuilderName] = useState('');
+  const [teamBuilderAssignments, setTeamBuilderAssignments] = useState<Array<{
+    agentId: string; agentType: string; agentName: string; role: string;
+  }>>([]);
   const waitTeamEnabled = useWaitTeamEnabled();
   // The scenario the placeholder carousel is currently showing. A Send on an
   // empty composer submits THIS scenario's text + template (see handleSend).
@@ -579,9 +585,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     { id: 'files', label: t('chat.mentionTabFiles'), count: fileMatches.length },
     { id: 'plugins', label: t('entry.navPlugins'), count: pluginMatches.length },
     { id: 'skills', label: t('homeHero.skills'), count: skillMatches.length },
-    { id: 'mcp', label: 'MCP', count: mcpMatches.length },
-    { id: 'connectors', label: 'Connectors', count: connectorMatches.length },
-    { id: 'teams', label: t('chat.mentionTabTeams', { defaultValue: 'Teams' }), count: teamMatches.length },
+    { id: 'mcp', label: t('chat.mentionTabMcp'), count: mcpMatches.length },
+    { id: 'connectors', label: t('chat.mentionTabConnectors'), count: connectorMatches.length },
+    { id: 'teams', label: t('chat.mentionTabTeams'), count: teamMatches.length },
   ];
   const showFiles = mentionTab === 'all' || mentionTab === 'files';
   const showPlugins = mentionTab === 'all' || mentionTab === 'plugins';
@@ -662,10 +668,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           })),
         }
       : null,
-    showTeams
+    showTeams && !(mentionTab === 'teams' && teamSubMode === 'custom')
       ? {
           id: 'teams',
-          label: t('chat.mentionTabTeams', { defaultValue: 'Teams' }),
+          label: t('chat.mentionTabTeams'),
           options: teamMatches.map((team) => ({
             id: `team-${team.id}`,
             icon: (MODE_ICONS[team.mode] ?? 'grid') as IconName,
@@ -1012,6 +1018,65 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPickConnector(connector, next);
   }
 
+  function buildCustomTeam(): GeneratedTeam | null {
+    const assignments = teamBuilderAssignments;
+    if (assignments.length === 0) return null;
+    const mode = teamBuilderMode;
+    const name = teamBuilderName.trim() || `${MODE_LABELS[mode] ?? mode} · 自定义`;
+    const uniqueId = `team-custom-${Date.now()}`;
+    return {
+      id: uniqueId,
+      mode,
+      name,
+      description: `${MODE_DESCRIPTIONS[mode] ?? ''} (${assignments.length} Agent 自定义编排)`,
+      assignments: assignments.map((a) => ({
+        agentId: a.agentId,
+        agentType: a.agentType,
+        agentName: a.agentName,
+        role: a.role || 'agent',
+        score: 0,
+        reason: '用户自定义分配',
+      })),
+    };
+  }
+
+  function handleCreateCustomTeam() {
+    const team = buildCustomTeam();
+    if (!team) return;
+    const token = inlineMentionToken(team.name);
+    const next = insertHomeMention(token, {
+      id: team.id,
+      kind: 'team',
+      label: team.name,
+      token,
+    });
+    setMentionTrigger(null);
+    onPickTeam(team, next);
+    setTeamSubMode('recommended');
+    setTeamBuilderAssignments([]);
+    setTeamBuilderName('');
+  }
+
+  function toggleTeamBuilderAgent(agent: { id: string; name: string; available: boolean }) {
+    if (!agent.available) return;
+    setTeamBuilderAssignments((prev) => {
+      const exists = prev.find((a) => a.agentId === agent.id);
+      if (exists) return prev.filter((a) => a.agentId !== agent.id);
+      return [...prev, {
+        agentId: agent.id,
+        agentType: agent.id,
+        agentName: agent.name,
+        role: '',
+      }];
+    });
+  }
+
+  function updateTeamBuilderRole(agentId: string, role: string) {
+    setTeamBuilderAssignments((prev) =>
+      prev.map((a) => (a.agentId === agentId ? { ...a, role } : a)),
+    );
+  }
+
   function pickTeam(team: GeneratedTeam) {
     const token = inlineMentionToken(team.name);
     const next = insertHomeMention(token, {
@@ -1021,6 +1086,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       token,
     });
     onPickTeam(team, next);
+    setTeamSubMode('recommended');
+    setTeamBuilderAssignments([]);
+    setTeamBuilderName('');
   }
 
   function insertInlineMentionSeparator() {
@@ -1719,10 +1787,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               ))}
             </div>
             <div className="home-hero__plugin-picker-results">
-              {visibleLoading && visiblePickerOptions.length === 0 ? (
+              {visibleLoading && visiblePickerOptions.length === 0 && teamSubMode === 'recommended' ? (
                 <div className="home-hero__plugin-picker-empty">{t('homeHero.loadingContext')}</div>
               ) : null}
-              {!visibleLoading && visiblePickerOptions.length === 0 ? (
+              {!visibleLoading && visiblePickerOptions.length === 0 && !(mentionTab === 'teams' && teamSubMode === 'custom') ? (
                 <div className="home-hero__plugin-picker-empty">
                   {mentionTab === 'teams' ? (
                     waitTeamEnabled ? (
@@ -1739,6 +1807,122 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                   ) : (
                     <>{t('homeHero.searchPrompt')}</>
                   )}
+                </div>
+              ) : null}
+              {showTeams && mentionTab === 'teams' ? (
+                <div className="home-hero__team-sub-tabs mention-team-tabs" role="tablist">
+                  <button
+                    role="tab"
+                    aria-selected={teamSubMode === 'recommended'}
+                    className={`mention-team-tab${teamSubMode === 'recommended' ? ' is-active' : ''}`}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setTeamSubMode('recommended')}
+                  >
+                    <Icon name="sparkles" size={11} />
+                    {t('waiteam.teamTabRecommended')}
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected={teamSubMode === 'custom'}
+                    className={`mention-team-tab${teamSubMode === 'custom' ? ' is-active' : ''}`}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setTeamSubMode('custom')}
+                  >
+                    <Icon name="sliders" size={11} />
+                    {t('waiteam.teamTabCustom')}
+                  </button>
+                </div>
+              ) : null}
+              {teamSubMode === 'custom' && mentionTab === 'teams' ? (
+                <div className="mention-team-builder">
+                  <div className="mention-team-builder-field">
+                    <label>{t('waiteam.customTeamModeLabel')}</label>
+                    <select
+                      value={teamBuilderMode}
+                      onChange={(e) => setTeamBuilderMode(e.target.value)}
+                    >
+                      {Object.entries(MODE_LABELS).map(([key, label]) => (
+                        <option key={key} value={key}>
+                          {label} — {MODE_DESCRIPTIONS[key] ?? ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="mention-team-builder-field">
+                    <label>{t('waiteam.customTeamNameLabel')}</label>
+                    <input
+                      type="text"
+                      value={teamBuilderName}
+                      onChange={(e) => setTeamBuilderName(e.target.value)}
+                      placeholder={t('waiteam.customTeamNamePlaceholder')}
+                    />
+                  </div>
+                  <div className="mention-team-builder-field">
+                    <label>{t('waiteam.customTeamAgentsLabel')}</label>
+                    <div className="mention-team-builder-agents">
+                      {availableAgents.filter((a) => a.available).map((agent) => {
+                        const assigned = teamBuilderAssignments.find((a) => a.agentId === agent.id);
+                        return (
+                          <div
+                            key={agent.id}
+                            className={`mention-team-builder-agent ${assigned ? 'selected' : ''}`}
+                          >
+                            <button
+                              type="button"
+                              className="mention-team-builder-agent-toggle"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => toggleTeamBuilderAgent(agent)}
+                            >
+                              <span className="agent-check">{assigned ? '\u2713' : '+'}</span>
+                              <span className="agent-name">{agent.name}</span>
+                            </button>
+                            {assigned ? (
+                              <select
+                                value={assigned.role}
+                                onChange={(e) => updateTeamBuilderRole(agent.id, e.target.value)}
+                                className="mention-team-builder-role-select"
+                              >
+                                <option value="">{t('waiteam.customTeamPickRole')}</option>
+                                {Object.entries(ROLE_LABELS).map(([key, label]) => (
+                                  <option key={key} value={key}>{label}</option>
+                                ))}
+                              </select>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                      {availableAgents.filter((a) => a.available).length === 0 ? (
+                        <span className="mention-team-builder-empty">
+                          {t('waiteam.customTeamNoAgents')}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  {availableAgents.filter((a) => !a.available).length > 0 ? (
+                    <div className="mention-team-builder-field">
+                      <label>{t('waiteam.customTeamMissingAgents')}</label>
+                      <div className="mention-team-builder-agents">
+                        {availableAgents.filter((a) => !a.available).map((agent) => (
+                          <div key={agent.id} className="mention-team-builder-agent unavailable">
+                            <span className="agent-name">{agent.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="mention-team-builder-actions">
+                    <button
+                      type="button"
+                      className="mention-team-builder-action create"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => handleCreateCustomTeam()}
+                      disabled={teamBuilderAssignments.length === 0 || teamBuilderAssignments.some((a) => !a.role)}
+                    >
+                      {t('waiteam.customTeamCreate')}
+                    </button>
+                  </div>
                 </div>
               ) : null}
               {visibleSections.map((section) => (

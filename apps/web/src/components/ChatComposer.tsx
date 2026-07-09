@@ -2259,7 +2259,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         // renders the same files-first section order and highlights the
         // matching row from activeIndex.
         const showFiles = mentionTab === 'all' || mentionTab === 'files';
-        const showTabs = mentionTab === 'all' || mentionTab === 'tabs';
+        const showTabs = mentionTab === 'all';
         const showPlugins = mentionTab === 'all' || mentionTab === 'plugins';
         const showSkills = mentionTab === 'all' || mentionTab === 'skills';
         const showMcp = mentionTab === 'all' || mentionTab === 'mcp';
@@ -2304,7 +2304,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         }
         i -= filteredFiles.length;
       }
-      if (mentionTab === 'all' || mentionTab === 'tabs') {
+      if (mentionTab === 'all') {
         if (i < filteredWorkspaceContexts.length) {
           insertWorkspaceMention(filteredWorkspaceContexts[i]!);
           return;
@@ -5450,18 +5450,16 @@ function MentionPopover({
 }) {
   const { locale, t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
-  console.log('[MentionPopover] tabs includes teams:', { tabCount: 8, tabs: ['all','files','tabs','plugins','skills','mcp','connectors','teams'] });
   const tabs: Array<{ id: MentionTab; label: string }> = [
     { id: 'all', label: t('chat.mentionTabAll') },
     { id: 'files', label: t('chat.mentionTabFiles') },
-    { id: 'tabs', label: t('chat.mentionTabTabs') },
     { id: 'plugins', label: t('chat.mentionTabPlugins') },
     { id: 'skills', label: t('chat.mentionTabSkills') },
     { id: 'mcp', label: t('chat.mentionTabMcp') },
     { id: 'connectors', label: t('chat.mentionTabConnectors') },
     { id: 'teams', label: t('chat.mentionTabTeams') },
   ];
-  const showTabs = tab === 'all' || tab === 'tabs';
+  const showTabs = tab === 'all';
   const showFiles = tab === 'all' || tab === 'files';
   const showPlugins = tab === 'all' || tab === 'plugins';
   const showSkills = tab === 'all' || tab === 'skills';
