@@ -44,6 +44,7 @@ const packagedPackageJsonPath = join(workspaceRoot, "apps", "packaged", "package
 const scopesScriptPath = join(workspaceRoot, "scripts", "scopes.ts");
 const runnersScriptPath = join(workspaceRoot, ".github", "scripts", "runners.py");
 const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-daily-feishu.yml");
+const cutReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-release.yml");
 const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
 const feishuNoticeScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-notice.ts");
 const landingPageDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-daily-feishu.yml");
@@ -1399,6 +1400,38 @@ process.stdin.on("end", () => {
     expect(notice).toContain("msg_type: \"interactive\"");
     expect(notice).toContain('required("NOTICE_TITLE")');
     expect(notice).toContain('required("NOTICE_BODY")');
+  });
+
+  it("[P2] posts an immediate branch-cut Feishu card naming the backport label on both cut workflows", async () => {
+    // Cutting a release branch triggers a ~20-40 min prerelease build before the
+    // download card lands, so both cut workflows post an eager "branch cut" notice
+    // the moment the branch exists. Each must: reuse feishu-notice.ts, run AFTER the
+    // branch push + label creation, and name the exact backport label so the team
+    // knows which label to apply for backports.
+    const [minorCut, patchCut] = await Promise.all([
+      readFile(cutReleaseWorkflowPath, "utf8"),
+      readFile(cutPatchReleaseWorkflowPath, "utf8"),
+    ]);
+
+    for (const [label, workflow, kind] of [
+      ["cut-release (minor)", minorCut, "大版本 minor"],
+      ["cut-patch-release (patch)", patchCut, "小版本 patch"],
+    ] as const) {
+      const step = sectionBetween(workflow, "- name: Notify Feishu that the branch was cut", "\n        run:");
+      // Same standalone notifier + the shared release webhook/secret.
+      expect(workflow, label).toContain("run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts");
+      expect(step, label).toContain("FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}");
+      // Names the version's backport label in the card body.
+      expect(step, label).toContain("backport release/v${{ steps.ver.outputs.version }}");
+      // Distinguishes major vs minor cut.
+      expect(step, label).toContain(kind);
+      // The eager card must come AFTER the branch is actually cut + pushed.
+      expect(workflow.indexOf("- name: Notify Feishu that the branch was cut"), label)
+        .toBeGreaterThan(workflow.indexOf('git push origin "$BRANCH"'));
+    }
+    // The patch workflow's eager card only fires on the happy (published) path.
+    const patchNotice = sectionBetween(patchCut, "- name: Notify Feishu that the branch was cut", "\n        run:");
+    expect(patchNotice).toContain("if: steps.guard.outputs.published == 'true'");
   });
 
   it("[P2] sends the daily landing PR summary to Feishu with staging deployment status", async () => {
