@@ -470,6 +470,188 @@ describe('deploy provider routes', () => {
     }
   });
 
+  it('returns a partial authenticated display.dev deployment when access hydration fails', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-hydration-fail-route-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    const projectId = `displaydev-hydration-fail-${Date.now()}`;
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+    try {
+      const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'display.dev hydration failure route test',
+          skillId: null,
+          designSystemId: null,
+        }),
+      });
+      expect(createProjectResp.status).toBe(200);
+
+      const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: DISPLAYDEV_PROVIDER_ID,
+          token: 'Bearer dsp_live_secret',
+          displayDev: {
+            defaultVisibility: 'private',
+            defaultSharedWith: ['fallback@example.com'],
+            defaultShowBranding: 'hide',
+          },
+        }),
+      });
+      expect(saveResp.status).toBe(200);
+
+      let artifactGetCalls = 0;
+      const updateBodies: Array<{
+        visibility: unknown;
+        sharedWith: unknown[];
+        clearSharedWith: unknown;
+        showBranding: unknown;
+      }> = [];
+      const updateHeaders: Array<{ authorization: string; ifMatch: string }> = [];
+      const realFetch = globalThis.fetch;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        const method = init?.method || (input instanceof Request ? input.method : 'GET');
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url.endsWith('/v1/artifacts') && method === 'POST') {
+          return new Response(JSON.stringify({
+            shortId: 'owned1234',
+            url: 'https://display.dsp.so/owned1234-demo',
+            version: 1,
+          }), {
+            status: 201,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url.endsWith('/v1/artifacts/owned1234') && method === 'GET') {
+          artifactGetCalls += 1;
+          if (artifactGetCalls === 1) {
+            return new Response(JSON.stringify({ error: 'temporary display.dev outage' }), {
+              status: 503,
+              headers: { 'content-type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({
+            shortId: 'owned1234',
+            url: 'https://display.dsp.so/owned1234-demo',
+            currentVersion: artifactGetCalls === 2 ? 1 : 2,
+            visibility: 'private',
+            sharedWith: ['fallback@example.com'],
+            showBranding: false,
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json', etag: `"v${artifactGetCalls === 2 ? 1 : 2}"` },
+          });
+        }
+        if (url.endsWith('/v1/artifacts/owned1234') && method === 'PUT') {
+          if (!(init?.body instanceof FormData)) throw new Error('Expected FormData body');
+          const headers = init.headers as Record<string, string | undefined> | undefined;
+          updateHeaders.push({
+            authorization: headers?.Authorization || headers?.authorization || '',
+            ifMatch: headers?.['If-Match'] || headers?.['if-match'] || '',
+          });
+          updateBodies.push({
+            visibility: init.body.get('visibility'),
+            sharedWith: init.body.getAll('sharedWith'),
+            clearSharedWith: init.body.get('clearSharedWith'),
+            showBranding: init.body.get('showBranding'),
+          });
+          return new Response(JSON.stringify({
+            shortId: 'owned1234',
+            url: 'https://display.dsp.so/owned1234-demo',
+            version: 2,
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url === 'https://display.dsp.so/owned1234-demo' && method === 'HEAD') {
+          return new Response('', { status: 200 });
+        }
+        throw new Error(`Unexpected fetch: ${method} ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: DISPLAYDEV_PROVIDER_ID,
+          }),
+        });
+        const deployText = await deployResp.text();
+        expect(deployResp.status, deployText).toBe(200);
+        const body = JSON.parse(deployText);
+        expect(artifactGetCalls).toBe(1);
+        expect(body).toMatchObject({
+          providerId: DISPLAYDEV_PROVIDER_ID,
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+          },
+        });
+        expect(body.displayDev).not.toHaveProperty('visibility');
+        expect(body.displayDev).not.toHaveProperty('showBranding');
+
+        const repairResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: DISPLAYDEV_PROVIDER_ID,
+            displayDev: {
+              visibility: 'private',
+              sharedWith: ['fallback@example.com'],
+              showBranding: 'hide',
+            },
+          }),
+        });
+        const repairText = await repairResp.text();
+        expect(repairResp.status, repairText).toBe(200);
+        expect(JSON.parse(repairText)).toMatchObject({
+          providerId: DISPLAYDEV_PROVIDER_ID,
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+            visibility: 'private',
+            sharedWith: ['fallback@example.com'],
+            showBranding: 'hide',
+          },
+        });
+        expect(artifactGetCalls).toBe(3);
+        expect(updateBodies).toEqual([{
+          visibility: 'private',
+          sharedWith: ['fallback@example.com'],
+          clearSharedWith: null,
+          showBranding: 'hide',
+        }]);
+        expect(updateHeaders).toEqual([{
+          authorization: 'Bearer dsp_live_secret',
+          ifMatch: '"v1"',
+        }]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
   it('omits display.dev access overrides on plain owned redeploys', async () => {
     const dataDir = process.env.OD_DATA_DIR;
     if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');

@@ -6912,7 +6912,7 @@ describe('FileViewer SVG artifacts', () => {
     });
   });
 
-  it('locks display.dev access fields when an owned redeploy has no current access settings', async () => {
+  it('keeps display.dev access fields editable when an owned redeploy has no current access settings', async () => {
     const file = baseFile({
       name: 'index.html',
       path: 'index.html',
@@ -6999,16 +6999,23 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(displayDevItems[0]!);
     await screen.findByRole('dialog');
 
-    expect(screen.getByLabelText('Visibility')).toBeDisabled();
-    expect((screen.getByLabelText('Visibility') as HTMLSelectElement).value).toBe('company');
-    expect(screen.queryByLabelText('Share with')).toBeNull();
-    expect(screen.getByLabelText('Show branding')).toBeDisabled();
+    expect(screen.getByLabelText('Visibility')).not.toBeDisabled();
+    expect((screen.getByLabelText('Visibility') as HTMLSelectElement).value).toBe('private');
+    expect((screen.getByLabelText('Share with') as HTMLInputElement).value).toBe('stale@example.com');
+    expect(screen.getByLabelText('Show branding')).not.toBeDisabled();
+    expect((screen.getByLabelText('Show branding') as HTMLSelectElement).value).toBe('hide');
+    expect(screen.getByText('Publishes to your display.dev organization using the access settings below.')).toBeInTheDocument();
+    expect(screen.queryByText('Redeploys keep existing display.dev access settings unless you change them here.')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
 
     await waitFor(() => {
       expect(deployRequest.body).toBeDefined();
     });
-    expect(deployRequest.body?.displayDev).toBeUndefined();
+    expect(deployRequest.body?.displayDev).toEqual({
+      visibility: 'private',
+      sharedWith: ['stale@example.com'],
+      showBranding: 'hide',
+    });
   });
 
   it('sends touched display.dev access settings on an owned redeploy', async () => {

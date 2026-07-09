@@ -9405,11 +9405,6 @@ function HtmlViewer({
   ) {
     const matchingConfig = config?.providerId === providerId ? config : null;
     const displayDevAccessSettings = displayDevAccessSettingsForDeployment(currentDeployment);
-    const displayDevAccessSettingsUnavailable =
-      providerId === DISPLAYDEV_PROVIDER_ID &&
-      currentDeployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
-      currentDeployment.displayDev?.mode === 'authenticated' &&
-      !displayDevAccessSettings;
     setDeployProviderId(providerId);
     setDeployConfig(matchingConfig);
     setDeployToken(matchingConfig?.tokenMask || '');
@@ -9426,9 +9421,9 @@ function HtmlViewer({
     // pre-regression behavior.
     setDeployTarget('production');
     setDisplayDevArtifactName(matchingConfig?.displayDev?.defaultArtifactName || '');
-    setDisplayDevVisibility(displayDevAccessSettings?.visibility || (displayDevAccessSettingsUnavailable ? 'company' : matchingConfig?.displayDev?.defaultVisibility) || 'company');
-    setDisplayDevSharedWith((displayDevAccessSettings?.sharedWith || (displayDevAccessSettingsUnavailable ? [] : matchingConfig?.displayDev?.defaultSharedWith) || []).join(', '));
-    setDisplayDevShowBranding(displayDevAccessSettings?.showBranding || (displayDevAccessSettingsUnavailable ? 'inherit' : matchingConfig?.displayDev?.defaultShowBranding) || 'inherit');
+    setDisplayDevVisibility(displayDevAccessSettings?.visibility || matchingConfig?.displayDev?.defaultVisibility || 'company');
+    setDisplayDevSharedWith((displayDevAccessSettings?.sharedWith || matchingConfig?.displayDev?.defaultSharedWith || []).join(', '));
+    setDisplayDevShowBranding(displayDevAccessSettings?.showBranding || matchingConfig?.displayDev?.defaultShowBranding || 'inherit');
     setDisplayDevDeployTouched({
       name: false,
       visibility: false,
@@ -14317,7 +14312,7 @@ function HtmlViewer({
     const isAuthenticatedUpdate =
       currentDeployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
       currentDeployment.displayDev?.mode === 'authenticated';
-    const canEditAccessSettings = !isAuthenticatedUpdate || Boolean(displayDevAccessSettingsForDeployment(currentDeployment));
+    const hasCurrentAccessSettings = Boolean(displayDevAccessSettingsForDeployment(currentDeployment));
     const name = displayDevArtifactName.trim();
     const sharedWith = displayDevSharedWithFromForm();
     if (!isAuthenticatedUpdate) {
@@ -14331,15 +14326,17 @@ function HtmlViewer({
     }
     const selection: WebDisplayDevDeploySelection = {};
     if (displayDevDeployTouched.name && name) selection.name = name;
-    if (!canEditAccessSettings) {
-      return Object.keys(selection).length > 0 ? selection : undefined;
-    }
-    if (displayDevDeployTouched.visibility) {
+    if (!hasCurrentAccessSettings) {
+      selection.visibility = displayDevVisibility;
+      if (displayDevVisibility === 'private') selection.sharedWith = sharedWith;
+      else selection.sharedWith = [];
+      selection.showBranding = displayDevShowBranding;
+    } else if (displayDevDeployTouched.visibility) {
       selection.visibility = displayDevVisibility;
       if (displayDevVisibility !== 'private') selection.sharedWith = [];
     }
-    if (displayDevVisibility === 'private' && displayDevDeployTouched.sharedWith) selection.sharedWith = sharedWith;
-    if (displayDevDeployTouched.showBranding) selection.showBranding = displayDevShowBranding;
+    if (hasCurrentAccessSettings && displayDevVisibility === 'private' && displayDevDeployTouched.sharedWith) selection.sharedWith = sharedWith;
+    if (hasCurrentAccessSettings && displayDevDeployTouched.showBranding) selection.showBranding = displayDevShowBranding;
     return Object.keys(selection).length > 0 ? selection : undefined;
   }
 
@@ -15613,10 +15610,6 @@ function HtmlViewer({
     ? activeDeployment.displayDev
     : undefined;
   const activeDisplayDevAccessSettings = displayDevAccessSettingsForDeployment(activeDeployment);
-  const displayDevAccessFieldsDisabled =
-    deployProviderId === DISPLAYDEV_PROVIDER_ID &&
-    activeDisplayDev?.mode === 'authenticated' &&
-    !activeDisplayDevAccessSettings;
   const hasDisplayDevApiKey = deployProviderId === DISPLAYDEV_PROVIDER_ID && Boolean(deployToken.trim());
   const displayDevApiKeyHint = hasDisplayDevApiKey
     ? t('fileViewer.displayDevApiKeyClearHint')
@@ -15624,7 +15617,9 @@ function HtmlViewer({
   const displayDevDeployHint = (() => {
     if (deployProviderId !== DISPLAYDEV_PROVIDER_ID) return '';
     if (activeDisplayDev?.mode === 'authenticated') {
-      return t('fileViewer.displayDevDeployOwnedHint');
+      return activeDisplayDevAccessSettings
+        ? t('fileViewer.displayDevDeployOwnedHint')
+        : t('fileViewer.displayDevDeployAuthenticatedCreateHint');
     }
     if (activeDisplayDev?.mode === 'anonymous' && hasDisplayDevApiKey) {
       return t('fileViewer.displayDevDeployAnonymousWithKeyHint');
@@ -18453,7 +18448,6 @@ function HtmlViewer({
                       <span>{t('fileViewer.displayDevVisibility')}</span>
                       <select
                         value={displayDevVisibility}
-                        disabled={displayDevAccessFieldsDisabled}
                         onChange={(e) => {
                           const nextVisibility = e.target.value as DisplayDevVisibility;
                           const shouldClearSharedWith = displayDevVisibility === 'private' && nextVisibility !== 'private';
@@ -18477,7 +18471,6 @@ function HtmlViewer({
                       <span>{t('fileViewer.displayDevShowBranding')}</span>
                       <select
                         value={displayDevShowBranding}
-                        disabled={displayDevAccessFieldsDisabled}
                         onChange={(e) => {
                           setDisplayDevShowBranding(e.target.value as DisplayDevShowBranding);
                           setDisplayDevDeployTouched((current) => ({ ...current, showBranding: true }));
@@ -18496,7 +18489,6 @@ function HtmlViewer({
                         <input
                           value={displayDevSharedWith}
                           placeholder={t('fileViewer.displayDevShareWithPlaceholder')}
-                          disabled={displayDevAccessFieldsDisabled}
                           onChange={(e) => {
                             setDisplayDevSharedWith(e.target.value);
                             setDisplayDevDeployTouched((current) => ({ ...current, sharedWith: true }));
