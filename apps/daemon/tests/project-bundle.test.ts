@@ -170,6 +170,30 @@ describe('Open Design project bundle import/export', () => {
     expect(tabs.active).toBe('index.html');
   });
 
+  it('fails bundle export when the project root is missing', async () => {
+    const db = openDatabase(root, { dataDir });
+    const sourceProjectId = 'missing-root-project';
+    insertProject(db, {
+      id: sourceProjectId,
+      name: 'Missing Root',
+      skillId: null,
+      designSystemId: null,
+      metadata: {
+        kind: 'prototype',
+        baseDir: path.join(root, 'missing-project-root'),
+      },
+      createdAt: 100,
+      updatedAt: 200,
+    });
+
+    await expect(buildOpenDesignProjectBundle({
+      db,
+      projectsRoot,
+      projectId: sourceProjectId,
+      metadata: getProject(db, sourceProjectId)?.metadata,
+    })).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('marks zips without an Open Design manifest as unsupported bundles', async () => {
     const db = openDatabase(root, { dataDir });
     const zip = new JSZip();

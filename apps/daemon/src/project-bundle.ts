@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import JSZip from 'jszip';
@@ -116,6 +116,15 @@ async function collectBundleFiles(dir: string, relDir: string, out: BundleFileEn
     }
     if (!stat.isFile()) continue;
     out.push({ relPath, fullPath });
+  }
+}
+
+async function assertBundleProjectRoot(dir: string): Promise<void> {
+  const rootStat = await stat(dir);
+  if (!rootStat.isDirectory()) {
+    const err = new Error(`project root is not a directory: ${dir}`) as Error & { code?: string };
+    err.code = 'ENOTDIR';
+    throw err;
   }
 }
 
@@ -270,6 +279,7 @@ export async function buildOpenDesignProjectBundle(options: BuildProjectBundleOp
     options.projectId,
     options.metadata,
   );
+  await assertBundleProjectRoot(projectRoot);
   const fileEntries: BundleFileEntry[] = [];
   await collectBundleFiles(projectRoot, '', fileEntries);
 
