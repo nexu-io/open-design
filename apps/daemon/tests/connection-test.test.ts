@@ -244,6 +244,41 @@ describe('POST /api/provider/models', () => {
     });
   });
 
+  // Regression for #5367: a gateway's /models catalogue can list embedding
+  // models alongside real chat models. `BAAI/bge-large-en-v1.5` (reported via
+  // SiliconFlow) doesn't contain any of the existing exclusion substrings
+  // (`embedding`, `rerank`, ...), so it was surfacing as a "loaded" chat model
+  // in the picker and then 404ing the moment a user actually tested it.
+  it('excludes the BGE embedding family from an OpenAI-compatible /models catalogue', async () => {
+    const fetchMock = passThroughOrUpstream(() =>
+      jsonResponse({
+        data: [
+          { id: 'deepseek-ai/DeepSeek-V3', object: 'model' },
+          { id: 'BAAI/bge-large-en-v1.5', object: 'model' },
+          { id: 'BAAI/bge-reranker-v2-m3', object: 'model' },
+        ],
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'openai',
+        baseUrl: 'https://api.siliconflow.cn/v1',
+        apiKey: 'sk-siliconflow',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      kind: 'success',
+      models: [{ id: 'deepseek-ai/DeepSeek-V3', label: 'deepseek-ai/DeepSeek-V3' }],
+    });
+  });
+
   it('routes provider model discovery through the live proxy dispatcher', async () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({
       HTTP_PROXY: 'http://proxy.example.test:8080',

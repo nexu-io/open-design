@@ -108,6 +108,12 @@ function isOpenAiChatModelId(id: string): boolean {
     normalized.includes('dall-e') ||
     normalized.includes('stable-diffusion') ||
     normalized.includes('flux') ||
+    // BAAI's BGE embedding family (e.g. `BAAI/bge-large-en-v1.5`, served by
+    // gateways like SiliconFlow) doesn't match any of the substrings above —
+    // `bge-reranker-*` variants are already caught by the `rerank` check, but
+    // the plain embedding models slip through and 404 when a chat-completion
+    // test is run against them (issue #5367).
+    /(?:^|[/_-])bge(?:[-_]|$)/u.test(normalized) ||
     (
       normalized.includes('wan') &&
       /(?:^|[-_.:])(?:t2v|i2v|v2v)(?:[-_.:]|$)/u.test(normalized)
