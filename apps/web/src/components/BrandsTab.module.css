@@ -1,0 +1,18 @@
+/* Role: 브랜드 목록 페이지 — 헤더 + 2열 리치 카드 그리드 */
+.page { padding: 24px 32px; max-width: 1200px; }
+.head { margin-bottom: 24px; }
+.title { font-size: 24px; font-weight: 700; margin: 0; }
+.subtitle { font-size: 14px; color: var(--fg2, #7d8085); margin: 6px 0 0; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.card { text-align: left; display: flex; flex-direction: column; gap: 14px; border: 1px solid var(--border, #e5e5ea); border-radius: 16px; padding: 24px; background: var(--surface, #fff); cursor: pointer; transition: border-color 200ms cubic-bezier(0.23, 1, 0.32, 1); }
+.card:hover { border-color: var(--accent, #16c5ff); }
+.cardHead { display: flex; align-items: center; gap: 12px; }
+.tile { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: #fff; font-size: 18px; font-weight: 700; flex: none; }
+.cardTitle { font-size: 16px; font-weight: 700; }
+.cardSubtitle { font-size: 13px; color: var(--fg2, #7d8085); }
+.tagline { font-size: 14px; color: var(--fg, #1d2024); }
+.badges { display: flex; gap: 8px; flex-wrap: wrap; }
+.badge { padding: 4px 10px; border-radius: 9999px; background: var(--accent-tint, #eaf4ff); color: var(--accent-strong, #0da5e0); font-size: 12px; }
+.meta { font-size: 13px; color: var(--fg2, #7d8085); }
+.empty { color: var(--fg2, #7d8085); }
+@media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
