@@ -290,4 +290,49 @@ describe('AssistantMessage next-step affordance', () => {
     );
     expect(screen.getByTestId('next-step-actions')).toBeTruthy();
   });
+
+  // Regression for: the Next Step card must not appear while this turn's
+  // question form is still unanswered — otherwise users see follow-up
+  // actions before the current Question stage is resolved.
+  it('hides Next Step actions while this turn carries an unanswered question form', () => {
+    const questionFormText =
+      'Before we start, a couple of questions.\n' +
+      '<question-form id="discovery" title="Quick brief">\n' +
+      '{"questions":[{"id":"tone","label":"Tone","type":"text","required":true}]}\n' +
+      '</question-form>';
+    const message = baseMessage({
+      content: questionFormText,
+      events: [{ kind: 'text', text: questionFormText } as NonNullable<ChatMessage['events']>[number]],
+      producedFiles: [],
+    });
+
+    const view = render(
+      <AssistantMessage
+        message={message}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        {...handlers()}
+      />,
+    );
+
+    expect(screen.getByTestId('questions-banner')).toBeTruthy();
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+
+    // Once the form is submitted (a "[form answers — …]" reply lands right
+    // after this message), the Question stage is resolved and Next Step
+    // actions can appear.
+    view.rerender(
+      <AssistantMessage
+        message={message}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        nextUserContent={'[form answers — discovery]\n- Tone: Warm'}
+        {...handlers()}
+      />,
+    );
+
+    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
+  });
 });

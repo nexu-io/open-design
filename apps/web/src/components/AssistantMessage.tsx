@@ -748,6 +748,22 @@ function AssistantMessageImpl({
             : !!onToolboxAction ||
               !!onNextStepCreateDesignSystem ||
               (!!nextStepArtifactName && (!!onArtifactShare || !!onArtifactDownload));
+  // While this message still has a question form the user hasn't submitted
+  // (or skipped) yet, keep the chat pane focused on that form instead of also
+  // surfacing "Next Step" follow-ups — otherwise users can jump into follow-up
+  // actions before the current question stage is resolved.
+  const hasUnansweredQuestionForm = useMemo(() => {
+    for (const block of blocks) {
+      if (block.kind !== "text") continue;
+      for (const seg of splitOnQuestionForms(block.text)) {
+        if (seg.kind !== "form") continue;
+        if (suppressDirectionForms && isDirectionForm(seg.form)) continue;
+        const submitted = nextUserContent ? parseSubmittedAnswers(seg.form, nextUserContent) : null;
+        if (submitted == null) return true;
+      }
+    }
+    return false;
+  }, [blocks, nextUserContent, suppressDirectionForms]);
   // Terminal turns should leave the user with an actionable path, including
   // canceled/failed/no-artifact turns. Artifact-backed cards still wire Share
   // and Download to the chosen file; incomplete cards fall back to composer
@@ -755,6 +771,7 @@ function AssistantMessageImpl({
   const showNextStepActions =
     !streaming &&
     runTerminal &&
+    !hasUnansweredQuestionForm &&
     ((!!isLast && hasNextStepPrimary) || showOpenDesignSubmission);
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
