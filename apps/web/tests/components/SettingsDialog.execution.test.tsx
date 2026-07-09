@@ -616,17 +616,20 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     fireEvent.click(modelPicker);
 
     const modelPopover = screen.getByTestId('settings-byok-model-popover');
-    const optionText = within(modelPopover)
+    const optionLabels = within(modelPopover)
       .getAllByRole('option')
-      .map((option) => option.textContent?.trim());
-    expect(optionText).toEqual([
+      .map((option) => {
+        const labelId = option.getAttribute('aria-labelledby');
+        return labelId ? document.getElementById(labelId)?.textContent?.trim() : null;
+      });
+    expect(optionLabels).toEqual([
       'Tenant Special A (tenant-special-a) · From your account',
       'Tenant Special B (tenant-special-b) · From your account',
       'tenant-default · Suggested',
       'Custom (type below)…',
     ]);
-    expect(optionText.some((text) => text?.includes('gpt-4o'))).toBe(false);
-    expect(optionText.some((text) => text?.includes('o3'))).toBe(false);
+    expect(optionLabels.some((text) => text?.includes('gpt-4o'))).toBe(false);
+    expect(optionLabels.some((text) => text?.includes('o3'))).toBe(false);
   });
 
   it('isolates API key draft and visibility by BYOK provider preset', () => {

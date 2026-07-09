@@ -716,16 +716,19 @@ describe('InlineModelSwitcher AMR row', () => {
     const modelPicker = screen.getByTestId('inline-model-switcher-api-model');
     fireEvent.click(modelPicker);
     const modelPopover = screen.getByTestId('inline-model-switcher-api-model-popover');
-    const optionText = within(modelPopover)
+    const optionLabels = within(modelPopover)
       .getAllByRole('option')
-      .map((option) => option.textContent?.trim());
-    expect(optionText).toEqual([
+      .map((option) => {
+        const labelId = option.getAttribute('aria-labelledby');
+        return labelId ? document.getElementById(labelId)?.textContent?.trim() : null;
+      });
+    expect(optionLabels).toEqual([
       'Tenant Special A',
       'Tenant Special B',
       'tenant-default',
     ]);
-    expect(optionText.some((text) => text?.includes('gpt-4o'))).toBe(false);
-    expect(optionText.some((text) => text?.includes('o3'))).toBe(false);
+    expect(optionLabels.some((text) => text?.includes('gpt-4o'))).toBe(false);
+    expect(optionLabels.some((text) => text?.includes('o3'))).toBe(false);
     expect(screen.queryByText('API key not set — open Settings to add it.')).toBeNull();
   });
 
