@@ -1853,12 +1853,6 @@ function AppInner() {
     openSettings('execution', { highlight: 'amr' });
   }, [openSettings]);
 
-  const openPetSettings = useCallback(() => {
-    setSettingsWelcome(false);
-    setSettingsInitialSection('pet');
-    setSettingsOpen(true);
-  }, []);
-
   const openMcpSettings = useCallback(() => {
     setIntegrationInitialTab('mcp');
     navigate({ kind: 'home', view: 'integrations' });
@@ -2085,7 +2079,6 @@ function AppInner() {
         onOpenConnectors={openConnectorIntegrations}
         onAdoptPetInline={handleAdoptPet}
         onTogglePet={handleTogglePet}
-        onOpenPetSettings={openPetSettings}
         onBack={handleBack}
         onClearPendingPrompt={handleClearPendingPrompt}
         onTouchProject={handleTouchProject}
