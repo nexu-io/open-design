@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Particle Galaxy — 50,000 points, one draw call</title>
+<!--
+  Self-contained WebGL2 particle galaxy. Every point's position is computed
+  in the VERTEX shader from gl_VertexID (a log-spiral disk with a rotation
+  curve) — the CPU never touches a particle, so 50,000 points render in a
+  single gl.drawArrays(POINTS) call at 60fps. Open Design renders this in
+  "powered preview" mode (cross-origin isolated iframe) because it calls
+  getContext('webgl2'); the opaque preview sandbox cannot run the GPU stack.
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #04050b; overflow: hidden; font-family: 'Albert Sans', system-ui, -apple-system, sans-serif; color: #eef2ff; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: flex-start; justify-content: flex-end; padding: 6vw;
+    pointer-events: none; z-index: 2;
+  }
+  .kicker { font-size: clamp(12px, 1.2vw, 15px); letter-spacing: 0.42em; text-transform: uppercase; color: #63fe13; margin: 0 0 18px; font-weight: 600; }
+  h1 { margin: 0; font-size: clamp(38px, 7.5vw, 104px); line-height: 0.92; font-weight: 800; letter-spacing: -0.03em; max-width: 15ch; text-shadow: 0 2px 40px rgba(0,0,0,0.5); }
+  p.sub { margin: 22px 0 0; font-size: clamp(15px, 1.6vw, 20px); max-width: 46ch; color: rgba(238,242,255,0.72); }
+  .stats { position: fixed; top: 6vw; right: 6vw; z-index: 2; pointer-events: none; display: flex; gap: 26px; font-variant-numeric: tabular-nums; text-align: right; }
+  .stat b { display: block; font-size: clamp(18px, 2.2vw, 30px); font-weight: 700; }
+  .stat span { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(238,242,255,0.5); }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="stats">
+  <div class="stat"><b id="count">—</b><span>Points</span></div>
+  <div class="stat"><b>1</b><span>Draw call</span></div>
+  <div class="stat"><b id="fps">—</b><span>fps</span></div>
+</div>
+<div class="overlay">
+  <p class="kicker">Particle Galaxy</p>
+  <h1>Fifty thousand points, one draw call.</h1>
+  <p class="sub">Each particle's orbit is solved on the GPU from its vertex id — a log-spiral disk with an inner-fast rotation curve, additive-blended into glowing arms.</p>
+</div>
+<script type="text/javascript">
+(() => {
+  const N = 50000;
+  const canvas = document.getElementById('gl');
+  const gl = canvas.getContext('webgl2', { antialias: true, alpha: false, premultipliedAlpha: false });
+  const fpsEl = document.getElementById('fps');
+  if (!gl) { fpsEl.textContent = 'n/a'; document.querySelector('h1').textContent = 'WebGL2 unavailable'; return; }
+  document.getElementById('count').textContent = N.toLocaleString();
+
+  // Position solved entirely from gl_VertexID — no vertex buffer needed.
+  const vert = `#version 300 es
+  precision highp float;
+  uniform float uTime;
+  uniform vec2 uRes;
+  out vec3 vCol;
+  out float vBright;
+  float hash11(float p){ p = fract(p*0.1031); p *= p+33.33; p *= p+p; return fract(p); }
+  vec2 hash21(float p){
+    vec3 p3 = fract(vec3(p)*vec3(0.1031,0.1030,0.0973));
+    p3 += dot(p3, p3.yzx+33.33);
+    return fract((p3.xx+p3.yz)*p3.zy);
+  }
+  void main(){
+    float id = float(gl_VertexID);
+    vec2 h = hash21(id);
+    float r = pow(h.x, 0.5);                 // radius, biased toward the core
+    float arms = 3.0;
+    float arm = floor(h.y * arms);
+    float armAngle = arm / arms * 6.2831853;
+    float scatter = (hash11(id*1.7) - 0.5) * (0.35 + 0.5*r);
+    float speed = 0.30 / (0.18 + r);         // inner particles rotate faster
+    float ang = armAngle + r * 3.2 + uTime * speed * 0.12 + scatter;
+    vec3 pos;
+    pos.x = cos(ang) * r * 1.15;
+    pos.z = sin(ang) * r * 1.15;
+    pos.y = (hash11(id*3.3) - 0.5) * 0.13 * (1.0 - r*0.7);   // thin disk
+    float spin = uTime * 0.05, tilt = 1.05;
+    float cs = cos(spin), sn = sin(spin);
+    pos = vec3(pos.x*cs - pos.z*sn, pos.y, pos.x*sn + pos.z*cs);
+    float ct = cos(tilt), st = sin(tilt);
+    pos = vec3(pos.x, pos.y*ct - pos.z*st, pos.y*st + pos.z*ct);
+    float camDist = 2.7;
+    float w = pos.z + camDist;
+    float aspect = uRes.x / max(uRes.y, 1.0);
+    gl_Position = vec4(vec2((pos.x / w) / aspect, pos.y / w) * 1.9, 0.0, 1.0);
+    gl_PointSize = clamp((1.0 / w) * 3.2, 1.0, 4.5) * clamp(uRes.y / 900.0, 0.6, 1.6);
+    vec3 core = vec3(0.86, 0.95, 1.0);
+    vec3 lime = vec3(0.39, 0.996, 0.075);
+    vec3 outer = vec3(0.10, 0.42, 0.55);
+    vec3 col = mix(core, lime, smoothstep(0.0, 0.30, r));
+    col = mix(col, outer, smoothstep(0.45, 1.0, r));
+    vCol = col;
+    vBright = (1.0 - r) * 0.75 + 0.25;
+  }`;
+
+  const frag = `#version 300 es
+  precision highp float;
+  in vec3 vCol;
+  in float vBright;
+  out vec4 o;
+  void main(){
+    vec2 pc = gl_PointCoord * 2.0 - 1.0;
+    float d = dot(pc, pc);
+    if (d > 1.0) discard;
+    float a = exp(-d * 3.2) * vBright;      // soft gaussian falloff
+    o = vec4(vCol * a, a);                   // premultiplied for additive blend
+  }`;
+
+  function compile(type, src){
+    const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'shader');
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, vert));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, frag));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) || 'link');
+  gl.useProgram(prog);
+  gl.bindVertexArray(gl.createVertexArray());     // some drivers require a bound VAO
+
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE);                   // additive (colors are premultiplied)
+  const uTime = gl.getUniformLocation(prog, 'uTime');
+  const uRes = gl.getUniformLocation(prog, 'uRes');
+
+  function resize(){
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.floor(canvas.clientWidth * dpr), h = Math.floor(canvas.clientHeight * dpr);
+    if (w === canvas.width && h === canvas.height) return;
+    canvas.width = w;
+    canvas.height = h;
+    gl.viewport(0, 0, w, h);
+  }
+  window.addEventListener('resize', resize); resize();
+
+  let frames = 0, acc = 0, last = 0;
+  const start = (typeof performance !== 'undefined' ? performance.now() : 0);
+  function tick(now){
+    resize();
+    gl.clearColor(0.016, 0.02, 0.043, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.uniform1f(uTime, (now - start) / 1000);
+    gl.uniform2f(uRes, canvas.width, canvas.height);
+    gl.drawArrays(gl.POINTS, 0, N);
+    frames++; acc += now - last; last = now;
+    if (acc > 500){ fpsEl.textContent = Math.round(frames * 1000 / acc); frames = 0; acc = 0; }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

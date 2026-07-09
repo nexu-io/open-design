@@ -959,6 +959,17 @@
   left: 12px;
   bottom: 12px;
 }
+.df-preview-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 38px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--bg-panel) 88%, var(--accent)) 0%, var(--bg-panel) 100%);
+}
 .df-preview-meta {
   padding: 0 16px 16px;
   display: flex;

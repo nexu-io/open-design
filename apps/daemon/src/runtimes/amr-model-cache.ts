@@ -64,6 +64,10 @@ export class AmrModelLoadingCache {
     this.startRefresh(this.stateFor(cacheKey), fetchRemote);
   }
 
+  invalidate(cacheKey: string): void {
+    this.states.delete(cacheKey);
+  }
+
   resetForTests(): void {
     this.states.clear();
   }

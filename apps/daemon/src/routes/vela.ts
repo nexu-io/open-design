@@ -35,6 +35,7 @@ import {
   velaWalletSnapshotReader,
 } from '../integrations/vela-wallet.js';
 import { amrModelLoadingCache } from '../runtimes/amr-model-cache.js';
+import { buildAmrModelCacheKey } from '../runtimes/amr-model-probe.js';
 import {
   fetchVelaBillingSummary,
   fetchVelaPresetModels,
@@ -169,14 +170,9 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       agentLaunch,
     );
     const credentialRevision = readVelaCredentialRevision(env, configuredEnv);
-    const cacheKey = JSON.stringify({
+    const cacheKey = buildAmrModelCacheKey({
       launchPath,
-      home: spawnEnv.HOME ?? spawnEnv.USERPROFILE ?? '',
-      openDesignAmrProfile: spawnEnv.OPEN_DESIGN_AMR_PROFILE ?? '',
-      velaProfile: spawnEnv.VELA_PROFILE ?? '',
-      velaLinkUrl: spawnEnv.VELA_LINK_URL ?? '',
-      velaRuntimeKey: spawnEnv.VELA_RUNTIME_KEY ?? '',
-      velaOpencodeBin: spawnEnv.VELA_OPENCODE_BIN ?? '',
+      env: spawnEnv,
       credentialRevision,
     });
     return { launchPath, env: spawnEnv, configuredEnv, cacheKey };
@@ -197,17 +193,29 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     string,
     Promise<VelaLiveAccount | null>
   >();
+  const inFlightVelaAccountInvalidations = new Set<string>();
   function fetchVelaLiveAccountSingleFlight(
     accountCacheKey: string,
     probe: AmrModelProbe,
+    options: { invalidateModelsOnPlanChange?: boolean } = {},
   ): Promise<VelaLiveAccount | null> {
+    if (options.invalidateModelsOnPlanChange === true) {
+      inFlightVelaAccountInvalidations.add(accountCacheKey);
+    }
     const existing = inFlightVelaAccountFetches.get(accountCacheKey);
     if (existing) return existing;
     const pending = (async () => {
+      const previousAccount = peekVelaLiveAccount(accountCacheKey);
       amrModelLoadingCache.warm(probe.cacheKey, () =>
         fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
       );
       const account = await fetchVelaBillingSummary(probe.launchPath, probe.env);
+      if (
+        inFlightVelaAccountInvalidations.has(accountCacheKey) &&
+        (!previousAccount || previousAccount.plan !== account.plan)
+      ) {
+        amrModelLoadingCache.invalidate(probe.cacheKey);
+      }
       setVelaLiveAccount(accountCacheKey, account);
       return account;
     })()
@@ -220,6 +228,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       })
       .finally(() => {
         inFlightVelaAccountFetches.delete(accountCacheKey);
+        inFlightVelaAccountInvalidations.delete(accountCacheKey);
       });
     inFlightVelaAccountFetches.set(accountCacheKey, pending);
     return pending;
@@ -242,6 +251,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
+      const refresh = _req.query.refresh === '1' || _req.query.refresh === 'true';
       const status = readVelaLoginStatus(mergeVelaEnv(env, configuredEnv));
       if (status.loggedIn) {
         // Key the live-account cache by the full credential revision (not just
@@ -254,7 +264,12 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
         );
         const probe = resolveAmrModelProbeForEnv(configuredEnv);
         const cachedAccount = peekVelaLiveAccount(accountCacheKey);
-        if (!cachedAccount) {
+        if (refresh) {
+          const liveAccount = await fetchVelaLiveAccountSingleFlight(accountCacheKey, probe, {
+            invalidateModelsOnPlanChange: true,
+          });
+          applyVelaLiveAccount(status, liveAccount);
+        } else if (!cachedAccount) {
           // Cold cache (or a fetch already in flight): BLOCK on the single-flight
           // billing fetch so the first open already carries plan/balance. The
           // consumers (settings card, inline switcher, avatar) read /status once
@@ -274,7 +289,9 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
           // next poll once the TTL has lapsed.
           applyVelaLiveAccount(status, cachedAccount);
           if (shouldRefreshVelaLiveAccount(accountCacheKey)) {
-            void fetchVelaLiveAccountSingleFlight(accountCacheKey, probe).catch(() => {});
+            void fetchVelaLiveAccountSingleFlight(accountCacheKey, probe, {
+              invalidateModelsOnPlanChange: true,
+            }).catch(() => {});
           }
         }
       }
@@ -294,6 +311,14 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
         configuredEnv,
         refresh,
       });
+      if (refresh) {
+        try {
+          const modelProbe = resolveAmrModelProbeForEnv(configuredEnv);
+          amrModelLoadingCache.invalidate(modelProbe.cacheKey);
+        } catch (err) {
+          console.warn('[amr] model cache invalidation after wallet refresh failed', err);
+        }
+      }
       res.json(snapshot);
     } catch (err) {
       res.status(500).json({ error: String(err) });

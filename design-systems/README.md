@@ -184,5 +184,11 @@ The `kami/` system adapts tokens, type rules, and the "ten invariants" from
 [`tw93/kami`](https://github.com/tw93/kami) (MIT, © Tw93 and contributors),
 a Claude skill for typesetting professional documents and slide decks.
 
+The `tom-modern/` system adapts the design system from
+[`Tom-Opencart/tom-modern-html-style-rule`](https://github.com/Tom-Opencart/tom-modern-html-style-rule)
+(MIT, © Tom-Opencart). The bundled package keeps the upstream origin in
+`design-systems/tom-modern/manifest.json`; use the upstream repository for the
+canonical templates, live preview, and license text.
+
 The 57 design skills are sourced from
 [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills).

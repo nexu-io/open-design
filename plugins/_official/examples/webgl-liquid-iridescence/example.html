@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Liquid Iridescence — Open Design</title>
+<!--
+  Self-contained WebGL2 hero. A single fullscreen triangle runs a domain-warped
+  FBM flow field, colored with an iridescent cosine palette and sharpened into
+  oil-on-water caustic ridges. Pointer position warps the flow (interactive),
+  a soft chromatic split gives the "liquid glass" sheen, and a hashed grain
+  breaks up banding. No meshes, no textures, no build step, no external assets.
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #05060a;
+    font-family: 'Albert Sans', ui-sans-serif, system-ui, -apple-system, sans-serif; color: #f5f3ff; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .overlay { position: fixed; inset: 0; z-index: 2; pointer-events: none;
+    display: flex; flex-direction: column; justify-content: space-between; padding: 5vw; }
+  .top { display: flex; justify-content: space-between; align-items: center;
+    font-size: clamp(11px, 1vw, 14px); letter-spacing: 0.32em; text-transform: uppercase;
+    color: rgba(245,243,255,0.72); }
+  .top .dot { width: 8px; height: 8px; border-radius: 50%; background: #b8ff3c;
+    box-shadow: 0 0 14px #b8ff3c; display: inline-block; margin-right: 10px; vertical-align: middle; }
+  h1 { margin: 0; font-size: clamp(44px, 11vw, 168px); line-height: 0.86; font-weight: 800;
+    letter-spacing: -0.04em; mix-blend-mode: overlay; text-shadow: 0 4px 60px rgba(0,0,0,0.35); }
+  h1 .thin { font-weight: 300; letter-spacing: -0.02em; }
+  .bottom { display: flex; justify-content: space-between; align-items: flex-end; gap: 4vw; }
+  .sub { font-size: clamp(14px, 1.5vw, 19px); max-width: 42ch; color: rgba(245,243,255,0.78);
+    line-height: 1.45; margin: 0; }
+  .badge { font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: rgba(245,243,255,0.6); border: 1px solid rgba(245,243,255,0.22);
+    padding: 9px 15px; border-radius: 999px; backdrop-filter: blur(8px); white-space: nowrap; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="overlay">
+  <div class="top">
+    <span><span class="dot"></span>Open Design · WebGL Preview</span>
+    <span>Real-time · GPU</span>
+  </div>
+  <div class="bottom">
+    <div>
+      <h1>LIQUID<br><span class="thin">IRIDESCENCE</span></h1>
+      <p class="sub">A living oil-on-water field, sphere-free and texture-free — every ripple is math, running live in the preview. Move your cursor to bend the flow.</p>
+    </div>
+    <div class="badge">Move the cursor ↗</div>
+  </div>
+</div>
+<script>
+(() => {
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', { antialias: true, premultipliedAlpha: false });
+if (!gl) { document.body.innerHTML = '<p style="color:#fff;padding:2rem;font-family:sans-serif">WebGL2 not available.</p>'; return; }
+
+const VERT = `#version 300 es
+void main(){
+  vec2 p = vec2((gl_VertexID<<1)&2, gl_VertexID&2);
+  gl_Position = vec4(p*2.0-1.0, 0.0, 1.0);
+}`;
+
+const FRAG = `#version 300 es
+precision highp float;
+out vec4 outColor;
+uniform vec2  u_res;
+uniform float u_time;
+uniform vec2  u_mouse;   // 0..1, smoothed
+
+// iq cosine palette
+vec3 pal(float t){
+  return 0.5 + 0.5*cos(6.28318*(vec3(1.0)*t + vec3(0.00,0.33,0.67)));
+}
+mat2 rot(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
+float hash(vec2 p){ return fract(sin(dot(p,vec2(41.3,289.1)))*43758.5453); }
+float noise(vec2 p){
+  vec2 i=floor(p), f=fract(p);
+  vec2 u=f*f*(3.0-2.0*f);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+}
+float fbm(vec2 p){
+  float v=0.0, amp=0.55;
+  for(int i=0;i<6;i++){ v+=amp*noise(p); p=rot(0.6)*p*1.9+11.0; amp*=0.55; }
+  return v;
+}
+
+void main(){
+  vec2 uv = (gl_FragCoord.xy - 0.5*u_res) / u_res.y;
+  float t = u_time*0.06;
+
+  // pointer pulls the field toward the cursor
+  vec2 m = (u_mouse - 0.5) * vec2(u_res.x/u_res.y, 1.0);
+  vec2 pull = (m - uv);
+  float grab = 0.35/(dot(pull,pull)+0.35);
+
+  // domain warp: two chained flow layers
+  vec2 q = vec2( fbm(uv*1.6 + vec2(0.0, t)),
+                 fbm(uv*1.6 + vec2(5.2,-t)) );
+  vec2 r = vec2( fbm(uv*1.6 + 3.2*q + vec2(1.7, 9.2) + grab*pull),
+                 fbm(uv*1.6 + 3.2*q + vec2(8.3, 2.8) - grab*pull) );
+  float f = fbm(uv*1.6 + 4.0*r + t);
+
+  // oil-on-water caustic ridges
+  float ridge = abs(fract(f*3.0 + length(r) + t*2.0)*2.0 - 1.0);
+  ridge = pow(1.0 - ridge, 2.5);
+
+  // iridescent color driven by flow + a subtle chromatic split for glass sheen
+  float hue = f + length(r)*0.5 + 0.15*u_time*0.02;
+  vec3 col  = pal(hue);
+  col += pal(hue+0.04)*0.35;               // chroma bleed
+  col = mix(col*0.35, col, ridge);          // ridges glow, valleys deepen
+  col += vec3(0.9,0.95,1.0)*pow(ridge,3.0)*0.6; // specular caustic highlight
+
+  // depth: darken toward edges, lift center
+  float vig = smoothstep(1.25, 0.15, length(uv));
+  col *= 0.55 + 0.75*vig;
+
+  // filmic-ish tone + grain
+  col = col/(col+0.6);
+  col += (hash(gl_FragCoord.xy + u_time) - 0.5)*0.03;
+
+  outColor = vec4(pow(max(col,0.0), vec3(0.85)), 1.0);
+}`;
+
+function compile(type, src){
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+const uRes = gl.getUniformLocation(prog, 'u_res');
+const uTime = gl.getUniformLocation(prog, 'u_time');
+const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+let mouse = [0.5, 0.5], target = [0.5, 0.5];
+addEventListener('pointermove', e => { target = [e.clientX/innerWidth, 1.0 - e.clientY/innerHeight]; });
+
+function resize(){
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const w = Math.floor(innerWidth*dpr), h = Math.floor(innerHeight*dpr);
+  if (w === canvas.width && h === canvas.height) return;
+  canvas.width = w;
+  canvas.height = h;
+  gl.viewport(0, 0, w, h);
+}
+addEventListener('resize', resize); resize();
+
+const start = performance.now();
+function frame(now){
+  resize();
+  mouse[0] += (target[0]-mouse[0])*0.06;
+  mouse[1] += (target[1]-mouse[1])*0.06;
+  gl.uniform2f(uRes, canvas.width, canvas.height);
+  gl.uniform1f(uTime, (now-start)/1000);
+  gl.uniform2f(uMouse, mouse[0], mouse[1]);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

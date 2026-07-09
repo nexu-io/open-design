@@ -80,6 +80,9 @@ import {
   trackDesignSystemApplyResult,
   trackDesignSystemEnrichClick,
   trackPageView,
+  trackOnboardingPromptPrefilled,
+  trackOnboardingFirstPromptSent,
+  trackOnboardingFirstGenerationCompleted,
 } from '../analytics/events';
 import {
   clearOnboardingSessionId,
@@ -104,6 +107,7 @@ import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent, removeErrorStatusEvent } from '../runtime/chat-events';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import { checkAmrBalanceGate } from '../runtime/amr-balance-gate';
+import { resolveAmrLowBalancePlan } from '../runtime/amr-low-balance-plan';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
 import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import {
@@ -233,6 +237,18 @@ import { SHARE_TO_COMMUNITY_PROMPT } from './share-to-community/shareToCommunity
 import { CenteredLoader } from './Loading';
 import type { SettingsSection } from './SettingsDialog';
 import { Toast } from './Toast';
+import { FirstArtifactHint } from './FirstArtifactHint';
+import {
+  consumeOnboardingEntryForProject,
+  hasSentFirstOnboardingPrompt,
+  markFirstOnboardingPromptSent,
+  hasCompletedFirstOnboardingGeneration,
+  markFirstOnboardingGenerationCompleted,
+  type OnboardingEntry,
+} from '../onboarding/onboarding-entry';
+import { producedPreviewableArtifact } from '../onboarding/first-generation';
+import { sentPrefilledPrompt } from '../onboarding/first-prompt';
+import { beginFirstLoop, recordFirstLoopStep } from '../onboarding/first-loop';
 import { BrandReadyPrompt } from './BrandReadyPrompt';
 import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
@@ -1335,6 +1351,37 @@ export function ProjectView({
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
+  // Onboarding first-generation funnel (spec §11.1). Consume the pending entry
+  // (set by the Home recommendation) exactly once on mount; the refs guard the
+  // two lifecycle events so each fires only for the genuine first send / first
+  // successful generation of a recommendation-started project.
+  const onboardingEntryInitRef = useRef(false);
+  const onboardingEntryRef = useRef<OnboardingEntry | null>(null);
+  // The prompt the recommendation prefilled into the composer. Prefer the seed
+  // cached WITH the onboarding entry (it survives a reopen-before-send, whereas
+  // `project.pendingPrompt` is wiped by `onClearPendingPrompt` on the first
+  // mount); fall back to `pendingPrompt` for the very first mount / any project
+  // without a cached seed. The first-prompt-sent funnel event compares the
+  // actually-sent prompt against this seed so `has_prefilled_prompt` reflects
+  // real behavior — the user is free to edit, clear, or replace the suggestion
+  // before sending (spec §7.4 / §8.2).
+  const onboardingSeedPromptRef = useRef('');
+  if (!onboardingEntryInitRef.current) {
+    onboardingEntryInitRef.current = true;
+    onboardingEntryRef.current = consumeOnboardingEntryForProject(project.id);
+    onboardingSeedPromptRef.current =
+      onboardingEntryRef.current?.seedPrompt ?? (project.pendingPrompt ?? '').trim();
+    // Pin the first-loop ledger for THIS project so later delivery taps (the
+    // FileViewer share/export path) can close the loop by project id without
+    // prop plumbing. Project-scoped, so an unrelated project's delivery never
+    // closes this loop.
+    if (onboardingEntryRef.current) beginFirstLoop(project.id, onboardingEntryRef.current);
+  }
+  // The once-per-project funnel guards live in the onboarding-entry module
+  // (project-keyed), not mount-local refs: ProjectView remounts on every
+  // leave/reopen, and the entry now survives those remounts via its cache, so a
+  // mount-local guard would let the funnel events re-fire on a later
+  // conversation/run of the same project.
   const iframeKeepAlivePool = useIframeKeepAlivePool();
   const handleThemeChange = onThemeChange ?? (() => {});
   const projectDetail = useProjectDetail(project.id);
@@ -1598,7 +1645,11 @@ export function ProjectView({
   // Soft low-balance warning holding a pending send: the dialog resolves the
   // promise the gate is awaiting ('proceed' continues the very same send).
   const [amrLowBalanceWarn, setAmrLowBalanceWarn] = useState<
-    { snapshot: AmrWalletSnapshot; resolve: (decision: AmrLowBalanceDecision) => void } | null
+    {
+      snapshot: AmrWalletSnapshot;
+      plan: string | null;
+      resolve: (decision: AmrLowBalanceDecision) => void;
+    } | null
   >(null);
   // Conversations with a balance-gate check currently in flight. Sends that
   // arrive during the check queue instead of racing a duplicate run through
@@ -2589,6 +2640,25 @@ export function ProjectView({
     () => new Set(projectFiles.map((f) => f.name)),
     [projectFiles],
   );
+  // A previewable artifact exists once any HTML file has been produced. Gates
+  // the one-time first-generation hint (spec §8.3); the hint component owns its
+  // own once-ever "seen" budget.
+  const hasPreviewableArtifact = useMemo(() => {
+    for (const name of projectFileNames) {
+      if (name.toLowerCase().endsWith('.html')) return true;
+    }
+    return false;
+  }, [projectFileNames]);
+  // First-loop ledger: the artifact reaching the preview is the 查看 step of the
+  // loop (spec §8.3). Recorded once per project; a no-op for any project not
+  // started from a recommendation.
+  const firstLoopViewedRef = useRef(false);
+  useEffect(() => {
+    if (!hasPreviewableArtifact || firstLoopViewedRef.current) return;
+    if (!onboardingEntryRef.current) return;
+    firstLoopViewedRef.current = true;
+    recordFirstLoopStep(analytics.track, 'artifact_viewed', project.id);
+  }, [hasPreviewableArtifact, analytics.track, project.id]);
   const activeProjectFileName = useMemo(
     () => (
       openTabsState.active && projectFileNames.has(openTabsState.active)
@@ -3757,12 +3827,20 @@ export function ProjectView({
               : artifactFromStandaloneHtml(replayedContent);
             let recoveredExistingArtifact: ProjectFile | null = null;
             if (artifactToPersist?.html) {
+              const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
               const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
-              recoveredExistingArtifact = findExistingArtifactProjectFile(
-                artifactToPersist,
-                nextFiles,
-                { minMtime: runStartedAt },
-              );
+              recoveredExistingArtifact =
+                await findSameTurnWriteForRecoveredArtifact({
+                  artifact: artifactToPersist,
+                  sourceText: replayedContent,
+                  producedFiles: producedBeforeFallback,
+                  readProjectText: readProjectHtml,
+                }) ??
+                findExistingArtifactProjectFile(
+                  artifactToPersist,
+                  nextFiles,
+                  { minMtime: runStartedAt },
+                );
               if (recoveredExistingArtifact) {
                 savedArtifactRef.current = recoveredExistingArtifact.name;
                 requestOpenFile(recoveredExistingArtifact.name);
@@ -4019,19 +4097,18 @@ export function ProjectView({
                 if (artifactToPersist?.html) {
                   const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
                   const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
-                  recoveredExistingArtifact = findExistingArtifactProjectFile(
-                    artifactToPersist,
-                    nextFiles,
-                    { minMtime: runStartedAt },
-                  ) ?? await findSameTurnHtmlWriteForRecoveredArtifact({
-                    artifactHtml: resolvePersistedArtifactHtml({
-                      artifactHtml: artifactToPersist.html,
-                      identifier: artifactToPersist.identifier,
+                  recoveredExistingArtifact =
+                    await findSameTurnWriteForRecoveredArtifact({
+                      artifact: artifactToPersist,
                       sourceText: replayedContent,
-                    }),
-                    producedFiles: producedBeforeFallback,
-                    readProjectHtml,
-                  });
+                      producedFiles: producedBeforeFallback,
+                      readProjectText: readProjectHtml,
+                    }) ??
+                    findExistingArtifactProjectFile(
+                      artifactToPersist,
+                      nextFiles,
+                      { minMtime: runStartedAt },
+                    );
                   if (recoveredExistingArtifact) {
                     savedArtifactRef.current = recoveredExistingArtifact.name;
                     requestOpenFile(recoveredExistingArtifact.name);
@@ -4110,11 +4187,19 @@ export function ProjectView({
                     );
                     const runStartedAt =
                       latestRunStatus?.createdAt || message.startedAt || message.createdAt;
-                    let recoveredExistingArtifact = findExistingArtifactProjectFile(
-                      artifactToPersist,
-                      nextFiles,
-                      { minMtime: runStartedAt },
-                    );
+                    const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+                    let recoveredExistingArtifact =
+                      await findSameTurnWriteForRecoveredArtifact({
+                        artifact: artifactToPersist,
+                        sourceText: replayedContent,
+                        producedFiles: producedBeforeFallback,
+                        readProjectText: readProjectHtml,
+                      }) ??
+                      findExistingArtifactProjectFile(
+                        artifactToPersist,
+                        nextFiles,
+                        { minMtime: runStartedAt },
+                      );
                     if (recoveredExistingArtifact) {
                       savedArtifactRef.current = recoveredExistingArtifact.name;
                       requestOpenFile(recoveredExistingArtifact.name);
@@ -4462,11 +4547,19 @@ export function ProjectView({
           );
           const runStartedAt =
             latestRunStatus?.createdAt || message.startedAt || message.createdAt;
-          let recoveredExistingArtifact = findExistingArtifactProjectFile(
-            artifactToPersist,
-            nextFiles,
-            { minMtime: runStartedAt },
-          );
+          const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+          let recoveredExistingArtifact =
+            await findSameTurnWriteForRecoveredArtifact({
+              artifact: artifactToPersist,
+              sourceText,
+              producedFiles: producedBeforeFallback,
+              readProjectText: readProjectHtml,
+            }) ??
+            findExistingArtifactProjectFile(
+              artifactToPersist,
+              nextFiles,
+              { minMtime: runStartedAt },
+            );
           if (recoveredExistingArtifact) {
             savedArtifactRef.current = recoveredExistingArtifact.name;
             requestOpenFile(recoveredExistingArtifact.name);
@@ -4776,8 +4869,13 @@ export function ProjectView({
             // Low balance: pause THIS send while the reminder dialog waits
             // for a decision. 'proceed' resumes the very same send below —
             // a continuation, not a re-submit.
+            const plan = await resolveAmrLowBalancePlan(gate.snapshot);
+            if (messagesConversationIdRef.current !== activeConversationId) {
+              queueGateSend();
+              return false;
+            }
             const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
-              setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
+              setAmrLowBalanceWarn({ snapshot: gate.snapshot, plan, resolve });
             });
             setAmrLowBalanceWarn(null);
             // Same conversation-switch guard for the dialog-open window; the
@@ -4791,6 +4889,34 @@ export function ProjectView({
         } finally {
           amrGateInFlightConversationsRef.current.delete(gateConversationId);
         }
+      }
+      // First genuine send in a recommendation-started project — the
+      // send-through half of the onboarding funnel. Fires once per project (the
+      // guard is project-scoped so it survives ProjectView remounts), on the
+      // first message of the conversation (not retries). Placed AFTER the
+      // queue-only / busy / AMR balance gates above: those can abort the send
+      // without creating a run, so emitting earlier would over-count blocked
+      // attempts and then suppress the real retry via the once-only guard. By
+      // here the send is committed to creating a run.
+      if (
+        onboardingEntryRef.current &&
+        !hasSentFirstOnboardingPrompt(project.id) &&
+        !retryTarget &&
+        historyBase.length === 0
+      ) {
+        markFirstOnboardingPromptSent(project.id);
+        const entry = onboardingEntryRef.current;
+        trackOnboardingFirstPromptSent(analytics.track, {
+          entry_source: entry.source,
+          product_type: entry.productType,
+          recommendation_id: entry.recommendationId,
+          // True only when the user sent the prefilled suggestion unmodified;
+          // an edited, cleared, replaced, or starter-swapped prompt (or an
+          // attachments-only send) reports false so the send-through split
+          // stays honest.
+          has_prefilled_prompt: sentPrefilledPrompt(onboardingSeedPromptRef.current, prompt),
+        });
+        recordFirstLoopStep(analytics.track, 'prompt_sent', project.id);
       }
       setChatSeed(null);
       const runConversationId = activeConversationId;
@@ -5317,24 +5443,55 @@ export function ProjectView({
                 : artifactFromStandaloneHtml(finalText);
               if (artifactToPersist?.html) {
                 const producedBeforeFallback = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
-                const sameTurnHtmlWrite = await findSameTurnHtmlWriteForRecoveredArtifact({
-                  artifactHtml: resolvePersistedArtifactHtml({
-                    artifactHtml: artifactToPersist.html,
-                    identifier: artifactToPersist.identifier,
-                    sourceText: finalText,
-                  }),
-                  producedFiles: producedBeforeFallback,
-                  readProjectHtml,
-                });
-                if (sameTurnHtmlWrite) {
-                  savedArtifactRef.current = sameTurnHtmlWrite.name;
-                  requestOpenFile(sameTurnHtmlWrite.name);
+                const sameTurnArtifactWrite =
+                  await findSameTurnNonHtmlWriteForRecoveredArtifact({
+                    artifact: artifactToPersist,
+                    producedFiles: producedBeforeFallback,
+                    readProjectText: readProjectHtml,
+                  });
+                const sameTurnHtmlWrite = sameTurnArtifactWrite
+                  ? null
+                  : await findSameTurnHtmlWriteForRecoveredArtifact({
+                      artifactHtml: resolvePersistedArtifactHtml({
+                        artifactHtml: artifactToPersist.html,
+                        identifier: artifactToPersist.identifier,
+                        sourceText: finalText,
+                      }),
+                      producedFiles: producedBeforeFallback,
+                      readProjectHtml,
+                    });
+                const sameTurnWrite = sameTurnArtifactWrite ?? sameTurnHtmlWrite;
+                if (sameTurnWrite) {
+                  savedArtifactRef.current = sameTurnWrite.name;
+                  requestOpenFile(sameTurnWrite.name);
                 } else {
                   await persistArtifact(artifactToPersist, nextFiles, finalText);
                   nextFiles = await refreshProjectFiles();
                 }
               }
               const produced = computeProducedFiles(beforeFileNames, nextFiles) ?? [];
+              // Completion half of the onboarding funnel: the first generation
+              // in a recommendation-started project that actually produced a
+              // previewable artifact. Gated on the same artifact-producing
+              // condition as the first-artifact hint (a produced `.html`), so a
+              // `succeeded` run that returned only text or a clarifying question
+              // does NOT count. Fires once.
+              if (
+                ownsCurrentRun &&
+                onboardingEntryRef.current &&
+                !hasCompletedFirstOnboardingGeneration(project.id) &&
+                finalRunStatus === 'succeeded' &&
+                producedPreviewableArtifact(produced)
+              ) {
+                markFirstOnboardingGenerationCompleted(project.id);
+                const entry = onboardingEntryRef.current;
+                trackOnboardingFirstGenerationCompleted(analytics.track, {
+                  entry_source: entry.source,
+                  product_type: entry.productType,
+                  recommendation_id: entry.recommendationId,
+                });
+                recordFirstLoopStep(analytics.track, 'generated', project.id);
+              }
               const traceObjectFiles = computeTraceObjectFiles(
                 beforeFileNames,
                 nextFiles,
@@ -7513,6 +7670,23 @@ export function ProjectView({
         ? undefined
         : (initialDraft?.projectId === project.id ? initialDraft.value : undefined)
     );
+  // Home → Studio handoff confirmation (spec §11.1 onboarding_prompt_prefilled):
+  // the recommendation's first request actually reached this composer. Fires
+  // once, only for recommendation-started projects that arrived with a seed.
+  const onboardingPrefilledFiredRef = useRef(false);
+  useEffect(() => {
+    const entry = onboardingEntryRef.current;
+    if (!entry || onboardingPrefilledFiredRef.current) return;
+    if (typeof chatInitialDraft !== 'string' || chatInitialDraft.trim().length === 0) return;
+    onboardingPrefilledFiredRef.current = true;
+    trackOnboardingPromptPrefilled(analytics.track, {
+      entry_source: entry.source,
+      product_type: entry.productType,
+      recommendation_id: entry.recommendationId,
+      ...(entry.role ? { role: entry.role } : {}),
+      ...(entry.useCases && entry.useCases.length > 0 ? { use_cases: entry.useCases } : {}),
+    });
+  }, [chatInitialDraft, analytics.track]);
   const brandEnrichmentPromptSeed =
     project.pendingPrompt?.trim() ||
     (initialDraft?.projectId === project.id ? initialDraft.value.trim() : '');
@@ -8266,6 +8440,7 @@ export function ProjectView({
               shareToOpenDesignBusyMessageId={shareToOpenDesignBusyMessageId}
               forceStreamingMessageIds={forceStreamingPluginMessageIds}
               initialDraft={chatInitialDraft}
+              onboardingStarterPath={onboardingEntryRef.current?.productType ?? null}
               onOpenQuestions={openQuestionsTab}
               onContinueRemainingTasks={handleContinueRemainingTasks}
               onAssistantFeedback={handleAssistantFeedback}
@@ -8564,6 +8739,14 @@ export function ProjectView({
           onClose={() => setContextDesignSystemDetails(null)}
         />
       ) : null}
+      {/* One-time first-generation hint (spec §8.3) is scoped to the new-user
+          onboarding handoff: only projects started from the Home recommendation
+          carry a consumed `onboardingEntryRef`. Without this gate the hint
+          would surface for any returning user opening an existing HTML project
+          and burn its once-ever localStorage budget outside the intended flow. */}
+      {onboardingEntryRef.current && hasPreviewableArtifact && !currentConversationStreaming ? (
+        <FirstArtifactHint />
+      ) : null}
       {amrBalanceGateBlock ? (
         <AmrBalanceDialog
           reason={amrBalanceGateBlock.reason}
@@ -8588,6 +8771,7 @@ export function ProjectView({
       {amrLowBalanceWarn ? (
         <AmrLowBalanceDialog
           balanceUsd={amrLowBalanceWarn.snapshot.balanceUsd}
+          plan={amrLowBalanceWarn.plan}
           profile={amrLowBalanceWarn.snapshot.profile}
           entrySource="chat_low_balance_warn_recharge"
           metricsConsent={config.telemetry?.metrics === true}
@@ -8639,12 +8823,17 @@ export function ProjectView({
   );
 }
 
-function artifactExtensionFor(art: Artifact): '.html' | '.jsx' | '.tsx' {
+function artifactExtensionFor(art: Artifact): '.html' | '.jsx' | '.tsx' | '.css' | '.svg' | '.md' {
   const type = (art.artifactType || '').toLowerCase();
   const identifier = (art.identifier || '').toLowerCase();
   if (type.includes('tsx') || identifier.endsWith('.tsx')) return '.tsx';
   if (type.includes('jsx') || type.includes('react') || identifier.endsWith('.jsx')) {
     return '.jsx';
+  }
+  if (type.includes('css') || identifier.endsWith('.css')) return '.css';
+  if (type.includes('svg') || identifier.endsWith('.svg')) return '.svg';
+  if (type.includes('markdown') || type === 'md' || identifier.endsWith('.md')) {
+    return '.md';
   }
   return '.html';
 }
@@ -8670,6 +8859,12 @@ function artifactBaseNameFor(art: Artifact): string {
       .replace(/^-+|-+$/g, '')
       .slice(0, 60) || 'artifact'
   );
+}
+
+function artifactFileNamePattern(baseName: string, ext: string): RegExp {
+  const escapedBaseName = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedExt = ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escapedBaseName}(?:-\\d+)?${escapedExt}$`);
 }
 
 export function findExistingArtifactProjectFile(
@@ -8702,7 +8897,89 @@ export function findExistingArtifactProjectFile(
     if (manifestMatches[0]) return manifestMatches[0];
   }
 
-  return currentRunFiles.find((file) => file.name === candidateFileName) ?? null;
+  if (ext === '.html') {
+    const exactNameMatch = currentRunFiles.find((file) => file.name === candidateFileName);
+    if (exactNameMatch) return exactNameMatch;
+  }
+  return null;
+}
+
+export function findExistingNonHtmlArtifactProjectFile(
+  art: Artifact,
+  projectFiles: ProjectFile[],
+  options: { minMtime?: number } = {},
+): ProjectFile | null {
+  if (artifactExtensionFor(art) === '.html') return null;
+  return findExistingArtifactProjectFile(art, projectFiles, options);
+}
+
+export async function findSameTurnNonHtmlWriteForRecoveredArtifact({
+  artifact,
+  producedFiles,
+  readProjectText,
+}: {
+  artifact: Artifact;
+  producedFiles: readonly ProjectFile[];
+  readProjectText: (name: string) => Promise<string | null>;
+}): Promise<ProjectFile | null> {
+  const ext = artifactExtensionFor(artifact);
+  if (ext === '.html') return null;
+
+  const baseName = artifactBaseNameFor(artifact);
+  const candidateFileName = `${baseName}${ext}`;
+  const namePattern = artifactFileNamePattern(baseName, ext);
+  const identifier = artifact.identifier || '';
+  const candidates = producedFiles
+    .filter((file) => {
+      if (identifier && file.artifactManifest?.metadata?.identifier === identifier) {
+        return file.name.toLowerCase().endsWith(ext);
+      }
+      return file.name === candidateFileName || namePattern.test(file.name);
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+
+  const expected = normalizeProjectTextForArtifactComparison(artifact.html);
+  for (const file of candidates) {
+    const text = await readProjectText(file.name);
+    if (text === null) continue;
+    const actual = normalizeProjectTextForArtifactComparison(text);
+    if (actual === expected) return file;
+  }
+  return null;
+}
+
+async function findSameTurnWriteForRecoveredArtifact({
+  artifact,
+  sourceText,
+  producedFiles,
+  readProjectText,
+}: {
+  artifact: Artifact;
+  sourceText: string;
+  producedFiles: readonly ProjectFile[];
+  readProjectText: (name: string) => Promise<string | null>;
+}): Promise<ProjectFile | null> {
+  const nonHtmlWrite = await findSameTurnNonHtmlWriteForRecoveredArtifact({
+    artifact,
+    producedFiles,
+    readProjectText,
+  });
+  if (nonHtmlWrite || artifactExtensionFor(artifact) !== '.html') return nonHtmlWrite;
+  return findSameTurnHtmlWriteForRecoveredArtifact({
+    artifactHtml: resolvePersistedArtifactHtml({
+      artifactHtml: artifact.html,
+      identifier: artifact.identifier,
+      sourceText,
+    }),
+    producedFiles,
+    readProjectHtml: readProjectText,
+  });
+}
+
+function normalizeProjectTextForArtifactComparison(value: string | null | undefined): string {
+  return String(value || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n');
 }
 
 function filterProjectFilesByMinMtime(

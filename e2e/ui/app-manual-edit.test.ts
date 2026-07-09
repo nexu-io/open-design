@@ -296,6 +296,28 @@ test('[P1] preview toolbar exports PDF and PPTX through the daemon contracts', a
   });
 });
 
+test('[P1] powered WebGL HTML artifacts open through the isolated preview route', async ({ page }) => {
+  test.setTimeout(60_000);
+
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Powered WebGL preview smoke');
+  await seedHtmlArtifact(page, projectId, 'powered-webgl.html', poweredWebglHtml());
+
+  await page.goto(`/projects/${projectId}/files/powered-webgl.html`);
+  await openDesignFile(page, 'powered-webgl.html');
+
+  const preview = artifactPreview(page);
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute('data-od-powered', 'true');
+  await expect(preview).toHaveAttribute('data-od-render-mode', 'url-load');
+  await expect(preview).toHaveAttribute('src', new RegExp(`/api/projects/${projectId}/powered/powered-webgl\\.html`));
+
+  const frame = artifactPreviewFrame(page);
+  await expect(frame.getByRole('heading', { name: 'Powered WebGL Smoke' })).toBeVisible();
+  await expect(frame.locator('#scene')).toBeVisible();
+  await expect(frame.getByTestId('powered-status')).toContainText(/isolated|not-isolated/);
+});
+
 test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit workflows', async ({ page }) => {
   test.setTimeout(60_000);
 
@@ -375,6 +397,148 @@ test('[P1] HTML preview toolbar exposes screenshot, comments, mark, and edit wor
   await expect(page.locator('.manual-edit-modal')).toContainText('Hero title');
   await expect(page.locator('.manual-edit-modal')).toContainText('TYPOGRAPHY');
   await expect(page.getByRole('button', { name: /^Save$/ })).toBeVisible();
+});
+
+test('[P1] draw annotation composer floats near the selected mark and can be queued', async ({ page }) => {
+  test.setTimeout(60_000);
+
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Draw composer position smoke');
+  await seedHtmlArtifact(page, projectId, 'draw-position.html', withSnapshotBridge(manualEditHtml()));
+  const conversationId = await latestConversationId(page, projectId);
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}/files/draw-position.html`);
+  await openDesignFile(page, 'draw-position.html');
+
+  await page.getByTestId('board-mode-toggle').click();
+  await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await holdNextRunOpen(page);
+  await sendPrompt(page, 'Keep draw queue mode active');
+  await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
+
+  await page.getByTestId('draw-overlay-toggle').click();
+  await expect(page.getByTestId('draw-overlay-toggle')).toHaveAttribute('aria-pressed', 'true');
+
+  const previewBox = await artifactPreview(page).boundingBox();
+  expect(previewBox).not.toBeNull();
+  const mark = {
+    x1: previewBox!.x + 120,
+    y1: previewBox!.y + 96,
+    x2: previewBox!.x + 300,
+    y2: previewBox!.y + 190,
+  };
+  await page.mouse.move(mark.x1, mark.y1);
+  await page.mouse.down();
+  await page.mouse.move(mark.x2, mark.y2);
+  await page.mouse.up();
+
+  const noteInput = page.locator('.preview-draw-note-input');
+  await expect(noteInput).toBeVisible();
+  const noteBox = await noteInput.boundingBox();
+  expect(noteBox).not.toBeNull();
+  expect(Math.abs(noteBox!.x - mark.x2)).toBeLessThan(260);
+  expect(Math.abs(noteBox!.y - mark.y2)).toBeLessThan(220);
+
+  await noteInput.fill('Float this note near the marked hero area');
+  await page.getByRole('button', { name: 'Submit options' }).click();
+  const queueButton = page.getByRole('menuitemradio', { name: 'Queue' });
+  await expect(queueButton).toBeEnabled();
+  await queueButton.click();
+  const queuedStrip = page.getByTestId('chat-queued-send-strip');
+  await expect(queuedStrip).toBeVisible();
+  await expect(queuedStrip).toContainText('Float this note near the marked hero area');
+  await expect(queuedStrip).toContainText('1 mark');
+});
+
+test('[P1] first-loop onboarding completes once after a successful artifact export', async ({ page }) => {
+  test.setTimeout(60_000);
+  const analyticsBodies: string[] = [];
+  const analyticsConfig = {
+    mode: 'daemon',
+    apiKey: '',
+    baseUrl: 'https://api.anthropic.com',
+    model: 'claude-sonnet-4-5',
+    agentId: 'mock',
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    agentModels: {},
+    privacyDecisionAt: 1,
+    telemetry: { metrics: true, content: false, artifactManifest: false },
+  };
+  await page.addInitScript(
+    ({ key, value }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: STORAGE_KEY, value: analyticsConfig },
+  );
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { config: analyticsConfig } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/analytics/config', async (route) => {
+    await route.fulfill({
+      json: {
+        enabled: true,
+        env: 'e2e',
+        key: 'phc_e2e',
+        host: 'https://analytics.open-design.test',
+        installationId: 'e2e-installation',
+      },
+    });
+  });
+  await page.route('https://analytics.open-design.test/**', async (route) => {
+    analyticsBodies.push(route.request().postData() ?? '');
+    await route.fulfill({ status: 200, json: { status: 1 } });
+  });
+
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'First loop export smoke');
+  await seedHtmlArtifact(page, projectId, 'first-loop-export.html', manualEditHtml());
+  await page.addInitScript(
+    ({ id }) => {
+      window.sessionStorage.setItem(
+        `open-design:first-loop-entry:${id}`,
+        JSON.stringify({
+          source: 'home_recommendation',
+          productType: 'prototype',
+          recommendationId: 'e2e-recommendation-card',
+        }),
+      );
+      window.sessionStorage.setItem(
+        `open-design:first-loop-steps:${id}`,
+        JSON.stringify(['prompt_sent', 'generated', 'artifact_viewed']),
+      );
+    },
+    { id: projectId },
+  );
+  await page.goto(`/projects/${projectId}/files/first-loop-export.html`);
+  await openDesignFile(page, 'first-loop-export.html');
+
+  await page.getByRole('button', { name: /^Download$/ }).click();
+  const htmlDownload = page.waitForEvent('download');
+  await page.locator('.share-menu-popover[role="menu"]').getByRole('menuitem', { name: /Export as standalone HTML/ }).click();
+  const download = await htmlDownload;
+  expect(download.suggestedFilename()).toMatch(/first-loop-export.*\.html$/i);
+
+  await expect.poll(() => analyticsBodies.join('\n'), { timeout: 15_000 }).toContain('onboarding_completed');
+  const raw = analyticsBodies.join('\n');
+  expect(raw).toContain('home_recommendation');
+  expect(raw).toContain('e2e-recommendation-card');
+  expect(raw).toContain('prompt_sent');
+  expect(raw).toContain('generated');
+  expect(raw).toContain('artifact_viewed');
+  expect(raw).toContain('delivered');
+
+  await page.getByRole('button', { name: /^Download$/ }).click();
+  const secondHtmlDownload = page.waitForEvent('download');
+  await page.locator('.share-menu-popover[role="menu"]').getByRole('menuitem', { name: /Export as standalone HTML/ }).click();
+  await secondHtmlDownload;
+  await page.waitForTimeout(500);
+  const completedCount = analyticsBodies.join('\n').match(/onboarding_completed/g)?.length ?? 0;
+  expect(completedCount).toBe(1);
 });
 
 async function selectStyleRowInput(
@@ -825,6 +989,39 @@ window.addEventListener('message', (event) => {
 });
 </script>`;
   return html.replace('</body>', `${bridge}</body>`);
+}
+
+function poweredWebglHtml(): string {
+  return `<!doctype html>
+<html>
+<head>
+  <title>Powered WebGL Smoke</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0f172a; color: #f8fafc; font-family: sans-serif; }
+    main { display: grid; gap: 12px; justify-items: center; }
+    canvas { width: 160px; height: 96px; border: 1px solid #38bdf8; background: #111827; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Powered WebGL Smoke</h1>
+    <canvas id="scene" width="160" height="96"></canvas>
+    <p data-testid="powered-status">booting</p>
+  </main>
+  <script>
+    document.createElement('canvas').getContext('webgl2');
+    const canvas = document.getElementById('scene');
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#22c55e';
+    ctx.fillRect(16, 20, 128, 56);
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '18px sans-serif';
+    ctx.fillText('OD', 66, 55);
+    document.querySelector('[data-testid="powered-status"]').textContent =
+      window.crossOriginIsolated ? 'isolated' : 'not-isolated';
+  </script>
+</body>
+</html>`;
 }
 
 async function seedDeckArtifact(
