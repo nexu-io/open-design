@@ -74,6 +74,7 @@ export function BrandDetailView({ brandId, onBack }: Props) {
 
   return (
     <div className={styles.page} data-testid="brand-detail">
+      <div className={styles.inner}>
       <div className={styles.breadcrumb}>
         <button type="button" className={styles.breadcrumbLink} onClick={onBack}>
           {t('brands.pageTitle')}
@@ -183,6 +184,7 @@ export function BrandDetailView({ brandId, onBack }: Props) {
           />
         </div>
       </section>
+      </div>
     </div>
   );
 }

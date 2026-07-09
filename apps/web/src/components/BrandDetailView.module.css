@@ -1,8 +1,13 @@
 /* Role: 브랜드 상세 리치 페이지 레이아웃 — 히어로/섹션/팔레트/문서 마스터-디테일 */
-/* height:100% + overflow-y:auto — the view mounts directly inside
+/* Full-width scroll container. The view mounts directly inside
  * .workspace-shell__body (overflow:hidden), so it must own its own scroll or the
- * content clips with no scrollbar. See apps/web/src/styles/shell.css. */
-.page { display: flex; flex-direction: column; gap: 32px; padding: 24px 32px; max-width: 1200px; height: 100%; overflow-y: auto; }
+ * content clips with no scrollbar. Scroll lives on the full-width .page (not the
+ * max-width .inner) so the scrollbar sits at the viewport edge like other pages.
+ * Mirrors the .entry-main--scroll / .entry-main__inner split. See shell.css. */
+.page { height: 100%; overflow-y: auto; }
+/* Centered content column — max-width + margin:auto gives the side margins other
+ * pages have; the scrollbar stays outside it on .page. */
+.inner { width: 100%; max-width: 1200px; margin: 0 auto; padding: 40px 32px 64px; display: flex; flex-direction: column; gap: 32px; }
 .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg2, #7d8085); }
 .breadcrumbLink { background: none; border: 0; color: inherit; cursor: pointer; padding: 0; }
 .hero { display: flex; align-items: center; gap: 16px; }

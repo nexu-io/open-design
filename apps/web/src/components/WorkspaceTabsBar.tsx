@@ -120,7 +120,11 @@ function tabFromRoute(route: Route, timestamp = Date.now()): WorkspaceChromeTab 
       lastActiveAt: timestamp,
     };
   }
-  return createEntryTab(route.kind === 'home' ? route.view : 'design-systems', timestamp);
+  // brand-detail is not a home route but belongs to the Brands section — pin it
+  // to the 'brands' entry tab so the chrome reads "브랜드", not "디자인 시스템".
+  const entryView =
+    route.kind === 'home' ? route.view : route.kind === 'brand-detail' ? 'brands' : 'design-systems';
+  return createEntryTab(entryView, timestamp);
 }
 
 function routeForTab(tab: WorkspaceChromeTab): Route {
@@ -155,6 +159,7 @@ function reviveTab(value: unknown): WorkspaceChromeTab | null {
       || view === 'tasks'
       || view === 'plugins'
       || view === 'design-systems'
+      || view === 'brands'
       || view === 'integrations'
     ) {
       return { id, kind: 'entry', view, createdAt, lastActiveAt };
