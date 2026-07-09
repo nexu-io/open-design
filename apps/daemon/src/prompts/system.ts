@@ -336,18 +336,18 @@ a different model or voice.
 ${lines.join('\n')}`;
 }
 
-function renderMediaDispatchHint(defaults?: ByokMediaDefaults): string {
+export function renderMediaDispatchHint(defaults?: ByokMediaDefaults): string {
   const imageModel = defaults?.imageModel?.trim();
   const videoModel = defaults?.videoModel?.trim();
 
-  let modelGuidance: string;
-  if (imageModel || videoModel) {
-    const imageRec = imageModel ? `\`${imageModel}\`` : '\`flux-pro-ultra\`';
-    const videoRec = videoModel ? `\`${videoModel}\`` : '\`veo-3-fal\` or \`wan-2.1-t2v\`';
-    modelGuidance = `For image generation prefer your configured model: ${imageRec}. For video: ${videoRec}. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
-  } else {
-    modelGuidance = `For the best image model use \`--model flux-pro-ultra\`. For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`. Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
-  }
+  const imagePart = imageModel
+    ? `For image generation prefer your configured model: \`${imageModel}\`.`
+    : `For the best image model use \`--model flux-pro-ultra\`.`;
+  const videoPart = videoModel
+    ? `For video prefer your configured model: \`${videoModel}\`.`
+    : `For video use \`--model veo-3-fal\` or \`--model wan-2.1-t2v\`.`;
+
+  const modelGuidance = `${imagePart} ${videoPart} Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
 
   const hint = MEDIA_DISPATCH_HINT.replace('MODEL_SELECTION_GUIDANCE', modelGuidance);
   return `${hint}${renderByokMediaDefaultsHint(defaults)}`;
