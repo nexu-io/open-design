@@ -646,3 +646,38 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     ).toBe('');
   });
 });
+
+describe('renderMediaDispatchHint — independent image/video guidance', () => {
+  it('says "prefer your configured model" only for the surface that has one', () => {
+    const { renderMediaDispatchHint } = require('../src/prompts/system.js');
+    const out = renderMediaDispatchHint({ videoModel: 'wan-2.1-t2v' });
+
+    // imageModel absent → stock fallback phrasing, NOT "your configured model"
+    expect(out).toContain('For the best image model use');
+    expect(out).not.toMatch(/For image generation prefer your configured model/);
+
+    // videoModel present → "prefer your configured model"
+    expect(out).toContain('For video prefer your configured model: `wan-2.1-t2v`');
+  });
+
+  it('says "prefer your configured model" for image when imageModel is set', () => {
+    const { renderMediaDispatchHint } = require('../src/prompts/system.js');
+    const out = renderMediaDispatchHint({ imageModel: 'flux-pro-ultra' });
+
+    expect(out).toContain('For image generation prefer your configured model: `flux-pro-ultra`');
+    // videoModel absent → stock fallback
+    expect(out).toContain('For video use');
+    expect(out).not.toMatch(/For video prefer your configured model/);
+  });
+
+  it('uses "prefer your configured model" for both when both are set', () => {
+    const { renderMediaDispatchHint } = require('../src/prompts/system.js');
+    const out = renderMediaDispatchHint({
+      imageModel: 'dall-e-3',
+      videoModel: 'veo-3-fal',
+    });
+
+    expect(out).toContain('For image generation prefer your configured model: `dall-e-3`');
+    expect(out).toContain('For video prefer your configured model: `veo-3-fal`');
+  });
+});
