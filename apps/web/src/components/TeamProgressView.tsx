@@ -164,6 +164,28 @@ export const TeamProgressView = memo(function TeamProgressView({
         />
       </div>
 
+      {/* Skip / Continue action — shown when some agents are done but others
+          are still running. Lets the user proceed with partial results. */}
+      {skipAvailable && (
+        <div className="team-progress-skip-row">
+          <button
+            type="button"
+            className="team-progress-skip-btn"
+            onClick={onSkip}
+            disabled={skipBusy}
+          >
+            {skipBusy ? (
+              <Icon name="spinner" size={14} className="team-icon-spin" />
+            ) : (
+              <Icon name="chevron-right" size={14} />
+            )}
+            <span>
+              {skipBusy ? "正在继续…" : `跳过等待 · 以 ${doneCount} 个结果继续`}
+            </span>
+          </button>
+        </div>
+      )}
+
       {/* Agent pipeline */}
       <div className="team-progress-agents">
         {agents.map((agent, idx) => {

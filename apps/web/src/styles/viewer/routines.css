@@ -1443,6 +1443,37 @@
     transform: translateY(0);
   }
 }
+/* Skip / Continue action */
+.team-progress-skip-row {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 2px;
+  animation: handoff-slide-in 300ms var(--ease-out);
+}
+.team-progress-skip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--btn-primary-label);
+  background: var(--btn-primary-bg);
+  border: 1px solid var(--btn-primary-bg);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background 150ms var(--ease-out), transform 120ms var(--ease-out);
+}
+.team-progress-skip-btn:hover:not(:disabled) {
+  background: var(--btn-primary-hover-bg);
+}
+.team-progress-skip-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.team-progress-skip-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
 .app .msg.assistant .prose-block {
   max-width: 68ch;
   color: var(--text);

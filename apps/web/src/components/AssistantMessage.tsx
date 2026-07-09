@@ -607,6 +607,7 @@ function AssistantMessageImpl({
   // a dead fiber and the user would see nothing change after "Sending...".
   const [pluginBusyKey, setPluginBusyKey] = useState<string | null>(null);
   const [pluginNoticeByFolder, setPluginNoticeByFolder] = useState<Record<string, ActionNotice>>({});
+  const [skipBusy, setSkipBusy] = useState(false);
   const runPluginAction = useCallback(
     async (folder: PluginFolderCandidate, action: PluginFolderAgentAction) => {
       if (pluginBusyKey || !onRequestPluginFolderAgentAction) return;
@@ -858,10 +859,13 @@ function AssistantMessageImpl({
             const handleSkip = async () => {
               const rid = message.runId;
               if (!rid) return;
+              setSkipBusy(true);
               try {
                 await fetch(`/api/runs/${rid}/team-proceed`, { method: "POST" });
               } catch {
                 /* daemon may already be cleaning up */
+              } finally {
+                setSkipBusy(false);
               }
             };
             return (
@@ -872,7 +876,7 @@ function AssistantMessageImpl({
                 agents={b.agents}
                 allDone={b.allDone}
                 onSkip={handleSkip}
-                skipBusy={false}
+                skipBusy={skipBusy}
               />
             );
           }
