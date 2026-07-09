@@ -1,5 +1,6 @@
 import { mkdir, readFile, readdir, writeFile, lstat } from 'node:fs/promises';
 import path from 'node:path';
+import { inflateRawSync } from 'node:zlib';
 import JSZip from 'jszip';
 import type Database from 'better-sqlite3';
 import {
@@ -13,6 +14,14 @@ import { isIgnoredProjectDirName } from './project-ignored-dirs.js';
 import { projectDir, resolveProjectDir } from './projects.js';
 
 export const OPEN_DESIGN_PROJECT_BUNDLE_SCHEMA = 'open-design.project-bundle.v1';
+
+const EOCD_SIG = 0x06054b50;
+const CENTRAL_SIG = 0x02014b50;
+const LOCAL_SIG = 0x04034b50;
+
+const MAX_BUNDLE_FILES = 5000;
+const MAX_BUNDLE_TOTAL_BYTES = 100 * 1024 * 1024;
+const MAX_BUNDLE_FILE_BYTES = 25 * 1024 * 1024;
 
 type Db = Database.Database;
 type Row = Record<string, any>;
@@ -36,6 +45,15 @@ interface BundleFileEntry {
   relPath: string;
   fullPath: string;
 }
+
+type ZipEntry = {
+  name: string;
+  method: number;
+  compressedSize: number;
+  uncompressedSize: number;
+  localOffset: number;
+  isDirectory: boolean;
+};
 
 function parseJson(value: unknown): unknown {
   if (typeof value !== 'string' || value.length === 0) return undefined;
@@ -281,10 +299,10 @@ export async function buildOpenDesignProjectBundle(options: BuildProjectBundleOp
   return { buffer, projectName: project.name };
 }
 
-async function readJsonEntry<T>(zip: JSZip, name: string): Promise<T> {
-  const entry = zip.file(name);
+function readJsonEntry<T>(entries: Map<string, Buffer>, name: string): T {
+  const entry = entries.get(name);
   if (!entry) throw new Error(`missing ${name}`);
-  return JSON.parse(await entry.async('string')) as T;
+  return JSON.parse(entry.toString('utf8')) as T;
 }
 
 function unsupportedProjectBundleError(message = 'expected an Open Design project bundle') {
@@ -293,16 +311,126 @@ function unsupportedProjectBundleError(message = 'expected an Open Design projec
   return err;
 }
 
-async function readBundleManifest(zip: JSZip): Promise<Row> {
-  const entry = zip.file('manifest.json');
+function readBundleManifest(entries: Map<string, Buffer>): Row {
+  const entry = entries.get('manifest.json');
   if (!entry) {
     throw unsupportedProjectBundleError('missing Open Design project bundle manifest');
   }
   try {
-    return JSON.parse(await entry.async('string')) as Row;
+    return JSON.parse(entry.toString('utf8')) as Row;
   } catch {
     throw unsupportedProjectBundleError('unreadable Open Design project bundle manifest');
   }
+}
+
+function readBoundedBundleEntries(zip: Buffer): Map<string, Buffer> {
+  const entries = readCentralDirectory(zip)
+    .filter((entry) => !entry.isDirectory);
+  if (entries.length > MAX_BUNDLE_FILES) {
+    throw new Error('project bundle contains too many files');
+  }
+
+  let declaredBytes = 0;
+  for (const entry of entries) {
+    assertSafeBundlePath(entry.name);
+    if (entry.uncompressedSize > MAX_BUNDLE_FILE_BYTES) {
+      throw new Error(`project bundle file too large: ${entry.name}`);
+    }
+    declaredBytes += entry.uncompressedSize;
+    if (declaredBytes > MAX_BUNDLE_TOTAL_BYTES) {
+      throw new Error('project bundle is too large');
+    }
+  }
+
+  const out = new Map<string, Buffer>();
+  let totalBytes = 0;
+  for (const entry of entries) {
+    const body = readEntryBody(zip, entry);
+    if (body.length > MAX_BUNDLE_FILE_BYTES) {
+      throw new Error(`project bundle file too large: ${entry.name}`);
+    }
+    if (entry.uncompressedSize > 0 && body.length !== entry.uncompressedSize) {
+      throw new Error(`project bundle entry size mismatch: ${entry.name}`);
+    }
+    totalBytes += body.length;
+    if (totalBytes > MAX_BUNDLE_TOTAL_BYTES) {
+      throw new Error('project bundle is too large');
+    }
+    out.set(entry.name, body);
+  }
+  return out;
+}
+
+function readCentralDirectory(zip: Buffer): ZipEntry[] {
+  const eocdOffset = findEndOfCentralDirectory(zip);
+  const entryCount = zip.readUInt16LE(eocdOffset + 10);
+  const centralSize = zip.readUInt32LE(eocdOffset + 12);
+  const centralOffset = zip.readUInt32LE(eocdOffset + 16);
+  if (centralOffset + centralSize > zip.length) {
+    throw new Error('invalid project bundle central directory');
+  }
+
+  const entries: ZipEntry[] = [];
+  let offset = centralOffset;
+  for (let i = 0; i < entryCount; i += 1) {
+    if (zip.readUInt32LE(offset) !== CENTRAL_SIG) {
+      throw new Error('invalid project bundle central directory entry');
+    }
+    const flags = zip.readUInt16LE(offset + 8);
+    const method = zip.readUInt16LE(offset + 10);
+    const compressedSize = zip.readUInt32LE(offset + 20);
+    const uncompressedSize = zip.readUInt32LE(offset + 24);
+    const nameLen = zip.readUInt16LE(offset + 28);
+    const extraLen = zip.readUInt16LE(offset + 30);
+    const commentLen = zip.readUInt16LE(offset + 32);
+    const localOffset = zip.readUInt32LE(offset + 42);
+    const name = zip.slice(offset + 46, offset + 46 + nameLen).toString('utf8');
+    if ((flags & 1) !== 0) {
+      throw new Error('encrypted project bundle entries are not supported');
+    }
+    if (method !== 0 && method !== 8) {
+      throw new Error(`unsupported project bundle compression method: ${method}`);
+    }
+    entries.push({
+      name,
+      method,
+      compressedSize,
+      uncompressedSize,
+      localOffset,
+      isDirectory: name.endsWith('/'),
+    });
+    offset += 46 + nameLen + extraLen + commentLen;
+  }
+  return entries;
+}
+
+function findEndOfCentralDirectory(zip: Buffer): number {
+  const min = Math.max(0, zip.length - 0xffff - 22);
+  for (let i = zip.length - 22; i >= min; i -= 1) {
+    if (zip.readUInt32LE(i) === EOCD_SIG) return i;
+  }
+  throw new Error('invalid project bundle: missing central directory');
+}
+
+function readEntryBody(zip: Buffer, entry: ZipEntry): Buffer {
+  const offset = entry.localOffset;
+  if (zip.readUInt32LE(offset) !== LOCAL_SIG) {
+    throw new Error(`invalid project bundle local header: ${entry.name}`);
+  }
+  const nameLen = zip.readUInt16LE(offset + 26);
+  const extraLen = zip.readUInt16LE(offset + 28);
+  const bodyStart = offset + 30 + nameLen + extraLen;
+  const bodyEnd = bodyStart + entry.compressedSize;
+  if (bodyEnd > zip.length) {
+    throw new Error(`project bundle entry exceeds archive: ${entry.name}`);
+  }
+  const compressed = zip.slice(bodyStart, bodyEnd);
+  if (entry.method === 0) return Buffer.from(compressed);
+  if (compressed.length === 0) return Buffer.alloc(0);
+  const cap = entry.uncompressedSize > 0
+    ? Math.min(entry.uncompressedSize, MAX_BUNDLE_FILE_BYTES)
+    : MAX_BUNDLE_FILE_BYTES;
+  return inflateRawSync(compressed, { maxOutputLength: cap });
 }
 
 function importMetadata(project: Row, originalName: string): Record<string, unknown> {
@@ -326,23 +454,23 @@ function chooseEntryFile(files: string[], metadata: unknown): string | null {
 }
 
 export async function importOpenDesignProjectBundle(options: ImportProjectBundleOptions) {
-  const zip = await JSZip.loadAsync(options.buffer);
-  const manifest = await readBundleManifest(zip);
+  const bundleEntries = readBoundedBundleEntries(options.buffer);
+  const manifest = readBundleManifest(bundleEntries);
   if (manifest.schema !== OPEN_DESIGN_PROJECT_BUNDLE_SCHEMA) {
     throw unsupportedProjectBundleError();
   }
 
-  const sourceProject = await readJsonEntry<Row>(zip, 'db/project.json');
-  const rawConversations = zip.file('db/conversations.json')
-    ? await readJsonEntry<unknown>(zip, 'db/conversations.json')
+  const sourceProject = readJsonEntry<Row>(bundleEntries, 'db/project.json');
+  const rawConversations = bundleEntries.has('db/conversations.json')
+    ? readJsonEntry<unknown>(bundleEntries, 'db/conversations.json')
     : [];
-  const rawMessages = zip.file('db/messages.json')
-    ? await readJsonEntry<unknown>(zip, 'db/messages.json')
+  const rawMessages = bundleEntries.has('db/messages.json')
+    ? readJsonEntry<unknown>(bundleEntries, 'db/messages.json')
     : [];
   const conversations = Array.isArray(rawConversations) ? rawConversations as Row[] : [];
   const messages = Array.isArray(rawMessages) ? rawMessages as Row[] : [];
-  const tabs = zip.file('db/tabs.json')
-    ? await readJsonEntry<{ state?: { state?: unknown } | null; tabs?: Row[] }>(zip, 'db/tabs.json')
+  const tabs = bundleEntries.has('db/tabs.json')
+    ? readJsonEntry<{ state?: { state?: unknown } | null; tabs?: Row[] }>(bundleEntries, 'db/tabs.json')
     : null;
 
   const projectId = options.randomId();
@@ -351,16 +479,16 @@ export async function importOpenDesignProjectBundle(options: ImportProjectBundle
   await mkdir(targetRoot, { recursive: true });
 
   const fileNames: string[] = [];
-  for (const entry of Object.values(zip.files)) {
-    if (entry.dir || !entry.name.startsWith('files/')) continue;
-    const relPath = assertSafeBundlePath(entry.name.slice('files/'.length));
+  for (const [name, body] of bundleEntries.entries()) {
+    if (!name.startsWith('files/')) continue;
+    const relPath = assertSafeBundlePath(name.slice('files/'.length));
     const target = path.resolve(targetRoot, relPath);
     const rootWithSep = `${path.resolve(targetRoot)}${path.sep}`;
     if (target !== path.resolve(targetRoot) && !target.startsWith(rootWithSep)) {
-      throw new Error(`unsafe project bundle path: ${entry.name}`);
+      throw new Error(`unsafe project bundle path: ${name}`);
     }
     await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, await entry.async('nodebuffer'));
+    await writeFile(target, body);
     fileNames.push(relPath);
   }
 

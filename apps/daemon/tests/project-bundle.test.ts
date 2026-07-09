@@ -161,4 +161,33 @@ describe('Open Design project bundle import/export', () => {
       code: 'PROJECT_BUNDLE_UNSUPPORTED',
     });
   });
+
+  it('rejects project bundles with oversized files before extraction', async () => {
+    const db = openDatabase(root, { dataDir });
+    const zip = new JSZip();
+    zip.file('manifest.json', JSON.stringify({
+      schema: OPEN_DESIGN_PROJECT_BUNDLE_SCHEMA,
+    }));
+    zip.file('db/project.json', JSON.stringify({
+      id: 'source-project',
+      name: 'Oversized bundle',
+    }));
+    zip.file('files/large.bin', Buffer.alloc((25 * 1024 * 1024) + 1), {
+      binary: true,
+      compression: 'DEFLATE',
+    });
+    const buffer = await zip.generateAsync({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 9 },
+    });
+
+    await expect(importOpenDesignProjectBundle({
+      db,
+      projectsRoot,
+      buffer,
+      originalName: 'oversized.zip',
+      randomId: () => 'new-id',
+    })).rejects.toThrow('project bundle file too large: files/large.bin');
+  });
 });
