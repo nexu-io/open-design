@@ -1,7 +1,8 @@
 // Role: Drift guard — design-templates/naver-blog mirror must match the canonical
 //       examples/naver-blog folder byte-for-byte on the shared subset.
 // Key Features: walk-bound byte-identical checks (every shared file, list derived from
-//               the canonical walk); open-design.json excluded (canonical-only).
+//               the canonical walk); open-design.json excluded (canonical-only);
+//               .DS_Store excluded (gitignored macOS noise, never checked into either side).
 // Dependencies: node:fs, node:path, vitest
 // Notes: Braze already drifted (SKILL.md body) with no guard — this prevents the same here.
 //        Walk-bound (not list-bound): a file added to BOTH catalogs with divergent
@@ -22,6 +23,7 @@ const listRel = (root: string): string[] => {
   const out: string[] = [];
   const walk = (dir: string, prefix: string) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === '.DS_Store') continue;
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (rel === 'open-design.json') continue;
       if (entry.isDirectory()) walk(path.join(dir, entry.name), rel);
