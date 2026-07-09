@@ -40,6 +40,8 @@ interface ImportProjectBundleOptions {
   buffer: Buffer;
   originalName: string;
   randomId: () => string;
+  validateSkillId?: ProjectReferenceValidator;
+  validateDesignSystemId?: ProjectReferenceValidator;
 }
 
 interface BundleFileEntry {
@@ -55,6 +57,13 @@ type ZipEntry = {
   localOffset: number;
   isDirectory: boolean;
 };
+
+type ProjectReferenceValidation = {
+  ok: boolean;
+  id?: string | null;
+};
+
+type ProjectReferenceValidator = (id: unknown) => Promise<ProjectReferenceValidation>;
 
 function parseJson(value: unknown): unknown {
   if (typeof value !== 'string' || value.length === 0) return undefined;
@@ -479,6 +488,18 @@ async function createImportTempRoot(projectsRoot: string, projectId: string): Pr
   return mkdtemp(path.join(tempParent, `${projectId}-`));
 }
 
+async function normalizeImportedProjectReference(
+  id: unknown,
+  validate?: ProjectReferenceValidator,
+): Promise<string | null> {
+  if (typeof id !== 'string' || id.length === 0) return null;
+  if (!validate) return id;
+  const result = await validate(id);
+  return result.ok && typeof result.id === 'string' && result.id.length > 0
+    ? result.id
+    : null;
+}
+
 export async function importOpenDesignProjectBundle(options: ImportProjectBundleOptions) {
   const bundleEntries = readBoundedBundleEntries(options.buffer);
   const manifest = readBundleManifest(bundleEntries);
@@ -504,6 +525,14 @@ export async function importOpenDesignProjectBundle(options: ImportProjectBundle
   const targetRoot = projectDir(options.projectsRoot, projectId);
   await assertImportTargetAvailable(options.db, targetRoot, projectId);
   const tempRoot = await createImportTempRoot(options.projectsRoot, projectId);
+  const importedSkillId = await normalizeImportedProjectReference(
+    sourceProject.skillId,
+    options.validateSkillId,
+  );
+  const importedDesignSystemId = await normalizeImportedProjectReference(
+    sourceProject.designSystemId,
+    options.validateDesignSystemId,
+  );
 
   const fileNames: string[] = [];
   let projectInserted = false;
@@ -529,11 +558,8 @@ export async function importOpenDesignProjectBundle(options: ImportProjectBundle
           typeof sourceProject.name === 'string' && sourceProject.name.trim()
             ? sourceProject.name.trim()
             : options.originalName.replace(/\.zip$/i, '') || 'Imported project',
-        skillId: typeof sourceProject.skillId === 'string' ? sourceProject.skillId : null,
-        designSystemId:
-          typeof sourceProject.designSystemId === 'string'
-            ? sourceProject.designSystemId
-            : null,
+        skillId: importedSkillId,
+        designSystemId: importedDesignSystemId,
         pendingPrompt:
           typeof sourceProject.pendingPrompt === 'string'
             ? sourceProject.pendingPrompt

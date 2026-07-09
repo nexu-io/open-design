@@ -41,6 +41,8 @@ describe('Open Design project bundle import/export', () => {
 
   async function minimalProjectBundle(options: {
     name?: string;
+    skillId?: string | null;
+    designSystemId?: string | null;
     conversations?: unknown[];
     files?: Record<string, string | Buffer>;
   } = {}): Promise<Buffer> {
@@ -51,6 +53,8 @@ describe('Open Design project bundle import/export', () => {
     zip.file('db/project.json', JSON.stringify({
       id: 'source-project',
       name: options.name ?? 'Imported project',
+      skillId: options.skillId ?? null,
+      designSystemId: options.designSystemId ?? null,
     }));
     zip.file('db/conversations.json', JSON.stringify(options.conversations ?? []));
     zip.file('db/messages.json', '[]');
@@ -277,5 +281,29 @@ describe('Open Design project bundle import/export', () => {
 
     expect(getProject(db, 'new-project')).toBeNull();
     expect(existsSync(path.join(projectsRoot, 'new-project'))).toBe(false);
+  });
+
+  it('drops missing skill and design-system references during bundle import', async () => {
+    const db = openDatabase(root, { dataDir });
+
+    const imported = await importOpenDesignProjectBundle({
+      db,
+      projectsRoot,
+      buffer: await minimalProjectBundle({
+        skillId: 'sender-only-skill',
+        designSystemId: 'user:sender-only-system',
+      }),
+      originalName: 'incoming.zip',
+      randomId: (() => {
+        let next = 0;
+        return () => `new-id-${++next}`;
+      })(),
+      validateSkillId: async () => ({ ok: false, id: null }),
+      validateDesignSystemId: async () => ({ ok: false, id: null }),
+    });
+
+    const project = getProject(db, imported.project!.id)!;
+    expect(project.skillId).toBeNull();
+    expect(project.designSystemId).toBeNull();
   });
 });

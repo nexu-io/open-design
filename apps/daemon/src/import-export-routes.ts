@@ -45,7 +45,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   const { getProject, insertProject, updateProject } = ctx.projectStore;
   const { insertConversation } = ctx.conversations;
   const { setTabs } = ctx.projectFiles;
-  const { validateProjectDesignSystemId } = ctx.validation;
+  const { validateProjectDesignSystemId, validateProjectSkillId } = ctx.validation;
   app.post(
     '/api/import/claude-design',
     importUpload.single('file'),
@@ -124,6 +124,8 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           buffer: await readFile(req.file.path),
           originalName,
           randomId,
+          validateSkillId: validateProjectSkillId,
+          validateDesignSystemId: validateProjectDesignSystemId,
         });
         return res.json(imported);
       } catch (err: any) {
