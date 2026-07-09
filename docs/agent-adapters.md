@@ -102,7 +102,7 @@ If both signals agree, detection is confident. If only one signal fires, we mark
 | **deepseek** | `deepseek` | `~/.deepseek/` | `~/.deepseek/skills/` | ❌ (prompt-injected) | ✅ | ✅ (plain text) | P2 |
 | **qoder** | `qodercli` | Qoder CLI config | Qoder CLI managed | ❌ (prompt-injected) | ✅ | ✅ (`stream-json`) | P2 |
 | **pi** | `pi` | `~/.pi/agent/` | `~/.pi/agent/skills/` | ❌ (prompt-injected) | ✅ | ✅ (`pi-rpc` JSON-RPC) | P2 |
-| **kimchi** | `kimchi` | `~/.config/kimchi/harness/` | ❌ | ✅ | ✅ (`pi-rpc` JSON-RPC) | P2 |
+| **kimchi** | `kimchi` | `~/.config/kimchi/harness/` | ❌ | ❌ (prompt-injected) | ✅ | ✅ (`pi-rpc` JSON-RPC) | P2 |
 
 "P0/P1/P2" correspond to the roadmap phases in [`roadmap.md`](roadmap.md).
 
