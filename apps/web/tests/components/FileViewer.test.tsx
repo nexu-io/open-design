@@ -5846,6 +5846,203 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it.each([
+    ['Vercel', 'vercel-self', 'https://vercel.example'],
+    ['Cloudflare Pages', 'cloudflare-pages', 'https://pages.example.pages.dev'],
+  ])('does not show a %s deployment in the display.dev modal', async (_label, providerId, deployedUrl) => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({
+          deployments: [
+            {
+              id: `${providerId}-deploy`,
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId,
+              url: deployedUrl,
+              deploymentCount: 1,
+              target: 'preview',
+              status: 'ready',
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=displaydev-self') {
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: '',
+          displayDev: {
+            defaultVisibility: 'company',
+            defaultSharedWith: [],
+            defaultShowBranding: 'inherit',
+          },
+          target: 'preview',
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to display\.dev/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(screen.getByRole('heading', { name: /Deploy to display\.dev/i })).toBeTruthy();
+    expect(dialog.querySelector('.deploy-result-block')).toBeNull();
+    expect(screen.queryByText(deployedUrl)).toBeNull();
+    expect(screen.getByRole('button', { name: /Deploy to display\.dev/i })).toBeTruthy();
+  });
+
+  it('keeps display.dev deploy disabled until provider state is hydrated', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    let deploymentsCallCount = 0;
+    let resolveModalDeployments!: (response: Response) => void;
+    const modalDeployments = new Promise<Response>((resolve) => {
+      resolveModalDeployments = resolve;
+    });
+    const deployRequest: { body?: Record<string, unknown> } = {};
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      if (url === '/api/projects/project-1/deployments') {
+        deploymentsCallCount += 1;
+        if (deploymentsCallCount === 1) {
+          return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+        }
+        return modalDeployments;
+      }
+      if (url === '/api/deploy/config?providerId=displaydev-self') {
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+          displayDev: {
+            defaultVisibility: 'company',
+            defaultSharedWith: [],
+            defaultShowBranding: 'inherit',
+          },
+          target: 'preview',
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
+        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          id: 'displaydev-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'displaydev-self',
+          url: 'https://personal.dsp.so/owned-preview',
+          deploymentCount: 2,
+          target: 'preview',
+          status: 'ready',
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned-preview',
+            visibility: 'company',
+            sharedWith: [],
+            showBranding: 'inherit',
+          },
+          createdAt: 1,
+          updatedAt: 2,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to display\.dev/i }));
+
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Deploy to display\.dev/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Save/i })).toBeDisabled();
+
+    await act(async () => {
+      resolveModalDeployments(new Response(JSON.stringify({
+        deployments: [
+          {
+            id: 'displaydev-deploy',
+            projectId: 'project-1',
+            fileName: 'index.html',
+            providerId: 'displaydev-self',
+            url: 'https://personal.dsp.so/owned-preview',
+            deploymentCount: 1,
+            target: 'preview',
+            status: 'ready',
+            displayDev: {
+              mode: 'authenticated',
+              shortId: 'owned-preview',
+              visibility: 'company',
+              sharedWith: [],
+              showBranding: 'inherit',
+            },
+            createdAt: 1,
+            updatedAt: 2,
+          },
+        ],
+      }), { status: 200 }));
+      await modalDeployments;
+    });
+
+    const redeployButton = await screen.findByRole('button', { name: /Redeploy to display\.dev/i });
+    await waitFor(() => {
+      expect(redeployButton).not.toBeDisabled();
+    });
+    fireEvent.click(redeployButton);
+
+    await waitFor(() => {
+      expect(deployRequest.body).toBeDefined();
+    });
+    expect(deployRequest.body).toMatchObject({
+      providerId: 'displaydev-self',
+      fileName: 'index.html',
+    });
+    expect(deployRequest.body).not.toHaveProperty('displayDev');
+  });
+
   it('keeps the anonymous display.dev claim URL visible when an API key is configured', async () => {
     const file = baseFile({
       name: 'index.html',

@@ -115,6 +115,58 @@ test('Share menu redeploys an authenticated display.dev preview with the current
   }
 });
 
+test('Share menu display.dev modal does not show another provider deployment', async ({ page }) => {
+  const displayDev = await createDisplayDevMock();
+  const projectId = `displaydev-fallback-e2e-${Date.now()}`;
+  const fileName = 'displaydev-fallback-preview.html';
+
+  try {
+    const { conversationId } = await createProjectViaApi(page, projectId, 'display.dev fallback E2E');
+    await seedHtmlArtifact(
+      page,
+      projectId,
+      fileName,
+      '<!doctype html><html><body><main><h1>display.dev Fallback E2E Preview</h1></main></body></html>',
+    );
+    await configureAnonymousDisplayDevApiUrl(page, displayDev.baseUrl);
+    await page.route('**/api/projects/*/deployments', async (route) => {
+      await route.fulfill({
+        json: {
+          deployments: [
+            {
+              id: 'vercel-existing',
+              projectId,
+              fileName,
+              providerId: 'vercel-self',
+              url: 'https://vercel.example',
+              deploymentCount: 1,
+              target: 'preview',
+              status: 'ready',
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+        },
+      });
+    });
+
+    await page.goto(`/projects/${projectId}/conversations/${conversationId}`, { waitUntil: 'domcontentloaded' });
+    await waitForLoadingToClear(page);
+    await expect(page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', { name: 'display.dev Fallback E2E Preview' })).toBeVisible();
+
+    await page.getByRole('button', { name: /^Share$/ }).click();
+    await page.getByRole('menuitem', { name: /Deploy to display\.dev/i }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', { name: 'Deploy to display.dev' })).toBeVisible();
+    await expect(dialog.getByText('https://vercel.example')).toHaveCount(0);
+    await expect(dialog.locator('.deploy-result-block')).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Deploy to display.dev' })).toBeVisible();
+  } finally {
+    await displayDev.close();
+  }
+});
+
 async function createDisplayDevMock() {
   const artifactRequests: Array<{ method: string; path: string; authorization: string; ifMatch: string }> = [];
   let baseUrl = '';

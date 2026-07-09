@@ -8068,6 +8068,7 @@ function HtmlViewer({
   const [copiedDeployLink, setCopiedDeployLink] = useState<string | null>(null);
   const [deployProviderId, setDeployProviderId] = useState<WebDeployProviderId>(DEFAULT_DEPLOY_PROVIDER_ID);
   const [deployTarget, setDeployTarget] = useState<'preview' | 'production'>('production');
+  const [deployProviderLoading, setDeployProviderLoading] = useState(false);
   const [projectSocialShare, setProjectSocialShare] = useState<SocialShareResponse | null>(null);
   const [deployToken, setDeployToken] = useState('');
   const [teamId, setTeamId] = useState('');
@@ -8089,6 +8090,7 @@ function HtmlViewer({
     showBranding: false,
   });
   const deployProviderLoadSeqRef = useRef(0);
+  const deployProviderLoadingRef = useRef(false);
   const deployTokenInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (!workspaceActive || !deployModalOpen) return;
@@ -9533,28 +9535,37 @@ function HtmlViewer({
     options?: { fallbackToExisting?: boolean },
   ) {
     const requestSeq = ++deployProviderLoadSeqRef.current;
+    deployProviderLoadingRef.current = true;
+    setDeployProviderLoading(true);
     setDeployProviderId(providerId);
-    const deployments = await fetchProjectDeployments(projectId, workspaceContext);
-    const nextDeploymentsByProvider = deploymentMapForCurrentFile(deployments);
-    const exactDeployment = nextDeploymentsByProvider[providerId] ?? null;
-    const fallbackDeployment = options?.fallbackToExisting
-      ? Object.values(nextDeploymentsByProvider)[0] ?? null
-      : null;
-    const currentDeployment = exactDeployment ?? fallbackDeployment;
-    // Use the explicit providerId for config/form so a fallback deployment from
-    // another provider only fills the existing-URL display, never the form/credentials.
-    const config = await fetchDeployConfig(providerId);
-    if (requestSeq !== deployProviderLoadSeqRef.current) {
-      return { config: null, currentDeployment: null };
+    try {
+      const deployments = await fetchProjectDeployments(projectId, workspaceContext);
+      const nextDeploymentsByProvider = deploymentMapForCurrentFile(deployments);
+      const exactDeployment = nextDeploymentsByProvider[providerId] ?? null;
+      const fallbackDeployment = options?.fallbackToExisting
+        ? Object.values(nextDeploymentsByProvider)[0] ?? null
+        : null;
+      const currentDeployment = exactDeployment ?? fallbackDeployment;
+      // Use the explicit providerId for config/form so a fallback deployment from
+      // another provider only fills the existing-URL display, never the form/credentials.
+      const config = await fetchDeployConfig(providerId);
+      if (requestSeq !== deployProviderLoadSeqRef.current) {
+        return { config: null, currentDeployment: null };
+      }
+      syncDeployFormFromConfig(providerId, config, currentDeployment ?? null);
+      setDeploymentsByProvider(nextDeploymentsByProvider);
+      setDeployment(currentDeployment ?? null);
+      setDeployResult(currentDeployment ?? null);
+      if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID && config?.configured) {
+        void loadCloudflareZones(config, { requestSeq });
+      }
+      return { config, currentDeployment };
+    } finally {
+      if (requestSeq === deployProviderLoadSeqRef.current) {
+        deployProviderLoadingRef.current = false;
+        setDeployProviderLoading(false);
+      }
     }
-    syncDeployFormFromConfig(providerId, config, currentDeployment ?? null);
-    setDeploymentsByProvider(nextDeploymentsByProvider);
-    setDeployment(currentDeployment ?? null);
-    setDeployResult(currentDeployment ?? null);
-    if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID && config?.configured) {
-      void loadCloudflareZones(config, { requestSeq });
-    }
-    return { config, currentDeployment };
   }
 
   async function loadCloudflareZones(
@@ -14232,7 +14243,7 @@ function HtmlViewer({
     setDeployActionToast(null);
     setCopiedDeployLink(null);
     setDeployPhase('idle');
-    await loadDeployProvider(nextProviderId, { fallbackToExisting: true });
+    await loadDeployProvider(nextProviderId, { fallbackToExisting: intent === 'social-share' });
   }
 
   async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
@@ -14243,6 +14254,7 @@ function HtmlViewer({
   }
 
   async function saveDeployConfig() {
+    if (deployProviderLoadingRef.current) return null;
     setSavingDeployConfig(true);
     setDeployError(null);
     setDeployActionToast(null);
@@ -14333,6 +14345,7 @@ function HtmlViewer({
   }
 
   async function deployToSelectedProvider() {
+    if (deployProviderLoadingRef.current) return;
     setDeploying(true);
     setDeployPhase('deploying');
     setDeployError(null);
@@ -15589,7 +15602,8 @@ function HtmlViewer({
       clearBoardComposer();
     }
   }, [activePreviewCommentId, boardMode, effectiveDeck, slideState?.active, visibleSideComments]);
-  const activeDeployment = deployResult || deployment;
+  const rawActiveDeployment = deployResult || deployment;
+  const activeDeployment = rawActiveDeployment?.providerId === deployProviderId ? rawActiveDeployment : null;
   const activeDeployedUrl = activeDeployment?.url?.trim() || '';
   const activeDeploymentDelayed = activeDeployment?.status === 'link-delayed';
   const activeDeploymentProtected = activeDeployment?.status === 'protected';
@@ -15709,11 +15723,16 @@ function HtmlViewer({
       ? t('fileViewer.redeployToProvider', { provider: label })
       : t('fileViewer.deployToProvider', { provider: label });
   };
+  const shareCandidateDeployments =
+    deployModalOpen && deployModalIntent !== 'social-share'
+      ? { [deployProviderId]: deploymentsByProvider[deployProviderId] }
+      : deploymentsByProvider;
   const deployedEntries = DEPLOY_PROVIDER_OPTIONS
-    .map((option) => deploymentsByProvider[option.id])
+    .map((option) => shareCandidateDeployments[option.id])
     .filter((item): item is WebDeploymentInfo => Boolean(item?.url?.trim()));
   const shareableDeploymentUrl =
-    DEPLOY_PROVIDER_OPTIONS.map((option) => deploymentsByProvider[option.id])
+    DEPLOY_PROVIDER_OPTIONS
+      .map((option) => shareCandidateDeployments[option.id])
       .map((item) => publicShareUrlForDeployment(item))
       .find(Boolean) ?? '';
   // A link is a link: the published-file URL unlocks social sharing exactly
@@ -18333,7 +18352,7 @@ function HtmlViewer({
                     <button
                       type="button"
                       className="ghost-link button-like"
-                      disabled={savingDeployConfig}
+                      disabled={deployProviderLoading || savingDeployConfig}
                       onClick={() => {
                         void saveDeployConfig();
                       }}
@@ -18610,7 +18629,7 @@ function HtmlViewer({
               <button
                 type="button"
                 className="viewer-action primary"
-                disabled={deploying || savingDeployConfig || deployPhase !== 'idle'}
+                disabled={deployProviderLoading || deploying || savingDeployConfig || deployPhase !== 'idle'}
                 onClick={() => {
                   void deployToSelectedProvider();
                 }}
