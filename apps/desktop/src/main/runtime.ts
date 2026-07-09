@@ -415,6 +415,14 @@ export type DesktopRuntimeOptions = {
    */
   splashStartedAt?: number;
   updater?: DesktopUpdater;
+  /**
+   * Fired once the main window is actually revealed (the web app mounted and
+   * the window is shown) — the real "app is running" moment, distinct from
+   * `createDesktopRuntime` returning (which starts async bootstrap via
+   * `void tick()` and returns before the first load). Used to mark the session
+   * as having reached running for abnormal-exit detection.
+   */
+  onRevealed?: () => void;
 };
 
 const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
@@ -2199,6 +2207,13 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     window.focus();
     ensureWindowVisible(window);
     if (splash != null && !splash.isDestroyed()) splash.close();
+    // The app is now truly up (mounted + shown). Fire once — revealed guards
+    // re-entry — so callers can mark "reached running".
+    try {
+      options.onRevealed?.();
+    } catch {
+      // A callback fault must not break reveal.
+    }
   };
 
   // Hold the splash until BOTH (a) the web bundle reports it has mounted — it

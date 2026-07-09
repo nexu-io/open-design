@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -39,6 +39,7 @@ import {
 import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
+import { beginDesktopSession, clearReportedCrash, endDesktopSessionCleanly, markDesktopSessionRunning } from "./session-lifecycle.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
 import { createDesktopUpdater, createDesktopUpdaterScheduler, type DesktopUpdaterScheduler } from "./updater.js";
 import {
@@ -220,6 +221,29 @@ function resolveDaemonBaseUrl(
     }
     return baseUrl;
   };
+}
+
+// Best-effort POST of a desktop observability event (abnormal exit, child-process
+// crash) to the daemon's safety-event bridge — the same path desktop_renderer_crash
+// uses; the daemon relays it to PostHog with device_id = installationId. Never
+// throws: failing to report must not affect startup or shutdown.
+async function reportDesktopObservabilityEvent(
+  discoverBaseUrl: () => Promise<string>,
+  event: string,
+  properties: Record<string, unknown>,
+): Promise<boolean> {
+  try {
+    const baseUrl = await discoverBaseUrl();
+    const res = await fetch(new URL("/api/observability/event", baseUrl).toString(), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ event, properties }),
+    });
+    return res.ok;
+  } catch {
+    // best-effort observability, never a failure path
+    return false;
+  }
 }
 
 export function normalizeAmrEnvironmentProfile(profile: unknown): AmrEnvironmentProfile {
@@ -678,6 +702,21 @@ export async function runDesktopMain(
   });
   const rendererLogPath = join(dirname(desktopLogPath), "renderer.log");
 
+  // Abnormal-exit detection: read the previous run's marker (unclean if the app
+  // died without a graceful quit — a main-process crash, OS kill, force-quit
+  // after a hang, or power loss), then stamp a fresh dirty marker for this run.
+  // The renderer-crash and startup-crash events don't cover this "runtime 闪退"
+  // class, and a dead process can't report itself, so this is the only way to
+  // observe it. Reported below once the daemon is reachable; marked clean on a
+  // graceful shutdown.
+  const sessionStatePath = join(dirname(desktopLogPath), "session-state.json");
+  const { previousUncleanSessions } = beginDesktopSession({
+    stateFilePath: sessionStatePath,
+    sessionId: randomUUID(),
+    version: app.getVersion(),
+    now: () => new Date(),
+  });
+
   let desktop: DesktopRuntime | null = null;
   let disposeMenu: () => void = () => undefined;
   let updateScheduler: DesktopUpdaterScheduler | null = null;
@@ -737,6 +776,11 @@ export async function runDesktopMain(
     removeDiagnosticsIpc();
     await ipcServer?.close().catch(() => undefined);
     await desktop?.close().catch(() => undefined);
+    // Mark the session clean only AFTER teardown actually completed, right
+    // before app.quit(). Doing it at the start of shutdown would flag a quit as
+    // clean even if a later await hangs and the process is then force-quit or
+    // OS-killed — which is itself an abnormal exit worth reporting.
+    endDesktopSessionCleanly({ stateFilePath: sessionStatePath });
     app.quit();
   }
 
@@ -818,6 +862,12 @@ export async function runDesktopMain(
     // protection still works) and POSTs once more.
     registerDesktopAuthWithDaemon: () => registerDesktopAuthWithDaemon(runtime, desktopAuthSecret),
     rendererLogPath,
+    // Mark "reached running" only when the window is ACTUALLY revealed (web app
+    // mounted + shown), not when createDesktopRuntime returns — it starts async
+    // bootstrap via `void tick()` and returns before the first load. Until this
+    // fires, a crash is still a startup failure (covered by
+    // packaged_runtime_failed), not a runtime abnormal exit.
+    onRevealed: () => markDesktopSessionRunning({ stateFilePath: sessionStatePath }),
     requestQuit: shutdownAndExit,
     splashWindow: options.splashWindow,
     splashStartedAt: options.splashStartedAt,
@@ -826,6 +876,42 @@ export async function runDesktopMain(
   });
   console.info("[open-design desktop] desktop runtime created");
   options.onDesktopReady?.({ show: () => desktop?.show() });
+
+  const discoverDaemonBaseUrl = resolveDaemonBaseUrl(runtime, options);
+  // Report each abnormal exit of a prior run now that the daemon is up to relay
+  // it (best-effort; the events carry no user content). Each is dropped from the
+  // queue only once the daemon acks it, so a failed report is retried next launch.
+  if (previousUncleanSessions.length > 0) {
+    console.warn("[open-design desktop] prior session(s) ended abnormally (no clean shutdown)", {
+      count: previousUncleanSessions.length,
+    });
+    for (const crash of previousUncleanSessions) {
+      void reportDesktopObservabilityEvent(discoverDaemonBaseUrl, "desktop_unclean_exit", {
+        previous_version: crash.version,
+        previous_session_id: crash.sessionId,
+        previous_started_at: crash.startedAt,
+        current_version: app.getVersion(),
+      }).then((reported) => {
+        if (reported) clearReportedCrash({ stateFilePath: sessionStatePath }, crash.sessionId);
+      });
+    }
+  }
+  // GPU / utility child-process crashes: the window keeps running but degraded
+  // (a GPU-process crash is a common cause of a window that then goes blank or
+  // vanishes), and the child can't report itself. `clean-exit` is normal teardown.
+  app.on("child-process-gone", (_event, details) => {
+    if (details.reason === "clean-exit") return;
+    console.error("[open-design desktop] child-process-gone", {
+      type: details.type,
+      reason: details.reason,
+      exitCode: details.exitCode,
+    });
+    void reportDesktopObservabilityEvent(discoverDaemonBaseUrl, "desktop_child_process_crash", {
+      process_type: details.type,
+      reason: details.reason,
+      exit_code: typeof details.exitCode === "number" ? details.exitCode : null,
+    });
+  });
   disposeMenu = installDesktopMenu(runtime, options);
   removeDiagnosticsIpc = registerDesktopDiagnosticsIpc({
     discoverDaemonBaseUrl: resolveDaemonBaseUrl(runtime, options),
