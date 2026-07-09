@@ -90,6 +90,7 @@ import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
 import { BUILT_IN_PETS, CUSTOM_PET_ID } from "./pet/pets";
 import {
   inlineMentionToken,
+  teamMentionToken,
   mentionTokenPresent,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
@@ -2430,8 +2431,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (!team) return;
       setStagedTeam(team);
       editorRef.current?.insertMention({
-        token: inlineMentionToken(team.name),
-        entity: { id: team.id, kind: 'team', label: team.name },
+        token: teamMentionToken(team.name),
+        entity: { id: team.id, kind: 'team', label: team.name, title: team.name },
       });
       setMention(null);
       setTeamSubMode('recommended');
@@ -2462,8 +2463,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     function insertTeamMention(team: GeneratedTeam) {
       setStagedTeam(team);
       editorRef.current?.insertMention({
-        token: inlineMentionToken(team.name),
-        entity: { id: team.id, kind: 'team', label: team.name },
+        token: teamMentionToken(team.name),
+        entity: { id: team.id, kind: 'team', label: team.name, title: team.name },
       });
       setMention(null);
     }
@@ -3432,7 +3433,7 @@ function buildComposerMentionEntities({
       id: team.id,
       kind: 'team',
       label: team.name,
-      token: inlineMentionToken(team.name),
+      token: teamMentionToken(team.name),
       title: `Team: ${team.name} — ${team.description}`,
     });
   }
@@ -5883,11 +5884,17 @@ function escapeRegExp(value: string): string {
 }
 
 function stripInlineMentionToken(text: string, label: string): string {
-  const token = inlineMentionToken(label);
-  return text.replace(
-    new RegExp(`(^|[\\s([{"'])${escapeRegExp(token)}(?=$|\\s|[.,;:!?)}\\]"'])([^\\S\\r\\n])?`, 'g'),
-    '$1',
-  );
+  // Team mention tokens are sanitized (spaces removed) via teamMentionToken,
+  // so try both formats — the sanitized version first, then the original.
+  const tokens = [teamMentionToken(label), inlineMentionToken(label)];
+  let result = text;
+  for (const token of tokens) {
+    result = result.replace(
+      new RegExp(`(^|[\\s([{"'])${escapeRegExp(token)}(?=$|\\s|[.,;:!?)}\\]"'])([^\\S\\r\\n])?`, 'g'),
+      '$1',
+    );
+  }
+  return result;
 }
 
 function stripInlineMentionLabels(text: string, labels: string[]): string {

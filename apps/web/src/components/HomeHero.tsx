@@ -61,6 +61,7 @@ import {
 } from './home-hero/sub-chips';
 import {
   inlineMentionToken,
+  teamMentionToken,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
 import { generateTeams, type GeneratedTeam, MODE_LABELS, MODE_DESCRIPTIONS, MODE_ICONS, ROLE_LABELS } from '../utils/teamGenerator';
@@ -1051,12 +1052,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   function handleCreateCustomTeam() {
     const team = buildCustomTeam();
     if (!team) return;
-    const token = inlineMentionToken(team.name);
+    const token = teamMentionToken(team.name);
     const next = insertHomeMention(token, {
       id: team.id,
       kind: 'team',
       label: team.name,
       token,
+      title: team.name,
     });
     setMentionTrigger(null);
     onPickTeam(team, next);
@@ -1086,12 +1088,13 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   }
 
   function pickTeam(team: GeneratedTeam) {
-    const token = inlineMentionToken(team.name);
+    const token = teamMentionToken(team.name);
     const next = insertHomeMention(token, {
       id: team.id,
       kind: 'team',
       label: team.name,
       token,
+      title: team.name,
     });
     onPickTeam(team, next);
     setTeamSubMode('recommended');
@@ -2884,7 +2887,7 @@ function buildHomeMentionEntities({
       id: activeTeam.id,
       kind: 'team',
       label: activeTeam.name,
-      token: inlineMentionToken(activeTeam.name),
+      token: teamMentionToken(activeTeam.name),
       title: `Team: ${activeTeam.name}`,
     });
   }
@@ -3392,11 +3395,17 @@ function optionLabelMap(field: InputFieldSpec): Record<string, string> {
 }
 
 function stripHomeMentionToken(value: string, label: string): string {
-  const token = inlineMentionToken(label);
-  return value.replace(
-    new RegExp(`(^|[\\s([{"'])${escapeRegExp(token)}(?=$|\\s|[.,;:!?)}\\]"'])([^\\S\\r\\n])?`, 'g'),
-    '$1',
-  );
+  // Team mention tokens are sanitized (spaces removed) via teamMentionToken,
+  // so try both formats — the sanitized version first, then the original.
+  const tokens = [teamMentionToken(label), inlineMentionToken(label)];
+  let result = value;
+  for (const token of tokens) {
+    result = result.replace(
+      new RegExp(`(^|[\\s([{"'])${escapeRegExp(token)}(?=$|\\s|[.,;:!?)}\\]"'])([^\\S\\r\\n])?`, 'g'),
+      '$1',
+    );
+  }
+  return result;
 }
 
 function fileMatchesQuery(file: File, query: string): boolean {

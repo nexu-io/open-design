@@ -31,6 +31,19 @@ export function inlineMentionToken(label: string): string {
   return label.startsWith('@') ? label : `@${label}`;
 }
 
+/**
+ * Team names contain decorative spaces (e.g., "并行模式 · 3 Agent") that
+ * break the /@[^\s@]+/ mention parser and create visible whitespace gaps
+ * inside the pill. This helper collapses all whitespace in the name so the
+ * token is parseable and renders without blank gaps inside the editor.
+ * The original name is preserved in the `label` field and shown via the
+ * `title` hover tooltip.
+ */
+export function teamMentionToken(name: string): string {
+  const collapsed = name.replace(/\s+/g, '');
+  return collapsed.startsWith('@') ? collapsed : `@${collapsed}`;
+}
+
 export function buildInlineMentionParts(
   text: string,
   entities: InlineMentionEntity[],
