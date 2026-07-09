@@ -255,7 +255,7 @@ une entrée dans [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts) 
 C'est tout : le daemon la détecte dans le `PATH`, le picker l'affiche et le
 chemin chat fonctionne. Si la CLI émet des **typed events** (comme
 `--output-format stream-json` de Claude Code), ajoutez un parser dans
-[`apps/daemon/src/claude-stream.ts`](../../apps/daemon/src/claude-stream.ts) et mettez
+[`apps/daemon/src/runtimes/claude-stream.ts`](../../apps/daemon/src/runtimes/claude-stream.ts) et mettez
 `streamFormat: 'claude-stream-json'`.
 
 Critères de merge :

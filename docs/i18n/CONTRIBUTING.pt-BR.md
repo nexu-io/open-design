@@ -183,7 +183,7 @@ Plugar um novo agente (por exemplo, o CLI `foo-coder` de alguma loja nova) é um
 }
 ```
 
-É só isso — o daemon detecta no `PATH`, o picker mostra, o caminho de chat funciona. Se o CLI emite **eventos tipados** (como o `--output-format stream-json` do Claude Code), conecte um parser em [`apps/daemon/src/claude-stream.ts`](../../apps/daemon/src/claude-stream.ts) e defina `streamFormat: 'claude-stream-json'`.
+É só isso — o daemon detecta no `PATH`, o picker mostra, o caminho de chat funciona. Se o CLI emite **eventos tipados** (como o `--output-format stream-json` do Claude Code), conecte um parser em [`apps/daemon/src/runtimes/claude-stream.ts`](../../apps/daemon/src/runtimes/claude-stream.ts) e defina `streamFormat: 'claude-stream-json'`.
 
 Barra para mergear:
 
