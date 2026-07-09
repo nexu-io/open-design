@@ -1567,6 +1567,45 @@ function pickLatestShareDeployment(
     .sort(compareDeploymentsByNewest)[0] ?? null;
 }
 
+type DisplayDevVisibility = 'public' | 'company' | 'private';
+type DisplayDevShowBranding = 'inherit' | 'show' | 'hide';
+type DisplayDevAccessSettings = {
+  visibility: DisplayDevVisibility;
+  sharedWith: string[];
+  showBranding: DisplayDevShowBranding;
+};
+
+function displayDevAccessSettingsForDeployment(
+  deployment: WebDeploymentInfo | null | undefined,
+): DisplayDevAccessSettings | null {
+  if (deployment?.providerId !== DISPLAYDEV_PROVIDER_ID || deployment.displayDev?.mode !== 'authenticated') {
+    return null;
+  }
+  const displayDev = deployment.displayDev;
+  if (!isDisplayDevVisibility(displayDev.visibility) || !isDisplayDevShowBranding(displayDev.showBranding)) {
+    return null;
+  }
+  if (displayDev.visibility === 'private' && !Array.isArray(displayDev.sharedWith)) {
+    return null;
+  }
+  const sharedWith = Array.isArray(displayDev.sharedWith)
+    ? displayDev.sharedWith.map((item) => item.trim()).filter(Boolean)
+    : [];
+  return {
+    visibility: displayDev.visibility,
+    sharedWith,
+    showBranding: displayDev.showBranding,
+  };
+}
+
+function isDisplayDevVisibility(value: unknown): value is DisplayDevVisibility {
+  return value === 'public' || value === 'company' || value === 'private';
+}
+
+function isDisplayDevShowBranding(value: unknown): value is DisplayDevShowBranding {
+  return value === 'inherit' || value === 'show' || value === 'hide';
+}
+
 function manualEditFloatingPanelStyle(
   target: ManualEditTarget,
   previewScale: number,
@@ -8040,9 +8079,9 @@ function HtmlViewer({
   const [cloudflareZoneId, setCloudflareZoneId] = useState('');
   const [cloudflareDomainPrefix, setCloudflareDomainPrefix] = useState('');
   const [displayDevArtifactName, setDisplayDevArtifactName] = useState('');
-  const [displayDevVisibility, setDisplayDevVisibility] = useState<'public' | 'company' | 'private'>('company');
+  const [displayDevVisibility, setDisplayDevVisibility] = useState<DisplayDevVisibility>('company');
   const [displayDevSharedWith, setDisplayDevSharedWith] = useState('');
-  const [displayDevShowBranding, setDisplayDevShowBranding] = useState<'inherit' | 'show' | 'hide'>('inherit');
+  const [displayDevShowBranding, setDisplayDevShowBranding] = useState<DisplayDevShowBranding>('inherit');
   const [displayDevDeployTouched, setDisplayDevDeployTouched] = useState({
     name: false,
     visibility: false,
@@ -9360,8 +9399,15 @@ function HtmlViewer({
   function syncDeployFormFromConfig(
     providerId: WebDeployProviderId,
     config: WebDeployConfigResponse | null,
+    currentDeployment: WebDeploymentInfo | null = null,
   ) {
     const matchingConfig = config?.providerId === providerId ? config : null;
+    const displayDevAccessSettings = displayDevAccessSettingsForDeployment(currentDeployment);
+    const displayDevAccessSettingsUnavailable =
+      providerId === DISPLAYDEV_PROVIDER_ID &&
+      currentDeployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
+      currentDeployment.displayDev?.mode === 'authenticated' &&
+      !displayDevAccessSettings;
     setDeployProviderId(providerId);
     setDeployConfig(matchingConfig);
     setDeployToken(matchingConfig?.tokenMask || '');
@@ -9378,9 +9424,9 @@ function HtmlViewer({
     // pre-regression behavior.
     setDeployTarget('production');
     setDisplayDevArtifactName(matchingConfig?.displayDev?.defaultArtifactName || '');
-    setDisplayDevVisibility(matchingConfig?.displayDev?.defaultVisibility || 'company');
-    setDisplayDevSharedWith((matchingConfig?.displayDev?.defaultSharedWith || []).join(', '));
-    setDisplayDevShowBranding(matchingConfig?.displayDev?.defaultShowBranding || 'inherit');
+    setDisplayDevVisibility(displayDevAccessSettings?.visibility || (displayDevAccessSettingsUnavailable ? 'company' : matchingConfig?.displayDev?.defaultVisibility) || 'company');
+    setDisplayDevSharedWith((displayDevAccessSettings?.sharedWith || (displayDevAccessSettingsUnavailable ? [] : matchingConfig?.displayDev?.defaultSharedWith) || []).join(', '));
+    setDisplayDevShowBranding(displayDevAccessSettings?.showBranding || (displayDevAccessSettingsUnavailable ? 'inherit' : matchingConfig?.displayDev?.defaultShowBranding) || 'inherit');
     setDisplayDevDeployTouched({
       name: false,
       visibility: false,
@@ -9415,15 +9461,27 @@ function HtmlViewer({
     }
     if (providerId === DISPLAYDEV_PROVIDER_ID) {
       const shouldClearToken = Boolean(deployConfig?.tokenMask) && !token;
+      const currentDeployment = deployResult || deployment;
+      const accessSettingsUnavailable =
+        currentDeployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
+        currentDeployment.displayDev?.mode === 'authenticated' &&
+        !displayDevAccessSettingsForDeployment(currentDeployment);
+      const existingDisplayDev = deployConfig?.displayDev;
       return {
         providerId,
         token,
         ...(shouldClearToken ? { clearToken: true } : {}),
         displayDev: {
           defaultArtifactName: displayDevArtifactName.trim(),
-          defaultVisibility: displayDevVisibility,
-          defaultSharedWith: displayDevDefaultSharedWithFromForm(),
-          defaultShowBranding: displayDevShowBranding,
+          defaultVisibility: accessSettingsUnavailable
+            ? existingDisplayDev?.defaultVisibility || 'company'
+            : displayDevVisibility,
+          defaultSharedWith: accessSettingsUnavailable
+            ? existingDisplayDev?.defaultSharedWith || []
+            : displayDevDefaultSharedWithFromForm(),
+          defaultShowBranding: accessSettingsUnavailable
+            ? existingDisplayDev?.defaultShowBranding || 'inherit'
+            : displayDevShowBranding,
         },
       };
     }
@@ -9449,6 +9507,13 @@ function HtmlViewer({
   function displayDevDefaultsChanged() {
     if (deployProviderId !== DISPLAYDEV_PROVIDER_ID) return false;
     const config = deployConfig?.displayDev;
+    const currentDeployment = deployResult || deployment;
+    const isAuthenticatedUpdate =
+      currentDeployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
+      currentDeployment.displayDev?.mode === 'authenticated';
+    if (isAuthenticatedUpdate) {
+      return displayDevDeployTouched.name && displayDevArtifactName.trim() !== (config?.defaultArtifactName || '');
+    }
     const sharedWith = displayDevDefaultSharedWithFromForm();
     const configSharedWith = config?.defaultSharedWith || [];
     const comparesSharedWith = displayDevVisibility === 'private' || config?.defaultVisibility === 'private';
@@ -9482,7 +9547,7 @@ function HtmlViewer({
     if (requestSeq !== deployProviderLoadSeqRef.current) {
       return { config: null, currentDeployment: null };
     }
-    syncDeployFormFromConfig(providerId, config);
+    syncDeployFormFromConfig(providerId, config, currentDeployment ?? null);
     setDeploymentsByProvider(nextDeploymentsByProvider);
     setDeployment(currentDeployment ?? null);
     setDeployResult(currentDeployment ?? null);
@@ -14196,7 +14261,7 @@ function HtmlViewer({
       if (!config || config.providerId !== deployProviderId) {
         throw new Error(t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
       }
-      syncDeployFormFromConfig(deployProviderId, config);
+      syncDeployFormFromConfig(deployProviderId, config, deployResult || deployment);
       if (deployProviderId === DISPLAYDEV_PROVIDER_ID && deployToken.trim() && deployToken.trim() !== deployConfig?.tokenMask) {
         const items = await fetchProjectDeployments(projectId);
         const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
@@ -14241,6 +14306,7 @@ function HtmlViewer({
     const isAuthenticatedUpdate =
       currentDeployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
       currentDeployment.displayDev?.mode === 'authenticated';
+    const canEditAccessSettings = !isAuthenticatedUpdate || Boolean(displayDevAccessSettingsForDeployment(currentDeployment));
     const name = displayDevArtifactName.trim();
     const sharedWith = displayDevSharedWithFromForm();
     if (!isAuthenticatedUpdate) {
@@ -14254,6 +14320,9 @@ function HtmlViewer({
     }
     const selection: WebDisplayDevDeploySelection = {};
     if (displayDevDeployTouched.name && name) selection.name = name;
+    if (!canEditAccessSettings) {
+      return Object.keys(selection).length > 0 ? selection : undefined;
+    }
     if (displayDevDeployTouched.visibility) {
       selection.visibility = displayDevVisibility;
       if (displayDevVisibility !== 'private') selection.sharedWith = [];
@@ -15530,6 +15599,11 @@ function HtmlViewer({
   const activeDisplayDev = activeDeployment?.providerId === DISPLAYDEV_PROVIDER_ID
     ? activeDeployment.displayDev
     : undefined;
+  const activeDisplayDevAccessSettings = displayDevAccessSettingsForDeployment(activeDeployment);
+  const displayDevAccessFieldsDisabled =
+    deployProviderId === DISPLAYDEV_PROVIDER_ID &&
+    activeDisplayDev?.mode === 'authenticated' &&
+    !activeDisplayDevAccessSettings;
   const hasDisplayDevApiKey = deployProviderId === DISPLAYDEV_PROVIDER_ID && Boolean(deployToken.trim());
   const displayDevApiKeyHint = hasDisplayDevApiKey
     ? t('fileViewer.displayDevApiKeyClearHint')
@@ -18361,8 +18435,9 @@ function HtmlViewer({
                       <span>{t('fileViewer.displayDevVisibility')}</span>
                       <select
                         value={displayDevVisibility}
+                        disabled={displayDevAccessFieldsDisabled}
                         onChange={(e) => {
-                          const nextVisibility = e.target.value as 'public' | 'company' | 'private';
+                          const nextVisibility = e.target.value as DisplayDevVisibility;
                           const shouldClearSharedWith = displayDevVisibility === 'private' && nextVisibility !== 'private';
                           setDisplayDevVisibility(nextVisibility);
                           if (shouldClearSharedWith) {
@@ -18384,8 +18459,9 @@ function HtmlViewer({
                       <span>{t('fileViewer.displayDevShowBranding')}</span>
                       <select
                         value={displayDevShowBranding}
+                        disabled={displayDevAccessFieldsDisabled}
                         onChange={(e) => {
-                          setDisplayDevShowBranding(e.target.value as 'inherit' | 'show' | 'hide');
+                          setDisplayDevShowBranding(e.target.value as DisplayDevShowBranding);
                           setDisplayDevDeployTouched((current) => ({ ...current, showBranding: true }));
                         }}
                       >
@@ -18402,6 +18478,7 @@ function HtmlViewer({
                         <input
                           value={displayDevSharedWith}
                           placeholder={t('fileViewer.displayDevShareWithPlaceholder')}
+                          disabled={displayDevAccessFieldsDisabled}
                           onChange={(e) => {
                             setDisplayDevSharedWith(e.target.value);
                             setDisplayDevDeployTouched((current) => ({ ...current, sharedWith: true }));

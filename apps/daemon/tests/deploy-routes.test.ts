@@ -530,6 +530,9 @@ describe('deploy provider routes', () => {
             shortId: 'owned1234',
             url: 'https://display.dsp.so/owned1234-demo',
             currentVersion: 1,
+            visibility: 'private',
+            sharedWith: ['person@example.com'],
+            showBranding: false,
           }), {
             status: 200,
             headers: { 'content-type': 'application/json', etag: '"v1"' },
@@ -583,6 +586,9 @@ describe('deploy provider routes', () => {
           displayDev: {
             mode: 'authenticated',
             shortId: 'owned1234',
+            visibility: 'private',
+            sharedWith: ['person@example.com'],
+            showBranding: 'hide',
           },
         });
 

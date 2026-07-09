@@ -6410,6 +6410,9 @@ describe('FileViewer SVG artifacts', () => {
               displayDev: {
                 mode: 'authenticated',
                 shortId: 'owned1234',
+                visibility: 'private',
+                sharedWith: ['old@example.com'],
+                showBranding: 'inherit',
               },
               createdAt: 1,
               updatedAt: 2,
@@ -6485,16 +6488,9 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
 
     await waitFor(() => {
-      expect(configRequest.body).toBeDefined();
       expect(deployRequest.body).toBeDefined();
     });
-    expect(configRequest.body).toMatchObject({
-      providerId: 'displaydev-self',
-      displayDev: {
-        defaultVisibility: 'company',
-        defaultSharedWith: [],
-      },
-    });
+    expect(configRequest.body).toBeUndefined();
     expect(deployRequest.body?.displayDev).toEqual({
       visibility: 'company',
       sharedWith: [],
@@ -6535,6 +6531,9 @@ describe('FileViewer SVG artifacts', () => {
               displayDev: {
                 mode: 'authenticated',
                 shortId: 'owned1234',
+                visibility: 'private',
+                sharedWith: ['live@example.com'],
+                showBranding: 'hide',
               },
               createdAt: 1,
               updatedAt: 2,
@@ -6587,6 +6586,9 @@ describe('FileViewer SVG artifacts', () => {
     const displayDevItems = await screen.findAllByRole('menuitem', { name: /Redeploy to display.dev/i });
     fireEvent.click(displayDevItems[0]!);
     await screen.findByRole('dialog');
+    expect((screen.getByLabelText('Visibility') as HTMLSelectElement).value).toBe('private');
+    expect((screen.getByLabelText('Share with') as HTMLInputElement).value).toBe('live@example.com');
+    expect((screen.getByLabelText('Show branding') as HTMLSelectElement).value).toBe('hide');
     fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
 
     await waitFor(() => {
@@ -6595,6 +6597,105 @@ describe('FileViewer SVG artifacts', () => {
     expect(deployRequest.body).toMatchObject({
       providerId: 'displaydev-self',
       fileName: 'index.html',
+    });
+    expect(deployRequest.body?.displayDev).toBeUndefined();
+  });
+
+  it('locks display.dev access fields when an owned redeploy has no current access settings', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const deployRequest: { body?: Record<string, unknown> } = {};
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      if (url === '/api/projects/project-1/deployments') {
+        return new Response(JSON.stringify({
+          deployments: [
+            {
+              id: 'displaydev-deploy',
+              projectId: 'project-1',
+              fileName: 'index.html',
+              providerId: 'displaydev-self',
+              url: 'https://app.display.dev/private-demo',
+              deploymentCount: 1,
+              target: 'preview',
+              status: 'ready',
+              displayDev: {
+                mode: 'authenticated',
+                shortId: 'owned1234',
+              },
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          ],
+        }), { status: 200 });
+      }
+      if (url === '/api/deploy/config?providerId=displaydev-self') {
+        return new Response(JSON.stringify({
+          providerId: 'displaydev-self',
+          configured: true,
+          tokenMask: 'saved-displaydev-token',
+          displayDev: {
+            defaultVisibility: 'private',
+            defaultSharedWith: ['stale@example.com'],
+            defaultShowBranding: 'hide',
+          },
+        }), { status: 200 });
+      }
+      if (url === '/api/projects/project-1/deploy' && method === 'POST') {
+        deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+        return new Response(JSON.stringify({
+          id: 'displaydev-deploy',
+          projectId: 'project-1',
+          fileName: 'index.html',
+          providerId: 'displaydev-self',
+          url: 'https://app.display.dev/private-demo',
+          deploymentCount: 2,
+          target: 'preview',
+          status: 'ready',
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+          },
+          createdAt: 1,
+          updatedAt: 3,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    const displayDevItems = await screen.findAllByRole('menuitem', { name: /Redeploy to display.dev/i });
+    fireEvent.click(displayDevItems[0]!);
+    await screen.findByRole('dialog');
+
+    expect(screen.getByLabelText('Visibility')).toBeDisabled();
+    expect((screen.getByLabelText('Visibility') as HTMLSelectElement).value).toBe('company');
+    expect(screen.queryByLabelText('Share with')).toBeNull();
+    expect(screen.getByLabelText('Show branding')).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
+
+    await waitFor(() => {
+      expect(deployRequest.body).toBeDefined();
     });
     expect(deployRequest.body?.displayDev).toBeUndefined();
   });
@@ -6634,6 +6735,9 @@ describe('FileViewer SVG artifacts', () => {
               displayDev: {
                 mode: 'authenticated',
                 shortId: 'owned1234',
+                visibility: 'company',
+                sharedWith: [],
+                showBranding: 'inherit',
               },
               createdAt: 1,
               updatedAt: 2,
@@ -6701,24 +6805,16 @@ describe('FileViewer SVG artifacts', () => {
     await screen.findByRole('dialog');
     fireEvent.change(screen.getByLabelText('Visibility'), { target: { value: 'private' } });
     const shareWithInput = await screen.findByLabelText('Share with');
-    expect((shareWithInput as HTMLInputElement).value).toBe('old@example.com');
+    expect((shareWithInput as HTMLInputElement).value).toBe('');
     fireEvent.change(shareWithInput, { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
 
     await waitFor(() => {
-      expect(configRequest.body).toBeDefined();
       expect(deployRequest.body).toBeDefined();
     });
-    expect(configRequest.body).toMatchObject({
-      providerId: 'displaydev-self',
-      displayDev: {
-        defaultVisibility: 'private',
-        defaultSharedWith: [],
-      },
-    });
+    expect(configRequest.body).toBeUndefined();
     expect(deployRequest.body?.displayDev).toEqual({
       visibility: 'private',
-      sharedWith: [],
     });
   });
 
@@ -6757,6 +6853,9 @@ describe('FileViewer SVG artifacts', () => {
               displayDev: {
                 mode: 'authenticated',
                 shortId: 'owned1234',
+                visibility: 'private',
+                sharedWith: ['old@example.com'],
+                showBranding: 'inherit',
               },
               createdAt: 1,
               updatedAt: 2,
@@ -6832,16 +6931,9 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(screen.getByRole('button', { name: /Redeploy to display.dev/i }));
 
     await waitFor(() => {
-      expect(configRequest.body).toBeDefined();
       expect(deployRequest.body).toBeDefined();
     });
-    expect(configRequest.body).toMatchObject({
-      providerId: 'displaydev-self',
-      displayDev: {
-        defaultVisibility: 'private',
-        defaultSharedWith: [],
-      },
-    });
+    expect(configRequest.body).toBeUndefined();
     expect(deployRequest.body?.displayDev).toEqual({
       visibility: 'private',
       sharedWith: [],

@@ -12,7 +12,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   const { PROJECTS_DIR } = ctx.paths;
   const { randomUUID } = ctx.ids;
   const { getProject } = ctx.projectStore;
-  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, DISPLAYDEV_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToDisplayDev, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
+  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, DISPLAYDEV_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToDisplayDev, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight, fetchDisplayDevArtifactAccessSettings } = ctx.deploy;
 
   /**
    * A DeployError now carries a specific `code` (MISSING_REFERENCES,
@@ -92,8 +92,13 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
       if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
+      const deployments = await hydrateDisplayDevDeploymentAccess(listDeployments(db, req.params.id), {
+        DISPLAYDEV_PROVIDER_ID,
+        readDeployConfig,
+        fetchDisplayDevArtifactAccessSettings,
+      });
       /** @type {import('@open-design/contracts').ProjectDeploymentsResponse} */
-      const body = { deployments: publicDeployments(listDeployments(db, req.params.id)) };
+      const body = { deployments: publicDeployments(deployments) };
       res.json(body);
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
@@ -215,7 +220,14 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         createdAt: prior?.createdAt ?? now,
         updatedAt: now,
       });
-      res.json(publicDeployment(body));
+      const responseDeployment = providerId === DISPLAYDEV_PROVIDER_ID
+        ? await hydrateDisplayDevDeploymentAccess(body, {
+            DISPLAYDEV_PROVIDER_ID,
+            readDeployConfig,
+            fetchDisplayDevArtifactAccessSettings,
+          })
+        : body;
+      res.json(publicDeployment(responseDeployment));
     } catch (err: any) {
       const status = err instanceof DeployError ? err.status : 400;
       const init =
@@ -274,6 +286,90 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     }
   });
 
+}
+
+type JsonObject = Record<string, unknown>;
+type DeployRouteDeployment = {
+  providerId?: string | null;
+  providerMetadata?: JsonObject | null;
+};
+
+type DisplayDevHydrationDeps = {
+  DISPLAYDEV_PROVIDER_ID: string;
+  readDeployConfig: (providerId: string) => Promise<unknown>;
+  fetchDisplayDevArtifactAccessSettings: (config: unknown, shortId: string) => Promise<JsonObject>;
+};
+
+async function hydrateDisplayDevDeploymentAccess<T extends DeployRouteDeployment>(
+  deployments: T[],
+  deps: DisplayDevHydrationDeps,
+): Promise<T[]>;
+async function hydrateDisplayDevDeploymentAccess<T extends DeployRouteDeployment>(
+  deployment: T,
+  deps: DisplayDevHydrationDeps,
+): Promise<T>;
+async function hydrateDisplayDevDeploymentAccess<T extends DeployRouteDeployment>(
+  deploymentOrDeployments: T | T[],
+  deps: DisplayDevHydrationDeps,
+): Promise<T | T[]> {
+  if (Array.isArray(deploymentOrDeployments)) {
+    let displayDevConfig: unknown | null | undefined;
+    const getDisplayDevConfig = async () => {
+      if (displayDevConfig !== undefined) return displayDevConfig;
+      try {
+        displayDevConfig = await deps.readDeployConfig(deps.DISPLAYDEV_PROVIDER_ID);
+      } catch {
+        displayDevConfig = null;
+      }
+      return displayDevConfig;
+    };
+    return Promise.all(
+      deploymentOrDeployments.map((deployment) => hydrateSingleDisplayDevDeploymentAccess(
+        deployment,
+        deps,
+        getDisplayDevConfig,
+      )),
+    );
+  }
+  return hydrateSingleDisplayDevDeploymentAccess(
+    deploymentOrDeployments,
+    deps,
+    () => deps.readDeployConfig(deps.DISPLAYDEV_PROVIDER_ID).catch(() => null),
+  );
+}
+
+async function hydrateSingleDisplayDevDeploymentAccess<T extends DeployRouteDeployment>(
+  deployment: T,
+  deps: DisplayDevHydrationDeps,
+  getDisplayDevConfig: () => Promise<unknown | null>,
+): Promise<T> {
+  if (deployment?.providerId !== deps.DISPLAYDEV_PROVIDER_ID) return deployment;
+  const providerMetadata = isRecord(deployment.providerMetadata) ? deployment.providerMetadata : {};
+  const displayDev = isRecord(providerMetadata.displayDev) ? providerMetadata.displayDev : null;
+  if (displayDev?.mode !== 'authenticated' || typeof displayDev.shortId !== 'string' || !displayDev.shortId.trim()) {
+    return deployment;
+  }
+  const config = await getDisplayDevConfig();
+  if (!config || typeof config !== 'object') return deployment;
+  try {
+    const accessSettings = await deps.fetchDisplayDevArtifactAccessSettings(config, displayDev.shortId.trim());
+    return {
+      ...deployment,
+      providerMetadata: {
+        ...providerMetadata,
+        displayDev: {
+          ...displayDev,
+          ...accessSettings,
+        },
+      },
+    };
+  } catch {
+    return deployment;
+  }
+}
+
+function isRecord(value: unknown): value is JsonObject {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 export interface RegisterDeploymentCheckRoutesDeps extends RouteDeps<'db' | 'http' | 'deploy' | 'projectStore'> {

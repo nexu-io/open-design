@@ -81,6 +81,15 @@ export function publicDeployment(deployment: unknown): unknown {
       ...(mode === 'anonymous' && typeof displayDev.expiresAt === 'string'
         ? { expiresAt: displayDev.expiresAt }
         : {}),
+      ...(isDisplayDevVisibility(displayDev.visibility)
+        ? { visibility: displayDev.visibility }
+        : {}),
+      ...(isStringArray(displayDev.sharedWith)
+        ? { sharedWith: displayDev.sharedWith.map((item) => item.trim()).filter(Boolean) }
+        : {}),
+      ...(isDisplayDevShowBranding(displayDev.showBranding)
+        ? { showBranding: displayDev.showBranding }
+        : {}),
     };
   }
   return publicShape;
@@ -173,4 +182,16 @@ function asRecord(value: unknown): JsonObject | null {
 
 function stringValue(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isDisplayDevVisibility(value: unknown): value is 'public' | 'company' | 'private' {
+  return value === 'public' || value === 'company' || value === 'private';
+}
+
+function isDisplayDevShowBranding(value: unknown): value is 'inherit' | 'show' | 'hide' {
+  return value === 'inherit' || value === 'show' || value === 'hide';
 }

@@ -312,12 +312,14 @@ describe('deploy config', () => {
     }
   });
 
-  it.each([
+  const invalidDisplayDefaultCases: Array<[string, Record<string, unknown>, RegExp]> = [
     ['defaultVisibility', { defaultVisibility: 'publik' }, /defaultVisibility must be/i],
     ['defaultShowBranding', { defaultShowBranding: 'sometimes' }, /defaultShowBranding must be/i],
     ['defaultSharedWith scalar', { defaultSharedWith: 'team@example.com' }, /defaultSharedWith must be an array/i],
     ['defaultSharedWith entry', { defaultSharedWith: ['team@example.com', 123] }, /defaultSharedWith must contain only strings/i],
-  ])('rejects malformed display.dev defaults on write: %s', async (_field, displayDev, message) => {
+  ];
+
+  it.each(invalidDisplayDefaultCases)('rejects malformed display.dev defaults on write: %s', async (_field, displayDev, message) => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-config-test-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = stateRoot;

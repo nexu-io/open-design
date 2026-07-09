@@ -872,6 +872,9 @@ export interface DisplayDevDeploymentInfo {
   mode: 'anonymous' | 'authenticated';
   claimUrl?: string;
   expiresAt?: string;
+  visibility?: 'public' | 'company' | 'private';
+  sharedWith?: string[];
+  showBranding?: 'inherit' | 'show' | 'hide';
 }
 
 export type DeploymentLinkStatus =

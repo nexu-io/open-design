@@ -47,6 +47,11 @@ type DisplayDevDeploySelection = {
   clearSharedWith?: boolean;
   showBranding?: 'inherit' | 'show' | 'hide';
 };
+type DisplayDevAccessSettings = {
+  visibility: 'public' | 'company' | 'private';
+  sharedWith: string[];
+  showBranding: 'inherit' | 'show' | 'hide';
+};
 type DeployFile = { file: string; data: Buffer | Uint8Array | string; contentType?: string; sourcePath?: string };
 type DeployFilePlan = { entryPath: string; html: string; files: DeployFile[]; missing: string[]; invalid: string[] };
 type DeployOptions = {
@@ -407,6 +412,46 @@ function displayDevStringArrayFromInput(value: unknown, field: string): string[]
   }
   if (value.every((item) => typeof item === 'string')) return value;
   throw new DeployError(`display.dev ${field} must contain only strings.`, 400);
+}
+
+function displayDevAccessSettingsFromArtifact(input: unknown): DisplayDevAccessSettings {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new DeployError('display.dev did not return artifact access settings.', 502, input as DeployErrorDetails);
+  }
+  const source = input as JsonObject;
+  const visibility = displayDevVisibilityFromArtifact(source.visibility);
+  const sharedWith = displayDevSharedWithFromArtifact(source.sharedWith, visibility);
+  const showBranding = displayDevShowBrandingFromArtifact(source.showBranding);
+  return { visibility, sharedWith, showBranding };
+}
+
+function displayDevVisibilityFromArtifact(value: unknown): DisplayDevAccessSettings['visibility'] {
+  if (value === 'public' || value === 'company' || value === 'private') return value;
+  throw new DeployError('display.dev did not return a valid artifact visibility.', 502);
+}
+
+function displayDevSharedWithFromArtifact(
+  value: unknown,
+  visibility: DisplayDevAccessSettings['visibility'],
+): string[] {
+  if (value === undefined || value === null) {
+    if (visibility === 'private') {
+      throw new DeployError('display.dev did not return artifact recipients.', 502);
+    }
+    return [];
+  }
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) {
+    throw new DeployError('display.dev did not return valid artifact recipients.', 502);
+  }
+  return value.map((item) => item.trim()).filter(Boolean);
+}
+
+function displayDevShowBrandingFromArtifact(value: unknown): DisplayDevAccessSettings['showBranding'] {
+  if (value === true) return 'show';
+  if (value === false) return 'hide';
+  if (value === null) return 'inherit';
+  if (value === 'inherit' || value === 'show' || value === 'hide') return value;
+  throw new DeployError('display.dev did not return a valid artifact branding setting.', 502);
 }
 
 function displayDevDefaultArtifactName(entry: DeployFile, projectId: string) {
@@ -927,6 +972,28 @@ async function fetchDisplayDevCurrentVersion(apiUrl: string, auth: string, short
     throw new DeployError('display.dev did not return the current artifact version.', 502, json);
   }
   return version;
+}
+
+export async function fetchDisplayDevArtifactAccessSettings(
+  config: DeployConfig,
+  shortId: string,
+): Promise<DisplayDevAccessSettings> {
+  const normalizedShortId = typeof shortId === 'string' ? shortId.trim() : '';
+  if (!normalizedShortId) {
+    throw new DeployError('display.dev artifact id is required to read access settings.', 400);
+  }
+  const auth = displayDevAuthorization(config);
+  if (!auth) {
+    throw new DeployError('display.dev API key is required to read access settings.', 400);
+  }
+  const apiUrl = validateDisplayDevApiUrl(config?.apiUrl);
+  const resp = await fetch(`${apiUrl}/v1/artifacts/${encodeURIComponent(normalizedShortId)}`, {
+    method: 'GET',
+    headers: displayDevHeaders(auth),
+  });
+  const json = await readDisplayDevJson(resp);
+  if (!resp.ok) throw displayDevError(json, resp.status);
+  return displayDevAccessSettingsFromArtifact(json);
 }
 
 function displayDevVersionFromEtag(etag: string | null) {

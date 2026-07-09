@@ -87,19 +87,26 @@ test('Share menu redeploys an authenticated display.dev preview with the current
     await dialog.getByRole('button', { name: 'Redeploy to display.dev' }).click();
 
     await expect
-      .poll(() => displayDev.artifactRequests.map((request) => `${request.method} ${request.path}`), { timeout: T.medium })
-      .toEqual([
-        'POST /v1/artifacts',
-        'GET /v1/artifacts/e2eDisplayDev',
-        'PUT /v1/artifacts/e2eDisplayDev',
-      ]);
-    expect(displayDev.artifactRequests[1]).toMatchObject({
-      method: 'GET',
+      .poll(() => displayDev.artifactRequests.some((request) => request.method === 'PUT'), { timeout: T.medium })
+      .toBe(true);
+    const postRequest = displayDev.artifactRequests.find((request) => request.method === 'POST');
+    const getRequests = displayDev.artifactRequests.filter((request) => request.method === 'GET');
+    const putRequest = displayDev.artifactRequests.find((request) => request.method === 'PUT');
+    expect(postRequest).toMatchObject({
+      path: '/v1/artifacts',
       authorization: 'Bearer dsp_live_secret',
       ifMatch: '',
     });
-    expect(displayDev.artifactRequests[2]).toMatchObject({
+    expect(getRequests.length).toBeGreaterThanOrEqual(1);
+    expect(getRequests[0]).toMatchObject({
+      method: 'GET',
+      path: '/v1/artifacts/e2eDisplayDev',
+      authorization: 'Bearer dsp_live_secret',
+      ifMatch: '',
+    });
+    expect(putRequest).toMatchObject({
       method: 'PUT',
+      path: '/v1/artifacts/e2eDisplayDev',
       authorization: 'Bearer dsp_live_secret',
       ifMatch: '"v1"',
     });
@@ -165,6 +172,9 @@ async function createDisplayDevMock() {
         shortId: 'e2eDisplayDev',
         url: `${baseUrl}${previewPath}`,
         currentVersion,
+        visibility: 'company',
+        sharedWith: [],
+        showBranding: null,
       }));
       return;
     }
