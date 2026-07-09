@@ -198,7 +198,10 @@ function isAgentConfigInvalidText(text: string): boolean {
     /\bunknown variant [`'"][^`'"]+[`'"], expected\b[\s\S]*\bin `service_tier`/i.test(text) ||
     /\bdefault_permissions requires a `?\[permissions\]`? table\b/i.test(text) ||
     /\bdefault_permissions refers to undefined profile\b/i.test(text) ||
-    /\bError loading config\.toml:[\s\S]*\bduplicate key\b/i.test(text);
+    /\bError loading config\.toml:[\s\S]*\bduplicate key\b/i.test(text) ||
+    /\bBYOK OpenCode requires a provider, API key, and model for this run\b/i.test(text) ||
+    /\bBYOK_PROVIDER_REQUIRED\b/i.test(text) ||
+    /\bEACCES: permission denied, mkdir\b[\s\S]*\.config[\\/]+opencode\b/i.test(text);
 }
 
 function isCliNotInstalledText(text: string): boolean {
@@ -262,12 +265,13 @@ function isPromptTooLargeText(text: string): boolean {
 }
 
 function isUpstreamDetailText(text: string): boolean {
-  return /\b(stream disconnected before completion|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|ConnectionRefused|error sending request|Provider returned error|high demand|model is at capacity|selected model is at capacity|temporarily unavailable|upstream_error|http2: response body closed|peer closed connection|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to the Anthropic API|Server error mid-response|empty or malformed response|Unexpected server error|Streaming response failed|Failed to process error response|gateway or proxy|Country, region, or territory not supported|AMR model catalog is (?:temporarily )?unavailable|statusCode[\"']?\s*:\s*(?:400|403|404)|400 Bad Request|403 Forbidden|404 Not Found|NotFoundError|OpenAIException - \{\"detail\":\"Not Found\"\}|API Error:\s*(?:400|403)\b)\b/i
-    .test(text);
+  return isUpstreamClientErrorText(text) ||
+    /\b(stream disconnected before completion|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|ConnectionRefused|error sending request|Provider returned error|high demand|model is at capacity|selected model is at capacity|temporarily unavailable|upstream_error|http2: response body closed|peer closed connection|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to (?:the Anthropic API|the configured custom Anthropic endpoint)|Server error mid-response|empty or malformed response|Unexpected server error|Streaming response failed|Failed to process error response|AMR model catalog is (?:temporarily )?unavailable)\b/i
+      .test(text);
 }
 
 function isUpstreamClientErrorText(text: string): boolean {
-  return /\b(statusCode[\"']?\s*:\s*(?:400|403|404)|400 Bad Request|403 Forbidden|404 Not Found|NotFoundError|OpenAIException - \{\"detail\":\"Not Found\"\}|API Error:\s*(?:400|403)\b|Country, region, or territory not supported|gateway or proxy|validation error|literal_error|Invalid input|Type validation failed)\b/i
+  return /\b(statusCode[\"']?\s*:\s*(?:400|403|404)|400 Bad Request|403 Forbidden|404 Not Found|404 page not found|Not Found:\s*(?:404 page not found|Not Found)|NotFoundError|OpenAIException - \{\"detail\":\"Not Found\"\}|API Error:\s*(?:400|403)\b|Country, region, or territory not supported|gateway or proxy|validation error|literal_error|Invalid input|Type validation failed|data did not match any variant of untagged enum InputParam)\b/i
     .test(text);
 }
 
@@ -321,7 +325,7 @@ function upstreamDetail(text: string): TrackingRunFailureDetail {
     return 'provider_routing_error';
   }
   if (/\bhigh demand|temporary errors|model is at capacity|selected model is at capacity\b/i.test(text)) return 'provider_high_demand';
-  if (/\b(stream disconnected before completion|response\.completed|websocket closed|socket connection was closed unexpectedly|connection reset|ConnectionRefused|tls handshake eof|tls close_notify|broken pipe|peer closed connection|remote host|远程主机强迫关闭|http2: response body closed|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to the Anthropic API|Server error mid-response|empty or malformed response|Streaming response failed)\b/i
+  if (/\b(stream disconnected before completion|response\.completed|websocket closed|socket connection was closed unexpectedly|connection reset|ConnectionRefused|tls handshake eof|tls close_notify|broken pipe|peer closed connection|remote host|远程主机强迫关闭|http2: response body closed|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to (?:the Anthropic API|the configured custom Anthropic endpoint)|Server error mid-response|empty or malformed response|Streaming response failed)\b/i
     .test(text)) {
     return 'stream_disconnected';
   }

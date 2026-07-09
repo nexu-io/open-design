@@ -1311,3 +1311,81 @@ describe('classifyRunFailure — batch A reclassification out of execution_faile
     expect(result?.failure_detail).toBe('session_resume_expired');
   });
 });
+
+describe('classifyRunFailure — BYOK OpenCode reclassification out of stream_error', () => {
+  it('classifies missing BYOK OpenCode run config as fixable agent config', () => {
+    const result = classify(
+      'BYOK_PROVIDER_REQUIRED',
+      'BYOK OpenCode requires a provider, API key, and model for this run.',
+    );
+    expect(result).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'agent_config_invalid',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'fix_config',
+    });
+  });
+
+  it('classifies BYOK OpenCode 404 provider responses as non-retryable upstream client errors', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'json-rpc id 4: opencode event stream: opencode session error: Not Found: 404 page not found',
+    );
+    expect(result).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      failure_stage: 'first_token_wait',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('classifies BYOK OpenCode provider request-shape rejections as non-retryable upstream client errors', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'json-rpc id 4: opencode event stream: data did not match any variant of untagged enum InputParam',
+    );
+    expect(result).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
+  it('classifies BYOK OpenCode config directory permission errors as fixable agent config', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      [
+        "EACCES: permission denied, mkdir '/Users/11140200/.config/opencode'",
+        '    path: "/Users/11140200/.config/opencode",',
+        ' syscall: "mkdir",',
+        '   errno: -13,',
+        '    code: "EACCES"',
+      ].join('\n'),
+    );
+    expect(result).toMatchObject({
+      failure_category: 'process_exit',
+      failure_detail: 'agent_config_invalid',
+      failure_stage: 'session_init',
+      retryable: false,
+      user_action: 'fix_config',
+    });
+  });
+});
+
+describe('classifyRunFailure — custom Anthropic endpoint disconnects', () => {
+  it('classifies configured custom Anthropic endpoint drops as stream_disconnected', () => {
+    const result = classify(
+      'AGENT_CONNECTION_DROPPED',
+      'Claude Code lost its connection to the configured custom Anthropic endpoint before the response finished.',
+    );
+    expect(result).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'stream_disconnected',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+});
