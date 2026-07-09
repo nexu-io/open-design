@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BrandDetail } from '@marketing-ax/contracts';
@@ -58,6 +61,18 @@ describe('BrandDetailView', () => {
     await waitFor(() => expect(screen.getByText('블로그')).toBeTruthy());
     fireEvent.click(screen.getByText('블로그'));
     await waitFor(() => expect(screen.getByText(/blog body/)).toBeTruthy());
+  });
+
+  // The view mounts directly inside .workspace-shell__body (overflow:hidden), so
+  // its root must own the scroll — otherwise a tall page clips with no scrollbar
+  // and the wheel does nothing (jsdom can't observe layout, so guard the CSS).
+  it('owns its own scroll so tall content is not clipped by the overflow-hidden shell', () => {
+    // vitest runs with cwd = the @marketing-ax/web package root.
+    const cssPath = join(process.cwd(), 'src/components/BrandDetailView.module.css');
+    const css = readFileSync(cssPath, 'utf8');
+    const pageRule = css.match(/\.page\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(pageRule).toMatch(/overflow-y:\s*auto/);
+    expect(pageRule).toMatch(/height:\s*100%/);
   });
 
   it('shows a back button and an error alert instead of a dead end when the fetch fails', async () => {

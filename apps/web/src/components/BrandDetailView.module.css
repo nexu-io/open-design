@@ -1,5 +1,8 @@
 /* Role: 브랜드 상세 리치 페이지 레이아웃 — 히어로/섹션/팔레트/문서 마스터-디테일 */
-.page { display: flex; flex-direction: column; gap: 32px; padding: 24px 32px; max-width: 1200px; }
+/* height:100% + overflow-y:auto — the view mounts directly inside
+ * .workspace-shell__body (overflow:hidden), so it must own its own scroll or the
+ * content clips with no scrollbar. See apps/web/src/styles/shell.css. */
+.page { display: flex; flex-direction: column; gap: 32px; padding: 24px 32px; max-width: 1200px; height: 100%; overflow-y: auto; }
 .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg2, #7d8085); }
 .breadcrumbLink { background: none; border: 0; color: inherit; cursor: pointer; padding: 0; }
 .hero { display: flex; align-items: center; gap: 16px; }
