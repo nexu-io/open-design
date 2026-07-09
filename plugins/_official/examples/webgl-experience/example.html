@@ -113,9 +113,11 @@
 
   function resize(){
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.floor(canvas.clientWidth * dpr);
-    canvas.height = Math.floor(canvas.clientHeight * dpr);
-    gl.viewport(0, 0, canvas.width, canvas.height);
+    const w = Math.floor(canvas.clientWidth * dpr), h = Math.floor(canvas.clientHeight * dpr);
+    if (w === canvas.width && h === canvas.height) return;
+    canvas.width = w;
+    canvas.height = h;
+    gl.viewport(0, 0, w, h);
   }
   window.addEventListener('resize', resize);
   resize();
@@ -124,6 +126,7 @@
   let frames = 0, last = 0, acc = 0;
   const start = (typeof performance !== 'undefined' ? performance.now() : 0);
   function tick(now){
+    resize();
     const t = (now - start) / 1000;
     gl.uniform2f(uRes, canvas.width, canvas.height);
     gl.uniform1f(uT, t);

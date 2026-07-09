@@ -144,14 +144,17 @@ addEventListener('pointermove', e => { target = [e.clientX/innerWidth, 1.0 - e.c
 
 function resize(){
   const dpr = Math.min(devicePixelRatio || 1, 2);
-  canvas.width = Math.floor(innerWidth*dpr);
-  canvas.height = Math.floor(innerHeight*dpr);
-  gl.viewport(0, 0, canvas.width, canvas.height);
+  const w = Math.floor(innerWidth*dpr), h = Math.floor(innerHeight*dpr);
+  if (w === canvas.width && h === canvas.height) return;
+  canvas.width = w;
+  canvas.height = h;
+  gl.viewport(0, 0, w, h);
 }
 addEventListener('resize', resize); resize();
 
 const start = performance.now();
 function frame(now){
+  resize();
   mouse[0] += (target[0]-mouse[0])*0.06;
   mouse[1] += (target[1]-mouse[1])*0.06;
   gl.uniform2f(uRes, canvas.width, canvas.height);

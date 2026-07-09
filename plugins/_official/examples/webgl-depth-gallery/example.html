@@ -243,8 +243,8 @@ addEventListener('wheel', e=>{ e.preventDefault();
   scrollTarget=clamp(scrollTarget+d, minScroll, maxScroll);
 }, {passive:false});
 
-function resize(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h,false);
-  camera.aspect=w/h; camera.updateProjectionMatrix(); }
+function resize(){ const w=innerWidth,h=innerHeight; if(w===resize._w&&h===resize._h)return; resize._w=w; resize._h=h;
+  renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
 
 // ---------- cursor trail: tapered tube along a Catmull-Rom spline (ported Trail.js) ----------
@@ -378,6 +378,7 @@ function trailUpdate(camZ,time){
 // ---------- loop ----------
 function frame(){
   requestAnimationFrame(frame);
+  resize();
   const time=performance.now();
   // scroll + velocity
   scrollCurrent=lerp(scrollCurrent, scrollTarget, 0.08);
