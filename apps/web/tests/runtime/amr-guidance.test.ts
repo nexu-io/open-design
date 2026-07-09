@@ -19,17 +19,53 @@ describe('amrRechargeUrlForProfile', () => {
 });
 
 describe('resolveRunFailureUi', () => {
-  // RATE_LIMITED / UPSTREAM_UNAVAILABLE: promote AMR + plain retry, raw error
-  // copy (no override). The auth codes (AGENT_AUTH_REQUIRED / UNAUTHORIZED) also
-  // promote AMR but carry sign-in copy — covered by a dedicated test below.
-  it('promotes AMR (switch card) for non-AMR model/quota errors', () => {
-    for (const code of ['RATE_LIMITED', 'UPSTREAM_UNAVAILABLE']) {
-      const ui = resolveRunFailureUi(code, 'claude');
-      expect(ui.showSwitchCard).toBe(true);
-      expect(ui.primaryAction).toBe('retry');
-      expect(ui.messageKey).toBeNull();
-    }
+  // RATE_LIMITED / UPSTREAM_UNAVAILABLE (non-antigravity): still promote AMR as
+  // the steadier hosted alternative, but now also name the failure type and
+  // carry actionable recovery copy (#895) instead of leaving the raw upstream
+  // string as the message. The auth codes (AGENT_AUTH_REQUIRED / UNAUTHORIZED)
+  // also promote AMR but carry sign-in copy — covered by a dedicated test below.
+  it('promotes AMR (switch card) + guidance copy for non-AMR quota/upstream errors', () => {
+    const rate = resolveRunFailureUi('RATE_LIMITED', 'claude');
+    expect(rate).toMatchObject({
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.rateLimited',
+      messageKey: 'chat.runError.rateLimitedMessage',
+      showSwitchCard: true,
+    });
+    const upstream = resolveRunFailureUi('UPSTREAM_UNAVAILABLE', 'claude');
+    expect(upstream).toMatchObject({
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.upstreamUnavailable',
+      messageKey: 'chat.runError.upstreamUnavailableMessage',
+      showSwitchCard: true,
+    });
     expect(resolveRunFailureUi('UNAUTHORIZED', null).showSwitchCard).toBe(true);
+  });
+
+  // Agent-agnostic root-cause codes (#895): each carries a named failure type +
+  // actionable fix, resolved the same way for any agent, with a plain Retry and
+  // no AMR promotion (these aren't "switch to hosted model" cases).
+  it('maps agent-agnostic root-cause codes to a named type + guidance for any agent', () => {
+    const cases: Array<[string, string, string]> = [
+      ['AGENT_UNAVAILABLE', 'chat.runError.title.cliMissing', 'chat.runError.cliMissingMessage'],
+      ['AGENT_PROMPT_TOO_LARGE', 'chat.runError.title.promptTooLarge', 'chat.runError.promptTooLargeMessage'],
+      ['AMR_MODEL_UNAVAILABLE', 'chat.runError.title.modelUnavailable', 'chat.runError.modelUnavailableMessage'],
+      ['TOOL_LOOP_DETECTED', 'chat.runError.title.toolLoop', 'chat.runError.toolLoopMessage'],
+      ['ROLE_MARKER_HALLUCINATION', 'chat.runError.title.outputInvalid', 'chat.runError.outputInvalidMessage'],
+      ['AGENT_RUNTIME_DEF_INVALID', 'chat.runError.title.runtimeConfig', 'chat.runError.runtimeConfigMessage'],
+    ];
+    for (const [code, titleKey, messageKey] of cases) {
+      for (const agent of ['claude', 'codex', 'amr', 'antigravity', null]) {
+        const ui = resolveRunFailureUi(code, agent);
+        expect(ui).toMatchObject({
+          primaryAction: 'retry',
+          titleKey,
+          messageKey,
+          secondaryRetry: false,
+          showSwitchCard: false,
+        });
+      }
+    }
   });
 
   it('shows plain retry (no card) for generic non-AMR failures', () => {
