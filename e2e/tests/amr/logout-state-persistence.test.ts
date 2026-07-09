@@ -21,10 +21,12 @@ describe('AMR logout state persistence', () => {
           assistantText: 'AMR logout persistence success',
           endpoints: suite.amr,
           requireLoginConfig: false,
+          requireSetModel: false,
         });
         const strictVelaBin = await writeFakeVelaBin(join(suite.scratchDir, 'fake-vela-logout-strict'), {
           assistantText: 'AMR logout persistence strict',
           endpoints: suite.amr,
+          requireSetModel: false,
         });
 
         await putAmrAppConfig(webUrl, {

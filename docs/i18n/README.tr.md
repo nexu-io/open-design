@@ -125,6 +125,7 @@ Bir projenin Studio'su içinde, aynı tasarım sistemi birden çok artifact tür
 | [Cline](https://github.com/cline/cline) | ✅ Destekleniyor | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Destekleniyor | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Destekleniyor | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ Destekleniyor | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Destekleniyor | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Destekleniyor | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Destekleniyor | `od mcp install hermes` |

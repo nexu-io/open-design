@@ -31,8 +31,10 @@ import type { PluginUseAction } from './plugins-home/useActions';
 import { Toast } from './Toast';
 import { AnimatePresence } from 'motion/react';
 
-const INITIAL_PLUGIN_RENDER_LIMIT = 60;
-const PLUGIN_RENDER_BATCH_SIZE = 60;
+const RICH_PLUGIN_RENDER_LIMIT = 60;
+const RICH_PLUGIN_RENDER_BATCH_SIZE = 60;
+const GALLERY_PLUGIN_RENDER_LIMIT = 12;
+const GALLERY_PLUGIN_RENDER_BATCH_SIZE = 12;
 
 interface Props {
   plugins: InstalledPluginRecord[];
@@ -79,7 +81,12 @@ export function PluginsHomeSection({
   const { locale, t } = useI18n();
   const { savedPluginIds, savePluginId } = useSavedPluginIds();
   const [saveToast, setSaveToast] = useState<string | null>(null);
-  const [renderLimit, setRenderLimit] = useState(INITIAL_PLUGIN_RENDER_LIMIT);
+  const initialRenderLimit =
+    cardLayout === 'gallery' ? GALLERY_PLUGIN_RENDER_LIMIT : RICH_PLUGIN_RENDER_LIMIT;
+  const renderBatchSize =
+    cardLayout === 'gallery' ? GALLERY_PLUGIN_RENDER_BATCH_SIZE : RICH_PLUGIN_RENDER_BATCH_SIZE;
+  const loadMoreRootMargin = cardLayout === 'gallery' ? '900px' : '640px';
+  const [renderLimit, setRenderLimit] = useState(initialRenderLimit);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const {
     visiblePlugins,
@@ -110,8 +117,8 @@ export function PluginsHomeSection({
   const hasMorePlugins = renderLimit < filtered.length;
 
   useEffect(() => {
-    setRenderLimit(INITIAL_PLUGIN_RENDER_LIMIT);
-  }, [filtered]);
+    setRenderLimit(initialRenderLimit);
+  }, [filtered, initialRenderLimit]);
 
   useEffect(() => {
     if (!hasMorePlugins) return;
@@ -125,14 +132,14 @@ export function PluginsHomeSection({
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
         setRenderLimit((limit) =>
-          Math.min(filtered.length, limit + PLUGIN_RENDER_BATCH_SIZE),
+          Math.min(filtered.length, limit + renderBatchSize),
         );
       },
-      { rootMargin: '640px' },
+      { rootMargin: loadMoreRootMargin },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [filtered.length, hasMorePlugins]);
+  }, [filtered.length, hasMorePlugins, loadMoreRootMargin, renderBatchSize]);
 
   function handleSavePlugin(record: InstalledPluginRecord): void {
     const result = savePluginId(record.id);

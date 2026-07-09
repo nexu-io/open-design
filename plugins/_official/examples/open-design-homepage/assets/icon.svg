@@ -1,0 +1,15 @@
+<svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+	<style>
+		rect { fill: #FFF279; }
+		@media (prefers-color-scheme: dark) {
+		rect { fill: #ffffff; }
+		}
+	</style>
+	<rect x="78.4712" y="140.417" width="20" height="212" transform="rotate(-54.3546 78.4712 140.417)" />
+	<rect x="57.6013" y="331.305" width="40" height="212" transform="rotate(-105.355 57.6013 331.305)" />
+	<rect x="198.041" y="462.369" width="60" height="212" transform="rotate(-156.355 198.041 462.369)" />
+	<rect x="389.562" y="426.86" width="80" height="212" transform="rotate(152.645 389.562 426.86)" />
+	<rect x="474.521" y="249.802" width="100" height="212" transform="rotate(101.645 474.521 249.802)" />
+	<rect x="382.162" y="75.4556" width="120" height="212" transform="rotate(50.6454 382.162 75.4556)" />
+	<rect x="184.557" y="44.5469" width="140" height="212" transform="rotate(-0.35462 184.557 44.5469)" />
+</svg>

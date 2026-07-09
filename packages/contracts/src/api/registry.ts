@@ -1,6 +1,10 @@
 export interface AgentModelOption {
   id: string;
   label: string;
+  /** Whether the current account/tier can use this model. */
+  enabled?: boolean;
+  /** Whether this is the default model for the current account/tier. */
+  default?: boolean;
   /** USD price per 1M input tokens when reported by the provider/catalog. */
   inputPriceUsdPerMillion?: number;
   /** USD price per 1M output tokens when reported by the provider/catalog. */

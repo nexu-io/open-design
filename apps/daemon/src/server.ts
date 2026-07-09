@@ -60,7 +60,7 @@ import {
   applyBakedPreviews,
   resolvePluginPreviewsDir,
   PLUGIN_PREVIEWS_ROUTE,
-} from './plugin-preview-bakes.js';
+} from './plugins/plugin-preview-bakes.js';
 import { userFacingAgentLabel } from './user-facing-agent-label.js';
 import {
   buildBrowserUseRunState,
@@ -181,11 +181,17 @@ import {
   getRememberedLiveModels,
   preferFreshLiveModels,
   rememberLiveModels,
+  resolveDefaultModelFromOptions,
   resolveModelForAgent,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
+import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js';
 import { buildOpenCodeByokProviderConfig } from './runtimes/byok-opencode.js';
+import {
+  persistPlainStreamArtifacts,
+  plainStdoutFromRunEvents,
+} from './runtimes/plain-stream.js';
 import {
   readVelaLoginStatus,
   resolveAmrProfile,
@@ -239,7 +245,7 @@ import {
   assetCacheRewriteUrl,
   createPluginAssetCache,
   isCacheableExternalUrl,
-} from './plugin-asset-cache.js';
+} from './plugins/plugin-asset-cache.js';
 import { defaultMediaExecutionPolicy, parseMediaExecutionPolicyInput } from './media/policy.js';
 import {
   applySandboxRuntimeEnv,
@@ -310,8 +316,8 @@ import {
   listActiveRuleEntries,
   readMemoryConfig,
 } from './memory.js';
-import { attachAcpSession } from './acp.js';
-import { attachPiRpcSession } from './pi-rpc.js';
+import { attachAcpSession } from './agent-protocol/index.js';
+import { attachPiRpcSession } from './agent-protocol/index.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
@@ -634,6 +640,7 @@ import {
   isAllowedBrowserOrigin,
   isLocalSameOrigin,
   isZeroConfigClipperLibraryRequest,
+  parseHostHeader,
 } from './origin-validation.js';
 import {
   apiTokenFromEnv,
@@ -2060,10 +2067,24 @@ export async function startServer({
     return /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])$/.test(origin);
   }
 
+  function reportHostForPoweredPreview(): string {
+    return host === '0.0.0.0' || host === '::' || host === '[::]' || host === '::1'
+      ? '127.0.0.1'
+      : host;
+  }
+
+  function poweredPreviewHost(): string | null {
+    const reportHost = reportHostForPoweredPreview();
+    if (reportHost === '127.0.0.1') return 'localhost';
+    if (reportHost === 'localhost') return '127.0.0.1';
+    return null;
+  }
+
   // Routes that serve content to sandboxed iframes (Origin: null) for
   // read-only purposes.  All other /api routes reject Origin: null.
   const _NULL_ORIGIN_SAFE_GET_RE =
     /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$|^\/asset-cache$/;
+  const _POWERED_PREVIEW_SAFE_RE = /^\/projects\/[^/]+\/powered\/.+$/u;
 
   // Reject cross-origin requests to API endpoints.
   // Health/version remain open for monitoring probes.
@@ -2084,6 +2105,36 @@ export async function startServer({
     // so the predicate matches `/library/ingest`, not `/api/library/ingest`.
     if (isZeroConfigClipperLibraryRequest(req.method, req.path, req.headers.origin)) {
       return next();
+    }
+
+    const poweredHost = poweredPreviewHost();
+    if (poweredHost && resolvedPort) {
+      const requestHost = parseHostHeader(req.headers.host);
+      const fetchMetadataPresent =
+        req.headers['sec-fetch-site'] != null ||
+        req.headers['sec-fetch-mode'] != null ||
+        req.headers['sec-fetch-dest'] != null;
+      const poweredReferer = (() => {
+        const raw = Array.isArray(req.headers.referer) ? req.headers.referer[0] : req.headers.referer;
+        if (typeof raw !== 'string' || raw.length === 0) return false;
+        try {
+          const parsed = new URL(raw);
+          return parsed.hostname === poweredHost &&
+            (parsed.port || (parsed.protocol === 'https:' ? '443' : '80')) === String(resolvedPort) &&
+            /^\/api\/projects\/[^/]+\/powered\/.+/u.test(parsed.pathname);
+        } catch {
+          return false;
+        }
+      })();
+      const isPoweredPreviewBrowserRequest =
+        requestHost?.hostname === poweredHost &&
+        requestHost.port === String(resolvedPort) &&
+        (fetchMetadataPresent || poweredReferer);
+      if (isPoweredPreviewBrowserRequest && !_POWERED_PREVIEW_SAFE_RE.test(req.path)) {
+        return res.status(403).json({
+          error: 'Powered preview origin cannot access this API route',
+        });
+      }
     }
 
     const origin = req.headers.origin;
@@ -2479,6 +2530,25 @@ export async function startServer({
   app.get('/api/version', async (_req, res) => {
     const version = await readCurrentAppVersionInfo();
     res.json({ version });
+  });
+
+  // Powered-preview isolation info. Reports the daemon's own directly-reachable
+  // http origin so the web host can render WebGL/Worker/WASM/SharedArrayBuffer
+  // artifacts in a cross-origin-isolated iframe (see the /powered route and
+  // apps/web/src/runtime/powered-preview.ts). The web host always swaps this
+  // loopback hostname before loading powered files; the /api origin middleware
+  // then treats that swapped browser origin as preview-only.
+  app.get('/api/preview/isolation', (_req, res) => {
+    const reportHost = reportHostForPoweredPreview();
+    const baseOrigin = resolvedPort ? `http://${reportHost}:${resolvedPort}` : null;
+    res.setHeader('Cache-Control', 'no-store');
+    /** @type {import('@open-design/contracts').ProjectPreviewIsolationResponse} */
+    const body = {
+      supported: Boolean(baseOrigin),
+      baseOrigin,
+      pathPrefix: 'powered',
+    };
+    res.json(body);
   });
 
   registerDaemonRoutes(app, {
@@ -3898,14 +3968,16 @@ export async function startServer({
           stage,
           iteration,
           snapshot:       stageSnapshot,
+          runEvents:      run.events,
         });
         return {
           signals:         outcome.signals,
           critiqueSummary: outcome.critiqueSummary,
+          tokensUsed:      outcome.tokensUsed,
         };
       };
     }
-    void runPipelineForRun({
+    const pipelineDone = runPipelineForRun({
       db: dbHandle,
       runId:           run.id,
       projectId:       projectIdForRun,
@@ -3925,6 +3997,17 @@ export async function startServer({
         });
       } catch { /* ignore */ }
     });
+    void Promise.all([runs.wait(run), pipelineDone])
+      .then(() => {
+        const tokensUsed = scanRunEventsForUsageAnalytics(run.events, null, 0).total_tokens ?? null;
+        if (tokensUsed === null) return;
+        dbHandle.prepare(
+          'UPDATE run_devloop_iterations SET tokens_used = ? WHERE run_id = ?',
+        ).run(tokensUsed, run.id);
+      })
+      .catch((err) => {
+        console.warn('[plugins] devloop tokens_used reconciliation failed', err);
+      });
   };
 
   const startChatRun = async (chatBody, run) => {
@@ -4192,6 +4275,21 @@ export async function startServer({
       toolTokenRevoked = true;
       toolTokenRegistry.revokeToken(toolTokenGrant.token, reason);
     };
+    // The async startup phase below (compose prompt, prepare prompt file,
+    // probe models, …) has many awaits and no blanket try/finally; an
+    // exception there finalizes the run via runs.fail() without running the
+    // per-attempt cleanup wired to the child lifecycle. Register the grant +
+    // sink release on the run's terminal chokepoint so any exit path — startup
+    // throw included — revokes the capability token instead of leaking it for
+    // the token TTL. Idempotent with the explicit pre-spawn/child-close cleanup.
+    if (toolTokenGrant) {
+      run.onFinalize = () => {
+        revokeToolToken('run_finalized');
+        const sinkRunId = toolTokenGrant.runId ?? runId;
+        activeChatAgentEventSinks.delete(sinkRunId);
+        activeChatRunHandles.delete(sinkRunId);
+      };
+    }
     const runtimeToolPrompt = createAgentRuntimeToolPrompt(daemonUrl, toolTokenGrant);
     const commentHint = renderCommentAttachmentHint(safeCommentAttachments);
 
@@ -4465,14 +4563,10 @@ export async function startServer({
     let capturedSessionId: string | null = null;
     // --- Model resolution hoisted above the resume-identity guard ---
     // The guard (and the persisted `agent_sessions.model`) must key off the
-    // CONCRETE model actually launched, not the raw request token: a user who
-    // picked `default` would otherwise store `default`/null, so changing the
-    // effective default between turns would still pass the guard and resume the
-    // old upstream session under the wrong model (#4704, reported by @nettee).
-    // resolveModelForAgent is hoisted here; the AMR `default`->live-catalog
-    // rewrite is mirrored below so `safeModel` is final before the guard. The
-    // preflight further down stays authoritative for auth/availability and
-    // re-runs the (cached, idempotent) resolution.
+    // model identity actually requested for this turn. Explicit `default` is
+    // kept as a real identity because ACP runtimes can leave model selection to
+    // the upstream session's own configured default; omitted models may still
+    // resolve to an available fallback below.
     let configuredAgentEnv = {};
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
@@ -4497,6 +4591,11 @@ export async function startServer({
       process.env,
       requestedLiveModelScope,
     );
+    const hasDefaultModelEnvOverride = Boolean(
+      def.defaultModelEnvVar &&
+      typeof process.env[def.defaultModelEnvVar] === 'string' &&
+      process.env[def.defaultModelEnvVar]?.trim(),
+    );
     const safeReasoning =
       typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
         ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
@@ -4505,10 +4604,10 @@ export async function startServer({
     const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
     const resolvedBin = agentLaunch.selectedPath;
     if (def.id === 'amr' && resolvedBin && agentLaunch.launchPath) {
-      // Concretize a default/empty model to the live catalog's first entry, the
-      // same rewrite the AMR preflight applies — done here only so the resume
-      // guard sees the launched model. Read-only + cached (hot on follow-up
-      // turns); the preflight below remains the authoritative gate.
+      // Concretize omitted/default AMR model requests to the live catalog
+      // default before the resume guard. The AMR preflight below applies the
+      // same rewrite before spawn; keeping this earlier copy aligned prevents
+      // stored concrete session models from comparing against raw `default`.
       try {
         const resumeProbe = await resolveAmrModelProbe({ dataDir: RUNTIME_DATA_DIR, env: process.env, readAppConfig });
         const resumeCatalog = await amrModelLoadingCache.get(resumeProbe.cacheKey, {
@@ -4522,8 +4621,18 @@ export async function startServer({
         const resumeModelIds = new Set(resumeLiveModels.map((c) => c?.id).filter(Boolean));
         const askedForDefault =
           typeof model !== 'string' || !model.trim() || model.trim().toLowerCase() === 'default';
-        if (!safeModel || safeModel === 'default' || (askedForDefault && !resumeModelIds.has(safeModel))) {
-          safeModel = resumeLiveModels[0]?.id ?? safeModel ?? null;
+        const defaultRunModel = resolveDefaultModelFromOptions(resumeLiveModels);
+        if (
+          !safeModel ||
+          safeModel === 'default' ||
+          (
+            askedForDefault &&
+            !hasDefaultModelEnvOverride &&
+            defaultRunModel &&
+            (!resumeModelIds.has(safeModel) || safeModel !== defaultRunModel)
+          )
+        ) {
+          safeModel = defaultRunModel ?? safeModel ?? null;
           agentOptions.model = safeModel;
         }
       } catch {
@@ -4711,6 +4820,17 @@ export async function startServer({
     const CLARIFYING_QUESTION_BUFFER_CAP = 256 * 1024;
     let clarifyingQuestionText = '';
     let visibleAssistantText = '';
+    // Reply text handed to the background memory extractor at child-close.
+    // Captures the GUARDED, visible reply from BOTH channels a run can emit on:
+    // structured agents' `agent` `text_delta` (Claude/Codex/Gemini/Copilot/ACP/
+    // qoder/pi-rpc) and the plain/BYOK/antigravity family's `stdout` chunks. So
+    // every agent family contributes its actual reply, and none leak raw
+    // transport frames (system:init, stream_event, hooks). Kept separate from
+    // `visibleAssistantText` so the filesystem empty-output guard that reads
+    // that variable keeps its text_delta-only semantics. Bounded — the
+    // extractor only needs the head of the reply.
+    const MEMORY_REPLY_CAP = 32 * 1024;
+    let memoryReplyText = '';
     const send = (event, data) => {
       const lifecycleMarkers = runLifecycleMarkersForStreamEvent(event, data);
       if (lifecycleMarkers.firstModelEventType) {
@@ -4741,6 +4861,22 @@ export async function startServer({
         typeof data.delta === 'string'
       ) {
         visibleAssistantText += data.delta;
+      }
+      // Accumulate the visible reply for the memory extractor from whichever
+      // channel this agent family uses: `agent` text_delta (structured streams)
+      // or `stdout` chunks (plain/BYOK/antigravity). Both carry already-guarded,
+      // user-visible text, so this never captures thinking, tool traffic, or raw
+      // transport frames.
+      if (memoryReplyText.length < MEMORY_REPLY_CAP) {
+        const replyPiece =
+          event === 'agent' && data && data.type === 'text_delta' && typeof data.delta === 'string'
+            ? data.delta
+            : event === 'stdout' && data && typeof data.chunk === 'string'
+              ? data.chunk
+              : '';
+        if (replyPiece) {
+          memoryReplyText = (memoryReplyText + replyPiece).slice(0, MEMORY_REPLY_CAP);
+        }
       }
       persistRunEventToAssistantMessage(db, run, event, data);
       design.runs.emit(run, event, data);
@@ -5268,17 +5404,24 @@ export async function startServer({
       );
       // A request that came in as 'default'/empty is normally pre-resolved to a
       // concrete id via the agent-wide cached model order; if it still is not,
-      // adopt the first catalog entry so the spawn layer always has a real id.
+      // adopt the catalog's enabled default so the spawn layer always has a
+      // usable real id.
       const userAskedForDefault =
         typeof model !== 'string' ||
         !model.trim() ||
         model.trim().toLowerCase() === 'default';
+      const defaultRunModel = resolveDefaultModelFromOptions(liveModels);
       if (
         !safeModel ||
         safeModel === 'default' ||
-        (userAskedForDefault && !liveModelIds.has(safeModel))
+        (
+          userAskedForDefault &&
+          !hasDefaultModelEnvOverride &&
+          defaultRunModel &&
+          (!liveModelIds.has(safeModel) || safeModel !== defaultRunModel)
+        )
       ) {
-        safeModel = liveModels[0]?.id ?? safeModel ?? null;
+        safeModel = defaultRunModel ?? (safeModel === 'default' ? null : safeModel ?? null);
         agentOptions.model = safeModel;
       }
       if (liveModelIds.size === 0) {
@@ -5541,7 +5684,13 @@ export async function startServer({
     const runStartTimeMs = Date.now();
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs(def.inactivityTimeoutMs);
     const artifactQuietPeriodMs = resolveChatRunArtifactQuietPeriodMs();
-    const inactivityKillGraceMs = 3_000;
+    // Grace before the inactivity watchdog escalates a stalled child from
+    // SIGTERM to SIGKILL. Env-tunable like its OD_CHAT_RUN_* cancel-grace
+    // siblings so the escalation path can be exercised deterministically.
+    const inactivityKillGraceMs = (() => {
+      const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_KILL_GRACE_MS);
+      return Number.isFinite(raw) && raw > 0 ? raw : 3_000;
+    })();
     let inactivityTimer = null;
     let childStdoutSeen = false;
     let lastAgentEventPhase = 'spawn pending';
@@ -5607,12 +5756,20 @@ export async function startServer({
     const scheduleForcedChildShutdown = () => {
       if (!child) return;
       clearForcedChildShutdown();
+      // Capture THIS attempt's child and its process group. A same-run retry
+      // can swap `run.child` to a fresh child within the grace window; these
+      // timers must escalate the stalled child they were scheduled for, never
+      // whatever now occupies `run.child` — otherwise the healthy retry gets
+      // killed and this stalled child is left unreaped. See runs.ts
+      // `signalChildProcess`.
+      const targetChild = child;
+      const targetProcessGroupId = run.processGroupId;
       forcedChildShutdownTimers = [
         setTimeout(() => {
-          if (child) design.runs.signalChild(run, 'SIGTERM');
+          design.runs.signalChildProcess(targetChild, targetProcessGroupId, 'SIGTERM');
         }, inactivityKillGraceMs),
         setTimeout(() => {
-          if (child) design.runs.signalChild(run, 'SIGKILL');
+          design.runs.signalChildProcess(targetChild, targetProcessGroupId, 'SIGKILL');
         }, inactivityKillGraceMs * 2),
       ];
     };
@@ -5986,22 +6143,15 @@ export async function startServer({
       agentStdoutTail = `${agentStdoutTail}${chunk}`.slice(-2000);
     });
 
-    // ---- Memory: assistant-reply buffer for LLM extraction --------------
-    // Capture up to 32 KiB of raw stdout. The LLM extractor (fired in the
-    // close handler) trims further; we only need enough to ground the
-    // model. Multiple `on('data')` listeners coexist — the wrapper-stream
-    // handlers below also subscribe and that's fine.
-    const MEMORY_BUFFER_CAP = 32 * 1024;
-    let memoryAssistantBuffer = '';
-    child.stdout.on('data', (chunk) => {
-      if (memoryAssistantBuffer.length >= MEMORY_BUFFER_CAP) return;
-      memoryAssistantBuffer += String(chunk);
-      if (memoryAssistantBuffer.length > MEMORY_BUFFER_CAP) {
-        memoryAssistantBuffer = memoryAssistantBuffer.slice(0, MEMORY_BUFFER_CAP);
-      }
-    });
+    // ---- Memory: assistant-reply capture for LLM extraction --------------
+    // Hand the extractor the guarded, rendered reply (`memoryReplyText`, fed
+    // through `send()` from either the `agent` text_delta or the `stdout`
+    // channel), NOT the child's raw stdout. For stream-json agents (Claude Code)
+    // raw stdout is JSONL transport — system:init, stream_event thinking deltas,
+    // hook_started/hook_response frames — none of which is the reply; mining it
+    // produced empty extractions that, near-identical across a build's re-fires,
+    // caused the same turn to be re-analyzed dozens of times.
     child.on('close', () => {
-      const captured = memoryAssistantBuffer;
       const userMsg = typeof message === 'string' ? message : '';
       // Forward the chat agent id so memory-llm.pickProvider can
       // constrain its auto-pick to the chat protocol's family — keeps
@@ -6012,9 +6162,19 @@ export async function startServer({
         projectRoot: PROJECT_ROOT,
         chatAgentId: typeof agentId === 'string' ? agentId : null,
         chatModel: typeof safeModel === 'string' ? safeModel : null,
+        // Scope the extractor's duplicate-turn de-dup to this conversation, so a
+        // re-fired turn collapses but an identical (message, reply) in another
+        // conversation is still examined.
+        conversationId: run.conversationId ?? null,
       };
       void import('./memory-llm.js')
         .then(({ extractWithLLM, distillAnnotationsToMemory }) => {
+          // Read the reply HERE, in the post-import microtask, not in the
+          // synchronous close handler: the Claude stream flush is a later
+          // 'close' listener, so deferring the read lets flush() emit the reply's
+          // final buffered frame first and a reply that ends without a trailing
+          // newline isn't truncated.
+          const captured = memoryReplyText;
           const generalPass = extractWithLLM(
             RUNTIME_DATA_DIR,
             {
@@ -6296,6 +6456,7 @@ export async function startServer({
     // Claude has its own per-message guards in claude-stream.ts.
     const runGuard = createRoleMarkerGuard('run');
     let runWarned = false;
+    const visibleStdoutControlStripper = new TerminalControlSequenceStripper();
     const titleMarkerStripper = createAgentTitleMarkerStripper({
       enabled: Boolean(titleGenerationRequested),
       emitTitle: (title) => send('agent', { type: 'conversation_title', title }),
@@ -6824,7 +6985,8 @@ export async function startServer({
         // (#3408 §4 marker). A plain adapter has no structured preamble, so
         // this typically coincides with its first model output.
         if (text.length > 0) noteCliReadyAt();
-        const visibleText = titleMarkerStripper.strip(text);
+        const strippedText = visibleStdoutControlStripper.write(text);
+        const visibleText = titleMarkerStripper.strip(strippedText);
         const safe = guardTextDelta(visibleText);
         if (safe.length > 0) {
           noteFirstTokenAt();
@@ -7229,11 +7391,67 @@ export async function startServer({
         noteFirstTokenAt(firstBufferedStdoutAt);
       }
       for (const chunk of plaintextStdoutBuffer) {
-        const visibleText = titleMarkerStripper.strip(chunk.text);
+        const strippedText = visibleStdoutControlStripper.write(chunk.text);
+        const visibleText = titleMarkerStripper.strip(strippedText);
         if (visibleText) send('stdout', { chunk: visibleText });
       }
-      const flushedTitleMarkerText = titleMarkerStripper.flush();
+      const flushedControlText = visibleStdoutControlStripper.flush();
+      const flushedTitleMarkerText =
+        titleMarkerStripper.strip(flushedControlText) + titleMarkerStripper.flush();
       if (flushedTitleMarkerText) send('stdout', { chunk: flushedTitleMarkerText });
+      if (
+        status === 'succeeded' &&
+        (def.streamFormat ?? 'plain') === 'plain' &&
+        run.projectId
+      ) {
+        const plainStdout = plainStdoutFromRunEvents(run.events);
+        if (plainStdout.includes('<artifact')) {
+          try {
+            const project = getProject(db, run.projectId);
+            const persistedPlainArtifacts = await persistPlainStreamArtifacts({
+              projectsRoot: PROJECTS_DIR,
+              projectId: run.projectId,
+              stdout: plainStdout,
+              metadata: project?.metadata,
+              writeProjectFile,
+            });
+            if (persistedPlainArtifacts.length > 0) {
+              for (const artifact of persistedPlainArtifacts) {
+                send('agent', {
+                  type: 'artifact',
+                  source: 'plain-stream',
+                  name: artifact.name,
+                  path: artifact.name,
+                  identifier: artifact.identifier,
+                  artifactType: artifact.artifactType,
+                });
+              }
+              send('agent', {
+                type: 'diagnostic',
+                name: 'plain_stream_artifacts_persisted',
+                source: 'daemon-run-finalize',
+                fileCount: persistedPlainArtifacts.length,
+                files: persistedPlainArtifacts.map((artifact) => artifact.name),
+              });
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            const failureMessage = `Failed to persist plain-stream artifact(s): ${message}`;
+            console.warn(`[plain-stream] failed to persist stdout artifact(s): ${message}`);
+            send('agent', {
+              type: 'diagnostic',
+              name: 'plain_stream_artifacts_persist_failed',
+              source: 'daemon-run-finalize',
+              message,
+            });
+            send('error', createSseErrorPayload(
+              'AGENT_EXECUTION_FAILED',
+              failureMessage,
+            ));
+            return finishWithRetryDecision('failed', 1, null);
+          }
+        }
+      }
       // Capture the pi session file path for conversational continuity.
       // The session path is discovered by attachPiRpcSession when it
       // processes agent_end; persist it under (conversationId, agentId) so

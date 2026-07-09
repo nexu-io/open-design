@@ -188,6 +188,45 @@ export function htmlNeedsFocusGuard(source: string): boolean {
   return false;
 }
 
+/**
+ * Return true when the HTML source shows hallmarks of a real GPU/compute app
+ * that the default opaque-origin preview sandbox cannot run correctly: it
+ * needs same-origin Web Workers, real Web Storage, WASM, or SharedArrayBuffer
+ * (cross-origin isolation). These are the WebGL/Worker artifacts from issue
+ * #724 — Gaussian-splat viewers, ffmpeg.wasm, threaded renderers.
+ *
+ * When true, FileViewer routes the artifact through the "powered preview"
+ * path (a cross-origin-isolated iframe with allow-same-origin) instead of the
+ * opaque sandbox. Plain single-canvas WebGL1 demos are intentionally NOT
+ * matched — they already run fine under the default sandbox, and powered mode
+ * carries a (documented, opt-in) larger trust surface, so we only escalate for
+ * artifacts that genuinely need it.
+ *
+ * Pure string scan over the same `source` already fetched for preview. False
+ * positives just take the powered path (still correct, slightly larger trust
+ * surface); false negatives keep the current opaque-sandbox behavior.
+ */
+export function htmlNeedsPoweredPreview(source: string | null | undefined): boolean {
+  if (!source) return false;
+  // Hard requirement — SharedArrayBuffer only exists in a crossOriginIsolated
+  // document, which ONLY the powered path provides.
+  if (/\bSharedArrayBuffer\b/.test(source)) return true;
+  // Web Workers / SharedWorker: external-file workers throw SecurityError at an
+  // opaque origin; even blob workers commonly pair with storage/WASM here.
+  if (/\bnew\s+(?:Worker|SharedWorker)\s*\(/.test(source)) return true;
+  if (/\bimportScripts\s*\(/.test(source)) return true;
+  // WASM streaming instantiation reads a same-origin .wasm the opaque origin
+  // cannot fetch; and threaded WASM needs SAB.
+  if (/\bWebAssembly\s*\.\s*(?:instantiateStreaming|compileStreaming)\b/.test(source)) return true;
+  if (/\.wasm\b/.test(source)) return true;
+  // WebGL2 / OffscreenCanvas / WebGPU — the modern rendering stack these
+  // artifacts drive, usually from a worker.
+  if (/getContext\s*\(\s*["'`]webgl2["'`]/.test(source)) return true;
+  if (/\bOffscreenCanvas\b/.test(source)) return true;
+  if (/\bnavigator\s*\.\s*gpu\b/.test(source)) return true;
+  return false;
+}
+
 export function htmlNeedsSandboxShim(source: string): boolean {
   // Quote-optional: HTML5 permits unquoted attribute values
   // (`<script type=text/babel src=app.jsx>`). The trailing `\b` rejects

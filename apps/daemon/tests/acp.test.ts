@@ -5,7 +5,7 @@ import os from 'node:os';
 import { PassThrough } from 'node:stream';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { attachAcpSession, buildAcpSessionNewParams, normalizeModels } from '../src/acp.js';
+import { attachAcpSession, buildAcpSessionNewParams, normalizeModels } from '../src/agent-protocol/index.js';
 import { countNewArtifacts } from '../src/runtimes/run-artifacts.js';
 
 const DEFAULT_MODEL_OPTION = { id: 'default', label: 'Default (CLI config)' };

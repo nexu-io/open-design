@@ -19,6 +19,7 @@ describe('AMR insufficient balance run failures', () => {
         endpoints: suite.amr,
         failBalanceAtPrompt: true,
         requireLoginConfig: false,
+        requireSetModel: false,
       });
 
       await putAmrAppConfig(webUrl, {

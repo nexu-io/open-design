@@ -14,6 +14,8 @@ type ChatRunMessageState = {
   agentId?: string | null;
   status?: string;
   createdAt?: number;
+  sessionMode?: string | null;
+  context?: Record<string, unknown> | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -214,9 +216,18 @@ export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessage
                 WHEN run_status IN ('succeeded', 'failed', 'canceled') THEN run_status
                 ELSE ?
               END,
+              session_mode = ?,
+              run_context_json = ?,
               started_at = COALESCE(started_at, ?)
         WHERE id = ?`,
-    ).run(run.id, run.status, run.createdAt, run.assistantMessageId);
+    ).run(
+      run.id,
+      run.status,
+      run.sessionMode ?? null,
+      run.context ? JSON.stringify(run.context) : null,
+      run.createdAt,
+      run.assistantMessageId,
+    );
     return;
   }
   upsertMessage(db, run.conversationId, {
@@ -227,6 +238,8 @@ export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessage
     events: [],
     runId: run.id,
     runStatus: run.status,
+    sessionMode: run.sessionMode ?? undefined,
+    runContext: run.context ?? undefined,
     startedAt: run.createdAt,
   });
 }

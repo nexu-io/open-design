@@ -159,9 +159,44 @@ export interface ProjectPreviewUrlResponse {
   opaqueOrigin: true;
 }
 
+/**
+ * Runtime info the web host needs to render a "powered preview" — an HTML
+ * artifact that requires real Web Workers, Web Storage, WASM, or (via
+ * cross-origin isolation) SharedArrayBuffer, which the default opaque-origin
+ * preview sandbox cannot provide.
+ *
+ * `baseOrigin` is the daemon's own directly-reachable http origin. The web
+ * host loads the powered iframe from a host-swapped loopback variant of it.
+ * That reserved browser origin is cross-origin to the app shell and is allowed
+ * to read `/powered/` file bytes, but the daemon rejects its browser requests
+ * to normal `/api/*` routes. `null` when the daemon cannot resolve a usable
+ * origin (powered mode is then unavailable and previews stay on the opaque
+ * sandbox).
+ */
+export interface ProjectPreviewIsolationResponse {
+  supported: boolean;
+  baseOrigin: string | null;
+  /** URL path segment for the powered file route (`.../:id/<pathPrefix>/<file>`). */
+  pathPrefix: string;
+}
+
 export interface ProjectFileResponse {
   file: ProjectFile;
   versionWarning?: ProjectFileVersionWarning;
+}
+
+export interface ProjectFileTextPreviewResponse {
+  text: string;
+  truncated: boolean;
+  size: number;
+  limit: number;
+  mime: string;
+  kind: ProjectFileKind;
+  poweredPreview: {
+    required: boolean;
+    scannedBytes: number;
+    complete: boolean;
+  };
 }
 
 export interface ProjectFolderResponse {
@@ -200,4 +235,28 @@ export function buildProjectRawFileUrl(
 
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
   return `${normalizedBaseUrl}/api/projects/${encodeURIComponent(projectId)}/raw/${segments}`;
+}
+
+/**
+ * Build an absolute powered-preview URL. Same shape as buildProjectRawFileUrl
+ * but targets the `/powered/` route (cross-origin-isolation headers) and is
+ * meant to be joined against the host-swapped preview origin derived from
+ * ProjectPreviewIsolationResponse — NOT a relative path — so the iframe runs
+ * at an origin isolated from the app shell and from normal daemon APIs.
+ */
+export function buildProjectPoweredFileUrl(
+  baseOrigin: string,
+  projectId: string,
+  filePath: unknown,
+): string | null {
+  if (typeof filePath !== 'string' || filePath.length === 0) return null;
+  const segments = filePath
+    .split('/')
+    .filter((segment) => segment.length > 0)
+    .map(encodeURIComponent)
+    .join('/');
+  if (segments.length === 0) return null;
+
+  const normalizedBaseUrl = baseOrigin.replace(/\/+$/, '');
+  return `${normalizedBaseUrl}/api/projects/${encodeURIComponent(projectId)}/powered/${segments}`;
 }

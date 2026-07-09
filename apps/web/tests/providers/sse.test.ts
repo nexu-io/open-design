@@ -105,6 +105,45 @@ describe('streamViaDaemon', () => {
     expect(handlers.onDone).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps consuming when a same-run retry succeeds after the transient error status briefly reads failed', async () => {
+    // Regression for #5110: the daemon can emit an empty-output error for a
+    // failed first attempt, then recover the SAME run through the retry path.
+    // If the status probe observes the transient failed state and returns
+    // immediately, the browser never sees the later successful write/text/end
+    // frames and the chat keeps showing the stale empty-output failure.
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse(
+          'event: error\ndata: {"code":"AGENT_EXECUTION_FAILED","message":"Agent completed without producing any output.","retryable":true}\n\n' +
+          'event: agent\ndata: {"type":"tool_use","id":"call_1","name":"write","input":{"filePath":"index.html"}}\n\n' +
+          'event: agent\ndata: {"type":"tool_result","toolUseId":"call_1","content":"Wrote file successfully.","isError":false}\n\n' +
+          'event: agent\ndata: {"type":"text_delta","delta":"Landing page saved to `index.html`."}\n\n' +
+          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-1') {
+        return jsonResponse({ id: 'run-1', status: 'failed' });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'opencode',
+      history: [{ id: '1', role: 'user', content: 'make a landing page' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onDelta).toHaveBeenCalledWith('Landing page saved to `index.html`.');
+    expect(handlers.onDone).toHaveBeenCalledWith('Landing page saved to `index.html`.');
+  });
+
   it('prefers a structured daemon error over the lifecycle exit fallback when the run later fails', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

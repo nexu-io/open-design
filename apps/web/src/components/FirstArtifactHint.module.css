@@ -1,0 +1,95 @@
+/* One-time first-artifact hint. Anchored directly UNDER the artifact
+   toolbar (top-right: 分享 / 下载 / edit cluster) with an upward caret, so
+   the copy "view, edit, and export from the preview" physically points at
+   the controls that do it — a corner toast had no directionality and sat on
+   top of the pet widget. Offsets track the stable chrome heights (tab strip
+   + artifact header ≈ 70px), not the in-flight preview internals. */
+.root {
+  position: fixed;
+  right: 24px;
+  /* top is set inline by the component: measured below the viewer toolbar. */
+  top: 78px;
+  z-index: 40;
+  /* Belt-and-braces: the card never intercepts clicks meant for controls it
+     might momentarily overlap during layout shifts — only the dismiss button
+     is interactive. */
+  pointer-events: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 320px;
+  padding: 12px 12px 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  border-radius: 12px;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-md);
+  /* Entrance motion lives in the component (motion/react): 600ms settle
+     delay, slide-down, then a double knock with easeInOut segments. */
+}
+
+/* Upward caret aimed at the share/download cluster above. Same surface and
+   border as the card; rotated square, clipped by stacking order. */
+.root::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 120px;
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  background: var(--bg-panel);
+  border-top: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  border-left: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+}
+
+.icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--accent-strong);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.dismiss {
+  pointer-events: auto;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.dismiss:hover:not(:disabled) {
+  /* :not(:disabled) matches the global button:hover rule in primitives.css
+     so it can't repaint this to --bg-subtle. */
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}

@@ -40,7 +40,16 @@ jobs:
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
-          token: ${{ secrets.PREVIEW_BAKE_TOKEN || github.token }}
+          # Read-only clone with the default token, but do NOT persist it as a
+          # github.com credential. release/** is guarded by the "Protected
+          # branches (preview/*, release/v*)" ruleset (deletion / non_fast_forward
+          # / pull_request), so a direct push is rejected (GH013) unless the pusher
+          # is a bypass actor. github-actions[bot] is NOT one — so the manifest
+          # writeback below force-authenticates as open-design-bot, which IS a
+          # bypass actor, via an explicit token URL. A persisted github.token
+          # extraheader would override that inline token on push (see #5357), so
+          # drop it; nothing between here and the push needs the persisted cred.
+          persist-credentials: false
 
       - name: Loop guard — skip the bake bot's own manifest commit
         id: guard
@@ -71,8 +80,26 @@ jobs:
           r2-bucket: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_BUCKET }}
           r2-endpoint: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_URL }}
 
+      - name: Mint the open-design-bot token for the release-branch push
+        if: ${{ steps.guard.outputs.skip != 'true' }}
+        id: bot
+        # open-design-bot (app id 3640364) is a bypass actor on the
+        # "Protected branches (preview/*, release/v*)" ruleset, so its push clears
+        # the pull_request rule that rejects github-actions[bot] (GH013). The
+        # release bake pushes the manifest directly (it then rides the non-squash
+        # release back-merge to main). Minted here — after the long render, not at
+        # job start — because an App token lives ~1h and the render can run long.
+        uses: actions/create-github-app-token@v3.2.0
+        with:
+          client-id: ${{ secrets.BOT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: nexu-io
+          repositories: open-design
+
       - name: Commit the authoritative manifest onto the release branch
         if: ${{ steps.guard.outputs.skip != 'true' }}
+        env:
+          BOT_TOKEN: ${{ steps.bot.outputs.token }}
         run: |
           OLD=data/plugin-previews/manifest.json
           NEW=.tmp/plugin-previews/manifest.json
@@ -89,4 +116,7 @@ jobs:
           git config user.email "bot@open-design.ai"
           git add "$OLD"
           git commit -m "chore(plugin-previews): refresh baked preview manifest (release cut)"
-          git push origin "HEAD:${GITHUB_REF#refs/heads/}"
+          # Push as open-design-bot (a ruleset bypass actor) via an explicit token
+          # URL. A plain `git push origin` would authenticate as github-actions[bot]
+          # and be rejected by the release/** pull_request rule (GH013).
+          git push "https://x-access-token:${BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_REF#refs/heads/}"

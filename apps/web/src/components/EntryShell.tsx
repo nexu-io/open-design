@@ -100,6 +100,7 @@ import { UpdaterPopup } from './UpdaterPopup';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
 import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import { checkAmrBalanceGate } from '../runtime/amr-balance-gate';
+import { resolveAmrLowBalancePlan } from '../runtime/amr-low-balance-plan';
 import { GithubStarBadge } from './GithubStarBadge';
 import {
   formatDiscordPresenceCount,
@@ -111,10 +112,16 @@ import {
   createPluginUseHandoff,
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
+import {
+  buildRecommendation,
+  type Recommendation,
+} from '../onboarding/recommendation';
+import type { OnboardingEntry } from '../onboarding/onboarding-entry';
 import { ONBOARDING_ARTIFACT_CHIP_IDS } from './home-hero/chips';
 import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
+import { defaultAgentModelId, effectiveAgentModelChoice } from './agentModelSelection';
 import { AgentIcon } from './AgentIcon';
 import {
   getModelCapabilityTag,
@@ -149,7 +156,7 @@ import {
 import { KNOWN_PROVIDERS } from '../state/config';
 import type { KnownProvider } from '../state/config';
 import { saveOnboardingProfile } from '../state/onboarding-profile';
-import { testApiProvider } from '../providers/connection-test';
+import { testAgent, testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
 import {
   cancelVelaLogin,
@@ -200,6 +207,11 @@ function writeStoredRailOpen(open: boolean): void {
 const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const X_URL = 'https://x.com/OpenDesignHQ';
 const ONBOARDING_DROPDOWN_OPEN_EVENT = 'open-design:onboarding-dropdown-open';
+
+type OnboardingAgentTestState =
+  | { status: 'idle' }
+  | { status: 'running'; inputKey: string }
+  | { status: 'done'; inputKey: string; result: ConnectionTestResponse };
 
 // The topbar chips (GitHub star, model switcher, Use everywhere)
 // collapse into the settings dropdown when the viewport gets
@@ -255,6 +267,7 @@ type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   pendingFiles?: File[];
   userWorkingDirToken?: string;
   linkedDirs?: string[] | null;
+  onboardingEntry?: OnboardingEntry;
 };
 
 function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
@@ -540,7 +553,11 @@ export function EntryShell({
   // resolves the promise the submit handler is awaiting ('proceed' continues
   // the very same create-and-run).
   const [amrLowBalanceWarn, setAmrLowBalanceWarn] = useState<
-    { snapshot: AmrWalletSnapshot; resolve: (decision: AmrLowBalanceDecision) => void } | null
+    {
+      snapshot: AmrWalletSnapshot;
+      plan: string | null;
+      resolve: (decision: AmrLowBalanceDecision) => void;
+    } | null
   >(null);
   useEffect(() => {
     if (view !== 'design-systems') return;
@@ -572,6 +589,12 @@ export function EntryShell({
     useState<CreateTab>('prototype');
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
   const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(null);
+  // Personalized first-run starting point. Computed once, in memory, when the
+  // user finishes the About-you survey with real answers (see
+  // `finishOnboarding`); null for returning users, skipped/blank surveys, and
+  // after any page refresh (deliberately not persisted, per onboarding spec
+  // §7.1). Cleared as soon as the user takes any concrete entry (spec §7.4).
+  const [onboardingRec, setOnboardingRec] = useState<Recommendation | null>(null);
   const entryMainScrollRef = useRef<HTMLElement | null>(null);
   const analytics = useAnalytics();
   const discordOnlineLabel = discordPresence
@@ -655,6 +678,9 @@ export function EntryShell({
     // is intentionally explicit so future kind-specific scenarios
     // (e.g. a deck- or image-specialized pipeline) can take over a
     // single row without touching the form.
+    // New-project modal / template / import is a concrete entry — retire any
+    // pending Home recommendation (spec §7.1 / §7.4).
+    dismissRecommendation();
     const pluginId = defaultPluginIdForMetadata(input.metadata);
     const pluginInputs = defaultPluginInputsForCreate(input, pluginId);
     return onCreateProject({
@@ -709,8 +735,9 @@ export function EntryShell({
         // Hold THIS submit while the reminder waits for a decision; 'proceed'
         // resumes the same create-and-run below, so HomeView's normal accept
         // path (draft clearing, context consumption) still applies.
+        const plan = await resolveAmrLowBalancePlan(gate.snapshot);
         const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
-          setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
+          setAmrLowBalanceWarn({ snapshot: gate.snapshot, plan, resolve });
         });
         setAmrLowBalanceWarn(null);
         if (decision !== 'proceed') return 'blocked' as const;
@@ -719,6 +746,11 @@ export function EntryShell({
       // auto-send, which must not re-prompt what the user just answered.
       amrGatePrechecked = true;
     }
+    // Starting from the Home composer is a concrete entry — retire the
+    // recommendation (spec §7.4). Done only once the submit actually proceeds
+    // to create (past any AMR balance gate) so a blocked/cancelled submit
+    // leaves the recommendation intact for the user.
+    dismissRecommendation();
     const summarizedName = summarizeProjectNameFromPrompt(payload.prompt);
     const head = payload.prompt.trim().split(/\s+/).slice(0, 8).join(' ');
     const firstAttachmentName = payload.attachments?.[0]?.name ?? '';
@@ -788,9 +820,61 @@ export function EntryShell({
     });
   }
 
-  function finishOnboarding() {
+  // Called when the welcome flow ends. `survey` is present on the About-you
+  // completion paths; we only build a recommendation when the user actually
+  // provided a role or use-case, so a skipped/blank survey lands on the
+  // generic Home entry (spec §6.2 / §7.1).
+  function finishOnboarding(survey?: { role: string; useCases: string[] }) {
+    if (survey && (survey.role.trim() || survey.useCases.length > 0)) {
+      setOnboardingRec(buildRecommendation(survey));
+    }
     onCompleteOnboarding();
     changeView('home');
+  }
+
+  // Drop the personalized recommendation. Fired when the user browses all
+  // types, or as soon as they take any other concrete entry, so Home never
+  // re-shows a recommendation the user has moved past (spec §7.4).
+  function dismissRecommendation() {
+    setOnboardingRec((current) => (current ? null : current));
+  }
+
+  // "进入 Studio" from the Home recommendation. Creates the project with the
+  // recommended first request pre-filled into the composer but NOT auto-sent —
+  // the user keeps control and can edit or clear it (spec §7.4 / §8.2).
+  async function handleRecommendationStart(input: {
+    name: string;
+    prompt: string;
+    metadata: ProjectMetadata;
+    onboardingEntry: OnboardingEntry;
+  }): Promise<boolean> {
+    const pluginId = defaultPluginIdForMetadata(input.metadata);
+    // Create FIRST, then tear down the recommendation only once it actually
+    // opened. Dismissing up-front turned a transient create/navigation failure
+    // into an onboarding dead-end: the user dropped back to generic Home with
+    // no way to retry the starter they just picked. On failure we keep the
+    // recommendation mounted. The onboarding entry rides along so the create
+    // success path stashes it keyed by the created project id — nothing is
+    // written on failure.
+    //
+    // Do NOT swallow the failure here: `onCreateProject` throws on real create
+    // failures, and a silent `catch` would leave the CTA looking clickable with
+    // no feedback. Let the error propagate so Home surfaces it in the same
+    // error channel the other entry actions use (HomeView owns `setError`), and
+    // return `false` for a clean no-project result so the caller can retry.
+    const ok =
+      (await onCreateProject({
+        name: input.name,
+        skillId: null,
+        designSystemId: null,
+        metadata: input.metadata,
+        pendingPrompt: input.prompt,
+        ...(pluginId ? { pluginId } : {}),
+        autoSendFirstMessage: false,
+        onboardingEntry: input.onboardingEntry,
+      })) !== false;
+    if (ok) dismissRecommendation();
+    return ok;
   }
 
   const avatarMenu = (
@@ -995,6 +1079,7 @@ export function EntryShell({
             {amrLowBalanceWarn ? (
               <AmrLowBalanceDialog
                 balanceUsd={amrLowBalanceWarn.snapshot.balanceUsd}
+                plan={amrLowBalanceWarn.plan}
                 profile={amrLowBalanceWarn.snapshot.profile}
                 entrySource="home_low_balance_warn_recharge"
                 metricsConsent={config.telemetry?.metrics === true}
@@ -1033,6 +1118,9 @@ export function EntryShell({
                 skillsLoading={skillsLoading}
                 connectors={connectors}
                 promptTemplates={promptTemplates}
+                recommendation={onboardingRec}
+                onRecommendationStart={handleRecommendationStart}
+                onRecommendationDismiss={dismissRecommendation}
                 executionSwitcher={view === 'home' ? homeExecutionSwitcher : undefined}
               />
             </div>
@@ -1205,7 +1293,9 @@ function OnboardingView({
   onApiModelChange: (model: string) => void;
   onConfigPersist: (cfg: AppConfig) => Promise<void> | void;
   onRefreshAgents: () => Promise<AgentInfo[]> | AgentInfo[];
-  onFinish: () => void;
+  // `survey` is passed on the About-you completion paths (not on skip) so the
+  // shell can build a personalized Home recommendation.
+  onFinish: (survey?: { role: string; useCases: string[] }) => void;
   onThemeChange: (theme: AppTheme) => void;
   onGoBuild: () => void;
 }) {
@@ -1243,6 +1333,9 @@ function OnboardingView({
     | { status: 'running'; inputKey: string }
     | { status: 'done'; inputKey: string; result: ConnectionTestResponse }
   >({ status: 'idle' });
+  const [agentTestState, setAgentTestState] = useState<OnboardingAgentTestState>({
+    status: 'idle',
+  });
   const [providerModelsState, setProviderModelsState] = useState<
     | { status: 'idle' }
     | { status: 'running'; inputKey: string }
@@ -1362,6 +1455,21 @@ function OnboardingView({
   const amrSelectedAndSignedOut = runtime === 'amr' && !amrSignedIn;
   const selectedAgent = visibleAgents.find((agent) => agent.id === config.agentId) ?? null;
   const selectedAgentChoice = selectedAgent ? (config.agentModels?.[selectedAgent.id] ?? {}) : {};
+  const normalizedSelectedAgentChoice = effectiveAgentModelChoice(selectedAgent, selectedAgentChoice) ?? selectedAgentChoice;
+  const selectedAgentTestModel = normalizedSelectedAgentChoice.model ?? defaultAgentModelId(selectedAgent) ?? '';
+  const selectedAgentTestReasoning = selectedAgentChoice.reasoning ?? '';
+  const agentTestInputKey = [
+    selectedAgent?.id ?? '',
+    selectedAgentTestModel,
+    selectedAgentTestReasoning,
+    JSON.stringify(config.agentCliEnv ?? {}),
+  ].join('\n');
+  const visibleAgentTestState =
+    agentTestState.status === 'running' ||
+    (agentTestState.status !== 'idle' && agentTestState.inputKey === agentTestInputKey)
+      ? agentTestState
+      : { status: 'idle' as const };
+  const canTestAgent = Boolean(selectedAgent) && daemonLive;
   // Connect-step (step 0) gate. Continue may only advance once the selected
   // runtime is actually usable: AMR signed in, an available local CLI chosen,
   // or a BYOK provider whose connection test passed. AMR-selected-but-signed-out
@@ -2045,7 +2153,10 @@ function OnboardingView({
     }
     if (isLastStep) {
       await runOnboardingCompletion('completed_without_design_system');
-      onFinish();
+      onFinish({
+        role: profileRef.current.role,
+        useCases: profileRef.current.useCase,
+      });
       return;
     }
     emitOnboardingClick('continue', 'continue');
@@ -2113,7 +2224,10 @@ function OnboardingView({
   async function handleFinishToHome(): Promise<void> {
     if (newsletterSubmitting) return;
     await runOnboardingCompletion('completed_without_design_system');
-    onFinish();
+    onFinish({
+      role: profileRef.current.role,
+      useCases: profileRef.current.useCase,
+    });
   }
 
   async function handleFinishToBuild(): Promise<void> {
@@ -2397,6 +2511,37 @@ function OnboardingView({
           kind: 'unknown',
           latencyMs: 0,
           model: config.model,
+          detail: error instanceof Error ? error.message : 'Test request failed',
+        },
+      });
+    }
+  }
+
+  async function testAgentInline() {
+    if (!selectedAgent || !canTestAgent || agentTestState.status === 'running') return;
+    const inputKey = agentTestInputKey;
+    const agent = selectedAgent;
+    const model = selectedAgentTestModel;
+    const reasoning = selectedAgentTestReasoning;
+    setAgentTestState({ status: 'running', inputKey });
+    try {
+      const result = await testAgent({
+        agentId: agent.id,
+        model: model || undefined,
+        reasoning: reasoning || undefined,
+        agentCliEnv: config.agentCliEnv ?? {},
+      });
+      setAgentTestState({ status: 'done', inputKey, result });
+    } catch (error) {
+      setAgentTestState({
+        status: 'done',
+        inputKey,
+        result: {
+          ok: false,
+          kind: 'unknown',
+          latencyMs: 0,
+          model: model || 'default',
+          agentName: agent.name,
           detail: error instanceof Error ? error.message : 'Test request failed',
         },
       });
@@ -2695,7 +2840,7 @@ function OnboardingView({
                     daemonLive={daemonLive}
                     selectedAgentId={config.agentId}
                     selectedAgent={selectedAgent}
-                    selectedModel={selectedAgentChoice.model ?? selectedAgent?.models?.[0]?.id ?? ''}
+                    selectedModel={normalizedSelectedAgentChoice.model ?? defaultAgentModelId(selectedAgent) ?? ''}
                     modelOptions={agentModelOptions}
                     scanStatus={cliScanStatus}
                     onRefresh={() => void scanCliAgents()}
@@ -2707,6 +2852,9 @@ function OnboardingView({
                       if (!selectedAgent) return;
                       onAgentModelChange(selectedAgent.id, { model });
                     }}
+                    testState={visibleAgentTestState}
+                    canTest={canTestAgent}
+                    onTest={() => void testAgentInline()}
                   />
                 ) : null}
                 {connectExpanded === 'byok' ? (
@@ -3033,6 +3181,9 @@ function OnboardingCliSetupPanel({
   onRefresh,
   onSelectAgent,
   onSelectModel,
+  testState,
+  canTest,
+  onTest,
 }: {
   agents: AgentInfo[];
   daemonLive: boolean;
@@ -3044,9 +3195,13 @@ function OnboardingCliSetupPanel({
   onRefresh: () => void;
   onSelectAgent: (agentId: string) => void;
   onSelectModel: (model: string) => void;
+  testState: OnboardingAgentTestState;
+  canTest: boolean;
+  onTest: () => void;
 }) {
   const t = useT();
   const scanning = scanStatus === 'scanning';
+  const running = testState.status === 'running';
   const showEmpty = scanStatus === 'done' && agents.length === 0;
   return (
     <div className="onboarding-view__setup-panel">
@@ -3055,14 +3210,25 @@ function OnboardingCliSetupPanel({
           <strong>{t('settings.localCli')}</strong>
           <p>{daemonLive ? t('settings.codeAgentHint') : t('settings.modeDaemonOffline')}</p>
         </div>
-        <button
-          type="button"
-          className={`onboarding-view__mini-button${scanning ? ' is-loading' : ''}`}
-          onClick={onRefresh}
-          disabled={scanning}
-        >
-          {scanning ? t('settings.rescanRunning') : t('settings.rescan')}
-        </button>
+        <div className="onboarding-view__setup-head-actions">
+          <button
+            type="button"
+            className={`onboarding-view__mini-button${scanning ? ' is-loading' : ''}`}
+            onClick={onRefresh}
+            disabled={scanning}
+          >
+            {scanning ? t('settings.rescanRunning') : t('settings.rescan')}
+          </button>
+          <button
+            type="button"
+            className={`onboarding-view__mini-button${running ? ' is-loading' : ''}`}
+            onClick={onTest}
+            disabled={running || !canTest}
+            title={t('settings.testTitle')}
+          >
+            {running ? t('settings.testRunning') : t('settings.test')}
+          </button>
+        </div>
       </div>
       {scanning ? (
         <div className="onboarding-view__scan-copy" role="status">
@@ -3112,6 +3278,24 @@ function OnboardingCliSetupPanel({
           searchable
           searchPlaceholder={t('newproj.modelSearch')}
         />
+      ) : null}
+      {testState.status === 'running' ? (
+        <p className="onboarding-view__test-status is-running" role="status">
+          {t('settings.testRunning')}
+        </p>
+      ) : testState.status === 'done' ? (
+        <p
+          className={`onboarding-view__test-status is-${onboardingTestVariant(
+            testState.result,
+          )}`}
+          role={testState.result.ok ? 'status' : 'alert'}
+        >
+          {renderOnboardingAgentTestMessage(
+            t,
+            testState.result,
+            selectedAgent?.name ?? '',
+          )}
+        </p>
       ) : null}
     </div>
   );
@@ -3583,6 +3767,37 @@ function renderOnboardingProviderTestMessage(
       });
       return result.detail ? `${baseMessage} ${result.detail}` : baseMessage;
     }
+    case 'timeout':
+      return t('settings.testTimeout', { ms });
+    default:
+      return t('settings.testUnknown', { detail: result.detail ?? '' });
+  }
+}
+
+function renderOnboardingAgentTestMessage(
+  t: ReturnType<typeof useT>,
+  result: ConnectionTestResponse,
+  fallbackAgentName: string,
+): string {
+  const ms = Math.max(0, Math.round(result.latencyMs));
+  const sample = result.sample ?? '';
+  const agentName = result.agentName ?? fallbackAgentName;
+  if (result.ok) {
+    const baseMessage = t('settings.testSuccessCli', { agentName, ms, sample });
+    return result.detail ? `${baseMessage} ${result.detail}` : baseMessage;
+  }
+  switch (result.kind) {
+    case 'agent_not_installed':
+      return t('settings.testAgentMissing', { agentName });
+    case 'agent_auth_required':
+      return result.detail || 'Agent authentication is required.';
+    case 'agent_spawn_failed':
+      return t('settings.testAgentSpawn', {
+        agentName,
+        detail: result.detail ?? '',
+      });
+    case 'rate_limited':
+      return t('settings.testRateLimited');
     case 'timeout':
       return t('settings.testTimeout', { ms });
     default:
