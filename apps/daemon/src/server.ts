@@ -109,9 +109,12 @@ import {
   pinAssistantMessageOnRunCreate,
 } from './runtimes/chat-run-messages.js';
 import {
+  createRunSideEffectLedger,
+  foldEventIntoRunSideEffectLedger,
   resolveRunProjectKindForAnalytics,
   retryFinalResultForRunStatus,
   runRetryEventsForAnalytics,
+  runSideEffectsForRun,
   scanRunEventsForFinishedProps,
   scanRunEventsForRetrySideEffects,
 } from './runtimes/run-lifecycle-analytics.js';
@@ -2401,6 +2404,14 @@ export async function startServer({
       createSseResponse,
       createSseErrorPayload,
       runsLogDir: path.join(RUNTIME_DATA_DIR, 'runs'),
+      // Fold committed side effects into a truncation-proof per-run ledger as
+      // each event is emitted, so the finalization verdict (retry safety gate,
+      // artifact_count, close-status artifactProducedThisRun) does not depend on
+      // early tool_use/artifact events surviving the run.events ring buffer.
+      onEventEmitted: (run, record) => {
+        if (!run.sideEffectLedger) run.sideEffectLedger = createRunSideEffectLedger();
+        foldEventIntoRunSideEffectLedger(run.sideEffectLedger, record);
+      },
     }),
     analytics: analyticsService,
     getAppVersion: () => telemetry.getCachedAppVersion()?.version ?? '0.0.0',
@@ -5056,7 +5067,7 @@ export async function startServer({
         events: run.events,
       });
       const sideEffects = {
-        ...scanRunEventsForRetrySideEffects(run.events),
+        ...runSideEffectsForRun(run),
         cancelRequested: !!run.cancelRequested,
       };
       const decision = decideSafeRunRetry({
@@ -7242,7 +7253,7 @@ export async function startServer({
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
-      const runArtifactSideEffects = scanRunEventsForRetrySideEffects(run.events);
+      const runArtifactSideEffects = runSideEffectsForRun(run);
       const status = classifyChatRunCloseStatus({
         cancelRequested: !!run.cancelRequested,
         code,
