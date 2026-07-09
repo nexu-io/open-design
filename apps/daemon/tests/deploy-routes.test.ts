@@ -329,6 +329,42 @@ describe('deploy provider routes', () => {
     });
   });
 
+  it('keeps display.dev preflight aligned with the single-file publish set', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const projectId = `displaydev-preflight-${Date.now()}`;
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width"><h1>Hello</h1>',
+    );
+    await writeFile(
+      path.join(dir, 'unused.html'),
+      '<!doctype html><meta name="viewport" content="width=device-width"><h1>Unused</h1>',
+    );
+
+    const resp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy/preflight`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: 'index.html',
+        providerId: DISPLAYDEV_PROVIDER_ID,
+      }),
+    });
+
+    expect(resp.status).toBe(200);
+    const body = await resp.json() as {
+      files: Array<{ path: string }>;
+      [key: string]: unknown;
+    };
+    expect(body).toMatchObject({
+      providerId: DISPLAYDEV_PROVIDER_ID,
+      entry: 'index.html',
+      totalFiles: 1,
+    });
+    expect(body.files.map((file) => file.path).sort()).toEqual(['index.html']);
+  });
+
   it('does not infer display.dev claim state when an API key is saved', async () => {
     const dataDir = process.env.OD_DATA_DIR;
     if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');

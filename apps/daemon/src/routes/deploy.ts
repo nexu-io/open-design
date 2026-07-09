@@ -265,7 +265,11 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         PROJECTS_DIR,
         req.params.id,
         fileName,
-        { metadata: preflightProject?.metadata, providerId, includeProjectFiles: true },
+        {
+          metadata: preflightProject?.metadata,
+          providerId,
+          includeProjectFiles: providerId !== DISPLAYDEV_PROVIDER_ID,
+        },
       );
       res.json(body);
     } catch (err: any) {
