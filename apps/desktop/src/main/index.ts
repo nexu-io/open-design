@@ -560,6 +560,9 @@ export async function runDesktopMain(
   // only recovers the locale string for the BrowserWindow below.
   const osLocale = applyOsLocaleSwitch(app);
 
+  // ready 전에 호출해야 macOS 앱 메뉴·dock 이름에 반영됨 — 데스크톱 앱명은 M-AX
+  app.setName("M-AX");
+
   await app.whenReady();
   configureAboutPanel(options);
 

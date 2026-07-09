@@ -1032,6 +1032,7 @@ export interface HomeNavClickProps {
     | 'automations'
     | 'plugins'
     | 'design_systems'
+    | 'brands'
     | 'integrations'
     | 'new_project_plus'
     | 'help';

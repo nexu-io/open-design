@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "od-design-system-project/v1",
+  "id": "bodoc-iam",
+  "name": "Bodoc IAM",
+  "category": "Marketing",
+  "description": "보닥 브랜드의 Braze IAM 디폴트 스킨 — 색 역할·타이포·간격·컴포넌트 룩·모션만 담는 순수 비주얼 계약. 브랜드 사실은 brands/bodoc/, 채널 포맷은 brands/bodoc/deliverables/iam.md 소관.",
+  "source": { "type": "bundled", "origin": "Marketing AX bodoc brand default IAM skin" },
+  "files": {
+    "design": "DESIGN.md",
+    "tokens": "tokens.css",
+    "components": "components.html"
+  }
+}

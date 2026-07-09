@@ -20,6 +20,7 @@ export type EntryView =
   | 'tasks'
   | 'plugins'
   | 'design-systems'
+  | 'brands'
   | 'integrations';
 
 interface Props {
@@ -164,6 +165,15 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }
           testId="entry-nav-design-systems"
         >
           <Icon name="blocks" size={18} />
+        </NavButton>
+        <NavButton
+          active={view === 'brands'}
+          ariaLabel={t('entry.navBrands')}
+          tooltip={t('entry.navBrands')}
+          onClick={() => selectView('brands')}
+          testId="entry-nav-brands"
+        >
+          <Icon name="apple" size={18} />
         </NavButton>
         <NavButton
           active={view === 'plugins'}

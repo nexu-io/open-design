@@ -197,7 +197,7 @@ async function expectWorkspaceReady(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  const loading = page.getByText('Loading Marketing AX…');
+  const loading = page.getByText('Loading M-AX…');
   await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
 }
 

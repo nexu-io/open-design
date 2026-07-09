@@ -18,6 +18,21 @@ import {
   findChip,
 } from '../../src/components/home-hero/chips';
 
+// The home rail currently hides every chip except the bodoc channels
+// (Braze IAM / Naver Blog / Card News) via the catalog's `hidden` flag.
+// This suite covers the flow logic BEHIND the chips, so it renders the
+// full catalog; visibility policy itself is owned by
+// HomeHero.rail-visibility.test.tsx.
+vi.mock('../../src/components/home-hero/chips', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../../src/components/home-hero/chips')>();
+  return {
+    ...mod,
+    chipsForGroup: (group: 'create' | 'migrate') =>
+      mod.HOME_HERO_CHIPS.filter((c) => c.group === group),
+  };
+});
+
+
 afterEach(() => {
   cleanup();
 });
@@ -434,6 +449,14 @@ describe('HomeHero intent rail', () => {
         intent: 'live-artifact',
         fidelity: 'high-fidelity',
       },
+    });
+  });
+
+  it('card news chip routes to the bundled cardnews-instagram scenario plugin with a green create-time badge', () => {
+    expect(findChip('cardnews-instagram')?.action).toMatchObject({
+      kind: 'apply-scenario',
+      pluginId: 'example-cardnews-instagram',
+      projectKind: 'prototype',
     });
   });
 });

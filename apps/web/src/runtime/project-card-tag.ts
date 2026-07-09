@@ -45,3 +45,8 @@ export function resolveProjectBadge(
     (badge.tone && TONE_CLASS[badge.tone]) || TONE_CLASS.neutral;
   return { label: badge.label, toneClass };
 }
+
+// 프로젝트의 브랜드 바인딩 배지 — plugin 배지와 별개로 브랜드 소속 표시
+export function resolveProjectBrandLabel(project: Project): string | null {
+  return typeof project.brandId === 'string' && project.brandId ? project.brandId : null;
+}

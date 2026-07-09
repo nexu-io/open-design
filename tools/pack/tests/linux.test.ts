@@ -339,7 +339,7 @@ describe("stopPackedLinuxHeadless", () => {
       await writeFile(
         markerPath,
         `${JSON.stringify({
-          appPath: "/tmp/Marketing-AX.AppImage",
+          appPath: "/tmp/M-AX.AppImage",
           executablePath: "/tmp/.mount_od/AppRun",
           logPath: join(namespaceRoot, "logs", "desktop", "latest.log"),
           namespaceRoot,
@@ -400,7 +400,7 @@ describe("stopPackedLinuxHeadless", () => {
       await writeFile(
         markerPath,
         `${JSON.stringify({
-          appPath: "/tmp/Marketing-AX.AppImage",
+          appPath: "/tmp/M-AX.AppImage",
           executablePath: "/tmp/.mount_od/AppRun",
           logPath: join(namespaceRoot, "logs", "desktop", "latest.log"),
           namespaceRoot,
@@ -469,7 +469,7 @@ describe("stopPackedLinuxHeadless", () => {
       await writeFile(
         markerPath,
         `${JSON.stringify({
-          appPath: "/tmp/Marketing-AX.AppImage",
+          appPath: "/tmp/M-AX.AppImage",
           executablePath: "/tmp/.mount_od/AppRun",
           logPath: join(namespaceRoot, "logs", "desktop", "latest.log"),
           namespaceRoot,
@@ -546,7 +546,7 @@ describe("resolveProductionInstallCommand", () => {
 describe("renderDesktopTemplate", () => {
   const template = `[Desktop Entry]
 Type=Application
-Name=Marketing AX (@@NAMESPACE@@)
+Name=M-AX (@@NAMESPACE@@)
 Exec=env MAX_PACKAGED_NAMESPACE=@@NAMESPACE@@ @@EXEC_PATH@@ --appimage-extract-and-run %U
 Icon=@@ICON_PATH@@
 MimeType=x-scheme-handler/od;
@@ -555,12 +555,12 @@ MimeType=x-scheme-handler/od;
   it("substitutes all @@TOKEN@@ placeholders", () => {
     const out = renderDesktopTemplate(template, {
       namespace: "default",
-      execPath: "/home/u/.local/bin/Marketing-AX.default.AppImage",
+      execPath: "/home/u/.local/bin/M-AX.default.AppImage",
       iconName: "open-design-default",
     });
-    expect(out).toContain("Name=Marketing AX (default)");
+    expect(out).toContain("Name=M-AX (default)");
     expect(out).toContain(
-      "Exec=env MAX_PACKAGED_NAMESPACE=default /home/u/.local/bin/Marketing-AX.default.AppImage --appimage-extract-and-run %U",
+      "Exec=env MAX_PACKAGED_NAMESPACE=default /home/u/.local/bin/M-AX.default.AppImage --appimage-extract-and-run %U",
     );
     expect(out).toContain("Icon=open-design-default");
   });
@@ -663,7 +663,7 @@ describe("inspectPackedLinuxApp", () => {
     requestJsonIpcMock.mockReset();
     requestJsonIpcMock
       .mockResolvedValueOnce({ state: "running", url: "max://app/" })
-      .mockResolvedValueOnce({ ok: true, value: "Marketing AX" })
+      .mockResolvedValueOnce({ ok: true, value: "M-AX" })
       .mockResolvedValueOnce({ path: "/tmp/open-design-linux.png" });
 
     const result = await inspectPackedLinuxApp(makeConfig(), {
@@ -672,7 +672,7 @@ describe("inspectPackedLinuxApp", () => {
     });
 
     expect(result).toEqual({
-      eval: { ok: true, value: "Marketing AX" },
+      eval: { ok: true, value: "M-AX" },
       screenshot: { path: "/tmp/open-design-linux.png" },
       status: { state: "running", url: "max://app/" },
     });
@@ -681,7 +681,7 @@ describe("inspectPackedLinuxApp", () => {
 });
 
 describe("matchesAppImageProcess", () => {
-  const installPath = "/home/u/.local/bin/Marketing-AX.default.AppImage";
+  const installPath = "/home/u/.local/bin/M-AX.default.AppImage";
 
   it("matches FUSE-mode (executable === installPath)", () => {
     const ok = matchesAppImageProcess(
@@ -727,7 +727,7 @@ describe("matchesAppImageProcess", () => {
     const ok = matchesAppImageProcess(
       {
         pid: 1234,
-        executable: "/tmp/appimage_extracted_fe548e54/Marketing AX",
+        executable: "/tmp/appimage_extracted_fe548e54/M-AX",
         env: { APPIMAGE: installPath },
       },
       installPath,
@@ -739,7 +739,7 @@ describe("matchesAppImageProcess", () => {
     const ok = matchesAppImageProcess(
       {
         pid: 1234,
-        executable: "/tmp/appimage_extracted_fe548e54/Marketing AX",
+        executable: "/tmp/appimage_extracted_fe548e54/M-AX",
         env: { APPIMAGE: "/elsewhere/Other.AppImage" },
       },
       installPath,

@@ -26,6 +26,7 @@ vi.mock('../../src/i18n', () => ({
       'entry.navProjects': 'Projects',
       'entry.navTasks': 'Automations',
       'entry.navPlugins': 'Plugins',
+      'entry.navBrands': 'Brands',
       'entry.navIntegrations': 'Integrations',
       'settings.welcomeTitle': 'Welcome',
     };
@@ -219,6 +220,20 @@ describe('WorkspaceTabsBar navigation semantics', () => {
 
     // The single entry tab in a non-home view is still permanent (no close btn).
     expect(screen.queryByRole('button', { name: 'Close tab' })).toBeNull();
+  });
+
+  it('pins a brand-detail route to the Brands entry tab, not Design systems', async () => {
+    // brand-detail is not a home route; without explicit handling it fell through
+    // to the 'design-systems' default and the chrome mislabelled the tab.
+    render(
+      <WorkspaceTabsBar route={{ kind: 'brand-detail', brandId: 'bodoc' }} projects={[project]} />,
+    );
+    await waitFor(() => {
+      const tabs = screen.getAllByRole('tab');
+      expect(tabs).toHaveLength(1);
+      expect(tabs[0]?.textContent ?? '').toContain('Brands');
+      expect(tabs[0]?.textContent ?? '').not.toContain('Design systems');
+    });
   });
 
   it('keeps the entry tab when opening a project from a non-home entry view', async () => {

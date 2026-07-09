@@ -151,7 +151,7 @@ async function main(): Promise<void> {
   }
 
   const shutdown = async (): Promise<void> => {
-    process.stdout.write("\n Shutting down Marketing AX...\n");
+    process.stdout.write("\n Shutting down M-AX...\n");
     await ipcServer.close().catch(() => undefined);
     await sidecars.close().catch(() => undefined);
     await identity.close().catch(() => undefined);
@@ -181,7 +181,7 @@ async function main(): Promise<void> {
   });
   await confirmPackagedLauncherRuntime(launcherRuntime);
 
-  process.stdout.write(`\n Marketing AX is running\n\n`);
+  process.stdout.write(`\n M-AX is running\n\n`);
   process.stdout.write(` ➜ ${colorize(webUrl)}\n\n`);
   process.stdout.write(` Press Ctrl+C to stop\n\n`);
 

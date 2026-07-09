@@ -4,6 +4,7 @@ export * from './tasks.js';
 export * from './api/app-config.js';
 export * from './api/automations.js';
 export * from './api/artifacts.js';
+export * from './api/brands.js';
 export * from './api/braze.js';
 export * from './api/chat.js';
 export * from './api/community.js';

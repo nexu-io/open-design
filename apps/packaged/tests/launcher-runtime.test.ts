@@ -73,7 +73,7 @@ describe("resolvePackagedLauncherRuntime", () => {
         root,
         version: "1.2.3-beta.5",
       });
-      const resourcesPath = join(versionPaths.payloadRoot, "Marketing AX Beta.app", "Contents", "Resources");
+      const resourcesPath = join(versionPaths.payloadRoot, "M-AX Beta.app", "Contents", "Resources");
       await mkdir(join(resourcesPath, "open-design", "bin"), { recursive: true });
       await mkdir(join(resourcesPath, "prebundled", "daemon"), { recursive: true });
       await mkdir(join(resourcesPath, "prebundled", "web"), { recursive: true });
@@ -95,8 +95,8 @@ describe("resolvePackagedLauncherRuntime", () => {
         `${JSON.stringify({
           channel: "beta",
           entry: {
-            cwd: "payload/Marketing AX Beta.app",
-            executable: "payload/Marketing AX Beta.app/Contents/MacOS/Marketing AX Beta",
+            cwd: "payload/M-AX Beta.app",
+            executable: "payload/M-AX Beta.app/Contents/MacOS/M-AX Beta",
           },
           namespace: config.namespace,
           payloadRoot: "payload",
@@ -120,7 +120,7 @@ describe("resolvePackagedLauncherRuntime", () => {
         join(paths.installationRoot, "launcher", "channels", "beta", "namespaces", config.namespace, "install.json"),
         `${JSON.stringify({
           channel: "beta",
-          launchPath: "/Applications/Marketing AX Beta.app",
+          launchPath: "/Applications/M-AX Beta.app",
           namespace: config.namespace,
           schemaVersion: LAUNCHER_SCHEMA_VERSION,
         })}\n`,
@@ -129,7 +129,7 @@ describe("resolvePackagedLauncherRuntime", () => {
       const runtime = await resolvePackagedLauncherRuntime(config, paths);
 
       expect(runtime.source).toBe("payload");
-      expect(runtime.installedLaunchPath).toBe("/Applications/Marketing AX Beta.app");
+      expect(runtime.installedLaunchPath).toBe("/Applications/M-AX Beta.app");
       expect(runtime.targetVersion).toBe("1.2.3-beta.5");
       expect(runtime.config.appVersion).toBe("1.2.3-beta.5");
       expect(runtime.config.resourceRoot).toBe(join(resourcesPath, "open-design"));

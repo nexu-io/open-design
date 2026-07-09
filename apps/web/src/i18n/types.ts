@@ -822,7 +822,30 @@ export interface Dict {
   'entry.navTasks': string;
   'entry.navPlugins': string;
   'entry.navDesignSystems': string;
+  'entry.navBrands': string;
   'entry.navIntegrations': string;
+  'brands.empty': string;
+  'brands.back': string;
+  'brands.core': string;
+  'brands.loadFailed': string;
+  'brands.pageTitle': string;
+  'brands.pageSubtitle': string;
+  'brands.sectionContext': string;
+  'brands.sectionDesignSystem': string;
+  'brands.sectionDocs': string;
+  'brands.docsHint': string;
+  'brands.fieldTagline': string;
+  'brands.fieldWebsite': string;
+  'brands.fieldAudience': string;
+  'brands.fieldKeyMessage': string;
+  'brands.fieldAvoid': string;
+  'brands.fieldChannels': string;
+  'brands.palette': string;
+  'brands.typography': string;
+  'brands.voiceTone': string;
+  'brands.coreDocLabel': string;
+  'brands.projectCount': string;
+  'brands.paletteChannelMeta': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;
   'workspaceTabs.marketplace': string;
@@ -888,6 +911,7 @@ export interface Dict {
   'homeHero.chip.hyperframes': string;
   'homeHero.chip.brazeIam': string;
   'homeHero.chip.naverBlog': string;
+  'homeHero.chip.cardnewsInstagram': string;
   'homeHero.chip.audio': string;
   'homeHero.chip.createPlugin': string;
   'homeHero.chip.figma': string;
@@ -897,6 +921,7 @@ export interface Dict {
   'homeHero.chip.hyperframesHint': string;
   'homeHero.chip.brazeIamHint': string;
   'homeHero.chip.naverBlogHint': string;
+  'homeHero.chip.cardnewsInstagramHint': string;
   'homeHero.chip.createPluginHint': string;
   'homeHero.chip.figmaHint': string;
   'homeHero.chip.folderHint': string;
@@ -1933,6 +1958,10 @@ export interface Dict {
   'ds.tokens': string;
   'ds.specToggle': string;
   'ds.specLoading': string;
+  'ds.detailLoadFailed': string;
+  'ds.back': string;
+  'ds.detailLoading': string;
+  'ds.detailLoadingHint': string;
 
   // Avatar menu (project topbar)
   'avatar.title': string;
@@ -2602,6 +2631,12 @@ export interface Dict {
   'fileViewer.markTool': string;
   'fileViewer.boxSelect': string;
   'fileViewer.screenshot': string;
+  'fileViewer.openFolder': string;
+  'fileViewer.openFolderFailed': string;
+  'fileViewer.openFolderWebFallback': string;
+  'fileViewer.copyCaption': string;
+  'fileViewer.copyCaptionDone': string;
+  'fileViewer.copyCaptionFailed': string;
   'manualEdit.layers': string;
   'manualEdit.editableCount': string;
   'manualEdit.hiddenBadge': string;

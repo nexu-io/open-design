@@ -4,6 +4,6 @@ export class PackagedPathAccessError extends Error {
   constructor(message: string, options?: { cause?: unknown; title?: string }) {
     super(message, options);
     this.name = "PackagedPathAccessError";
-    this.title = options?.title ?? "Marketing AX cannot access its data folder";
+    this.title = options?.title ?? "M-AX cannot access its data folder";
   }
 }

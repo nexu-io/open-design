@@ -173,7 +173,7 @@ const DAEMON_STRING_FLAGS = new Set([
 const DAEMON_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json', 'headless', 'serve-web', 'no-open',
 ]);
-const LIBRARY_STRING_FLAGS = new Set(['daemon-url', 'query', 'tag']);
+const LIBRARY_STRING_FLAGS = new Set(['daemon-url', 'query', 'tag', 'deliverable']);
 const LIBRARY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
 const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
@@ -288,6 +288,7 @@ const SUBCOMMAND_MAP = {
   skills: runSkills,
   'design-systems': runDesignSystems,
   craft: runCraft,
+  brand: runBrand,
   diagnostics: runDiagnostics,
   status: runStatus,
   version: runVersion,
@@ -6374,6 +6375,54 @@ async function runLibraryList(name, args) {
 
 async function runSkills(args)        { return runLibraryList('skills', args); }
 async function runCraft(args)         { return runLibraryList('craft', args); }
+
+// od brand list | od brand show <id> [--deliverable <key>] [--json]
+//
+// Brand/DS separation (Task 7 routes) — CLI mirror of GET /api/brands and
+// GET /api/brands/:id?deliverable=<key> so the brand registry stays reachable
+// headlessly, not just from the Brands web page (Task 10). Kept as its own
+// function rather than routed through runLibraryList because `show` needs the
+// --deliverable query param that the generic list/show helper doesn't support.
+async function runBrand(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od brand list                              List brands.
+  od brand show <id> [--deliverable <key>]   Print brand core (+ one deliverable).`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const sub = args[0];
+  const rest = args.slice(1);
+  const flags = parseFlags(rest, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  switch (sub) {
+    case 'list': {
+      const resp = await fetch(`${base}/api/brands`);
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      const rows = data?.brands ?? [];
+      for (const row of rows) {
+        console.log(`${row.id}\t${row.title}\t[${(row.deliverables ?? []).join(', ')}]`);
+      }
+      return;
+    }
+    case 'show': {
+      const id = rest.find((a) => !a.startsWith('-'));
+      if (!id) {
+        console.error('Usage: od brand show <id> [--deliverable <key>]');
+        process.exit(2);
+      }
+      const qs = flags.deliverable ? `?deliverable=${encodeURIComponent(flags.deliverable)}` : '';
+      const resp = await fetch(`${base}/api/brands/${encodeURIComponent(id)}${qs}`);
+      if (!resp.ok) return structuredHttpFailure(resp);
+      process.stdout.write(JSON.stringify(await resp.json(), null, 2) + '\n');
+      return;
+    }
+    default:
+      console.error(`unknown subcommand: od brand ${sub}`);
+      process.exit(2);
+  }
+}
 
 async function runDesignSystems(args) {
   if (args[0] === 'rename') return runDesignSystemRename(args.slice(1));

@@ -234,6 +234,12 @@ export interface ComposeInput {
   // Free-form instructions the user set on this specific project.
   // Injected after user-level instructions and before the design system.
   projectInstructions?: string | undefined;
+  brandTitle?: string | undefined;
+  brandCoreMd?: string | undefined;
+  brandDeliverableKey?: string | undefined;
+  brandDeliverableMd?: string | undefined;
+  /** 서브에이전트에 전달할 소스 파일 경로 안내 (데몬이 절대경로 조립) */
+  brandSourceNote?: string | undefined;
 }
 
 export function composeSystemPrompt({
@@ -254,6 +260,11 @@ export function composeSystemPrompt({
   locale,
   userInstructions,
   projectInstructions,
+  brandTitle,
+  brandCoreMd,
+  brandDeliverableKey,
+  brandDeliverableMd,
+  brandSourceNote,
 }: ComposeInput): string {
   // Discovery + philosophy goes FIRST so its hard rules ("emit a form on
   // turn 1", "branch on brand on turn 2", "TodoWrite on turn 3", run
@@ -341,6 +352,20 @@ export function composeSystemPrompt({
   if (projectInstructions && projectInstructions.trim().length > 0) {
     parts.push(
       `\n\n## Custom instructions (project-level)\n\nThe user has set the following instructions for this specific project. They take precedence over user-level custom instructions whenever both address the same topic (e.g. if user-level says "use spaces" but project-level says "use tabs", use tabs).\n\n${projectInstructions.trim()}`,
+    );
+  }
+
+  if (brandCoreMd) {
+    parts.push(
+      `\n\n## Active brand${brandTitle ? ` — ${brandTitle}` : ''}\n\n` +
+        `Treat the following brand context as authoritative for voice, terminology, forbidden expressions, services, sources, and the brand palette. It applies to every deliverable of this brand.` +
+        `${brandSourceNote ? `\n${brandSourceNote}` : ''}\n\n${brandCoreMd}`,
+    );
+  }
+  if (brandDeliverableMd) {
+    parts.push(
+      `\n\n## Brand deliverable context${brandDeliverableKey ? ` — ${brandDeliverableKey}` : ''}\n\n` +
+        `Channel-specific production facts for the active deliverable. These extend the brand core; on channel-format concerns this section wins.\n\n${brandDeliverableMd}`,
     );
   }
 

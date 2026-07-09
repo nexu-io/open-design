@@ -1,0 +1,42 @@
+/* Role: 브랜드 상세 리치 페이지 레이아웃 — 히어로/섹션/팔레트/문서 마스터-디테일 */
+/* Full-width scroll container. The view mounts directly inside
+ * .workspace-shell__body (overflow:hidden), so it must own its own scroll or the
+ * content clips with no scrollbar. Scroll lives on the full-width .page (not the
+ * max-width .inner) so the scrollbar sits at the viewport edge like other pages.
+ * Mirrors the .entry-main--scroll / .entry-main__inner split. See shell.css. */
+.page { height: 100%; overflow-y: auto; }
+/* Centered content column — max-width + margin:auto gives the side margins other
+ * pages have; the scrollbar stays outside it on .page. */
+.inner { width: 100%; max-width: 1200px; margin: 0 auto; padding: 40px 32px 64px; display: flex; flex-direction: column; gap: 32px; }
+.breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg2, #7d8085); }
+.breadcrumbLink { background: none; border: 0; color: inherit; cursor: pointer; padding: 0; }
+.hero { display: flex; align-items: center; gap: 16px; }
+.tile { width: 64px; height: 64px; border-radius: 16px; display: grid; place-items: center; color: #fff; font-size: 26px; font-weight: 700; }
+.heroTitle { font-size: 24px; font-weight: 700; margin: 0; }
+.heroSubtitle { font-size: 14px; color: var(--fg2, #7d8085); margin: 2px 0 0; }
+.section { display: flex; flex-direction: column; gap: 12px; }
+.sectionHead { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+.sectionDot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent, #16c5ff); }
+.contextTable { border: 1px solid var(--border, #e5e5ea); border-radius: 12px; overflow: hidden; }
+.contextRow { display: grid; grid-template-columns: 160px 1fr; gap: 16px; padding: 16px 20px; border-bottom: 1px solid var(--border, #e5e5ea); }
+.contextRow:last-child { border-bottom: 0; }
+.contextKey { color: var(--fg2, #7d8085); font-size: 14px; }
+.contextValue { font-size: 14px; }
+.dsGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.card { border: 1px solid var(--border, #e5e5ea); border-radius: 16px; padding: 20px; }
+.cardLabel { font-size: 13px; color: var(--fg2, #7d8085); margin-bottom: 12px; }
+.swatches { display: flex; gap: 12px; flex-wrap: wrap; }
+.swatch { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.swatchChip { width: 56px; height: 56px; border-radius: 12px; border: 1px solid var(--border, #e5e5ea); }
+.swatchHex { font-size: 11px; color: var(--fg2, #7d8085); font-variant-numeric: tabular-nums; }
+.typeFamily { font-size: 26px; font-weight: 700; }
+.typeMeta { font-size: 13px; color: var(--fg2, #7d8085); margin-top: 4px; }
+.dsMeta { font-size: 12px; color: var(--fg2, #7d8085); margin-top: 8px; }
+.toneChips { display: flex; gap: 8px; flex-wrap: wrap; }
+.toneChip { padding: 6px 12px; border-radius: 9999px; background: var(--accent-tint, #eaf4ff); color: var(--accent-strong, #0da5e0); font-size: 13px; }
+.docs { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
+.docList { display: flex; flex-direction: column; gap: 4px; }
+.docItem { text-align: left; background: none; border: 1px solid transparent; border-radius: 10px; padding: 12px 14px; cursor: pointer; font-size: 14px; }
+.docItemActive { border-color: var(--border, #e5e5ea); background: var(--bg, #f5f5f5); }
+.docPreview { border: 1px solid var(--border, #e5e5ea); border-radius: 12px; padding: 20px; overflow-x: auto; }
+@media (max-width: 860px) { .dsGrid, .docs { grid-template-columns: 1fr; } }

@@ -339,7 +339,7 @@ describe("writeLaunchPackagedConfig", () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
       const config = makeConfig(root, { namespace: "release-beta", portable: true });
-      const appPath = join(root, "Marketing AX.app");
+      const appPath = join(root, "M-AX.app");
       const embeddedConfigPath = join(appPath, "Contents", "Resources", "open-design-config.json");
       await mkdir(dirname(embeddedConfigPath), { recursive: true });
       await writeFile(

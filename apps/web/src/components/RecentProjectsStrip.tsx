@@ -14,7 +14,7 @@ import type { DesignSystemSummary, Project, ProjectDisplayStatus, ProjectFile } 
 import { Icon } from './Icon';
 import { STATUS_LABEL_KEYS } from './DesignsTab';
 import { isDesignSystemProject, isPublishedDesignSystemProject } from './design-system-project';
-import { projectCategory as deriveCategory, resolveProjectBadge } from '../runtime/project-card-tag';
+import { projectCategory as deriveCategory, resolveProjectBadge, resolveProjectBrandLabel } from '../runtime/project-card-tag';
 
 interface Props {
   projects: Project[];
@@ -200,6 +200,11 @@ export function RecentProjectsStrip({
                   ) : (
                     <ProjectTag project={project} />
                   )}
+                  {resolveProjectBrandLabel(project) ? (
+                    <span className="design-card-tag badge-tone-blue" data-testid="project-brand-tag">
+                      {resolveProjectBrandLabel(project)}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="recent-projects__card-name">{project.name}</div>
                 <div className="recent-projects__card-time">

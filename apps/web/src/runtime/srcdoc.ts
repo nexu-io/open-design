@@ -80,7 +80,42 @@ export function buildSrcdoc(
   // it to a per-call option would force iframe srcdoc regeneration (and a
   // visible flash) every time the host toggle flips.
   const withTweaks = injectTweaksBridge(withEdit);
-  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withTweaks));
+  // 다운로드 브리지도 항상 주입 — a[download]가 없는 문서에선 아무 일도 하지
+  // 않는 수동 리스너라 옵션 게이트가 불필요하다 (tweaks 브리지와 동일 근거).
+  const withDownload = injectDownloadBridge(withTweaks);
+  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withDownload));
+}
+
+// sandbox에 allow-same-origin이 없어 srcdoc 문서는 opaque origin — 앵커의
+// download 속성이 cross-origin 취급으로 무시되고 이미지로 네비게이션된다.
+// 클릭을 가로채 ?download=1(데몬이 Content-Disposition: attachment로 응답)로
+// 우회해 네비게이션 자체를 다운로드로 만든다. URL-load 트랜스포트의
+// data-od-url-download-bridge(데몬 주입)와 동일 동작의 srcdoc 짝.
+function injectDownloadBridge(doc: string): string {
+  const script = `<script data-od-download-bridge>(function(){
+  if (window.__odDownloadBridge) return;
+  window.__odDownloadBridge = true;
+  document.addEventListener('click', function(ev){
+    var target = ev.target;
+    var anchor = target && target.closest ? target.closest('a[download]') : null;
+    if (!anchor) return;
+    var href = anchor.getAttribute('href');
+    if (!href) return;
+    var url;
+    var base;
+    try {
+      url = new URL(href, document.baseURI);
+      base = new URL(document.baseURI);
+    } catch (err) { return; }
+    if (!/^https?:$/.test(url.protocol)) return;
+    if (url.host !== base.host) return;
+    if (url.searchParams.get('download') === '1') return;
+    ev.preventDefault();
+    url.searchParams.set('download', '1');
+    window.location.assign(url.href);
+  }, true);
+})();</script>`;
+  return injectBeforeBodyEnd(doc, script);
 }
 
 /**

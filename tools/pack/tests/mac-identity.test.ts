@@ -47,10 +47,10 @@ describe("resolveMacInstallIdentity", () => {
   it("keeps stable builds on the canonical mac identity", () => {
     expect(resolveMacInstallIdentity(makeConfig("/work", "release-stable"))).toMatchObject({
       appId: "io.marketing-ax.desktop",
-      installerTitle: "Marketing AX",
-      productName: "Marketing AX",
-      publicAppBundleName: "Marketing AX.app",
-      systemAppBundleName: "Marketing AX.app",
+      installerTitle: "M-AX",
+      productName: "M-AX",
+      publicAppBundleName: "M-AX.app",
+      systemAppBundleName: "M-AX.app",
     });
   });
 
@@ -59,13 +59,13 @@ describe("resolveMacInstallIdentity", () => {
 
     expect(resolveMacInstallIdentity(config)).toEqual({
       appId: "io.marketing-ax.desktop.beta",
-      executableName: "Marketing AX Beta",
-      installerTitle: "Marketing AX Beta",
-      productName: "Marketing AX Beta",
-      publicAppBundleName: "Marketing AX Beta.app",
-      systemAppBundleName: "Marketing AX Beta.app",
+      executableName: "M-AX Beta",
+      installerTitle: "M-AX Beta",
+      productName: "M-AX Beta",
+      publicAppBundleName: "M-AX Beta.app",
+      systemAppBundleName: "M-AX Beta.app",
     });
-    expect(resolveMacPaths(config).appPath).toMatch(/Marketing AX Beta\.app$/);
+    expect(resolveMacPaths(config).appPath).toMatch(/M-AX Beta\.app$/);
   });
 
   it("uses first-class preview app identity for preview release namespaces", () => {
@@ -73,13 +73,13 @@ describe("resolveMacInstallIdentity", () => {
 
     expect(resolveMacInstallIdentity(config)).toEqual({
       appId: "io.marketing-ax.desktop.preview",
-      executableName: "Marketing AX Preview",
-      installerTitle: "Marketing AX Preview",
-      productName: "Marketing AX Preview",
-      publicAppBundleName: "Marketing AX Preview.app",
-      systemAppBundleName: "Marketing AX Preview.app",
+      executableName: "M-AX Preview",
+      installerTitle: "M-AX Preview",
+      productName: "M-AX Preview",
+      publicAppBundleName: "M-AX Preview.app",
+      systemAppBundleName: "M-AX Preview.app",
     });
-    expect(resolveMacPaths(config).appPath).toMatch(/Marketing AX Preview\.app$/);
+    expect(resolveMacPaths(config).appPath).toMatch(/M-AX Preview\.app$/);
   });
 
   it("uses first-class nightly app identity for nightly release versions and namespaces", () => {
@@ -91,16 +91,16 @@ describe("resolveMacInstallIdentity", () => {
 
     expect(resolveMacInstallIdentity(nightlyVersionConfig)).toEqual({
       appId: "io.marketing-ax.desktop.nightly",
-      executableName: "Marketing AX Nightly",
-      installerTitle: "Marketing AX Nightly",
-      productName: "Marketing AX Nightly",
-      publicAppBundleName: "Marketing AX Nightly.app",
-      systemAppBundleName: "Marketing AX Nightly.app",
+      executableName: "M-AX Nightly",
+      installerTitle: "M-AX Nightly",
+      productName: "M-AX Nightly",
+      publicAppBundleName: "M-AX Nightly.app",
+      systemAppBundleName: "M-AX Nightly.app",
     });
-    expect(resolveMacPaths(nightlyVersionConfig).appPath).toMatch(/Marketing AX Nightly\.app$/);
+    expect(resolveMacPaths(nightlyVersionConfig).appPath).toMatch(/M-AX Nightly\.app$/);
     expect(resolveMacInstallIdentity(nightlyNamespaceConfig)).toMatchObject({
-      productName: "Marketing AX Nightly",
-      publicAppBundleName: "Marketing AX Nightly.app",
+      productName: "M-AX Nightly",
+      publicAppBundleName: "M-AX Nightly.app",
     });
   });
 });

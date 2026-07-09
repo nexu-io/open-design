@@ -168,6 +168,14 @@ import {
   updateUserDesignSystem,
   updateUserDesignSystemRevisionStatus,
 } from './design-systems.js';
+import {
+  brandDeliverableDefaultDesignSystem,
+  listBrands,
+  parseBrandPalette,
+  readBrandCore,
+  readBrandDeliverable,
+  readBrandManifest,
+} from './brands.js';
 import { createDesignSystemGenerationJobStore } from './design-system-generation-jobs.js';
 import { prepareDesignTokenContractRebuild } from './design-token-contract-rebuild.js';
 import {
@@ -1339,6 +1347,11 @@ const DESIGN_SYSTEMS_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'design-systems',
   path.join(PROJECT_ROOT, 'design-systems'),
+);
+const BRANDS_DIR = resolveDaemonResourceDir(
+  DAEMON_RESOURCE_ROOT,
+  'brands',
+  path.join(PROJECT_ROOT, 'brands'),
 );
 // Renderable templates pulled out of `skills/` by the skills/design-templates
 // split (PR #955) so the EntryView Templates tab gets the large rendering
@@ -5632,6 +5645,7 @@ export async function startServer({
     USER_SKILLS_DIR,
     PROMPT_TEMPLATES_DIR,
     BUNDLED_PETS_DIR,
+    BRANDS_DIR,
     MAX_BIN,
   };
   const nodeDeps = { fs, path };
@@ -6395,6 +6409,87 @@ export async function startServer({
       });
     } catch (err) {
       res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/brands', async (_req, res) => {
+    try {
+      const brands = await listBrands(BRANDS_DIR);
+      // 브랜드별 프로젝트 수 1쿼리 집계 후 병합 (레지스트리는 파일, 카운트는 DB — route에서 합침)
+      const counts = new Map<string, number>();
+      for (const row of db
+        .prepare(
+          `SELECT brand_id AS id, COUNT(*) AS n FROM projects WHERE brand_id IS NOT NULL GROUP BY brand_id`,
+        )
+        .all() as Array<{ id: string; n: number }>) {
+        counts.set(row.id, row.n);
+      }
+      res.json({ brands: brands.map((b) => ({ ...b, projectCount: counts.get(b.id) ?? 0 })) });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/brands/:id', async (req, res) => {
+    try {
+      const brands = await listBrands(BRANDS_DIR);
+      const summary = brands.find((b) => b.id === req.params.id);
+      const body = await readBrandCore(BRANDS_DIR, req.params.id);
+      if (!summary || body === null) return res.status(404).json({ error: 'brand not found' });
+      const deliverableKey =
+        typeof req.query.deliverable === 'string' ? req.query.deliverable : undefined;
+      let deliverable: { key: string; body: string } | undefined;
+      if (deliverableKey) {
+        const dBody = await readBrandDeliverable(BRANDS_DIR, req.params.id, deliverableKey);
+        if (dBody === null) return res.status(404).json({ error: 'deliverable not found' });
+        deliverable = { key: deliverableKey, body: dBody };
+      }
+      const manifest = await readBrandManifest(BRANDS_DIR, req.params.id);
+      const palette = parseBrandPalette(body);
+      const countRow = db
+        .prepare(`SELECT COUNT(*) AS n FROM projects WHERE brand_id = ?`)
+        .get(req.params.id) as { n: number } | undefined;
+      res.json({
+        ...summary,
+        body,
+        projectCount: countRow?.n ?? 0,
+        ...(deliverable ? { deliverable } : {}),
+        ...(palette ? { palette } : {}),
+        ...(manifest?.presentation ? { presentation: manifest.presentation } : {}),
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Brand asset bytes (logotype/character-sheet/etc referenced from brand.md
+  // and deliverable channel docs). Mirrors the /api/skills/:id/assets/*splat
+  // route above: gate the id against the registry FIRST (as the skills route
+  // gates on findSkillById), then resolve against the brand's assets/ root and
+  // reject anything that escapes it.
+  app.get('/api/brands/:id/assets/*splat', async (req, res) => {
+    try {
+      // readBrandManifest runs isValidBrandId internally, so a traversal id
+      // (`.`/`..`/embedded slashes) returns null and 404s BEFORE assetsRoot is
+      // built from it — otherwise a `../` id would relocate assetsRoot itself
+      // outside BRANDS_DIR and defeat the containment guard below.
+      const manifest = await readBrandManifest(BRANDS_DIR, req.params.id);
+      if (!manifest) {
+        return res.status(404).type('text/plain').send('brand not found');
+      }
+      const splatParam = req.params.splat;
+      const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam || '');
+      const assetsRoot = path.resolve(BRANDS_DIR, req.params.id, 'assets');
+      const target = path.resolve(assetsRoot, relPath);
+      if (target !== assetsRoot && !target.startsWith(assetsRoot + path.sep)) {
+        return res.status(400).type('text/plain').send('invalid asset path');
+      }
+      if (!fs.existsSync(target)) {
+        return res.status(404).type('text/plain').send('asset not found');
+      }
+      await res.type(mimeFor(target)).sendFile(target);
+    } catch (err) {
+      res.status(500).type('text/plain').send(String(err));
     }
   });
 
@@ -7609,10 +7704,16 @@ export async function startServer({
         : null;
     const effectiveSkillId =
       typeof skillId === 'string' && skillId ? skillId : project?.skillId;
+    const projectBrandId = project?.brandId ?? undefined;
+    const projectBrandDeliverable = project?.brandDeliverable ?? undefined;
+    const brandManifest = projectBrandId
+      ? await readBrandManifest(BRANDS_DIR, projectBrandId)
+      : null;
     const effectiveDesignSystemId =
       typeof designSystemId === 'string' && designSystemId
         ? designSystemId
-        : project?.designSystemId;
+        : project?.designSystemId
+          ?? brandDeliverableDefaultDesignSystem(brandManifest, projectBrandDeliverable);
     const metadata = project?.metadata;
     let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntries> | null = null;
     const loadAllSkills = async () => {
@@ -7797,6 +7898,32 @@ export async function startServer({
       if (appCfg.customInstructions) userInstructions = appCfg.customInstructions;
     } catch (err) {
       console.warn('[custom-instructions] readAppConfig failed', err);
+    }
+
+    // Brand core + active deliverable body, loaded from brands/<id> per the
+    // project's binding (Task 5 columns). Threaded into the composer as the
+    // `## Active brand` / `## Brand deliverable context` blocks — see
+    // apps/daemon/src/prompts/system.ts. brandSourceNote gives subagents
+    // (research/review) an absolute path they can Read directly instead of
+    // re-deriving the brand root from BRANDS_DIR themselves.
+    let brandCoreMd;
+    let brandDeliverableMd;
+    let brandSourceNote;
+    if (projectBrandId && brandManifest) {
+      brandCoreMd = (await readBrandCore(BRANDS_DIR, projectBrandId)) ?? undefined;
+      if (projectBrandDeliverable) {
+        brandDeliverableMd =
+          (await readBrandDeliverable(BRANDS_DIR, projectBrandId, projectBrandDeliverable)) ?? undefined;
+      }
+      if (brandCoreMd) {
+        const coreAbs = path.join(BRANDS_DIR, projectBrandId, brandManifest.core ?? 'brand.md');
+        const delivRel = projectBrandDeliverable
+          ? brandManifest.deliverables?.[projectBrandDeliverable]?.file
+          : undefined;
+        brandSourceNote =
+          `Source files (pass these paths to subagents that need to Read the brand context): ` +
+          `core=${coreAbs}${delivRel ? `; deliverable=${path.join(BRANDS_DIR, projectBrandId, delivRel)}` : ''}`;
+      }
     }
 
     let designSystemBody;
@@ -8064,6 +8191,11 @@ export async function startServer({
       ...(pluginBlock ? { pluginBlock } : {}),
       ...(activeStageBlocks ? { activeStageBlocks } : {}),
       userInstructions,
+      brandTitle: brandManifest?.title,
+      brandCoreMd,
+      brandDeliverableKey: projectBrandDeliverable,
+      brandDeliverableMd,
+      brandSourceNote,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files

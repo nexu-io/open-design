@@ -1,3 +1,4 @@
+import type { AmrModelsResponse } from '@marketing-ax/contracts';
 import type { Express, Request, Response } from 'express';
 import dns from 'node:dns';
 import https from 'node:https';
@@ -136,14 +137,17 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     return host ? `${proto}://${host}` : 'http://localhost:7456';
   });
 
-  async function resolveAmrModelProbe(): Promise<AmrModelProbe> {
+  // null return = vela CLI not resolvable on this host (integration not
+  // installed) — an expected degraded state. A missing runtime definition is a
+  // genuine server misconfig and still throws so it surfaces as 500.
+  async function resolveAmrModelProbe(): Promise<AmrModelProbe | null> {
     const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
     const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
     const def = getAgentDef('amr');
     if (!def) throw new Error('AMR runtime definition is missing');
     const agentLaunch = resolveAgentLaunch(def, configuredEnv);
     const launchPath = agentLaunch.launchPath ?? agentLaunch.selectedPath;
-    if (!launchPath) throw new Error('AMR vela binary could not be resolved');
+    if (!launchPath) return null;
     const spawnEnv = applyAgentLaunchEnv(
       spawnEnvForAgent(
         def.id,
@@ -173,6 +177,13 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
   app.get('/api/amr/models', async (_req, res) => {
     try {
       const probe = await resolveAmrModelProbe();
+      if (!probe) {
+        // vela not installed on this host — serve an empty catalog so the web
+        // boot poll degrades quietly instead of logging a 500 every load.
+        const empty: AmrModelsResponse = { source: 'preset', models: [], refreshing: false };
+        res.json(empty);
+        return;
+      }
       const response = await amrModelLoadingCache.get(probe.cacheKey, {
         fetchPreset: () => fetchVelaPresetModels(probe.launchPath, probe.env),
         fetchRemote: () => fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
@@ -191,6 +202,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       if (status.loggedIn) {
         void resolveAmrModelProbe()
           .then((probe) => {
+            if (!probe) return;
             amrModelLoadingCache.warm(probe.cacheKey, () =>
               fetchVelaRemoteModelsWithRetry(probe.launchPath, probe.env),
             );

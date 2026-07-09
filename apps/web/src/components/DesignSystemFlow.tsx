@@ -953,8 +953,9 @@ export function DesignSystemDetailView({
   initialRevisionJob,
   onInitialRevisionJobConsumed,
 }: DetailProps) {
-  const { locale } = useI18n();
+  const { t, locale } = useI18n();
   const [system, setSystem] = useState<DesignSystemDetail | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [body, setBody] = useState('');
   const [tab, setTab] = useState<ReviewTab>('system');
   const [openSection, setOpenSection] = useState(0);
@@ -990,6 +991,7 @@ export function DesignSystemDetailView({
   useEffect(() => {
     let cancelled = false;
     setSystem(null);
+    setLoadFailed(false);
     setRevisions([]);
     setWorkspaceProjectId(null);
     setWorkspaceProjectFiles([]);
@@ -1009,6 +1011,11 @@ export function DesignSystemDetailView({
       if (cancelled) return;
       setSystem(detail);
       setBody(detail?.body ?? '');
+      // fetchDesignSystem swallows both HTTP and network failures into
+      // `null` — treat a resolved-but-empty result as a load failure so the
+      // view can offer a way back instead of spinning on "Loading..."
+      // forever (the previous dead end for this fetch path).
+      setLoadFailed(detail === null);
     });
     void fetchDesignSystemRevisions(id).then((next) => {
       if (cancelled) return;
@@ -1836,12 +1843,25 @@ export function DesignSystemDetailView({
     }
   }
 
+  if (loadFailed) {
+    return (
+      <div className="ds-setup-shell ds-setup-shell--center">
+        <div className="ds-setup-center-card">
+          <button type="button" className="icon-only" onClick={onBack} aria-label={t('ds.back')}>
+            <Icon name="arrow-left" />
+          </button>
+          <p role="alert">{t('ds.detailLoadFailed')}</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!system) {
     return (
       <div className="ds-setup-shell ds-setup-shell--center">
         <div className="ds-setup-center-card">
-          <h1>Loading design system...</h1>
-          <p>Opening the review workspace.</p>
+          <h1>{t('ds.detailLoading')}</h1>
+          <p>{t('ds.detailLoadingHint')}</p>
         </div>
       </div>
     );
@@ -1851,7 +1871,7 @@ export function DesignSystemDetailView({
     <div className="ds-workspace">
       <aside className="ds-project-chat">
         <div className="ds-project-chat__bar">
-          <button type="button" className="icon-only" onClick={onBack} aria-label="Back">
+          <button type="button" className="icon-only" onClick={onBack} aria-label={t('ds.back')}>
             <Icon name="arrow-left" />
           </button>
           <strong>{system.title}</strong>

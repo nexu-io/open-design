@@ -1,7 +1,10 @@
 // Role: Daemon HTTP 테스트 — 시나리오 플러그인의 pinned design system이 프로젝트 생성 시 자동 바인딩되는 불변을 검증.
-// Key Features: bodoc 자동 바인딩(RED→GREEN), explicit override 우선, no-ref 플러그인 null 유지
+// Key Features: explicit override 우선, no-ref 플러그인 null 유지, naver-blog는 브랜드 레일
+//               이관 후 designSystem pin이 없음(브랜드 사실은 od.context.brand 소관)을 확인.
 // Dependencies: startServer, resolveStampDesignSystemId, vitest
-// Notes: port:0으로 dev 런타임과 포트 충돌 없음.
+// Notes: port:0으로 dev 런타임과 포트 충돌 없음. bodoc 자동 바인딩 pin은 브랜드/디자인시스템
+//        분리(브랜드 레일 도입) 트랙에서 naver-blog 매니페스트가 designSystem.ref를 제거하며
+//        폐기됨 — 이 파일의 첫 it는 그 폐기를 계약으로 고정한다.
 
 import type http from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -23,9 +26,10 @@ beforeAll(async () => {
 afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
 describe('design system binding at project create', () => {
-  it('(RED→GREEN) pins bodoc from naver-blog manifest when no explicit designSystemId given', async () => {
-    // body.designSystemId 없이 pluginId만 넘기면 → manifest의 od.context.designSystem.ref("bodoc")가
-    // 자동으로 project.designSystemId에 채워져야 한다. 수정 전에는 null → RED.
+  it('naver-blog manifest no longer pins a design system (brand rail owns brand facts now)', async () => {
+    // naver-blog의 od.context.designSystem.ref("bodoc")는 브랜드 레일 이관(od.context.brand)으로
+    // 삭제되었다 — 보험 등 브랜드 사실은 이제 brands/bodoc/에서 로드되고, 이 플러그인은 더 이상
+    // 디자인시스템을 pin하지 않는다. 따라서 designSystemId는 명시 지정 없이는 null로 남아야 한다.
     const id = `proj-ds-bind-${Date.now()}`;
     const resp = await fetch(`${baseUrl}/api/projects`, {
       method: 'POST',
@@ -34,8 +38,7 @@ describe('design system binding at project create', () => {
     });
     expect(resp.ok).toBe(true);
     const { project } = (await resp.json()) as { project: { designSystemId?: string | null } };
-    // 핵심 불변: 플러그인이 bodoc을 pinning하므로 결과도 bodoc이어야 함.
-    expect(project.designSystemId).toBe('bodoc');
+    expect(project.designSystemId).toBeNull();
   });
 
   it('explicit body.designSystemId overrides the plugin-pinned one', async () => {

@@ -199,6 +199,10 @@ export interface Project {
   name: string;
   skillId: string | null;
   designSystemId: string | null;
+  /** 바인딩된 브랜드 id (brands/<id>) — 플러그인 매니페스트 od.context.brand.ref에서 스탬프 */
+  brandId?: string;
+  /** 활성 채널 키 (brands/<id>/deliverables/<key>.md) */
+  brandDeliverable?: string;
   createdAt: number;
   updatedAt: number;
   status?: ProjectStatusInfo;
@@ -262,6 +266,8 @@ export interface CreateProjectRequest {
   projectLocationId?: string;
   skillId?: string | null;
   designSystemId?: string | null;
+  brandId?: string;
+  brandDeliverable?: string;
   pendingPrompt?: string;
   metadata?: ProjectMetadata;
   pluginId?: string;
@@ -278,6 +284,8 @@ export interface UpdateProjectRequest {
   name?: string;
   skillId?: string | null;
   designSystemId?: string | null;
+  brandId?: string;
+  brandDeliverable?: string;
   pendingPrompt?: string | null;
   metadata?: ProjectMetadata | null;
   customInstructions?: string | null;

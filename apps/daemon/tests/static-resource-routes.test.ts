@@ -41,6 +41,7 @@ describe('static resource mutation routes', () => {
           paths: {
             ARTIFACTS_DIR: path.join(tempRoot, 'artifacts'),
             BUNDLED_PETS_DIR: path.join(tempRoot, 'pets'),
+            BRANDS_DIR: path.join(tempRoot, 'brands'),
             DESIGN_SYSTEMS_DIR: path.join(tempRoot, 'design-systems'),
             DESIGN_TEMPLATES_DIR: path.join(tempRoot, 'design-templates'),
             MAX_BIN: path.join(tempRoot, 'od'),
@@ -204,6 +205,7 @@ describe('design system import catalog lookup', () => {
           paths: {
             ARTIFACTS_DIR: path.join(tempRoot, 'artifacts'),
             BUNDLED_PETS_DIR: path.join(tempRoot, 'pets'),
+            BRANDS_DIR: path.join(tempRoot, 'brands'),
             DESIGN_SYSTEMS_DIR: path.join(tempRoot, 'design-systems'),
             DESIGN_TEMPLATES_DIR: path.join(tempRoot, 'design-templates'),
             MAX_BIN: path.join(tempRoot, 'od'),

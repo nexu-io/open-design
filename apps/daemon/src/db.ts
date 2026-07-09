@@ -249,6 +249,14 @@ function migrate(db: SqliteDb): void {
   if (!cols.some((c: DbRow) => c.name === 'custom_instructions')) {
     db.exec(`ALTER TABLE projects ADD COLUMN custom_instructions TEXT`);
   }
+  if (!cols.some((c: DbRow) => c.name === 'brand_id')) {
+    db.exec(`ALTER TABLE projects ADD COLUMN brand_id TEXT`);
+    db.exec(`ALTER TABLE projects ADD COLUMN brand_deliverable TEXT`);
+    // 구 bodoc 통짜 DS를 참조하던 기존 프로젝트를 브랜드 레일로 이관 —
+    // design_system_id='bodoc'는 분리 후 미존재 id라 주입이 조용히 소실되므로
+    // brand_id로 옮기고 DS 컬럼은 비운다 (deliverable은 미상 → 코어만 주입)
+    db.exec(`UPDATE projects SET brand_id = 'bodoc', design_system_id = NULL WHERE design_system_id = 'bodoc'`);
+  }
   const conversationCols = db.prepare(`PRAGMA table_info(conversations)`).all() as DbRow[];
   if (!conversationCols.some((c: DbRow) => c.name === 'session_mode')) {
     db.exec(`ALTER TABLE conversations ADD COLUMN session_mode TEXT NOT NULL DEFAULT 'design'`);
@@ -566,6 +574,8 @@ function stringifyJsonObjectOrNull(value: unknown) {
 
 const PROJECT_COLS = `id, name, skill_id AS skillId,
   design_system_id AS designSystemId,
+  brand_id AS brandId,
+  brand_deliverable AS brandDeliverable,
   pending_prompt AS pendingPrompt,
   metadata_json AS metadataJson,
   applied_plugin_snapshot_id AS appliedPluginSnapshotId,
@@ -660,14 +670,16 @@ export function getProject(db: SqliteDb, id: string) {
 export function insertProject(db: SqliteDb, p: DbRow) {
   db.prepare(
     `INSERT INTO projects
-       (id, name, skill_id, design_system_id, pending_prompt,
+       (id, name, skill_id, design_system_id, brand_id, brand_deliverable, pending_prompt,
         metadata_json, custom_instructions, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     p.id,
     p.name,
     p.skillId ?? null,
     p.designSystemId ?? null,
+    p.brandId ?? null,
+    p.brandDeliverable ?? null,
     p.pendingPrompt ?? null,
     p.metadata ? JSON.stringify(p.metadata) : null,
     p.customInstructions ?? null,
@@ -690,6 +702,8 @@ export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
         SET name = ?,
             skill_id = ?,
             design_system_id = ?,
+            brand_id = ?,
+            brand_deliverable = ?,
             pending_prompt = ?,
             metadata_json = ?,
             custom_instructions = ?,
@@ -699,6 +713,8 @@ export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
     merged.name,
     merged.skillId ?? null,
     merged.designSystemId ?? null,
+    merged.brandId ?? null,
+    merged.brandDeliverable ?? null,
     merged.pendingPrompt ?? null,
     merged.metadata ? JSON.stringify(merged.metadata) : null,
     merged.customInstructions ?? null,
@@ -726,6 +742,8 @@ function normalizeProject(row: DbRow) {
     name: row.name,
     skillId: row.skillId,
     designSystemId: row.designSystemId,
+    brandId: row.brandId ?? undefined,
+    brandDeliverable: row.brandDeliverable ?? undefined,
     pendingPrompt: row.pendingPrompt ?? undefined,
     metadata,
     appliedPluginSnapshotId: row.appliedPluginSnapshotId ?? undefined,

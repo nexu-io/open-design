@@ -81,7 +81,7 @@
 /* 메트릭 카드 글로우 펄스 (혜택·발견 가치 강조) */
 @keyframes glowPulse {
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
-  50%       { box-shadow: 0 0 0 4px var(--primary-glow, rgba(0,0,0,.15)); }
+  50%       { box-shadow: 0 0 0 4px var(--accent-glow, rgba(0,0,0,.15)); }
 }
 .metric-card.--highlight { animation: glowPulse 2.4s ease-in-out 1.2s infinite; }
 
@@ -106,7 +106,7 @@
 }
 ```
 
-> **알파 컬러는 브랜드 토큰으로**: `--primary-glow`, `--primary-tint`, `--overlay` 등.
+> **알파 컬러는 브랜드 토큰으로**: `--accent-glow`, `--accent-tint`, `--overlay` 등.
 > raw `rgba(...)` 인라인은 브랜드 토큰 계약 위반.
 
 ---

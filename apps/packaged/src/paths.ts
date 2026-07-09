@@ -64,13 +64,13 @@ function resolvePackagedDataRoot(
     if (!isAbs) {
       throw new PackagedPathAccessError(
         [
-          "Marketing AX's packaged runtime requires MAX_DATA_DIR to be an absolute path.",
+          "M-AX's packaged runtime requires MAX_DATA_DIR to be an absolute path.",
           "",
           `Configured value: ${odDataDir}`,
           "",
-          "Set MAX_DATA_DIR to an absolute path (for example, C:\\\\Users\\\\You\\\\OpenDesign on Windows or /Users/you/OpenDesign on macOS/Linux) and relaunch Marketing AX.",
+          "Set MAX_DATA_DIR to an absolute path (for example, C:\\\\Users\\\\You\\\\OpenDesign on Windows or /Users/you/OpenDesign on macOS/Linux) and relaunch M-AX.",
         ].join("\n"),
-        { title: "Marketing AX cannot start with this MAX_DATA_DIR" },
+        { title: "M-AX cannot start with this MAX_DATA_DIR" },
       );
     }
     const scopedNamespace = getScopedPackagedDataRootNamespace(expanded);
@@ -78,7 +78,7 @@ function resolvePackagedDataRoot(
       if (scopedNamespace !== namespace) {
         throw new PackagedPathAccessError(
           [
-            "Marketing AX's packaged runtime requires MAX_DATA_DIR to target the active namespace.",
+            "M-AX's packaged runtime requires MAX_DATA_DIR to target the active namespace.",
             "",
             `Configured value: ${odDataDir}`,
             `Configured namespace: ${scopedNamespace}`,
@@ -86,7 +86,7 @@ function resolvePackagedDataRoot(
             "",
             "Use an unscoped absolute base path or relaunch the matching packaged namespace.",
           ].join("\n"),
-          { title: "Marketing AX cannot start with this MAX_DATA_DIR" },
+          { title: "M-AX cannot start with this MAX_DATA_DIR" },
         );
       }
       return expanded;
@@ -107,7 +107,7 @@ export function resolvePackagedNamespacePaths(
   const dataRoot = resolvePackagedDataRoot(config, normalizedNamespace, env);
   // Channel root = parent of the `namespaces/` directory. With the default
   // packaged layout this resolves to `<electronApp.userData>` — e.g.
-  // `~/Library/Application Support/Marketing AX Nightly/` on mac. Custom
+  // `~/Library/Application Support/M-AX Nightly/` on mac. Custom
   // `namespaceBaseRoot` overrides (tests, multi-namespace deployments)
   // still get a usable parent here.
   const installationRoot = join(config.namespaceBaseRoot, "..");

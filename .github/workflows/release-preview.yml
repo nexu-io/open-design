@@ -209,7 +209,7 @@ jobs:
           output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
           source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
           source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
-          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-preview/builder/mac-arm64/Marketing AX Preview.app/Contents/Frameworks/Electron Framework.framework"
+          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-preview/builder/mac-arm64/M-AX Preview.app/Contents/Frameworks/Electron Framework.framework"
 
           dump_framework() {
             local label="$1"
@@ -306,7 +306,7 @@ jobs:
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
           RELEASE_CHANNEL: preview
           RELEASE_NAMESPACE: release-preview
-          RELEASE_NOTES: Marketing AX Preview ${{ needs.metadata.outputs.release_version }}
+          RELEASE_NOTES: M-AX Preview ${{ needs.metadata.outputs.release_version }}
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
@@ -620,7 +620,7 @@ jobs:
             -ReleaseAssetSuffix "" `
             -ReleaseChannel preview `
             -ReleasePublicOrigin "${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}" `
-            -ReleaseNotes "Marketing AX Preview ${{ needs.metadata.outputs.release_version }}" `
+            -ReleaseNotes "M-AX Preview ${{ needs.metadata.outputs.release_version }}" `
             -IncludeZip $true
 
       - name: Publish windows preview platform

@@ -3,8 +3,9 @@
 Brand-agnostic technical constraints for Braze Custom-HTML In-App Messages.
 Every rule cites the verified BRAZE-DOMAIN.md section that grounds it.
 Brand-specific facts (personas, forbidden words, deeplink catalogs,
-personalization attributes) belong in `design-systems/<brand>/DESIGN.md`,
-not here.
+personalization attributes) belong in `brands/<brand>/` brand context (the
+facts); the active design system (`design-systems/<brand>/`) owns only the
+visual look — not here.
 
 > Source: BRAZE-DOMAIN.md (deep-research verification, 2026-06-23,
 > 25 claims 3-vote verified / 0 killed). All claims cite primary

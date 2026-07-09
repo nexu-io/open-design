@@ -80,8 +80,8 @@ describe("tools-pack launcher layout", () => {
     const macPayload = resolveToolPackLauncherPayloadLayout(mac, "0.8.1-beta.2");
     const winPayload = resolveToolPackLauncherPayloadLayout(win, "0.8.1-beta.2");
 
-    expect(macPayload.archivePath).toBe(join(mac.roots.output.namespaceRoot, "payload", "Marketing AX-release-beta-payload.zip"));
-    expect(winPayload.archivePath).toBe(join(win.roots.output.namespaceRoot, "payload", "Marketing AX-release-beta-win-payload.7z"));
+    expect(macPayload.archivePath).toBe(join(mac.roots.output.namespaceRoot, "payload", "M-AX-release-beta-payload.zip"));
+    expect(winPayload.archivePath).toBe(join(win.roots.output.namespaceRoot, "payload", "M-AX-release-beta-win-payload.7z"));
     expect(macPayload.payloadRoot).toBe(join(macPayload.versionRoot, "payload"));
     expect(winPayload.payloadRoot).toBe(join(winPayload.versionRoot, "payload"));
     expect(macPayload.archiveRootName).toBe("payload-0.8.1-beta.2");
@@ -91,18 +91,18 @@ describe("tools-pack launcher layout", () => {
     const config = makeConfig(TEST_WORKSPACE_ROOT, "mac", "release-beta", "0.8.1-beta.2");
     const paths = resolveMacPaths(config);
 
-    expect(paths.payloadZipPath).toBe(join(config.roots.output.namespaceRoot, "payload", "Marketing AX-release-beta-payload.zip"));
-    expect(paths.dmgPath).toBe(join(config.roots.output.namespaceRoot, "dmg", "Marketing AX-release-beta.dmg"));
-    expect(paths.zipPath).toBe(join(config.roots.output.namespaceRoot, "zip", "Marketing AX-release-beta.zip"));
+    expect(paths.payloadZipPath).toBe(join(config.roots.output.namespaceRoot, "payload", "M-AX-release-beta-payload.zip"));
+    expect(paths.dmgPath).toBe(join(config.roots.output.namespaceRoot, "dmg", "M-AX-release-beta.dmg"));
+    expect(paths.zipPath).toBe(join(config.roots.output.namespaceRoot, "zip", "M-AX-release-beta.zip"));
   });
 
   it("exposes a stable Windows payload 7z path next to existing Windows artifacts", () => {
     const config = makeConfig(TEST_WORKSPACE_ROOT, "win", "release-beta-win", "0.8.1-beta.2");
     const paths = resolveWinPaths(config);
 
-    expect(paths.launcherPayloadPath).toBe(join(config.roots.output.namespaceRoot, "payload", "Marketing AX-release-beta-win-payload.7z"));
-    expect(paths.setupPath).toBe(join(config.roots.output.namespaceRoot, "builder", "Marketing AX-release-beta-win-setup.exe"));
-    expect(paths.setupZipPath).toBe(join(config.roots.output.namespaceRoot, "builder", "Marketing AX-release-beta-win-portable.zip"));
+    expect(paths.launcherPayloadPath).toBe(join(config.roots.output.namespaceRoot, "payload", "M-AX-release-beta-win-payload.7z"));
+    expect(paths.setupPath).toBe(join(config.roots.output.namespaceRoot, "builder", "M-AX-release-beta-win-setup.exe"));
+    expect(paths.setupZipPath).toBe(join(config.roots.output.namespaceRoot, "builder", "M-AX-release-beta-win-portable.zip"));
   });
 
   it("uses zip payload archives for mac and 7z payload archives for Windows", () => {

@@ -306,7 +306,7 @@ export async function writeAssembledApp(
     `${JSON.stringify(
       {
         dependencies,
-        description: "Marketing AX packaged runtime",
+        description: "M-AX packaged runtime",
         main: "./main.cjs",
         name: "open-design-packaged-app",
         private: true,

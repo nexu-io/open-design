@@ -1213,6 +1213,40 @@ describe('POST /api/integrations/vela/logout', () => {
   });
 });
 
+describe('GET /api/amr/models — degraded host (vela binary unresolvable)', () => {
+  it('returns 200 with an empty preset catalog instead of 500 when vela cannot be resolved', async () => {
+    // The web App polls /api/amr/models on every boot. On a host without the
+    // vela CLI, resolution yields launchPath=null — "integration not installed"
+    // — which is an expected degraded state, NOT a server fault. Point VELA_BIN
+    // at a non-existent path so resolution fails deterministically (the suite
+    // already assumes no real `vela` on PATH), then assert graceful 200.
+    const dataDir = process.env.MAX_DATA_DIR as string;
+    const previous = await readAppConfig(dataDir);
+    await writeAppConfig(dataDir, {
+      ...previous,
+      agentCliEnv: {
+        ...(previous.agentCliEnv ?? {}),
+        amr: {
+          VELA_BIN: path.join(tmpHome, 'no-such-vela-binary'),
+        },
+      },
+    });
+    try {
+      const { status, body } = await getJson<{
+        source: 'preset' | 'remote';
+        models: Array<{ id: string }>;
+        refreshing: boolean;
+      }>(`${baseUrl}/api/amr/models`);
+      expect(status).toBe(200);
+      expect(Array.isArray(body.models)).toBe(true);
+      expect(body.models).toHaveLength(0);
+      expect(body.refreshing).toBe(false);
+    } finally {
+      await writeAppConfig(dataDir, previous as unknown as Record<string, unknown>);
+    }
+  });
+});
+
 describe('login → status round-trip (E2E across the three routes)', () => {
   it('flips loggedIn=false → loggedIn=true after a successful login subprocess', async () => {
     process.env.FAKE_VELA_LOGIN_USER_EMAIL = 'round-trip@example.com';

@@ -19,6 +19,6 @@ describe('braze chip design-system binding', () => {
     const manifest = PluginManifestSchema.parse(raw);
 
     // No active-project design system passed: ref must win on its own.
-    expect(pickDesignSystemId(manifest)).toBe('bodoc');
+    expect(pickDesignSystemId(manifest)).toBe('bodoc-iam');
   });
 });

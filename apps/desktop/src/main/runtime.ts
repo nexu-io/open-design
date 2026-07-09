@@ -19,7 +19,7 @@ import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesig
 
 import { openValidatedDirectory } from "./open-path.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
-import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
+import { SPLASH_ICON_DATA_URL } from "./splash-icon.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
 
@@ -791,16 +791,17 @@ const MAC_WINDOW_CHROME_CSS = `
   }
 `;
 
-// Light-background startup splash shown while the web runtime boots. It plays
-// the brand intro clip once and then holds on its final settled logo frame until
-// the main window is ready. The clip is embedded as a base64 data URL so it
-// renders identically in dev and in packaged builds (see `splash-video.ts`).
+// Light-background startup splash shown while the web runtime boots. Static
+// M-AX brand mark (the padded dock icon) over the wordmark, held until the main
+// window is ready. The icon is embedded as a base64 data URL so it renders
+// identically in dev and in packaged builds before any HTTP server is up (see
+// `splash-icon.ts`).
 function createPendingHtml(): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Marketing AX</title>
+    <title>M-AX</title>
     <style>
       html,
       body {
@@ -814,37 +815,30 @@ function createPendingHtml(): string {
         display: flex;
         justify-content: center;
       }
-      video {
-        background: #f2f4f5;
-        height: auto;
-        max-height: 100%;
-        max-width: 100%;
-        width: auto;
+      .brand {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .brand img {
+        height: 120px;
+        width: 120px;
+      }
+      .brand span {
+        color: #1a1a1a;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
       }
     </style>
   </head>
   <body>
-    <video
-      id="splash"
-      autoplay
-      muted
-      playsinline
-      disablepictureinpicture
-      src="${SPLASH_VIDEO_DATA_URL}"
-    ></video>
-    <script>
-      (function () {
-        var video = document.getElementById("splash");
-        if (!video) return;
-        var play = function () {
-          var attempt = video.play();
-          if (attempt && typeof attempt.catch === "function") attempt.catch(function () {});
-        };
-        video.addEventListener("loadedmetadata", function () { video.currentTime = 0; });
-        video.addEventListener("loadeddata", play);
-        play();
-      })();
-    </script>
+    <div class="brand">
+      <img src="${SPLASH_ICON_DATA_URL}" alt="M-AX" />
+      <span>M-AX</span>
+    </div>
   </body>
 </html>`)}`;
 }
@@ -880,7 +874,7 @@ export function createSplashWindow(): SplashWindowHandle {
     height: 900,
     resizable: false,
     show: true,
-    title: "Marketing AX",
+    title: "M-AX",
     width: 1280,
     webPreferences: {
       contextIsolation: true,
@@ -893,7 +887,8 @@ export function createSplashWindow(): SplashWindowHandle {
 }
 
 function resolveDesktopIconPath(): string {
-  return resolve(dirname(fileURLToPath(import.meta.url)), "../../../web/public/app-icon.png");
+  // desktop-icon.png 전용 파일 — app-icon.png는 웹 UI 브랜드 마크라 dock 아이콘과 분리
+  return resolve(dirname(fileURLToPath(import.meta.url)), "../../../web/public/desktop-icon.png");
 }
 
 function applyDockIcon(): void {
@@ -1525,7 +1520,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // mounted (see `revealWhenReady` below), so there is never a flash of the
     // web's own "Loading Marketing AX…" shell.
     show: false,
-    title: "Marketing AX",
+    title: "M-AX",
     autoHideMenuBar: true,
     ...MAC_WINDOW_CHROME,
     webPreferences: {
@@ -1539,6 +1534,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     width: 1280,
   });
+  // 웹 페이지 document.title("Marketing AX")이 창 제목을 덮어쓰지 않도록 고정 — 데스크톱 앱명은 M-AX
+  window.on("page-title-updated", (event) => event.preventDefault());
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
@@ -1575,7 +1572,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const unsubscribeUpdater = options.updater?.subscribe(() => sendUpdaterStatus()) ?? (() => undefined);
   const requireMainWindowSender = (event: Electron.IpcMainInvokeEvent): void => {
     if (event.sender !== window.webContents) {
-      throw new Error("host IPC is only available to the main Marketing AX window");
+      throw new Error("host IPC is only available to the main M-AX window");
     }
   };
   window.webContents.on("will-attach-webview", (event, webPreferences, params) => {

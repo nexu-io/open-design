@@ -78,6 +78,7 @@ import type {
   SkillSummary,
 } from '../types';
 import { CenteredLoader } from './Loading';
+import { BrandsTab } from './BrandsTab';
 import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
@@ -364,6 +365,7 @@ function navElementForView(
   | 'automations'
   | 'plugins'
   | 'design_systems'
+  | 'brands'
   | 'integrations'
   | null {
   switch (next) {
@@ -377,6 +379,8 @@ function navElementForView(
       return 'plugins';
     case 'design-systems':
       return 'design_systems';
+    case 'brands':
+      return 'brands';
     case 'integrations':
       return 'integrations';
     default:
@@ -826,6 +830,16 @@ export function EntryShell({
                   />
                 </div>
               )}
+            </div>
+            <div data-testid="entry-view-brands" data-active={view === 'brands' ? 'true' : 'false'} {...inactiveViewProps(view === 'brands')}>
+              <div className="entry-section">
+                <header className="entry-section__head">
+                  <h1 className="entry-section__title">{t('entry.navBrands')}</h1>
+                </header>
+                <BrandsTab
+                  onOpenBrand={(id) => navigate({ kind: 'brand-detail', brandId: id })}
+                />
+              </div>
             </div>
             {view === 'integrations' ? (
               <IntegrationsView

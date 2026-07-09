@@ -1,0 +1,125 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import {
+  brandDeliverableDefaultDesignSystem,
+  listBrands,
+  parseBrandPalette,
+  readBrandCore,
+  readBrandDeliverable,
+  readBrandManifest,
+} from '../src/brands.js';
+
+let root: string;
+beforeEach(async () => {
+  root = await fs.mkdtemp(path.join(os.tmpdir(), 'brands-'));
+  const dir = path.join(root, 'acme');
+  await fs.mkdir(path.join(dir, 'deliverables'), { recursive: true });
+  await fs.writeFile(
+    path.join(dir, 'manifest.json'),
+    JSON.stringify({
+      schemaVersion: 'od-brand/v1',
+      id: 'acme',
+      title: 'Acme',
+      core: 'brand.md',
+      deliverables: {
+        blog: { file: 'deliverables/blog.md', label: 'Blog' },
+        iam: { file: 'deliverables/iam.md', designSystem: 'acme-iam', label: 'Acme IAM' },
+      },
+      presentation: {
+        subtitle: 'Widgets',
+        tagline: 'Acme makes widgets.',
+        toneLabel: 'bold',
+      },
+    }),
+  );
+  await fs.writeFile(
+    path.join(dir, 'brand.md'),
+    '# Acme\n\n## Palette\n\n| 이름 | 값 | 용도 |\n|---|---|---|\n| primary | `#123456` | x |\n',
+  );
+  await fs.writeFile(path.join(dir, 'deliverables/blog.md'), 'BLOG');
+  await fs.writeFile(path.join(dir, 'deliverables/iam.md'), 'IAM');
+});
+afterEach(() => fs.rm(root, { recursive: true, force: true }));
+
+describe('brands registry', () => {
+  it('lists brands with display fields and deliverable keys', async () => {
+    const brands = await listBrands(root);
+    expect(brands).toEqual([
+      {
+        id: 'acme',
+        title: 'Acme',
+        deliverables: ['blog', 'iam'],
+        subtitle: 'Widgets',
+        tagline: 'Acme makes widgets.',
+        toneLabel: 'bold',
+        primaryColor: '#123456',
+        deliverableLabels: { blog: 'Blog', iam: 'Acme IAM' },
+      },
+    ]);
+  });
+  it('reads core and deliverable bodies', async () => {
+    expect(await readBrandCore(root, 'acme')).toBe(
+      '# Acme\n\n## Palette\n\n| 이름 | 값 | 용도 |\n|---|---|---|\n| primary | `#123456` | x |\n',
+    );
+    expect(await readBrandDeliverable(root, 'acme', 'blog')).toBe('BLOG');
+    expect(await readBrandDeliverable(root, 'acme', 'nope')).toBeNull();
+    expect(await readBrandCore(root, 'ghost')).toBeNull();
+  });
+  it('resolves the deliverable default design system', async () => {
+    const manifest = await readBrandManifest(root, 'acme');
+    expect(brandDeliverableDefaultDesignSystem(manifest, 'iam')).toBe('acme-iam');
+    expect(brandDeliverableDefaultDesignSystem(manifest, 'blog')).toBeUndefined();
+    expect(brandDeliverableDefaultDesignSystem(null, 'iam')).toBeUndefined();
+  });
+  it('rejects path-traversal brand ids', async () => {
+    // 검증이 없으면 'ghost/../acme'는 root/acme로 해석되어 CORE가 읽힘 — 게이트가 실제로 막는지 확인
+    expect(await readBrandCore(root, 'ghost/../acme')).toBeNull();
+    expect(await readBrandManifest(root, '..')).toBeNull();
+    expect(await readBrandDeliverable(root, 'ghost/../acme', 'blog')).toBeNull();
+  });
+  it('ignores non-brand directories and missing roots', async () => {
+    await fs.mkdir(path.join(root, 'not-a-brand'));
+    const brands = await listBrands(root);
+    expect(brands.map((b) => b.id)).toEqual(['acme']);
+    expect(await listBrands(path.join(root, 'missing'))).toEqual([]);
+  });
+});
+
+describe('parseBrandPalette', () => {
+  const core = [
+    '# Brand',
+    '',
+    '## Palette (정본)',
+    '',
+    '| 이름 | 값 | 용도 |',
+    '|---|---|---|',
+    '| brand-blue | `#1E86FA` | 캐릭터 바디 |',
+    '| signature-cyan | `#16C5FF` | 액센트 |',
+    '| signature-cyan-dark | `#0DA5E0` | hover |',
+    '',
+    '기계 미러 예외: ...',
+    '',
+    '## Voice',
+    '- 톤: 차분',
+  ].join('\n');
+
+  it('parses identity colors from the Palette table', () => {
+    expect(parseBrandPalette(core)).toEqual([
+      { name: 'brand-blue', value: '#1E86FA', usage: '캐릭터 바디' },
+      { name: 'signature-cyan', value: '#16C5FF', usage: '액센트' },
+      { name: 'signature-cyan-dark', value: '#0DA5E0', usage: 'hover' },
+    ]);
+  });
+
+  it('returns undefined when there is no Palette section', () => {
+    expect(parseBrandPalette('# Brand\n\n## Voice\n- 톤')).toBeUndefined();
+  });
+
+  it('skips rows whose value is not a hex color', () => {
+    const bad = ['## Palette', '', '| 이름 | 값 | 용도 |', '|---|---|---|', '| note | see below | x |', '| ok | `#ABCDEF` | y |'].join('\n');
+    expect(parseBrandPalette(bad)).toEqual([{ name: 'ok', value: '#ABCDEF', usage: 'y' }]);
+  });
+});

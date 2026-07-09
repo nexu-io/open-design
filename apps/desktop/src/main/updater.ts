@@ -726,7 +726,7 @@ async function ensureOwnedUpdateRoot(
           ok: false,
           error: createError(
             "update-root-not-owned",
-            `update root is not empty and has no Marketing AX updater ownership marker: ${realRoot}`,
+            `update root is not empty and has no M-AX updater ownership marker: ${realRoot}`,
           ),
         };
       }

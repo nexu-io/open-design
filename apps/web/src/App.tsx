@@ -31,6 +31,7 @@ import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
 } from './components/DesignSystemFlow';
+import { BrandDetailView } from './components/BrandDetailView';
 import {
   IframeKeepAliveProvider,
   useIframeKeepAlivePool,
@@ -339,7 +340,7 @@ function AppInner() {
   // Observability marker. `apps/web/src/observability/white-screen.ts`
   // keys its "app actually mounted" success condition on this attribute
   // because the dynamic-import loading shell (`<div class="od-loading-shell">
-  // Loading Marketing AX…</div>`) is itself >MIN_VISIBLE_TEXT and would
+  // Loading M-AX…</div>`) is itself >MIN_VISIBLE_TEXT and would
   // otherwise be mistaken for a real mount. Survives subsequent render
   // crashes — once App has mounted at least once, it's no longer a white
   // screen (subsequent failures show up as `$exception`).
@@ -2049,6 +2050,13 @@ function AppInner() {
         onInitialRevisionJobConsumed={(jobId) =>
           handleDesignSystemRevisionJobConsumed(route.designSystemId, jobId)
         }
+      />
+    );
+  } else if (route.kind === 'brand-detail') {
+    appMain = (
+      <BrandDetailView
+        brandId={route.brandId}
+        onBack={() => navigate({ kind: 'home', view: 'brands' })}
       />
     );
   } else if (activeProject) {

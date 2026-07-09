@@ -7,49 +7,49 @@ import { resolveWinInstallIdentity } from "../src/win/identity.js";
 describe("resolveWinInstallIdentity", () => {
   it("keeps the default namespace on the canonical Windows display name", () => {
     expect(resolveWinInstallIdentity({ namespace: "default" })).toMatchObject({
-      displayName: "Marketing AX",
-      shortcutName: "Marketing AX.lnk",
-      uninstallerName: "Uninstall Marketing AX.exe",
+      displayName: "M-AX",
+      shortcutName: "M-AX.lnk",
+      uninstallerName: "Uninstall M-AX.exe",
     });
   });
 
   it("uses the canonical Windows display name for stable release namespaces", () => {
     expect(resolveWinInstallIdentity({ namespace: "release-stable-win" })).toMatchObject({
-      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Marketing AX.exe",
-      displayName: "Marketing AX",
-      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Marketing AX-release-stable-win",
-      shortcutName: "Marketing AX.lnk",
-      uninstallerName: "Uninstall Marketing AX.exe",
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\M-AX.exe",
+      displayName: "M-AX",
+      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\M-AX-release-stable-win",
+      shortcutName: "M-AX.lnk",
+      uninstallerName: "Uninstall M-AX.exe",
     });
   });
 
   it("uses first-class beta display identity for beta release namespaces", () => {
     expect(resolveWinInstallIdentity({ namespace: "release-beta-win" })).toMatchObject({
-      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Marketing AX Beta.exe",
-      displayName: "Marketing AX Beta",
-      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Marketing AX-release-beta-win",
-      shortcutName: "Marketing AX Beta.lnk",
-      uninstallerName: "Uninstall Marketing AX Beta.exe",
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\M-AX Beta.exe",
+      displayName: "M-AX Beta",
+      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\M-AX-release-beta-win",
+      shortcutName: "M-AX Beta.lnk",
+      uninstallerName: "Uninstall M-AX Beta.exe",
     });
   });
 
   it("keeps non-release beta-like namespaces isolated from the real beta channel identity", () => {
     expect(resolveWinInstallIdentity({ namespace: "beta-local-flow" })).toMatchObject({
-      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Marketing AX beta-local-flow.exe",
-      displayName: "Marketing AX beta-local-flow",
-      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Marketing AX-beta-local-flow",
-      shortcutName: "Marketing AX beta-local-flow.lnk",
-      uninstallerName: "Uninstall Marketing AX beta-local-flow.exe",
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\M-AX beta-local-flow.exe",
+      displayName: "M-AX beta-local-flow",
+      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\M-AX-beta-local-flow",
+      shortcutName: "M-AX beta-local-flow.lnk",
+      uninstallerName: "Uninstall M-AX beta-local-flow.exe",
     });
   });
 
   it("uses first-class preview display identity for preview release namespaces", () => {
     expect(resolveWinInstallIdentity({ namespace: "release-preview-win" })).toMatchObject({
-      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Marketing AX Preview.exe",
-      displayName: "Marketing AX Preview",
-      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Marketing AX-release-preview-win",
-      shortcutName: "Marketing AX Preview.lnk",
-      uninstallerName: "Uninstall Marketing AX Preview.exe",
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\M-AX Preview.exe",
+      displayName: "M-AX Preview",
+      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\M-AX-release-preview-win",
+      shortcutName: "M-AX Preview.lnk",
+      uninstallerName: "Uninstall M-AX Preview.exe",
     });
   });
 
@@ -58,15 +58,15 @@ describe("resolveWinInstallIdentity", () => {
       appVersion: "0.8.0.nightly.2",
       namespace: "release-stable-win",
     })).toMatchObject({
-      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Marketing AX Nightly.exe",
-      displayName: "Marketing AX Nightly",
-      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Marketing AX-release-stable-win",
-      shortcutName: "Marketing AX Nightly.lnk",
-      uninstallerName: "Uninstall Marketing AX Nightly.exe",
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\M-AX Nightly.exe",
+      displayName: "M-AX Nightly",
+      registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\M-AX-release-stable-win",
+      shortcutName: "M-AX Nightly.lnk",
+      uninstallerName: "Uninstall M-AX Nightly.exe",
     });
     expect(resolveWinInstallIdentity({ namespace: "release-nightly-win" })).toMatchObject({
-      displayName: "Marketing AX Nightly",
-      shortcutName: "Marketing AX Nightly.lnk",
+      displayName: "M-AX Nightly",
+      shortcutName: "M-AX Nightly.lnk",
     });
   });
 

@@ -195,6 +195,12 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
       path.join(dir, 'snapshot-bridged.html'),
       Buffer.from('<html><body><script data-od-url-snapshot-bridge></script><main>Preview</main></body></html>'),
     );
+    await writeFile(
+      path.join(dir, 'download-bridged.html'),
+      Buffer.from('<html><body><script data-od-url-download-bridge></script><main>Preview</main></body></html>'),
+    );
+    await writeFile(path.join(dir, 'cover.png'), Buffer.alloc(64, 0x44));
+    await writeFile(path.join(dir, '여름-달걀-01.png'), Buffer.alloc(64, 0x45));
     await mkdir(path.join(dir, 'dist', 'assets'), { recursive: true });
     await writeFile(
       path.join(dir, 'vite-entry.html'),
@@ -362,5 +368,49 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
   it('returns 404 for a missing file', async () => {
     const res = await fetch(rawUrl('missing.mp4'));
     expect(res.status).toBe(404);
+  });
+
+  // 프리뷰 iframe은 allow-same-origin 없는 sandbox라 opaque origin — 앵커의
+  // download 속성이 cross-origin 취급으로 무시된다. ?download=1 서버 부착이
+  // 네비게이션 자체를 다운로드로 만드는 유일한 경로.
+  it('serves an attachment Content-Disposition when ?download=1 is passed', async () => {
+    const res = await fetch(`${rawUrl('cover.png')}?download=1`);
+    expect(res.status).toBe(200);
+    const disposition = res.headers.get('content-disposition');
+    expect(disposition).toContain('attachment');
+    expect(disposition).toContain('cover.png');
+  });
+
+  it('encodes non-ASCII filenames in the attachment disposition', async () => {
+    const res = await fetch(`${rawUrl(encodeURIComponent('여름-달걀-01.png'))}?download=1`);
+    expect(res.status).toBe(200);
+    const disposition = res.headers.get('content-disposition');
+    expect(disposition).toContain('attachment');
+    expect(disposition).toContain(`filename*=UTF-8''${encodeURIComponent('여름-달걀-01.png')}`);
+  });
+
+  it('does not set Content-Disposition without the download param', async () => {
+    const res = await fetch(rawUrl('cover.png'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-disposition')).toBeNull();
+  });
+
+  it('injects the URL preview download bridge only when requested', async () => {
+    const plain = await fetch(rawUrl('page.html'));
+    expect(await plain.text()).toBe('<html/>');
+
+    const bridged = await fetch(`${rawUrl('page.html')}?odPreviewBridge=download`);
+    expect(bridged.status).toBe(200);
+    const html = await bridged.text();
+    expect(html).toContain('data-od-url-download-bridge');
+    expect(html).toContain("a[download]");
+    expect(html).not.toContain('data-od-url-scroll-bridge');
+  });
+
+  it('does not inject the URL preview download bridge twice', async () => {
+    const bridged = await fetch(`${rawUrl('download-bridged.html')}?odPreviewBridge=download`);
+    expect(bridged.status).toBe(200);
+    const html = await bridged.text();
+    expect(html.match(/data-od-url-download-bridge/g)?.length).toBe(1);
   });
 });

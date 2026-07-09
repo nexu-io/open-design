@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "od-brand/v1",
+  "id": "bodoc",
+  "title": "보닥",
+  "core": "brand.md",
+  "deliverables": {
+    "blog": { "file": "deliverables/blog.md", "label": "블로그" },
+    "cardnews": { "file": "deliverables/cardnews.md", "label": "카드뉴스" },
+    "iam": { "file": "deliverables/iam.md", "designSystem": "bodoc-iam", "label": "Braze IAM" }
+  },
+  "presentation": {
+    "subtitle": "보험 앱",
+    "website": "bodoc.co.kr",
+    "audience": "보험료가 아까운 40·50대 (+30대)",
+    "tagline": "내 손 안의 보험 전문가",
+    "keyMessage": "200만의 손해 없는 보험 관리",
+    "avoid": "과장·자극어(완전/진짜/정말), ㅎㅎ/ㅠㅠ·감정 이모지, \"플래너\" 호칭, 추상 호명(여러분·누군가) 금지",
+    "typography": { "family": "Pretendard", "roles": "제목 · 본문", "weights": "700 · 500 · 400" },
+    "voiceTone": ["차분한", "신뢰감 있는", "전문적인", "안심되는"],
+    "toneLabel": "차분·신뢰",
+    "neutralPalette": ["#EAF4FF", "#1c1c22"]
+  }
+}
