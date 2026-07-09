@@ -837,6 +837,27 @@ describe('deployToDisplayDev', () => {
     expect(calls[0]?.body?.get('name')).toBeNull();
   });
 
+  it.each([
+    ['visibility', { visibility: 'publik' }, /visibility must be/i],
+    ['showBranding', { showBranding: 'sometimes' }, /showBranding must be/i],
+    ['sharedWith scalar', { sharedWith: 123 }, /sharedWith must be/i],
+    ['sharedWith entry', { sharedWith: ['team@example.com', 123] }, /sharedWith must contain only strings/i],
+  ])('rejects invalid display.dev deploy selection: %s', async (_field, displayDev, message) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(deployToDisplayDev({
+      config: { token: 'Bearer dsp_live_secret', apiUrl: 'https://api.display.dev' },
+      files: [{ file: 'index.html', sourcePath: 'index.html', data: '<!doctype html><h1>Hello</h1>', contentType: 'text/html' }],
+      projectId: 'project-1',
+      displayDev,
+    })).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringMatching(message),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('publishes authenticated artifacts with visibility fields', async () => {
     const calls: Array<{ url: string; method?: string; auth?: string | null; body?: FormData }> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {

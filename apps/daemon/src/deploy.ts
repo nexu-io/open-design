@@ -369,26 +369,21 @@ function normalizeDisplayDevDeploySelection(input: unknown): DisplayDevDeploySel
   if (!input || typeof input !== 'object') return {};
   const source = input as JsonObject;
   const name = typeof source.name === 'string' ? source.name.trim() : '';
-  const rawVisibility = typeof source.visibility === 'string' ? source.visibility : '';
-  const visibility =
-    rawVisibility === 'public' || rawVisibility === 'company' || rawVisibility === 'private'
-      ? rawVisibility
-      : undefined;
-  const rawSharedWith = Array.isArray(source.sharedWith)
-    ? source.sharedWith
-    : typeof source.sharedWith === 'string'
-      ? source.sharedWith.split(',')
-      : [];
+  const hasVisibilityInput = Object.prototype.hasOwnProperty.call(source, 'visibility');
+  const visibility = hasVisibilityInput
+    ? displayDevVisibilityFromInput(source.visibility)
+    : undefined;
   const hasSharedWithInput = Object.prototype.hasOwnProperty.call(source, 'sharedWith');
+  const rawSharedWith = hasSharedWithInput
+    ? displayDevSharedWithFromInput(source.sharedWith)
+    : [];
   const sharedWith = rawSharedWith
-    .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim())
     .filter(Boolean);
-  const rawShowBranding = typeof source.showBranding === 'string' ? source.showBranding : '';
-  const showBranding =
-    rawShowBranding === 'inherit' || rawShowBranding === 'show' || rawShowBranding === 'hide'
-      ? rawShowBranding
-      : undefined;
+  const hasShowBrandingInput = Object.prototype.hasOwnProperty.call(source, 'showBranding');
+  const showBranding = hasShowBrandingInput
+    ? displayDevShowBrandingFromInput(source.showBranding)
+    : undefined;
   return {
     ...(name ? { name } : {}),
     ...(visibility ? { visibility } : {}),
@@ -396,6 +391,25 @@ function normalizeDisplayDevDeploySelection(input: unknown): DisplayDevDeploySel
     ...(hasSharedWithInput && sharedWith.length === 0 ? { clearSharedWith: true } : {}),
     ...(showBranding ? { showBranding } : {}),
   };
+}
+
+function displayDevVisibilityFromInput(value: unknown): DisplayDevDeploySelection['visibility'] {
+  if (value === 'public' || value === 'company' || value === 'private') return value;
+  throw new DeployError('display.dev visibility must be "public", "company", or "private".', 400);
+}
+
+function displayDevShowBrandingFromInput(value: unknown): DisplayDevDeploySelection['showBranding'] {
+  if (value === 'inherit' || value === 'show' || value === 'hide') return value;
+  throw new DeployError('display.dev showBranding must be "inherit", "show", or "hide".', 400);
+}
+
+function displayDevSharedWithFromInput(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    if (value.every((item) => typeof item === 'string')) return value;
+    throw new DeployError('display.dev sharedWith must contain only strings.', 400);
+  }
+  if (typeof value === 'string') return value.split(',');
+  throw new DeployError('display.dev sharedWith must be a string or an array of strings.', 400);
 }
 
 function displayDevDefaultArtifactName(entry: DeployFile, projectId: string) {
