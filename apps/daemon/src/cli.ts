@@ -200,9 +200,9 @@ const PROJECT_STRING_FLAGS = new Set([
   'prompt-file', 'path', 'dir', 'as',
   'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
-  'source',
+  'source', 'out', 'output', 'root',
 ]);
-const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
+const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'include-conversations']);
 // `od templates …` mirrors NewProjectPanel / ExamplesTab. Same surface,
 // same /api/templates store. The CLI form is the embeddability contract:
 // external agents (hermes-agent, openclaw, ...) can snapshot, list, or
@@ -5706,6 +5706,40 @@ async function postImportFolderToDaemon(base, body, baseDir) {
   return postJsonToDaemon(base, '/api/import/folder', body, headers);
 }
 
+function filenameFromContentDisposition(header, fallback) {
+  const cd = typeof header === 'string' ? header : '';
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+  const plain = /filename="([^"]+)"/i.exec(cd);
+  if (star && star[1]) {
+    try {
+      return decodeURIComponent(star[1]);
+    } catch {
+      return plain && plain[1] ? plain[1] : fallback;
+    }
+  }
+  return plain && plain[1] ? plain[1] : fallback;
+}
+
+async function postProjectZipToDaemon(base, filePath) {
+  const { readFile } = await import('node:fs/promises');
+  const path = await import('node:path');
+  const buffer = await readFile(filePath);
+  const form = new FormData();
+  form.append('file', new Blob([buffer], { type: 'application/zip' }), path.basename(filePath));
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/import/project`, {
+      method: 'POST',
+      body: form,
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  return resp.json();
+}
+
 async function runProject(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
@@ -5721,6 +5755,11 @@ async function runProject(args) {
   od project import <baseDir> [--name "<title>"]
   od project import-folder <path> [--name "<title>"] [--skill <id>]
                     [--design-system <id>] [--json]
+  od project import-zip <file.zip> [--json]
+                    Import an Open Design project ZIP bundle.
+  od project export-zip <id> [--include-conversations] [--out <file>] [--json]
+                    Export a project ZIP. With --include-conversations, include
+                    bundle metadata and conversation history.
   od project list                         List projects.
   od project info <id>                    Print one project.
   od project delete <id>                  Delete a project.
@@ -5919,6 +5958,55 @@ Common options:
       const data = await postImportFolderToDaemon(base, body, folderPath);
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       console.log(`[project] imported ${data.project?.id ?? '-'} from ${folderPath} (conversation ${data.conversationId ?? '-'})`);
+      return;
+    }
+    case 'import-zip': {
+      const [zipPath] = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      if (!zipPath) {
+        console.error('Usage: od project import-zip <file.zip> [--json]');
+        process.exit(2);
+      }
+      const data = await postProjectZipToDaemon(base, zipPath);
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[project] imported ${data.project?.id ?? '-'} from ${zipPath} (conversation ${data.conversationId ?? '-'})`);
+      return;
+    }
+    case 'export-zip': {
+      const [projectId] = positionalArgs(rest, PROJECT_STRING_FLAGS);
+      if (!projectId) {
+        console.error('Usage: od project export-zip <id> [--include-conversations] [--out <file>] [--json]');
+        process.exit(2);
+      }
+      const params = new URLSearchParams();
+      if (flags['include-conversations']) params.set('includeConversations', '1');
+      if (typeof flags.root === 'string' && flags.root.length > 0 && !flags['include-conversations']) {
+        params.set('root', flags.root);
+      }
+      const query = params.toString();
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/archive${query ? `?${query}` : ''}`);
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const buffer = Buffer.from(await resp.arrayBuffer());
+      const out =
+        flags.out ||
+        flags.output ||
+        filenameFromContentDisposition(resp.headers.get('content-disposition'), `${projectId}.zip`);
+      const { writeFile } = await import('node:fs/promises');
+      await writeFile(out, buffer);
+      if (flags.json) {
+        return process.stdout.write(JSON.stringify({
+          path: out,
+          bytes: buffer.length,
+          projectId,
+          includeConversations: Boolean(flags['include-conversations']),
+        }, null, 2) + '\n');
+      }
+      console.log(`[project] exported ${projectId} to ${out} (${buffer.length} bytes)`);
       return;
     }
     case 'delete': {

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve as pathResolve } from 'node:path';
@@ -67,6 +67,27 @@ async function startProjectStubServer(): Promise<StubServer> {
           project: { id: 'duplicate-1', name: 'Duplicate Copy' },
           conversationId: 'conversation-duplicate',
         }));
+        return;
+      }
+      if (captured.method === 'POST' && captured.url === '/api/import/project') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          project: { id: 'imported-project', name: 'Imported Project' },
+          conversationId: 'conversation-imported',
+          entryFile: 'index.html',
+        }));
+        return;
+      }
+      if (
+        captured.method === 'GET' &&
+        captured.url === '/api/projects/source-project/archive?includeConversations=1'
+      ) {
+        res.statusCode = 200;
+        res.setHeader(
+          'content-disposition',
+          'attachment; filename="Bundle_Source.zip"; filename*=UTF-8\'\'Bundle%20Source.zip',
+        );
+        res.end(Buffer.from('zip-bytes'));
         return;
       }
 
@@ -171,5 +192,66 @@ describe('od project CLI', () => {
       url: '/api/projects/source-project/duplicate',
     });
     expect(JSON.parse(stub.requests[0]!.body)).toEqual({ name: 'Duplicate Copy' });
+  });
+
+  it('imports an Open Design project ZIP through the project import endpoint', async () => {
+    stub = await startProjectStubServer();
+    tempRoot = mkdtempSync(join(tmpdir(), 'od-project-cli-'));
+    const zipPath = join(tempRoot, 'handoff.zip');
+    writeFileSync(zipPath, 'zip-bytes');
+
+    const result = await runCli([
+      'project',
+      'import-zip',
+      zipPath,
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({
+      project: { id: 'imported-project', name: 'Imported Project' },
+      conversationId: 'conversation-imported',
+      entryFile: 'index.html',
+    });
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]!.method).toBe('POST');
+    expect(stub.requests[0]!.url).toBe('/api/import/project');
+    expect(stub.requests[0]!.body).toContain('name="file"; filename="handoff.zip"');
+  });
+
+  it('exports a project ZIP with conversation history through the archive endpoint', async () => {
+    stub = await startProjectStubServer();
+    tempRoot = mkdtempSync(join(tmpdir(), 'od-project-cli-'));
+    const outPath = join(tempRoot, 'bundle.zip');
+
+    const result = await runCli([
+      'project',
+      'export-zip',
+      'source-project',
+      '--include-conversations',
+      '--out',
+      outPath,
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(JSON.parse(result.stdout)).toEqual({
+      path: outPath,
+      bytes: Buffer.byteLength('zip-bytes'),
+      projectId: 'source-project',
+      includeConversations: true,
+    });
+    expect(readFileSync(outPath, 'utf8')).toBe('zip-bytes');
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({
+      method: 'GET',
+      url: '/api/projects/source-project/archive?includeConversations=1',
+    });
   });
 });
