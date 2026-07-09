@@ -2427,11 +2427,15 @@ export function ChatPane({
                               signInLabel={t('chat.amrError.authorizeCta')}
                               amrEntrySourceDetail="chat_error_authorize_retry"
                               initialStatus={inlineAmrLoginStatus}
+                              skipInitialRefresh
                               metricsConsent={config?.telemetry?.metrics === true}
                               installationId={config?.installationId}
                               showActivationDetails
                               hideSignedOutStatus
                               revealPendingCancelAction
+                              onSignInStarted={() => {
+                                amrAuthPrevLoggedInRef.current = false;
+                              }}
                               onStatusChange={(loginStatus) => {
                                 // Retry only on a real signed-out -> signed-in
                                 // transition (see amrAuthPrevLoggedInRef).

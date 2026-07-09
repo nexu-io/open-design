@@ -91,7 +91,7 @@ test.beforeAll(async () => {
   codexRuntime = runtimes.codex;
 });
 
-test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and keep Retry available', async ({ page }) => {
+test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and recover after manual Retry', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
   const profile = 'local';
@@ -119,7 +119,8 @@ test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and ke
   });
 
   const amr = await setupAmrWorkspace(page, {
-    failBalanceAtPrompt: true,
+    assistantText: 'AMR balance retry recovered.',
+    failBalanceAtPromptOnce: true,
     profile,
     requireLoginConfig: false,
     selectedAgentId: 'amr',
@@ -151,9 +152,12 @@ test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and ke
       }),
     )
     .toBeTruthy();
+
+  await retry.click();
+  await expect(page.getByText('AMR balance retry recovered.').first()).toBeVisible({ timeout: T.long });
 });
 
-test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in', async ({ page }) => {
+test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in and auto-recover', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
   let loggedIn = false;
@@ -190,7 +194,8 @@ test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in', 
   });
 
   const amr = await setupAmrWorkspace(page, {
-    failAuthAtPrompt: true,
+    assistantText: 'AMR auth auto retry recovered.',
+    failAuthAtPromptOnce: true,
     selectedAgentId: 'amr',
   });
 
@@ -206,9 +211,10 @@ test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in', 
   // dialog. The run then auto-retries once /status reports signed in.
   await expect.poll(() => loginRequested, { timeout: T.medium }).toBe(true);
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText('AMR auth auto retry recovered.').first()).toBeVisible({ timeout: T.long });
 });
 
-test('[P0] @critical AMR model catalog invalid-key failures route to authorization recovery', async ({ page }) => {
+test('[P0] @critical AMR model catalog invalid-key failures authorize and auto-recover', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
   let loggedIn = false;
@@ -245,7 +251,7 @@ test('[P0] @critical AMR model catalog invalid-key failures route to authorizati
   });
 
   const amr = await setupAmrWorkspace(page, {
-    failModelListInvalidApiKey: true,
+    assistantText: 'AMR model catalog auth retry recovered.',
     profile: 'prod',
     requireLoginConfig: false,
     selectedAgentId: 'amr',
@@ -304,6 +310,122 @@ test('[P0] @critical AMR model catalog invalid-key failures route to authorizati
   await authorizeAndRetry.click();
   await expect.poll(() => loginRequested, { timeout: T.medium }).toBe(true);
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText('AMR model catalog auth retry recovered.').first()).toBeVisible({ timeout: T.long });
+});
+
+test('[P0] @critical non-AMR model failures promote Open Design AMR and auto-retry after sign-in', async ({ page }) => {
+  await stubCatalogsEmpty(page);
+  await stubRuntimeAgents(page);
+  let loggedIn = false;
+  let loginRequested = false;
+  await page.route('**/api/integrations/vela/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        loggedIn
+          ? {
+              loggedIn: true,
+              profile: 'local',
+              configPath: '/tmp/.amr/config.json',
+              user: { id: 'switch-user', email: 'switch-amr@example.com', plan: 'free' },
+            }
+          : {
+              loggedIn: false,
+              profile: 'local',
+              configPath: '/tmp/.amr/config.json',
+              user: null,
+            },
+      ),
+    });
+  });
+  await page.route('**/api/integrations/vela/login', async (route) => {
+    loginRequested = true;
+    loggedIn = true;
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ pid: 4244, startedAt: new Date().toISOString(), profile: 'local' }),
+    });
+  });
+
+  const amr = await setupAmrWorkspace(page, {
+    assistantText: 'AMR promotion retry recovered.',
+    requireLoginConfig: false,
+    selectedAgentId: 'codex',
+  });
+  const { conversationId, projectId } = amr;
+  const runRequestBodies: Array<Record<string, unknown>> = [];
+  await page.route('**/api/runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+    const raw = route.request().postData();
+    if (raw) runRequestBodies.push(JSON.parse(raw) as Record<string, unknown>);
+    await route.fallback();
+  });
+
+  const userMsgId = `u-switch-${projectId}`;
+  const userMsgRes = await page.request.put(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages/${userMsgId}`,
+    {
+      data: {
+        role: 'user',
+        content: 'please recover this failed non-AMR model run',
+        createdAt: Date.now() - 2_000,
+      },
+    },
+  );
+  expect(userMsgRes.ok(), `upsert user msg: ${await userMsgRes.text()}`).toBeTruthy();
+
+  const assistantMsgId = `a-switch-${projectId}`;
+  const assistantMsgRes = await page.request.put(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages/${assistantMsgId}`,
+    {
+      data: {
+        role: 'assistant',
+        content: '',
+        agentId: 'codex',
+        runId: `run-switch-${projectId}`,
+        runStatus: 'failed',
+        createdAt: Date.now() - 1_000,
+        startedAt: Date.now() - 1_000,
+        preTurnFileNames: [],
+        events: [
+          {
+            kind: 'status',
+            label: 'error',
+            detail: 'The selected model quota is exhausted for this provider.',
+            code: 'RATE_LIMITED',
+          },
+        ],
+      },
+    },
+  );
+  expect(assistantMsgRes.ok(), `upsert assistant msg: ${await assistantMsgRes.text()}`).toBeTruthy();
+
+  await gotoProject(page, projectId);
+
+  const switchAndRetry = page.getByRole('button', { name: /Switch to Open Design & retry/i }).first();
+  await expect(switchAndRetry).toBeVisible({ timeout: T.long });
+  await switchAndRetry.click();
+
+  const settings = page.getByRole('dialog');
+  await expect(settings).toBeVisible({ timeout: T.long });
+  await expect
+    .poll(async () => {
+      const raw = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
+      return raw ? JSON.parse(raw).agentId : null;
+    })
+    .toBe('amr');
+
+  await settings.getByTestId('settings-agent-select-amr').click();
+  await settings.getByRole('button', { name: /^(Authorize|Sign in)$/ }).first().click();
+
+  await expect.poll(() => loginRequested, { timeout: T.medium }).toBe(true);
+  await expect.poll(() => runRequestBodies.some((body) => body.agentId === 'amr'), { timeout: T.long }).toBe(true);
+  await expect(page.getByText('AMR promotion retry recovered.').first()).toBeVisible({ timeout: T.long });
 });
 
 test('[P0] @critical Settings reopens AMR with the configured profile, account badge, and model catalog', async ({ page }) => {
@@ -760,7 +882,9 @@ async function setupAmrWorkspace(
   page: Page,
   options: {
     failAuthAtPrompt?: boolean;
+    failAuthAtPromptOnce?: boolean;
     failBalanceAtPrompt?: boolean;
+    failBalanceAtPromptOnce?: boolean;
     failModelListInvalidApiKey?: boolean;
     profile?: string;
     requireLoginConfig?: boolean;
@@ -773,10 +897,16 @@ async function setupAmrWorkspace(
 
   const root = join(tmpdir(), `open-design-amr-ui-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const homeDir = join(root, 'home');
+  const fakeVelaSessionId = `fake-amr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const velaBin = await writeFakeVelaBin(join(root, 'bin'), {
+    sessionId: fakeVelaSessionId,
     ...(options.assistantText !== undefined ? { assistantText: options.assistantText } : {}),
     ...(options.failAuthAtPrompt !== undefined ? { failAuthAtPrompt: options.failAuthAtPrompt } : {}),
+    ...(options.failAuthAtPromptOnce !== undefined ? { failAuthAtPromptOnce: options.failAuthAtPromptOnce } : {}),
     ...(options.failBalanceAtPrompt !== undefined ? { failBalanceAtPrompt: options.failBalanceAtPrompt } : {}),
+    ...(options.failBalanceAtPromptOnce !== undefined
+      ? { failBalanceAtPromptOnce: options.failBalanceAtPromptOnce }
+      : {}),
     ...(options.failModelListInvalidApiKey !== undefined
       ? { failModelListInvalidApiKey: options.failModelListInvalidApiKey }
       : {}),
@@ -806,8 +936,10 @@ async function setupAmrWorkspace(
       amr: {
         VELA_BIN: velaBin,
         HOME: homeDir,
+        OPENCODE_TEST_HOME: homeDir,
         VELA_LINK_URL: 'http://localhost:18081',
         VELA_RUNTIME_KEY: 'fake-runtime-key',
+        FAKE_VELA_SESSION_ID: fakeVelaSessionId,
         ...(options.profile ? { OPEN_DESIGN_AMR_PROFILE: options.profile } : {}),
       },
       codex: codexRuntime.env,

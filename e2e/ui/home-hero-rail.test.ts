@@ -1,8 +1,9 @@
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import { routeAgents } from '@/playwright/mock-factory';
+import { T } from '@/timeouts';
 
-test.describe.configure({ timeout: 30_000 });
+test.describe.configure({ timeout: T.xlong });
 
 const STORAGE_KEY = 'open-design:config';
 const LOCALE_KEY = 'open-design:locale';
@@ -269,7 +270,7 @@ const APPLY_RESPONSES: Record<string, unknown> = {
     inputs: [],
     assets: [],
     mcpServers: [],
-    trust: 'trusted',
+    trust: 'bundled',
     capabilitiesGranted: ['prompt:inject'],
     capabilitiesRequired: ['prompt:inject'],
     appliedPlugin: {
@@ -327,7 +328,7 @@ const PROMPT_TEMPLATES = [
 ];
 
 async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 15_000 });
 }
 
 async function seedBrowserConfig(page: Page, config: Record<string, unknown>) {
@@ -474,7 +475,9 @@ test('[P1] home left rail expands and collapses from the shell controls', async 
   await expect(page.getByTestId('entry-nav-home')).toBeVisible();
   await expect(page.getByTestId('entry-nav-projects')).toBeVisible();
 
-  await page.getByTestId('entry-nav-collapse').click();
+  const collapse = page.getByTestId('entry-nav-collapse');
+  await expect(collapse).toBeVisible();
+  await collapse.click();
   await expect(shell).not.toHaveClass(/entry--rail-open/);
   await expect(rail).toHaveAttribute('aria-hidden', 'true');
   await expect(expand).toHaveAttribute('aria-expanded', 'false');
@@ -505,6 +508,557 @@ test('[P1] home composer plus menu exposes attachment, connector, plugin, and MC
 
   await page.getByTestId('home-hero-file-input').setInputFiles('../package.json');
   await expect(page.getByTestId('home-hero-staged-files')).toContainText('package.json');
+});
+
+test('[P1] home composer plus menu opens project, local code, Figma help, and design system context actions', async ({ page }) => {
+  const referenceProject = {
+    id: 'ref-home-project',
+    name: 'Reference Home Project',
+    skillId: null,
+    designSystemId: null,
+    createdAt: Date.now() - 1_000,
+    updatedAt: Date.now(),
+    metadata: {
+      kind: 'prototype',
+      nameSource: 'user',
+    },
+  };
+
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects: [referenceProject] } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/projects/ref-home-project**', async (route) => {
+    await route.fulfill({
+      json: {
+        project: referenceProject,
+        resolvedDir: '/tmp/open-design/reference-home-project',
+      },
+    });
+  });
+  await page.route('**/api/dialog/open-folder', async (route) => {
+    await route.fulfill({ json: { path: '/tmp/open-design/local-code-home' } });
+  });
+  await page.route('**/api/dir-exists', async (route) => {
+    await route.fulfill({ json: { exists: true } });
+  });
+
+  await gotoEntryHome(page);
+  const input = page.getByTestId('home-hero-input');
+
+  await page.getByTestId('home-hero-plus-trigger').click();
+  const plusMenu = page.getByRole('menu');
+  for (const label of ['Files', 'Code', 'Designs']) {
+    await expect(plusMenu.getByText(label, { exact: true })).toBeVisible();
+  }
+  await expect(page.getByTestId('composer-plus-attach')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-reference-project')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-local-code')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-figma')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-figma-help')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-design-system')).toBeVisible();
+  await page.getByTestId('composer-plus-reference-project').click();
+  const referenceDialog = page.getByRole('dialog', { name: 'Reference another project' });
+  await expect(referenceDialog).toBeVisible();
+  await expect(referenceDialog.getByRole('option', { name: /Reference Home Project/i })).toHaveAttribute('aria-selected', 'true');
+  await referenceDialog.getByRole('button', { name: 'Reference project' }).click();
+  await expect(referenceDialog).toHaveCount(0);
+  await expect(input).toContainText('Reference Home Project');
+  await expect(page.locator('[data-testid^="home-hero-context-workspace-"]', { hasText: 'Reference Home Project' })).toBeVisible();
+
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await page.getByTestId('composer-plus-local-code').click();
+  await expect(input).toContainText('local-code-home');
+  await expect(page.locator('[data-testid^="home-hero-context-workspace-"]', { hasText: 'local-code-home' })).toBeVisible();
+
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await page.getByTestId('composer-plus-figma').click();
+  const figmaImport = page.getByRole('dialog', { name: 'Import from Figma' });
+  await expect(figmaImport).toBeVisible();
+  await expect(figmaImport.getByRole('tab', { name: 'Upload .fig' })).toHaveAttribute('aria-selected', 'true');
+  await expect(figmaImport.getByRole('tab', { name: 'Figma URL' })).toBeVisible();
+  await figmaImport.getByRole('button', { name: 'Close' }).click();
+  await expect(figmaImport).toHaveCount(0);
+
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await page.getByTestId('composer-plus-figma-help').click();
+  const figmaHelp = page.getByRole('dialog', { name: 'How to download a .fig file' });
+  await expect(figmaHelp).toBeVisible();
+  await expect(figmaHelp).toContainText('Save local copy');
+  await figmaHelp.getByRole('button', { name: 'Close' }).click();
+  await expect(figmaHelp).toHaveCount(0);
+
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await page.getByTestId('composer-plus-design-system').click();
+  await expect(page.getByTestId('project-ds-picker-popover')).toBeVisible();
+});
+
+test('[P1] home Figma import uploads a .fig file into a new project and opens it with the suggested prompt', async ({ page }) => {
+  const projectId = 'home-figma-file-project';
+  const conversationId = 'conv-home-figma-file';
+  const createBodies: Array<Record<string, unknown>> = [];
+  const patchBodies: Array<Record<string, unknown>> = [];
+  const importBodies: string[] = [];
+  const suggestedPrompt = 'Build a responsive page from figma/DESIGN-context.md.';
+
+  await page.route('**/api/projects', async (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') {
+      await route.fulfill({ json: { projects: [] } });
+      return;
+    }
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON() as Record<string, unknown>;
+      createBodies.push(body);
+      await route.fulfill({
+        json: {
+          project: {
+            id: projectId,
+            name: body.name ?? 'Imported from Figma',
+            skillId: null,
+            designSystemId: null,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            metadata: { kind: 'prototype', nameSource: 'user' },
+          },
+          conversationId,
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await routeMinimalProjectWorkspace(page, projectId, conversationId, {
+    name: 'Imported from Figma',
+    metadata: { kind: 'prototype', nameSource: 'user' },
+  });
+  await page.route(`**/api/projects/${projectId}/figma/import`, async (route) => {
+    importBodies.push(route.request().postData() ?? '');
+    await route.fulfill({
+      json: {
+        snapshotDir: 'figma',
+        files: ['figma/tree.json', 'figma/DESIGN-context.md', 'figma/thumbnail.png'],
+        inventory: {
+          decoded: true,
+          source: 'fig-file',
+          nodeCount: 12,
+          pageCount: 1,
+          frameCount: 2,
+          componentCount: 3,
+          colors: ['#FF5500'],
+          fonts: [{ family: 'Inter', styles: ['Regular'] }],
+          assetCount: 1,
+          hasThumbnail: true,
+          warnings: [],
+        },
+        thumbnailPath: 'figma/thumbnail.png',
+        contextPath: 'figma/DESIGN-context.md',
+        suggestedPrompt,
+        label: 'marketing-home.fig',
+      },
+    });
+  });
+  await page.route(`**/api/projects/${projectId}`, async (route) => {
+    const request = route.request();
+    if (request.method() === 'PATCH') {
+      const body = request.postDataJSON() as Record<string, unknown>;
+      patchBodies.push(body);
+      await route.fulfill({
+        json: {
+          project: {
+            id: projectId,
+            name: 'Imported from Figma',
+            skillId: null,
+            designSystemId: null,
+            pendingPrompt: body.pendingPrompt ?? null,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            metadata: { kind: 'prototype', nameSource: 'user' },
+          },
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await gotoEntryHome(page);
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await page.getByTestId('composer-plus-figma').click();
+  const figmaImport = page.getByRole('dialog', { name: 'Import from Figma' });
+  await expect(figmaImport).toBeVisible();
+
+  await figmaImport.locator('input[type="file"]').setInputFiles({
+    name: 'marketing-home.fig',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from('fake fig payload for home import e2e', 'utf8'),
+  });
+  await expect(figmaImport).toContainText('marketing-home.fig');
+  await figmaImport.getByPlaceholder(/Optional: notes/i).fill('Use bold sections.');
+  await figmaImport.getByRole('button', { name: 'Import & build' }).click();
+
+  await expect.poll(() => importBodies.length, { timeout: 10_000 }).toBe(1);
+  expect(importBodies[0]).toContain('marketing-home.fig');
+  expect(importBodies[0]).toContain('Use bold sections.');
+  await expect.poll(() => patchBodies.length, { timeout: 10_000 }).toBe(1);
+  expect(createBodies[0]?.name).toBe('Imported from Figma');
+  expect(createBodies[0]?.pendingPrompt ?? null).toBeNull();
+  expect(patchBodies[0]?.pendingPrompt).toBe(suggestedPrompt);
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`));
+});
+
+test('[P1] home Figma URL import creates a project with the migration prompt', async ({ page }) => {
+  const projectId = 'home-figma-url-project';
+  const conversationId = 'conv-home-figma-url';
+  const createBodies: Array<Record<string, unknown>> = [];
+  const figmaUrl = 'https://figma.com/design/AbCdEf12345/Home-Mockup';
+  const notes = 'Keep the hero compact.';
+
+  await page.route('**/api/projects', async (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') {
+      await route.fulfill({ json: { projects: [] } });
+      return;
+    }
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON() as Record<string, unknown>;
+      createBodies.push(body);
+      await route.fulfill({
+        json: {
+          project: {
+            id: projectId,
+            name: body.name ?? 'Imported from Figma',
+            skillId: null,
+            designSystemId: null,
+            pendingPrompt: body.pendingPrompt ?? null,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            metadata: { kind: 'prototype', nameSource: 'user' },
+          },
+          conversationId,
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await routeMinimalProjectWorkspace(page, projectId, conversationId, {
+    name: 'Imported from Figma',
+    metadata: { kind: 'prototype', nameSource: 'user' },
+  });
+
+  await gotoEntryHome(page);
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await page.getByTestId('composer-plus-figma').click();
+  const figmaImport = page.getByRole('dialog', { name: 'Import from Figma' });
+  await figmaImport.getByRole('tab', { name: 'Figma URL' }).click();
+  await figmaImport.locator('input[type="url"]').fill(figmaUrl);
+  await figmaImport.getByPlaceholder(/Optional: notes/i).fill(notes);
+  await figmaImport.getByRole('button', { name: 'Import & build' }).click();
+
+  await expect.poll(() => createBodies.length, { timeout: 10_000 }).toBe(1);
+  expect(createBodies[0]?.name).toBe('Imported from Figma');
+  expect(createBodies[0]?.pendingPrompt).toBe(
+    `Migrate the Figma file at ${figmaUrl} into a responsive webpage using its design system. ${notes}`,
+  );
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`));
+});
+
+test('[P1] home composer sends referenced workspace context into project creation', async ({ page }) => {
+  const createBodies: Array<Record<string, any>> = [];
+  const referenceProject = {
+    id: 'ref-home-payload',
+    name: 'Reference Home Payload',
+    skillId: null,
+    designSystemId: null,
+    createdAt: Date.now() - 1_000,
+    updatedAt: Date.now(),
+    metadata: {
+      kind: 'prototype',
+      nameSource: 'user',
+    },
+  };
+
+  await page.route('**/api/projects', async (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') {
+      await route.fulfill({ json: { projects: [referenceProject] } });
+      return;
+    }
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON() as Record<string, any>;
+      createBodies.push(body);
+      const id = body.id ?? 'home-context-project';
+      await route.fulfill({
+        json: {
+          project: {
+            id,
+            name: body.name ?? 'Untitled project',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            metadata: body.metadata ?? {},
+          },
+          conversationId: `conv-${id}`,
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route('**/api/projects/ref-home-payload**', async (route) => {
+    await route.fulfill({
+      json: {
+        project: referenceProject,
+        resolvedDir: '/tmp/open-design/reference-home-payload',
+      },
+    });
+  });
+  await page.route('**/api/dialog/open-folder', async (route) => {
+    await route.fulfill({ json: { path: '/tmp/open-design/local-code-home-payload' } });
+  });
+  await page.route('**/api/dir-exists', async (route) => {
+    await route.fulfill({ json: { exists: true } });
+  });
+  await routeRunsAccepted(page);
+
+  await gotoEntryHome(page);
+  const input = page.getByTestId('home-hero-input');
+
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await page.getByTestId('composer-plus-reference-project').click();
+  const referenceDialog = page.getByRole('dialog', { name: 'Reference another project' });
+  await expect(referenceDialog.getByRole('option', { name: /Reference Home Payload/i })).toHaveAttribute('aria-selected', 'true');
+  await referenceDialog.getByRole('button', { name: 'Reference project' }).click();
+  await expect(input).toContainText('Reference Home Payload');
+
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await page.getByTestId('composer-plus-local-code').click();
+  await expect(input).toContainText('local-code-home-payload');
+
+  await input.fill('Create a project using the referenced workspace context.');
+  await Promise.all([
+    page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects'),
+    page.getByTestId('home-hero-submit').click(),
+  ]);
+
+  await expect.poll(() => createBodies.length).toBe(1);
+  const metadata = createBodies[0]?.metadata as { linkedDirs?: string[] } | undefined;
+  expect(metadata?.linkedDirs ?? []).toEqual([
+    '/tmp/open-design/reference-home-payload',
+    '/tmp/open-design/local-code-home-payload',
+  ]);
+});
+
+test('[P1] home staged workspace context auto-sends into the first project run', async ({ page }) => {
+  const prompt = 'Create a project and immediately use the Home-staged context.';
+  const projectId = 'home-autosend-context-project';
+  const conversationId = 'conv-home-autosend-context';
+  const runBodies: Array<Record<string, unknown>> = [];
+  let createdProjectMetadata: Record<string, unknown> = {};
+  const referenceProject = {
+    id: 'ref-home-autosend',
+    name: 'Reference Home Autosend',
+    skillId: null,
+    designSystemId: null,
+    createdAt: Date.now() - 1_000,
+    updatedAt: Date.now(),
+    metadata: {
+      kind: 'prototype',
+      nameSource: 'user',
+    },
+  };
+
+  await page.route('**/api/projects', async (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') {
+      await route.fulfill({ json: { projects: [referenceProject] } });
+      return;
+    }
+    if (request.method() === 'POST') {
+      const body = request.postDataJSON() as { metadata?: Record<string, unknown>; name?: string; pendingPrompt?: string };
+      createdProjectMetadata = body.metadata ?? {};
+      await route.fulfill({
+        json: {
+          project: {
+            id: projectId,
+            name: body.name ?? 'Home autosend context project',
+            skillId: null,
+            designSystemId: null,
+            pendingPrompt: body.pendingPrompt ?? prompt,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            metadata: createdProjectMetadata,
+          },
+          conversationId,
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.route(`**/api/projects/${referenceProject.id}**`, async (route) => {
+    await route.fulfill({
+      json: {
+        project: referenceProject,
+        resolvedDir: '/tmp/open-design/reference-home-autosend',
+      },
+    });
+  });
+  await page.route(`**/api/projects/${projectId}`, async (route) => {
+    const request = route.request();
+    if (request.method() === 'GET') {
+      await route.fulfill({
+        json: {
+          project: {
+            id: projectId,
+            name: 'Home autosend context project',
+            skillId: null,
+            designSystemId: null,
+            pendingPrompt: prompt,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            metadata: createdProjectMetadata,
+          },
+        },
+      });
+      return;
+    }
+    if (request.method() === 'PATCH') {
+      await route.fulfill({
+        json: {
+          project: {
+            id: projectId,
+            name: 'Home autosend context project',
+            skillId: null,
+            designSystemId: null,
+            pendingPrompt: null,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            metadata: createdProjectMetadata,
+          },
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.route(`**/api/projects/${projectId}/conversations`, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        conversations: [
+          {
+            id: conversationId,
+            projectId,
+            title: null,
+            sessionMode: 'design',
+            messageCount: 0,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+        ],
+      },
+    });
+  });
+  await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/messages`, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { messages: [] } });
+  });
+  await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/messages/*`, async (route) => {
+    if (route.request().method() !== 'PUT') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { ok: true } });
+  });
+  await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/comments`, async (route) => {
+    await route.fulfill({ json: { comments: [] } });
+  });
+  await page.route(`**/api/projects/${projectId}/files`, async (route) => {
+    await route.fulfill({ json: { files: [] } });
+  });
+  await page.route('**/api/live-artifacts**', async (route) => {
+    await route.fulfill({ json: { liveArtifacts: [] } });
+  });
+  await page.route('**/api/runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+    const raw = route.request().postData();
+    if (raw) runBodies.push(JSON.parse(raw) as Record<string, unknown>);
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: 'home-autosend-context-run' }),
+    });
+  });
+  await page.route('**/api/runs/*/events**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: ['event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n'),
+    });
+  });
+  await page.route('**/api/dialog/open-folder', async (route) => {
+    await route.fulfill({ json: { path: '/tmp/open-design/local-code-home-autosend' } });
+  });
+  await page.route('**/api/dir-exists', async (route) => {
+    await route.fulfill({ json: { exists: true } });
+  });
+
+  await gotoEntryHome(page);
+  const input = page.getByTestId('home-hero-input');
+
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await page.getByTestId('composer-plus-reference-project').click();
+  const referenceDialog = page.getByRole('dialog', { name: 'Reference another project' });
+  await expect(referenceDialog.getByRole('option', { name: /Reference Home Autosend/i })).toHaveAttribute('aria-selected', 'true');
+  await referenceDialog.getByRole('button', { name: 'Reference project' }).click();
+  await expect(input).toContainText('Reference Home Autosend');
+
+  await page.getByTestId('home-hero-plus-trigger').click();
+  await page.getByTestId('composer-plus-local-code').click();
+  await expect(input).toContainText('local-code-home-autosend');
+
+  await input.fill(prompt);
+  await Promise.all([
+    page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects'),
+    page.getByTestId('home-hero-submit').click(),
+  ]);
+
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`));
+  await expect.poll(() => runBodies.length, { timeout: 15_000 }).toBe(1);
+  expect(runBodies[0]?.message).toContain(prompt);
+  expect(runBodies[0]?.projectId).toBe(projectId);
+  expect(runBodies[0]?.conversationId).toBe(conversationId);
+  const context = runBodies[0]?.context as { workspaceItems?: Array<{ id?: string; label?: string; absolutePath?: string }> } | undefined;
+  expect(context?.workspaceItems ?? []).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: 'project:ref-home-autosend',
+        label: 'Reference Home Autosend',
+        absolutePath: '/tmp/open-design/reference-home-autosend',
+      }),
+      expect.objectContaining({
+        id: 'local-code:/tmp/open-design/local-code-home-autosend',
+        label: 'local-code-home-autosend',
+        absolutePath: '/tmp/open-design/local-code-home-autosend',
+      }),
+    ]),
+  );
+  await expect
+    .poll(() => page.evaluate((id) => window.sessionStorage.getItem(`od:auto-send-context:${id}`), projectId))
+    .toBeNull();
 });
 
 test('[P2] home hero exposes the template picker, starter cards, blank project, and More shortcuts', async ({ page }) => {
@@ -551,6 +1105,51 @@ test('[P0] empty home composer submits the active placeholder suggestion with te
   expect(typeof body.pluginId).toBe('string');
   expect(typeof body.metadata?.kind).toBe('string');
   await expect(page).toHaveURL(/\/projects\//);
+});
+
+test('[P1] home session mode toggle switches Ask planning prompts away from design routing', async ({ page }) => {
+  await routeProjectCreates(page);
+  await routeRunsAccepted(page);
+  await gotoEntryHome(page);
+
+  const modeTrigger = page.getByTestId('session-mode-trigger');
+  await expect(modeTrigger).toContainText('Design');
+  await modeTrigger.click();
+  await expect(page.getByRole('menuitemradio', { name: 'Design mode' })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('menuitemradio', { name: 'Ask mode' }).hover();
+  await expect(page.getByText(/planning, and discussion/i)).toBeVisible();
+
+  await page.getByRole('menuitemradio', { name: 'Ask mode' }).click();
+  await expect(modeTrigger).toContainText('Ask');
+  await page.getByTestId('home-hero-input').fill('Help me plan the IA before designing screens.');
+
+  const askRequestPromise = page.waitForRequest((request) =>
+    request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
+  );
+  await page.getByTestId('home-hero-submit').click();
+  const askBody = await askRequestPromise.then((request) => request.postDataJSON() as {
+    conversationMode?: string;
+    pluginId?: string | null;
+  });
+
+  expect(askBody.conversationMode).toBe('chat');
+  expect(askBody.pluginId ?? null).toBeNull();
+
+  await gotoEntryHome(page);
+  await expect(page.getByTestId('session-mode-trigger')).toContainText('Design');
+  await page.getByTestId('home-hero-input').fill('Design the screens from this brief.');
+
+  const designRequestPromise = page.waitForRequest((request) =>
+    request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
+  );
+  await page.getByTestId('home-hero-submit').click();
+  const designBody = await designRequestPromise.then((request) => request.postDataJSON() as {
+    conversationMode?: string;
+    pluginId?: string | null;
+  });
+
+  expect(designBody.conversationMode).toBe('design');
+  expect(typeof designBody.pluginId).toBe('string');
 });
 
 test('[P0] home design-system picker carries explicit and cleared selections into project creation', async ({ page }) => {
@@ -623,9 +1222,9 @@ test('[P1] brand-backed design system previews as a Brand Kit and carries into p
   await expect(popover.getByTestId(`project-ds-picker-option-${BRAND_DESIGN_SYSTEM.id}`)).toBeVisible();
   await popover.getByTestId(`project-ds-picker-option-${BRAND_DESIGN_SYSTEM.id}`).hover();
 
-  const brandPreview = page.getByTestId('project-ds-picker-preview-brand');
+  const brandPreview = page.getByTestId('project-ds-picker-preview');
   await expect(brandPreview).toBeVisible();
-  await expect(brandPreview.getByTestId('brand-preview-card')).toBeVisible();
+  await expect(brandPreview.getByTestId('project-ds-picker-preview-kit')).toBeVisible();
   await expect(brandPreview).toContainText('Acme is a bold engineering brand for fast-moving teams.');
   await expect(brandPreview).toContainText('Space Grotesk');
 
@@ -675,19 +1274,26 @@ test('[P1] first-run home template reveal opens from wheel gesture', async ({ pa
   await expect(page.getByTestId('entry-view-home').getByTestId('plugins-home-section')).toBeVisible();
 });
 
-test('[P1] blank project entry surfaces create failures and remains retryable', async ({ page }) => {
+test('[P1] blank project entry remains retryable after create failures', async ({ page }) => {
   await routeProjectCreates(page, { failFirstCreate: true });
   await gotoEntryHome(page);
 
+  const failedResponsePromise = page.waitForResponse((response) =>
+    response.request().method() === 'POST'
+    && new URL(response.url()).pathname === '/api/projects'
+    && response.status() === 500,
+  );
   await page.getByTestId('home-hero-blank-project').click();
-  await expect(page.locator('.home-hero__error')).toContainText(/blank project|空白项目|空白專案|create/i);
+  await failedResponsePromise;
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId('home-hero-blank-project')).toBeEnabled();
 
   const retryRequestPromise = page.waitForRequest((request) =>
     request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
   );
   await page.getByTestId('home-hero-blank-project').click();
   await retryRequestPromise;
-  await expect(page.locator('.home-hero__error')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/projects\/[^/]+$/);
 });
 
 test('[P2] home template picker supports no-results, clear, Escape, and outside dismissal', async ({ page }) => {
@@ -701,7 +1307,7 @@ test('[P2] home template picker supports no-results, clear, Escape, and outside 
   await page.getByTestId('home-hero-template-search').fill('zzzz-no-template');
   await expect(page.getByTestId('home-hero-template-menu')).toContainText(/No matches|没有匹配|沒有相符/i);
   await page.getByTestId('home-hero-template-clear').click();
-  await expect(page.getByTestId('home-hero-active-type-chip')).toHaveCount(0);
+  await expect(activeHeroChip(page)).toHaveCount(0);
 
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('home-hero-template-menu')).toHaveCount(0);
@@ -823,7 +1429,7 @@ test('[P1] home hero rail switches non-media modes without surfacing media-only 
   await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
 
   await expectChipSelection(page, 'prototype', 'Prototype');
-  await expect(page.getByTestId('home-hero-footer-option-designSystem')).toBeVisible();
+  await expect(page.getByTestId('home-hero-design-system-trigger')).toBeVisible();
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
   await clearActiveChip(page);
@@ -834,35 +1440,37 @@ test('[P1] home hero rail switches non-media modes without surfacing media-only 
   await clearActiveChip(page);
 
   await expectChipSelection(page, 'deck', 'Slide deck');
-  await expect(page.getByTestId('home-hero-footer-option-designSystem')).toBeVisible();
+  await expect(page.getByTestId('home-hero-design-system-trigger')).toBeVisible();
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
   await clearActiveChip(page);
 });
 
-test('[P1] home hero rail exposes media footer options for image, video, hyperframes, and audio', async ({ page }) => {
+test('[P1] home hero rail defers media settings for image, video, hyperframes, and audio', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expectChipSelection(page, 'image', 'Image');
-  await expect(page.getByTestId('home-hero-footer-option-ratio')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-resolution')).toBeVisible();
+  await expect(page.getByTestId('home-hero-design-system-trigger')).toBeVisible();
+  await expect(page.getByTestId('home-hero-footer-option-ratio')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-footer-option-resolution')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
   await clearActiveChip(page);
 
   await expectChipSelection(page, 'video', 'Video');
-  await expect(page.getByTestId('home-hero-footer-option-ratio')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-resolution')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-duration')).toBeVisible();
+  await expect(page.getByTestId('home-hero-design-system-trigger')).toBeVisible();
+  await expect(page.getByTestId('home-hero-footer-option-ratio')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-footer-option-resolution')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
   await clearActiveChip(page);
 
   await expectChipSelection(page, 'hyperframes', 'HyperFrames');
-  await expect(page.getByTestId('home-hero-footer-option-ratio')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-duration')).toBeVisible();
+  await expect(page.getByTestId('home-hero-footer-option-ratio')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
   await clearActiveChip(page);
 
   await expectChipSelection(page, 'audio', 'Audio');
-  await expect(page.getByTestId('home-hero-footer-option-audioType')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-duration')).toBeVisible();
+  await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
 });
 
 test('[P1] home hero example presets update the composer input for prototype and live artifact', async ({ page }) => {
@@ -886,7 +1494,130 @@ test('[P1] home hero example presets update the composer input for prototype and
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="image-template-notion-team-dashboard-live-artifact"]')
     .click();
-  await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
+  await expect(input).toHaveText('Create a live Notion dashboard artifact.');
+});
+
+test('[P1] home hero example preset Use button applies the template without relying on card click', async ({ page }) => {
+  await gotoEntryHome(page);
+
+  const input = page.getByTestId('home-hero-input');
+  await expect(input).toHaveText('');
+
+  await page.getByTestId('home-hero-rail-prototype').click();
+  await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
+  await page.getByTestId('home-hero-plugin-preset-use-example-web-prototype').click();
+
+  await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
+  await expect(input).toHaveText(
+    'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
+  );
+});
+
+test('[P1] home hero example preset Copy creates a project from the template preview', async ({ page }) => {
+  const projectId = 'home-preset-copy-project';
+  const conversationId = 'conv-home-preset-copy';
+  const duplicateRequests: Array<{ name?: string }> = [];
+  const copyPlugin = homePresetCopyPlugin('example-web-prototype', 'Web Prototype');
+
+  await page.unroute('**/api/plugins');
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [copyPlugin] } });
+  });
+  await page.route('**/api/plugins/example-web-prototype/preview', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+      body: '<!doctype html><html><body><main><h1>Home Preset Copy Preview</h1></main></body></html>',
+    });
+  });
+  await page.route('**/api/plugins/example-web-prototype/duplicate-project', async (route) => {
+    duplicateRequests.push(route.request().postDataJSON() as { name?: string });
+    await route.fulfill({
+      json: {
+        ok: true,
+        sourcePluginId: 'example-web-prototype',
+        projectId,
+        conversationId,
+        relPath: 'example.html',
+        warnings: [],
+      },
+    });
+  });
+  await routeMinimalProjectWorkspace(page, projectId, conversationId, {
+    name: 'Web Prototype',
+    metadata: {
+      kind: 'prototype',
+      templateId: 'plugin:example-web-prototype',
+      duplicatedFromPluginId: 'example-web-prototype',
+    },
+  });
+  await page.route(`**/api/projects/${projectId}/files/example.html`, async (route) => {
+    await route.fulfill({
+      json: {
+        file: {
+          name: 'example.html',
+          path: 'example.html',
+          kind: 'html',
+          size: 96,
+          updatedAt: Date.now(),
+          content: '<!doctype html><html><body><h1>Copied preset</h1></body></html>',
+        },
+      },
+    });
+  });
+
+  await gotoEntryHome(page);
+  await page.getByTestId('home-hero-rail-prototype').click();
+  await expect(page.locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-web-prototype"]')).toBeVisible();
+  const preset = page.locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-web-prototype"]');
+  await preset.hover();
+  const duplicateButton = page.getByTestId('home-hero-plugin-preset-duplicate-example-web-prototype');
+  await expect(duplicateButton).toBeVisible();
+  await duplicateButton.click();
+
+  await expect
+    .poll(() => duplicateRequests.at(-1)?.name)
+    .toBe('Web Prototype');
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}`));
+});
+
+test('[P1] home hero example preset Copy failure keeps Home retryable', async ({ page }) => {
+  const duplicateRequests: Array<{ name?: string }> = [];
+  const copyPlugin = homePresetCopyPlugin('example-web-prototype', 'Web Prototype');
+
+  await page.unroute('**/api/plugins');
+  await page.route('**/api/plugins', async (route) => {
+    await route.fulfill({ json: { plugins: [copyPlugin] } });
+  });
+  await page.route('**/api/plugins/example-web-prototype/preview', async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+      body: '<!doctype html><html><body><main><h1>Copy Failure Preview</h1></main></body></html>',
+    });
+  });
+  await page.route('**/api/plugins/example-web-prototype/duplicate-project', async (route) => {
+    duplicateRequests.push(route.request().postDataJSON() as { name?: string });
+    await route.fulfill({
+      status: 500,
+      json: { error: { code: 'duplicate-failed', message: 'fixture duplicate failure' } },
+    });
+  });
+
+  await gotoEntryHome(page);
+  await page.getByTestId('home-hero-rail-prototype').click();
+  const duplicateButton = page.getByTestId('home-hero-plugin-preset-duplicate-example-web-prototype');
+  await page.locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-web-prototype"]').hover();
+  await expect(duplicateButton).toBeVisible();
+  await duplicateButton.click();
+
+  await expect
+    .poll(() => duplicateRequests.at(-1)?.name)
+    .toBe('Web Prototype');
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator('.home-hero__error')).toContainText('Could not remix this template.');
+  await expect(duplicateButton).not.toHaveAttribute('aria-busy', 'true');
+  await expect(duplicateButton).toBeEnabled();
 });
 
 test('[P1] home hero preset inline Use and Duplicate actions work from the template card', async ({ page }) => {
@@ -987,13 +1718,13 @@ test('[P1] home hero prompt example cards fill the composer for fallback modes',
   await expect(input).toHaveText(exampleText ?? '');
 });
 
-test('[P2] clearing the active hero chip restores the rail and clears preset chrome', async ({ page }) => {
+test('[P2] clearing the selected hero template restores the rail and clears preset chrome', async ({ page }) => {
   await gotoEntryHome(page);
 
   await page.getByTestId('home-hero-rail-prototype').click();
-  await expect(page.getByTestId('home-hero-active-type-chip')).toBeVisible();
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-designSystem')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-reset')).toBeVisible();
+  await expect(page.getByTestId('home-hero-design-system-trigger')).toBeVisible();
 
   await clearActiveChip(page);
 
@@ -1022,13 +1753,12 @@ test('[P1] after clearing one mode, selecting another example updates the compos
   await clearActiveChip(page);
 
   await page.getByTestId('home-hero-rail-live-artifact').click();
-  await expect(page.getByTestId('home-hero-active-type-chip')).toBeVisible();
   await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
   await expect(page.getByTestId('home-hero-footer-option-designSystem')).toHaveCount(0);
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="image-template-notion-team-dashboard-live-artifact"]')
     .click();
-  await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
+  await expect(input).toHaveText('Create a live Notion dashboard artifact.');
 });
 
 test('[P1] selecting another example updates the composer input', async ({ page }) => {
@@ -1041,25 +1771,141 @@ test('[P1] selecting another example updates the composer input', async ({ page 
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="image-template-notion-team-dashboard-live-artifact"]')
     .click();
-  await expect(input).toHaveText('Create a refreshable Notion dashboard live artifact.');
+  await expect(input).toHaveText('Create a live Notion dashboard artifact.');
 
   await page
     .locator('[data-testid="home-hero-plugin-preset"][data-plugin-id="example-live-artifact"]')
     .click();
-  await expect(input).toHaveText('Create refreshable, auditable Open Design artifacts backed by connector or local data.');
+  await expect(input).toHaveText('Create refreshable, auditable Open Design artifacts.');
 });
 
 async function expectChipSelection(page: Page, chipId: string, _label: string) {
   const chip = page.getByTestId(`home-hero-rail-${chipId}`);
   await expect(chip).toBeEnabled();
   await chip.click();
-  await expect(page.getByTestId('home-hero-active-type-chip')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-reset')).toBeVisible();
+}
+
+function activeHeroChip(page: Page) {
+  return page.getByTestId('home-hero-active-type-chip').or(page.getByTestId('home-hero-active-plugin'));
 }
 
 async function clearActiveChip(page: Page) {
-  await page.getByTestId('home-hero-active-type-chip').click();
-  await expect(page.getByTestId('home-hero-active-type-chip')).toHaveCount(0);
+  const activeChip = activeHeroChip(page);
+  if ((await activeChip.count()) > 0) {
+    const clearPlugin = page.getByRole('button', { name: /Clear active plugin|清除/i });
+    if ((await clearPlugin.count()) > 0) {
+      await clearPlugin.click();
+    } else {
+      await activeChip.click();
+    }
+    await expect(activeHeroChip(page)).toHaveCount(0);
+  }
+  const templateClear = page.getByTestId('home-hero-template-reset')
+    .or(page.getByTestId('home-hero-template-clear'))
+    .or(page.getByRole('button', { name: /^Clear$/ }));
+  if ((await templateClear.count()) > 0) {
+    await templateClear.first().click();
+  }
   await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
+}
+
+async function routeMinimalProjectWorkspace(
+  page: Page,
+  projectId: string,
+  conversationId: string,
+  options: { name: string; metadata?: Record<string, unknown> },
+) {
+  const project = {
+    id: projectId,
+    name: options.name,
+    skillId: null,
+    designSystemId: null,
+    pendingPrompt: null,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    metadata: options.metadata ?? { kind: 'prototype', nameSource: 'user' },
+  };
+  await page.route(`**/api/projects/${projectId}`, async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { project } });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.route(`**/api/projects/${projectId}/conversations`, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        conversations: [
+          {
+            id: conversationId,
+            projectId,
+            title: null,
+            sessionMode: 'design',
+            messageCount: 0,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+        ],
+      },
+    });
+  });
+  await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/messages`, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { messages: [] } });
+  });
+  await page.route(`**/api/projects/${projectId}/conversations/${conversationId}/comments`, async (route) => {
+    await route.fulfill({ json: { comments: [] } });
+  });
+  await page.route(`**/api/projects/${projectId}/files`, async (route) => {
+    await route.fulfill({ json: { files: [] } });
+  });
+  await page.route('**/api/live-artifacts**', async (route) => {
+    await route.fulfill({ json: { liveArtifacts: [] } });
+  });
+}
+
+function homePresetCopyPlugin(id: string, title: string) {
+  return {
+    id,
+    title,
+    version: '1.0.0',
+    trust: 'trusted',
+    sourceKind: 'bundled',
+    source: `/tmp/${id}`,
+    fsPath: `/tmp/${id}`,
+    capabilitiesGranted: ['prompt:inject'],
+    installedAt: 0,
+    updatedAt: 0,
+    manifest: {
+      name: id,
+      title,
+      version: '1.0.0',
+      description: `${title} fixture.`,
+      tags: ['prototype', 'template'],
+      od: {
+        kind: 'scenario',
+        taskKind: 'new-generation',
+        mode: 'prototype',
+        preview: {
+          type: 'html',
+          entry: './example.html',
+        },
+        useCase: {
+          query: {
+            en: 'Build a copied template.',
+          },
+        },
+      },
+    },
+  };
 }
 
 async function routeRunsAccepted(page: Page) {

@@ -3086,6 +3086,75 @@ test('[P1] Browser Inspiration page_info carries a loaded page title into the ne
   expect(runBodies[0]?.message).toContain('- title: Browser Fixture Title');
 });
 
+test('[P1] questions banner opens the Questions tab and remains reachable after reload', async ({ page }) => {
+  await routeMockAgents(page);
+
+  await page.route('**/api/runs', async (route) => {
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: '{"runId":"questions-banner-run"}',
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    const questionForm = [
+      '<question-form id="discovery" title="Quick brief">',
+      JSON.stringify(
+        {
+          description: 'Answer these before generation continues.',
+          questions: [
+            {
+              id: 'audience',
+              label: 'Audience',
+              type: 'text',
+              required: true,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      '</question-form>',
+    ].join('\n');
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body: [
+        'event: start',
+        'data: {"bin":"mock-agent"}',
+        '',
+        'event: stdout',
+        `data: ${JSON.stringify({ chunk: questionForm })}`,
+        '',
+        'event: end',
+        'data: {"code":0,"status":"succeeded"}',
+        '',
+        '',
+      ].join('\n'),
+    });
+  });
+
+  await createEmptyProject(page, 'Questions banner persistence');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Ask clarifying questions before generating.');
+  const banner = page.getByTestId('questions-banner');
+  await expect(banner).toBeVisible();
+  await banner.click();
+  await expect(page.getByTestId('questions-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('questions-panel')).toContainText('Audience');
+
+  await page.reload();
+  await expectWorkspaceReady(page);
+  await expect(page.getByTestId('questions-banner')).toBeVisible();
+  await page.getByTestId('questions-banner').click();
+  await expect(page.getByTestId('questions-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('questions-panel')).toContainText('Audience');
+});
+
 test('[P1] questions tab Skip all sends structured skipped answers into the next run request', async ({ page }) => {
   await routeMockAgents(page);
 

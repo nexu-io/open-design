@@ -70,6 +70,14 @@ export function createChatRunService({
       mediaExecution: normalizeMediaExecutionPolicyForRun(meta.mediaExecution),
       toolBundle: normalizeRunToolBundleForRun(meta.toolBundle),
       browserUse: meta.browserUse && typeof meta.browserUse === 'object' ? meta.browserUse : null,
+      sessionMode:
+        meta.sessionMode === 'chat' || meta.sessionMode === 'design' || meta.sessionMode === 'plan'
+          ? meta.sessionMode
+          : null,
+      context:
+        meta.context && typeof meta.context === 'object' && !Array.isArray(meta.context)
+          ? meta.context
+          : null,
       status: 'queued',
       createdAt: now,
       updatedAt: now,
