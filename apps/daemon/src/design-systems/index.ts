@@ -90,6 +90,7 @@ export type DesignSystemStaticFileDetail = {
 
 export type DesignSystemPackageInfo = {
   manifest?: DesignSystemProjectManifest;
+  availableFiles?: string[];
   sourceEvidence?: {
     scannedFileCount?: number;
     tokenCount?: number;
@@ -404,10 +405,47 @@ export async function readDesignSystemPackageInfo(
   if (manifest === null) return null;
 
   const sourceEvidence = await readDesignSystemSourceEvidence(brandRoot, manifest);
+  const availableFiles = await listAvailableDesignSystemPackageFiles(brandRoot, manifest);
   return {
     manifest,
+    ...(availableFiles.length > 0 ? { availableFiles } : {}),
     ...(sourceEvidence ? { sourceEvidence } : {}),
   };
+}
+
+async function listAvailableDesignSystemPackageFiles(
+  brandRoot: string,
+  manifest: DesignSystemProjectManifest,
+): Promise<string[]> {
+  const candidates = new Set<string>(DESIGN_SYSTEM_STATIC_SYSTEM_FILES);
+  const add = (filePath: string | undefined): void => {
+    const cleanPath = typeof filePath === 'string' ? sanitizeRelativeFilePath(filePath) : null;
+    if (cleanPath) candidates.add(cleanPath);
+  };
+
+  add(manifest.files.design);
+  add(manifest.files.tokens);
+  add(manifest.files.components);
+  add(manifest.files.designTokens);
+  add(manifest.files.tailwind);
+  add(manifest.usage);
+  add(manifest.componentsManifest);
+  for (const page of manifest.preview?.pages ?? []) add(page.path);
+  for (const font of manifest.fonts ?? []) add(font.file);
+
+  const out: string[] = [];
+  const resolvedRoot = path.resolve(brandRoot);
+  for (const relativePath of Array.from(candidates).sort()) {
+    const filePath = path.resolve(brandRoot, relativePath);
+    if (filePath !== resolvedRoot && !filePath.startsWith(`${resolvedRoot}${path.sep}`)) continue;
+    try {
+      const stats = await stat(filePath);
+      if (stats.isFile()) out.push(relativePath);
+    } catch (err) {
+      if (!isAbsenceError(err)) throw err;
+    }
+  }
+  return out;
 }
 
 /**

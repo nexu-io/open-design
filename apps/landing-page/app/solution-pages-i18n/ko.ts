@@ -847,6 +847,134 @@ export const KO: SolutionLocaleCopy = {
       { href: '/solutions/engineering/', label: '엔지니어링을 위한 Open Design' },
     ],
   },
+  htmlToPpt: {
+    title: 'HTML to PPT — Open Design으로 HTML을 편집 가능한 PowerPoint로 바꾸기',
+    description:
+      '무료 오픈소스 HTML-to-PPT 워크플로우: 코딩 에이전트가 깔끔한 HTML 덱을 만들고, 진짜 편집 가능한 .pptx로 내보냅니다 — 이미 사용 중인 에이전트 안에서. 클라우드 변환기도, 납작한 슬라이드 이미지도, 잠긴 내보내기도 없습니다. HTML과 PowerPoint 모두 당신이 소유하는 파일입니다.',
+    breadcrumb: 'HTML to PPT',
+    label: '도구 · HTML to PPT',
+    heading: 'HTML to PPT, 당신의 에이전트 안에서',
+    lead: 'HTML 페이지, markdown 문서, 아니면 프롬프트만 있나요? 코딩 에이전트가 그것을 깔끔한 HTML 덱으로 만들고 진짜 편집 가능한 PowerPoint로 내보내게 하세요 — 슬라이드마다 스크린샷이 아니라, 계속 편집할 수 있는 네이티브 도형과 텍스트로. HTML이 소스이고, .pptx는 발표하고, 넘기고, 소유하는 당신의 것입니다.',
+    heroImageAlt:
+      '코딩 에이전트 안에서 HTML 덱이 편집 가능한 PowerPoint 파일로 변환되는 모습을, 초록색 선택 상자로 감싼 에디토리얼 일러스트',
+    tldrTitle: '한 줄로 말하면',
+    tldrBody:
+      '대부분의 HTML-to-PPT 변환기는 페이지를 편집할 수 없는 정적 슬라이드 이미지로 납작하게 만듭니다. Open Design은 코딩 에이전트 안에서 덱을 HTML로 만들고 진짜 편집 가능한 .pptx로 내보냅니다 — 네이티브 텍스트와 도형, 당신의 디자인 시스템, 좌석당 과금도 벤더 종속도 없이.',
+    stepsTitle: 'HTML to PPT가 작동하는 방식',
+    steps: [
+      {
+        title: 'HTML, 문서, 프롬프트에서 시작한다',
+        body: '에이전트를 HTML 페이지, markdown 문서로 향하게 하거나, 그냥 덱을 설명하세요. Open Design이 알맞은 기술을 불러와 에이전트가 원시 마크업만이 아니라 구조와 의도 — 제목, 섹션, 데이터 — 를 읽어냅니다.',
+        imageAlt: 'HTML과 markdown 문서가 코딩 에이전트에게 건네지는 일러스트',
+      },
+      {
+        title: '깔끔한 HTML 덱을 만든다',
+        body: '에이전트가 내용을 진짜 디자인 시스템 위의 HTML 덱으로 배치합니다 — 일관된 타입, 그리드, 색 — 제목 없는 상자의 나열이 아니라 준비된 테마(피치 덱, 제품 출시, 에디토리얼, 테크니컬)를 사용해서.',
+        imageAlt: 'HTML 콘텐츠가 디자인된 슬라이드 연속으로 바뀌는 일러스트',
+      },
+      {
+        title: '편집 가능한 .pptx로 내보낸다',
+        body: 'Open Design의 pptx-generator가 HTML 덱을 진짜 PowerPoint로 바꿉니다 — 네이티브 도형, 편집 가능한 텍스트, 여전히 바꿀 수 있는 차트 — 슬라이드마다 납작한 이미지가 아니라 HTML-to-PPTX 충실도 감사와 함께.',
+        imageAlt: 'HTML 덱이 편집 가능한 PowerPoint 파일로 내보내지는 일러스트',
+      },
+      {
+        title: '슬라이드를 소유하고 넘긴다',
+        body: 'HTML과 .pptx가 당신의 리포지토리에 온전히 당신 것으로 남습니다. .pptx를 PowerPoint나 Keynote에서 열고, 브라우저에서 발표하거나, 에이전트에서 계속 반복하세요 — 클라우드 종속도, HTML과 덱 사이의 다시 그리기도 없이.',
+        imageAlt: '완성된 슬라이드가 초록색 선택 프레임에 담겨 넘길 준비가 된 일러스트',
+      },
+    ],
+    tableTitle: 'Open Design vs 일반적인 HTML-to-PPT 변환기',
+    tableColCapability: '필요한 것',
+    tableColWithOd: 'Open Design이라면',
+    tableColWithout: '일반적인 HTML-to-PPT 변환기',
+    tableRows: [
+      {
+        capability: '시작점',
+        withOd: 'HTML, 문서, 프롬프트 — 이미 실행 중인 에이전트 안에서',
+        without: 'HTML을 별도의 클라우드 변환기에 붙여넣기',
+      },
+      {
+        capability: '슬라이드 품질',
+        withOd: '진짜 디자인 시스템 + 준비된 테마에서 나온 깔끔한 HTML 덱',
+        without: '당신의 페이지를 상자 하나하나 그대로 렌더링',
+      },
+      {
+        capability: '편집 가능한 결과물',
+        withOd: '진짜 .pptx — 네이티브하고 편집 가능한 텍스트와 도형',
+        without: '바꿀 수 없는 납작한 슬라이드 이미지',
+      },
+      {
+        capability: '내보내기 이후 반복',
+        withOd: '대화로 다듬고, 언제든 다시 생성해 다시 내보내기',
+        without: '얼어붙은 일회성 파일',
+      },
+      {
+        capability: '결과물 소유',
+        withOd: 'HTML + .pptx 파일이 당신의 리포지토리에 온전히 당신 것으로',
+        without: '그들의 에디터나 내보내기 크레딧에 묶임',
+      },
+      {
+        capability: '비용과 종속',
+        withOd: '오픈소스, 자신의 키를 가져와 로컬에서 실행',
+        without: '파일당·크레딧당 구독, 벤더 호스팅',
+      },
+    ],
+    featuresTitle: '덱으로 바꿀 수 있는 것',
+    features: [
+      { title: 'HTML 페이지를 PPT로', body: 'HTML 페이지나 내보내기를 편집 가능한 PowerPoint 덱으로 바꿉니다.', thumb: 'example-html-ppt-pitch-deck' },
+      { title: 'Markdown을 PPT로', body: '에이전트에게 markdown 문서를 건네고 깔끔한 덱과 .pptx를 받습니다.', thumb: 'example-html-ppt-course-module' },
+      { title: '프롬프트를 덱으로', body: '발표를 설명하면 에이전트가 슬라이드를 초안하고 .pptx로 내보냅니다.', thumb: 'example-html-ppt-product-launch' },
+      { title: '피치 덱', body: '강한 서사와 깔끔한 데이터 슬라이드를 갖춘 투자자·영업 덱.', thumb: 'example-html-ppt-pitch-deck' },
+      { title: '발표자 모드', body: '편집 가능한 PowerPoint로도 내보내지는 Reveal 스타일 HTML 덱.', thumb: 'example-html-ppt-presenter-mode-reveal' },
+      { title: '어떤 비주얼 취향이든', body: '에디토리얼, 볼드, 미니멀 — 테마가 .pptx까지 그대로 이어집니다.', thumb: 'example-deck-guizang-editorial' },
+    ],
+    galleryTitle: '시작점으로 삼을 수 있는 슬라이드 템플릿',
+    galleryLead:
+      'Open Design이 렌더링한 진짜 덱, 편집 가능한 .pptx로 내보낼 준비가 되어 있습니다. 당신의 내용에 가까운 테마를 고르고, 원하는 변형을 설명하면 에이전트가 덱을 만들어 — 당신이 소유하는 PowerPoint를 넘겨줍니다.',
+    gallery: [
+      { thumb: 'deck-pitch', caption: '피치 덱' },
+      { thumb: 'deck-product-launch', caption: '제품 출시 덱' },
+      { thumb: 'deck-data-graph', caption: '다크 데이터 그래프 덱' },
+      { thumb: 'deck-gradient', caption: '그라데이션 키노트' },
+      { thumb: 'deck-blueprint', caption: '테크니컬 블루프린트 덱' },
+      { thumb: 'deck-course', caption: '코스 모듈 덱' },
+    ],
+    exampleHref: '/plugins/templates/',
+    exampleLinkLabel: '덱 템플릿 둘러보기',
+    faqTitle: 'HTML to PPT FAQ',
+    faq: [
+      {
+        q: 'Open Design은 HTML을 어떻게 PPT로 바꾸나요?',
+        a: '코딩 에이전트가 내용을 깔끔한 HTML 덱으로 만들고, Open Design의 pptx-generator 기술이 그것을 진짜 편집 가능한 .pptx로 내보냅니다 — 슬라이드마다 납작한 이미지가 아니라 HTML-to-PPTX 충실도를 감사한 네이티브 도형과 텍스트로.',
+      },
+      {
+        q: 'HTML을 편집 가능한 PowerPoint로 변환할 수 있나요?',
+        a: '네. .pptx에는 스크린샷이 아니라 PowerPoint나 Keynote에서 계속 바꿀 수 있는 네이티브하고 편집 가능한 텍스트와 도형이 담깁니다. 소스 덱을 에이전트에서 계속 반복하며 언제든 다시 내보낼 수도 있습니다.',
+      },
+      {
+        q: 'Claude Code에서 작동하나요?',
+        a: '네 — "claude html to ppt"가 바로 이 워크플로우입니다. Claude Code로 구동하거나 Codex, Cursor Agent, Gemini CLI 등으로도 가능합니다. 자신의 프로바이더 키를 가져오며, 무엇도 대신 호스팅되지 않습니다.',
+      },
+      {
+        q: '무료인가요?',
+        a: '네. Open Design은 오픈소스이며 이미 사용 중인 코딩 에이전트 안에서 자신의 키로 실행됩니다 — HTML-to-PPT 워크플로우에 파일당·크레딧당 과금은 없습니다.',
+      },
+      {
+        q: '슬라이드를 생성하는 것과 무엇이 다른가요?',
+        a: '덱 생성은 보통 프롬프트나 아웃라인에서 시작하지만, HTML to PPT는 이미 가지고 있는 HTML이나 markdown에서 시작해 편집 가능한 .pptx 내보내기에 집중합니다. 둘 다 같은 Open Design 덱 엔진을 사용합니다 — 아웃라인 우선 흐름은 슬라이드 활용 사례를 참고하세요.',
+      },
+    ],
+    ctaTitle: '다음 HTML 덱을 편집 가능한 PPT로 바꾸세요',
+    ctaBody:
+      '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, HTML을 — 또는 프롬프트를 — 이미 사용 중인 에이전트 안에서 깔끔한 덱과 진짜 편집 가능한 .pptx로 바꿔 보세요.',
+    relatedTitle: '관련 도구와 가이드',
+    related: [
+      { href: '/solutions/slides/', label: '프레젠테이션 덱 생성하기' },
+      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/plugins/templates/', label: '덱 템플릿 둘러보기' },
+      { href: '/solutions/marketing/', label: '마케팅을 위한 Open Design' },
+    ],
+  },
   aiPrototypeGenerator: {
     title: 'AI 프로토타입 생성기 — 프롬프트에서 클릭 가능한 프로토타입으로, 그리고 코드로',
     description:
@@ -1349,8 +1477,8 @@ export const KO: SolutionLocaleCopy = {
         a: '아니요. 에이전트는 그리드, 타입 스케일, 비주얼 위계를 갖춘 진짜 덱 템플릿을 적용하므로 슬라이드가 자동 채워진 것이 아니라 디자인된 듯 보입니다.',
       },
       {
-        q: '클라이언트를 위해 PowerPoint로 내보낼 수 있나요?',
-        a: '네. 덱은 발표하는 HTML 외에 PPTX와 PDF로도 내보내지므로 청중이 기대하는 어떤 형식에도 맞출 수 있습니다.',
+        q: '편집 가능한 PowerPoint로 내보낼 수 있나요?',
+        a: '네. Open Design의 pptx-generator가 덱을 네이티브하고 편집 가능한 텍스트와 도형을 갖춘 진짜 .pptx로 내보냅니다 — 납작한 슬라이드 이미지가 아니라 HTML-to-PPTX 충실도를 감사해서 — 여기에 PDF와 당신이 발표하는 HTML까지. 변환 우선 흐름은 HTML to PPT 도구를 참고하세요.',
       },
       {
         q: '어떤 에이전트를 쓸 수 있나요?',
@@ -1360,6 +1488,13 @@ export const KO: SolutionLocaleCopy = {
     ctaTitle: '다음 덱을 오늘 밤 만드세요',
     ctaBody:
       '리포지토리에 스타를 누르고 Open Design을 설치한 뒤, 당신의 아웃라인을, 이미 사용 중인 에이전트 안에서 디자인된 덱으로 바꿔 보세요.',
+    relatedTitle: '관련 도구와 가이드',
+    related: [
+      { href: '/solutions/html-to-ppt/', label: 'Open Design으로 HTML to PPT' },
+      { href: '/solutions/design-to-code/', label: 'Open Design으로 디자인에서 코드로' },
+      { href: '/plugins/templates/', label: '덱 템플릿 둘러보기' },
+      { href: '/solutions/marketing/', label: '마케팅을 위한 Open Design' },
+    ],
   },
   image: {
     title: 'Open Design + Claude Code로 브랜드에 맞는 그래픽 생성하기',

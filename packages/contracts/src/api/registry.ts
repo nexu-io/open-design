@@ -332,6 +332,8 @@ export interface DesignSystemPackageInfo {
     };
     assetsDir?: string;
   };
+  /** Package-relative files the daemon confirmed exist and can be served via /static. */
+  availableFiles?: string[];
   sourceEvidence?: {
     scannedFileCount?: number;
     tokenCount?: number;
