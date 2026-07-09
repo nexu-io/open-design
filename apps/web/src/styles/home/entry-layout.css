@@ -807,6 +807,53 @@
   margin: 0;
 }
 
+/* Brand chip — shows the currently active brand (swatch + name). Unlike its
+   sibling chips it stays expanded in the icon-only topbar, because the whole
+   point is to read WHICH brand is selected; the name must stay visible. */
+.entry-main__topbar-chips--icon-only .brand-chip {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 180px;
+  padding: 0 10px 0 8px;
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background var(--dur-quick) var(--ease-out),
+    border-color var(--dur-quick) var(--ease-out);
+}
+.entry-main__topbar-chips--icon-only .brand-chip:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
+/* Brand initial tile — same visual language as the Brands tab cards, scaled
+   down for the topbar (rounded square, brand color, white initial glyph). */
+.brand-chip__tile {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.brand-chip__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Downward hover tooltip for the collapsed chips. */
 .entry-main__topbar-chips--icon-only [data-tooltip]:not(.od-tooltip) {
   position: relative;

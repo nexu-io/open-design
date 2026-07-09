@@ -22,6 +22,7 @@ import {
 } from 'react';
 import {
   defaultScenarioPluginIdForProjectMetadata,
+  type BrandSummary,
   type ChatSessionMode,
   type ConnectorDetail,
   type InstalledPluginRecord,
@@ -58,6 +59,8 @@ import type {
   TrackingCliProviderId,
 } from '@marketing-ax/contracts/analytics';
 import { agentIdToTracking } from '@marketing-ax/contracts/analytics';
+import { fetchBrands } from '../providers/registry';
+import { brandAccentFallback } from './brand-accent';
 import { useT } from '../i18n';
 import { navigate, useRoute } from '../router';
 import type {
@@ -542,6 +545,20 @@ export function EntryShell({
     [designSystems, previewSystemId],
   );
 
+  // 토픽바 브랜드 칩용 — /api/brands 의 브랜드 목록. 브랜드 선택 전역상태는
+  // 아직 없어(브랜드 스위처 미착수) 워크스페이스의 첫 브랜드를 현재 브랜드로 본다.
+  const [brands, setBrands] = useState<BrandSummary[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetchBrands()
+      .then((rows) => alive && setBrands(rows))
+      .catch(() => alive && setBrands([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const currentBrand = brands?.[0] ?? null;
+
   function handleCreate(input: CreateInput) {
     // The NewProjectModal no longer asks the user to pick a plugin.
     // Each project kind is silently bound to its default scenario
@@ -721,25 +738,24 @@ export function EntryShell({
               {executionSwitcher}
               <button
                 type="button"
-                className="use-everywhere-chip od-tooltip"
-                onClick={() => {
-                  trackHomeToolbarClick(analytics.track, {
-                    page_name: 'home',
-                    area: 'toolbar',
-                    element: 'use_everywhere',
-                  });
-                  openIntegrationTab('use-everywhere');
-                }}
-                data-tooltip={t('entry.useEverywhereTitle')}
-                data-tooltip-placement="bottom"
-                aria-label={t('entry.useEverywhereAria')}
-                data-testid="entry-use-everywhere-button"
+                className="brand-chip"
+                onClick={() => changeView('brands')}
+                title={currentBrand ? currentBrand.title : t('entry.navBrands')}
+                data-testid="entry-brand-chip"
               >
-                <span className="use-everywhere-chip__icon" aria-hidden>
-                  <Icon name="hammer" size={13} />
+                <span
+                  className="brand-chip__tile"
+                  aria-hidden
+                  style={{
+                    background: currentBrand
+                      ? currentBrand.primaryColor ?? brandAccentFallback(currentBrand.id)
+                      : 'var(--border-strong, var(--border))',
+                  }}
+                >
+                  {currentBrand ? currentBrand.title.slice(0, 1) : ''}
                 </span>
-                <span className="use-everywhere-chip__label">
-                  {t('entry.useEverywhereTitle')}
+                <span className="brand-chip__label">
+                  {currentBrand ? currentBrand.title : t('entry.navBrands')}
                 </span>
               </button>
             </div>
