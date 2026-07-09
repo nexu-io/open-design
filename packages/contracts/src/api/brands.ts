@@ -29,6 +29,8 @@ export interface BrandPresentation {
   voiceTone?: string[];
   toneLabel?: string;
   neutralPalette?: string[];
+  /** assets/ 하위 브랜드 아이콘 파일명 (예: 'icon.png') — 목록은 iconUrl로 미러 */
+  icon?: string;
 }
 
 /** 브랜드 목록 행 — GET /api/brands 응답 { brands: BrandSummary[] } */
@@ -41,6 +43,8 @@ export interface BrandSummary {
   subtitle?: string;
   tagline?: string;
   primaryColor?: string; // palette[0].value — 이니셜 타일색
+  /** 브랜드 아이콘 이미지 URL (presentation.icon 있을 때) — 없으면 이니셜 타일 폴백 */
+  iconUrl?: string;
   toneLabel?: string;
   projectCount?: number;
   deliverableLabels?: Record<string, string>; // 키→표시 라벨

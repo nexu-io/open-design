@@ -11,7 +11,7 @@
 .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg2, #7d8085); }
 .breadcrumbLink { background: none; border: 0; color: inherit; cursor: pointer; padding: 0; }
 .hero { display: flex; align-items: center; gap: 16px; }
-.tile { width: 64px; height: 64px; border-radius: 16px; display: grid; place-items: center; color: #fff; font-size: 26px; font-weight: 700; }
+.tile { width: 64px; height: 64px; border-radius: 16px; display: grid; place-items: center; color: #fff; font-size: 26px; font-weight: 700; object-fit: cover; }
 .heroTitle { font-size: 24px; font-weight: 700; margin: 0; }
 .heroSubtitle { font-size: 14px; color: var(--fg2, #7d8085); margin: 2px 0 0; }
 .section { display: flex; flex-direction: column; gap: 12px; }

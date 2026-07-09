@@ -9,6 +9,7 @@
     "iam": { "file": "deliverables/iam.md", "designSystem": "bodoc-iam", "label": "Braze IAM" }
   },
   "presentation": {
+    "icon": "icon.png",
     "subtitle": "보험 앱",
     "website": "bodoc.co.kr",
     "audience": "보험료가 아까운 40·50대 (+30대)",

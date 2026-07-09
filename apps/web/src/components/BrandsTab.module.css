@@ -7,7 +7,7 @@
 .card { text-align: left; display: flex; flex-direction: column; gap: 14px; border: 1px solid var(--border, #e5e5ea); border-radius: 16px; padding: 24px; background: var(--surface, #fff); cursor: pointer; transition: border-color 200ms cubic-bezier(0.23, 1, 0.32, 1); }
 .card:hover { border-color: var(--accent, #16c5ff); }
 .cardHead { display: flex; align-items: center; gap: 12px; }
-.tile { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: #fff; font-size: 18px; font-weight: 700; flex: none; }
+.tile { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: #fff; font-size: 18px; font-weight: 700; flex: none; object-fit: cover; }
 .cardTitle { font-size: 16px; font-weight: 700; }
 .cardSubtitle { font-size: 13px; color: var(--fg2, #7d8085); }
 .tagline { font-size: 14px; color: var(--fg, #1d2024); }

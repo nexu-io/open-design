@@ -52,12 +52,21 @@ export function BrandsTab({ onOpenBrand }: Props) {
                 onClick={() => onOpenBrand(brand.id)}
               >
                 <div className={styles.cardHead}>
-                  <div
-                    className={styles.tile}
-                    style={{ background: brand.primaryColor ?? brandAccentFallback(brand.id) }}
-                  >
-                    {brand.title.slice(0, 1)}
-                  </div>
+                  {brand.iconUrl ? (
+                    <img
+                      className={styles.tile}
+                      src={brand.iconUrl}
+                      alt=""
+                      aria-hidden
+                    />
+                  ) : (
+                    <div
+                      className={styles.tile}
+                      style={{ background: brand.primaryColor ?? brandAccentFallback(brand.id) }}
+                    >
+                      {brand.title.slice(0, 1)}
+                    </div>
+                  )}
                   <div>
                     <div className={styles.cardTitle}>{brand.title}</div>
                     {brand.subtitle && <div className={styles.cardSubtitle}>{brand.subtitle}</div>}
