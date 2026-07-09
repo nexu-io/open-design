@@ -319,6 +319,39 @@ describe('QuestionFormView', () => {
     expect(onSubmit.mock.calls[0]?.[1]).toEqual({ platform: 'mobile' });
   });
 
+  // Regression for: repeated clicks on the same submit/Continue affordance
+  // enqueued one duplicate task per click, since the form only locks once
+  // `submittedAnswers` round-trips back through the agent. The form must
+  // self-lock on the FIRST submit so a burst of clicks fires onSubmit once.
+  it('ignores repeated submit clicks after the first one fires onSubmit', () => {
+    const onSubmit = vi.fn();
+    render(<QuestionFormView form={checkboxObjectForm} interactive onSubmit={onSubmit} />);
+
+    fireEvent.click(screen.getByLabelText('Editorial / magazine'));
+    const submit = screen.getByRole('button', { name: 'Send answers' });
+
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    // Once submitted the form locks immediately (the footer button is
+    // replaced by the "already sent" note), so a 4th click has nothing to hit.
+    expect(screen.queryByRole('button', { name: 'Send answers' })).toBeNull();
+  });
+
+  it('ignores a second skipAll call reached via the imperative handle after the first', () => {
+    const onSubmit = vi.fn();
+    const ref = { current: null as import('../../src/components/QuestionForm').QuestionFormHandle | null };
+    render(<QuestionFormView ref={ref} form={checkboxObjectForm} interactive onSubmit={onSubmit} />);
+
+    ref.current?.skipAll();
+    ref.current?.skipAll();
+    ref.current?.submit();
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('submits native defaults for required color and defaultless range controls', () => {
     const nativeDefaultsForm = {
       id: 'native-defaults',

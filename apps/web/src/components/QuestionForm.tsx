@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import type { DirectionCard, FormOption, QuestionForm } from '../artifacts/question-form';
 import { formatFormAnswers, formOptionValueForLabel } from '../artifacts/question-form';
@@ -53,7 +53,16 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
     [form, submittedAnswers, draftAnswers],
   );
   const [answers, setAnswers] = useState<Record<string, string | string[]>>(initial);
-  const locked = !interactive || !onSubmit || submittedAnswers !== undefined;
+  // Guards against repeated clicks (internal button, external Continue/Skip
+  // ref, or the auto-continue countdown) firing onSubmit more than once for
+  // the same form — submittedAnswers only arrives after a full round trip
+  // through the agent, so without this a burst of clicks queues one task per
+  // click. The ref makes the guard effective immediately (before the re-render
+  // that `submitted` state triggers); the state mirrors it into `locked` so
+  // the form visually locks the instant it's submitted.
+  const submittedRef = useRef(false);
+  const [submitted, setSubmitted] = useState(false);
+  const locked = !interactive || !onSubmit || submittedAnswers !== undefined || submitted;
   const currentAnswers = submittedAnswers ?? answers;
 
   // When the form streams in question-by-question, backfill state for newly
@@ -105,16 +114,20 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
   }
 
   function handleSubmit() {
-    if (locked || !onSubmit) return;
+    if (locked || !onSubmit || submittedRef.current) return;
     // Block submit until required fields are answered and selection caps hold.
     // skipAll() is the only path that intentionally bypasses this (the new
     // Questions-tab Skip button / countdown).
     if (!ready) return;
+    submittedRef.current = true;
+    setSubmitted(true);
     onSubmit(formatFormAnswers(form, answers), answers);
   }
 
   function handleSkipAll() {
-    if (locked || !onSubmit) return;
+    if (locked || !onSubmit || submittedRef.current) return;
+    submittedRef.current = true;
+    setSubmitted(true);
     const empty: Record<string, string | string[]> = {};
     onSubmit(formatFormAnswers(form, empty), empty);
   }
