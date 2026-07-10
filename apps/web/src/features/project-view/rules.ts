@@ -254,7 +254,9 @@ export function workspaceContextItemsEqual(
 ): boolean {
   if (a === b) return true;
   if (a.length !== b.length) return false;
-  return a.every((item, index) => workspaceContextItemEqual(item, b[index] ?? null));
+  // Lengths are equal (checked above), so `b[index]` is always present for every
+  // index `a.every` visits — the non-null assertion states that guarantee.
+  return a.every((item, index) => workspaceContextItemEqual(item, b[index]!));
 }
 
 // --- Stored-value type guards -------------------------------------------
