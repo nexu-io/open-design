@@ -4,6 +4,7 @@
 // live billing summary, and 升级 opens the real Stripe checkout.
 
 import { Icon } from './Icon';
+import { useT } from '../i18n';
 
 export interface CreditsInfo {
   /** Full plan name shown in the popover header (e.g. "团队版"). */
@@ -40,6 +41,8 @@ export function CreditsPanel({
   upgrading = false,
   memberCreditNotice = false,
 }: Props) {
+  const t = useT();
+
   if (!open) return null;
 
   return (
@@ -55,7 +58,7 @@ export function CreditsPanel({
               disabled={upgrading}
               onClick={onUpgrade}
             >
-              {upgrading ? '正在打开…' : '升级'}
+              {upgrading ? t('entry.creditsOpening') : t('entry.creditsUpgrade')}
             </button>
           ) : null}
         </div>
@@ -65,7 +68,7 @@ export function CreditsPanel({
         <div className="credits-panel__row credits-panel__row--total">
           <span className="credits-panel__row-label">
             <Icon name="sparkles" size={15} />
-            剩余积分
+            {t('entry.creditsRemaining')}
             <span className="credits-panel__help" title={info.grantTip} aria-label={info.grantTip}>
               <Icon name="info" size={13} />
             </span>
@@ -74,15 +77,15 @@ export function CreditsPanel({
         </div>
 
         <button type="button" className="credits-panel__usage" onClick={onClose}>
-          查看使用情况
+          {t('entry.creditsUsage')}
           <Icon name="chevron-right" size={14} />
         </button>
 
         {memberCreditNotice ? (
           <div className="credits-panel__member-notice">
-            <strong>额度不足？</strong>
-            <p>你当前是 Member，不能自行续额度。需要更多额度时，可以提醒团队 Admin 提额。</p>
-            <button type="button" onClick={onClose}>提醒 Admin 提额</button>
+            <strong>{t('entry.creditsMemberNoticeTitle')}</strong>
+            <p>{t('entry.creditsMemberNoticeBody')}</p>
+            <button type="button" onClick={onClose}>{t('entry.creditsMemberNoticeAction')}</button>
           </div>
         ) : null}
       </div>

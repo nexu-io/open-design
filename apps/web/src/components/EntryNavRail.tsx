@@ -633,6 +633,7 @@ export function EntryNavRail({
       <InsufficientCreditsDialog
         open={upgradeOpen}
         plan="free"
+        creditsRemaining={creditsBalance}
         onClose={() => setUpgradeOpen(false)}
         onUpgrade={() => void handleUpgrade()}
         onBuyPack={() => setUpgradeOpen(false)}

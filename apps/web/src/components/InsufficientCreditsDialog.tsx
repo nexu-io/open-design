@@ -13,6 +13,7 @@
 
 import { useState } from 'react';
 import { Icon } from './Icon';
+import { useT } from '../i18n';
 
 /** Plan-tier union — inlined from the demo's `DemoControlBar` (demo-only). */
 export type DemoPlan = 'free' | 'plus' | 'pro' | 'max' | 'team';
@@ -22,18 +23,18 @@ type AutoRechargeLimit = '30' | '50' | '100' | '200' | 'custom' | 'unlimited';
 
 interface TierOption {
   plan: DemoPlan;
-  label: string;
-  desc: string;
+  labelKey: Parameters<ReturnType<typeof useT>>[0];
+  descKey: Parameters<ReturnType<typeof useT>>[0];
   /** Per-month price (¥), billed monthly. */
   monthly: number;
   /** Per-month price (¥) when billed annually. */
   annual: number;
 }
 
-const PLUS: TierOption = { plan: 'plus', label: '个人版 Plus', desc: '基础 Token 用量 · SOTA 模型', monthly: 39, annual: 29 };
-const PRO: TierOption = { plan: 'pro', label: '个人版 Pro', desc: '3 倍 Token 用量 · 顶级多模态', monthly: 99, annual: 79 };
-const MAX: TierOption = { plan: 'max', label: '个人版 Max', desc: '10 倍 Token 用量 · 顶级多模态', monthly: 199, annual: 159 };
-const TEAM: TierOption = { plan: 'team', label: '团队版', desc: '多人协作 · 资产共享 · 角色权限', monthly: 119, annual: 99 };
+const PLUS: TierOption = { plan: 'plus', labelKey: 'entry.upgradePlanPlus', descKey: 'entry.upgradePlanPlusDesc', monthly: 39, annual: 29 };
+const PRO: TierOption = { plan: 'pro', labelKey: 'entry.upgradePlanPro', descKey: 'entry.upgradePlanProDesc', monthly: 99, annual: 79 };
+const MAX: TierOption = { plan: 'max', labelKey: 'entry.upgradePlanMax', descKey: 'entry.upgradePlanMaxDesc', monthly: 199, annual: 159 };
+const TEAM: TierOption = { plan: 'team', labelKey: 'entry.upgradePlanTeam', descKey: 'entry.upgradePlanTeamDesc', monthly: 119, annual: 99 };
 
 // Tiers reachable from each plan, in order. Max / 团队版 use auto recharge.
 const UPGRADE_TARGETS: Record<DemoPlan, TierOption[]> = {
@@ -49,8 +50,8 @@ const AUTO_RECHARGE_LIMITS: Array<{ id: AutoRechargeLimit; label: string }> = [
   { id: '50', label: '$50' },
   { id: '100', label: '$100' },
   { id: '200', label: '$200' },
-  { id: 'custom', label: '$ 自定义' },
-  { id: 'unlimited', label: '∞ 不限额（无月度上限）' },
+  { id: 'custom', label: 'custom' },
+  { id: 'unlimited', label: 'unlimited' },
 ];
 
 interface Props {
@@ -63,6 +64,7 @@ interface Props {
   onBuyPack: (packLabel: string) => void;
   autoRechargeScope?: 'team' | 'member';
   autoRechargeMemberName?: string;
+  creditsRemaining?: number | null;
 }
 
 export function InsufficientCreditsDialog({
@@ -73,10 +75,16 @@ export function InsufficientCreditsDialog({
   onBuyPack,
   autoRechargeScope = 'team',
   autoRechargeMemberName = '李娜',
+  creditsRemaining = null,
 }: Props) {
+  const t = useT();
   const targets = UPGRADE_TARGETS[plan];
   const isTopTier = targets.length === 0;
   const isMemberRecharge = autoRechargeScope === 'member';
+  const creditsExhausted = typeof creditsRemaining === 'number' && creditsRemaining <= 0;
+  const upgradeSubtitle = creditsExhausted
+    ? t('entry.upgradeCreditsExhaustedSubtitle')
+    : t('entry.upgradeSubtitle');
 
   const [selectedTier, setSelectedTier] = useState<DemoPlan>(targets[0]?.plan ?? 'team');
   const [selectedLimit, setSelectedLimit] = useState<AutoRechargeLimit>('50');
@@ -86,42 +94,52 @@ export function InsufficientCreditsDialog({
   if (!open) return null;
 
   return (
-    <div className="entry-invite" role="dialog" aria-modal="true" aria-label="积分不足">
+    <div className="entry-invite" role="dialog" aria-modal="true" aria-label={t('entry.upgradeDialogAria')}>
       <div className="entry-invite__backdrop" onClick={onClose} />
       <div className="credit-upgrade">
-        <button type="button" className="entry-invite__close" onClick={onClose} aria-label="关闭">
+        <button type="button" className="entry-invite__close" onClick={onClose} aria-label={t('common.close')}>
           <Icon name="close" size={16} />
         </button>
 
         <div className="credit-upgrade__badge" aria-hidden>
           <Icon name="sparkles" size={20} />
         </div>
-        <h2 className="credit-upgrade__title">{isTopTier ? '自动充值' : '积分已用尽'}</h2>
+        <h2 className="credit-upgrade__title">
+          {isTopTier
+            ? t('entry.upgradeAutoRechargeTitle')
+            : creditsExhausted
+              ? t('entry.upgradeCreditsExhaustedTitle')
+              : t('entry.upgradeTitle')}
+        </h2>
         <p className="credit-upgrade__subtitle">
           {isTopTier
             ? isMemberRecharge
-              ? `为 ${autoRechargeMemberName} 单独开启额度。保存配置不会立即扣费；该成员余额低于阈值时才会自动补充。`
-              : '默认为所有员工开启额度。保存配置不会立即扣费；团队余额低于阈值时才会自动补充。'
-            : '继续使用需要更多积分。升级到更高版本可立即提升额度，费用按当前周期已使用天数补差价。'}
+              ? t('entry.upgradeAutoRechargeMemberSubtitle', { member: autoRechargeMemberName })
+              : t('entry.upgradeAutoRechargeTeamSubtitle')
+            : upgradeSubtitle}
         </p>
 
         {isTopTier ? (
           <div className="credit-upgrade__auto">
             <div className="credit-upgrade__payment">
-              <span>作用范围</span>
-              <strong>{isMemberRecharge ? `${autoRechargeMemberName} · 单成员额度` : '所有员工 · 统一额度'}</strong>
+              <span>{t('entry.upgradeScopeLabel')}</span>
+              <strong>
+                {isMemberRecharge
+                  ? t('entry.upgradeScopeMember', { member: autoRechargeMemberName })
+                  : t('entry.upgradeScopeTeam')}
+              </strong>
             </div>
             <div className="credit-upgrade__payment">
-              <span>默认用订阅支付方式，可随时管理。</span>
+              <span>{t('entry.upgradePaymentHint')}</span>
               <button
                 type="button"
                 className="credit-upgrade__payment-button"
               >
-                <Icon name="external-link" size={14} /> 管理支付方式
+                <Icon name="external-link" size={14} /> {t('entry.upgradeManagePayment')}
               </button>
             </div>
             <div className="credit-upgrade__auto-card">
-              <h3 className="credit-upgrade__section-title">每月上限</h3>
+              <h3 className="credit-upgrade__section-title">{t('entry.upgradeMonthlyLimit')}</h3>
               <div className="credit-upgrade__limit-grid">
                 {AUTO_RECHARGE_LIMITS.map((limit) => (
                   <button
@@ -130,7 +148,11 @@ export function InsufficientCreditsDialog({
                     className={`credit-upgrade__limit${selectedLimit === limit.id ? ' is-active' : ''}${limit.id === 'unlimited' ? ' credit-upgrade__limit--wide' : ''}`}
                     onClick={() => setSelectedLimit(limit.id)}
                   >
-                    {limit.label}
+                    {limit.id === 'custom'
+                      ? t('entry.upgradeLimitCustom')
+                      : limit.id === 'unlimited'
+                        ? t('entry.upgradeLimitUnlimited')
+                        : limit.label}
                   </button>
                 ))}
               </div>
@@ -138,7 +160,7 @@ export function InsufficientCreditsDialog({
           </div>
         ) : (
           <div className="credit-upgrade__options">
-            <div className="credit-upgrade__cycle" role="tablist" aria-label="计费周期">
+            <div className="credit-upgrade__cycle" role="tablist" aria-label={t('entry.upgradeBillingCycleAria')}>
               <button
                 type="button"
                 role="tab"
@@ -146,7 +168,7 @@ export function InsufficientCreditsDialog({
                 className={`credit-upgrade__cycle-tab${cycle === 'annual' ? ' is-active' : ''}`}
                 onClick={() => setCycle('annual')}
               >
-                年付 <span className="credit-upgrade__cycle-save">省 20%</span>
+                {t('entry.upgradeAnnual')} <span className="credit-upgrade__cycle-save">{t('entry.upgradeAnnualSave')}</span>
               </button>
               <button
                 type="button"
@@ -155,12 +177,11 @@ export function InsufficientCreditsDialog({
                 className={`credit-upgrade__cycle-tab${cycle === 'monthly' ? ' is-active' : ''}`}
                 onClick={() => setCycle('monthly')}
               >
-                月付
+                {t('entry.upgradeMonthly')}
               </button>
             </div>
             {targets.map((tier) => {
               const price = cycle === 'annual' ? tier.annual : tier.monthly;
-              const perSeat = tier.plan === 'team' ? '/席' : '';
               return (
                 <button
                   key={tier.plan}
@@ -170,35 +191,41 @@ export function InsufficientCreditsDialog({
                 >
                   <span className="credit-upgrade__option-radio" aria-hidden />
                   <span className="credit-upgrade__option-text">
-                    <span className="credit-upgrade__option-label">{tier.label}</span>
-                    <span className="credit-upgrade__option-desc">{tier.desc}</span>
+                    <span className="credit-upgrade__option-label">{t(tier.labelKey)}</span>
+                    <span className="credit-upgrade__option-desc">{t(tier.descKey)}</span>
                   </span>
                   <span className="credit-upgrade__option-price">
                     ¥{price}
-                    <span className="credit-upgrade__option-unit">/月{perSeat}</span>
+                    <span className="credit-upgrade__option-unit">
+                      {tier.plan === 'team'
+                        ? t('entry.upgradePriceUnitSeat')
+                        : t('entry.upgradePriceUnitMonth')}
+                    </span>
                   </span>
                 </button>
               );
             })}
             <p className="credit-upgrade__prorate">
               <Icon name="info" size={13} />
-              {cycle === 'annual' ? '按年付费，立省 20%；' : '按月付费；'}
-              升级按当前周期已使用天数补差价，立即生效。
+              {cycle === 'annual'
+                ? t('entry.upgradeProrateAnnualPrefix')
+                : t('entry.upgradeProrateMonthlyPrefix')}
+              {t('entry.upgradeProrateSuffix')}
             </p>
           </div>
         )}
 
         <div className="credit-upgrade__foot">
           <button type="button" className="entry-invite__btn" onClick={onClose}>
-            {isTopTier ? '返回' : '取消'}
+            {isTopTier ? t('entry.upgradeBack') : t('common.cancel')}
           </button>
           {isTopTier ? (
             <button
               type="button"
               className="entry-invite__btn is-primary"
-              onClick={() => onBuyPack('自动充值设置已保存')}
+              onClick={() => onBuyPack(t('entry.upgradeAutoRechargeSaved'))}
             >
-              保存
+              {t('common.save')}
             </button>
           ) : (
             <button
@@ -206,7 +233,7 @@ export function InsufficientCreditsDialog({
               className="entry-invite__btn is-primary"
               onClick={() => onUpgrade(selectedTier)}
             >
-              <Icon name="sparkles" size={14} /> 确认支付并升级
+              <Icon name="sparkles" size={14} /> {t('entry.upgradeConfirm')}
             </button>
           )}
         </div>
