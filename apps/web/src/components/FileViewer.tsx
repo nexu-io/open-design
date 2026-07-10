@@ -147,6 +147,7 @@ import {
   readManualEditStyles,
 } from '../edit-mode/source-patches';
 import { MANUAL_EDIT_STYLE_PROPS, type ManualEditBridgeMessage, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
+import { computeAlignedPositions, type AlignmentOp, type PositionedTarget } from '../edit-mode/alignment';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 
 function resolveChromeActionsHost(): HTMLElement | null {
@@ -4922,6 +4923,8 @@ function HtmlViewer({
   }, []);
   const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
   const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
+  const [manualEditMultiSelectedIds, setManualEditMultiSelectedIds] = useState<string[]>([]);
+  const manualEditMultiSelectedCount = manualEditMultiSelectedIds.length > 1 ? manualEditMultiSelectedIds.length : 1;
   const [manualEditHoverTarget, setManualEditHoverTarget] = useState<ManualEditTarget | null>(null);
   const [manualEditPageStylesOpen, setManualEditPageStylesOpen] = useState(false);
   const [manualEditPanelPosition, setManualEditPanelPosition] = useState<{ left: number; top: number } | null>(null);
@@ -6303,6 +6306,7 @@ function HtmlViewer({
         return;
       }
       if (data.type === 'od-edit-multi-select') {
+        setManualEditMultiSelectedIds(Array.isArray(data.ids) ? data.ids.filter((id): id is string => typeof id === 'string') : []);
         return;
       }
       if (data.type === 'od-edit-drag-start') {
@@ -6777,6 +6781,64 @@ function HtmlViewer({
     setManualEditDraft((current) => ({ ...current, fullSource: persisted }));
     setManualEditError(message);
     return false;
+  }
+
+  async function handleManualEditAlign(op: AlignmentOp) {
+    if (manualEditSavingRef.current) return;
+    const ids = manualEditMultiSelectedIds;
+    if (ids.length < 2) return;
+    const baseSource = sourceRef.current;
+    if (baseSource == null) return;
+    const idSet = new Set(ids);
+    const targets: PositionedTarget[] = manualEditTargets
+      .filter((t) => idSet.has(t.id))
+      .map((t) => ({ id: t.id, left: t.rect.x, top: t.rect.y, width: t.rect.width, height: t.rect.height }));
+    if (targets.length < 2) return;
+    const positions = computeAlignedPositions(targets, op);
+    if (!positions) return;
+    let patched = baseSource;
+    let anyChanged = false;
+    for (const pos of Object.entries(positions)) {
+      const [id, { left, top }] = pos;
+      const target = targets.find((t) => t.id === id);
+      if (!target) continue;
+      const r = applyManualEditPatch(patched, {
+        id,
+        kind: 'set-position',
+        left,
+        top,
+        width: `${Math.round(target.width)}px`,
+        height: `${Math.round(target.height)}px`,
+      });
+      if (r.ok && r.source !== patched) { patched = r.source; anyChanged = true; }
+    }
+    if (!anyChanged) return;
+    manualEditSavingRef.current = true;
+    setManualEditSaving(true);
+    try {
+      const saved = await writeProjectTextFileDetailed(projectId, file.name, patched, {
+        artifactManifest: file.artifactManifest,
+      });
+      if (!saved.ok) {
+        const message = 'message' in saved ? (saved as { message: string }).message : 'Unknown save error';
+        setManualEditError(`Could not save alignment: ${message}`);
+        return;
+      }
+      setSource(patched);
+      sourceRef.current = patched;
+      setInlinedSource(null);
+      setManualEditHistory((current) => [{
+        id: `${Date.now()}-${current.length}`,
+        label: `Align: ${op}`,
+        patch: { kind: 'set-full-source', source: patched },
+        beforeSource: baseSource,
+        afterSource: patched,
+        createdAt: Date.now(),
+      }, ...current]);
+    } finally {
+      manualEditSavingRef.current = false;
+      setManualEditSaving(false);
+    }
   }
 
   async function undoManualEdit() {
@@ -8415,6 +8477,8 @@ function HtmlViewer({
     <ManualEditPanel
       targets={manualEditTargets}
       selectedTarget={selectedManualEditTarget}
+      selectedCount={manualEditMultiSelectedCount}
+      onAlign={handleManualEditAlign}
       draft={manualEditDraft}
       history={manualEditHistory}
       error={manualEditError}

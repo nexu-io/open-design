@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useT } from '../i18n';
+import { type AlignmentOp } from '../edit-mode/alignment';
 import { emptyManualEditStyles, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
 import { Icon } from './Icon';
 
@@ -28,6 +29,8 @@ export function ManualEditPanel({
   error,
   busy,
   resetAvailable = false,
+  selectedCount = 1,
+  onAlign,
   onDraftChange,
   onStyleChange,
   onInvalidStyle,
@@ -52,6 +55,8 @@ export function ManualEditPanel({
   canRedo: boolean;
   busy?: boolean;
   resetAvailable?: boolean;
+  selectedCount?: number;
+  onAlign?: (op: AlignmentOp) => void;
   pageStylesEnabled?: boolean;
   onSelectTarget: (target: ManualEditTarget) => void;
   onDraftChange: (draft: ManualEditDraft) => void;
@@ -77,6 +82,16 @@ export function ManualEditPanel({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const targetForInspector = selectedTarget;
   const panelTitle = targetForInspector ? readableManualEditTargetName(targetForInspector) : t('manualEdit.fallbackTitle');
+  const alignBtnStyle: CSSProperties = {
+    background: 'none',
+    border: '1px solid var(--separator)',
+    borderRadius: 4,
+    cursor: 'pointer',
+    padding: '2px 6px',
+    fontSize: 14,
+    lineHeight: '18px',
+    color: 'var(--fg)',
+  };
   useEffect(() => {
     selectedTargetRef.current = selectedTarget;
   }, [selectedTarget]);
@@ -161,6 +176,21 @@ export function ManualEditPanel({
             </button>
           ) : null}
         </div>
+        {selectedCount > 1 && onAlign ? (
+          <div role="toolbar" aria-label="Align" style={{ display: 'flex', gap: 2, padding: '4px 8px', borderBottom: '1px solid var(--separator)', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)', padding: '0 4px', display: 'flex', alignItems: 'center' }}>{selectedCount} selected</span>
+            <button type="button" title="Align left" onClick={() => onAlign('align-left')} style={alignBtnStyle}>⟵</button>
+            <button type="button" title="Align center H" onClick={() => onAlign('align-center-h')} style={alignBtnStyle}>⟷</button>
+            <button type="button" title="Align right" onClick={() => onAlign('align-right')} style={alignBtnStyle}>⟶</button>
+            <span style={{ width: 4 }} />
+            <button type="button" title="Align top" onClick={() => onAlign('align-top')} style={alignBtnStyle}>⟰</button>
+            <button type="button" title="Align center V" onClick={() => onAlign('align-center-v')} style={alignBtnStyle}>↕</button>
+            <button type="button" title="Align bottom" onClick={() => onAlign('align-bottom')} style={alignBtnStyle}>⟱</button>
+            <span style={{ width: 4 }} />
+            <button type="button" title="Distribute H" onClick={() => onAlign('distribute-h')} style={alignBtnStyle}>⇥</button>
+            <button type="button" title="Distribute V" onClick={() => onAlign('distribute-v')} style={alignBtnStyle}>⇅</button>
+          </div>
+        ) : null}
         <div className="manual-edit-scroll">
           {targetForInspector ? (
             <>
