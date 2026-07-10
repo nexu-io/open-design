@@ -205,6 +205,13 @@ export interface ManualEditDragCommitMessage {
   display?: string;
 }
 
+export interface ManualEditStyleCommitMessage {
+  type: 'od-edit-style-commit';
+  id: string;
+  prop: string;
+  value: string;
+}
+
 export interface ManualEditPositionCommitMessage {
   type: 'od-edit-position-commit';
   id: string;
@@ -256,7 +263,8 @@ export type ManualEditBridgeMessage =
   | ManualEditDragEndMessage
   | ManualEditMultiSelectMessage
   | ManualEditSetSelectedIdsMessage
-  | ManualEditPositionCommitBatchMessage;
+  | ManualEditPositionCommitBatchMessage
+  | ManualEditStyleCommitMessage;
 
 export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign', 'lineHeight', 'letterSpacing',
