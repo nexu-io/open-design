@@ -64,27 +64,39 @@ interface GeneratedSegmentsPayload {
 const VOICE_PROFILE_CARDS: readonly VoiceProfileCard[] = [
   {
     id: 'guide-host',
-    role: 'Guide host',
+    role: '專業講解者',
     tone: 'professional',
-    description: 'Clear and steady for explainers.',
+    description: '清楚、穩定，適合科普與商務解說。',
   },
   {
-    id: 'warm-storyteller',
-    role: 'Warm storyteller',
+    id: 'young-voice',
+    role: '年輕聲線',
+    tone: 'young',
+    description: '明亮、有朝氣，適合短影音與開場。',
+  },
+  {
+    id: 'mature-voice',
+    role: '成熟聲線',
+    tone: 'mature',
+    description: '沉穩、有份量，適合品牌與專業說明。',
+  },
+  {
+    id: 'friendly-voice',
+    role: '親切聲線',
     tone: 'friendly',
-    description: 'Soft and approachable for how-tos.',
+    description: '溫和、好接近，適合教學與口播。',
   },
   {
-    id: 'calm-explainer',
-    role: 'Calm explainer',
+    id: 'calm-voice',
+    role: '沉穩聲線',
     tone: 'calm',
-    description: 'Good for product or science breakdowns.',
+    description: '平穩、放鬆，適合長文講解與品牌片。',
   },
   {
-    id: 'energetic-presenter',
-    role: 'Energetic presenter',
-    tone: 'energetic',
-    description: 'Best for short-form or fast hooks.',
+    id: 'lively-voice',
+    role: '活潑聲線',
+    tone: 'lively',
+    description: '有節奏感與動態感，適合短影音和節目感。',
   },
 ] as const;
 

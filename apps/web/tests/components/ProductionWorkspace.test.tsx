@@ -22,7 +22,7 @@ vi.mock('../../src/providers/anthropic', () => ({
                 id: 'hook',
                 label: 'Hook',
                 paragraph: 'Open with the question the viewer cares about.',
-                narration: 'Guide host (professional) 旁白：Open with the question the viewer cares about.',
+                narration: '專業講解者 (professional) 旁白：Open with the question the viewer cares about.',
                 shot: '鏡頭：Open with the question the viewer cares about.',
                 assets: '素材：Use a bold title card and one sample image.',
                 output: '成片：Open with the question the viewer cares about.',
@@ -32,7 +32,7 @@ vi.mock('../../src/providers/anthropic', () => ({
                 id: 'body',
                 label: 'Body',
                 paragraph: 'Show one concrete example and explain the key step.',
-                narration: 'Guide host (professional) 旁白：Show one concrete example and explain the key step.',
+                narration: '專業講解者 (professional) 旁白：Show one concrete example and explain the key step.',
                 shot: '鏡頭：Show one concrete example and explain the key step.',
                 assets: '素材：Use a demo screen and supporting illustration.',
                 output: '成片：Show one concrete example and explain the key step.',
@@ -46,8 +46,8 @@ vi.mock('../../src/providers/anthropic', () => ({
                 {
                   id: 'hook',
                   label: 'Hook',
-                  narration: 'Energetic presenter (professional) 旁白：Hook rewrite from OpenRouter.',
-                  voiceProfileId: 'energetic-presenter',
+                  narration: '年輕聲線 (young) 旁白：Hook rewrite from OpenRouter.',
+                  voiceProfileId: 'young-voice',
                 },
               ],
             }
@@ -107,7 +107,8 @@ describe('ProductionWorkspace', () => {
     expect(screen.getByRole('heading', { name: '成片' })).toBeInTheDocument();
     expect(screen.getByText('Science explainer')).toBeInTheDocument();
     expect(screen.getByTestId('production-voice-profile-cards')).toBeInTheDocument();
-    expect(screen.getByTestId('production-voice-profile-card-guide-host')).toHaveTextContent('Guide host');
+    expect(screen.getByTestId('production-voice-profile-card-guide-host')).toHaveTextContent('專業講解者');
+    expect(screen.getByTestId('production-voice-profile-card-young-voice')).toHaveTextContent('年輕聲線');
     expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Voice flow (professional)');
     expect(screen.getByRole('textbox', { name: 'Hook 段落' })).toHaveValue('Hook: explain the core idea in one line.');
     expect(screen.getByRole('textbox', { name: 'Body 鏡頭' })).toHaveValue('鏡頭：Body: show the main example with one clear visual.');
@@ -157,7 +158,7 @@ describe('ProductionWorkspace', () => {
 
     expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Voice flow (professional)');
     expect(screen.getByRole('textbox', { name: 'Hook 旁白' })).toHaveValue(
-      'Guide host (professional) 旁白：Opening: frame the question.\nDemo: show the key step.\nEnding: leave the viewer with a clear next move.',
+      '專業講解者 (professional) 旁白：Opening: frame the question.\nDemo: show the key step.\nEnding: leave the viewer with a clear next move.',
     );
     expect(screen.getByRole('textbox', { name: 'Hook 鏡頭' })).toHaveValue(
       '鏡頭：Opening: frame the question.\nDemo: show the key step.\nEnding: leave the viewer with a clear next move.',
@@ -174,12 +175,12 @@ describe('ProductionWorkspace', () => {
     renderWorkspace();
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Hook 角色綁定' }), {
-      target: { value: 'energetic-presenter' },
+      target: { value: 'young-voice' },
     });
 
-    expect(screen.getByTestId('production-voice-profile-card-energetic-presenter')).toHaveTextContent('1 lanes');
+    expect(screen.getByTestId('production-voice-profile-card-young-voice')).toHaveTextContent('1 lanes');
     expect(screen.getByRole('textbox', { name: 'Hook 旁白' })).toHaveValue(
-      'Energetic presenter (professional) 旁白：Hook: explain the core idea in one line.',
+      '年輕聲線 (professional) 旁白：Hook: explain the core idea in one line.',
     );
   });
 
@@ -189,7 +190,7 @@ describe('ProductionWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '新增分段' }));
 
     expect(screen.getByRole('textbox', { name: '第 4 段 段落' })).toHaveValue('');
-    expect(screen.getByRole('textbox', { name: '第 4 段 旁白' })).toHaveValue('Guide host (professional) 旁白：請輸入段落');
+    expect(screen.getByRole('textbox', { name: '第 4 段 旁白' })).toHaveValue('專業講解者 (professional) 旁白：請輸入段落');
     expect(screen.getByRole('textbox', { name: '第 4 段 鏡頭' })).toHaveValue('鏡頭：請輸入段落');
 
     fireEvent.click(screen.getByRole('button', { name: '第 4 段 刪除分段' }));
@@ -214,9 +215,9 @@ describe('ProductionWorkspace', () => {
 
     expect(await screen.findByText('Voice lanes updated from OpenRouter.')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Hook 旁白' })).toHaveValue(
-      'Energetic presenter (professional) 旁白：Hook rewrite from OpenRouter.',
+      '年輕聲線 (young) 旁白：Hook rewrite from OpenRouter.',
     );
-    expect(screen.getByRole('combobox', { name: 'Hook 角色綁定' })).toHaveValue('energetic-presenter');
+    expect(screen.getByRole('combobox', { name: 'Hook 角色綁定' })).toHaveValue('young-voice');
   });
 
   it('applies generated storyboard results from OpenRouter', async () => {
