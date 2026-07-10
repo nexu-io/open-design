@@ -117,7 +117,7 @@ Constraints: no text, no letters, no numbers, no watermark, no logo,
 | 선언 | 전개 문구 |
 |---|---|
 | `shot: "mid"` | full body, roughly 50-70% of frame height |
-| `shot: "close-up"` | upper body from the waist up, roughly 70-90% of frame height |
+| `shot: "close-up"` | close to the camera, roughly 70-90% of frame height — 카드가 상반신 크롭을 원하면 "upper body from the waist up", 가까운 전신이면 "FULL BODY visible, large and close (head to feet, not cropped at the waist)" 전개. 어느 쪽이든 "close proximity, no distant framing" 상수 |
 | `angle: "eye"` | camera at the character's eye level |
 | `angle: "low"` | camera slightly below the character's eye level, looking up |
 | `angle: "high"` | camera slightly above the character's eye level, looking down |
