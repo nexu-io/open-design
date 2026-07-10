@@ -174,9 +174,10 @@ export function buildManualEditBridge(enabled: boolean): string {
   var discoverySelector = ${JSON.stringify(MANUAL_EDIT_DISCOVERY_SELECTOR)};
   var hostNodeSelector = ${JSON.stringify(MANUAL_EDIT_HOST_NODE_SELECTOR)};
   var sourcePathAttr = ${JSON.stringify(MANUAL_EDIT_SOURCE_PATH_ATTR)};
-  var styleProps = ['fontFamily','fontSize','fontWeight','color','textAlign','lineHeight','letterSpacing','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius','transform','display','position','left','top','right','bottom','zIndex','boxShadow'];
+  var styleProps = ['fontFamily','fontSize','fontWeight','color','textAlign','lineHeight','letterSpacing','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius','transform','display','position','left','top','right','bottom','zIndex','boxShadow','borderTopLeftRadius','borderTopRightRadius','borderBottomRightRadius','borderBottomLeftRadius'];
   var dragState = null; // { el, startX, startY, startLeft, startTop, startWidth, startHeight, handle, id }
-  var handles = []; // live handle elements
+  var handles = []; // live handle elements (8 resize)
+  var cornerHandles = []; // live corner-radius handles (4)
   var selectedElForHandles = null; // which element currently has handles shown
   var selectedIds = {}; // map of id → true for multi-selected elements
   var rubberband = null; // { el, startX, startY } for drag-to-select rectangle
@@ -1213,7 +1214,11 @@ export function buildManualEditBridge(enabled: boolean): string {
     for (var i = 0; i < handles.length; i++) {
       if (handles[i] && handles[i].parentNode) handles[i].parentNode.removeChild(handles[i]);
     }
+    for (var j = 0; j < cornerHandles.length; j++) {
+      if (cornerHandles[j] && cornerHandles[j].parentNode) cornerHandles[j].parentNode.removeChild(cornerHandles[j]);
+    }
     handles = [];
+    cornerHandles = [];
     selectedElForHandles = null;
   }
 
@@ -1258,6 +1263,39 @@ export function buildManualEditBridge(enabled: boolean): string {
       containerEl.appendChild(handle);
       handles.push(handle);
     }
+    // Corner radius handles (small gray diamonds at each corner)
+    var r = parseFloat(el.style.borderRadius || '0') || 0;
+    if (r > 0 || true) {
+      var CH = 6;
+      var cornerPositions = [
+        { c: 'tl', left: -CH/2, top: -CH/2, cursor: 'nesw-resize', prop: 'borderTopLeftRadius' },
+        { c: 'tr', left: rect.width - CH/2, top: -CH/2, cursor: 'nwse-resize', prop: 'borderTopRightRadius' },
+        { c: 'br', left: rect.width - CH/2, top: rect.height - CH/2, cursor: 'nesw-resize', prop: 'borderBottomRightRadius' },
+        { c: 'bl', left: -CH/2, top: rect.height - CH/2, cursor: 'nwse-resize', prop: 'borderBottomLeftRadius' },
+      ];
+      for (var cj = 0; cj < cornerPositions.length; cj++) {
+        var cp2 = cornerPositions[cj];
+        var ch = document.createElement('div');
+        ch.setAttribute('data-od-corner-handle', cp2.c);
+        ch.setAttribute('data-od-corner-prop', cp2.prop);
+        ch.style.cssText = [
+          'position:absolute',
+          'left:' + Math.round(rect.left - containerRect.left + cp2.left) + 'px',
+          'top:' + Math.round(rect.top - containerRect.top + cp2.top) + 'px',
+          'width:' + CH + 'px',
+          'height:' + CH + 'px',
+          'background:#94a3b8',
+          'border:1.5px solid #fff',
+          'border-radius:50%',
+          'z-index:2147483647',
+          'pointer-events:auto',
+          'cursor:' + cp2.cursor,
+          'box-sizing:border-box',
+        ].join(';');
+        containerEl.appendChild(ch);
+        cornerHandles.push(ch);
+      }
+    }
   }
 
   function updateHandlePositions(el){
@@ -1288,6 +1326,17 @@ export function buildManualEditBridge(enabled: boolean): string {
     var t = el.style.transform || '';
     var m = t.match(/rotate\((-?[0-9.]+)deg\)/);
     return m ? parseFloat(m[1]) : 0;
+  }
+  function saveInlinePosition(el){
+    return { position: el.style.position, left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height, margin: el.style.margin };
+  }
+  function restoreInlinePosition(el, saved){
+    el.style.position = saved.position || '';
+    el.style.left = saved.left || '';
+    el.style.top = saved.top || '';
+    el.style.width = saved.width || '';
+    el.style.height = saved.height || '';
+    el.style.margin = saved.margin || '';
   }
   function ensureAbsolute(el){
     var pos = window.getComputedStyle(el).position;
@@ -1359,6 +1408,17 @@ export function buildManualEditBridge(enabled: boolean): string {
       rotationHandle.targetEl.setPointerCapture(ev.pointerId);
       return;
     }
+    // Check corner radius handles
+    var cornerEl2 = ev.target && ev.target.closest ? ev.target.closest('[data-od-corner-handle]') : null;
+    if (cornerEl2 && selectedElForHandles){
+      ev.preventDefault(); ev.stopPropagation();
+      var cornerProp2 = cornerEl2.getAttribute('data-od-corner-prop') || 'borderRadius';
+      var curR = parseFloat(selectedElForHandles.style[cornerProp2] || selectedElForHandles.style.borderRadius || '0') || 0;
+      dragState = { el: selectedElForHandles, startX: ev.clientX, startY: ev.clientY, handle: 'corner', id: stableId(selectedElForHandles), moved: false,
+        startLeft: curR, startTop: 0, startWidth: 0, startHeight: 0, cornerProp: cornerProp2 };
+      selectedElForHandles.setPointerCapture(ev.pointerId);
+      return;
+    }
     // Check handle hit first
     var handleEl = ev.target && ev.target.closest ? ev.target.closest('[data-od-drag-handle]') : null;
     if (handleEl && selectedElForHandles) {
@@ -1391,6 +1451,7 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (targetEl && !handleEl && (targetEl === selectedElForHandles || isMultiDrag)) {
       ev.preventDefault();
       ev.stopPropagation();
+      var savedPosBefore = saveInlinePosition(targetEl);
       if (isMultiDrag) {
         // Multi-drag: store all selected elements
         var selEls = getSelectedElements();
@@ -1411,6 +1472,7 @@ export function buildManualEditBridge(enabled: boolean): string {
           id: targetId,
           moved: false,
           multiEls: multiEls,
+          savedPos: savedPosBefore,
         };
       } else {
         // Single drag
@@ -1427,6 +1489,7 @@ export function buildManualEditBridge(enabled: boolean): string {
           handle: 'body',
           id: targetId,
           moved: false,
+          savedPos: savedPosBefore,
         };
       }
       targetEl.setPointerCapture(ev.pointerId);
@@ -1464,6 +1527,18 @@ export function buildManualEditBridge(enabled: boolean): string {
     }
     if (rubberband) { updateRubberband(ev.clientX, ev.clientY); return; }
     if (!dragState) return;
+    // Corner
+    if (dragState.handle === 'corner'){
+      var newR = Math.max(0, dragState.startLeft + Math.max(Math.abs(ev.clientX - dragState.startX), Math.abs(ev.clientY - dragState.startY)));
+      if (dragState.cornerProp.indexOf('Left') >= 0 || dragState.cornerProp.indexOf('Right') >= 0){
+        newR = Math.max(0, dragState.startLeft + (Math.abs(ev.clientX - dragState.startX) + Math.abs(ev.clientY - dragState.startY)) / 2);
+      }
+      dragState.el.style[dragState.cornerProp] = Math.round(newR) + 'px';
+      dragState.moved = true;
+      updateHandlePositions(dragState.el);
+      updateRotationHandlePos(dragState.el);
+      return;
+    }
     // Rotation
     if (dragState.handle === 'rotate'){
       var angle = Math.atan2(ev.clientY - dragState.cy, ev.clientX - dragState.cx) * 180 / Math.PI + 90;
@@ -1540,6 +1615,17 @@ export function buildManualEditBridge(enabled: boolean): string {
     var el = dragState.el;
     var id = dragState.id;
     try { el.releasePointerCapture(ev.pointerId); } catch(e) {}
+    if (dragState.handle === 'corner'){
+      if (dragState.moved){
+        var cv = dragState.el.style[dragState.cornerProp] || '';
+        commitStyle(dragState.el, dragState.cornerProp, cv);
+        dragEndedJustNow = true;
+      }
+      dragState = null;
+      updateHandlePositions(el);
+      updateRotationHandlePos(el);
+      return;
+    }
     if (dragState.handle === 'rotate'){
       if (dragState.moved){
         commitPosition(el, id);
@@ -1558,6 +1644,10 @@ export function buildManualEditBridge(enabled: boolean): string {
         commitPosition(el, id);
         dragEndedJustNow = true;
       }
+    } else if (dragState.savedPos && dragState.handle === 'body') {
+      // Drag started (ensureAbsolute mutated the DOM) but didn't move.
+      // Restore original inline position so the layout is not permanently altered.
+      restoreInlinePosition(el, dragState.savedPos);
     }
     dragState = null;
     if (el) {
@@ -1586,6 +1676,8 @@ export function buildManualEditBridge(enabled: boolean): string {
         } else {
           commitPosition(el2, id2);
         }
+      } else if (dragState.savedPos && dragState.handle === 'body') {
+        restoreInlinePosition(el2, dragState.savedPos);
       }
       dragState = null;
       window.parent.postMessage({ type: 'od-edit-drag-end', id: id2 || '' }, '*');

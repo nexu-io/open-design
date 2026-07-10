@@ -4,6 +4,7 @@ import { useT } from '../i18n';
 import { type AlignmentOp } from '../edit-mode/alignment';
 import { emptyManualEditStyles, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
 import { Icon } from './Icon';
+import { ColorPicker } from './ColorPicker';
 
 function parseRotationDeg(t: string): string {
   const m = (t || '').match(/rotate\((-?[0-9.]+)deg\)/);
@@ -898,6 +899,13 @@ function StyleInspector({
           <UnitRow label={t('manualEdit.width')} value={styles.width} placeholder={widthPlaceholder} onChange={(v) => u('width', v)} unit="px" autoUnit onFocus={() => activate('width', t('manualEdit.width'))} />
           <UnitRow label={t('manualEdit.height')} value={styles.height} placeholder={heightPlaceholder} onChange={(v) => u('height', v)} unit="px" autoUnit onFocus={() => activate('height', t('manualEdit.height'))} />
         </PairRow>
+        <PairRow>
+          <div style={{ display:'flex',alignItems:'center',gap:6 }}>
+            <span style={{ fontSize:11,minWidth:48,color:'var(--muted)' }}>Fill</span>
+            <ColorPicker value={styles.backgroundColor} onChange={(v) => u('backgroundColor', v)} />
+          </div>
+          <UnitRow label="Opacity" value={styles.opacity} onChange={(v) => u('opacity', v)} unit="" />
+        </PairRow>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: -4, marginBottom: 4 }}>
           <input type="range" min="0" max="1" step="0.05" value={parseFloat(styles.opacity || '1')} style={{ flex: 1, height: 4 }}
             onChange={(e) => u('opacity', e.target.value)} />
@@ -933,6 +941,13 @@ function StyleInspector({
           <DropdownRow label={t('manualEdit.distribution')} value={styles.justifyContent} onChange={(v) => u('justifyContent', v)} options={justifyOptions(t)} disabled={layoutDisabled} />
         </PairRow>
         <PairRow>
+          <DropdownRow label="Style" value={styles.borderStyle} onChange={(v) => u('borderStyle', v)} options={BORDER_STYLE_OPTS} />
+          <div style={{ display:'flex',alignItems:'center',gap:6 }}>
+            <span style={{ fontSize:11,minWidth:40,color:'var(--muted)' }}>Stroke</span>
+            <ColorPicker value={styles.borderColor} onChange={(v) => u('borderColor', v)} compact />
+          </div>
+        </PairRow>
+        <PairRow>
           <UnitRow label={t('manualEdit.gap')} value={styles.gap} onChange={(v) => u('gap', v)} unit="px" autoUnit disabled={layoutDisabled} onFocus={() => activate('gap', t('manualEdit.gap'))} />
           {layoutDisabled ? (
             // Non-flex/grid targets still get a live alignment dropdown — it
@@ -945,6 +960,15 @@ function StyleInspector({
         </PairRow>
         {layoutDisabled ? <p className="cc-section-hint">{t('manualEdit.layoutUnavailable')}</p> : null}
         <UnitRow label="Radius" value={styles.borderRadius} onChange={(v) => u('borderRadius', v)} unit="px" autoUnit />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, fontSize: 11 }}>
+          <span style={{ color: 'var(--muted)', minWidth: 60 }}>Corners</span>
+          {(['borderTopLeftRadius','borderTopRightRadius','borderBottomRightRadius','borderBottomLeftRadius'] as const).map((cp, ci) => (
+            <input key={cp} type="number" min="0" step="1"
+              value={parseFloat((styles[cp] || '0') || '0') || 0}
+              onChange={(e) => u(cp, e.target.value ? e.target.value + 'px' : '')}
+              style={{ width: 32, padding: '1px 2px', fontSize: 10, background: 'var(--bg-input)', color: 'var(--fg)', border: '1px solid var(--separator)', borderRadius: 3, textAlign: 'center' }} />
+          ))}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
           <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 60 }}>Rotate</span>
           <input type="number" min="-360" max="360" step="1" value={parseRotationDeg(styles.transform)}
