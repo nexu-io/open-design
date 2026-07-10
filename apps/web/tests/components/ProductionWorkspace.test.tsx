@@ -33,8 +33,11 @@ describe('ProductionWorkspace', () => {
     expect(screen.getByRole('heading', { name: 'Output' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Generate voiceover' })).toBeInTheDocument();
     expect(screen.getByText('Science explainer')).toBeInTheDocument();
-    expect(screen.getByText('Beginner-friendly empty state: break the script into shots when you need more control.'))
-      .toBeInTheDocument();
+    expect(screen.getByLabelText('Editable script draft')).toHaveValue(
+      'Hook: explain the core idea in one line.\nBody: show the main example with one clear visual.\nWrap-up: finish with a useful takeaway or CTA.',
+    );
+    expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Voice profile (professional) will speak 3 beats');
+    expect(screen.getByTestId('production-storyboard-shots')).toHaveTextContent('Shot 1: Hook: explain the core idea in one line.');
   });
 
   it('renders a draggable canvas board for the production cards', () => {
@@ -93,5 +96,34 @@ describe('ProductionWorkspace', () => {
 
     expect(screen.getByTestId('production-canvas-edge-script-assets')).toBeInTheDocument();
     expect(screen.getByTestId('production-canvas-status')).toHaveTextContent('No active connection');
+  });
+
+  it('syncs the voice and storyboard panels when the script changes', () => {
+    render(
+      <ProductionWorkspace
+        projectId="project-1"
+        projectName="Science Explainer"
+        metadata={{
+          kind: 'video',
+          workflowMode: 'production',
+          taskCardId: 'science-explainer',
+          voiceTone: 'professional',
+          voiceProfileId: 'rachel-default',
+        } as never}
+        projectFiles={[]}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Editable script draft'), {
+      target: {
+        value: 'Opening: frame the question.\nDemo: show the key step.\nEnding: leave the viewer with a clear next move.',
+      },
+    });
+
+    expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Voice profile (professional) will speak 3 beats');
+    expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Opening: frame the question.');
+    expect(screen.getByTestId('production-storyboard-shots')).toHaveTextContent('Shot 2: Demo: show the key step.');
+    expect(screen.getByTestId('production-storyboard-shots')).toHaveTextContent('Shot 3: Ending: leave the viewer with a clear next move.');
+    expect(screen.getByRole('heading', { name: 'Script' })).toBeInTheDocument();
   });
 });
