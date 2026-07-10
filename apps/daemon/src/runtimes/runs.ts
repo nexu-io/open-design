@@ -247,10 +247,45 @@ export function createChatRunService({
     return run;
   };
 
+  // Read persisted events in the exclusive id range (afterId, beforeId) from the
+  // on-disk log, in order. Used to backfill the reattach gap below; returns []
+  // when persistence is disabled or the log is unreadable.
+  const readPersistedEventRange = (run, afterId, beforeId) => {
+    const out = [];
+    if (!run.eventsLogPath) return out;
+    let text;
+    try { text = fs.readFileSync(run.eventsLogPath, 'utf8'); } catch { return out; }
+    for (const line of text.split('\n')) {
+      if (!line) continue;
+      let rec;
+      try { rec = JSON.parse(line); } catch { continue; }
+      if (typeof rec?.id !== 'number') continue;
+      if (rec.id > afterId && rec.id < beforeId) out.push(rec);
+    }
+    return out;
+  };
+
   const stream = (run, req, res) => {
     const sse = createSseResponse(res);
     const lastEventId = Number(req.get('Last-Event-ID') || req.query.after || 0);
     let sent = 0;
+    // Reattach gap backfill. run.events is a bounded ring buffer (maxEvents), so
+    // a client reconnecting with a cursor older than the oldest surviving event
+    // would otherwise silently skip everything the buffer already evicted. Those
+    // events are still in the on-disk log, so replay the missing prefix from disk
+    // first — the reattach stays gapless instead of dropping events with no signal.
+    const firstBufferedId = run.events.length > 0 ? run.events[0].id : null;
+    if (
+      Number.isFinite(lastEventId) &&
+      lastEventId > 0 &&
+      firstBufferedId != null &&
+      firstBufferedId > lastEventId + 1
+    ) {
+      for (const record of readPersistedEventRange(run, lastEventId, firstBufferedId)) {
+        sse.send(record.event, record.data, record.id);
+        sent++;
+      }
+    }
     for (const record of run.events) {
       if (!Number.isFinite(lastEventId) || record.id > lastEventId) {
         sse.send(record.event, record.data, record.id);
