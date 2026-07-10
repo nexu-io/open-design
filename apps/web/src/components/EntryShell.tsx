@@ -1020,7 +1020,6 @@ export function EntryShell({
             className={[
               'entry-main__inner',
               view === 'home' ? '' : 'entry-main__inner--wide',
-              view === 'drafts' || view === 'all-projects' ? 'entry-main__inner--project-grid' : '',
             ].filter(Boolean).join(' ')}
           >
             <div data-testid="entry-view-home" data-active={view === 'home' ? 'true' : 'false'} {...inactiveViewProps(view === 'home')}>

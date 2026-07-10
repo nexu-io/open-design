@@ -747,7 +747,7 @@
   width: 100%;
   max-width: 1440px;
   margin: 0 auto;
-  padding: 40px 32px 64px;
+  padding: 16px 32px 64px;
   display: flex;
   flex-direction: column;
   gap: 32px;
@@ -759,9 +759,6 @@
    while the hero card self-constrains to a readable column. */
 .entry-main__inner--wide {
   max-width: 1440px;
-}
-.entry-main__inner--project-grid {
-  max-width: none;
 }
 
 /* Sticky top-right control strip inside the main scroll area.

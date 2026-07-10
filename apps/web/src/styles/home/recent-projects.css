@@ -73,16 +73,6 @@
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 12px;
 }
-.recent-projects__row--grid {
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 18px;
-}
-.recent-projects__row--grid .recent-projects__card-name {
-  font-size: 15px;
-}
-.recent-projects__row--grid .recent-projects__card-time {
-  font-size: 12.5px;
-}
 .recent-projects__controls {
   display: flex;
   align-items: center;
