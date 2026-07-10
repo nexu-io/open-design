@@ -67,4 +67,31 @@ describe('ProductionWorkspace', () => {
 
     expect(scriptNode).toHaveStyle({ transform: 'translate(136px, 124px)' });
   });
+
+  it('can connect two cards into a new canvas edge', () => {
+    render(
+      <ProductionWorkspace
+        projectId="project-1"
+        projectName="Science Explainer"
+        metadata={{
+          kind: 'video',
+          workflowMode: 'production',
+          taskCardId: 'science-explainer',
+          voiceTone: 'professional',
+          voiceProfileId: 'rachel-default',
+        } as never}
+        projectFiles={[]}
+      />,
+    );
+
+    expect(screen.queryByTestId('production-canvas-edge-script-assets')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start outgoing link from Script' }));
+    expect(screen.getByTestId('production-canvas-status')).toHaveTextContent('Connecting from Script');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Complete link to Assets' }));
+
+    expect(screen.getByTestId('production-canvas-edge-script-assets')).toBeInTheDocument();
+    expect(screen.getByTestId('production-canvas-status')).toHaveTextContent('No active connection');
+  });
 });

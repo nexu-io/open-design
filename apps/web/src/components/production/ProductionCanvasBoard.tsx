@@ -70,23 +70,17 @@ export function ProductionCanvasBoard() {
   const boardRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const [nodes, setNodes] = useState<CanvasNode[]>(INITIAL_NODES);
+  const [edges, setEdges] = useState<CanvasEdge[]>(INITIAL_EDGES);
+  const [pendingConnection, setPendingConnection] = useState<CanvasNodeId | null>(null);
 
   const nodeLookup = useMemo(() => new Map(nodes.map((node) => [node.id, node] as const)), [nodes]);
-  const edges = useMemo(
-    () =>
-      INITIAL_EDGES.map((edge) => {
-        const fromNode = nodeLookup.get(edge.from);
-        const toNode = nodeLookup.get(edge.to);
-        return fromNode && toNode
-          ? {
-              ...edge,
-              fromNode,
-              toNode,
-            }
-          : null;
-      }).filter((edge): edge is { from: CanvasNodeId; to: CanvasNodeId; fromNode: CanvasNode; toNode: CanvasNode } => Boolean(edge)),
-    [nodeLookup],
-  );
+
+  const addEdge = (from: CanvasNodeId, to: CanvasNodeId) => {
+    if (from === to) return;
+    setEdges((current) =>
+      current.some((edge) => edge.from === from && edge.to === to) ? current : [...current, { from, to }],
+    );
+  };
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
@@ -118,6 +112,8 @@ export function ProductionCanvasBoard() {
     };
   }, []);
 
+  const pendingConnectionTitle = pendingConnection ? nodeLookup.get(pendingConnection)?.title : null;
+
   return (
     <section className="production-canvas-board" aria-label="Production canvas" data-testid="production-canvas-board">
       <div className="production-canvas-board__header">
@@ -125,8 +121,15 @@ export function ProductionCanvasBoard() {
           <p className="production-canvas-board__eyebrow">Canvas draft</p>
           <h3>Move the production cards around</h3>
         </div>
-        <p className="production-canvas-board__hint">Drag the cards to reshape the flow before we add real links and automation.</p>
+        <p className="production-canvas-board__hint">
+          Drag cards to reshape the flow. Click Out on one card, then In on another to create a connection.
+        </p>
       </div>
+      <p className="production-canvas-board__status" aria-live="polite" data-testid="production-canvas-status">
+        {pendingConnectionTitle
+          ? `Connecting from ${pendingConnectionTitle}. Choose a target card to finish the link.`
+          : 'No active connection. Start with any card that should drive the next step.'}
+      </p>
 
       <div
         ref={boardRef}
@@ -163,7 +166,10 @@ export function ProductionCanvasBoard() {
               <path d="M0,0 L10,5 L0,10 z" fill="rgba(148, 163, 184, 0.95)" />
             </marker>
           </defs>
-          {edges.map(({ from, to, fromNode, toNode }) => {
+          {edges.map(({ from, to }) => {
+            const fromNode = nodeLookup.get(from);
+            const toNode = nodeLookup.get(to);
+            if (!fromNode || !toNode) return null;
             const startX = fromNode.x + 220;
             const startY = fromNode.y + 92;
             const endX = toNode.x;
@@ -186,11 +192,11 @@ export function ProductionCanvasBoard() {
           })}
         </svg>
         {nodes.map((node) => (
-          <button
+          <div
             key={node.id}
-            type="button"
             className="production-canvas-board__node"
             data-testid={`production-canvas-node-${node.id}`}
+            role="group"
             aria-label={`${node.title} node`}
             style={{
               position: 'absolute',
@@ -222,9 +228,74 @@ export function ProductionCanvasBoard() {
               };
             }}
           >
-            <span className="production-canvas-board__node-title">{node.title}</span>
+            <div
+              className="production-canvas-board__node-topline"
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 12,
+              }}
+            >
+              <span className="production-canvas-board__node-title">{node.title}</span>
+              <div
+                className="production-canvas-board__node-actions"
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                }}
+              >
+                <button
+                  type="button"
+                  className="production-canvas-board__link-button"
+                  style={{
+                    borderRadius: 999,
+                    border: '1px solid rgba(148, 163, 184, 0.3)',
+                    background: pendingConnection === node.id ? 'rgba(96, 165, 250, 0.28)' : 'rgba(30, 41, 59, 0.96)',
+                    color: '#e2e8f0',
+                    padding: '4px 10px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                  aria-label={
+                    pendingConnection === node.id ? `Cancel outgoing link from ${node.title}` : `Start outgoing link from ${node.title}`
+                  }
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => {
+                    setPendingConnection((current) => (current === node.id ? null : node.id));
+                  }}
+                >
+                  {pendingConnection === node.id ? 'Cancel' : 'Out'}
+                </button>
+                <button
+                  type="button"
+                  className="production-canvas-board__link-button"
+                  style={{
+                    borderRadius: 999,
+                    border: '1px solid rgba(148, 163, 184, 0.3)',
+                    background: !pendingConnection || pendingConnection === node.id ? 'rgba(15, 23, 42, 0.82)' : 'rgba(34, 197, 94, 0.18)',
+                    color: '#e2e8f0',
+                    padding: '4px 10px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: pendingConnection && pendingConnection !== node.id ? 'pointer' : 'not-allowed',
+                  }}
+                  aria-label={pendingConnection ? `Complete link to ${node.title}` : `Choose a source node first for ${node.title}`}
+                  disabled={!pendingConnection || pendingConnection === node.id}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => {
+                    if (!pendingConnection || pendingConnection === node.id) return;
+                    addEdge(pendingConnection, node.id);
+                    setPendingConnection(null);
+                  }}
+                >
+                  In
+                </button>
+              </div>
+            </div>
             <span className="production-canvas-board__node-desc">{node.description}</span>
-          </button>
+          </div>
         ))}
       </div>
     </section>
