@@ -93,6 +93,15 @@ Character: [브랜드 캐릭터 있을 때만] Use the exact same character as i
   The character is interacting with props that match the card's message.
   Keep the character (head included) fully inside the central 4:5 crop
   region — the top and bottom ~8.3% of the frame are cropped away.
+Pose: [pose 매핑 — 시트의 해당 포즈를 사용. idle→standing at ease as in the sheet's
+  IDLE row / point→one short arm extended, gesturing toward the prop / hold-prop→holding
+  the card's prop with both short arms as in the sheet's ACTIONS row / crouch→crouching
+  low to look into or at the prop / sit→seated on a chair or edge as in the sheet's
+  SITTING row]. Keep the stubby unibody proportions in the pose.
+Expression: [expression 매핑 — 시트 표정. neutral→calm closed-ish smile / happy→big
+  open smile, tongue visible / surprised→round open mouth (sheet '놀람') / worried→
+  worried face, mouth slightly down (sheet '걱정') / wink→one eye winking].
+  Match the pose and expression to the corresponding cell in the character sheet.
 Constraints: no text, no letters, no numbers, no watermark, no logo,
   no flat illustration, no abstract graphic background.
 ```
@@ -111,6 +120,15 @@ Constraints: no text, no letters, no numbers, no watermark, no logo,
 | `placement: "right"` | character positioned in the right third of the frame |
 | `view: "front"` | facing the camera |
 | `view: "three-quarter"` | three-quarter view, both eyes and mouth clearly visible |
+| `pose: "point"` | one short arm extended toward the prop |
+| `pose: "hold-prop"` | holding the card's prop with both short arms |
+| `pose: "crouch"` | crouching low to look into/at the prop |
+| `pose: "sit"` | seated on a chair or edge (sheet SITTING) |
+| `pose: "idle"` (또는 미지정) | standing at ease, sheet IDLE |
+| `expression: "worried"` | worried face, mouth slightly down |
+| `expression: "surprised"` | surprised, round open mouth |
+| `expression: "wink"` | one eye winking |
+| `expression: "happy"`/`"neutral"` (또는 미지정) | open smile / calm smile |
 | `locale` | Subject 라인의 장소·상황으로 영어 번역 반영 |
 
 - **기본형(basic) 배경 = 실사 환경 고정** — 플랫/그래픽 일러스트 배경은 craft 룰 2
