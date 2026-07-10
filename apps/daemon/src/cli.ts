@@ -126,6 +126,16 @@ const UI_BOOLEAN_FLAGS = new Set([
   // value back through `od ui respond --value-json`.
   'schema',
 ]);
+const STUDIO_STRING_FLAGS = new Set([
+  'daemon-url',
+  'root',
+  'manifest-url',
+  'component',
+  'control',
+  'value',
+  'verification',
+]);
+const STUDIO_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 
 // Hoist flag set bindings consumed by handlers reachable through
 // the top-of-file dispatcher. The dispatch block runs synchronously
@@ -207,6 +217,7 @@ const SUBCOMMAND_MAP = {
   research: runResearch,
   plugin: runPlugin,
   ui: runUi,
+  studio: runStudio,
   marketplace: runMarketplace,
   project: runProject,
   automation: runAutomation,
@@ -3375,6 +3386,107 @@ async function runUi(args) {
       printUiHelp();
       process.exit(2);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od studio …  (existing-application visual editor)
+// ---------------------------------------------------------------------------
+
+async function runStudio(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    printStudioHelp();
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const sub = args[0];
+  const flags = parseFlags(args.slice(1), { string: STUDIO_STRING_FLAGS, boolean: STUDIO_BOOLEAN_FLAGS });
+  const root = flags.root;
+  const manifestUrl = flags['manifest-url'];
+  if (!root || !manifestUrl) {
+    console.error('--root and --manifest-url are required');
+    process.exit(2);
+  }
+  const base = await cliDaemonBaseUrl(flags);
+  let endpoint;
+  let body;
+  if (sub === 'inspect') {
+    endpoint = '/api/repo-studio/inspect';
+    body = { root, manifestUrl };
+  } else if (sub === 'diff') {
+    endpoint = '/api/repo-studio/diff';
+    body = { root, manifestUrl };
+  } else if (sub === 'apply') {
+    if (!flags.component || !flags.control || flags.value == null) {
+      console.error('apply requires --component, --control, and --value');
+      process.exit(2);
+    }
+    endpoint = '/api/repo-studio/apply';
+    body = {
+      root,
+      manifestUrl,
+      componentId: flags.component,
+      controlId: flags.control,
+      value: coerceStudioValue(flags.value),
+    };
+  } else if (sub === 'verify') {
+    if (!flags.verification) {
+      console.error('verify requires --verification');
+      process.exit(2);
+    }
+    endpoint = '/api/repo-studio/verify';
+    body = { root, manifestUrl, verificationId: flags.verification };
+  } else {
+    console.error(`unknown subcommand: od studio ${sub}`);
+    printStudioHelp();
+    process.exit(2);
+  }
+  const response = await fetch(`${base}${endpoint}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = { error: text }; }
+  if (!response.ok) {
+    console.error(data.error || `${response.status} ${text}`);
+    process.exit(1);
+  }
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    return;
+  }
+  if (sub === 'inspect') {
+    console.log(`[studio] ${data.manifest.appName} — ${data.manifest.components.length} registered component(s)`);
+    for (const component of data.manifest.components) {
+      console.log(`  ${component.id}: ${component.label} (${component.sourceFile})`);
+    }
+  } else if (sub === 'diff') {
+    process.stdout.write(data.diff || 'No registered source changes.\n');
+  } else if (sub === 'apply') {
+    console.log(`[studio] updated ${data.file}: ${data.controlId} ${data.previousValue} → ${data.value}`);
+  } else {
+    process.stdout.write(data.stdout || '');
+    process.stderr.write(data.stderr || '');
+    if (!data.ok) process.exitCode = 1;
+  }
+}
+
+function coerceStudioValue(value) {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  if (/^-?\d+(?:\.\d+)?$/.test(value)) return Number(value);
+  return value;
+}
+
+function printStudioHelp() {
+  console.log(`Usage:
+  od studio inspect --root <absolute-path> --manifest-url <url> [--json]
+  od studio diff --root <absolute-path> --manifest-url <url> [--json]
+  od studio apply --root <path> --manifest-url <url> --component <id> --control <id> --value <value> [--json]
+  od studio verify --root <path> --manifest-url <url> --verification <id> [--json]
+
+Repo Studio only edits controls and runs verification commands declared by the
+target application's loopback-local development manifest.`);
 }
 
 async function uiDaemonUrl(flags) {

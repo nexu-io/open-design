@@ -17,6 +17,7 @@ import { EntryHelpMenu } from './EntryHelpMenu';
 import { Icon } from './Icon';
 import { UpdaterPopup } from './UpdaterPopup';
 import { useT } from '../i18n';
+import { navigate } from '../router';
 
 export type EntryView =
   | 'home'
@@ -123,6 +124,14 @@ export function EntryNavRail({ view, onViewChange, onNewProject }: Props) {
       </div>
       <div className="entry-nav-rail__footer">
         <div className="entry-nav-rail__divider" role="separator" />
+        <NavButton
+          ariaLabel="Repo Studio"
+          tooltip="Repo Studio"
+          onClick={() => navigate({ kind: 'repo-studio' })}
+          testId="entry-nav-repo-studio"
+        >
+          <Icon name="tweaks" size={18} />
+        </NavButton>
         <NavButton
           active={view === 'plugins'}
           ariaLabel="Plugins"

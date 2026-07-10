@@ -1,3 +1,43 @@
+/* Repo Studio — live existing-app editor. */
+.repo-studio { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--text); }
+.repo-studio__topbar { min-height: 72px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
+.repo-studio__topbar h1 { margin: 0; font-size: 18px; }
+.repo-studio__topbar p { margin: 3px 0 0; color: var(--text-muted); font-size: 12px; }
+.repo-studio__topbar-actions { display: flex; align-items: center; gap: 8px; }
+.repo-studio__connect { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(360px, 1.2fr); gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+.repo-studio label { display: flex; flex-direction: column; gap: 6px; color: var(--text-muted); font-size: 11px; font-weight: 600; }
+.repo-studio input, .repo-studio select { min-height: 34px; border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; background: var(--bg); color: var(--text); }
+.repo-studio__workspace { min-height: 0; flex: 1; display: grid; grid-template-columns: 230px minmax(0, 1fr) 300px; }
+.repo-studio__sidebar, .repo-studio__inspector { min-height: 0; overflow: auto; padding: 16px; background: var(--bg-elevated); }
+.repo-studio__sidebar { border-right: 1px solid var(--border); }
+.repo-studio__inspector { border-left: 1px solid var(--border); }
+.repo-studio__sidebar h2, .repo-studio__inspector h2 { margin: 0 0 12px; font-size: 13px; }
+.repo-studio__inspector h3 { margin: 18px 0 8px; font-size: 12px; }
+.repo-studio__inspector code { display: block; margin-bottom: 16px; overflow-wrap: anywhere; color: var(--text-muted); font-size: 10px; }
+.repo-studio__component { width: 100%; display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: transparent; color: var(--text); text-align: left; }
+.repo-studio__component span { color: var(--text-muted); font-size: 10px; overflow-wrap: anywhere; }
+.repo-studio__component:hover, .repo-studio__component.is-active { border-color: var(--accent); background: var(--bg-subtle); }
+.repo-studio__canvas-column { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg-subtle); }
+.repo-studio__canvas-toolbar { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
+.repo-studio__segmented { display: inline-flex; padding: 3px; border-radius: 9px; background: var(--bg-muted); }
+.repo-studio__segmented button { border: 0; border-radius: 7px; padding: 6px 10px; background: transparent; color: var(--text-muted); text-transform: capitalize; }
+.repo-studio__segmented button.is-active { background: var(--bg); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.14); }
+.repo-studio__canvas { min-height: 0; flex: 1; display: grid; place-items: start center; overflow: auto; padding: 20px; }
+.repo-studio__canvas iframe { height: calc(100vh - 205px); max-width: 100%; border: 1px solid var(--border); border-radius: 16px; background: white; box-shadow: 0 16px 48px rgba(0,0,0,.18); transition: width .2s cubic-bezier(.23,1,.32,1); }
+.repo-studio__empty { margin: auto; max-width: 420px; color: var(--text-muted); text-align: center; }
+.repo-studio__button { min-height: 34px; border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; background: var(--bg); color: var(--text); }
+.repo-studio__button--primary { border-color: var(--accent); background: var(--accent); color: white; }
+.repo-studio__button:disabled { opacity: .55; }
+.repo-studio__notice { padding: 8px 20px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--accent) 8%, var(--bg)); font-size: 12px; }
+.repo-studio__notice--error { background: color-mix(in srgb, #ef4444 10%, var(--bg)); color: #ef4444; }
+.repo-studio__checks { display: flex; flex-direction: column; gap: 8px; }
+.repo-studio__result { margin-top: 16px; }
+.repo-studio__result summary { cursor: pointer; font-size: 12px; font-weight: 600; }
+.repo-studio__result pre { max-height: 240px; overflow: auto; white-space: pre-wrap; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--bg); font-size: 10px; }
+@media (max-width: 980px) {
+  .repo-studio__workspace { grid-template-columns: 180px minmax(0, 1fr); }
+  .repo-studio__inspector { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--border); }
+}
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap');
 @import './styles/design-system-flow.css';
 

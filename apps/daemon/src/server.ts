@@ -356,6 +356,7 @@ import { registerDesignSystemToolRoutes } from './design-system-tool-routes.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './deploy-routes.js';
 import { registerMediaRoutes } from './media-routes.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './project-routes.js';
+import { registerRepoStudioRoutes } from './repo-studio-routes.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
 import { registerChatRoutes } from './chat-routes.js';
 import { registerStaticResourceRoutes } from './static-resource-routes.js';
@@ -4392,6 +4393,8 @@ export async function startServer({
     documents: { buildDocumentPreview },
     artifacts: artifactDeps,
   });
+
+  registerRepoStudioRoutes(app, requireLocalDaemonRequest);
 
   registerMediaRoutes(app, {
     db,
