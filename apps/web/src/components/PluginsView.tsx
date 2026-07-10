@@ -184,10 +184,13 @@ export function PluginsView({
   async function finishImport(
     work: () => Promise<PluginInstallOutcome>,
     targetTab: PluginsTab = 'installed',
+    { showFailureNotice = true }: { showFailureNotice?: boolean } = {},
   ) {
     setNotice(null);
     const outcome = await work();
-    setNotice(outcome);
+    if (outcome.ok || showFailureNotice) {
+      setNotice(outcome);
+    }
     if (outcome.ok) {
       setImportOpen(false);
       await refresh();
@@ -616,9 +619,15 @@ export function PluginsView({
       {importOpen ? (
         <PluginImportModal
           onClose={() => setImportOpen(false)}
-          onInstallSource={(source) => finishImport(() => installPluginSource(source))}
-          onUploadZip={(file) => finishImport(() => uploadPluginZip(file))}
-          onUploadFolder={(files) => finishImport(() => uploadPluginFolder(files))}
+          onInstallSource={(source) =>
+            finishImport(() => installPluginSource(source), 'installed', { showFailureNotice: false })
+          }
+          onUploadZip={(file) =>
+            finishImport(() => uploadPluginZip(file), 'installed', { showFailureNotice: false })
+          }
+          onUploadFolder={(files) =>
+            finishImport(() => uploadPluginFolder(files), 'installed', { showFailureNotice: false })
+          }
         />
       ) : null}
     </section>
@@ -1560,6 +1569,7 @@ function PluginImportModal({
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [folderFiles, setFolderFiles] = useState<File[]>([]);
   const [working, setWorking] = useState(false);
+  const [importOutcome, setImportOutcome] = useState<PluginInstallOutcome | null>(null);
 
   function selectKind(next: ImportKind) {
     trackPluginImportModalClick(analytics.track, {
@@ -1568,6 +1578,7 @@ function PluginImportModal({
       element: 'source_tab',
       import_source: next,
     });
+    setImportOutcome(null);
     setKind(next);
   }
 
@@ -1579,6 +1590,7 @@ function PluginImportModal({
       import_source: kind,
     });
     setWorking(true);
+    setImportOutcome(null);
     try {
       let outcome: PluginInstallOutcome | null = null;
       if (kind === 'github') {
@@ -1597,6 +1609,10 @@ function PluginImportModal({
           result: outcome.ok ? 'success' : 'failed',
           ...(outcome.ok ? {} : { error_code: outcome.message ?? 'unknown' }),
         });
+        // Successful imports close the modal (handled by the parent), so only
+        // failures need to be surfaced here, inline, next to the controls
+        // that caused them.
+        if (!outcome.ok) setImportOutcome(outcome);
       }
     } finally {
       setWorking(false);
@@ -1664,7 +1680,10 @@ function PluginImportModal({
                 <input
                   id="plugin-source"
                   value={source}
-                  onChange={(event) => setSource(event.target.value)}
+                  onChange={(event) => {
+                    setSource(event.target.value);
+                    setImportOutcome(null);
+                  }}
                   placeholder="github:owner/repo@main/plugins/my-plugin"
                   disabled={working}
                 />
@@ -1691,7 +1710,10 @@ function PluginImportModal({
               accept=".zip,application/zip"
               working={working}
               fileLabel={zipFile?.name ?? 'No zip selected'}
-              onChange={(files) => setZipFile(files[0] ?? null)}
+              onChange={(files) => {
+                setZipFile(files[0] ?? null);
+                setImportOutcome(null);
+              }}
               onImport={runImport}
               canSubmit={canSubmit}
             />
@@ -1708,12 +1730,20 @@ function PluginImportModal({
                   : 'No folder selected'
               }
               folder
-              onChange={setFolderFiles}
+              onChange={(files) => {
+                setFolderFiles(files);
+                setImportOutcome(null);
+              }}
               onImport={runImport}
               canSubmit={canSubmit}
             />
           ) : null}
 
+          {importOutcome && !importOutcome.ok ? (
+            <div className="plugins-import-modal__error" data-testid="plugins-import-modal-error">
+              <Notice outcome={importOutcome} />
+            </div>
+          ) : null}
         </div>
 
         <footer className="plugins-import-modal__foot">

@@ -713,6 +713,49 @@ describe('PluginsView', () => {
     expect(await screen.findByText('Installed Folder Plugin.')).toBeTruthy();
   });
 
+  it('shows failed plugin folder imports inline inside the import modal', async () => {
+    mockedUploadPluginFolder.mockResolvedValueOnce({
+      ok: false,
+      warnings: [],
+      log: [],
+      message:
+        'Plugin folder contains no SKILL.md, no .claude-plugin/plugin.json, and no open-design.json: /tmp/od-plugin-folder-xf6xl0',
+    });
+
+    render(<PluginsView />);
+
+    fireEvent.click(await screen.findByTestId('plugins-import-button'));
+    fireEvent.click(screen.getByRole('button', { name: /upload folder/i }));
+    const folderFile = new File(['not a plugin'], 'notes.txt', { type: 'text/plain' });
+    fireEvent.change(screen.getByTestId('plugins-folder-input'), {
+      target: { files: [folderFile] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    await waitFor(() => expect(mockedUploadPluginFolder).toHaveBeenCalledWith([folderFile]));
+
+    // The dialog must stay open on failure so the user isn't left wondering
+    // whether the import silently succeeded.
+    const dialog = screen.getByRole('dialog', { name: /import a plugin/i });
+
+    // The error should render inline, inside the dialog, next to the upload
+    // controls that caused it — not behind it on the underlying page.
+    const inlineError = await within(dialog).findByTestId('plugins-import-modal-error');
+    expect(inlineError.textContent).toContain('Plugin folder contains no SKILL.md');
+
+    // It must appear exactly once, and that copy must live inside the dialog —
+    // not duplicated as a separate page-level notice behind the modal.
+    const errorMatches = screen.getAllByText(/Plugin folder contains no SKILL\.md/);
+    expect(errorMatches).toHaveLength(1);
+    expect(dialog.contains(errorMatches[0] ?? null)).toBe(true);
+
+    // Selecting a different folder clears the stale error.
+    const retryFile = new File(['{}'], 'open-design.json', { type: 'application/json' });
+    fireEvent.change(screen.getByTestId('plugins-folder-input'), {
+      target: { files: [retryFile] },
+    });
+    expect(within(dialog).queryByTestId('plugins-import-modal-error')).toBeNull();
+  });
+
   it('confirms a plugin share action before starting the GitHub repo task', async () => {
     mockedListPlugins.mockResolvedValue([
       makePlugin('official-plugin', 'bundled', 'bundled'),

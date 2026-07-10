@@ -626,6 +626,10 @@
   padding-left: 18px;
 }
 
+.plugins-import-modal__error {
+  margin-top: 4px;
+}
+
 .plugins-import-modal__backdrop {
   position: fixed;
   inset: 0;
