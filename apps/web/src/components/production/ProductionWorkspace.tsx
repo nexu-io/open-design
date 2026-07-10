@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ProjectFile, ProjectMetadata } from '../../types';
 import type { AppConfig } from '../../types';
@@ -12,6 +12,11 @@ import {
   buildShot,
   createStoryboardShots,
   createVoicePreview,
+  cancelFalMediaJob,
+  cancelFalMediaTask,
+  planFalMediaJobs,
+  submitFalMediaJob,
+  waitForFalMediaJob,
   runProductionGeneration,
   type GenerationKind,
   type ProductionMediaJob,
@@ -36,6 +41,14 @@ type ProductionProjectMetadata = ProjectMetadata & {
 type ProductionSegmentId = string;
 
 type ProductionLaneId = 'paragraph' | 'voice' | 'shot' | 'assets' | 'output';
+type MediaLaneKind = 'image' | 'video' | '3d';
+
+interface ProductionWorkspaceSnapshot {
+  version: 1;
+  segments: ProductionSegment[];
+  mediaJobs: ProductionMediaJob[];
+  nextSegmentNumber: number;
+}
 
 interface VoiceProfileCard {
   id: string;
@@ -152,19 +165,84 @@ function createEmptySegment(
   };
 }
 
+function workspaceStorageKey(projectId: string) {
+  return `open-design:production-workspace:${projectId}`;
+}
+
+function readWorkspaceSnapshot(projectId: string): ProductionWorkspaceSnapshot | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(workspaceStorageKey(projectId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ProductionWorkspaceSnapshot>;
+    if (
+      parsed.version !== 1 ||
+      !Array.isArray(parsed.segments) ||
+      !Array.isArray(parsed.mediaJobs) ||
+      typeof parsed.nextSegmentNumber !== 'number' ||
+      parsed.nextSegmentNumber < 1
+    ) {
+      return null;
+    }
+    return {
+      version: 1,
+      segments: parsed.segments as ProductionSegment[],
+      mediaJobs: parsed.mediaJobs as ProductionMediaJob[],
+      nextSegmentNumber: Math.floor(parsed.nextSegmentNumber),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeWorkspaceSnapshot(projectId: string, snapshot: ProductionWorkspaceSnapshot): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(workspaceStorageKey(projectId), JSON.stringify(snapshot));
+  } catch {
+    // Best-effort only. The workspace still runs from in-memory state.
+  }
+}
+
 export function ProductionWorkspace({ projectId, projectName, metadata, projectFiles, config }: Props) {
   const productionMetadata = metadata as ProductionProjectMetadata | null | undefined;
   const selectedTaskCard = productionTaskCardForId(productionMetadata?.taskCardId);
   const taskCardCount = PRODUCTION_TASK_CARD_CATALOG.length;
   const voiceTone = productionMetadata?.voiceTone ?? 'professional';
   const defaultVoiceProfileId = productionMetadata?.voiceProfileId ?? VOICE_PROFILE_CARDS[0]!.id;
-  const nextSegmentNumberRef = useRef(DEFAULT_SEGMENT_BLUEPRINTS.length + 1);
+  const savedSnapshot = useMemo(() => readWorkspaceSnapshot(projectId), [projectId]);
+  const nextSegmentNumberRef = useRef(savedSnapshot?.nextSegmentNumber ?? DEFAULT_SEGMENT_BLUEPRINTS.length + 1);
+  const falAbortRef = useRef<AbortController | null>(null);
   const [segments, setSegments] = useState<ProductionSegment[]>(
-    () => createInitialSegments(voiceTone, defaultVoiceProfileId),
+    () => savedSnapshot?.segments ?? createInitialSegments(voiceTone, defaultVoiceProfileId),
   );
-  const [mediaJobs] = useState<ProductionMediaJob[]>([]);
+  const [mediaJobs, setMediaJobs] = useState<ProductionMediaJob[]>(
+    () => savedSnapshot?.mediaJobs ?? [],
+  );
+  const [nextSegmentNumber, setNextSegmentNumber] = useState(
+    () => savedSnapshot?.nextSegmentNumber ?? DEFAULT_SEGMENT_BLUEPRINTS.length + 1,
+  );
   const [generationBusy, setGenerationBusy] = useState<GenerationKind | null>(null);
   const [generationNotice, setGenerationNotice] = useState<string | null>(null);
+  const [falSyncBusy, setFalSyncBusy] = useState(false);
+  const mediaJobBuckets = useMemo(
+    () =>
+      ({
+        image: mediaJobs.filter((job) => job.kind === 'image'),
+        video: mediaJobs.filter((job) => job.kind === 'video'),
+        '3d': mediaJobs.filter((job) => job.kind === '3d'),
+      }) as Record<MediaLaneKind, ProductionMediaJob[]>,
+    [mediaJobs],
+  );
+
+  useEffect(() => {
+    writeWorkspaceSnapshot(projectId, {
+      version: 1,
+      segments,
+      mediaJobs,
+      nextSegmentNumber,
+    });
+  }, [mediaJobs, nextSegmentNumber, projectId, segments]);
 
   const voicePreview = useMemo(
     () => createVoicePreview(segments, voiceTone, (profileId) => getVoiceProfile(profileId).role),
@@ -241,6 +319,7 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
   const appendSegment = () => {
     const nextNumber = nextSegmentNumberRef.current;
     nextSegmentNumberRef.current += 1;
+    setNextSegmentNumber(nextSegmentNumberRef.current);
     setSegments((current) => [
       ...current,
       createEmptySegment(`第 ${nextNumber} 段`, voiceTone, defaultVoiceProfileId, `segment-${nextNumber}`),
@@ -252,6 +331,7 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
       const index = current.findIndex((segment) => segment.id === segmentId);
       const nextNumber = nextSegmentNumberRef.current;
       nextSegmentNumberRef.current += 1;
+      setNextSegmentNumber(nextSegmentNumberRef.current);
       const nextSegment = createEmptySegment(
         `第 ${nextNumber} 段`,
         voiceTone,
@@ -278,6 +358,18 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
     });
   };
 
+  const updateMediaJob = (jobId: string, updater: (job: ProductionMediaJob) => ProductionMediaJob) => {
+    setMediaJobs((current) => current.map((job) => (job.id === jobId ? updater(job) : job)));
+  };
+
+  const queueFalJobs = (nextSegments: readonly ProductionSegment[], kind: MediaLaneKind = 'image') => {
+    if (kind === '3d') {
+      setGenerationNotice('3D queue is planned in the canvas, but the daemon currently only accepts image and video surfaces.');
+      return;
+    }
+    setMediaJobs(planFalMediaJobs({ segments: nextSegments, kind }));
+  };
+
   const runGeneration = async (kind: GenerationKind) => {
     setGenerationBusy(kind);
     setGenerationNotice(null);
@@ -294,10 +386,100 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
       });
       setSegments(result.segments);
       setGenerationNotice(result.notice);
+      if (kind === 'draft' || kind === 'storyboard') {
+        queueFalJobs(result.segments, 'image');
+      }
     } catch (error) {
       setGenerationNotice(error instanceof Error ? error.message : String(error));
     }
     setGenerationBusy(null);
+  };
+
+  const runFalQueue = async () => {
+    if (mediaJobs.length === 0) {
+      setGenerationNotice('No FAL.ai jobs queued yet.');
+      return;
+    }
+
+    falAbortRef.current?.abort();
+    const controller = new AbortController();
+    falAbortRef.current = controller;
+    setFalSyncBusy(true);
+    setGenerationNotice('Submitting queued media jobs to FAL.ai...');
+
+    try {
+      for (const job of mediaJobs) {
+        if (controller.signal.aborted) break;
+        if (job.status === 'completed') continue;
+        if (job.kind === '3d') {
+          setGenerationNotice('Skipped 3D plan-only jobs while syncing FAL.ai.');
+          continue;
+        }
+
+        const submitted = await submitFalMediaJob({
+          projectId,
+          job,
+        });
+        if (controller.signal.aborted) {
+          updateMediaJob(job.id, (current) => cancelFalMediaJob(current));
+          break;
+        }
+
+        updateMediaJob(job.id, () => submitted);
+
+        let current = submitted;
+        while (!controller.signal.aborted && (current.status === 'queued' || current.status === 'running')) {
+          const { job: nextJob, snapshot } = await waitForFalMediaJob({
+            job: current,
+            since: current.progress.length,
+            timeoutMs: 25_000,
+          });
+          current = nextJob;
+          updateMediaJob(job.id, () => nextJob);
+          if (snapshot.status === 'done' || snapshot.status === 'failed' || snapshot.status === 'interrupted') {
+            break;
+          }
+        }
+      }
+
+      if (!controller.signal.aborted) {
+        setGenerationNotice('FAL.ai jobs synced from the daemon.');
+      }
+    } catch (error) {
+      setGenerationNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (falAbortRef.current === controller) {
+        falAbortRef.current = null;
+      }
+      setFalSyncBusy(false);
+    }
+  };
+
+  const cancelFalQueue = () => {
+    const controller = falAbortRef.current;
+    falAbortRef.current = null;
+    if (controller) controller.abort();
+    setGenerationBusy(null);
+    setFalSyncBusy(false);
+    setGenerationNotice('Canceling FAL.ai queue...');
+    void (async () => {
+      const activeJobs = mediaJobs.filter(
+        (job) => (job.status === 'queued' || job.status === 'running') && job.kind !== '3d',
+      );
+      const nextJobs = await Promise.all(
+        activeJobs.map(async (job) => {
+          try {
+            return await cancelFalMediaTask({ projectId, job });
+          } catch {
+            return cancelFalMediaJob(job);
+          }
+        }),
+      );
+      setMediaJobs((current) =>
+        current.map((job) => nextJobs.find((nextJob) => nextJob.id === job.id) ?? job),
+      );
+      setGenerationNotice('FAL.ai queue canceled.');
+    })();
   };
 
   const workflowSteps: readonly ProductionWorkflowStep[] = useMemo(
@@ -383,6 +565,22 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
           disabled={generationBusy !== null}
         >
           {generationBusy === 'storyboard' ? 'Generating storyboard…' : 'Generate storyboard'}
+        </button>
+        <button
+          type="button"
+          className="production-workspace__secondary-action"
+          onClick={() => void runFalQueue()}
+          disabled={generationBusy !== null || falSyncBusy || mediaJobs.length === 0}
+        >
+          Sync FAL.ai queue
+        </button>
+        <button
+          type="button"
+          className="production-workspace__secondary-action"
+          onClick={cancelFalQueue}
+          disabled={!falSyncBusy && !mediaJobs.some((job) => job.status === 'queued' || job.status === 'running')}
+        >
+          Cancel FAL.ai queue
         </button>
         {generationNotice ? <p style={{ margin: '6px 0 0', color: '#94a3b8' }}>{generationNotice}</p> : null}
       </div>
@@ -602,6 +800,32 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
         <section className="production-workspace__pane production-workspace__pane--lane">
           <h3>成片</h3>
           <p>輸出層會總覽每段最終狀態，完成後即可送出成片。</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+            <button
+              type="button"
+              className="production-workspace__secondary-action"
+              onClick={() => queueFalJobs(segments, 'image')}
+              disabled={segments.length === 0 || falSyncBusy}
+            >
+              規劃圖片隊列
+            </button>
+            <button
+              type="button"
+              className="production-workspace__secondary-action"
+              onClick={() => queueFalJobs(segments, 'video')}
+              disabled={segments.length === 0 || falSyncBusy}
+            >
+              規劃影片隊列
+            </button>
+            <button
+              type="button"
+              className="production-workspace__secondary-action"
+              disabled
+              title="3D queue is planned locally first; a daemon surface has not been confirmed yet."
+            >
+              3D 規劃中
+            </button>
+          </div>
           {segments.map((segment) => (
             <article key={segment.id} className="production-workspace__lane-card">
               <label style={{ display: 'grid', gap: 8 }}>
@@ -626,7 +850,55 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
             </article>
           ))}
           <p style={{ marginTop: 16 }}>{storyboardShots.length} shots ready for export.</p>
-          <p style={{ marginTop: 8, color: '#94a3b8' }}>{mediaJobs.length} media jobs queued for FAL.ai.</p>
+          <p style={{ marginTop: 8, color: '#94a3b8' }}>
+            {mediaJobs.length} media jobs queued for FAL.ai: {mediaJobBuckets.image.length} image, {mediaJobBuckets.video.length} video, {mediaJobBuckets['3d'].length} plan-only 3D.
+          </p>
+          {mediaJobs.length > 0 ? (
+            <div data-testid="production-media-job-list" style={{ display: 'grid', gap: 12, marginTop: 12 }}>
+              {(['image', 'video', '3d'] as const).map((kind) => {
+                const jobs = mediaJobBuckets[kind];
+                return (
+                  <article key={kind} className="production-workspace__lane-card">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div>
+                        <strong>{kind === '3d' ? '3D 規劃' : `${kind === 'image' ? '圖片' : '影片'} queue`}</strong>
+                        <p style={{ margin: '4px 0 0', color: '#94a3b8' }}>
+                          {kind === '3d'
+                            ? '先保留成畫布規劃，不直接送 daemon。'
+                            : '這一欄會同步到 FAL.ai / daemon。'}
+                        </p>
+                      </div>
+                      <span className="production-task-card__pill">{jobs.length}</span>
+                    </div>
+                    {jobs.length > 0 ? (
+                      <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
+                        {jobs.map((job) => (
+                          <div key={job.id}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                              <strong>{job.segmentId}</strong>
+                              <span className="production-task-card__pill">{job.status}</span>
+                            </div>
+                            <p style={{ margin: '8px 0 0' }}>
+                              {job.kind} / {job.model}
+                            </p>
+                            {job.taskId ? <p style={{ margin: '8px 0 0', color: '#94a3b8' }}>task {job.taskId}</p> : null}
+                            {job.progress.length > 0 ? <p style={{ margin: '8px 0 0', color: '#94a3b8' }}>{job.progress.at(-1)}</p> : null}
+                            <p style={{ margin: '8px 0 0', color: '#94a3b8' }}>{job.prompt}</p>
+                            {job.error ? <p style={{ margin: '8px 0 0', color: '#fda4af' }}>{job.error}</p> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <p style={{ marginTop: 12, color: '#94a3b8' }}>No FAL.ai jobs queued yet.</p>
+          )}
+          <p style={{ marginTop: 12, color: '#94a3b8' }}>
+            3D is intentionally plan-only until we confirm a supported FAL daemon surface.
+          </p>
         </section>
       </div>
     </section>

@@ -62,18 +62,36 @@ export function createProductionMediaJob(input: {
     prompt: input.prompt,
     referenceAssetIds: input.referenceAssetIds ?? [],
     resultAssetIds: [],
+    progress: [],
+    file: null,
   };
 }
 
 export function updateProductionMediaJobStatus(
   job: ProductionMediaJob,
   status: MediaJobStatus,
-  patch: Partial<Pick<ProductionMediaJob, 'resultAssetIds' | 'error'>>,
+  patch: Partial<
+    Pick<
+      ProductionMediaJob,
+      | 'resultAssetIds'
+      | 'error'
+      | 'progress'
+      | 'taskId'
+      | 'startedAt'
+      | 'endedAt'
+      | 'file'
+    >
+  >,
 ): ProductionMediaJob {
   return {
     ...job,
     status,
     resultAssetIds: patch.resultAssetIds ?? job.resultAssetIds,
+    progress: patch.progress ?? job.progress,
+    taskId: patch.taskId ?? job.taskId,
+    startedAt: patch.startedAt ?? job.startedAt,
+    endedAt: patch.endedAt ?? job.endedAt,
+    file: patch.file ?? job.file,
     error: patch.error,
   };
 }

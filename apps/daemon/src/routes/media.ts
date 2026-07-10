@@ -616,6 +616,53 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     res.on('close', wake);
   });
 
+  app.post('/api/projects/:id/media/tasks/:taskId/cancel', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+
+    const projectId = req.params.id;
+    const taskId = req.params.taskId;
+    const task = getLiveMediaTask(taskId);
+    if (!task || task.projectId !== projectId) {
+      return res.status(404).json({ error: 'task not found' });
+    }
+
+    if (task.status === 'interrupted') {
+      return res.status(202).json({
+        accepted: true,
+        prevStatus: 'interrupted',
+        ...mediaTaskSnapshot(task, 0),
+      });
+    }
+
+    if (task.status !== 'queued' && task.status !== 'running') {
+      return res.status(409).json({
+        error: {
+          code: 'CONFLICT',
+          message: `task is already in terminal status: ${task.status}`,
+          currentStatus: task.status,
+        },
+      });
+    }
+
+    const prevStatus = task.status;
+    task.status = 'interrupted';
+    task.error = {
+      message: 'media task canceled by user',
+      code: 'USER_CANCELLED',
+    };
+    task.endedAt = Date.now();
+    persistMediaTask(task);
+    notifyTaskWaiters(task);
+
+    return res.status(202).json({
+      accepted: true,
+      prevStatus,
+      ...mediaTaskSnapshot(task, 0),
+    });
+  });
+
   app.get('/api/projects/:id/media/tasks', (req, res) => {
     if (!isLocalSameOrigin(req, getResolvedPort())) {
       return res.status(403).json({ error: 'cross-origin request rejected' });

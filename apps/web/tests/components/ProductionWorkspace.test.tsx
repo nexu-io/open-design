@@ -67,6 +67,8 @@ vi.mock('../../src/providers/anthropic', () => ({
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
+  vi.unstubAllGlobals();
 });
 
 const openRouterConfig = {
@@ -112,8 +114,10 @@ describe('ProductionWorkspace', () => {
     expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Voice flow (professional)');
     expect(screen.getByRole('textbox', { name: 'Hook 段落' })).toHaveValue('Hook: explain the core idea in one line.');
     expect(screen.getByRole('textbox', { name: 'Body 鏡頭' })).toHaveValue('鏡頭：Body: show the main example with one clear visual.');
-    expect(screen.getByText('0 media jobs queued for FAL.ai.')).toBeInTheDocument();
+    expect(screen.getByText('0 media jobs queued for FAL.ai: 0 image, 0 video, 0 plan-only 3D.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '新增分段' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '規劃圖片隊列' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '規劃影片隊列' })).toBeInTheDocument();
   });
 
   it('renders a draggable canvas board for the production cards', () => {
@@ -122,9 +126,11 @@ describe('ProductionWorkspace', () => {
     const board = screen.getByTestId('production-canvas-board');
     const scriptNode = screen.getByTestId('production-canvas-node-script');
     const firstEdge = screen.getByTestId('production-canvas-edge-script-voice');
+    const threeDNode = screen.getByTestId('production-canvas-node-threeD');
 
     expect(board).toBeInTheDocument();
     expect(firstEdge).toBeInTheDocument();
+    expect(threeDNode).toBeInTheDocument();
     expect(scriptNode).toHaveStyle({ transform: 'translate(36px, 44px)' });
 
     fireEvent.pointerDown(scriptNode, { clientX: 72, clientY: 92 });
@@ -228,5 +234,95 @@ describe('ProductionWorkspace', () => {
 
     expect(await screen.findByText('Storyboard lanes updated from OpenRouter.')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Hook 鏡頭' })).toHaveValue('鏡頭：Hook rewrite from OpenRouter.');
+    expect(screen.getByText('3 media jobs queued for FAL.ai: 3 image, 0 video, 0 plan-only 3D.')).toBeInTheDocument();
+    expect(screen.getByTestId('production-media-job-list')).toBeInTheDocument();
+  });
+
+  it('syncs queued FAL.ai jobs through the daemon media routes', async () => {
+    const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
+      const href = String(url);
+      if (href.includes('/media/generate')) {
+        const taskId = href.includes('project-1') ? `task-${Math.random().toString(36).slice(2, 8)}` : 'task-unknown';
+        return new Response(JSON.stringify({ taskId, status: 'queued', startedAt: 111 }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      return new Response(
+        JSON.stringify({
+          taskId: 'task-hook',
+          status: 'done',
+          startedAt: 111,
+          endedAt: 222,
+          progress: ['daemon accepted the job'],
+          nextSince: 1,
+          file: { name: 'render.mp4' },
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock as never);
+
+    renderWorkspace();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Generate storyboard' }));
+    await screen.findByText('3 media jobs queued for FAL.ai: 3 image, 0 video, 0 plan-only 3D.');
+    fireEvent.click(screen.getByRole('button', { name: 'Sync FAL.ai queue' }));
+
+    expect(await screen.findByText('FAL.ai jobs synced from the daemon.')).toBeInTheDocument();
+    expect(screen.getAllByText(/task task-/)).toHaveLength(3);
+    expect(screen.getAllByText('daemon accepted the job')).toHaveLength(3);
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it('restores a saved production workspace snapshot from localStorage', () => {
+    window.localStorage.setItem(
+      'open-design:production-workspace:project-1',
+      JSON.stringify({
+        version: 1,
+        nextSegmentNumber: 9,
+        segments: [
+          {
+            id: 'hook',
+            label: 'Hook',
+            paragraph: 'Saved paragraph',
+            narration: '專業講解者 (professional) 旁白：Saved paragraph',
+            shot: '鏡頭：Saved paragraph',
+            assets: '素材：Saved paragraph',
+            output: '成片：Saved paragraph',
+            voiceProfileId: 'guide-host',
+          },
+        ],
+        mediaJobs: [
+          {
+            id: 'job-hook',
+            segmentId: 'hook',
+            kind: 'image',
+            status: 'queued',
+            provider: 'fal',
+            model: 'fal/flux-pro',
+            prompt: 'Saved prompt',
+            referenceAssetIds: [],
+            resultAssetIds: [],
+            progress: ['restored from storage'],
+            taskId: 'task-restore',
+            startedAt: 123,
+            endedAt: null,
+            file: null,
+          },
+        ],
+      }),
+    );
+
+    renderWorkspace();
+
+    expect(screen.getByRole('textbox', { name: 'Hook 段落' })).toHaveValue('Saved paragraph');
+    expect(screen.getByText('1 media jobs queued for FAL.ai: 1 image, 0 video, 0 plan-only 3D.')).toBeInTheDocument();
+    expect(screen.getByText('task task-restore')).toBeInTheDocument();
+    expect(screen.getByText('restored from storage')).toBeInTheDocument();
   });
 });

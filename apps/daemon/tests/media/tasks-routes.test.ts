@@ -32,7 +32,7 @@ describe('media task route recovery', () => {
     insertMediaTask(db, {
       id: taskId,
       projectId,
-      status: 'running',
+      status: 'queued',
       surface: 'video',
       model: 'seedance-2',
       progress: ['provider task accepted'],
@@ -63,6 +63,75 @@ describe('media task route recovery', () => {
     expect(body.error).toMatchObject({
       code: 'DAEMON_RESTART',
       message: 'media task interrupted by daemon restart',
+    });
+  });
+
+  it('cancels a running media task through the dedicated route', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    const db = openDatabase(process.cwd(), dataDir === undefined ? {} : { dataDir });
+    const projectId = `project_${randomUUID()}`;
+    const taskId = `task_${randomUUID()}`;
+    const now = Date.now() - 5_000;
+
+    const started = await startServer({ port: 0, returnServer: true }) as {
+      url: string;
+      server: http.Server;
+    };
+    server = started.server;
+
+    insertProject(db, {
+      id: projectId,
+      name: 'Cancelable media project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    insertMediaTask(db, {
+      id: taskId,
+      projectId,
+      status: 'queued',
+      surface: 'video',
+      model: 'seedance-2',
+      progress: ['provider task accepted'],
+      startedAt: now,
+      updatedAt: now,
+    });
+
+    const cancelResponse = await fetch(
+      `${started.url}/api/projects/${encodeURIComponent(projectId)}/media/tasks/${encodeURIComponent(taskId)}/cancel`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+    );
+    const cancelBody = await cancelResponse.json() as {
+      status?: string;
+      error?: { message?: string; code?: string };
+    };
+
+    expect(cancelResponse.status).toBe(202);
+    expect(cancelBody.status).toBe('interrupted');
+    expect(cancelBody.prevStatus).toBe('queued');
+    expect(cancelBody.error).toMatchObject({
+      code: 'USER_CANCELLED',
+      message: 'media task canceled by user',
+    });
+
+    const waitResponse = await fetch(`${started.url}/api/media/tasks/${encodeURIComponent(taskId)}/wait`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ since: 0, timeoutMs: 0 }),
+    });
+    const waitBody = await waitResponse.json() as {
+      status?: string;
+      error?: { code?: string; message?: string };
+    };
+
+    expect(waitResponse.status).toBe(200);
+    expect(waitBody.status).toBe('interrupted');
+    expect(waitBody.error).toMatchObject({
+      code: 'USER_CANCELLED',
+      message: 'media task canceled by user',
     });
   });
 

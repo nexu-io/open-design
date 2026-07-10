@@ -45,5 +45,10 @@ export interface ProductionMediaJob {
   prompt: string;
   referenceAssetIds: readonly string[];
   resultAssetIds: readonly string[];
+  progress: readonly string[];
+  taskId?: string;
+  startedAt?: number;
+  endedAt?: number | null;
+  file?: unknown | null;
   error?: string;
 }

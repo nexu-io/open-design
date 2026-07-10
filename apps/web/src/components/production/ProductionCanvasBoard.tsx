@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-type CanvasNodeId = 'script' | 'voice' | 'storyboard' | 'assets' | 'output';
+type CanvasNodeId = 'script' | 'voice' | 'storyboard' | 'threeD' | 'assets' | 'output';
 
 interface CanvasNode {
   id: CanvasNodeId;
@@ -38,17 +38,24 @@ const INITIAL_NODES: CanvasNode[] = [
     y: 86,
   },
   {
+    id: 'threeD',
+    title: '3D',
+    description: 'Plan camera moves, viewpoint changes, and scene depth.',
+    x: 802,
+    y: 128,
+  },
+  {
     id: 'assets',
     title: 'Assets',
     description: 'Collect generated and uploaded media in one place.',
-    x: 804,
+    x: 1052,
     y: 26,
   },
   {
     id: 'output',
     title: 'Output',
     description: 'Export the assembled video when the sequence is complete.',
-    x: 1068,
+    x: 1320,
     y: 66,
   },
 ];
@@ -56,6 +63,8 @@ const INITIAL_NODES: CanvasNode[] = [
 const INITIAL_EDGES: CanvasEdge[] = [
   { from: 'script', to: 'voice' },
   { from: 'voice', to: 'storyboard' },
+  { from: 'storyboard', to: 'threeD' },
+  { from: 'threeD', to: 'assets' },
   { from: 'storyboard', to: 'assets' },
   { from: 'assets', to: 'output' },
 ];
