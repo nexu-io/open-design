@@ -2121,18 +2121,29 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           <div className="home-hero__prompt-examples-title">
             {t('homeHero.promptExamples')}
           </div>
-          <div className="home-hero__prompt-examples-grid">
-            {activePromptExamples.map((example, index) => (
-              <button
-                key={example}
-                type="button"
-                className={`home-hero__prompt-example${guidePulseFirstPreset && index === 0 ? ' home-hero__attention-sheen' : ''}`}
-                data-testid="home-hero-prompt-example"
-                onClick={() => usePromptExample(example)}
-              >
-                <span>{example}</span>
-              </button>
-            ))}
+          <div
+            className={`home-hero__prompt-examples-grid${activeChipId === 'web-clone' ? ' home-hero__prompt-examples-grid--sites' : ''}`}
+          >
+            {activePromptExamples.map((example, index) =>
+              webCloneExampleSite(example) ? (
+                <WebClonePromptExampleCard
+                  key={example}
+                  example={example}
+                  pulse={guidePulseFirstPreset && index === 0}
+                  onPick={usePromptExample}
+                />
+              ) : (
+                <button
+                  key={example}
+                  type="button"
+                  className={`home-hero__prompt-example${guidePulseFirstPreset && index === 0 ? ' home-hero__attention-sheen' : ''}`}
+                  data-testid="home-hero-prompt-example"
+                  onClick={() => usePromptExample(example)}
+                >
+                  <span>{example}</span>
+                </button>
+              ),
+            )}
           </div>
         </div>
       ) : null}
@@ -2235,6 +2246,67 @@ function PluginPromptPresets({
         <EdgeScrollZones {...edgeScroll} />
       </div>
     </div>
+  );
+}
+
+// A Website-clone text example ("Website URL to clone: https://kimi.com") —
+// pull the site out so the card can show the site's own favicon + bare domain
+// instead of the raw prompt line. Returns null for non-URL examples so the
+// generic text card renders unchanged.
+function webCloneExampleSite(example: string): { domain: string; faviconUrl: string } | null {
+  const match = example.match(/https?:\/\/[^\s"'<>]+/i);
+  if (!match) return null;
+  let hostname: string;
+  try {
+    hostname = new URL(match[0]).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+  if (!hostname || !hostname.includes('.')) return null;
+  // The site's own favicon, resolved at render time via Google's public service
+  // — no third-party brand assets are bundled into the repo, and a broken/blocked
+  // fetch falls back to a lettered tile.
+  return {
+    domain: hostname,
+    faviconUrl: `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(hostname)}`,
+  };
+}
+
+function WebClonePromptExampleCard({
+  example,
+  pulse,
+  onPick,
+}: {
+  example: string;
+  pulse: boolean;
+  onPick: (example: string) => void;
+}) {
+  const [iconFailed, setIconFailed] = useState(false);
+  const site = webCloneExampleSite(example);
+  const domain = site?.domain ?? example;
+  const monogram = (domain.replace(/[^a-z0-9]/i, '')[0] ?? '?').toUpperCase();
+  return (
+    <button
+      type="button"
+      className={`home-hero__prompt-example home-hero__prompt-example--site${pulse ? ' home-hero__attention-sheen' : ''}`}
+      data-testid="home-hero-prompt-example"
+      onClick={() => onPick(example)}
+      title={domain}
+    >
+      <span className="home-hero__site-badge" aria-hidden>
+        {site && !iconFailed ? (
+          <img
+            src={site.faviconUrl}
+            alt=""
+            loading="lazy"
+            onError={() => setIconFailed(true)}
+          />
+        ) : (
+          <span className="home-hero__site-monogram">{monogram}</span>
+        )}
+      </span>
+      <span className="home-hero__site-domain">{domain}</span>
+    </button>
   );
 }
 
@@ -3492,6 +3564,7 @@ function ShortcutsMenu({
 function homeHeroChipDescription(chipId: string, t: ReturnType<typeof useT>): string {
   switch (chipId) {
     case 'prototype': return t('homeHero.chip.prototypeDesc');
+    case 'web-clone': return t('homeHero.chip.webCloneDesc');
     case 'wireframe': return t('homeHero.chip.wireframeDesc');
     case 'mobile': return t('homeHero.chip.mobileDesc');
     case 'deck': return t('homeHero.chip.deckDesc');
@@ -3532,6 +3605,7 @@ function fallbackPlaceholderScenarioText(
 function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): string {
   switch (chip.id) {
     case 'prototype': return t('homeHero.chip.prototypeNext');
+    case 'web-clone': return t('homeHero.chip.webCloneNext');
     case 'wireframe': return t('homeHero.chip.wireframeNext');
     case 'mobile': return t('homeHero.chip.mobileNext');
     case 'deck': return t('homeHero.chip.deckNext');
@@ -3556,7 +3630,15 @@ function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): stri
 // card never appears under the audio/image/video chips — and, because the
 // example card's selected state is keyed on the active plugin id, never shows
 // up pre-selected when a media mode is entered.
-const EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS = new Set<string>(['od-media-generation']);
+//
+// `example-web-clone` is the Website clone chip's own base scenario, not a
+// concrete example. The per-site examples are plain text prompt cards (from
+// HOME_PROMPT_EXAMPLES) rather than plugins, so hide the base plugin to keep the
+// preset rail empty for web-clone and let those text cards show instead.
+const EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS = new Set<string>([
+  'od-media-generation',
+  'example-web-clone',
+]);
 
 export function homeHeroExamplePluginsForChip(
   chipId: string,
@@ -3630,6 +3712,9 @@ export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: 
   switch (chipId) {
     case 'prototype':
       return has('prototype') || hasPart('web-prototype');
+    case 'web-clone':
+      // Website reproduction flows (e.g. example-web-clone / site-clone kits).
+      return has('web-clone', 'website-clone', 'site-clone') || hasPart('web-clone', 'website-clone');
     case 'wireframe':
       // Lo-fi / sketch / whiteboard explorations (e.g. wireframe-sketch).
       return (
@@ -3921,6 +4006,10 @@ function fallbackPluginPresetPrompt(
 
 const HOME_PROMPT_EXAMPLES: Record<Locale, Record<string, string[]>> = {
   "en": {
+    "web-clone": [
+      "Website URL to clone: https://open-design.ai",
+      "Website URL to clone: https://kimi.com",
+    ],
     prototype: [
       "Design a high-converting website for an AI CRM with a clear hero, feature story, proof points, and trial CTA",
       "Create a desktop dashboard for a team knowledge base with search, recent updates, permissions, and collaboration entry points",
@@ -4053,6 +4142,10 @@ const HOME_PROMPT_EXAMPLES: Record<Locale, Record<string, string[]>> = {
     ],
   },
   "zh-CN": {
+    "web-clone": [
+      "想要复刻的网站链接：https://open-design.ai",
+      "想要复刻的网站链接：https://kimi.com",
+    ],
     prototype: [
       "为 AI CRM 设计一个高转化官网，包含首屏、功能卖点、客户案例和清晰的试用入口",
       "为团队知识库做一个桌面端仪表盘，突出搜索、最近更新、权限状态和协作入口",
@@ -4687,6 +4780,8 @@ function briefForChipId(chipId: string): Record<string, string> {
   switch (chipId) {
     case 'prototype':
       return { artifact_type: 'web prototype', audience: 'product evaluators', fidelity: 'high-fidelity' };
+    case 'web-clone':
+      return { artifact_type: 'website clone', source: 'target URL', fidelity: 'source-first visual reproduction' };
     case 'wireframe':
       return { artifact_type: 'lo-fi wireframe', audience: 'product team', fidelity: 'wireframe' };
     case 'mobile':

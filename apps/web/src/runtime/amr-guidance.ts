@@ -80,7 +80,11 @@ export type RunFailurePrimaryAction =
   | 'recharge'
   | 'upgrade'
   | 'launch-terminal-auth'
-  | 'launch-terminal-switch-model';
+  | 'launch-terminal-switch-model'
+  // No self-contained recovery button. Used when retrying is futile (e.g. a
+  // hard quota / exhausted credits) and the only forward path is the AMR switch
+  // card rendered below, so the card shows guidance copy without a dead Retry.
+  | 'none';
 
 // i18n keys for the gray-card text override (null = show the raw error).
 // Keys ending in a value with `{agent}` are interpolated at render time via
@@ -99,6 +103,8 @@ export type RunFailureMessageKey =
   | 'chat.runError.toolLoopMessage'
   | 'chat.runError.outputInvalidMessage'
   | 'chat.runError.runtimeConfigMessage'
+  | 'chat.runError.quotaExhaustedMessage'
+  | 'chat.runError.workspaceCreditsMessage'
   | null;
 
 // i18n keys for the unified error card's TITLE (the "error type" line above the
@@ -119,6 +125,7 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.toolLoop'
   | 'chat.runError.title.outputInvalid'
   | 'chat.runError.title.runtimeConfig'
+  | 'chat.runError.title.quotaExhausted'
   | 'chat.runError.title.generic';
 
 export interface RunFailureUi {
@@ -193,6 +200,48 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
   ),
 };
 
+// Same "switch to the hosted alternative" shape for causes where retrying with
+// the current provider is futile (hard quota / exhausted credits): no plain
+// Retry button, just guidance copy + the AMR promotion card below.
+function switchToAlternative(
+  titleKey: RunFailureTitleKey,
+  messageKey: RunFailureMessageKey,
+): RunFailureUi {
+  return {
+    primaryAction: 'none',
+    titleKey,
+    messageKey,
+    secondaryRetry: false,
+    showSwitchCard: true,
+  };
+}
+
+// Failure causes keyed by the daemon's fine-grained `failure_detail`, for the
+// cases where the coarse `error_code` alone is wrong or too vague. This layer
+// can OVERRIDE a code mapping — e.g. `hard_quota` and a transient 429 share
+// `error_code: RATE_LIMITED`, but only the transient one should offer Retry.
+// Applied after AMR/Antigravity agent-specific handling (which own their own
+// quota/auth flows) and before the generic code branches.
+const DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
+  // Provider quota / billing hard-stop: retrying reproduces the failure, so
+  // drop Retry and steer to the hosted-AMR switch card.
+  hard_quota: switchToAlternative(
+    'chat.runError.title.quotaExhausted',
+    'chat.runError.quotaExhaustedMessage',
+  ),
+  workspace_credits_exhausted: switchToAlternative(
+    'chat.runError.title.quotaExhausted',
+    'chat.runError.workspaceCreditsMessage',
+  ),
+  // CLI binary missing detected only from text (leaks in as the opaque
+  // AGENT_EXECUTION_FAILED code, not AGENT_UNAVAILABLE) — reuse the same
+  // "install the CLI, then retry" card the code path already renders.
+  cli_not_installed: retryWithGuidance(
+    'chat.runError.title.cliMissing',
+    'chat.runError.cliMissingMessage',
+  ),
+};
+
 // Resolve the failure UI for a failed run:
 //   - agent-agnostic root cause (cli missing, prompt too large, model
 //     unavailable, tool loop, bad output, bad runtime def) → named type + fix
@@ -200,10 +249,13 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
 //   - AMR agent, insufficient funds → recharge button + manual retry, clearer copy
 //   - AMR agent, tier entitlement   → upgrade button + manual retry
 //   - AMR agent, anything else      → plain retry
+//   - fine-grained failure_detail (hard quota, workspace credits, text-detected
+//     cli-missing) → named type + fix, overriding a too-coarse code
 //   - non-AMR agent, model/auth/quota error → plain retry + promotion card
 //   - non-AMR agent, generic failure        → plain retry
 export function resolveRunFailureUi(
   code: string | null | undefined,
+  detail: string | null | undefined,
   agentId: string | null | undefined,
 ): RunFailureUi {
   // Agent-agnostic codes resolve first so an AMR/Antigravity run that hits one
@@ -279,6 +331,12 @@ export function resolveRunFailureUi(
       };
     }
   }
+  // Fine-grained daemon classification overrides a too-coarse code (e.g.
+  // hard_quota vs a transient 429 both arriving as RATE_LIMITED). Placed after
+  // the AMR/Antigravity agent branches so their bespoke quota/auth flows still
+  // win, and before the generic code branches so it can correct them.
+  const detailUi = typeof detail === 'string' ? DETAIL_FAILURE_UI[detail] : undefined;
+  if (detailUi) return detailUi;
   // Agent-neutral: a mid-response connection drop (any agent) gets a clear,
   // localized "lost connection — retry" message instead of the raw SDK string.
   // Not an AMR-promotable case: the break is the user's own network path, which

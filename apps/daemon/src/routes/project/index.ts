@@ -1543,11 +1543,25 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
         externalProjectDir = await createLocationProjectDir(location, id);
       }
+      // Website Clone projects that already carry the target URL skip the
+      // turn-1 discovery brief: for this scenario the URL *is* the brief —
+      // the user asked for a reproduction, not a requirements interview, and
+      // an unanswered question form just stalls the run (the agent then
+      // "answers" it with conservative defaults). An explicit client-provided
+      // skipDiscoveryBrief still wins in both directions.
+      const webCloneUrlSkipsDiscovery =
+        skipDiscoveryBrief === undefined
+        && metadata && typeof metadata === 'object'
+        && (metadata as { intent?: unknown }).intent === 'web-clone'
+        && typeof pendingPrompt === 'string'
+        && /https?:\/\/\S+/i.test(pendingPrompt);
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
               ...metadata,
-              ...(skipDiscoveryBrief === true ? { skipDiscoveryBrief: true } : {}),
+              ...(skipDiscoveryBrief === true || webCloneUrlSkipsDiscovery
+                ? { skipDiscoveryBrief: true }
+                : {}),
               ...(externalProjectDir
                 ? {
                     baseDir: externalProjectDir,

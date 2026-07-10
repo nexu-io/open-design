@@ -16,9 +16,9 @@
 
 ## 一键脚本
 ```bash
-node "$WEB_CLONE_SKILL_DIR/scripts/mirror-site.mjs" \
+node scripts/mirror-site.mjs \
   --url https://<站>/ \
-  --out "$WEB_CLONE_PROJECT"
+  --out 当前项目目录
 ```
 产物：
 - `<out>/site/…`：镜像的**同源**资产（保留路径；目录 URL 存 `index.html`）
@@ -59,7 +59,7 @@ node "$WEB_CLONE_SKILL_DIR/scripts/mirror-site.mjs" \
 
 ## 服务 + 验证
 ```bash
-cd "$WEB_CLONE_PROJECT/site"
+cd 当前项目目录/site
 python3 -m http.server 8124      # 必须从 site/ 作 web 根，根相对路径(/_astro /models …)才解析
 ```
 然后按 SKILL.md Step 5：浏览器 0 console error + `visual-diff.mjs` 像素对照原站。重 WebGL 站记得**滚动到各段截图**对照（静态全页截图抓不到滚动触发的 GL 帧）。
@@ -69,4 +69,4 @@ python3 -m http.server 8124      # 必须从 site/ 作 web 根，根相对路径
 - 唯一改写：Typekit `@import`→本地自托管 halyard + 删 cloudflare beacon
 - 结果：`scrollHeight` 精确一致、**0 console error**、hero 像素 diff **36/1.3M（5/5）**
 - 留在线：Vimeo 画廊视频 + unpkg Rive wasm（非核心）
-- 完整记录：`./website-clones/oryzo-clone/`（NOTES.md + TEARDOWN.md）
+- 完整记录：`当前项目目录/oryzo-clone/`（NOTES.md + TEARDOWN.md）

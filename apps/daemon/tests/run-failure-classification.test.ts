@@ -1387,6 +1387,19 @@ describe('classifyRunFailure — BYOK OpenCode reclassification out of stream_er
     });
   });
 
+  it('classifies BYOK OpenCode Responses API request rejections as non-retryable upstream client errors', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'json-rpc id 4: opencode event stream: Invalid Responses API request',
+    );
+    expect(result).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'upstream_client_error',
+      retryable: false,
+      user_action: 'none',
+    });
+  });
+
   it('classifies BYOK OpenCode config directory permission errors as fixable agent config', () => {
     const result = classify(
       'AGENT_EXECUTION_FAILED',

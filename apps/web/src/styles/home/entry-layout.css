@@ -3507,6 +3507,36 @@
   color: var(--accent-strong);
 }
 
+/* Free-text detail revealed when the visitor picks "Other" on the "Where did
+   you hear about us?" question. Rendered inline as the last item of the chip
+   row so it sits right after the Other chip (growing to fill the rest of the
+   row, or wrapping onto the next line at a comfortable width) instead of
+   floating below the group. Height matches the chips so the row stays even. */
+.onboarding-chip-field__other-input {
+  flex: 1 1 200px;
+  min-width: 180px;
+  max-width: 280px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font-size: 13px;
+  transition:
+    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.onboarding-chip-field__other-input::placeholder {
+  color: var(--text-muted);
+}
+
+.onboarding-chip-field__other-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
 /* Step 2 memory callout — makes it explicit that the answers above are saved
    to Memory, and sells the compounding benefit of letting it learn. */
 .onboarding-view__memory-callout {

@@ -251,6 +251,21 @@ export interface Dict {
   'settings.onboardingOrgSizeLabel': string;
   'settings.onboardingUseCaseLabel': string;
   'settings.onboardingSourceLabel': string;
+  'settings.onboardingSourceX': string;
+  'settings.onboardingSourceGithub': string;
+  'settings.onboardingSourceYoutube': string;
+  'settings.onboardingSourceTiktok': string;
+  'settings.onboardingSourceReddit': string;
+  'settings.onboardingSourceLinkedin': string;
+  'settings.onboardingSourceMetaSocial': string;
+  'settings.onboardingSourceSearch': string;
+  'settings.onboardingSourceAiTool': string;
+  'settings.onboardingSourceFriend': string;
+  'settings.onboardingSourceCommunity': string;
+  'settings.onboardingSourceEmail': string;
+  'settings.onboardingSourceBlog': string;
+  'settings.onboardingSourceOther': string;
+  'settings.onboardingSourceOtherPlaceholder': string;
   'settings.onboardingSelectPlaceholder': string;
   'settings.onboardingSelectMultiplePlaceholder': string;
   'settings.onboardingOrgSolo': string;
@@ -279,16 +294,6 @@ export interface Dict {
   'settings.onboardingUseDeck': string;
   'settings.onboardingUseEngineering': string;
   'settings.onboardingUseAgency': string;
-  'settings.onboardingSourceGithub': string;
-  'settings.onboardingSourceFriend': string;
-  'settings.onboardingSourceSocial': string;
-  'settings.onboardingSourceProductHunt': string;
-  'settings.onboardingSourceCommunity': string;
-  'settings.onboardingSourceYoutube': string;
-  'settings.onboardingSourceBlog': string;
-  'settings.onboardingSourceAiTool': string;
-  'settings.onboardingSourceSearch': string;
-  'settings.onboardingSourceEvent': string;
   'settings.onboardingBack': string;
   'settings.onboardingContinue': string;
   'settings.onboardingFinish': string;
@@ -1078,6 +1083,7 @@ export interface Dict {
   'homeHero.confirmReplaceBody': string;
   'homeHero.confirmReplace': string;
   'homeHero.chip.prototype': string;
+  'homeHero.chip.webClone': string;
   'homeHero.chip.liveArtifact': string;
   'homeHero.chip.deck': string;
   'homeHero.chip.image': string;
@@ -1100,6 +1106,7 @@ export interface Dict {
   'homeHero.chip.mobile': string;
   'homeHero.chip.document': string;
   'homeHero.chip.prototypeDesc': string;
+  'homeHero.chip.webCloneDesc': string;
   'homeHero.chip.wireframeDesc': string;
   'homeHero.chip.mobileDesc': string;
   'homeHero.chip.deckDesc': string;
@@ -1115,6 +1122,7 @@ export interface Dict {
   'homeHero.chip.liveArtifactDesc': string;
   'homeHero.chip.createBrandKitDesc': string;
   'homeHero.chip.prototypeNext': string;
+  'homeHero.chip.webCloneNext': string;
   'homeHero.chip.wireframeNext': string;
   'homeHero.chip.mobileNext': string;
   'homeHero.chip.deckNext': string;
@@ -1122,6 +1130,7 @@ export interface Dict {
   'homeHero.chip.imageNext': string;
   'homeHero.chip.videoNext': string;
   'homeHero.chip.audioNext': string;
+  'homeHero.chip.webClonePromptSeed': string;
   'homeWorkingDir.trigger': string;
   'homeWorkingDir.pick': string;
   'homeWorkingDir.replace': string;
@@ -2448,6 +2457,7 @@ export interface Dict {
   'chat.runError.title.toolLoop': string;
   'chat.runError.title.outputInvalid': string;
   'chat.runError.title.runtimeConfig': string;
+  'chat.runError.title.quotaExhausted': string;
   'chat.runError.title.generic': string;
   'chat.runError.signInMessage.amr': string;
   'chat.runError.signInMessage.other': string;
@@ -2459,6 +2469,8 @@ export interface Dict {
   'chat.runError.toolLoopMessage': string;
   'chat.runError.outputInvalidMessage': string;
   'chat.runError.runtimeConfigMessage': string;
+  'chat.runError.quotaExhaustedMessage': string;
+  'chat.runError.workspaceCreditsMessage': string;
   'chat.runError.agentFallback': string;
   'chat.runError.sourceLabel': string;
   'chat.runError.sourceExpandAria': string;

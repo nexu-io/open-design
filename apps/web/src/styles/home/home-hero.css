@@ -2170,6 +2170,57 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* Website-clone examples: a logo tile + bare domain reads as a real "pick a
+   site" gallery instead of seven near-identical lines of prompt text. */
+.home-hero__prompt-examples-grid--sites {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.home-hero__prompt-example--site {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 108px;
+  padding: 16px 12px;
+  text-align: center;
+}
+.home-hero__site-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  /* Favicons are drawn for a light browser tab, so keep the tile light in both
+     themes; the border keeps it defined on a light page. */
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.home-hero__site-badge img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+.home-hero__site-monogram {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111;
+  line-height: 1;
+}
+.home-hero__site-domain {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.home-hero__prompt-example--site:hover .home-hero__site-badge,
+.home-hero__prompt-example--site:focus-visible .home-hero__site-badge {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
 .home-hero__plugin-presets-wrap {
   max-width: min(880px, 100%);
 }

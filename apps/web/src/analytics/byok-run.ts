@@ -12,6 +12,7 @@
 // for a mode==='api' session resolves to 'byok'.
 
 import {
+  byokProtocolToTracking,
   modelIdForTracking,
   sessionModeToTracking,
   type RunCreatedProps,
@@ -25,30 +26,11 @@ import {
 import type { ChatSessionMode } from '@open-design/contracts';
 import type { ApiProtocol } from '../types';
 
-// Map the BYOK transport protocol to the tracking provider id. `aihubmix` is
-// an aggregator with no dedicated provider bucket, so it folds into the CLI
-// catch-all `'other'`; everything else has a 1:1 BYOK provider.
+// Map the BYOK transport protocol to the tracking provider id.
 export function byokAgentProviderId(
   protocol: ApiProtocol | undefined,
 ): TrackingByokProviderId | TrackingCliProviderId {
-  switch (protocol) {
-    case 'anthropic':
-      return 'anthropic';
-    case 'openai':
-      return 'openai';
-    case 'azure':
-      return 'azure_openai';
-    case 'google':
-      return 'google_gemini';
-    case 'ollama':
-      return 'ollama_cloud';
-    case 'senseaudio':
-      return 'senseaudio';
-    case 'bedrock':
-      return 'other';
-    default:
-      return 'other';
-  }
+  return byokProtocolToTracking(protocol) ?? 'other';
 }
 
 export interface ByokRunBaseInput {

@@ -928,8 +928,9 @@ export function mergeDaemonConfig(
   // never mints an id), which the Settings → Privacy field rendered as
   // "Opted out" even though the user never declined. We mint the id and
   // keep the default channels on so the displayed state matches the product
-  // default — the same metrics+content surface the first-run banner's "I
-  // get it" opt-in enables (artifactManifest stays off, as it does there).
+  // default — the same metrics+content surface the first-run banner's
+  // "Share" choice enables (artifactManifest stays off, as it
+  // does there).
   // This does NOT override an explicit opt-out: metrics === false short-
   // circuits the whole block, and any channel the user already turned off
   // is preserved via the nullish-coalesce.

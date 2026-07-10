@@ -774,6 +774,16 @@ export interface ListPluginsOptions {
   includeHidden?: boolean;
 }
 
+// Module-level cache of the visible plugin list. The `/api/plugins` payload is
+// large (all bundled manifests), so re-fetching + parsing it on every Home
+// remount left the create rail greyed for 1-2s each time. `listPluginsFresh`
+// serves this cache without a network round trip while it is warm, so a Home
+// remount clears `pluginsLoading` within a frame instead of after the heavy
+// fetch+parse.
+let cachedVisiblePlugins: InstalledPluginRecord[] | null = null;
+let cachedVisibleAt = 0;
+const PLUGINS_CACHE_TTL_MS = 10_000;
+
 export async function listPlugins(
   options: ListPluginsOptions = {},
 ): Promise<InstalledPluginRecord[]> {
@@ -782,10 +792,34 @@ export async function listPlugins(
     if (!resp.ok) return [];
     const json = (await resp.json()) as { plugins?: InstalledPluginRecord[] };
     const plugins = json.plugins ?? [];
-    return options.includeHidden ? plugins : plugins.filter(isVisiblePlugin);
+    const visible = plugins.filter(isVisiblePlugin);
+    cachedVisiblePlugins = visible;
+    cachedVisibleAt = Date.now();
+    return options.includeHidden ? plugins : visible;
   } catch {
     return [];
   }
+}
+
+// Return the cached visible plugins without hitting the network when the cache
+// is still within its TTL; otherwise fetch (which refreshes the cache). Used by
+// surfaces that mount often (Home) where a slightly stale list is fine and the
+// heavy `/api/plugins` round trip per mount is not.
+export async function listPluginsFresh(): Promise<InstalledPluginRecord[]> {
+  if (cachedVisiblePlugins !== null && Date.now() - cachedVisibleAt < PLUGINS_CACHE_TTL_MS) {
+    return cachedVisiblePlugins;
+  }
+  return listPlugins();
+}
+
+// Test-only: drop the warm visible-plugins cache so each case starts cold. The
+// module-level cache intentionally survives Home remounts in the app, but that
+// same persistence leaks across test cases in a worker (a case's mocked
+// `/api/plugins` payload would satisfy the next case via `listPluginsFresh`).
+// The web vitest setup calls this in a global `afterEach`.
+export function resetPluginsCache(): void {
+  cachedVisiblePlugins = null;
+  cachedVisibleAt = 0;
 }
 
 export function isVisiblePlugin(plugin: InstalledPluginRecord): boolean {
