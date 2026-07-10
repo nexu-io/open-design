@@ -865,6 +865,17 @@ export function buildManualEditBridge(enabled: boolean): string {
     var m = t.match(/rotate\((-?[0-9.]+)deg\)/);
     return m ? parseFloat(m[1]) : 0;
   }
+  function saveInlinePosition(el){
+    return { position: el.style.position, left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height, margin: el.style.margin };
+  }
+  function restoreInlinePosition(el, saved){
+    el.style.position = saved.position || '';
+    el.style.left = saved.left || '';
+    el.style.top = saved.top || '';
+    el.style.width = saved.width || '';
+    el.style.height = saved.height || '';
+    el.style.margin = saved.margin || '';
+  }
   function ensureAbsolute(el){
     var pos = window.getComputedStyle(el).position;
     if (pos !== 'absolute' && pos !== 'fixed') {
@@ -977,6 +988,7 @@ export function buildManualEditBridge(enabled: boolean): string {
     if (targetEl && !handleEl && (targetEl === selectedElForHandles || isMultiDrag)) {
       ev.preventDefault();
       ev.stopPropagation();
+      var savedPosBefore = saveInlinePosition(targetEl);
       if (isMultiDrag) {
         // Multi-drag: store all selected elements
         var selEls = getSelectedElements();
@@ -997,6 +1009,7 @@ export function buildManualEditBridge(enabled: boolean): string {
           id: targetId,
           moved: false,
           multiEls: multiEls,
+          savedPos: savedPosBefore,
         };
       } else {
         // Single drag
@@ -1013,6 +1026,7 @@ export function buildManualEditBridge(enabled: boolean): string {
           handle: 'body',
           id: targetId,
           moved: false,
+          savedPos: savedPosBefore,
         };
       }
       targetEl.setPointerCapture(ev.pointerId);
@@ -1167,6 +1181,10 @@ export function buildManualEditBridge(enabled: boolean): string {
         commitPosition(el, id);
         dragEndedJustNow = true;
       }
+    } else if (dragState.savedPos && dragState.handle === 'body') {
+      // Drag started (ensureAbsolute mutated the DOM) but didn't move.
+      // Restore original inline position so the layout is not permanently altered.
+      restoreInlinePosition(el, dragState.savedPos);
     }
     dragState = null;
     if (el) {
@@ -1195,6 +1213,8 @@ export function buildManualEditBridge(enabled: boolean): string {
         } else {
           commitPosition(el2, id2);
         }
+      } else if (dragState.savedPos && dragState.handle === 'body') {
+        restoreInlinePosition(el2, dragState.savedPos);
       }
       dragState = null;
       window.parent.postMessage({ type: 'od-edit-drag-end', id: id2 || '' }, '*');

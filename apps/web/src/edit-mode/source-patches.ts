@@ -233,17 +233,25 @@ export function readManualEditOuterHtml(source: string, id: string): string {
 }
 
 function insertElement(source: string, p: Extract<ManualEditPatch, { kind: 'add-element' }>): string | null {
-  // Insert the new element HTML string right before </body> with absolute positioning.
-  const style = `position:absolute;left:${p.left};top:${p.top};width:${p.width};height:${p.height};`;
-  // If html doesn't already have inline style, add it; otherwise inject
+  // Sanitise: reject HTML with script tags or inline event handlers
+  if (/<script[\s>]/i.test(p.html) || /\bon\w+\s*=/i.test(p.html)) return null;
+  const safeStyle = sanitiseCssValues({ left: p.left, top: p.top, width: p.width, height: p.height });
+  const style = `position:absolute;left:${safeStyle.left};top:${safeStyle.top};width:${safeStyle.width};height:${safeStyle.height};`;
   const styledHtml = p.html.replace('<', `<${p.tagName} style="${style}" data-od-id="${p.id}" `);
   const idx = source.lastIndexOf('</body>');
   if (idx >= 0) return source.slice(0, idx) + styledHtml + '\n' + source.slice(idx);
-  // Fallback: append before </html>
   const htmlEnd = source.lastIndexOf('</html>');
   if (htmlEnd >= 0) return source.slice(0, htmlEnd) + styledHtml + '\n' + source.slice(htmlEnd);
-  // Last resort: append to end
   return source + '\n' + styledHtml;
+}
+
+function sanitiseCssValues(v: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, val] of Object.entries(v)) {
+    // Strip semicolons, closing braces, unbalanced quotes — safe for CSS attribute injection
+    out[k] = String(val).replace(/[";{}()]/g, '');
+  }
+  return out;
 }
 
 function parseSource(source: string): Document | null {
