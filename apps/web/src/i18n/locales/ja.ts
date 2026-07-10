@@ -2583,6 +2583,7 @@ export const ja: Dict = {
   'fileViewer.empty': 'ファイルを選択して表示します。',
   'fileViewer.loading': '読み込み中…',
   'fileViewer.exportPptx': 'PPTX としてエクスポート',
+  'fileViewer.exportReady': 'ダウンロードの準備ができました',
   'fileViewer.openInNewTab': '新しいタブで開く',
   'fileViewer.copyPath': 'パスをコピー',
   'fileViewer.copied': 'コピーしました！',

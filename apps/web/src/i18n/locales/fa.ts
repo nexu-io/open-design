@@ -2582,6 +2582,7 @@ export const fa: Dict = {
   'sketch.tooltipClean': 'ذخیره شد',
   'fileViewer.empty': 'یک فایل را برای مشاهده انتخاب کنید.',
   'fileViewer.loading': 'در حال بارگذاری…',
+  'fileViewer.exportReady': 'آماده ذخیره',
   'fileViewer.exportPptx': 'صادرکردن به PPTX',
   'fileViewer.openInNewTab': 'باز کردن در تب جدید',
   'fileViewer.copyPath': 'کپی مسیر',

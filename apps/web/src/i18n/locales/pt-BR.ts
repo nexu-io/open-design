@@ -2584,6 +2584,7 @@ export const ptBR: Dict = {
   'fileViewer.loading': 'Carregando…',
   'fileViewer.exportPptx': 'Exportar como PPTX',
   'fileViewer.openInNewTab': 'Abrir em nova aba',
+  'fileViewer.exportReady': 'Pronto para salvar',
   'fileViewer.copyPath': 'Copiar caminho',
   'fileViewer.copied': 'Copiado!',
   'fileViewer.share': 'Compartilhar',

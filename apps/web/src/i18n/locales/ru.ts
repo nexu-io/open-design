@@ -2581,6 +2581,7 @@ export const ru: Dict = {
   'sketch.tooltipDirty': 'Несохраненные изменения',
   'sketch.tooltipClean': 'Сохранено',
   'fileViewer.empty': 'Выберите файл для просмотра.',
+  'fileViewer.exportReady': 'готово к сохранению.',
   'fileViewer.loading': 'Загрузка…',
   'fileViewer.exportPptx': 'Экспорт в PPTX',
   'fileViewer.openInNewTab': 'Открыть в новой вкладке',

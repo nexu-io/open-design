@@ -2581,6 +2581,7 @@ export const id: Dict = {
   'sketch.tooltipDirty': 'Ada perubahan belum disimpan',
   'sketch.tooltipClean': 'Tersimpan',
   'fileViewer.empty': 'Pilih file untuk dilihat.',
+  'fileViewer.exportReady': 'Siap untuk menyimpan',
   'fileViewer.loading': 'Memuat file...',
   'fileViewer.exportPptx': 'Ekspor PPTX',
   'fileViewer.openInNewTab': 'Buka di tab baru',

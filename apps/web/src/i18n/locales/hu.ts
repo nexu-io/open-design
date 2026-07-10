@@ -2582,6 +2582,7 @@ export const hu: Dict = {
   'sketch.tooltipClean': 'Mentve',
   'fileViewer.empty': 'Válassz fájlt a megtekintéshez.',
   'fileViewer.loading': 'Betöltés…',
+  'fileViewer.exportReady': 'mentésre kész',
   'fileViewer.exportPptx': 'Exportálás PPTX-ként',
   'fileViewer.openInNewTab': 'Megnyitás új lapon',
   'fileViewer.copyPath': 'Útvonal másolása',

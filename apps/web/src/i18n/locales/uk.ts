@@ -2583,6 +2583,7 @@ export const uk: Dict = {
   'fileViewer.empty': 'Виберіть файл для перегляду.',
   'fileViewer.loading': 'Завантаження…',
   'fileViewer.exportPptx': 'Експортувати як PPTX',
+  'fileViewer.exportReady': 'готовий рятувати.',
   'fileViewer.openInNewTab': 'Відкрити в новій вкладці',
   'fileViewer.copyPath': 'Копіювати шлях',
   'fileViewer.copied': 'Скопійовано!',

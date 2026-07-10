@@ -3433,6 +3433,7 @@ export interface Dict {
   'fileViewer.versions.restoring': string;
   'fileViewer.versions.restoreFailed': string;
   'fileViewer.versions.restoreSuccess': string;
+  'fileViewer.exportReady': string;
   'manualEdit.layers': string;
   'manualEdit.editableCount': string;
   'manualEdit.hiddenBadge': string;

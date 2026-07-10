@@ -2586,6 +2586,7 @@ export const pl: Dict = {
   'fileViewer.openInNewTab': 'Otwórz w nowej karcie',
   'fileViewer.copyPath': 'Kopiuj ścieżkę',
   'fileViewer.copied': 'Skopiowano!',
+  'fileViewer.exportReady': 'Gotowy do zapisania',
   'fileViewer.share': 'Udostępnij',
   'fileViewer.binaryMeta': 'Binarny · {size}',
   'fileViewer.binaryNote': 'Plik binarny ({size} bajtów). Pobierz go lub otwórz z dysku, aby sprawdzić zawartość.',

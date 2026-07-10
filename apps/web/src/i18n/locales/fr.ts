@@ -2581,6 +2581,7 @@ export const fr: Dict = {
   'sketch.tooltipDirty': 'Modifications non enregistrées',
   'sketch.tooltipClean': 'Enregistré',
   'fileViewer.empty': 'Sélectionnez un fichier à afficher.',
+  'fileViewer.exportReady': 'Prêt à enregistrer',
   'fileViewer.loading': 'Chargement…',
   'fileViewer.exportPptx': 'Exporter en PPTX',
   'fileViewer.openInNewTab': 'Ouvrir dans un nouvel onglet',

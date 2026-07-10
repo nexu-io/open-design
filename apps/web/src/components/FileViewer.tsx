@@ -5557,7 +5557,7 @@ function HtmlViewer({
               return;
             }
             finish('success');
-            if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
+            if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportReady'), tone: 'default' });
           },
           (err) => {
             finish('failed', exportErrorCode(err));
@@ -5572,7 +5572,7 @@ function HtmlViewer({
           return;
         }
         finish('success');
-        if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportDone'), tone: 'success' });
+        if (toastFormats.has(format)) setExportToast({ message: t('fileViewer.exportReady'), tone: 'default' });
       }
     } catch (err) {
       finish('failed', exportErrorCode(err));

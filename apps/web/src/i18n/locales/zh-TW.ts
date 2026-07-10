@@ -2834,6 +2834,7 @@ export const zhTW: Dict = {
   "sketch.tooltipClean": "已儲存",
   "fileViewer.empty": "請選擇一個檔案檢視。",
   "fileViewer.loading": "載入中…",
+  "fileViewer.exportReady": "加載完成",
   "fileViewer.exportPptx": "匯出為 PPTX",
   "fileViewer.openInNewTab": "在新分頁中開啟",
   "fileViewer.copyPath": "複製路徑",

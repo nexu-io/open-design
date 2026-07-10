@@ -2825,6 +2825,7 @@ export const zhCN: Dict = {
   "sketch.tooltipClean": "已保存",
   "fileViewer.empty": "请选择一个文件查看。",
   "fileViewer.loading": "加载中…",
+  "fileViewer.exportReady": "加载完成",
   "fileViewer.exportPptx": "导出为 PPTX",
   "fileViewer.openInNewTab": "在新标签页中打开",
   "fileViewer.copyPath": "复制路径",
