@@ -1591,18 +1591,21 @@ function displayDevAccessSettingsForDeployment(
     return null;
   }
   const displayDev = deployment.displayDev;
+  const visibility = 'visibility' in displayDev ? displayDev.visibility : undefined;
+  const sharedWithValue = 'sharedWith' in displayDev ? displayDev.sharedWith : undefined;
+  const showBranding = 'showBranding' in displayDev ? displayDev.showBranding : undefined;
   if (
-    !isDisplayDevVisibility(displayDev.visibility) ||
-    !Array.isArray(displayDev.sharedWith) ||
-    !isDisplayDevShowBranding(displayDev.showBranding)
+    !isDisplayDevVisibility(visibility) ||
+    !Array.isArray(sharedWithValue) ||
+    !isDisplayDevShowBranding(showBranding)
   ) {
     return null;
   }
-  const sharedWith = displayDev.sharedWith.map((item) => item.trim()).filter(Boolean);
+  const sharedWith = sharedWithValue.map((item) => item.trim()).filter(Boolean);
   return {
-    visibility: displayDev.visibility,
+    visibility,
     sharedWith,
-    showBranding: displayDev.showBranding,
+    showBranding,
   };
 }
 

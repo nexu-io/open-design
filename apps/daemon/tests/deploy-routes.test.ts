@@ -677,8 +677,12 @@ describe('deploy provider routes', () => {
           providerId: DISPLAYDEV_PROVIDER_ID,
           url: 'https://display.dsp.so/owned1234-demo',
           status: 'ready',
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+            accessSettingsMissing: true,
+          },
         });
-        expect(deployBody).not.toHaveProperty('displayDev');
         expect(artifactGetCalls).toBe(1);
 
         const deploymentsResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
@@ -699,7 +703,13 @@ describe('deploy provider routes', () => {
         const displayDevDeployment = deploymentsBody.deployments.find((deployment) => (
           deployment.providerId === DISPLAYDEV_PROVIDER_ID
         ));
-        expect(displayDevDeployment).not.toHaveProperty('displayDev');
+        expect(displayDevDeployment).toMatchObject({
+          displayDev: {
+            mode: 'authenticated',
+            shortId: 'owned1234',
+            accessSettingsMissing: true,
+          },
+        });
         expect(artifactGetCalls).toBe(2);
       } finally {
         vi.unstubAllGlobals();
@@ -806,8 +816,12 @@ describe('deploy provider routes', () => {
             providerId: DISPLAYDEV_PROVIDER_ID,
             url: 'https://display.dsp.so/owned1234-demo',
             status: 'ready',
+            displayDev: {
+              mode: 'authenticated',
+              shortId: 'owned1234',
+              accessSettingsMissing: true,
+            },
           });
-          expect(deployBody).not.toHaveProperty('displayDev');
         } finally {
           vi.unstubAllGlobals();
         }

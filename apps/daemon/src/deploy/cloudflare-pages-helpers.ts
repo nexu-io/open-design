@@ -86,6 +86,12 @@ export function publicDeployment(deployment: unknown): unknown {
           sharedWith,
           showBranding,
         };
+      } else if (shortId) {
+        (publicShape as DeploymentLike).displayDev = {
+          mode: 'authenticated',
+          shortId,
+          accessSettingsMissing: true,
+        };
       }
     } else {
       (publicShape as DeploymentLike).displayDev = {

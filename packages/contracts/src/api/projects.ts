@@ -877,6 +877,11 @@ export type DisplayDevDeploymentInfo =
   | {
       mode: 'authenticated';
       shortId: string;
+      accessSettingsMissing: true;
+    }
+  | {
+      mode: 'authenticated';
+      shortId: string;
       visibility: 'public' | 'company' | 'private';
       sharedWith: string[];
       showBranding: 'inherit' | 'show' | 'hide';

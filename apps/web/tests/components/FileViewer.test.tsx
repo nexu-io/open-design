@@ -6161,6 +6161,7 @@ describe('FileViewer SVG artifacts', () => {
               displayDev: {
                 mode: 'authenticated',
                 shortId: 'owned1234',
+                accessSettingsMissing: true,
               },
               createdAt: 1,
               updatedAt: 2,
@@ -6325,6 +6326,7 @@ describe('FileViewer SVG artifacts', () => {
                 displayDev: {
                   mode: 'authenticated',
                   shortId: 'owned1234',
+                  accessSettingsMissing: true,
                 },
                 createdAt: 1,
                 updatedAt: 2,
@@ -6967,6 +6969,7 @@ describe('FileViewer SVG artifacts', () => {
           displayDev: {
             mode: 'authenticated',
             shortId: 'owned1234',
+            accessSettingsMissing: true,
           },
           createdAt: 1,
           updatedAt: 2,
@@ -7691,6 +7694,7 @@ describe('FileViewer SVG artifacts', () => {
               displayDev: {
                 mode: 'authenticated',
                 shortId: 'owned1234',
+                accessSettingsMissing: true,
               },
               createdAt: 1,
               updatedAt: 2,
@@ -7806,6 +7810,7 @@ describe('FileViewer SVG artifacts', () => {
           displayDev: {
             mode: 'authenticated',
             shortId: 'owned1234',
+            accessSettingsMissing: true,
           },
           createdAt: 1,
           updatedAt: 3,
