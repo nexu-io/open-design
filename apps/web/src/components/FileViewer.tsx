@@ -138,6 +138,7 @@ import type {
   PreviewCommentTarget,
 } from '../types';
 import { ManualEditPanel, emptyManualEditDraft, type ManualEditDraft } from './ManualEditPanel';
+import { ManualEditToolbar, type DrawTool } from './ManualEditToolbar';
 import {
   applyManualEditPatch,
   isManualEditFullHtmlDocument,
@@ -4925,6 +4926,7 @@ function HtmlViewer({
   const [selectedManualEditTarget, setSelectedManualEditTarget] = useState<ManualEditTarget | null>(null);
   const [manualEditMultiSelectedIds, setManualEditMultiSelectedIds] = useState<string[]>([]);
   const manualEditMultiSelectedCount = manualEditMultiSelectedIds.length > 1 ? manualEditMultiSelectedIds.length : 1;
+  const [manualEditDrawTool, setManualEditDrawTool] = useState<DrawTool>(null);
   const [manualEditHoverTarget, setManualEditHoverTarget] = useState<ManualEditTarget | null>(null);
   const [manualEditPageStylesOpen, setManualEditPageStylesOpen] = useState(false);
   const [manualEditPanelPosition, setManualEditPanelPosition] = useState<{ left: number; top: number } | null>(null);
@@ -6312,6 +6314,27 @@ function HtmlViewer({
         return;
       }
       if (data.type === 'od-edit-drag-start') {
+        return;
+      }
+      if (data.type === 'od-edit-add-element') {
+        var nId = data.id || ('od-n-' + Date.now());
+        var pHtml = String(data.html || '<div></div>');
+        var pLeft = String(data.left || '100px');
+        var pTop = String(data.top || '100px');
+        var pWidth = String(data.width || '200px');
+        var pHeight = String(data.height || '120px');
+        var pTag = String(data.tag || 'div');
+        void applyManualEdit({
+          id: nId,
+          kind: 'add-element',
+          parentId: String(data.parentId || '__body__'),
+          html: pHtml,
+          tagName: pTag,
+          left: pLeft,
+          top: pTop,
+          width: pWidth,
+          height: pHeight,
+        }, 'Add ' + pTag);
         return;
       }
       if (data.type === 'od-edit-style-commit') {
@@ -8903,6 +8926,16 @@ function HtmlViewer({
               >
                 <RemixIcon name="edit-line" size={15} />
               </button>
+              {manualEditMode ? (
+                <ManualEditToolbar
+                  activeTool={manualEditDrawTool}
+                  onSelectTool={(tool) => {
+                    setManualEditDrawTool(tool);
+                    const win = iframeRef.current?.contentWindow;
+                    if (win) win.postMessage({ type: 'od-edit-set-tool', tool }, '*');
+                  }}
+                />
+              ) : null}
               <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button
                 type="button"

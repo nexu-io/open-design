@@ -108,6 +108,10 @@ export interface ManualEditPatchResult {
 
 export function applyManualEditPatch(source: string, patch: ManualEditPatch): ManualEditPatchResult {
   if (patch.kind === 'set-full-source') return { ok: true, source: patch.source };
+  if (patch.kind === 'add-element') {
+    const addSource = insertElement(source, patch);
+    return addSource ? { ok: true, source: addSource } : { ok: false, source, error: 'Could not add element.' };
+  }
 
   const doc = parseSource(source);
   if (!doc) return { ok: false, source, error: 'Could not parse source.' };
@@ -226,6 +230,20 @@ export function readManualEditAttributes(source: string, id: string): Record<str
 export function readManualEditOuterHtml(source: string, id: string): string {
   const doc = parseSource(source);
   return (doc ? findEditableElement(doc, id)?.outerHTML : '') ?? '';
+}
+
+function insertElement(source: string, p: Extract<ManualEditPatch, { kind: 'add-element' }>): string | null {
+  // Insert the new element HTML string right before </body> with absolute positioning.
+  const style = `position:absolute;left:${p.left};top:${p.top};width:${p.width};height:${p.height};`;
+  // If html doesn't already have inline style, add it; otherwise inject
+  const styledHtml = p.html.replace('<', `<${p.tagName} style="${style}" data-od-id="${p.id}" `);
+  const idx = source.lastIndexOf('</body>');
+  if (idx >= 0) return source.slice(0, idx) + styledHtml + '\n' + source.slice(idx);
+  // Fallback: append before </html>
+  const htmlEnd = source.lastIndexOf('</html>');
+  if (htmlEnd >= 0) return source.slice(0, htmlEnd) + styledHtml + '\n' + source.slice(htmlEnd);
+  // Last resort: append to end
+  return source + '\n' + styledHtml;
 }
 
 function parseSource(source: string): Document | null {

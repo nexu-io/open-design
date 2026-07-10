@@ -176,6 +176,9 @@ export function buildManualEditBridge(enabled: boolean): string {
   var selectedElForHandles = null; // which element currently has handles shown
   var selectedIds = {}; // map of id → true for multi-selected elements
   var rubberband = null; // { el, startX, startY } for drag-to-select rectangle
+  var activeTool = null; // 'rect' | 'circle' | 'text' | 'line' | 'image' | null
+  var placementStartX = 0, placementStartY = 0;
+  var previewEl = null; // visual preview of shape being drawn
   function isHostNode(el){
     return !!(el && el.matches && el.matches(hostNodeSelector));
   }
@@ -586,6 +589,12 @@ export function buildManualEditBridge(enabled: boolean): string {
       applyPreviewStyles(ev.data.id, ev.data.styles || {}, ev.data.version);
       return;
     }
+    if (ev.data.type === 'od-edit-set-tool') {
+      activeTool = ev.data.tool || null;
+      if (!activeTool) { removeHandles(); removeRotationHandle(); }
+      if (previewEl && previewEl.parentNode) { previewEl.parentNode.removeChild(previewEl); previewEl = null; }
+      return;
+    }
     if (ev.data.type === 'od-edit-text-finish') {
       finishActiveTextEdit(ev.data.commit !== false);
       return;
@@ -849,6 +858,35 @@ export function buildManualEditBridge(enabled: boolean): string {
   // Pointer handlers for drag + resize
   function onPointerDown(ev){
     if (!enabled) return;
+    // Shape tool placement
+    if (activeTool){
+      var ctEl = closestTarget(ev);
+      var pId = ctEl ? stableId(ctEl) : '__body__';
+      if (activeTool === 'text'){
+        ev.preventDefault(); ev.stopPropagation();
+        var newId = 'od-n-' + Date.now();
+        window.parent.postMessage({ type: 'od-edit-add-element', parentId: pId, tag: 'div', left: Math.round(ev.clientX) + 'px', top: Math.round(ev.clientY) + 'px', width: '200px', height: '40px', html: '<div contenteditable="plaintext-only" data-od-edit="text">Type here</div>' }, '*');
+        activeTool = null;
+        return;
+      }
+      if (activeTool === 'image'){
+        // Image tool: prompt is handled by host panel; just commit coordinated
+        var imgId = 'od-n-' + Date.now();
+        window.parent.postMessage({ type: 'od-edit-add-element', parentId: pId, tag: 'img', left: Math.round(ev.clientX) + 'px', top: Math.round(ev.clientY) + 'px', width: '200px', height: '150px', html: '<img src="" alt="image" style="background:#f0f0f0;border:1px dashed #ccc;">' }, '*');
+        activeTool = null;
+        return;
+      }
+      // rect/circle/line: start drawing
+      ev.preventDefault(); ev.stopPropagation();
+      placementStartX = ev.clientX;
+      placementStartY = ev.clientY;
+      previewEl = document.createElement('div');
+      previewEl.style.cssText = 'position:fixed;z-index:2147483646;background:rgba(37,99,235,0.1);border:2px dashed #2563eb;pointer-events:none;';
+      previewEl.style.left = ev.clientX + 'px';
+      previewEl.style.top = ev.clientY + 'px';
+      document.body.appendChild(previewEl);
+      return;
+    }
     // Check rotation handle first
     if (ev.target && ev.target.closest && ev.target.closest('[data-od-rotation-handle]')){
       ev.preventDefault(); ev.stopPropagation();
@@ -940,6 +978,27 @@ export function buildManualEditBridge(enabled: boolean): string {
   }
 
   function onPointerMove(ev){
+    if (previewEl){
+      // Shape placement: resize preview
+      var sx = Math.min(placementStartX, ev.clientX);
+      var sy = Math.min(placementStartY, ev.clientY);
+      var sw = Math.max(10, Math.abs(ev.clientX - placementStartX));
+      var sh = Math.max(10, Math.abs(ev.clientY - placementStartY));
+      if (activeTool === 'circle'){
+        var d = Math.max(sw, sh);
+        previewEl.style.borderRadius = '50%';
+        previewEl.style.left = sx + 'px';
+        previewEl.style.top = sy + 'px';
+        previewEl.style.width = d + 'px';
+        previewEl.style.height = d + 'px';
+      } else {
+        previewEl.style.left = sx + 'px';
+        previewEl.style.top = sy + 'px';
+        previewEl.style.width = sw + 'px';
+        previewEl.style.height = sh + 'px';
+      }
+      return;
+    }
     if (rubberband) { updateRubberband(ev.clientX, ev.clientY); return; }
     if (!dragState) return;
     // Rotation
@@ -989,6 +1048,30 @@ export function buildManualEditBridge(enabled: boolean): string {
   }
 
   function onPointerUp(ev){
+    if (previewEl){
+      var sx2 = Math.min(placementStartX, ev.clientX);
+      var sy2 = Math.min(placementStartY, ev.clientY);
+      var sw2 = Math.max(20, Math.abs(ev.clientX - placementStartX));
+      var sh2 = Math.max(20, Math.abs(ev.clientY - placementStartY));
+      if (previewEl.parentNode) previewEl.parentNode.removeChild(previewEl);
+      previewEl = null;
+      var ctEl2 = closestTarget(ev) || { parentElement: document.body };
+      var pId2 = ctEl2 && ctEl2.parentElement ? stableId(ctEl2) : '__body__';
+      var nId = 'od-n-' + Date.now();
+      var tag2 = 'div';
+      var html2 = '';
+      if (activeTool === 'rect'){
+        html2 = '<div></div>';
+      } else if (activeTool === 'circle'){
+        html2 = '<div style="border-radius:50%;"></div>';
+      } else if (activeTool === 'line'){
+        html2 = '<div style="background:#333;"></div>';
+        sh2 = '2px';
+      }
+      window.parent.postMessage({ type: 'od-edit-add-element', parentId: pId2, tag: tag2, left: Math.round(sx2) + 'px', top: Math.round(sy2) + 'px', width: Math.round(sw2) + 'px', height: Math.round(sh2) + 'px', html: html2, id: nId }, '*');
+      activeTool = null;
+      return;
+    }
     if (rubberband) { endRubberband(ev.clientX, ev.clientY); return; }
     if (!dragState) return;
     var el = dragState.el;

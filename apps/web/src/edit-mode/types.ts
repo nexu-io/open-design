@@ -87,6 +87,17 @@ export type ManualEditPatch =
   | { kind: 'set-full-source'; source: string }
   | {
       id: string;
+      kind: 'add-element';
+      parentId: string;
+      html: string;
+      tagName: string;
+      left: string;
+      top: string;
+      width: string;
+      height: string;
+    }
+  | {
+      id: string;
       kind: 'set-position';
       left: string;
       top: string;
@@ -152,6 +163,23 @@ export interface ManualEditStyleCommitMessage {
   value: string;
 }
 
+export interface ManualEditAddElementMessage {
+  type: 'od-edit-add-element';
+  id?: string;
+  parentId: string;
+  tag: string; // 'div' | 'span' | 'img'
+  left: string;
+  top: string;
+  width: string;
+  height: string;
+  html: string;
+}
+
+export interface ManualEditSetToolMessage {
+  type: 'od-edit-set-tool';
+  tool: string | null; // 'rect' | 'circle' | 'text' | 'line' | 'image' | null
+}
+
 export interface ManualEditPositionCommitMessage {
   type: 'od-edit-position-commit';
   id: string;
@@ -201,7 +229,9 @@ export type ManualEditBridgeMessage =
   | ManualEditMultiSelectMessage
   | ManualEditSetSelectedIdsMessage
   | ManualEditPositionCommitBatchMessage
-  | ManualEditStyleCommitMessage;
+  | ManualEditStyleCommitMessage
+  | ManualEditAddElementMessage
+  | ManualEditSetToolMessage;
 
 export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign', 'lineHeight', 'letterSpacing',
