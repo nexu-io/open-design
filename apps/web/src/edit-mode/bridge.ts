@@ -1713,67 +1713,42 @@ export function buildManualEditBridge(enabled: boolean): string {
     postHoverTarget(hoveredEl);
   }, true);
   window.addEventListener('resize', postTargets);
-  var hoverGuidesScrollScheduled = false;
-  var scheduleGuideFrame = window.requestAnimationFrame
-    ? window.requestAnimationFrame.bind(window)
-    : function(cb){ return setTimeout(cb, 16); };
-  // Guides are drawn in viewport (fixed) coordinates, so any scroll — page or
-  // inner container — invalidates them; re-measure the tracked hover element.
-  window.addEventListener('scroll', function(){
-    if (!enabled || hoverGuidesScrollScheduled) return;
-    hoverGuidesScrollScheduled = true;
-    scheduleGuideFrame(function(){
-      hoverGuidesScrollScheduled = false;
-      if (!lastHoverEl) return;
-      if (!lastHoverEl.isConnected) {
-        lastHoverEl = null;
-        clearGuidesLayer();
-        return;
-      }
-      renderHoverRelation(targetFrom(lastHoverEl, false));
-    });
-  }, true);
-  // Double-tap Command screenshot hotkey (edit mode only). Keyboard focus can
-  // live inside the sandboxed iframe, where the host's window listener never
-  // hears the keys — detect here and delegate the capture to the host. Two
-  // quick bare Meta taps trigger; any non-Meta key cancels (so ⌘C never
-  // fires), and holding BOTH Meta keys is the module-capture chord owned by
-  // the snapshot bridge, so it resets instead of triggering.
-  // Registered on documentElement, NOT window/document: the keyboard guard
-  // wraps window/document keydown listeners and suppresses them during inline
-  // text editing, which would silently eat the hotkey exactly when the user
-  // is editing a text element.
-  var screenshotTap = { at: 0, left: false, right: false };
-  document.documentElement.addEventListener('keydown', function(ev){
-    if (!enabled) return;
-    if (ev.key !== 'Meta') {
-      screenshotTap.at = 0;
-      return;
-    }
-    if (ev.code === 'MetaLeft') screenshotTap.left = true;
-    if (ev.code === 'MetaRight') screenshotTap.right = true;
-    if (ev.repeat) return;
-    if (screenshotTap.left && screenshotTap.right) {
-      screenshotTap.at = 0;
-      return;
-    }
-    var now = Date.now();
-    if (screenshotTap.at && now - screenshotTap.at <= 600) {
-      screenshotTap.at = 0;
-      window.parent.postMessage({ type: 'od-edit-screenshot-hotkey' }, '*');
-    } else {
-      screenshotTap.at = now;
+  // style-commit passthrough (z-index / opacity / box-shadow / transform panel)
+  // ── Z-index keyboard shortcuts ──
+  document.addEventListener('keydown', function(ev){
+    if (!enabled || !selectedElForHandles) return;
+    if (activeTextEdit) return;
+    if (!ev.ctrlKey && !ev.metaKey) return;
+    var el = selectedElForHandles;
+    var cur = parseInt(el.style.zIndex || '', 10) || 0;
+    if (ev.key === ']'){
+      ev.preventDefault();
+      el.style.zIndex = String(cur + 1);
+      commitStyle(selectedElForHandles, 'zIndex', String(cur + 1));
+    } else if (ev.key === '['){
+      ev.preventDefault();
+      el.style.zIndex = String(Math.max(0, cur - 1));
+      commitStyle(selectedElForHandles, 'zIndex', String(Math.max(0, cur - 1)));
+    } else if (ev.key === ']' && ev.shiftKey){
+      ev.preventDefault();
+      el.style.zIndex = '9999';
+      commitStyle(selectedElForHandles, 'zIndex', '9999');
     }
   }, true);
-  document.documentElement.addEventListener('keyup', function(ev){
-    if (ev.code === 'MetaLeft') screenshotTap.left = false;
-    if (ev.code === 'MetaRight') screenshotTap.right = false;
-  }, true);
-  window.addEventListener('blur', function(){
-    screenshotTap.at = 0;
-    screenshotTap.left = false;
-    screenshotTap.right = false;
-  });
+
+  function commitStyle(el, prop, value){
+    window.parent.postMessage({
+      type: 'od-edit-preview-style-applied',
+      id: stableId(el), version: (Date.now() % 100000), ok: true,
+    }, '*');
+    // Defer actual commit via set-style
+    var target = el ? targetFrom(el, false) : null;
+    if (!target) return;
+    var patch = { id: stableId(el), kind: 'set-style', styles: {} };
+    patch.styles[prop] = value;
+    window.parent.postMessage({ type: 'od-edit-style-commit', id: stableId(el), prop: prop, value: value }, '*');
+  }
+
   function bootEditBridge(){
     annotateBrandKitRuntimeTargets();
     postTargets();
