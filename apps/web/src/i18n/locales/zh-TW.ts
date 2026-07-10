@@ -3395,6 +3395,7 @@ export const zhTW: Dict = {
   'waiteam.customTeamNotInstalled': 'Not installed',
   'waiteam.customTeamCancel': 'Cancel',
   'waiteam.customTeamCreate': 'Create Team',
+  'waiteam.customTeamCycleMissing': 'Cycle mode requires a generator and a reviewer',
   'waiteam.teamTabRecommended': 'Recommended',
   'waiteam.teamTabCustom': 'Custom Team',
 

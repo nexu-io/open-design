@@ -1929,7 +1929,21 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                       className="mention-team-builder-action create"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => handleCreateCustomTeam()}
-                      disabled={teamBuilderAssignments.length === 0 || teamBuilderAssignments.some((a) => !a.role)}
+                      disabled={
+                        teamBuilderAssignments.length === 0 ||
+                        teamBuilderAssignments.some((a) => !a.role) ||
+                        (teamBuilderMode === 'cycle' && (
+                          !teamBuilderAssignments.some((a) => a.role === 'generator') ||
+                          !teamBuilderAssignments.some((a) => a.role === 'reviewer')
+                        ))
+                      }
+                      title={
+                        teamBuilderMode === 'cycle' &&
+                        (!teamBuilderAssignments.some((a) => a.role === 'generator') ||
+                         !teamBuilderAssignments.some((a) => a.role === 'reviewer'))
+                          ? t('waiteam.customTeamCycleMissing')
+                          : undefined
+                      }
                     >
                       {t('waiteam.customTeamCreate')}
                     </button>

@@ -4099,6 +4099,7 @@ export interface Dict {
   'waiteam.customTeamNotInstalled': string;
   'waiteam.customTeamCancel': string;
   'waiteam.customTeamCreate': string;
+  'waiteam.customTeamCycleMissing': string;
   'waiteam.teamTabRecommended': string;
   'waiteam.teamTabCustom': string;
 

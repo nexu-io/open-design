@@ -4571,6 +4571,7 @@ export const zhCN: Dict = {
   "waiteam.customTeamNotInstalled": "未安装",
   "waiteam.customTeamCancel": "取消",
   "waiteam.customTeamCreate": "创建团队",
+  "waiteam.customTeamCycleMissing": "循环模式需要指定生成者和评审者",
   "waiteam.teamTabRecommended": "推荐组队",
   "waiteam.teamTabCustom": "自定义组队",
 };
