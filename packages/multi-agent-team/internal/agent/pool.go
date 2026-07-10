@@ -586,7 +586,8 @@ func (p *Pool) WaitResult(agentID string, timeout time.Duration) (*TaskResult, e
 
 // WaitResultContext 等待 Agent 任务结果，支持通过 context 取消等待。
 // 当 ctx 被取消（如并行调度器的 proceed signal 触发 cancel）时，
-// 立即返回 nil，避免调用者阻塞在已在执行的 agent 上。
+// 优先检查 replyCh 中是否已有已完成的结果，避免因 select 随机性
+// 导致已完成结果在 ctx.Done() 竞态下丢失（partial-results 场景）。
 func (p *Pool) WaitResultContext(ctx context.Context, agentID string, timeout time.Duration) (*TaskResult, error) {
 	p.mu.RLock()
 	ma, ok := p.agents[agentID]
@@ -600,9 +601,23 @@ func (p *Pool) WaitResultContext(ctx context.Context, agentID string, timeout ti
 	case result := <-ma.replyCh:
 		return result, nil
 	case <-ctx.Done():
-		return nil, fmt.Errorf("wait cancelled for agent %s: %w", agentID, ctx.Err())
+		// ctx 取消时优先排空 replyCh：agent 可能刚好在 cancel 瞬间
+		// 将结果写入了 replyCh，此时 Go select 会随机选分支，
+		// 不加非阻塞检查可能丢失已完成的结果。
+		select {
+		case result := <-ma.replyCh:
+			return result, nil
+		default:
+			return nil, fmt.Errorf("wait cancelled for agent %s: %w", agentID, ctx.Err())
+		}
 	case <-time.After(timeout):
-		return nil, fmt.Errorf("timeout waiting for agent %s result", agentID)
+		// 超时时同样优先检查 replyCh，避免丢失恰好到达的结果
+		select {
+		case result := <-ma.replyCh:
+			return result, nil
+		default:
+			return nil, fmt.Errorf("timeout waiting for agent %s result", agentID)
+		}
 	}
 }
 
