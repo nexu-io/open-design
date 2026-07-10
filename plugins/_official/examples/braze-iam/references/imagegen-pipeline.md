@@ -59,19 +59,20 @@
 
    exit 3(알파 없음)이면 크로마키 폴백을 **이 서브에이전트 안에서 1회** 수행:
    같은 프롬프트의 Background 라인을 `solid pure green background (#00FF00),
-   object does not touch the frame edges`로 교체해 재생성 →
-   `python3 <스킬 폴더>/scripts/cut_character.py {cwd}/{out_name}.chroma.png {cwd}/{out_name} --color "#00FF00"`.
+   object does not touch the frame edges`로 교체해 재생성한다. 이때 재생성
+   지시문의 복사 마감 문구는 `생성된 이미지를 {cwd}/{out_name}.chroma.png 로
+   복사하라` — 최종 경로 `{cwd}/{out_name}` 를 덮어쓰지 않는다. 이어서
+   `python3 <스킬 폴더>/scripts/cut_character.py {cwd}/{out_name}.chroma.png {cwd}/{out_name} --color "#00FF00"`
+   로 키잉하고, 키잉 성공 후 중간산출 `{cwd}/{out_name}.chroma.png` 를
+   삭제한다(assets/ 글롭에 크로마 원본이 남으면 검수·미디어 업로드로 누출).
 4. 반환(1~2줄만): `OK {out_name}` 또는 `FAIL {out_name} — [사유 1줄]`.
    codex stdout 원문은 반환에 넣지 않는다.
 
 ## 투명 배경 계약
 
-기본 경로 = 투명 직생성(스캐폴드 Background 라인). 서브에이전트가 알파 검증으로
-실효를 확인하고, 미지원 산출이면 크로마키 폴백이 자동 발동한다(위 임무 3).
-<!-- Task 3 판정 False 시 이 문단으로 교체:
-기본 경로 = 크로마키 생성 → cut_character.py 키잉 (gpt-5.5 투명 직생성 미지원
-실측 2026-07-10). 스캐폴드 Background 라인을 항상 크로마키 문구로 조립하고,
-서브에이전트 임무 3의 키잉을 상시 수행한다. -->
+기본 경로 = 투명 직생성(스캐폴드 Background 라인, gpt-5.5 투명 직생성 실측 확인
+2026-07-10). 서브에이전트가 알파 검증으로 실효를 확인하고, 미지원 산출이면
+크로마키 폴백이 자동 발동한다(위 임무 3).
 
 ## 프롬프트 스캐폴드 (메인이 조립)
 

@@ -541,7 +541,7 @@ od braze produce <braze_message_id> --variant <uuid-B> --artifact <path/to/varia
 
 ### 종료 조건 (variant별)
 
-1. **자동 종료**: 검수 게이트 P0 = 0건 (재검수 서브에이전트 판정) → 해당 variant 완료
+1. **자동 종료**: 검수 게이트 P0 0건 그리고 총점 ≥80 (재검수 서브에이전트 판정) → 해당 variant 완료
 2. **반복 한계 가드**: `MAX_ITERATIONS = 3`. P0 남아도 더 이상 반복하지 않고 발송 보류 권고 처리
 3. 두 variant 모두 완료 시 Step 7 진입
 
