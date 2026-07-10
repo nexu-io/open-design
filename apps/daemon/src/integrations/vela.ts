@@ -300,6 +300,10 @@ export function mergeVelaEnv(
 }
 
 function configDir(): string {
+  const amrHome = process.env.AMR_HOME?.trim();
+  if (amrHome === '~') return homedir();
+  if (amrHome?.startsWith('~/')) return path.join(homedir(), amrHome.slice(2));
+  if (amrHome) return amrHome;
   return path.join(homedir(), '.amr');
 }
 

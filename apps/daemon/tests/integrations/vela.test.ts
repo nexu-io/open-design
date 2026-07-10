@@ -20,6 +20,7 @@ import {
   clearAllVelaLiveAccounts,
   forgetVelaLogin,
   peekVelaLiveAccount,
+  readVelaControlApiContext,
   readVelaCredentialRevision,
   readVelaLoginStatus,
   resolveAmrProfile,
@@ -32,6 +33,7 @@ import {
 } from '../../src/integrations/vela.js';
 
 let originalHome: string | undefined;
+let originalAmrHome: string | undefined;
 let tmpHome: string;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FAKE_VELA = path.resolve(HERE, '..', 'fixtures', 'fake-vela.mjs');
@@ -54,8 +56,10 @@ function writeLegacyVelaConfig(payload: unknown): string {
 
 beforeEach(() => {
   originalHome = process.env.HOME;
+  originalAmrHome = process.env.AMR_HOME;
   tmpHome = mkdtempSync(path.join(tmpdir(), 'od-vela-test-'));
   process.env.HOME = tmpHome;
+  delete process.env.AMR_HOME;
   delete process.env.OPEN_DESIGN_AMR_PROFILE;
   delete process.env.VELA_PROFILE;
 });
@@ -63,6 +67,8 @@ beforeEach(() => {
 afterEach(() => {
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
+  if (originalAmrHome === undefined) delete process.env.AMR_HOME;
+  else process.env.AMR_HOME = originalAmrHome;
   rmSync(tmpHome, { recursive: true, force: true });
 });
 
@@ -230,6 +236,36 @@ describe('readVelaLoginStatus', () => {
     // showing up in HTTP responses to the local web.
     expect(JSON.stringify(status)).not.toContain('rt-secret-abc');
     expect(JSON.stringify(status)).not.toContain('ck-secret');
+  });
+
+  it('reads the Vela CLI config from AMR_HOME when set', () => {
+    const amrHome = path.join(tmpHome, 'custom-amr-home');
+    mkdirSync(amrHome, { recursive: true });
+    writeFileSync(
+      path.join(amrHome, 'config.json'),
+      JSON.stringify({
+        profiles: {
+          local: {
+            runtimeKey: 'rt-custom',
+            controlKey: 'vela_ctrl_custom',
+            apiUrl: 'http://127.0.0.1:18082',
+            user: { id: 'u-custom', email: 'custom@example.com' },
+          },
+        },
+      }),
+      'utf8',
+    );
+    process.env.AMR_HOME = amrHome;
+
+    const status = readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    expect(status.loggedIn).toBe(true);
+    expect(status.configPath).toBe(path.join(amrHome, 'config.json'));
+    expect(status.user?.email).toBe('custom@example.com');
+    expect(readVelaControlApiContext({ OPEN_DESIGN_AMR_PROFILE: 'local' })).toMatchObject({
+      profile: 'local',
+      apiUrl: 'http://127.0.0.1:18082',
+      controlKey: 'vela_ctrl_custom',
+    });
   });
 
   it('returns loggedIn=false when the active profile is present but lacks runtimeKey', () => {
