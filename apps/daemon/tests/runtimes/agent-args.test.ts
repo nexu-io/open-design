@@ -131,6 +131,8 @@ test('cline uses headless auto-approve mode with cwd, model, and thinking option
   assert.equal(cline.streamFormat, 'plain');
   assert.equal(cline.promptViaStdin, true);
   assert.equal(cline.maxPromptArgBytes, undefined);
+  assert.equal(cline.installUrl, 'https://docs.cline.bot/getting-started/installing-cline');
+  assert.equal(cline.docsUrl, 'https://docs.cline.bot/usage/cli-overview');
   assert.deepEqual(args, [
     '--auto-approve',
     'true',

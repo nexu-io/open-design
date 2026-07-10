@@ -34,4 +34,6 @@ export const clineAgentDef = {
   },
   promptViaStdin: true,
   streamFormat: 'plain',
+  installUrl: 'https://docs.cline.bot/getting-started/installing-cline',
+  docsUrl: 'https://docs.cline.bot/usage/cli-overview',
 } satisfies RuntimeAgentDef;
