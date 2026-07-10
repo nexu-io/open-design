@@ -6554,6 +6554,8 @@ function HtmlViewer({
   }, [boardImages]);
   const [commentSavedToast, setCommentSavedToast] = useState<string | null>(null);
   const [templateSavedToast, setTemplateSavedToast] = useState<string | null>(null);
+  const [manualEditSavedToast, setManualEditSavedToast] = useState<{ id: number; message: string } | null>(null);
+  const manualEditSavedToastIdRef = useRef(0);
   const [deploySavedToast, setDeploySavedToast] = useState<{ message: string; details: string } | null>(null);
   const [deployActionToast, setDeployActionToast] = useState<string | null>(null);
   const [versionRestoredToast, setVersionRestoredToast] = useState<{ id: number; message: string } | null>(null);
@@ -8423,6 +8425,9 @@ function HtmlViewer({
   }
 
   async function saveManualEditPanelDraft() {
+    // A new save attempt must not leave a previous success visible while the
+    // next persistence result is still pending.
+    setManualEditSavedToast(null);
     const selectedTarget = selectedManualEditTarget;
     const contentPatchBeforeText = selectedTarget
       ? manualEditContentPatchForDraft(selectedTarget, manualEditDraft, sourceRef.current ?? '')
@@ -8434,13 +8439,25 @@ function HtmlViewer({
     const inlineTextCommitted =
       hadTextCommitInFlight ||
       manualEditTextCommitSequenceRef.current !== textCommitSequenceBeforeSave;
+    let didPersist = inlineTextCommitted;
     if (selectedTarget && (panelContentChanged || !inlineTextCommitted)) {
       const base = sourceRef.current ?? '';
       const contentPatch = manualEditContentPatchForDraft(selectedTarget, manualEditDraft, base);
-      if (contentPatch && !(await applyManualEdit(contentPatch.patch, contentPatch.label))) return;
+      if (contentPatch) {
+        if (!(await applyManualEdit(contentPatch.patch, contentPatch.label))) return;
+        didPersist = true;
+      }
     }
+    const hadPendingStyleSave = Boolean(manualEditPendingStyleRef.current);
     const ok = await flushManualEditStyleSave();
     if (!ok) return;
+    if (didPersist || hadPendingStyleSave) {
+      manualEditSavedToastIdRef.current += 1;
+      setManualEditSavedToast({
+        id: manualEditSavedToastIdRef.current,
+        message: t('manualEdit.saved'),
+      });
+    }
     if (selectedManualEditTarget) void clearManualEditTargetSelection();
     else setManualEditPageStylesOpen(false);
   }
@@ -12106,6 +12123,23 @@ function HtmlViewer({
                   />
                 </div>
               ) : null}
+              {manualEditSavedToast
+                ? createPortal(
+                    <Toast
+                      key={manualEditSavedToast.id}
+                      message={manualEditSavedToast.message}
+                      tone="success"
+                      ttlMs={2200}
+                      placement="top"
+                      onDismiss={() => {
+                        setManualEditSavedToast((current) => (
+                          current?.id === manualEditSavedToast.id ? null : current
+                        ));
+                      }}
+                    />,
+                    document.body,
+                  )
+                : null}
               {templateSavedToast ? (
                 <div className="comment-toast-anchor">
                   <Toast

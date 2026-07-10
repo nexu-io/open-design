@@ -2711,6 +2711,7 @@ export const ko: Dict = {
   'manualEdit.applyAttributes': '속성 적용',
   'manualEdit.applyHtml': 'HTML 적용',
   'manualEdit.applySource': '소스 적용',
+  'manualEdit.saved': '저장됨',
   'manualEdit.invalidAttributes': '유효하지 않은 속성 JSON입니다.',
   'manualEdit.changes': '변경 사항',
   'manualEdit.undo': '실행 취소',

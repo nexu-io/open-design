@@ -2711,6 +2711,7 @@ export const de: Dict = {
   'manualEdit.applyAttributes': 'Attribute übernehmen',
   'manualEdit.applyHtml': 'HTML übernehmen',
   'manualEdit.applySource': 'Quelle übernehmen',
+  'manualEdit.saved': 'Gespeichert',
   'manualEdit.invalidAttributes': 'Ungültiges Attribute-JSON.',
   'manualEdit.changes': 'Änderungen',
   'manualEdit.undo': 'Rückgängig',

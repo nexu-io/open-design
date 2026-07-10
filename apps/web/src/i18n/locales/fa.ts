@@ -2711,6 +2711,7 @@ export const fa: Dict = {
   'manualEdit.applyAttributes': 'اعمال ویژگی‌ها',
   'manualEdit.applyHtml': 'اعمال HTML',
   'manualEdit.applySource': 'اعمال منبع',
+  'manualEdit.saved': 'ذخیره شد',
   'manualEdit.invalidAttributes': 'JSON ویژگی‌ها نامعتبر است.',
   'manualEdit.changes': 'تغییرات',
   'manualEdit.undo': 'واگرد',

@@ -2711,6 +2711,7 @@ export const ru: Dict = {
   'manualEdit.applyAttributes': 'Применить атрибуты',
   'manualEdit.applyHtml': 'Применить HTML',
   'manualEdit.applySource': 'Применить исходный код',
+  'manualEdit.saved': 'Сохранено',
   'manualEdit.invalidAttributes': 'Некорректный JSON атрибутов.',
   'manualEdit.changes': 'Изменения',
   'manualEdit.undo': 'Отменить',

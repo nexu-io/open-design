@@ -3489,6 +3489,7 @@ export interface Dict {
   'manualEdit.applyAttributes': string;
   'manualEdit.applyHtml': string;
   'manualEdit.applySource': string;
+  'manualEdit.saved': string;
   'manualEdit.invalidAttributes': string;
   'manualEdit.changes': string;
   'manualEdit.undo': string;

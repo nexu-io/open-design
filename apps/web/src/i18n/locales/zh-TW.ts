@@ -2934,6 +2934,7 @@ export const zhTW: Dict = {
   "manualEdit.applyAttributes": "套用屬性",
   "manualEdit.applyHtml": "套用 HTML",
   "manualEdit.applySource": "套用原始碼",
+  "manualEdit.saved": "已儲存",
   "manualEdit.invalidAttributes": "屬性 JSON 無效。",
   "manualEdit.changes": "變更",
   "manualEdit.undo": "復原",

@@ -2711,6 +2711,7 @@ export const hu: Dict = {
   'manualEdit.applyAttributes': 'Attribútumok alkalmazása',
   'manualEdit.applyHtml': 'HTML alkalmazása',
   'manualEdit.applySource': 'Forrás alkalmazása',
+  'manualEdit.saved': 'Mentve',
   'manualEdit.invalidAttributes': 'Érvénytelen attribútumok JSON.',
   'manualEdit.changes': 'Módosítások',
   'manualEdit.undo': 'Visszavonás',

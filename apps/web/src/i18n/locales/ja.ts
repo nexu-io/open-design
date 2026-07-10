@@ -2711,6 +2711,7 @@ export const ja: Dict = {
   'manualEdit.applyAttributes': '属性を適用',
   'manualEdit.applyHtml': 'HTML を適用',
   'manualEdit.applySource': 'ソースを適用',
+  'manualEdit.saved': '保存済み',
   'manualEdit.invalidAttributes': '属性 JSON が無効です。',
   'manualEdit.changes': '変更',
   'manualEdit.undo': '元に戻す',

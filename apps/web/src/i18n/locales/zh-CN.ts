@@ -2925,6 +2925,7 @@ export const zhCN: Dict = {
   "manualEdit.applyAttributes": "应用属性",
   "manualEdit.applyHtml": "应用 HTML",
   "manualEdit.applySource": "应用源码",
+  "manualEdit.saved": "已保存",
   "manualEdit.invalidAttributes": "属性 JSON 格式无效。",
   "manualEdit.changes": "修改记录",
   "manualEdit.undo": "撤销",

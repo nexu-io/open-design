@@ -2711,6 +2711,7 @@ export const tr: Dict = {
   'manualEdit.applyAttributes': 'Öznitelikleri Uygula',
   'manualEdit.applyHtml': 'HTML Uygula',
   'manualEdit.applySource': 'Kaynağı Uygula',
+  'manualEdit.saved': 'Kaydedildi',
   'manualEdit.invalidAttributes': 'Geçersiz öznitelikler JSON\'u.',
   'manualEdit.changes': 'Değişiklikler',
   'manualEdit.undo': 'Geri al',

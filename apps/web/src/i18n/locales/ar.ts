@@ -2711,6 +2711,7 @@ export const ar: Dict = {
   'manualEdit.applyAttributes': 'تطبيق السمات',
   'manualEdit.applyHtml': 'تطبيق HTML',
   'manualEdit.applySource': 'تطبيق المصدر',
+  'manualEdit.saved': 'تم الحفظ',
   'manualEdit.invalidAttributes': 'السمات بصيغة JSON غير صالحة.',
   'manualEdit.changes': 'التغييرات',
   'manualEdit.undo': 'تراجع',

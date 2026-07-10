@@ -2711,6 +2711,7 @@ export const uk: Dict = {
   'manualEdit.applyAttributes': 'Застосувати атрибути',
   'manualEdit.applyHtml': 'Застосувати HTML',
   'manualEdit.applySource': 'Застосувати джерело',
+  'manualEdit.saved': 'Збережено',
   'manualEdit.invalidAttributes': 'Некоректний JSON атрибутів.',
   'manualEdit.changes': 'Зміни',
   'manualEdit.undo': 'Скасувати',

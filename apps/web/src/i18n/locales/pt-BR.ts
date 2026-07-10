@@ -2711,6 +2711,7 @@ export const ptBR: Dict = {
   'manualEdit.applyAttributes': 'Aplicar atributos',
   'manualEdit.applyHtml': 'Aplicar HTML',
   'manualEdit.applySource': 'Aplicar código-fonte',
+  'manualEdit.saved': 'Salvo',
   'manualEdit.invalidAttributes': 'JSON de atributos inválido.',
   'manualEdit.changes': 'Alterações',
   'manualEdit.undo': 'Desfazer',

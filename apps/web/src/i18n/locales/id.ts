@@ -2711,6 +2711,7 @@ export const id: Dict = {
   'manualEdit.applyAttributes': 'Terapkan atribut',
   'manualEdit.applyHtml': 'Terapkan HTML',
   'manualEdit.applySource': 'Terapkan sumber',
+  'manualEdit.saved': 'Tersimpan',
   'manualEdit.invalidAttributes': 'JSON atribut tidak valid.',
   'manualEdit.changes': 'Perubahan',
   'manualEdit.undo': 'Undo',

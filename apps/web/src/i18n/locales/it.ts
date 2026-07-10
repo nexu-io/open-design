@@ -2711,6 +2711,7 @@ export const it: Dict = {
   'manualEdit.applyAttributes': 'Applica attributi',
   'manualEdit.applyHtml': 'Applica HTML',
   'manualEdit.applySource': 'Applica sorgente',
+  'manualEdit.saved': 'Salvato',
   'manualEdit.invalidAttributes': 'JSON degli attributi non valido.',
   'manualEdit.changes': 'Modifiche',
   'manualEdit.undo': 'Annulla',

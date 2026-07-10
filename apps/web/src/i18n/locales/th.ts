@@ -2711,6 +2711,7 @@ export const th: Dict = {
   'manualEdit.applyAttributes': 'รับพิกัดเข้า',
   'manualEdit.applyHtml': 'ตั้งต้น HTML',
   'manualEdit.applySource': 'รับโค้ดรันระบบ',
+  'manualEdit.saved': 'บันทึกแล้ว',
   'manualEdit.invalidAttributes': 'JSON แอททริบิวต์ใช้งานจริงไม่ได้',
   'manualEdit.changes': 'จุดถูกแก้แล้ว',
   'manualEdit.undo': 'กลับไปเก่า',

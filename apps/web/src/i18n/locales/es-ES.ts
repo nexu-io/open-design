@@ -2711,6 +2711,7 @@ export const esES: Dict = {
   'manualEdit.applyAttributes': 'Aplicar atributos',
   'manualEdit.applyHtml': 'Aplicar HTML',
   'manualEdit.applySource': 'Aplicar código fuente',
+  'manualEdit.saved': 'Guardado',
   'manualEdit.invalidAttributes': 'JSON de atributos no válido.',
   'manualEdit.changes': 'Cambios',
   'manualEdit.undo': 'Deshacer',

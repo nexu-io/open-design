@@ -62,6 +62,126 @@ afterEach(() => {
 });
 
 describe('FileViewer manual edit history regressions', () => {
+  it('shows success feedback only after a manual edit save is persisted', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1></body></html>';
+    let saveResolve!: (value: Response) => void;
+    const saveResponse = new Promise<Response>((resolve) => {
+      saveResolve = resolve;
+    });
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/deployments')) {
+        return new Response(JSON.stringify({ deployments: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        return saveResponse;
+      }
+      if (url.includes('/api/projects/project-1/raw/preview.html')) {
+        return new Response(initialSource, { status: 200 });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    await selectManualEditTarget();
+
+    act(() => {
+      panelState.props?.onSaveDraft();
+    });
+    await waitFor(() => expect(screen.queryByTestId('mock-manual-edit-panel')).toBeNull());
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(fetchMock.mock.calls.filter(([input, init]) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      return url.includes('/api/projects/project-1/files') && init?.method === 'POST';
+    })).toHaveLength(0);
+
+    await selectManualEditTarget();
+    act(() => {
+      const draft = panelState.props?.draft;
+      if (!draft) throw new Error('Manual edit draft not found');
+      panelState.props?.onDraftChange({ ...draft, text: 'Updated hero' });
+    });
+    await waitFor(() => expect(panelState.props?.draft.text).toBe('Updated hero'));
+
+    act(() => {
+      panelState.props?.onSaveDraft();
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/projects/project-1/files'),
+      expect.objectContaining({ method: 'POST' }),
+    ));
+    expect(screen.queryByRole('status')).toBeNull();
+
+    await act(async () => {
+      saveResolve(new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+      await saveResponse;
+    });
+
+    const status = await screen.findByRole('status');
+    expect(status.textContent).toContain('Saved');
+    expect(status.classList.contains('placement-top')).toBe(true);
+    expect(status.parentElement).toBe(document.body);
+  });
+
+  it('does not show success feedback when a manual edit save fails', async () => {
+    const initialSource = '<!doctype html><html><body><h1 data-od-id="hero">Hero</h1></body></html>';
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/deployments')) {
+        return new Response(JSON.stringify({ deployments: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ error: 'Write failed' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/raw/preview.html')) {
+        return new Response(initialSource, { status: 200 });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={initialSource}
+      />,
+    );
+
+    clickManualTool('manual-edit-mode-toggle');
+    await selectManualEditTarget();
+    act(() => {
+      const draft = panelState.props?.draft;
+      if (!draft) throw new Error('Manual edit draft not found');
+      panelState.props?.onDraftChange({ ...draft, text: 'Updated hero' });
+    });
+    await waitFor(() => expect(panelState.props?.draft.text).toBe('Updated hero'));
+
+    act(() => {
+      panelState.props?.onSaveDraft();
+    });
+
+    await waitFor(() => expect(panelState.props?.error).toBeTruthy());
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
   it('flushes pending style edits before activating draw mode from manual edit', async () => {
     const initialSource = '<!doctype html><html><body><h1 data-od-id="hero" style="color: #111111">Hero</h1></body></html>';
     let saveResolve!: (value: Response) => void;
