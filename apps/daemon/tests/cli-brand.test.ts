@@ -177,7 +177,7 @@ describe('od brand CLI', () => {
     expect(result.code).toBe(0);
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0]).toMatchObject({ method: 'POST', url: '/api/brands' });
-    expect(JSON.parse(stub.requests[0].body)).toEqual({
+    expect(JSON.parse(stub.requests[0]!.body)).toEqual({
       title: 'Acme',
       id: 'acme',
       presentation: { subtitle: 'B2B SaaS', tagline: 'Ship faster' },
@@ -203,7 +203,7 @@ describe('od brand CLI', () => {
     expect(result.code).toBe(0);
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0]).toMatchObject({ method: 'PUT', url: '/api/brands/acme' });
-    expect(JSON.parse(stub.requests[0].body)).toEqual({
+    expect(JSON.parse(stub.requests[0]!.body)).toEqual({
       title: 'Acme Corp',
       presentation: { subtitle: 'New sub' },
     });
@@ -217,7 +217,7 @@ describe('od brand CLI', () => {
       { stdin: '{"tagline":"From stdin"}' },
     );
     expect(result.code).toBe(0);
-    expect(JSON.parse(stub.requests[0].body)).toEqual({
+    expect(JSON.parse(stub.requests[0]!.body)).toEqual({
       presentation: { tagline: 'From stdin' },
     });
   });
@@ -239,7 +239,7 @@ describe('od brand CLI', () => {
     expect(result.code).toBe(0);
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0]).toMatchObject({ method: 'PUT', url: '/api/brands/acme/docs/core' });
-    expect(JSON.parse(stub.requests[0].body)).toEqual({ body: '# Acme\n\nBrand core body.\n' });
+    expect(JSON.parse(stub.requests[0]!.body)).toEqual({ body: '# Acme\n\nBrand core body.\n' });
     expect(result.stdout).toContain('brand.md');
   });
 
@@ -250,7 +250,7 @@ describe('od brand CLI', () => {
     );
     expect(result.code).toBe(0);
     expect(stub.requests[0]).toMatchObject({ method: 'PUT', url: '/api/brands/acme/docs/blog' });
-    expect(JSON.parse(stub.requests[0].body)).toEqual({ body: 'Blog channel guidance.' });
+    expect(JSON.parse(stub.requests[0]!.body)).toEqual({ body: 'Blog channel guidance.' });
   });
 
   it('doc set without --prompt-file exits 2 without a request', async () => {
@@ -270,7 +270,7 @@ describe('od brand CLI', () => {
     ]);
     expect(result.code).toBe(0);
     expect(stub.requests[0]).toMatchObject({ method: 'POST', url: '/api/brands/acme/deliverables' });
-    expect(JSON.parse(stub.requests[0].body)).toEqual({
+    expect(JSON.parse(stub.requests[0]!.body)).toEqual({
       key: 'cardnews',
       label: 'Card News',
       designSystem: 'toss',
@@ -311,9 +311,9 @@ describe('od brand CLI', () => {
       url: '/api/brands/acme/assets?role=icon',
     });
     // multipart body carries the file part under the daemon's expected field name
-    expect(stub.requests[0].body).toContain('name="file"');
-    expect(stub.requests[0].body).toContain('filename="icon.png"');
-    expect(stub.requests[0].body).toContain('Content-Type: image/png');
+    expect(stub.requests[0]!.body).toContain('name="file"');
+    expect(stub.requests[0]!.body).toContain('filename="icon.png"');
+    expect(stub.requests[0]!.body).toContain('Content-Type: image/png');
     expect(JSON.parse(result.stdout)).toEqual({
       path: 'assets/icon.png',
       url: '/api/brands/acme/assets/icon.png',
