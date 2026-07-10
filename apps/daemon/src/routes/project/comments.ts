@@ -101,10 +101,26 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
     try {
       // Server-authoritative author: stamp the current member id so the stored
       // (and pushed) comment carries who wrote it, rather than trusting the body.
-      // This also makes the upsert author-scoped — a caller can only create or
-      // edit their OWN comment on an element, never overwrite another member's.
+      // New comments do not use a natural element key; editing requires an id
+      // and is author-only.
       const body = { ...(req.body || {}) };
       const authorMemberId = await resolveCaller(req);
+      const requestedId = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : '';
+      if (requestedId) {
+        const existing = getPreviewComment(
+          db,
+          req.params.id,
+          req.params.cid,
+          requestedId,
+        ) as PreviewComment | null;
+        if (!existing) {
+          return res.status(404).json({ error: 'comment not found' });
+        }
+        const existingAuthor = existing.authorMemberId ?? null;
+        if (authorMemberId && existingAuthor && existingAuthor !== authorMemberId) {
+          return res.status(403).json({ error: 'not permitted' });
+        }
+      }
       if (authorMemberId) body.authorMemberId = authorMemberId;
       const comment = upsertPreviewComment(db, req.params.id, req.params.cid, body);
       updateProject(db, req.params.id, {});

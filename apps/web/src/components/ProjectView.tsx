@@ -3414,7 +3414,13 @@ export function ProjectView({
   }, [projectCollab.enabled, activeConversationId, refreshPreviewComments]);
 
   const savePreviewComment = useCallback(
-    async (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images: File[] = []) => {
+    async (
+      target: PreviewCommentTarget,
+      note: string,
+      attachAfterSave: boolean,
+      images: File[] = [],
+      commentId?: string,
+    ) => {
       if (!activeConversationId) return null;
       // Upload any attached images first so the saved comment carries durable
       // file paths — this is what lets the comment list / re-opened popover
@@ -3425,11 +3431,12 @@ export function ProjectView({
         if (result.uploaded.length !== images.length) return null;
         uploadedAttachments = result.uploaded.map((file) => ({ path: file.path, name: file.name }));
       }
-      const existing = previewComments.find(
-        (comment) => comment.filePath === target.filePath && comment.elementId === target.elementId,
-      );
+      const existing = commentId
+        ? previewComments.find((comment) => comment.id === commentId)
+        : undefined;
       const attachments = mergePreviewCommentAttachments(existing?.attachments, uploadedAttachments);
       const saved = await upsertPreviewComment(project.id, activeConversationId, {
+        ...(commentId ? { id: commentId } : {}),
         target,
         note,
         ...(attachments.length > 0 ? { attachments } : {}),

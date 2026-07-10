@@ -165,7 +165,6 @@ function migrate(db: SqliteDb): void {
       anchored_version INTEGER,
       author_member_id TEXT,
       last_good_position_json TEXT,
-      UNIQUE(project_id, conversation_id, file_path, element_id, slide_key, author_member_id),
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
       FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
     );
@@ -353,11 +352,9 @@ function migrate(db: SqliteDb): void {
   if (!previewCommentAnchorCols.some((c: DbRow) => c.name === 'last_good_position_json')) {
     db.exec(`ALTER TABLE preview_comments ADD COLUMN last_good_position_json TEXT`);
   }
-  // Multi-author coexistence: fold author_member_id into the natural unique key so
-  // two members can comment on the same element without one upsert clobbering the
-  // other (see migratePreviewCommentsAuthorUnique). Runs AFTER the anchor/author
-  // columns exist so the rebuild carries them.
-  migratePreviewCommentsAuthorUnique(db);
+  // Multiple comments per element: edit by explicit id; creating another note
+  // on the same element inserts a new row.
+  migratePreviewCommentsAllowMultiplePerElement(db);
   const deploymentCols = db.prepare(`PRAGMA table_info(deployments)`).all() as DbRow[];
   if (!deploymentCols.some((c: DbRow) => c.name === 'status')) {
     db.exec(`ALTER TABLE deployments ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'`);
@@ -441,7 +438,6 @@ function migratePreviewCommentsSlideKey(db: SqliteDb): void {
       status TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
-      UNIQUE(project_id, conversation_id, file_path, element_id, slide_key),
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
       FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
     );
@@ -463,31 +459,22 @@ function migratePreviewCommentsSlideKey(db: SqliteDb): void {
 }
 
 /**
- * Team-collaboration multi-author coexistence: rebuild `preview_comments` so
- * `author_member_id` is part of the natural unique key. Without it, the key was
- * one-comment-per-(conversation, element): after a member's comment was synced
- * (re-homed) into a local conversation, the local user commenting on the SAME
- * element would upsert-clobber the synced one, and the synced-in INSERT would
- * collide and be dropped — so same-element comments from two members could not
- * coexist. Folding the author into the key lets each member own their own row.
+ * Rebuild `preview_comments` so comments are keyed by `id` only.
  *
- * Idempotent + lossless: no-op once the key already carries author_member_id;
- * otherwise a DROP/CREATE/INSERT-SELECT rebuild that preserves every row and
- * column (including the anchor/author columns, which is why this runs AFTER they
- * are added). NULL authors (single-user / off-team comments) stay distinct under
- * SQLite's NULL-in-unique semantics, which is why upsert/merge match the author
- * with `IS` and reuse the row id rather than relying on the constraint.
+ * Older schemas had a natural unique key on project/conversation/file/element/
+ * slide/author. That prevented multiple notes by the same member on one
+ * element. Editing now requires the caller to send an explicit comment id.
  */
-function migratePreviewCommentsAuthorUnique(db: SqliteDb): void {
+function migratePreviewCommentsAllowMultiplePerElement(db: SqliteDb): void {
   const table = db
     .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'preview_comments'`)
     .get() as DbRow | undefined;
   const tableSql = String(table?.sql ?? '');
-  const hasAuthorInUnique = /UNIQUE\s*\([^)]*\bauthor_member_id\b[^)]*\)/i.test(tableSql);
-  if (hasAuthorInUnique) return;
+  const hasNaturalUnique = /UNIQUE\s*\([^)]*\bproject_id\b[^)]*\belement_id\b[^)]*\)/i.test(tableSql);
+  if (!hasNaturalUnique) return;
 
   db.exec(`
-    CREATE TABLE preview_comments_author_next (
+    CREATE TABLE preview_comments_multi_next (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
       conversation_id TEXT NOT NULL,
@@ -513,12 +500,11 @@ function migratePreviewCommentsAuthorUnique(db: SqliteDb): void {
       anchored_version INTEGER,
       author_member_id TEXT,
       last_good_position_json TEXT,
-      UNIQUE(project_id, conversation_id, file_path, element_id, slide_key, author_member_id),
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
       FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
     );
 
-    INSERT INTO preview_comments_author_next
+    INSERT INTO preview_comments_multi_next
       (id, project_id, conversation_id, file_path, element_id, selector, label,
        text, position_json, html_hint, selection_kind, member_count, pod_members_json,
        style_json, attachments_json, slide_index, slide_key, note, status, created_at, updated_at,
@@ -530,7 +516,7 @@ function migratePreviewCommentsAuthorUnique(db: SqliteDb): void {
       FROM preview_comments;
 
     DROP TABLE preview_comments;
-    ALTER TABLE preview_comments_author_next RENAME TO preview_comments;
+    ALTER TABLE preview_comments_multi_next RENAME TO preview_comments;
     CREATE INDEX IF NOT EXISTS idx_preview_comments_conversation
       ON preview_comments(project_id, conversation_id, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_preview_comments_conversation_created
@@ -1760,20 +1746,21 @@ export function upsertPreviewComment(db: SqliteDb, projectId: string, conversati
     typeof input?.authorMemberId === 'string' && input.authorMemberId.trim()
       ? input.authorMemberId.trim()
       : null;
+  const requestedId =
+    typeof input?.id === 'string' && input.id.trim()
+      ? input.id.trim()
+      : null;
   const now = Date.now();
-  // Match this author's OWN comment on the element (NULL-safe `IS` so a
-  // single-user / off-team NULL author still matches its own row). Folding the
-  // author into the lookup means a member upserts only their row and never
-  // clobbers a different member's synced comment on the same element.
-  const existing = db
-    .prepare(
-      `SELECT id, created_at AS createdAt, attachments_json AS attachmentsJson
-         FROM preview_comments
-        WHERE project_id = ? AND conversation_id = ? AND file_path = ? AND element_id = ? AND slide_key = ?
-          AND author_member_id IS ?`,
-    )
-    .get(projectId, conversationId, filePath, elementId, slideKey, authorMemberId) as DbRow | undefined;
-  const id = existing?.id ?? randomCommentId();
+  const existing = requestedId
+    ? db
+        .prepare(
+          `SELECT id, created_at AS createdAt, attachments_json AS attachmentsJson
+             FROM preview_comments
+            WHERE id = ? AND project_id = ? AND conversation_id = ?`,
+        )
+        .get(requestedId, projectId, conversationId) as DbRow | undefined
+    : undefined;
+  const id = existing?.id ?? requestedId ?? randomCommentId();
   const createdAt = existing?.createdAt ?? now;
   const existingAttachments = normalizePreviewCommentAttachments(parseJsonOrUndef(existing?.attachmentsJson));
   const attachments = attachmentsProvided ? incomingAttachments : existingAttachments;
@@ -1802,7 +1789,9 @@ export function upsertPreviewComment(db: SqliteDb, projectId: string, conversati
        status = 'open',
        anchored_version = excluded.anchored_version,
        author_member_id = excluded.author_member_id,
-       updated_at = excluded.updated_at`,
+       updated_at = excluded.updated_at
+     WHERE preview_comments.project_id = excluded.project_id
+       AND preview_comments.conversation_id = excluded.conversation_id`,
   ).run(
     id,
     projectId,
@@ -1935,8 +1924,9 @@ export function deleteSyncedPreviewComment(
  * - Create/edit: UPSERT by id. A brand-new id inserts; an existing id updates
  *   IN PLACE only when the incoming `updatedAt` is strictly newer
  *   (last-writer-wins), so a re-pull of an unchanged comment is a no-op and a
- *   stale edit never overwrites a fresher local one. The author is part of the
- *   unique key, so two members' comments on the same element coexist.
+ *   stale edit never overwrites a fresher local one. Comments are keyed by id,
+ *   so multiple notes on the same element coexist, including from the same
+ *   member.
  *
  * `conversationId` is a LOCAL conversation (see getLatestConversationIdForProject);
  * the cloud comment's own conversationId is not a valid FK here. It is only used
@@ -2012,8 +2002,8 @@ export function mergeSyncedPreviewComment(
     );
     return true;
   }
-  // New comment. INSERT OR IGNORE guards against a rare natural-key race (e.g. two
-  // conversations resolving) without throwing.
+  // New comment. INSERT OR IGNORE guards against a rare id collision without
+  // throwing.
   const result = db
     .prepare(
       `INSERT OR IGNORE INTO preview_comments

@@ -200,4 +200,60 @@ describe('preview comment permission gating', () => {
     expect(rows.find((c) => c.authorMemberId === 'm-author')?.note).toBe('author note');
     expect(rows.find((c) => c.authorMemberId === 'm-other')?.note).toBe('other note');
   });
+
+  it('POST creates another row for the same author unless an existing id is sent', async () => {
+    const api = await startServer();
+    const first = await api.createComment('m-author', 'first note');
+    const second = await api.createComment('m-author', 'second note');
+
+    expect(second.id).not.toBe(first.id);
+    expect(api.listComments()).toHaveLength(2);
+
+    const edit = await api.json(
+      `/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments`,
+      {
+        method: 'POST',
+        member: 'm-author',
+        body: { id: first.id, target: api.commentTarget, note: 'edited first' },
+      },
+    );
+
+    expect(edit.status).toBe(200);
+    expect(edit.body.comment.id).toBe(first.id);
+    expect(api.listComments()).toHaveLength(2);
+    expect(api.listComments().find((c) => c.id === first.id)?.note).toBe('edited first');
+    expect(api.listComments().find((c) => c.id === second.id)?.note).toBe('second note');
+  });
+
+  it('POST cannot edit another member comment by passing its id', async () => {
+    const api = await startServer();
+    const first = await api.createComment('m-author', 'author note');
+    const edit = await api.json(
+      `/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments`,
+      {
+        method: 'POST',
+        member: 'm-other',
+        body: { id: first.id, target: api.commentTarget, note: 'stolen edit' },
+      },
+    );
+
+    expect(edit.status).toBe(403);
+    expect(api.listComments()).toHaveLength(1);
+    expect(api.listComments()[0]?.note).toBe('author note');
+  });
+
+  it('POST with an unknown id is treated as a missing edit target', async () => {
+    const api = await startServer();
+    const edit = await api.json(
+      `/api/projects/${PROJECT}/conversations/${CONVERSATION}/comments`,
+      {
+        method: 'POST',
+        member: 'm-author',
+        body: { id: 'missing-comment', target: api.commentTarget, note: 'edit nothing' },
+      },
+    );
+
+    expect(edit.status).toBe(404);
+    expect(api.listComments()).toHaveLength(0);
+  });
 });

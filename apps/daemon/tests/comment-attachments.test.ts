@@ -119,7 +119,7 @@ describe('preview comment persistence', () => {
     expect(lost?.anchoredVersion).toBe(3); // COALESCE preserved it
   });
 
-  it('upserts the latest comment by conversation, file, and element', () => {
+  it('creates multiple comments on the same element unless an id is provided', () => {
     const db = seededDb();
     const first = upsertPreviewComment(db, 'project-1', 'conversation-1', {
       target: target({ elementId: 'hero-title', text: 'Old title' }),
@@ -133,9 +133,27 @@ describe('preview comment persistence', () => {
     expect(first).not.toBeNull();
     expect(second).not.toBeNull();
     if (!first || !second) throw new Error('comment upsert failed');
-    expect(second.id).toBe(first.id);
-    expect(second.note).toBe('Make it more specific');
-    expect(second.text).toBe('New title');
+    expect(second.id).not.toBe(first.id);
+    expect(listPreviewComments(db, 'project-1', 'conversation-1')).toHaveLength(2);
+  });
+
+  it('updates an existing comment when its id is provided', () => {
+    const db = seededDb();
+    const first = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      target: target({ elementId: 'hero-title', text: 'Old title' }),
+      note: 'Shorten this',
+    });
+    if (!first) throw new Error('comment upsert failed');
+
+    const second = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      id: first.id,
+      target: target({ elementId: 'hero-title', text: 'New title' }),
+      note: 'Make it more specific',
+    });
+
+    expect(second?.id).toBe(first.id);
+    expect(second?.note).toBe('Make it more specific');
+    expect(second?.text).toBe('New title');
     expect(listPreviewComments(db, 'project-1', 'conversation-1')).toHaveLength(1);
   });
 
@@ -174,6 +192,7 @@ describe('preview comment persistence', () => {
       ],
     });
     const second = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      id: first?.id,
       target: target({ elementId: 'hero-title' }),
       note: 'Still match this reference',
     });
@@ -225,6 +244,7 @@ describe('preview comment persistence', () => {
       note: 'Fix slide two',
     });
     const firstSlideEdit = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      id: firstSlide?.id,
       target: target({ elementId: 'hero-title', slideIndex: 0, text: 'Updated slide one title' }),
       note: 'Revise slide one',
     });
@@ -335,10 +355,8 @@ describe('preview comment persistence', () => {
       .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'preview_comments'`)
       .get() as { sql?: string } | undefined;
     expect(table?.sql).toMatch(/slide_key INTEGER NOT NULL DEFAULT -1/);
-    // Author is folded into the unique key (multi-author coexistence migration).
-    expect(table?.sql).toMatch(
-      /UNIQUE\(project_id, conversation_id, file_path, element_id, slide_key, author_member_id\)/,
-    );
+    // Comments are keyed by id only; multiple notes can target the same element.
+    expect(table?.sql).not.toMatch(/UNIQUE\(project_id, conversation_id, file_path, element_id/);
     expect(listPreviewComments(db, 'project-1', 'conversation-1')[0]?.slideIndex).toBe(0);
     // Anchor columns are backfilled even though the table was rebuilt for the
     // slide-key migration (the ALTERs run after the rebuild).
@@ -356,6 +374,7 @@ describe('preview comment persistence', () => {
       note: 'Fix slide two',
     });
     const firstSlideEdit = upsertPreviewComment(db, 'project-1', 'conversation-1', {
+      id: 'legacy-slide-0',
       target: target({ elementId: 'hero-title', slideIndex: 0, text: 'Updated slide one title' }),
       note: 'Revise slide one',
     });

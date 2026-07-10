@@ -26,6 +26,7 @@ import {
 import {
   buildVelaCollabEnv,
   createVelaCliCollabClient,
+  shouldUseVelaCliCollabTransport,
 } from '../src/collab/vela-cli-collab-client.js';
 import type { WorkspaceContextProvider } from '../src/collab/workspace-context.js';
 
@@ -460,6 +461,15 @@ describe('collab-cloud client', () => {
 });
 
 describe('VelaCliCollabClient', () => {
+  it('uses the CLI transport when team/resource sync is already Vela-backed', () => {
+    expect(shouldUseVelaCliCollabTransport({ OD_COLLAB_TRANSPORT: 'vela-cli' })).toBe(true);
+    expect(shouldUseVelaCliCollabTransport({ OD_COLLAB_TRANSPORT: 'sdk' })).toBe(false);
+    expect(shouldUseVelaCliCollabTransport({ OD_TEAM_PROJECTS_TRANSPORT: 'vela-cli' })).toBe(true);
+    expect(shouldUseVelaCliCollabTransport({ OD_RESOURCE_TRANSPORT: 'vela-cli' })).toBe(true);
+    expect(shouldUseVelaCliCollabTransport({ OD_COLLAB_CLOUD_URL: 'http://fixture.local' })).toBe(false);
+    expect(shouldUseVelaCliCollabTransport({})).toBe(false);
+  });
+
   it('keeps an explicit VELA_PROFILE and AMR_HOME when spawning the CLI', () => {
     const env = buildVelaCollabEnv({
       OPEN_DESIGN_AMR_PROFILE: 'prod',

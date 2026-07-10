@@ -1200,7 +1200,7 @@ interface Props {
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
   previewComments?: PreviewComment[];
-  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[]) => Promise<PreviewComment | null>;
+  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[], commentId?: string) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onFileSaved?: () => Promise<void> | void;
@@ -5872,7 +5872,7 @@ function HtmlViewer({
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
   previewComments?: PreviewComment[];
-  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[]) => Promise<PreviewComment | null>;
+  onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[], commentId?: string) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[], images?: File[]) => Promise<boolean | void> | boolean | void;
   onFileSaved?: () => Promise<void> | void;
@@ -9414,6 +9414,7 @@ function HtmlViewer({
         commentDraft.trim(),
         false,
         boardImages,
+        activeComposerComment?.id,
       );
       if (saved) {
         rememberSavedPreviewCommentOrder(saved.id);
@@ -10910,9 +10911,9 @@ function HtmlViewer({
             <button
               type="button"
               className="chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only"
-              disabled={source === null}
+              disabled={source === null || viewerOnly}
               aria-label={t('fileViewer.versions.entry')}
-              title={t('fileViewer.versions.entryFull')}
+              title={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.versions.entryFull')}
               onClick={() => {
                 fireArtifactToolbarClick('versions', 'toolbar');
                 setVersionModalOpen('toolbar');
@@ -10935,6 +10936,7 @@ function HtmlViewer({
                     aria-haspopup="menu"
                     aria-expanded={deployMenuOpen}
                     aria-label={shareMenuLabel}
+                    disabled={viewerOnly}
                     title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
                     onClick={rawCanShare ? openShareMenu : openDownloadMenu}
                   >

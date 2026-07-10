@@ -133,6 +133,11 @@ export interface PreviewComment {
 }
 
 export interface PreviewCommentUpsertRequest {
+  /**
+   * Existing comment id when editing a comment. Omit to create a new comment,
+   * even if the same author comments on the same element again.
+   */
+  id?: string;
   target: PreviewCommentTarget;
   note: string;
   attachments?: PreviewCommentAttachment[];

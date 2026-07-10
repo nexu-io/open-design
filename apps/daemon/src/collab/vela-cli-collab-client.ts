@@ -229,7 +229,11 @@ export function buildVelaCollabEnv(
 export function shouldUseVelaCliCollabTransport(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  return env.OD_COLLAB_TRANSPORT?.trim() === 'vela-cli';
+  const explicitTransport = env.OD_COLLAB_TRANSPORT?.trim();
+  if (explicitTransport) return explicitTransport === 'vela-cli';
+  if (env.OD_COLLAB_CLOUD_URL?.trim()) return false;
+  return env.OD_TEAM_PROJECTS_TRANSPORT?.trim() === 'vela-cli' ||
+    env.OD_RESOURCE_TRANSPORT?.trim() === 'vela-cli';
 }
 
 export function createVelaCliCollabClientFromEnv(
