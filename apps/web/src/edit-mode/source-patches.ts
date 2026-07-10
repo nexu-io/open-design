@@ -149,6 +149,14 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
     setInlineStyles(el as HTMLElement, patch.styles);
   } else if (patch.kind === 'set-attributes') {
     setAttributes(el, patch.attributes);
+  } else if (patch.kind === 'set-position') {
+    setInlineStyles(el as HTMLElement, {
+      position: 'absolute',
+      left: patch.left,
+      top: patch.top,
+      width: patch.width,
+      height: patch.height,
+    });
   } else if (patch.kind === 'set-outer-html') {
     const replaced = replaceOuterHtml(doc, el, patch.html);
     if (!replaced.ok) {

@@ -6240,6 +6240,23 @@ function HtmlViewer({
         // save is never silently torn down.
         return;
       }
+      if (data.type === 'od-edit-position-commit') {
+        void applyManualEdit({
+          id: String(data.id),
+          kind: 'set-position',
+          left: String(data.left),
+          top: String(data.top),
+          width: String(data.width),
+          height: String(data.height),
+        }, 'Drag / Resize');
+        return;
+      }
+      if (data.type === 'od-edit-drag-start') {
+        return;
+      }
+      if (data.type === 'od-edit-drag-end') {
+        return;
+      }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);

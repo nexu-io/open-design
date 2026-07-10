@@ -49,6 +49,11 @@ export interface ManualEditStyles {
   borderStyle: string;
   borderColor: string;
   borderRadius: string;
+  position: string;
+  left: string;
+  top: string;
+  right: string;
+  bottom: string;
 }
 
 export interface ManualEditTarget {
@@ -76,7 +81,15 @@ export type ManualEditPatch =
   | { id: string; kind: 'set-style'; styles: Partial<ManualEditStyles> }
   | { id: string; kind: 'set-attributes'; attributes: Record<string, string> }
   | { id: string; kind: 'set-outer-html'; html: string }
-  | { kind: 'set-full-source'; source: string };
+  | { kind: 'set-full-source'; source: string }
+  | {
+      id: string;
+      kind: 'set-position';
+      left: string;
+      top: string;
+      width: string;
+      height: string;
+    };
 
 export interface ManualEditHistoryEntry {
   id: string;
@@ -128,6 +141,25 @@ export interface ManualEditTextSessionMessage {
   committed?: boolean;
 }
 
+export interface ManualEditPositionCommitMessage {
+  type: 'od-edit-position-commit';
+  id: string;
+  left: string;
+  top: string;
+  width: string;
+  height: string;
+}
+
+export interface ManualEditDragStartMessage {
+  type: 'od-edit-drag-start';
+  id: string;
+}
+
+export interface ManualEditDragEndMessage {
+  type: 'od-edit-drag-end';
+  id: string;
+}
+
 export type ManualEditBridgeMessage =
   | ManualEditTargetMessage
   | ManualEditSelectMessage
@@ -135,7 +167,10 @@ export type ManualEditBridgeMessage =
   | ManualEditBackgroundMessage
   | ManualEditPreviewAppliedMessage
   | ManualEditTextCommitMessage
-  | ManualEditTextSessionMessage;
+  | ManualEditTextSessionMessage
+  | ManualEditPositionCommitMessage
+  | ManualEditDragStartMessage
+  | ManualEditDragEndMessage;
 
 export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign', 'lineHeight', 'letterSpacing',
@@ -146,6 +181,7 @@ export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
   'border', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
   'borderStyle', 'borderColor', 'borderRadius',
+  'position', 'left', 'top', 'right', 'bottom',
 ];
 
 export function emptyManualEditStyles(): ManualEditStyles {
