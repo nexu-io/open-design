@@ -54,6 +54,9 @@ export interface ManualEditStyles {
   top: string;
   right: string;
   bottom: string;
+  transform: string;
+  zIndex: string;
+  boxShadow: string;
 }
 
 export interface ManualEditTarget {
@@ -89,6 +92,7 @@ export type ManualEditPatch =
       top: string;
       width: string;
       height: string;
+      transform?: string;
     };
 
 export interface ManualEditHistoryEntry {
@@ -148,6 +152,7 @@ export interface ManualEditPositionCommitMessage {
   top: string;
   width: string;
   height: string;
+  transform?: string;
 }
 
 export interface ManualEditDragStartMessage {
@@ -200,6 +205,7 @@ export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'border', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
   'borderStyle', 'borderColor', 'borderRadius',
   'position', 'left', 'top', 'right', 'bottom',
+  'transform', 'zIndex', 'boxShadow',
 ];
 
 export function emptyManualEditStyles(): ManualEditStyles {

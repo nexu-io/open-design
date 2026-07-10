@@ -170,7 +170,7 @@ export function buildManualEditBridge(enabled: boolean): string {
   var discoverySelector = ${JSON.stringify(MANUAL_EDIT_DISCOVERY_SELECTOR)};
   var hostNodeSelector = ${JSON.stringify(MANUAL_EDIT_HOST_NODE_SELECTOR)};
   var sourcePathAttr = ${JSON.stringify(MANUAL_EDIT_SOURCE_PATH_ATTR)};
-  var styleProps = ['fontFamily','fontSize','fontWeight','color','textAlign','lineHeight','letterSpacing','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius','position','left','top','right','bottom'];
+  var styleProps = ['fontFamily','fontSize','fontWeight','color','textAlign','lineHeight','letterSpacing','width','height','minHeight','gap','flexDirection','justifyContent','alignItems','backgroundColor','opacity','padding','paddingTop','paddingRight','paddingBottom','paddingLeft','margin','marginTop','marginRight','marginBottom','marginLeft','border','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderStyle','borderColor','borderRadius','position','left','top','right','bottom','transform','zIndex','boxShadow'];
   var dragState = null; // { el, startX, startY, startLeft, startTop, startWidth, startHeight, handle, id }
   var handles = []; // live handle elements
   var selectedElForHandles = null; // which element currently has handles shown
@@ -559,6 +559,7 @@ export function buildManualEditBridge(enabled: boolean): string {
         finishActiveTextEdit(true);
         clearSelectedTarget();
         removeHandles();
+        removeRotationHandle();
       }
       if (enabled) setTimeout(postTargets, 0);
       return;
@@ -695,6 +696,48 @@ export function buildManualEditBridge(enabled: boolean): string {
     }
   }
 
+  // ── Rotation handle ──
+  var rotationHandle = null;
+  var rotationLineEl = null;
+  function createRotationHandle(el){
+    removeRotationHandle();
+    if (!el || !el.isConnected) return;
+    var rect = el.getBoundingClientRect();
+    var cx = rect.left + rect.width / 2;
+    var cy = rect.top;
+    // Connecting line
+    var line = document.createElement('div');
+    line.setAttribute('data-od-rotation-line', '');
+    line.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;background:#2563eb;left:' + cx + 'px;top:' + (cy - 24) + 'px;width:1px;height:24px;';
+    document.body.appendChild(line);
+    rotationLineEl = line;
+    // Handle circle
+    var handle = document.createElement('div');
+    handle.setAttribute('data-od-rotation-handle', '');
+    handle.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:auto;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #2563eb;cursor:grab;transform:translate(-50%,-50%);left:' + cx + 'px;top:' + (cy - 30) + 'px;';
+    document.body.appendChild(handle);
+    rotationHandle = { el: handle, cx: cx, cy: cy, w: rect.width, h: rect.height, targetEl: el };
+  }
+  function updateRotationHandlePos(el){
+    if (!rotationHandle || rotationHandle.targetEl !== el) { removeRotationHandle(); return; }
+    var rect = el.getBoundingClientRect();
+    var cx = rect.left + rect.width / 2;
+    rotationHandle.cx = cx;
+    rotationHandle.cy = rect.top;
+    rotationHandle.el.style.left = cx + 'px';
+    rotationHandle.el.style.top = (rect.top - 30) + 'px';
+    if (rotationLineEl){
+      rotationLineEl.style.left = cx + 'px';
+      rotationLineEl.style.top = (rect.top - 24) + 'px';
+    }
+  }
+  function removeRotationHandle(){
+    if (rotationHandle && rotationHandle.el.parentNode) rotationHandle.el.parentNode.removeChild(rotationHandle.el);
+    if (rotationLineEl && rotationLineEl.parentNode) rotationLineEl.parentNode.removeChild(rotationLineEl);
+    rotationHandle = null;
+    rotationLineEl = null;
+  }
+
   function removeHandles(){
     for (var i = 0; i < handles.length; i++) {
       if (handles[i] && handles[i].parentNode) handles[i].parentNode.removeChild(handles[i]);
@@ -770,6 +813,11 @@ export function buildManualEditBridge(enabled: boolean): string {
     }
   }
 
+  function parseRotation(el){
+    var t = el.style.transform || '';
+    var m = t.match(/rotate\((-?[0-9.]+)deg\)/);
+    return m ? parseFloat(m[1]) : 0;
+  }
   function ensureAbsolute(el){
     var pos = window.getComputedStyle(el).position;
     if (pos !== 'absolute' && pos !== 'fixed') {
@@ -785,19 +833,31 @@ export function buildManualEditBridge(enabled: boolean): string {
 
   function commitPosition(el, id){
     var rect = el.getBoundingClientRect();
-    window.parent.postMessage({
+    var msg = {
       type: 'od-edit-position-commit',
       id: id,
       left: Math.round(rect.left) + 'px',
       top: Math.round(rect.top) + 'px',
       width: Math.round(rect.width) + 'px',
       height: Math.round(rect.height) + 'px',
-    }, '*');
+    };
+    var t = el.style.transform || '';
+    if (t) msg.transform = t;
+    window.parent.postMessage(msg, '*');
   }
 
   // Pointer handlers for drag + resize
   function onPointerDown(ev){
     if (!enabled) return;
+    // Check rotation handle first
+    if (ev.target && ev.target.closest && ev.target.closest('[data-od-rotation-handle]')){
+      ev.preventDefault(); ev.stopPropagation();
+      if (!rotationHandle) return;
+      dragState = { el: rotationHandle.targetEl, startX: ev.clientX, startY: ev.clientY, handle: 'rotate', id: stableId(rotationHandle.targetEl), moved: false,
+        startLeft: rotationHandle.cx, startTop: rotationHandle.cy, startWidth: 0, startHeight: 0, rotationStart: parseRotation(rotationHandle.targetEl) };
+      rotationHandle.targetEl.setPointerCapture(ev.pointerId);
+      return;
+    }
     // Check handle hit first
     var handleEl = ev.target && ev.target.closest ? ev.target.closest('[data-od-drag-handle]') : null;
     if (handleEl && selectedElForHandles) {
@@ -882,6 +942,15 @@ export function buildManualEditBridge(enabled: boolean): string {
   function onPointerMove(ev){
     if (rubberband) { updateRubberband(ev.clientX, ev.clientY); return; }
     if (!dragState) return;
+    // Rotation
+    if (dragState.handle === 'rotate'){
+      var angle = Math.atan2(ev.clientY - dragState.cy, ev.clientX - dragState.cx) * 180 / Math.PI + 90;
+      dragState.el.style.transform = 'rotate(' + Math.round(angle) + 'deg)';
+      dragState.moved = true;
+      updateRotationHandlePos(dragState.el);
+      updateHandlePositions(dragState.el);
+      return;
+    }
     var dx = ev.clientX - dragState.startX;
     var dy = ev.clientY - dragState.startY;
     if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
@@ -925,6 +994,16 @@ export function buildManualEditBridge(enabled: boolean): string {
     var el = dragState.el;
     var id = dragState.id;
     try { el.releasePointerCapture(ev.pointerId); } catch(e) {}
+    if (dragState.handle === 'rotate'){
+      if (dragState.moved){
+        commitPosition(el, id);
+        dragEndedJustNow = true;
+      }
+      dragState = null;
+      updateRotationHandlePos(el);
+      updateHandlePositions(el);
+      return;
+    }
     if (dragState.moved) {
       if (dragState.multiEls){
         commitMultiPosition(dragState.multiEls.map(function(m2){ return m2.el; }));
@@ -1015,7 +1094,7 @@ export function buildManualEditBridge(enabled: boolean): string {
     var kind = inferKind(el);
     window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
     // Show resize handles for selected element
-    setTimeout(function(){ createHandles(el); }, 0);
+    setTimeout(function(){ createHandles(el); createRotationHandle(el); }, 0);
     if (kind === 'text' || kind === 'link') {
       makeEditable(el, ev);
       return;

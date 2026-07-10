@@ -6244,6 +6244,7 @@ function HtmlViewer({
         return;
       }
       if (data.type === 'od-edit-position-commit') {
+        const transform = typeof data.transform === 'string' ? data.transform : undefined;
         void applyManualEdit({
           id: String(data.id),
           kind: 'set-position',
@@ -6251,6 +6252,7 @@ function HtmlViewer({
           top: String(data.top),
           width: String(data.width),
           height: String(data.height),
+          transform,
         }, 'Drag / Resize');
         return;
       }

@@ -156,6 +156,7 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
       top: patch.top,
       width: patch.width,
       height: patch.height,
+      transform: patch.transform ?? '',
     });
   } else if (patch.kind === 'set-outer-html') {
     const replaced = replaceOuterHtml(doc, el, patch.html);
