@@ -1,11 +1,21 @@
 import { useMemo, useRef, useState } from 'react';
 
 import type { ProjectFile, ProjectMetadata } from '../../types';
-import { streamMessage, type StreamHandlers } from '../../providers/anthropic';
-import type { AppConfig, ChatMessage } from '../../types';
+import type { AppConfig } from '../../types';
 import { ProductionCanvasBoard } from './ProductionCanvasBoard';
 import { ProductionTaskCard, productionTaskCardForId, PRODUCTION_TASK_CARD_CATALOG } from './ProductionTaskCard';
 import { ProductionWorkflowRail, type ProductionWorkflowStep } from './ProductionWorkflowRail';
+import {
+  buildAssets,
+  buildNarration,
+  buildOutput,
+  buildShot,
+  createStoryboardShots,
+  createVoicePreview,
+  runProductionGeneration,
+  type GenerationKind,
+  type ProductionSegment,
+} from '../../production-generation';
 
 interface Props {
   projectId: string;
@@ -31,34 +41,6 @@ interface VoiceProfileCard {
   role: string;
   tone: string;
   description: string;
-}
-
-interface ProductionSegment {
-  id: ProductionSegmentId;
-  label: string;
-  paragraph: string;
-  narration: string;
-  shot: string;
-  assets: string;
-  output: string;
-  voiceProfileId: string;
-}
-
-type GenerationKind = 'draft' | 'voice' | 'storyboard';
-
-interface GeneratedSegmentPatch {
-  id?: string;
-  label?: string;
-  paragraph?: string;
-  narration?: string;
-  shot?: string;
-  assets?: string;
-  output?: string;
-  voiceProfileId?: string;
-}
-
-interface GeneratedSegmentsPayload {
-  segments?: GeneratedSegmentPatch[];
 }
 
 const VOICE_PROFILE_CARDS: readonly VoiceProfileCard[] = [
@@ -132,25 +114,6 @@ function getVoiceProfile(profileId: string | null | undefined) {
   return VOICE_PROFILE_CARDS.find((profile) => profile.id === profileId) ?? VOICE_PROFILE_CARDS[0]!;
 }
 
-function buildNarration(paragraph: string, voiceTone: string, profile: VoiceProfileCard) {
-  const trimmedParagraph = paragraph.trim();
-  return trimmedParagraph
-    ? `${profile.role} (${voiceTone}) 旁白：${paragraph}`
-    : `${profile.role} (${voiceTone}) 旁白：請輸入段落`;
-}
-
-function buildShot(paragraph: string) {
-  return paragraph.trim() ? `鏡頭：${paragraph}` : '鏡頭：請輸入段落';
-}
-
-function buildAssets(paragraph: string) {
-  return paragraph.trim() ? `素材：${paragraph}` : '素材：請輸入段落';
-}
-
-function buildOutput(paragraph: string) {
-  return paragraph.trim() ? `成片：${paragraph}` : '成片：請輸入段落';
-}
-
 function createInitialSegments(voiceTone: string, defaultVoiceProfileId: string): ProductionSegment[] {
   const profile = getVoiceProfile(defaultVoiceProfileId);
   return DEFAULT_SEGMENT_BLUEPRINTS.map((segment, index) => {
@@ -160,7 +123,7 @@ function createInitialSegments(voiceTone: string, defaultVoiceProfileId: string)
       id: segment.id,
       label: segment.label,
       paragraph,
-      narration: buildNarration(paragraph, voiceTone, chosenProfile),
+      narration: buildNarration(paragraph, voiceTone, chosenProfile.role),
       shot: buildShot(paragraph),
       assets: buildAssets(paragraph),
       output: buildOutput(paragraph),
@@ -180,172 +143,12 @@ function createEmptySegment(
     id,
     label,
     paragraph: '',
-    narration: buildNarration('', voiceTone, profile),
+    narration: buildNarration('', voiceTone, profile.role),
     shot: buildShot(''),
     assets: buildAssets(''),
     output: buildOutput(''),
     voiceProfileId: profile.id,
   };
-}
-
-function createVoicePreview(segments: ProductionSegment[], voiceTone: string) {
-  if (segments.length === 0) {
-    return 'Add a script line to generate a voice preview.';
-  }
-
-  const profileLabels = segments
-    .map((segment) => getVoiceProfile(segment.voiceProfileId).role)
-    .filter((role, index, array) => array.indexOf(role) === index);
-
-  return `Voice flow (${voiceTone}) uses ${profileLabels.join(', ')} across ${segments.length} beats.`;
-}
-
-function createStoryboardShots(segments: ProductionSegment[]) {
-  if (segments.length === 0) {
-    return ['Add a script line to create storyboard shots.'];
-  }
-
-  return segments.map((segment) => `${segment.label}: ${segment.shot}`);
-}
-
-function extractJsonPayload(text: string): GeneratedSegmentsPayload | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-
-  const fenced = trimmed.match(/```json\s*([\s\S]*?)```/i) ?? trimmed.match(/```\s*([\s\S]*?)```/);
-  const candidate = fenced?.[1]?.trim() ?? trimmed;
-
-  try {
-    const parsed = JSON.parse(candidate) as unknown;
-    if (!parsed || typeof parsed !== 'object') return null;
-    const record = parsed as { segments?: unknown };
-    if (record.segments && Array.isArray(record.segments)) {
-      return { segments: record.segments as GeneratedSegmentPatch[] };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function buildGenerationSystemPrompt(kind: GenerationKind): string {
-  const focus =
-    kind === 'draft'
-      ? 'Rewrite the whole production draft so each segment is production-ready.'
-      : kind === 'voice'
-        ? 'Rewrite only the voice narration for each segment.'
-        : 'Rewrite only the storyboard shot text for each segment.';
-
-  return [
-    'You are a production assistant for a short-form video workflow.',
-    'Return strict JSON only. No markdown, no commentary.',
-    'Schema: {"segments":[{"id":"...","label":"...","paragraph":"...","narration":"...","shot":"...","assets":"...","output":"...","voiceProfileId":"..."}]}',
-    'Keep the same segment order when possible.',
-    'Use concise Traditional Chinese friendly production copy.',
-    focus,
-  ].join('\n');
-}
-
-function buildGenerationUserPrompt(
-  kind: GenerationKind,
-  segments: ProductionSegment[],
-  voiceTone: string,
-): string {
-  const current = segments.map((segment) => ({
-    id: segment.id,
-    label: segment.label,
-    paragraph: segment.paragraph,
-    narration: segment.narration,
-    shot: segment.shot,
-    assets: segment.assets,
-    output: segment.output,
-    voiceProfileId: segment.voiceProfileId,
-  }));
-
-  const focus =
-    kind === 'draft'
-      ? 'Rewrite every field to make this a better production draft.'
-      : kind === 'voice'
-        ? 'Only improve narration and voiceProfileId. Keep paragraph, shot, assets, and output unchanged if possible.'
-        : 'Only improve shot. Keep other fields unchanged if possible.';
-
-  return JSON.stringify(
-    {
-      task: kind,
-      voiceTone,
-      focus,
-      segments: current,
-    },
-    null,
-    2,
-  );
-}
-
-function mergeGeneratedSegments(
-  current: ProductionSegment[],
-  generated: GeneratedSegmentPatch[],
-  kind: GenerationKind,
-  voiceTone: string,
-  defaultVoiceProfileId: string,
-): ProductionSegment[] {
-  if (generated.length === 0) return current;
-
-  const next = current.map((segment, index) => {
-    const patch = generated[index];
-    if (!patch) return segment;
-
-    const id = patch.id?.trim() || segment.id;
-    const label = patch.label?.trim() || segment.label;
-    const nextProfileId = patch.voiceProfileId?.trim() || segment.voiceProfileId || defaultVoiceProfileId;
-    const profile = getVoiceProfile(nextProfileId);
-    const paragraph = patch.paragraph?.trim() || segment.paragraph;
-    const narration =
-      kind === 'voice'
-        ? patch.narration?.trim() || buildNarration(paragraph, voiceTone, profile)
-        : patch.narration?.trim() || segment.narration || buildNarration(paragraph, voiceTone, profile);
-    const shot =
-      kind === 'storyboard'
-        ? patch.shot?.trim() || buildShot(paragraph)
-        : patch.shot?.trim() || segment.shot || buildShot(paragraph);
-    const assets = patch.assets?.trim() || segment.assets || buildAssets(paragraph);
-    const output = patch.output?.trim() || segment.output || buildOutput(paragraph);
-
-    return {
-      id,
-      label,
-      paragraph: kind === 'draft' ? paragraph : segment.paragraph,
-      narration: kind === 'voice' ? narration : segment.narration,
-      shot: kind === 'storyboard' ? shot : segment.shot,
-      assets: kind === 'draft' ? assets : segment.assets,
-      output: kind === 'draft' ? output : segment.output,
-      voiceProfileId: kind === 'voice' && patch.voiceProfileId?.trim()
-        ? nextProfileId
-        : segment.voiceProfileId,
-    };
-  });
-
-  if (generated.length > current.length) {
-    for (let index = current.length; index < generated.length; index += 1) {
-      const patch = generated[index]!;
-      const nextProfileId = patch.voiceProfileId?.trim() || defaultVoiceProfileId;
-      const profile = getVoiceProfile(nextProfileId);
-      const paragraph = patch.paragraph?.trim() || '';
-      next.push({
-        id: patch.id?.trim() || `generated-${index + 1}`,
-        label: patch.label?.trim() || `第 ${index + 1} 段`,
-        paragraph: kind === 'draft' ? paragraph : '',
-        narration: kind === 'voice'
-          ? patch.narration?.trim() || buildNarration(paragraph, voiceTone, profile)
-          : buildNarration(paragraph, voiceTone, profile),
-        shot: kind === 'storyboard' ? patch.shot?.trim() || buildShot(paragraph) : buildShot(paragraph),
-        assets: kind === 'draft' ? patch.assets?.trim() || buildAssets(paragraph) : buildAssets(paragraph),
-        output: kind === 'draft' ? patch.output?.trim() || buildOutput(paragraph) : buildOutput(paragraph),
-        voiceProfileId: kind === 'voice' && patch.voiceProfileId?.trim() ? nextProfileId : defaultVoiceProfileId,
-      });
-    }
-  }
-
-  return next;
 }
 
 export function ProductionWorkspace({ projectId, projectName, metadata, projectFiles, config }: Props) {
@@ -361,7 +164,10 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
   const [generationBusy, setGenerationBusy] = useState<GenerationKind | null>(null);
   const [generationNotice, setGenerationNotice] = useState<string | null>(null);
 
-  const voicePreview = useMemo(() => createVoicePreview(segments, voiceTone), [segments, voiceTone]);
+  const voicePreview = useMemo(
+    () => createVoicePreview(segments, voiceTone, (profileId) => getVoiceProfile(profileId).role),
+    [segments, voiceTone],
+  );
   const storyboardShots = useMemo(() => createStoryboardShots(segments), [segments]);
   const voiceProfileCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -381,7 +187,7 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
           return {
             ...segment,
             paragraph: value,
-            narration: buildNarration(value, voiceTone, profile),
+            narration: buildNarration(value, voiceTone, profile.role),
             shot: buildShot(value),
             assets: buildAssets(value),
             output: buildOutput(value),
@@ -393,7 +199,7 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
           return {
             ...segment,
             voiceProfileId: profile.id,
-            narration: buildNarration(segment.paragraph, voiceTone, profile),
+            narration: buildNarration(segment.paragraph, voiceTone, profile.role),
           };
         }
 
@@ -471,75 +277,25 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
   };
 
   const runGeneration = async (kind: GenerationKind) => {
-    const trimmedBaseUrl = config.baseUrl.trim();
-    const trimmedApiKey = config.apiKey.trim();
-    const trimmedModel = config.model.trim();
-    if (config.mode !== 'api') {
-      setGenerationNotice('Switch Settings to API mode with OpenRouter before generating.');
-      return;
-    }
-    if (!trimmedBaseUrl || !trimmedApiKey || !trimmedModel) {
-      setGenerationNotice('Set OpenRouter base URL, API key, and model first.');
-      return;
-    }
-
     setGenerationBusy(kind);
     setGenerationNotice(null);
 
-    const buffer: string[] = [];
-    const handlers: StreamHandlers = {
-      onDelta: (delta) => buffer.push(delta),
-      onDone: () => {
-        const payload = extractJsonPayload(buffer.join(''));
-        if (!payload?.segments?.length) {
-          setGenerationNotice('Generation finished, but the response was not valid JSON.');
-          setGenerationBusy(null);
-          return;
-        }
-        setSegments((current) =>
-          mergeGeneratedSegments(current, payload.segments ?? [], kind, voiceTone, defaultVoiceProfileId),
-        );
-        setGenerationNotice(
-          kind === 'draft'
-            ? 'Draft updated from OpenRouter.'
-            : kind === 'voice'
-              ? 'Voice lanes updated from OpenRouter.'
-              : 'Storyboard lanes updated from OpenRouter.',
-        );
-        setGenerationBusy(null);
-      },
-      onError: (err) => {
-        setGenerationNotice(err.message);
-        setGenerationBusy(null);
-      },
-    };
-
-    const history: ChatMessage[] = [
-      {
-        id: `production-generation-${kind}`,
-        role: 'user',
-        content: buildGenerationUserPrompt(kind, segments, voiceTone),
-        createdAt: Date.now(),
-      },
-    ];
-
     try {
-      await streamMessage(
-        {
-          ...config,
-          model: trimmedModel,
-          baseUrl: trimmedBaseUrl,
-          apiKey: trimmedApiKey,
-        },
-        buildGenerationSystemPrompt(kind),
-        history,
-        new AbortController().signal,
-        handlers,
-      );
+      const result = await runProductionGeneration({
+        kind,
+        config,
+        segments,
+        voiceTone,
+        defaultVoiceProfileId,
+        knownVoiceProfileIds: VOICE_PROFILE_CARDS.map((profile) => profile.id),
+        resolveVoiceLabel: (voiceProfileId) => getVoiceProfile(voiceProfileId).role,
+      });
+      setSegments(result.segments);
+      setGenerationNotice(result.notice);
     } catch (error) {
       setGenerationNotice(error instanceof Error ? error.message : String(error));
-      setGenerationBusy(null);
     }
+    setGenerationBusy(null);
   };
 
   const workflowSteps: readonly ProductionWorkflowStep[] = useMemo(
