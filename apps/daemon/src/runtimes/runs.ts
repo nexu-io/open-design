@@ -191,6 +191,16 @@ export function createChatRunService({
       ) {
         evictable++;
       }
+      // Memory backstop only: force eviction past 2x the cap even if those
+      // records are not yet durable. This is the sole path that can drop an
+      // un-durable record, and it is unreachable through the normal emit path —
+      // events arrive on separate stdout ticks, so the write callback fires and
+      // advances the watermark between bursts, keeping the live buffer near the
+      // cap. Reaching 2x un-durable events requires the writer to stall for a
+      // whole buffer, i.e. a failing disk; that stream errors out and the branch
+      // above has already fallen back to plain eviction (disk backfill is
+      // impossible anyway). So this backstop never silently drops a recoverable
+      // record in practice — it only bounds memory under a broken writer.
       const hardCapEvict = run.events.length - maxEvents * 2;
       if (hardCapEvict > evictable) evictable = hardCapEvict;
       if (evictable > 0) run.events.splice(0, evictable);
