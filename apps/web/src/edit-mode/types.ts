@@ -84,6 +84,10 @@ export interface ManualEditStyles {
      bumped to inline-block for inline elements so the translate takes effect. */
   transform: string;
   display: string;
+  borderTopLeftRadius: string;
+  borderTopRightRadius: string;
+  borderBottomRightRadius: string;
+  borderBottomLeftRadius: string;
   position: string;
   left: string;
   top: string;
@@ -306,6 +310,7 @@ export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'border', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
   'borderStyle', 'borderColor', 'borderRadius',
   'transform', 'display', 'position', 'left', 'top', 'right', 'bottom', 'zIndex', 'boxShadow',
+  'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomRightRadius', 'borderBottomLeftRadius',
 ];
 
 export function emptyManualEditStyles(): ManualEditStyles {
