@@ -4,7 +4,11 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { composeSystemPrompt, resolveExclusiveSurface } from '../../src/prompts/system.js';
+import {
+  composeSystemPrompt,
+  renderConnectedExternalMcpDirective,
+  resolveExclusiveSurface,
+} from '../../src/prompts/system.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -415,66 +419,69 @@ describe('composeSystemPrompt', () => {
     });
   });
 
-  describe('connectedExternalMcp directive', () => {
-    it('omits the directive when no servers are passed', () => {
+  // The connected-external-MCP directive reflects live OAuth token state, which
+  // flips mid-conversation as Bearers expire/refresh. It now rides in the
+  // per-turn instruction slice (server.ts), NOT the cached system prompt, so it
+  // no longer churns the cacheable prefix across resumes. composeSystemPrompt
+  // must therefore never emit it; the exported renderer is tested directly.
+  describe('connectedExternalMcp directive is no longer in the system prompt', () => {
+    it('never emits the MCP directive from composeSystemPrompt', () => {
       const prompt = composeSystemPrompt({});
       expect(prompt).not.toContain('External MCP servers — already authenticated');
       expect(prompt).not.toContain('mcp__<server>__authenticate');
     });
 
-    it('omits the directive when an empty array is passed', () => {
-      const prompt = composeSystemPrompt({ connectedExternalMcp: [] });
-      expect(prompt).not.toContain('External MCP servers — already authenticated');
-    });
-
-    it('lists each connected server and forbids the synthetic auth tools', () => {
+    it('keeps the media-execution-disabled block, still with no MCP directive', () => {
       const prompt = composeSystemPrompt({
-        connectedExternalMcp: [
-          { id: 'higgsfield-openclaw', label: 'Higgsfield (OpenClaw)' },
-          { id: 'github' },
-        ],
-      });
-
-      expect(prompt).toContain('## External MCP servers — already authenticated');
-      expect(prompt).toContain('`higgsfield-openclaw`');
-      expect(prompt).toContain('Higgsfield (OpenClaw)');
-      expect(prompt).toContain('`github`');
-      expect(prompt).toContain(
-        '**Do NOT call any tool whose name matches `mcp__<server>__authenticate` or `mcp__<server>__complete_authentication`',
-      );
-      expect(prompt).toContain('localhost:<random>/callback');
-      expect(prompt).toContain('Settings → External MCP');
-    });
-
-    it('skips entries with blank ids and emits no directive when nothing usable remains', () => {
-      const prompt = composeSystemPrompt({
-        connectedExternalMcp: [
-          { id: '   ', label: 'blank' },
-          { id: '', label: 'empty' },
-        ] as any,
-      });
-      expect(prompt).not.toContain('External MCP servers — already authenticated');
-    });
-
-    it('does not duplicate the label when it equals the id', () => {
-      const prompt = composeSystemPrompt({
-        connectedExternalMcp: [{ id: 'github', label: 'github' }],
-      });
-      expect(prompt).toContain('- `github`\n');
-      expect(prompt).not.toContain('- `github` (github)');
-    });
-
-    it('keeps external MCP tools visible when OD-owned media execution is disabled', () => {
-      const prompt = composeSystemPrompt({
-        connectedExternalMcp: [{ id: 'external-media', label: 'External media' }],
         metadata: { kind: 'image' },
         mediaExecution: { mode: 'disabled' },
       });
-
-      expect(prompt).toContain('## External MCP servers — already authenticated');
-      expect(prompt).toContain('`external-media`');
       expect(prompt).toContain('Open Design-owned media execution is **disabled for this run**');
       expect(prompt).not.toContain('## Media generation contract');
+      expect(prompt).not.toContain('External MCP servers — already authenticated');
+    });
+  });
+
+  describe('renderConnectedExternalMcpDirective', () => {
+    it('returns an empty string for no / empty servers', () => {
+      expect(renderConnectedExternalMcpDirective(undefined)).toBe('');
+      expect(renderConnectedExternalMcpDirective([])).toBe('');
+    });
+
+    it('lists each connected server and forbids the synthetic auth tools', () => {
+      const directive = renderConnectedExternalMcpDirective([
+        { id: 'higgsfield-openclaw', label: 'Higgsfield (OpenClaw)' },
+        { id: 'github' },
+      ]);
+      expect(directive).toContain('## External MCP servers — already authenticated');
+      expect(directive).toContain('`higgsfield-openclaw`');
+      expect(directive).toContain('Higgsfield (OpenClaw)');
+      expect(directive).toContain('`github`');
+      expect(directive).toContain(
+        '**Do NOT call any tool whose name matches `mcp__<server>__authenticate` or `mcp__<server>__complete_authentication`',
+      );
+      expect(directive).toContain('localhost:<random>/callback');
+      expect(directive).toContain('Settings → External MCP');
+    });
+
+    it('skips entries with blank ids and emits nothing when none remain', () => {
+      expect(
+        renderConnectedExternalMcpDirective([
+          { id: '   ', label: 'blank' },
+          { id: '', label: 'empty' },
+        ] as any),
+      ).toBe('');
+    });
+
+    it('does not duplicate the label when it equals the id', () => {
+      const directive = renderConnectedExternalMcpDirective([{ id: 'github', label: 'github' }]);
+      expect(directive).toContain('- `github`\n');
+      expect(directive).not.toContain('- `github` (github)');
+    });
+
+    it('has no leading separator so it composes cleanly in a `---`-joined slice', () => {
+      const directive = renderConnectedExternalMcpDirective([{ id: 'github' }]);
+      expect(directive.startsWith('## External MCP servers')).toBe(true);
     });
   });
 

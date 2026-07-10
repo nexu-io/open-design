@@ -197,4 +197,66 @@ describe('selectAutoOpenProducedArtifact', () => {
 
     expect(result).toBeNull();
   });
+
+  describe('preferSiteEntry (website-clone turns)', () => {
+    it('opens the site entry even when subpages were written after it', () => {
+      // A clone run writes the entry first and keeps landing subpages and
+      // reports afterwards — the newest-mtime rule would open a subpage.
+      const result = selectAutoOpenProducedArtifact(
+        [
+          { name: 'index.html', path: 'index.html', kind: 'html', mtime: 10 },
+          { name: 'about.html', path: 'about.html', kind: 'html', mtime: 30 },
+          { name: 'CLONE_REPORT.md', path: 'CLONE_REPORT.md', kind: 'text', mtime: 40 },
+        ],
+        { preferSiteEntry: true },
+      );
+
+      expect(result).toBe('index.html');
+    });
+
+    it('prefers the shallowest index.html among nested entries', () => {
+      const result = selectAutoOpenProducedArtifact(
+        [
+          { name: 'zh/index.html', path: 'zh/index.html', kind: 'html', mtime: 30 },
+          { name: 'index.html', path: 'index.html', kind: 'html', mtime: 10 },
+        ],
+        { preferSiteEntry: true },
+      );
+
+      expect(result).toBe('index.html');
+    });
+
+    it('breaks a same-depth entry tie to the newest mtime', () => {
+      const result = selectAutoOpenProducedArtifact(
+        [
+          { name: 'en/index.html', path: 'en/index.html', kind: 'html', mtime: 10 },
+          { name: 'zh/index.html', path: 'zh/index.html', kind: 'html', mtime: 30 },
+        ],
+        { preferSiteEntry: true },
+      );
+
+      expect(result).toBe('zh/index.html');
+    });
+
+    it('falls back to the standard newest-html rule when no index.html was produced', () => {
+      const result = selectAutoOpenProducedArtifact(
+        [
+          { name: 'landing.html', path: 'landing.html', kind: 'html', mtime: 10 },
+          { name: 'pricing.html', path: 'pricing.html', kind: 'html', mtime: 30 },
+        ],
+        { preferSiteEntry: true },
+      );
+
+      expect(result).toBe('pricing.html');
+    });
+
+    it('does not change behavior when the flag is off', () => {
+      const result = selectAutoOpenProducedArtifact([
+        { name: 'index.html', path: 'index.html', kind: 'html', mtime: 10 },
+        { name: 'about.html', path: 'about.html', kind: 'html', mtime: 30 },
+      ]);
+
+      expect(result).toBe('about.html');
+    });
+  });
 });

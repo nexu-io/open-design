@@ -51,6 +51,14 @@ export interface UrlLoadDecision {
   /** User explicitly opted into the inline path via ?forceInline=1. */
   forceInline: boolean;
   /**
+   * The source references project files by site-root path (`/assets/x.css`),
+   * confirmed against the project's file list (see
+   * `file-viewer-preview-assets.ts`). URL-load resolves those against the app
+   * origin root and 404s; only the srcDoc pipeline rewrites them into
+   * resolvable asset URLs.
+   */
+  projectRootAssetRefs?: boolean;
+  /**
    * The HTML source contains patterns that steal focus on load (e.g.
    * `window.focus()`, `element.focus()`). When true, forces the srcDoc path
    * so `injectPreviewFocusGuard` can suppress the focus grab.
@@ -97,6 +105,10 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   if (d.tweaksBridge) return false;
   if (d.forceInline) return false;
   if (d.needsFocusGuard) return false;
+  // Root-relative project asset refs only resolve after the srcDoc pipeline
+  // normalizes them (normalizeRootRelativeProjectAssetRefs); the URL-load
+  // path serves the document untouched and the browser 404s each asset.
+  if (d.projectRootAssetRefs) return false;
   return true;
 }
 

@@ -120,6 +120,12 @@ import {
   shouldUrlLoadHtmlPreview,
   type UrlLoadDecision,
 } from './file-viewer-render-mode';
+import {
+  htmlHasRootRelativeProjectAssetRefs,
+  normalizeRootRelativeProjectAssetRefs,
+  rewriteInlinedCssAssetRefs,
+  rewriteInlinedScriptAssetRefs,
+} from './file-viewer-preview-assets';
 import { resolvePoweredPreviewUrl } from '../runtime/powered-preview';
 import { saveTemplate } from '../state/projects';
 import type {
@@ -6502,6 +6508,26 @@ function HtmlViewer({
     const s = routingHtmlSource;
     return s != null && htmlNeedsFocusGuard(s);
   }, [passiveLargeHtmlPreview, routingHtmlSource]);
+  // Project file paths, for confirming root-relative asset refs
+  // (`/reference-assets/main.css`) against real files instead of guessing
+  // from path shape. `null` while the list is in flight — the detection memo
+  // below then runs in conservative candidate mode so a clone artifact never
+  // flashes through the (unstyled) URL-load path before the list lands.
+  const [projectFilePathSet, setProjectFilePathSet] = useState<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setProjectFilePathSet(null);
+    void fetchProjectFiles(projectId).then((files) => {
+      if (!cancelled) setProjectFilePathSet(new Set(files.map((entry) => entry.name)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, file.mtime, filesRefreshKey, reloadKey]);
+  const projectRootAssetRefs = useMemo(
+    () => source != null && htmlHasRootRelativeProjectAssetRefs(source, projectFilePathSet),
+    [source, projectFilePathSet],
+  );
   // A real WebGL/Worker/WASM/SharedArrayBuffer artifact needs the "powered
   // preview" path — a cross-origin-isolated iframe with allow-same-origin —
   // which the opaque preview sandbox cannot provide (issue #724). Powered mode
@@ -6530,6 +6556,7 @@ function HtmlViewer({
     drawMode: drawOverlayOpen,
     forceInline: (forceInline || needsSandboxShim) && !needsPowered,
     needsFocusGuard: needsFocusGuard && !needsPowered,
+    projectRootAssetRefs,
   };
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview(urlLoadDecision) && !manualEditRequiresSrcDoc;
   const basePreviewSrcUrl = useMemo(
@@ -6673,15 +6700,29 @@ function HtmlViewer({
   useEffect(() => {
     setInlinedSource(null);
     if (useUrlLoadPreview) return;
-    if (!source || effectiveDeck || !hasRelativeAssetRefs(source)) return;
+    if (!source || effectiveDeck) return;
+    // Root-relative project asset refs need the confirmed file list before
+    // they can be normalized; wait for it rather than inlining a half-fixed
+    // document (the effect re-runs when the set lands).
+    if (projectRootAssetRefs && projectFilePathSet === null) return;
+    if (!hasRelativeAssetRefs(source) && !projectRootAssetRefs) return;
     let cancelled = false;
-    void inlineRelativeAssets(source, projectId, file.name).then((next) => {
+    void inlineRelativeAssets(source, projectId, file.name, projectFilePathSet).then((next) => {
       if (!cancelled) setInlinedSource(next);
     });
     return () => {
       cancelled = true;
     };
-  }, [source, effectiveDeck, projectId, file.name, reloadKey, useUrlLoadPreview]);
+  }, [
+    source,
+    effectiveDeck,
+    projectId,
+    file.name,
+    reloadKey,
+    useUrlLoadPreview,
+    projectRootAssetRefs,
+    projectFilePathSet,
+  ]);
 
   const srcDoc = useMemo(
     () => (previewSource ? buildSrcdoc(previewSource, {
@@ -11820,34 +11861,47 @@ async function inlineRelativeAssets(
   html: string,
   projectId: string,
   fileName: string,
+  projectFilePaths: ReadonlySet<string> | null = null,
 ): Promise<string> {
+  const toRawUrl = (projectPath: string) => projectRawUrl(projectId, projectPath);
+  // Root-relative project asset refs (confirmed against the real file list)
+  // become owner-relative first, so the stylesheet/script inlining below and
+  // the srcDoc <base href> rebasing treat them like any other relative ref.
+  const normalized = projectFilePaths
+    ? normalizeRootRelativeProjectAssetRefs(html, fileName, projectFilePaths)
+    : html;
+
   const replacements: Array<Promise<{ from: string; to: string } | null>> = [];
-  const links = html.match(/<link\b[^>]*>/gi) ?? [];
+  const links = normalized.match(/<link\b[^>]*>/gi) ?? [];
   for (const tag of links) {
     const rel = readHtmlAttr(tag, 'rel');
     const href = readHtmlAttr(tag, 'href');
     if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
     replacements.push(
-      fetchProjectRelativeText(projectId, fileName, href).then((css) =>
-        css == null
+      fetchProjectRelativeText(projectId, fileName, href).then((asset) =>
+        asset == null
           ? null
           : {
               from: tag,
               to:
                 `<style data-od-inline-asset="${escapeHtmlAttr(href)}">\n` +
-                `${css.replace(/<\/style/gi, '<\\/style')}\n</style>`,
+                `${rewriteInlinedCssAssetRefs(asset.text, asset.filePath, projectFilePaths, toRawUrl)
+                  .replace(/<\/style/gi, '<\\/style')}\n</style>`,
             },
       ),
     );
   }
 
-  const scripts = html.match(/<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi) ?? [];
+  const scripts = normalized.match(/<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi) ?? [];
   for (const tag of scripts) {
     const src = readHtmlAttr(tag, 'src');
     if (!src) continue;
     replacements.push(
-      fetchProjectRelativeText(projectId, fileName, src).then((js) => {
-        if (js == null) return null;
+      fetchProjectRelativeText(projectId, fileName, src).then((asset) => {
+        if (asset == null) return null;
+        const js = projectFilePaths
+          ? rewriteInlinedScriptAssetRefs(asset.text, asset.filePath, projectFilePaths, toRawUrl)
+          : asset.text;
         const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
         const attrs = open
           .replace(/^<script/i, '')
@@ -11864,20 +11918,20 @@ async function inlineRelativeAssets(
   const resolved = (await Promise.all(replacements)).filter(
     (item): item is { from: string; to: string } => item !== null,
   );
-  return resolved.reduce((next, { from, to }) => next.replace(from, () => to), html);
+  return resolved.reduce((next, { from, to }) => next.replace(from, () => to), normalized);
 }
 
 async function fetchProjectRelativeText(
   projectId: string,
   ownerFileName: string,
   assetRef: string,
-): Promise<string | null> {
+): Promise<{ filePath: string; text: string } | null> {
   const filePath = resolveProjectRelativePath(ownerFileName, assetRef);
   if (!filePath) return null;
   try {
     const resp = await fetch(projectRawUrl(projectId, filePath));
     if (!resp.ok) return null;
-    return await resp.text();
+    return { filePath, text: await resp.text() };
   } catch {
     return null;
   }

@@ -68,6 +68,13 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, needsFocusGuard: true })).toBe(false);
   });
 
+  it('falls back to srcDoc when the source references project files by site-root path', () => {
+    // URL-load serves the document untouched, so `/reference-assets/main.css`
+    // resolves against the app origin root and 404s; only the srcDoc pipeline
+    // rewrites confirmed root-relative refs into resolvable URLs.
+    expect(shouldUrlLoadHtmlPreview({ ...base, projectRootAssetRefs: true })).toBe(false);
+  });
+
   it('does not URL-load while the source-code tab is active', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, mode: 'source' })).toBe(false);
   });

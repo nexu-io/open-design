@@ -1013,6 +1013,12 @@ async function consumeDaemonRun({
   // a session-resuming runtime). Carried onto the surfaced error so the chat
   // can offer a Continue affordance. See ChatRunStatusResponse.resumable.
   let endResumable = false;
+  // Daemon failure classification carried onto the surfaced error so the chat's
+  // error card can name a specific failure type + fix (see resolveRunFailureUi).
+  // Sourced from the run-status fetch on the error frame and from the SSE `end`
+  // frame — both mirror the same finalize-time classification.
+  let endFailureCategory: ChatRunStatusResponse['failureCategory'] = null;
+  let endFailureDetail: ChatRunStatusResponse['failureDetail'] = null;
   let lastEventId: string | null = initialLastEventId ?? null;
   let canceled = false;
   const cancelRun = () => {
@@ -1153,6 +1159,8 @@ async function consumeDaemonRun({
             exitCode = typeof event.data.code === 'number' ? event.data.code : null;
             exitSignal = typeof event.data.signal === 'string' ? event.data.signal : null;
             if (event.data.resumable === true) endResumable = true;
+            if (event.data.failureCategory) endFailureCategory = event.data.failureCategory;
+            if (event.data.failureDetail) endFailureDetail = event.data.failureDetail;
             // `serverDeclaredSuccess` records whether the server explicitly
             // set `status: 'succeeded'` in the end payload — the local
             // `'succeeded'` fallback below does not count and must keep
@@ -1172,6 +1180,13 @@ async function consumeDaemonRun({
           exitSignal = status.signal ?? null;
           serverDeclaredSuccess = status.status === 'succeeded';
           if (status.resumable === true) endResumable = true;
+          // Carry the daemon failure classification off this terminal status
+          // too — this error-frame-then-status recovery path breaks before the
+          // SSE `end` frame, so without it markErrorRunFailure() below stamps
+          // null and the specific failureDetail card degrades to the generic
+          // run-error UI on reconnect.
+          if (status.failureCategory) endFailureCategory = status.failureCategory;
+          if (status.failureDetail) endFailureDetail = status.failureDetail;
           onRunStatus?.(endStatus);
           break;
         }
@@ -1201,6 +1216,8 @@ async function consumeDaemonRun({
         // end-event success.
         serverDeclaredSuccess = status.status === 'succeeded';
         if (status.resumable === true) endResumable = true;
+        if (status.failureCategory) endFailureCategory = status.failureCategory;
+        if (status.failureDetail) endFailureDetail = status.failureDetail;
         onRunStatus?.(endStatus);
       } else {
         onRunStatus?.('failed');
@@ -1233,7 +1250,12 @@ async function consumeDaemonRun({
         (exitSignal || (exitCode !== null && exitCode !== 0)));
     if (looksLikeFailure) {
       if (pendingStructuredError) {
-        handlers.onError(markErrorResumable(pendingStructuredError, endResumable));
+        handlers.onError(
+          markErrorRunFailure(markErrorResumable(pendingStructuredError, endResumable), {
+            failureCategory: endFailureCategory,
+            failureDetail: endFailureDetail,
+          }),
+        );
         return;
       }
       if (shouldSuppressLifecycleExitFallback(agentId, exitCode, exitSignal, stderrBuf)) {
@@ -1246,9 +1268,12 @@ async function consumeDaemonRun({
       const fallbackTail =
         tail || (isAmrOpenCodeExitFallback(agentId, stderrBuf) ? AMR_OPENCODE_INCOMPLETE_MESSAGE : '');
       handlers.onError(
-        markErrorResumable(
-          new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${fallbackTail ? `\n${fallbackTail}` : ''}`),
-          endResumable,
+        markErrorRunFailure(
+          markErrorResumable(
+            new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${fallbackTail ? `\n${fallbackTail}` : ''}`),
+            endResumable,
+          ),
+          { failureCategory: endFailureCategory, failureDetail: endFailureDetail },
         ),
       );
       return;
@@ -1273,6 +1298,26 @@ function isChatRunStatus(value: unknown): value is ChatRunStatus {
  *  when true so non-resumable failures stay undefined. */
 function markErrorResumable(err: Error, resumable: boolean): Error {
   if (resumable) (err as Error & { resumable?: boolean }).resumable = true;
+  return err;
+}
+
+/** Stamp the daemon's failure classification onto a surfaced error so the chat
+ *  error card can map `failureDetail` to a specific named failure type + fix
+ *  (see resolveRunFailureUi). Only stamps present values so an older daemon that
+ *  omits the fields leaves the error's classification undefined. */
+function markErrorRunFailure(
+  err: Error,
+  fields: {
+    failureCategory?: ChatRunStatusResponse['failureCategory'];
+    failureDetail?: ChatRunStatusResponse['failureDetail'];
+  },
+): Error {
+  const target = err as Error & {
+    failureCategory?: ChatRunStatusResponse['failureCategory'];
+    failureDetail?: ChatRunStatusResponse['failureDetail'];
+  };
+  if (fields.failureCategory) target.failureCategory = fields.failureCategory;
+  if (fields.failureDetail) target.failureDetail = fields.failureDetail;
   return err;
 }
 

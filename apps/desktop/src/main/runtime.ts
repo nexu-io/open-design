@@ -1433,6 +1433,7 @@ interface SaveAsDialogOptions {
   title: string;
   defaultPath: string;
   filters: Array<{ name: string; extensions: string[] }>;
+  properties: Array<"dontAddToRecent">;
 }
 
 // Pure: the Save As dialog options for a downloaded filename, or null when the
@@ -1455,7 +1456,7 @@ export function saveAsDialogOptionsForFilename(filename: string): SaveAsDialogOp
           { name: "PowerPoint Presentation", extensions: ["pptx"] },
           { name: "All Files", extensions: ["*"] },
         ];
-  return { title: "Save As", defaultPath: filename, filters };
+  return { title: "Save As", defaultPath: filename, filters, properties: ["dontAddToRecent"] };
 }
 
 function attachDownloadSaveAsDialog(window: BrowserWindow): void {
@@ -1582,7 +1583,11 @@ async function showDirectoryPickerForSender(
   const parent =
     BrowserWindow.fromWebContents(sender) ?? BrowserWindow.getFocusedWindow();
   const pickerOptions: Electron.OpenDialogOptions = {
-    properties: ["openDirectory", "createDirectory"],
+    // `dontAddToRecent` avoids shell recent-items / jump-list writes against
+    // the browsed folder. Combined with not seeding a cloud-backed default
+    // location, this trims the shell work that stalls the native picker on
+    // OneDrive-backed folders (see AppHangB1 note in diagnostics.ts).
+    properties: ["openDirectory", "createDirectory", "dontAddToRecent"],
   };
   return parent
     ? dialog.showOpenDialog(parent, pickerOptions)

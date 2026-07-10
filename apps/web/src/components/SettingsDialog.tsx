@@ -395,6 +395,7 @@ interface Props {
    * incremental save, not a final commit.
    */
   onPersist: (cfg: AppConfig, options?: { forceMediaProviderSync?: boolean }) => Promise<void> | void;
+  onDraftChange?: (cfg: AppConfig) => void;
   /**
    * Persist the Composio API key separately from the broader autosave
    * loop. Composio secrets need an explicit user gesture so half-typed
@@ -428,6 +429,15 @@ interface Props {
   onDesignSystemImportRebuildJob?: (designSystemId: string, job: DesignSystemGenerationJob) => void;
   deploymentProviderConfig?: DeploymentProviderConfig | null;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
+}
+
+function telemetryPrefsEqual(
+  a: AppConfig['telemetry'],
+  b: AppConfig['telemetry'],
+): boolean {
+  return a?.metrics === b?.metrics
+    && a?.content === b?.content
+    && a?.artifactManifest === b?.artifactManifest;
 }
 
 export interface AgentRefreshOptions {
@@ -1383,6 +1393,7 @@ export function SettingsDialog({
   deploymentProviderConfig = null,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
+  onDraftChange,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const analytics = useAnalytics();
@@ -1407,6 +1418,10 @@ export function SettingsDialog({
     accentColor: resolveAccentColor(initial.accentColor),
   });
 
+  useEffect(() => {
+    onDraftChange?.(cfg);
+  }, [cfg, onDraftChange]);
+
   // settings_view — fire on dialog open and on every section switch so the
   // configuration funnel can see which section the user spent time in.
   // The fire is keyed on section so a section bounce (open → switch →
@@ -1422,12 +1437,17 @@ export function SettingsDialog({
 
   useEffect(() => {
     const previousInitial = previousInitialRef.current;
+    const parentPrivacyChanged =
+      previousInitial.installationId !== initial.installationId ||
+      previousInitial.privacyDecisionAt !== initial.privacyDecisionAt ||
+      !telemetryPrefsEqual(previousInitial.telemetry, initial.telemetry);
     setCfg((current) => {
       const nextAgentCliEnv = reconcileAmrProfileEnv(current.agentCliEnv, initial.agentCliEnv);
       const nextAgentModels = reconcileAmrModelChoice(current.agentModels, previousInitial, initial);
       if (
         nextAgentCliEnv === current.agentCliEnv
         && nextAgentModels === current.agentModels
+        && !parentPrivacyChanged
       ) {
         return current;
       }
@@ -1435,6 +1455,13 @@ export function SettingsDialog({
         ...current,
         agentCliEnv: nextAgentCliEnv,
         agentModels: nextAgentModels,
+        ...(parentPrivacyChanged
+          ? {
+              installationId: initial.installationId,
+              privacyDecisionAt: initial.privacyDecisionAt,
+              telemetry: initial.telemetry ? { ...initial.telemetry } : undefined,
+            }
+          : {}),
       };
     });
     autosaveLastSavedRef.current = {
@@ -1448,6 +1475,13 @@ export function SettingsDialog({
         previousInitial,
         initial,
       ),
+      ...(parentPrivacyChanged
+        ? {
+            installationId: initial.installationId,
+            privacyDecisionAt: initial.privacyDecisionAt,
+            telemetry: initial.telemetry ? { ...initial.telemetry } : undefined,
+          }
+        : {}),
     };
     previousInitialRef.current = initial;
   }, [initial]);

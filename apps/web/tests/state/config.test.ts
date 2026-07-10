@@ -255,7 +255,7 @@ describe('mergeDaemonConfig', () => {
     // Brand-new install: the daemon has no privacy state at all. The product
     // default telemetry channels (metrics + content) are on and an anonymous
     // id is assigned so events have a stable distinct id. This mirrors the
-    // first-run banner's "I get it" opt-in payload; artifactManifest stays
+    // first-run banner's "Share" payload; artifactManifest stays
     // off, matching that surface.
     const merged = mergeDaemonConfig(DEFAULT_CONFIG, {});
 
