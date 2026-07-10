@@ -165,9 +165,12 @@ test('checkPromptArgvBudget gives DeepSeek-specific guidance for large contexts'
   assert.match(flagged.message, /stdin-capable adapter/);
 });
 
-test('Kimi ACP mode does not declare an argv-byte prompt budget', () => {
-  assert.equal(kimi.maxPromptArgBytes, undefined);
-  assert.equal(checkPromptArgvBudget(kimi, 'x'.repeat(100_000), 'win32'), null);
+test('Kimi print mode caps argv-sized prompts', () => {
+  assert.equal(kimi.maxPromptArgBytes, 30_000);
+  assert.equal(
+    checkPromptArgvBudget(kimi, 'x'.repeat(100_000), 'win32')?.code,
+    'AGENT_PROMPT_TOO_LARGE',
+  );
 });
 
 test('checkPromptArgvBudget is a no-op for Grok Build because it uses prompt files', () => {
