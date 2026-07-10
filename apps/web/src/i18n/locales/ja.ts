@@ -346,6 +346,7 @@ export const ja: Dict = {
   'settings.testSuccessCli': '{agentName} が {ms} ms で応答 — \'{sample}\'',
   'settings.testAuthFailed': '認証に失敗しました。API キーを確認してください。',
   'settings.testForbidden': 'アクセスが拒否されました。アカウント、リージョン、組織を確認してください。',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': 'このエンドポイントにモデル \'{model}\' は見つかりません。',
   'settings.testInvalidModelId': 'モデル ID \'{model}\' は無効です。カスタム ID は英数字で始まり、空白を含めないでください。',
   'settings.testInvalidBaseUrl': 'Base URL が無効か到達できません。',

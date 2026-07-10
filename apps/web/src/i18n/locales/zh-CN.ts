@@ -343,6 +343,7 @@ export const zhCN: Dict = {
   "settings.testSuccessCli": "{agentName} 在 {ms} 毫秒内响应 — '{sample}'",
   "settings.testAuthFailed": "鉴权失败，请检查 API 密钥。",
   "settings.testForbidden": "访问被拒绝。请检查账号、地区或组织。",
+    "settings.testInternalIpBlocked": "Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.",
   "settings.testNotFoundModel": "未在此端点找到模型 '{model}'。",
   "settings.testInvalidModelId":
     "模型 ID '{model}' 格式无效。自定义 ID 必须以字母或数字开头，且不能包含空格。",

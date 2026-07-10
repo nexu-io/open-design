@@ -169,9 +169,25 @@ export function validateBaseUrl(
     !isAllowlistedInternalHost(hostname, options.allowedInternalHosts) &&
     isBlockedExternalApiHostname(hostname)
   ) {
-    return { error: 'Internal IPs blocked', forbidden: true };
+    return { error: INTERNAL_IP_BLOCKED_SENTINEL, forbidden: true };
   }
   return { parsed };
+}
+
+// Sentinel used to identify the allowlist-blocked internal host case (issue #3225 / #1244).
+// This exact string is emitted in `error` / `detail` when a user-configured provider
+// base URL resolves to a blocked internal IP and is not present in OD_ALLOWED_INTERNAL_HOSTS.
+// UI layers branch on the exact sentinel (not just `kind === 'forbidden'`) to show
+// actionable guidance. Keep the literal stable; treat as narrow API surface.
+export const INTERNAL_IP_BLOCKED_SENTINEL = 'Internal IPs blocked';
+
+export function isInternalIpBlocked(result: {
+  kind?: string;
+  detail?: string;
+  error?: string;
+}): boolean {
+  const text = (result?.detail ?? result?.error ?? '').trim();
+  return result?.kind === 'forbidden' && text === INTERNAL_IP_BLOCKED_SENTINEL;
 }
 
 export type ConnectionTestKind =

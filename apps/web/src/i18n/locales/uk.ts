@@ -346,6 +346,7 @@ export const uk: Dict = {
   'settings.testSuccessCli': '{agentName} відповів за {ms} мс — \'{sample}\'',
   'settings.testAuthFailed': 'Помилка автентифікації. Перевірте ключ API.',
   'settings.testForbidden': 'Доступ заборонено. Перевірте обліковий запис, регіон або організацію.',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': 'Модель \'{model}\' не знайдено на цій кінцевій точці.',
   'settings.testInvalidModelId': 'ID моделі \'{model}\' недійсний. Власний ID має починатися з літери або цифри й не містити пробілів.',
   'settings.testInvalidBaseUrl': 'Base URL недійсний або недоступний.',

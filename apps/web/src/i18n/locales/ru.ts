@@ -346,6 +346,7 @@ export const ru: Dict = {
   'settings.testSuccessCli': '{agentName} ответил за {ms} мс — \'{sample}\'',
   'settings.testAuthFailed': 'Сбой аутентификации. Проверьте ключ API.',
   'settings.testForbidden': 'Доступ запрещен. Проверьте учетную запись, регион или организацию.',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': 'Модель \'{model}\' не найдена на этом эндпойнте.',
   'settings.testInvalidModelId': 'ID модели \'{model}\' недействителен. Пользовательский ID должен начинаться с буквы или цифры и не содержать пробелов.',
   'settings.testInvalidBaseUrl': 'Base URL недействителен или недоступен.',

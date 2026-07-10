@@ -346,6 +346,7 @@ export const esES: Dict = {
   'settings.testSuccessCli': '{agentName} respondió en {ms} ms — \'{sample}\'',
   'settings.testAuthFailed': 'Autenticación fallida. Comprueba tu clave de API.',
   'settings.testForbidden': 'Acceso prohibido. Verifica cuenta, región u organización.',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': 'No se encontró el modelo \'{model}\' en este endpoint.',
   'settings.testInvalidModelId': 'El id de modelo \'{model}\' no es válido. Los ids personalizados deben empezar con una letra o un número y no contener espacios.',
   'settings.testInvalidBaseUrl': 'La Base URL no es válida o no es accesible.',

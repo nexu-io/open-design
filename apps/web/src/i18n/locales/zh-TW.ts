@@ -344,6 +344,7 @@ export const zhTW: Dict = {
   "settings.testSuccessCli": "{agentName} 在 {ms} 毫秒內回應 — '{sample}'",
   "settings.testAuthFailed": "驗證失敗，請檢查 API 金鑰。",
   "settings.testForbidden": "存取被拒絕，請確認帳戶、地區或組織。",
+    "settings.testInternalIpBlocked": "Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.",
   "settings.testNotFoundModel": "此端點找不到模型 '{model}'。",
   "settings.testInvalidModelId":
     "模型 ID '{model}' 格式無效。自訂 ID 必須以字母或數字開頭，且不能包含空格。",

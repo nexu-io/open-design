@@ -346,6 +346,7 @@ export const tr: Dict = {
   'settings.testSuccessCli': '{agentName}, {ms} ms içinde yanıtladı — \'{sample}\'',
   'settings.testAuthFailed': 'Kimlik doğrulama başarısız. API anahtarınızı kontrol edin.',
   'settings.testForbidden': 'Erişim yasak. Hesabı, bölgeyi veya kuruluşu doğrulayın.',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': 'Bu uçta \'{model}\' modeli bulunamadı.',
   'settings.testInvalidModelId': '\'{model}\' model id geçersiz. Özel id harf veya rakamla başlamalı ve boşluk içermemelidir.',
   'settings.testInvalidBaseUrl': 'Base URL geçersiz veya erişilemez.',

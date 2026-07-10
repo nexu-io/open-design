@@ -30,6 +30,7 @@ import {
   type RunContextSelection,
   type UpsertMemoryRequest,
 } from '@open-design/contracts';
+import { isInternalIpBlocked } from '@open-design/contracts/api/connectionTest';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import type { DesignSystemGenerateSnapshot } from './DesignSystemFlow';
 import { useAnalytics } from '../analytics/provider';
@@ -3370,7 +3371,7 @@ function OnboardingByokSetupPanel({
           )}`}
           role={modelsState.result.ok ? 'status' : 'alert'}
         >
-          {renderOnboardingProviderModelsMessage(t, modelsState.result)}
+          {renderOnboardingProviderModelsMessage(t, modelsState.result, baseUrl)}
         </p>
       ) : null}
       {testState.status === 'running' ? (
@@ -3384,7 +3385,7 @@ function OnboardingByokSetupPanel({
           )}`}
           role={testState.result.ok ? 'status' : 'alert'}
         >
-          {renderOnboardingProviderTestMessage(t, testState.result, model)}
+          {renderOnboardingProviderTestMessage(t, testState.result, model, baseUrl)}
         </p>
       ) : null}
     </div>
@@ -3445,6 +3446,7 @@ function renderOnboardingProviderTestMessage(
   t: ReturnType<typeof useT>,
   result: ConnectionTestResponse,
   fallbackModel: string,
+  baseUrl?: string,
 ): string {
   const ms = Math.max(0, Math.round(result.latencyMs));
   const sample = result.sample ?? '';
@@ -3457,6 +3459,16 @@ function renderOnboardingProviderTestMessage(
     case 'auth_failed':
       return t('settings.testAuthFailed');
     case 'forbidden':
+      if (isInternalIpBlocked(result)) {
+        const entered = (baseUrl || '').trim();
+        let host = entered;
+        try {
+          host = new URL(entered.replace(/\/+$/, '')).hostname;
+        } catch {
+          /* keep raw */
+        }
+        return t('settings.testInternalIpBlocked', { host: host || entered || 'host' });
+      }
       return t('settings.testForbidden');
     case 'not_found_model':
       return t('settings.testNotFoundModel', { model: testedModel });
@@ -3513,6 +3525,7 @@ function renderOnboardingAgentTestMessage(
 function renderOnboardingProviderModelsMessage(
   t: ReturnType<typeof useT>,
   result: ProviderModelsResponse,
+  baseUrl?: string,
 ): string {
   if (result.ok) {
     return t('settings.fetchModelsSuccess', {
@@ -3523,6 +3536,16 @@ function renderOnboardingProviderModelsMessage(
     case 'auth_failed':
       return t('settings.testAuthFailed');
     case 'forbidden':
+      if (isInternalIpBlocked(result)) {
+        const entered = (baseUrl || '').trim();
+        let host = entered;
+        try {
+          host = new URL(entered.replace(/\/+$/, '')).hostname;
+        } catch {
+          /* keep raw */
+        }
+        return t('settings.testInternalIpBlocked', { host: host || entered || 'host' });
+      }
       return t('settings.testForbidden');
     case 'invalid_base_url':
       return t('settings.testInvalidBaseUrl');

@@ -346,6 +346,7 @@ export const ptBR: Dict = {
   'settings.testSuccessCli': '{agentName} respondeu em {ms} ms — \'{sample}\'',
   'settings.testAuthFailed': 'Falha na autenticação. Verifique sua chave de API.',
   'settings.testForbidden': 'Acesso proibido. Verifique conta, região ou organização.',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': 'Modelo \'{model}\' não encontrado neste endpoint.',
   'settings.testInvalidModelId': 'O id de modelo \'{model}\' é inválido. IDs personalizados devem começar com letra ou número e não conter espaços.',
   'settings.testInvalidBaseUrl': 'Base URL inválida ou inacessível.',

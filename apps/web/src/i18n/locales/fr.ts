@@ -346,6 +346,7 @@ export const fr: Dict = {
   'settings.testSuccessCli': '{agentName} a répondu en {ms} ms — \'{sample}\'',
   'settings.testAuthFailed': 'Échec de l’authentification. Vérifiez votre clé API.',
   'settings.testForbidden': 'Accès interdit. Vérifiez le compte, la région ou l’organisation.',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': 'Modèle \'{model}\' introuvable sur ce point d’accès.',
   'settings.testInvalidModelId': 'L’id de modèle \'{model}\' est invalide. Les ids personnalisés doivent commencer par une lettre ou un chiffre et ne contenir aucun espace.',
   'settings.testInvalidBaseUrl': 'L’URL de base est invalide ou inaccessible.',

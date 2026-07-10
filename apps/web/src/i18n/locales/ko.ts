@@ -346,6 +346,7 @@ export const ko: Dict = {
   'settings.testSuccessCli': '{agentName}이(가) {ms} ms 만에 응답 — \'{sample}\'',
   'settings.testAuthFailed': '인증 실패. API 키를 확인하세요.',
   'settings.testForbidden': '접근이 거부되었습니다. 계정, 지역 또는 조직을 확인하세요.',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': '이 엔드포인트에서 모델 \'{model}\'을(를) 찾을 수 없습니다.',
   'settings.testInvalidModelId': '모델 ID \'{model}\'이(가) 잘못되었습니다. 사용자 지정 ID는 문자 또는 숫자로 시작하고 공백을 포함할 수 없습니다.',
   'settings.testInvalidBaseUrl': 'Base URL이 잘못되었거나 접속할 수 없습니다.',

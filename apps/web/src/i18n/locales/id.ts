@@ -346,6 +346,7 @@ export const id: Dict = {
   'settings.testSuccessCli': '{agentName} membalas dalam {ms} md — \'{sample}\'',
   'settings.testAuthFailed': 'Autentikasi gagal. Periksa API key kamu.',
   'settings.testForbidden': 'Akses ditolak. Verifikasi akun, wilayah, atau organisasi kamu.',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': 'Model \'{model}\' tidak ditemukan di endpoint ini.',
   'settings.testInvalidModelId': 'ID model \'{model}\' tidak valid. ID kustom harus diawali huruf atau angka dan tidak boleh berisi spasi.',
   'settings.testInvalidBaseUrl': 'Base URL tidak valid atau tidak dapat dijangkau.',

@@ -346,6 +346,7 @@ export const ar: Dict = {
   'settings.testSuccessCli': 'رد {agentName} خلال {ms} مللي ثانية — \'{sample}\'',
   'settings.testAuthFailed': 'فشلت المصادقة. تحقق من مفتاح الـ API.',
   'settings.testForbidden': 'الوصول ممنوع. تحقق من الحساب أو المنطقة أو المؤسسة.',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': 'لم يتم العثور على النموذج \'{model}\' في هذه النقطة.',
   'settings.testInvalidModelId': 'معرّف النموذج \'{model}\' غير صالح. يجب أن يبدأ المعرّف المخصص بحرف أو رقم وألا يحتوي على مسافات.',
   'settings.testInvalidBaseUrl': 'Base URL غير صالح أو يتعذر الوصول إليه.',

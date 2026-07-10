@@ -2,7 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
 import { Button, VisuallyHidden } from '@open-design/components';
 import type { AmrWalletSnapshot } from '@open-design/contracts';
-import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
+import {
+  validateBaseUrl,
+  isInternalIpBlocked,
+} from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
   byokProtocolToTracking,
@@ -2633,6 +2636,16 @@ export function SettingsDialog({
       case 'auth_failed':
         return t('settings.testAuthFailed');
       case 'forbidden':
+        if (isInternalIpBlocked(result)) {
+          const entered = (cfg.baseUrl || '').trim();
+          let host = entered;
+          try {
+            host = new URL(entered.replace(/\/+$/, '')).hostname;
+          } catch {
+            /* keep raw */
+          }
+          return t('settings.testInternalIpBlocked', { host: host || entered || 'host' });
+        }
         return t('settings.testForbidden');
       case 'not_found_model':
         return t('settings.testNotFoundModel', { model: testedModel });
@@ -3388,11 +3401,21 @@ export function SettingsDialog({
     currentProviderModelsResult.kind === 'auth_failed';
   const providerModelsFailureMessage =
     currentProviderModelsResult?.ok === false && !apiKeyAuthFailed
-      ? t('settings.fetchModelsFailed', {
-          detail:
-            currentProviderModelsResult.detail ||
-            currentProviderModelsResult.kind,
-        })
+      ? isInternalIpBlocked(currentProviderModelsResult)
+        ? t('settings.testInternalIpBlocked', {
+            host: (() => {
+              try {
+                return new URL((cfg.baseUrl || '').trim().replace(/\/+$/, '')).hostname;
+              } catch {
+                return (cfg.baseUrl || '').trim() || 'host';
+              }
+            })(),
+          })
+        : t('settings.fetchModelsFailed', {
+            detail:
+              currentProviderModelsResult.detail ||
+              currentProviderModelsResult.kind,
+          })
       : null;
   const providerTestBaseUrlInvalid =
     providerTestState.status === 'done' &&

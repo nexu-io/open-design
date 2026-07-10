@@ -346,6 +346,7 @@ export const fa: Dict = {
   'settings.testSuccessCli': '{agentName} در {ms} میلی‌ثانیه پاسخ داد — \'{sample}\'',
   'settings.testAuthFailed': 'احراز هویت ناموفق بود. کلید API را بررسی کنید.',
   'settings.testForbidden': 'دسترسی مجاز نیست. حساب، منطقه یا سازمان را بررسی کنید.',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': 'مدل \'{model}\' در این نقطه پایانی یافت نشد.',
   'settings.testInvalidModelId': 'شناسه مدل \'{model}\' نامعتبر است. شناسه سفارشی باید با حرف یا عدد شروع شود و فاصله نداشته باشد.',
   'settings.testInvalidBaseUrl': 'Base URL نامعتبر یا غیرقابل دسترسی است.',

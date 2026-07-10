@@ -7,7 +7,10 @@ import type {
   ProviderModelsRequest,
   ProviderModelsResponse,
 } from '@open-design/contracts/api/providerModels';
-import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
+import {
+  INTERNAL_IP_BLOCKED_SENTINEL,
+  isLoopbackApiHost,
+} from '@open-design/contracts/api/connectionTest';
 import { redactSecrets, validateUserProviderBaseUrl } from '../connectionTest.js';
 import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
 import { aihubmixHeaders, aihubmixCatalogUrl, parseAIHubMixCatalog } from './aihubmix.js';

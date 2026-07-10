@@ -324,6 +324,7 @@ export interface Dict {
   'settings.testSuccessCli': string;
   'settings.testAuthFailed': string;
   'settings.testForbidden': string;
+  'settings.testInternalIpBlocked': string;
   'settings.testNotFoundModel': string;
   'settings.testInvalidModelId': string;
   'settings.testInvalidBaseUrl': string;

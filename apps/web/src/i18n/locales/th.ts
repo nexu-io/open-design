@@ -346,6 +346,7 @@ export const th: Dict = {
   'settings.testSuccessCli': '{agentName} ตอบกลับใน {ms} มิลลิวินาที — \'{sample}\'',
   'settings.testAuthFailed': 'การยืนยันตัวตนล้มเหลว ตรวจสอบ API Key ของคุณ',
   'settings.testForbidden': 'ถูกปฏิเสธการเข้าถึง ตรวจสอบบัญชี ภูมิภาค หรือองค์กรของคุณ',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': 'ไม่พบโมเดล \'{model}\' ใน Endpoint นี้',
   'settings.testInvalidModelId': 'ID โมเดล \'{model}\' ไม่ถูกต้อง ID ต้องขึ้นต้นด้วยตัวอักษรหรือตัวเลข และไม่มีช่องว่าง',
   'settings.testInvalidBaseUrl': 'Base URL ไม่ถูกต้องหรือไม่สามารถเข้าถึงได้',

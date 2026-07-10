@@ -346,6 +346,7 @@ export const de: Dict = {
   'settings.testSuccessCli': '{agentName} antwortete in {ms} ms — \'{sample}\'',
   'settings.testAuthFailed': 'Authentifizierung fehlgeschlagen. Pruefen Sie Ihren API-Schluessel.',
   'settings.testForbidden': 'Zugriff verweigert. Pruefen Sie Konto, Region oder Organisation.',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': 'Modell \'{model}\' an diesem Endpunkt nicht gefunden.',
   'settings.testInvalidModelId': 'Modell-ID \'{model}\' ist ungueltig. Benutzerdefinierte IDs muessen mit einem Buchstaben oder einer Zahl beginnen und duerfen keine Leerzeichen enthalten.',
   'settings.testInvalidBaseUrl': 'Base URL ist ungueltig oder nicht erreichbar.',

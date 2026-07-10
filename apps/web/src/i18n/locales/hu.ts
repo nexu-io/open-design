@@ -346,6 +346,7 @@ export const hu: Dict = {
   'settings.testSuccessCli': '{agentName} {ms} ms alatt válaszolt — \'{sample}\'',
   'settings.testAuthFailed': 'A hitelesítés sikertelen. Ellenőrizd az API kulcsot.',
   'settings.testForbidden': 'A hozzáférés tiltott. Ellenőrizd a fiókot, régiót vagy szervezetet.',
+    'settings.testInternalIpBlocked': 'Internal host blocked for security (SSRF guard). Host not in allowlist. Set OD_ALLOWED_INTERNAL_HOSTS=<host> in the launch environment, then restart the daemon/desktop app. Copy the snippet or see the docs.',
   'settings.testNotFoundModel': 'A(z) \'{model}\' modell nem található ezen a végponton.',
   'settings.testInvalidModelId': 'A(z) \'{model}\' modellazonosító érvénytelen. Az egyéni azonosító betűvel vagy számmal kezdődjön, és ne tartalmazzon szóközt.',
   'settings.testInvalidBaseUrl': 'A Base URL érvénytelen vagy nem elérhető.',
