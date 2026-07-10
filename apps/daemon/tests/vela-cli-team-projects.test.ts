@@ -13,6 +13,13 @@ describe('Vela CLI team-project catalog adapter', () => {
               ownerMemberId: 'wm-owner',
               displayName: 'Electric Studio 2',
               syncState: 'synced',
+              metadata: {
+                skillId: 'deck-builder',
+                designSystemId: 'ds-emerald',
+                createdAt: 1719820800000,
+                updatedAt: 1719907200000,
+                metadata: { kind: 'deck', entryFile: 'index.html' },
+              },
               createdAt: '2026-07-01T00:00:00.000Z',
               updatedAt: '2026-07-02T00:00:00.000Z',
             },
@@ -27,8 +34,11 @@ describe('Vela CLI team-project catalog adapter', () => {
         ownerMemberId: 'wm-owner',
         sharedAt: '2026-07-01T00:00:00.000Z',
         name: 'Electric Studio 2',
-        createdAt: Date.parse('2026-07-01T00:00:00.000Z'),
-        updatedAt: Date.parse('2026-07-02T00:00:00.000Z'),
+        skillId: 'deck-builder',
+        designSystemId: 'ds-emerald',
+        createdAt: 1719820800000,
+        updatedAt: 1719907200000,
+        metadata: { kind: 'deck', entryFile: 'index.html' },
       },
     ]);
   });
@@ -87,6 +97,11 @@ describe('Vela CLI team-project catalog adapter', () => {
       displayName: 'Electric Studio 2',
       syncState: 'pending_upload',
       lastSyncedVersionId: 'v2',
+      metadata: {
+        skillId: 'deck-builder',
+        designSystemId: 'ds-emerald',
+        metadata: { kind: 'deck' },
+      },
     });
     await catalog.remove('p1');
 
@@ -102,6 +117,12 @@ describe('Vela CLI team-project catalog adapter', () => {
         'pending_upload',
         '--last-synced-version-id',
         'v2',
+        '--metadata-json',
+        JSON.stringify({
+          skillId: 'deck-builder',
+          designSystemId: 'ds-emerald',
+          metadata: { kind: 'deck' },
+        }),
       ],
       ['remove', 'p1'],
     ]);

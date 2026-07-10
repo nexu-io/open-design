@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import type { TeamProject } from '@open-design/contracts';
+import type { ProjectMetadata, TeamProject } from '@open-design/contracts';
 import { amrVelaProfileEnv } from '../integrations/vela-profile.js';
 
 const PROJECT_RESOURCE_PREFIX = 'project-';
@@ -13,6 +13,7 @@ export interface VelaTeamProjectCatalog {
     displayName?: string | null;
     syncState?: 'pending_upload' | 'syncing' | 'synced' | 'failed';
     lastSyncedVersionId?: string | null;
+    metadata?: Record<string, unknown> | null;
   }): Promise<void>;
   remove(projectId: string): Promise<void>;
 }
@@ -24,6 +25,7 @@ type TeamProjectWire = {
   displayName?: unknown;
   syncState?: unknown;
   lastSyncedVersionId?: unknown;
+  metadata?: unknown;
   createdAt?: unknown;
   updatedAt?: unknown;
 };
@@ -67,6 +69,9 @@ export function createVelaCliTeamProjectCatalog(
       if (input.syncState) args.push('--sync-state', input.syncState);
       if (input.lastSyncedVersionId?.trim()) {
         args.push('--last-synced-version-id', input.lastSyncedVersionId.trim());
+      }
+      if (input.metadata && Object.keys(input.metadata).length > 0) {
+        args.push('--metadata-json', JSON.stringify(input.metadata));
       }
       await run(args);
     },
@@ -112,13 +117,28 @@ function toTeamProject(input: unknown): TeamProject | null {
   if (typeof record.displayName === 'string' && record.displayName.trim()) {
     project.name = record.displayName.trim();
   }
+  const metadata = recordObject(record.metadata);
+  if (metadata) {
+    if (typeof metadata.skillId === 'string') project.skillId = metadata.skillId;
+    if (typeof metadata.designSystemId === 'string') project.designSystemId = metadata.designSystemId;
+    const projectMetadata = recordObject(metadata.metadata);
+    if (projectMetadata) project.metadata = projectMetadata as unknown as ProjectMetadata;
+    if (typeof metadata.createdAt === 'number') project.createdAt = metadata.createdAt;
+    if (typeof metadata.updatedAt === 'number') project.updatedAt = metadata.updatedAt;
+  }
   if (typeof record.updatedAt === 'string') {
     const updatedAt = Date.parse(record.updatedAt);
-    if (Number.isFinite(updatedAt)) project.updatedAt = updatedAt;
+    if (Number.isFinite(updatedAt) && project.updatedAt === undefined) project.updatedAt = updatedAt;
   }
   const createdAt = Date.parse(record.createdAt);
-  if (Number.isFinite(createdAt)) project.createdAt = createdAt;
+  if (Number.isFinite(createdAt) && project.createdAt === undefined) project.createdAt = createdAt;
   return project;
+}
+
+function recordObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 const defaultRunVelaTeamProjects: RunVelaTeamProjects = (args) =>

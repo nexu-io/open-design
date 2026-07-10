@@ -306,6 +306,7 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
           projectId: req.params.id,
           displayName: project?.name ?? null,
           syncState: 'synced',
+          ...(project ? { metadata: { ...project } } : {}),
         });
       } catch (error) {
         console.warn('[od] failed to write Vela team project catalog:', error);

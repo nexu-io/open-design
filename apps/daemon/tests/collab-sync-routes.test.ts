@@ -270,6 +270,13 @@ describe('collab sync routes', () => {
         projectId: 'p1',
         displayName: 'Electric Studio 2',
         syncState: 'synced',
+        metadata: {
+          name: 'Electric Studio 2',
+          skillId: null,
+          designSystemId: null,
+          createdAt: 1,
+          updatedAt: 2,
+        },
       },
     ]);
 
