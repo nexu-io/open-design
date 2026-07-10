@@ -31,6 +31,11 @@ const TEAM_CONTEXT = {
   displayName: 'Ma Shu',
 };
 
+const ADMIN_CONTEXT = {
+  ...TEAM_CONTEXT,
+  role: 'admin',
+};
+
 /** What `parseWorkspaceCollabContext` returns: the minimal input enriched with the
  *  fields it derives — workspaceId fallback, provider/billing defaults, and the
  *  permissions + seat summary derived through B's shared helpers. */
@@ -192,7 +197,7 @@ describe('POST /api/workspace/invite', () => {
       },
     });
     // Derive workspaceId from the set context (parsed → workspaceId 'wm-1').
-    await api.req('/api/workspace/context', { method: 'PUT', body: TEAM_CONTEXT });
+    await api.req('/api/workspace/context', { method: 'PUT', body: ADMIN_CONTEXT });
     const res = await api.req('/api/workspace/invite', {
       method: 'POST',
       body: { invites: [{ email: 'a@x.com', role: 'admin' }, { email: 'b@x.com', role: 'member' }] },
@@ -229,11 +234,31 @@ describe('POST /api/workspace/invite', () => {
     expect(res.body).toEqual({ error: 'no_workspace' });
   });
 
+  it('403s when the current team member cannot invite teammates', async () => {
+    let called = false;
+    const api = await startContextServer({
+      createInvite: async () => {
+        called = true;
+        return { ok: true, inviteId: 'inv-x' };
+      },
+    });
+    await api.req('/api/workspace/context', { method: 'PUT', body: TEAM_CONTEXT });
+
+    const res = await api.req('/api/workspace/invite', {
+      method: 'POST',
+      body: { invites: [{ email: 'a@x.com', role: 'member' }] },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: 'forbidden' });
+    expect(called).toBe(false);
+  });
+
   it('short-circuits to 401 no_session', async () => {
     const api = await startContextServer({
       createInvite: async () => ({ ok: false, status: 401, error: 'no_session' }),
     });
-    await api.req('/api/workspace/context', { method: 'PUT', body: TEAM_CONTEXT });
+    await api.req('/api/workspace/context', { method: 'PUT', body: ADMIN_CONTEXT });
     const res = await api.req('/api/workspace/invite', {
       method: 'POST',
       body: { invites: [{ email: 'a@x.com', role: 'member' }] },
@@ -246,7 +271,7 @@ describe('POST /api/workspace/invite', () => {
     const api = await startContextServer({
       createInvite: async () => ({ ok: false, status: 404, error: 'create_404' }),
     });
-    await api.req('/api/workspace/context', { method: 'PUT', body: TEAM_CONTEXT });
+    await api.req('/api/workspace/context', { method: 'PUT', body: ADMIN_CONTEXT });
     const res = await api.req('/api/workspace/invite', {
       method: 'POST',
       body: { invites: [{ email: 'a@x.com', role: 'member' }] },

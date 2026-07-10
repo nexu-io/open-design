@@ -88,9 +88,6 @@ export function createResourceHubPublishAdapter(
     const resourceId = resourceIdFor(projectId, principal);
     try {
       const existing = await client.getResource(principal, resourceId);
-      if (metadata && Object.keys(metadata).length > 0) {
-        await client.createResource(principal, { kind, resourceId, metadata });
-      }
       return existing.id;
     } catch (error) {
       if (!(error instanceof ResourceHubError) || error.status !== 404) throw error;

@@ -23,14 +23,13 @@ describe('createWorkspaceInvite', () => {
     expect(out).toEqual({ ok: true, inviteId: 'inv-9' });
 
     const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    expect(String(url)).toBe('https://vela.example/api/v1/workspace-invites');
+    expect(String(url)).toBe('https://vela.example/api/v1/workspaces/ws-team-1/invites');
     const request = init as RequestInit;
     expect(request.method).toBe('POST');
     expect(request.headers).toMatchObject({ authorization: 'Bearer ck-1' });
     expect(JSON.parse(String(request.body))).toEqual({
-      email: 'new@company.com',
+      invitedEmail: 'new@company.com',
       role: 'admin',
-      workspaceId: 'ws-team-1',
     });
   });
 

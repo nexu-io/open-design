@@ -131,10 +131,11 @@ export function useProjectCollab(
   // briefly missing `ownerMemberId`. The real owner sees a momentary read-only
   // state until their id is confirmed, then flips to editable. A personal /
   // unshared project is never read-only on this gate.
+  const statusUnknown = decision.enabled && collab.syncState === null;
   const shared = collab.syncState !== 'local_only' && collab.syncState !== null;
-  const collabEnabled = decision.enabled && shared;
+  const collabEnabled = decision.enabled && (statusUnknown || shared);
   const isOwner = collab.ownerMemberId != null && collab.ownerMemberId === context?.workspaceMemberId;
-  const sharedReadOnly = shared && !isOwner;
+  const sharedReadOnly = statusUnknown || (shared && !isOwner);
   const viewerOnly = workspaceReadOnly || sharedReadOnly;
 
   // Member content auto-sync (the last link): when a read-only member sees the

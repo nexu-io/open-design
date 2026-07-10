@@ -148,7 +148,12 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
     const authorization = req.header('authorization') ?? undefined;
     const context = await workspaceContext.current({ authorization });
     const workspaceId = context?.workspaceId?.trim() ?? '';
-    if (!workspaceId) return res.status(409).json({ error: 'no_workspace' });
+    if (!workspaceId || context?.workspaceType !== 'team') {
+      return res.status(409).json({ error: 'no_workspace' });
+    }
+    if (!context.permissions.canInviteMembers) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
 
     const results: WorkspaceInviteCreateResult[] = [];
     for (const item of items) {

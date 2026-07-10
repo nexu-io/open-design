@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   continueInviteFromUrl,
+  createInviteDeeplinkDispatcher,
   findDeeplinkArg,
 } from "../../src/main/invite-deeplink-core.js";
 
@@ -73,5 +74,25 @@ describe("continueInviteFromUrl", () => {
       }) as unknown as typeof fetch,
     });
     expect(broken).toEqual({ ok: false, reason: "unreachable" });
+  });
+});
+
+describe("createInviteDeeplinkDispatcher", () => {
+  it("queues cold-start deeplinks until daemon deps are registered", () => {
+    const continueInvite = vi.fn(async () => ({ ok: true }));
+    const dispatcher = createInviteDeeplinkDispatcher(continueInvite);
+    const deps = {
+      resolveDaemonBaseUrl: async () => "http://127.0.0.1:17456",
+    };
+
+    dispatcher.dispatch(VALID);
+
+    expect(dispatcher.pendingCount()).toBe(1);
+    expect(continueInvite).not.toHaveBeenCalled();
+
+    dispatcher.setDeps(deps);
+
+    expect(dispatcher.pendingCount()).toBe(0);
+    expect(continueInvite).toHaveBeenCalledWith(VALID, deps);
   });
 });

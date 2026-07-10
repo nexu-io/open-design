@@ -50,6 +50,45 @@ export interface InviteDeeplinkDeps {
   onActivated?: (context: unknown) => void;
 }
 
+type ContinueInvite = (
+  url: string,
+  deps: InviteDeeplinkDeps,
+) => Promise<{ ok: boolean; reason?: string; status?: number }>;
+
+/**
+ * Queue OS deeplinks that arrive before the desktop runtime can resolve the
+ * daemon URL. macOS can deliver `open-url` during cold start, before the app has
+ * finished constructing the daemon/web bridge; dropping that URL would strand
+ * the accepted invite on the cloud success page.
+ */
+export function createInviteDeeplinkDispatcher(
+  continueInvite: ContinueInvite = continueInviteFromUrl,
+) {
+  let deps: InviteDeeplinkDeps | null = null;
+  const pending: string[] = [];
+
+  const dispatch = (url: string | null) => {
+    if (!url) return;
+    if (!deps) {
+      pending.push(url);
+      return;
+    }
+    void continueInvite(url, deps);
+  };
+
+  return {
+    dispatch,
+    setDeps(nextDeps: InviteDeeplinkDeps) {
+      deps = nextDeps;
+      const queued = pending.splice(0);
+      for (const url of queued) dispatch(url);
+    },
+    pendingCount() {
+      return pending.length;
+    },
+  };
+}
+
 /** Extract an `opendesign://` url from a process argv list, if present. */
 export function findDeeplinkArg(argv: readonly string[]): string | null {
   return argv.find((arg) => arg.startsWith(`${INVITE_DEEPLINK_SCHEME}://`)) ?? null;

@@ -13,7 +13,10 @@ import { readVelaControlApiContext } from '../integrations/vela.js';
 // not a crash.
 
 const DEFAULT_TIMEOUT_MS = 8_000;
-const CREATE_INVITE_PATH = '/api/v1/workspace-invites';
+
+function createInvitePath(workspaceId: string): string {
+  return `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/invites`;
+}
 
 export interface CreateWorkspaceInviteInput {
   email: string;
@@ -63,13 +66,13 @@ export async function createWorkspaceInvite(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   try {
-    const response = await fetchImpl(new URL(CREATE_INVITE_PATH, session.apiUrl), {
+    const response = await fetchImpl(new URL(createInvitePath(workspaceId), session.apiUrl), {
       method: 'POST',
       headers: {
         authorization: `Bearer ${session.controlKey}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ email, role: input.role, workspaceId }),
+      body: JSON.stringify({ invitedEmail: email, role: input.role }),
       signal: controller.signal,
     });
     if (!response.ok) {

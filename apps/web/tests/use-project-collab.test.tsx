@@ -122,6 +122,33 @@ describe('useProjectCollab', () => {
     expect(result.current.viewerOnly).toBe(true);
   });
 
+  it('fails closed before the first collab status response resolves', async () => {
+    const admin = makeContext({ role: 'admin', workspaceMemberId: 'wm-admin' });
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      let payload: unknown = { ok: true };
+      if (pathname.endsWith('/workspace/context')) payload = { context: admin };
+      else if (pathname.endsWith('/presence/heartbeat')) payload = { present: [{ memberId: 'wm-admin' }] };
+      else if (pathname.endsWith('/collab/status')) {
+        return new Promise<Response>(() => {
+          /* keep the initial status poll unresolved */
+        });
+      }
+      return { ok: true, status: 200, json: async () => payload } as unknown as Response;
+    }) as typeof fetch;
+
+    const { result } = renderHook(() => useProjectCollab('p1', { fetch: fetchImpl }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current.enabled).toBe(true);
+    expect(result.current.syncState).toBeNull();
+    expect(result.current.viewerOnly).toBe(true);
+  });
+
   it('lets the confirmed owner edit their own shared project', async () => {
     // Positive control: once /collab/status reports an ownerMemberId that matches
     // the current member, the single writer keeps editing (not read-only).

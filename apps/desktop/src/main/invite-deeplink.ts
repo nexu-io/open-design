@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import {
   INVITE_DEEPLINK_SCHEME,
+  createInviteDeeplinkDispatcher,
   continueInviteFromUrl,
   findDeeplinkArg,
   type InviteDeeplinkDeps,
@@ -15,10 +16,19 @@ import {
 
 export {
   continueInviteFromUrl,
+  createInviteDeeplinkDispatcher,
   findDeeplinkArg,
   INVITE_DEEPLINK_SCHEME,
   type InviteDeeplinkDeps,
 } from "./invite-deeplink-core.js";
+
+const deeplinkDispatcher = createInviteDeeplinkDispatcher();
+let secondInstanceHandlerRegistered = false;
+
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  deeplinkDispatcher.dispatch(url);
+});
 
 /**
  * Register the `opendesign://` scheme and wire the OS deeplink events to
@@ -28,21 +38,17 @@ export {
  */
 export function registerInviteDeeplink(deps: InviteDeeplinkDeps): void {
   app.setAsDefaultProtocolClient(INVITE_DEEPLINK_SCHEME);
+  deeplinkDispatcher.setDeps(deps);
 
-  const run = (url: string | null) => {
-    if (url) void continueInviteFromUrl(url, deps);
-  };
-
-  app.on("open-url", (event, url) => {
-    event.preventDefault();
-    run(url);
-  });
-  app.on("second-instance", (_event, argv) => {
-    run(findDeeplinkArg(argv));
-  });
+  if (!secondInstanceHandlerRegistered) {
+    secondInstanceHandlerRegistered = true;
+    app.on("second-instance", (_event, argv) => {
+      deeplinkDispatcher.dispatch(findDeeplinkArg(argv));
+    });
+  }
 
   const initial = findDeeplinkArg(process.argv);
-  if (initial) void app.whenReady().then(() => run(initial));
+  if (initial) void app.whenReady().then(() => deeplinkDispatcher.dispatch(initial));
 }
 
 /** Best-effort bring-to-front for the deeplink hand-off. */
