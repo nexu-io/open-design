@@ -174,6 +174,8 @@ export function buildManualEditBridge(enabled: boolean): string {
   var dragState = null; // { el, startX, startY, startLeft, startTop, startWidth, startHeight, handle, id }
   var handles = []; // live handle elements
   var selectedElForHandles = null; // which element currently has handles shown
+  var selectedIds = {}; // map of id → true for multi-selected elements
+  var rubberband = null; // { el, startX, startY } for drag-to-select rectangle
   function isHostNode(el){
     return !!(el && el.matches && el.matches(hostNodeSelector));
   }
@@ -593,6 +595,106 @@ export function buildManualEditBridge(enabled: boolean): string {
   var HANDLE_SIZE = 8;
   var DRAG_THRESHOLD = 3; // px before drag activates (vs click)
 
+  // ── Multi-select helpers ──
+  function getSelectedCount(){ var n=0; for (var _k in selectedIds) n++; return n; }
+  function getSelectedIds(){ var ids=[]; for (var _k in selectedIds) ids.push(_k); return ids; }
+  function isSelectedId(id){ return !!selectedIds[id]; }
+  function addToMultiSelectionById(id){ if (id){ selectedIds[id]=true; } }
+  function removeFromMultiSelectionById(id){ if (id){ delete selectedIds[id]; } }
+  function clearMultiSelection(){ selectedIds={}; }
+  function applyMultiSelectionAttrs(){
+    // Highlight all selected elements, focus highlight on the last clicked
+    var all = document.querySelectorAll('[data-od-edit-selected]');
+    for (var s=0; s<all.length; s++) all[s].removeAttribute('data-od-edit-selected');
+    var ids = getSelectedIds();
+    for (var j=0; j<ids.length; j++){
+      var selEl = findById(ids[j]);
+      if (selEl) selEl.setAttribute('data-od-edit-selected', 'true');
+    }
+  }
+  function postMultiSelect(){
+    window.parent.postMessage({ type: 'od-edit-multi-select', ids: getSelectedIds() }, '*');
+    applyMultiSelectionAttrs();
+  }
+
+  // ── Rubberband drag-to-select ──
+  function startRubberband(clientX, clientY){
+    rubberband = { startX: clientX, startY: clientY, el: null };
+  }
+  function updateRubberband(clientX, clientY){
+    if (!rubberband) return;
+    var rx = Math.min(rubberband.startX, clientX);
+    var ry = Math.min(rubberband.startY, clientY);
+    var rw = Math.max(10, Math.abs(clientX - rubberband.startX));
+    var rh = Math.max(10, Math.abs(clientY - rubberband.startY));
+    if (!rubberband.el){
+      rubberband.el = document.createElement('div');
+      rubberband.el.setAttribute('data-od-rubberband', '');
+      rubberband.el.style.cssText = 'position:fixed;z-index:2147483646;background:rgba(37,99,235,0.12);border:1px solid #2563eb;pointer-events:none;';
+      document.body.appendChild(rubberband.el);
+    }
+    rubberband.el.style.left = rx + 'px';
+    rubberband.el.style.top = ry + 'px';
+    rubberband.el.style.width = rw + 'px';
+    rubberband.el.style.height = rh + 'px';
+  }
+  function endRubberband(clientX, clientY){
+    if (!rubberband) return;
+    if (rubberband.el && rubberband.el.parentNode) rubberband.el.parentNode.removeChild(rubberband.el);
+    // Find elements intersecting rubberband rectangle
+    var rx = Math.min(rubberband.startX, clientX);
+    var ry = Math.min(rubberband.startY, clientY);
+    var rw = Math.abs(clientX - rubberband.startX);
+    var rh = Math.abs(clientY - rubberband.startY);
+    // Only activate if rubberband is larger than a click (>= 5px)
+    if (rw < 5 && rh < 5){ rubberband = null; return; }
+    var rubberbandRect = { left: rx, top: ry, right: rx+rw, bottom: ry+rh };
+    clearMultiSelection();
+    var allEls = document.querySelectorAll(discoverySelector);
+    for (var i=0; i<allEls.length; i++){
+      var el2 = allEls[i];
+      if (!isSourceMappable(el2)) continue;
+      var rect2 = el2.getBoundingClientRect();
+      if (rect2.right > rubberbandRect.left && rect2.left < rubberbandRect.right &&
+          rect2.bottom > rubberbandRect.top && rect2.top < rubberbandRect.bottom){
+        addToMultiSelectionById(stableId(el2));
+      }
+    }
+    rubberband = null;
+    postMultiSelect();
+    if (getSelectedCount() >= 1){
+      // Show handles on first selected
+      var firstId = getSelectedIds()[0];
+      if (firstId) {
+        var firstEl = findById(firstId);
+        if (firstEl) createHandles(firstEl);
+      }
+    }
+  }
+
+  // ── Multi-element drag helpers ──
+  function getSelectedElements(){
+    var result = [];
+    var ids = getSelectedIds();
+    for (var i=0; i<ids.length; i++){
+      var el3 = findById(ids[i]);
+      if (el3 && el3.isConnected) result.push(el3);
+    }
+    return result;
+  }
+  function commitMultiPosition(els){
+    var positions = [];
+    for (var m=0; m<els.length; m++){
+      var e = els[m];
+      if (!e || !e.isConnected) continue;
+      var r = e.getBoundingClientRect();
+      positions.push({ id: stableId(e), left: Math.round(r.left)+'px', top: Math.round(r.top)+'px', width: Math.round(r.width)+'px', height: Math.round(r.height)+'px' });
+    }
+    if (positions.length > 0){
+      window.parent.postMessage({ type: 'od-edit-position-commit-batch', positions: positions }, '*');
+    }
+  }
+
   function removeHandles(){
     for (var i = 0; i < handles.length; i++) {
       if (handles[i] && handles[i].parentNode) handles[i].parentNode.removeChild(handles[i]);
@@ -720,38 +822,80 @@ export function buildManualEditBridge(enabled: boolean): string {
       window.parent.postMessage({ type: 'od-edit-drag-start', id: dragState.id }, '*');
       return;
     }
-    // Check if pointer is on the selected element itself (body drag)
+    // Check if pointer is on a selectable element
     var targetEl = closestTarget(ev);
-    if (targetEl && targetEl === selectedElForHandles && !handleEl) {
+    var targetId = targetEl ? stableId(targetEl) : null;
+    var isMultiDrag = targetEl && isSelectedId(targetId) && getSelectedCount() > 1;
+
+    if (targetEl && !handleEl && (targetEl === selectedElForHandles || isMultiDrag)) {
       ev.preventDefault();
       ev.stopPropagation();
-      var el2 = targetEl;
-      ensureAbsolute(el2);
-      var rect2 = el2.getBoundingClientRect();
-      dragState = {
-        el: el2,
-        startX: ev.clientX,
-        startY: ev.clientY,
-        startLeft: rect2.left,
-        startTop: rect2.top,
-        startWidth: rect2.width,
-        startHeight: rect2.height,
-        handle: 'body',
-        id: stableId(el2),
-        moved: false,
-      };
-      el2.setPointerCapture(ev.pointerId);
+      if (isMultiDrag) {
+        // Multi-drag: store all selected elements
+        var selEls = getSelectedElements();
+        var multiEls = [];
+        for (var i2 = 0; i2 < selEls.length; i2++) {
+          var selEl = selEls[i2];
+          ensureAbsolute(selEl);
+          var sr = selEl.getBoundingClientRect();
+          multiEls.push({ el: selEl, startLeft: sr.left, startTop: sr.top });
+        }
+        dragState = {
+          el: targetEl,
+          startX: ev.clientX,
+          startY: ev.clientY,
+          startLeft: 0, startTop: 0,
+          startWidth: 0, startHeight: 0,
+          handle: 'body',
+          id: targetId,
+          moved: false,
+          multiEls: multiEls,
+        };
+      } else {
+        // Single drag
+        ensureAbsolute(targetEl);
+        var rect2 = targetEl.getBoundingClientRect();
+        dragState = {
+          el: targetEl,
+          startX: ev.clientX,
+          startY: ev.clientY,
+          startLeft: rect2.left,
+          startTop: rect2.top,
+          startWidth: rect2.width,
+          startHeight: rect2.height,
+          handle: 'body',
+          id: targetId,
+          moved: false,
+        };
+      }
+      targetEl.setPointerCapture(ev.pointerId);
       window.parent.postMessage({ type: 'od-edit-drag-start', id: dragState.id }, '*');
+      return;
+    }
+    // Start rubberband on background click (no source-mapped ancestor)
+    if (!targetEl && !handleEl){
+      startRubberband(ev.clientX, ev.clientY);
       return;
     }
   }
 
   function onPointerMove(ev){
+    if (rubberband) { updateRubberband(ev.clientX, ev.clientY); return; }
     if (!dragState) return;
     var dx = ev.clientX - dragState.startX;
     var dy = ev.clientY - dragState.startY;
     if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
     dragState.moved = true;
+    // Multi-drag
+    if (dragState.multiEls){
+      for (var mi=0; mi<dragState.multiEls.length; mi++){
+        var me = dragState.multiEls[mi];
+        me.el.style.left = (me.startLeft + dx) + 'px';
+        me.el.style.top = (me.startTop + dy) + 'px';
+      }
+      updateHandlePositions(dragState.el);
+      return;
+    }
     var el = dragState.el;
     if (dragState.handle === 'body') {
       el.style.left = (dragState.startLeft + dx) + 'px';
@@ -776,13 +920,19 @@ export function buildManualEditBridge(enabled: boolean): string {
   }
 
   function onPointerUp(ev){
+    if (rubberband) { endRubberband(ev.clientX, ev.clientY); return; }
     if (!dragState) return;
     var el = dragState.el;
     var id = dragState.id;
     try { el.releasePointerCapture(ev.pointerId); } catch(e) {}
     if (dragState.moved) {
-      commitPosition(el, id);
-      dragEndedJustNow = true;
+      if (dragState.multiEls){
+        commitMultiPosition(dragState.multiEls.map(function(m2){ return m2.el; }));
+        dragEndedJustNow = true;
+      } else {
+        commitPosition(el, id);
+        dragEndedJustNow = true;
+      }
     }
     dragState = null;
     if (el) {
@@ -796,11 +946,22 @@ export function buildManualEditBridge(enabled: boolean): string {
   document.addEventListener('pointerup', onPointerUp, true);
   // Also listen on pointerup outside iframe bounds
   document.addEventListener('pointerleave', function(ev){
+    if (rubberband){
+      if (rubberband.el && rubberband.el.parentNode) rubberband.el.parentNode.removeChild(rubberband.el);
+      rubberband = null;
+      return;
+    }
     if (dragState) {
       var el2 = dragState.el;
       var id2 = dragState.id;
       try { el2.releasePointerCapture(ev.pointerId); } catch(e) {}
-      if (dragState.moved) { commitPosition(el2, id2); }
+      if (dragState.moved) {
+        if (dragState.multiEls){
+          commitMultiPosition(dragState.multiEls.map(function(m2){ return m2.el; }));
+        } else {
+          commitPosition(el2, id2);
+        }
+      }
       dragState = null;
       window.parent.postMessage({ type: 'od-edit-drag-end', id: id2 || '' }, '*');
     }
@@ -819,9 +980,36 @@ export function buildManualEditBridge(enabled: boolean): string {
     var el = closestTarget(ev);
     if (!el) {
       removeHandles();
+      clearMultiSelection();
+      postMultiSelect();
       if (activeTextEdit) finishActiveTextEdit(true);
       window.parent.postMessage({ type: 'od-edit-background' }, '*');
       return;
+    }
+    var id = stableId(el);
+    if (ev.shiftKey) {
+      // Shift+click: toggle individual element in multi-selection
+      if (isSelectedId(id)) { removeFromMultiSelectionById(id); }
+      else { addToMultiSelectionById(id); }
+      // Show handles on last-clicked
+      if (el) { createHandles(el); }
+      postMultiSelect();
+      // If single after toggle, also send select for inspector
+      if (getSelectedCount() === 1){
+        window.parent.postMessage({ type: 'od-edit-select', target: targetFrom(el, true) }, '*');
+      }
+      return;
+    }
+    if (isSelectedId(id) && getSelectedCount() > 1){
+      // Click on a multi-selected element: collapse to single select
+      clearMultiSelection();
+      addToMultiSelectionById(id);
+      postMultiSelect();
+    } else if (!isSelectedId(id)){
+      // Click on unselected element: clear multi-select
+      clearMultiSelection();
+      addToMultiSelectionById(id);
+      postMultiSelect();
     }
     if (activeTextEdit && activeTextEdit.el !== el) finishActiveTextEdit(true);
     var kind = inferKind(el);

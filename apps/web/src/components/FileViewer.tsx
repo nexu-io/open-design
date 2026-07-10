@@ -6251,6 +6251,60 @@ function HtmlViewer({
         }, 'Drag / Resize');
         return;
       }
+      if (data.type === 'od-edit-position-commit-batch') {
+        void (async () => {
+          const positions: Array<{ id: string; left: string; top: string; width: string; height: string }> =
+            Array.isArray(data.positions) ? data.positions : [];
+          if (positions.length === 0) return;
+          if (manualEditSavingRef.current) return;
+          const baseSource = sourceRef.current;
+          if (baseSource == null) return;
+          let patched = baseSource;
+          for (const pos of positions) {
+            const r = applyManualEditPatch(patched, {
+              id: String(pos.id),
+              kind: 'set-position',
+              left: String(pos.left),
+              top: String(pos.top),
+              width: String(pos.width),
+              height: String(pos.height),
+            });
+            if (r.ok) patched = r.source;
+          }
+          if (patched === baseSource) return;
+          manualEditSavingRef.current = true;
+          setManualEditSaving(true);
+          try {
+            const saved = await writeProjectTextFileDetailed(projectId, file.name, patched, {
+              artifactManifest: file.artifactManifest,
+            });
+            if (!saved.ok) {
+              const message = 'message' in saved ? (saved as { message: string }).message : 'Unknown save error';
+              setManualEditError(`Could not save batch: ${message}`);
+              return;
+            }
+            const before = baseSource;
+            setSource(patched);
+            sourceRef.current = patched;
+            setInlinedSource(null);
+            setManualEditHistory((current) => [{
+              id: `${Date.now()}-${current.length}`,
+              label: 'Multi-drag',
+              patch: { kind: 'set-full-source', source: patched },
+              beforeSource: before,
+              afterSource: patched,
+              createdAt: Date.now(),
+            }, ...current]);
+          } finally {
+            manualEditSavingRef.current = false;
+            setManualEditSaving(false);
+          }
+        })();
+        return;
+      }
+      if (data.type === 'od-edit-multi-select') {
+        return;
+      }
       if (data.type === 'od-edit-drag-start') {
         return;
       }
