@@ -1,58 +1,13 @@
-// Web client for the daemon's external-MCP endpoints.
+// Web client for the daemon-owned OAuth flow of HTTP / SSE MCP servers.
 //
-// `GET /api/mcp/servers` returns both the user's saved entries AND the
-// built-in template list, so the Settings panel hydrates with one round-trip.
-// `PUT /api/mcp/servers` replaces the whole list — same pattern the media
-// providers PUT uses (the daemon takes the full set rather than merging).
-
+// The daemon hosts the OAuth client end-to-end; these adapters just kick off
+// the dance, poll status, and disconnect. The browser-side subscriptions the
+// flow needs (popup-callback message + status poll + opening the authorize
+// tab) live in `oauth-bridge.ts` so the slice stays DOM-free.
 import type {
   McpOAuthStatusResponse,
-  McpServerConfig,
-  McpServersResponse,
-  McpTemplate,
   StartMcpOAuthResponse,
 } from '@open-design/contracts';
-
-export type {
-  McpOAuthStatusResponse,
-  McpServerConfig,
-  McpTemplate,
-  StartMcpOAuthResponse,
-};
-
-export async function fetchMcpServers(): Promise<McpServersResponse | null> {
-  try {
-    const res = await fetch('/api/mcp/servers');
-    if (!res.ok) return null;
-    const data = (await res.json()) as McpServersResponse;
-    return {
-      servers: Array.isArray(data?.servers) ? data.servers : [],
-      templates: Array.isArray(data?.templates) ? data.templates : [],
-    };
-  } catch {
-    return null;
-  }
-}
-
-export async function saveMcpServers(
-  servers: McpServerConfig[],
-): Promise<McpServersResponse | null> {
-  try {
-    const res = await fetch('/api/mcp/servers', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ servers }),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as McpServersResponse;
-    return {
-      servers: Array.isArray(data?.servers) ? data.servers : [],
-      templates: Array.isArray(data?.templates) ? data.templates : [],
-    };
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Result of `startMcpOAuth`. Either a usable response, or a structured
@@ -124,7 +79,7 @@ export async function startMcpOAuth(
   try {
     const response = (await res.json()) as StartMcpOAuthResponse;
     return { ok: true, response };
-  } catch (err) {
+  } catch {
     return {
       ok: false,
       status: res.status,
@@ -157,25 +112,4 @@ export async function disconnectMcpOAuth(serverId: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-/** Generate a unique stable id from a label (lowercase, slug). Falls back to
- * a short random suffix so duplicates of the same template still land at
- * distinct ids. */
-export function suggestMcpServerId(
-  label: string,
-  taken: ReadonlySet<string>,
-): string {
-  const base =
-    label
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 48) || 'mcp-server';
-  if (!taken.has(base)) return base;
-  for (let i = 2; i < 1000; i++) {
-    const next = `${base}-${i}`;
-    if (!taken.has(next)) return next;
-  }
-  return `${base}-${Math.random().toString(36).slice(2, 6)}`;
 }

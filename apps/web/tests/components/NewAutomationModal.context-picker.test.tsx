@@ -9,13 +9,13 @@ import type { AutomationTemplate } from '../../src/components/NewAutomationModal
 import { I18nProvider } from '../../src/i18n';
 import type { SkillSummary } from '../../src/types';
 import { listPlugins } from '../../src/state/projects';
-import { fetchMcpServers } from '../../src/state/mcp';
+import { fetchMcpServers } from '../../src/providers/mcp';
 
 vi.mock('../../src/state/projects', () => ({
   listPlugins: vi.fn(),
 }));
 
-vi.mock('../../src/state/mcp', () => ({
+vi.mock('../../src/providers/mcp', () => ({
   fetchMcpServers: vi.fn(),
 }));
 

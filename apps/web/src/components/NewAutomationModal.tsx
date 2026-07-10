@@ -17,7 +17,7 @@ import type {
 import { Icon, type IconName } from './Icon';
 import type { SkillSummary } from '../types';
 import { listPlugins } from '../state/projects';
-import { fetchMcpServers, type McpServerConfig } from '../state/mcp';
+import { fetchMcpServers, type McpServerConfig } from '../providers/mcp';
 import { inlineMentionToken } from '../utils/inlineMentions';
 import { useI18n, useT } from '../i18n';
 import type { Dict } from '../i18n/types';
