@@ -1326,6 +1326,64 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(payload.body).toContain('- Discovery source: Other (Design podcast)');
   });
 
+  it('drops the stale "Other" text from the memory note when switching to another source chip', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url === '/api/memory/user_profile' && init?.method === 'PUT') {
+        return jsonResponse({
+          entry: {
+            id: 'user_profile',
+            name: 'Work profile',
+            description: 'Role and defaults',
+            type: 'profile',
+            updatedAt: Date.now(),
+            body: JSON.parse(String(init.body)).body,
+          },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    renderOnboarding();
+
+    await clickSignedInCloudContinue();
+    // Pick Other, type a channel, then switch the chip to Search and finish in
+    // one batch: the note must reflect the visible chip (Search), never the
+    // abandoned Other free-text, because updateProfile clears sourceOther into
+    // the live ref synchronously.
+    chooseOnboardingOption('Where did you hear about us?', /Other/i);
+    const otherInput = document.querySelector<HTMLInputElement>(
+      '.onboarding-chip-field__other-input',
+    );
+    fireEvent.change(otherInput as HTMLInputElement, {
+      target: { value: 'Design podcast' },
+    });
+    await act(async () => {
+      chooseOnboardingOption('Where did you hear about us?', /Search/i);
+      fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    });
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) => String(url) === '/api/memory/user_profile'),
+      ).toBe(true);
+    });
+    const memoryCall = fetchMock.mock.calls.find(
+      ([url]) => String(url) === '/api/memory/user_profile',
+    );
+    const payload = JSON.parse(String(memoryCall?.[1]?.body));
+    expect(payload.body).toContain('- Discovery source: Search');
+    expect(payload.body).not.toContain('Other (Design podcast)');
+  });
+
   it('reports about_you_submit exactly once when advancing to the newsletter step', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({

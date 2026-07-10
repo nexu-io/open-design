@@ -1360,6 +1360,20 @@ function OnboardingView({
   useEffect(() => {
     profileRef.current = profile;
   }, [profile]);
+  // Update the About-you profile through this helper (not `setProfile`
+  // directly) whenever the value feeds an imperative read. It mirrors the new
+  // value into `profileRef.current` synchronously, so paths that read the live
+  // ref before React's state→ref sync effect runs — `emitAboutYouSubmit`, the
+  // Memory note, the newsletter submit — never see a stale field even when the
+  // user changes an answer and immediately continues.
+  const updateProfile = useCallback(
+    (producer: (current: OnboardingProfileState) => OnboardingProfileState) => {
+      const next = producer(profileRef.current);
+      profileRef.current = next;
+      setProfile(next);
+    },
+    [],
+  );
   const agentRevealTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const cliScanTokenRef = useRef(0);
   const cliScanTelemetryRef = useRef<{
@@ -2769,7 +2783,7 @@ function OnboardingView({
                         role: value,
                       });
                     }
-                    setProfile((current) => ({ ...current, role: value }));
+                    updateProfile((current) => ({ ...current, role: value }));
                   }}
                 />
                 <OnboardingChipField
@@ -2782,7 +2796,7 @@ function OnboardingView({
                         organization_size: value,
                       });
                     }
-                    setProfile((current) => ({ ...current, orgSize: value }));
+                    updateProfile((current) => ({ ...current, orgSize: value }));
                   }}
                 />
                 <OnboardingChipField
@@ -2807,7 +2821,7 @@ function OnboardingView({
                         emitOnboardingClick('use_case', 'select_option', { use_case: v });
                       }
                     }
-                    setProfile((current) => ({ ...current, useCase: value }));
+                    updateProfile((current) => ({ ...current, useCase: value }));
                   }}
                 />
                 <OnboardingChipField
@@ -2822,8 +2836,10 @@ function OnboardingView({
                     }
                     // Clear the free-text detail whenever the chip changes away
                     // from 'Other' so a stale custom value never leaks into
-                    // attribution for a different bucket.
-                    setProfile((current) => ({
+                    // attribution for a different bucket. Routed through
+                    // updateProfile so the live ref reflects the cleared value
+                    // immediately, even if the user changes chip then continues.
+                    updateProfile((current) => ({
                       ...current,
                       source: typeof value === 'string' ? value : current.source,
                       sourceOther: value === 'other' ? current.sourceOther : '',
@@ -2842,17 +2858,11 @@ function OnboardingView({
                         value={profile.sourceOther}
                         onChange={(event) => {
                           const next = event.target.value;
-                          // Mirror into the live ref synchronously. The Memory
-                          // note (the free-text's only sink) is written from
-                          // `profileRef.current`, which state otherwise syncs
-                          // one tick late via useEffect — so a fast type-then-
-                          // Continue would drop the last keystrokes. Updating
-                          // the ref here keeps the note in step with the input.
-                          profileRef.current = {
-                            ...profileRef.current,
-                            sourceOther: next,
-                          };
-                          setProfile((current) => ({ ...current, sourceOther: next }));
+                          // updateProfile keeps profileRef in sync synchronously
+                          // so the Memory note (written from the live ref) never
+                          // drops the latest keystrokes on a fast type-then-
+                          // Continue.
+                          updateProfile((current) => ({ ...current, sourceOther: next }));
                         }}
                       />
                     ) : null
@@ -2889,7 +2899,7 @@ function OnboardingView({
                   placeholder={t('newsletter.placeholder')}
                   value={profile.email}
                   onChange={(event) =>
-                    setProfile((current) => ({ ...current, email: event.target.value }))
+                    updateProfile((current) => ({ ...current, email: event.target.value }))
                   }
                 />
               </label>
