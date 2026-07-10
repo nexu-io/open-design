@@ -51,19 +51,28 @@ How does a tool call say which project it targets?
   change. *But* it is invisible to the daemon: the daemon cannot route or
   permission-check a target buried in tool-specific `input` without parsing every
   tool's schema.
-- **(b) A first-class `targetProjectId?` on the action envelope.** The daemon reads
-  the target directly, so it can route the action and enforce the task's
-  `projectIds` boundary uniformly, regardless of the tool.
+- **(b) A first-class `targetProjectId?` the daemon reads directly** — carried on
+  each surface's own request path (per agent-ready.md the two surfaces have
+  distinct call paths, so there is no single universal envelope to bolt it onto).
+  The daemon reads the target without parsing tool-specific `input`, so it can
+  route and enforce the task's `projectIds` boundary uniformly on both paths.
 
-**Recommend (b)** for cross-project work, added as an OPTIONAL, non-breaking field
-on `BrowserActionRequest` when slice 5 lands (alongside an optional `taskId?` to
-correlate steps to the `AgentTask`). It is **not** added in slice 1: adding an
-optional field later is non-breaking, so the shipped contract stays minimal. The
-future addition:
+**Recommend (b)** for cross-project work, added as OPTIONAL, non-breaking fields
+when slice 5 lands (alongside an optional `taskId?` to correlate steps to the
+`AgentTask`). Because a `browser` call and an `api` call travel different paths,
+the fields are added on **both**: on `BrowserActionRequest` for the browser
+surface, and on the `api`-call request (query/body the daemon controls) for `api`
+tools — which do not use the browser envelope. They are **not** added in slice 1:
+adding an optional field later is non-breaking, so the shipped contract stays
+minimal. The future browser-envelope addition:
 
     // BrowserActionRequest (slice 5, non-breaking optionals):
     taskId?: string;          // the AgentTask this step advances
     targetProjectId?: string; // absent = the run's current project
+
+    // The api-call path carries the same two as daemon-controlled request
+    // params, so an api capability can be routed and permission-checked
+    // cross-project without ever touching the browser envelope.
 
 ## Cross-project discovery
 
@@ -115,7 +124,8 @@ read-only cross-project discovery is granted more liberally than write access.
 - **Slice 5 (this design's runtime)** creates/persists `AgentTask` in the daemon's
   SQLite store under the resolved data root (`RUNTIME_DATA_DIR` — no path literal
   per the data-directory contract), adds the optional `taskId?`/`targetProjectId?`
-  envelope fields, and enforces `projectIds` per the chosen permission model.
+  routing fields on both call paths (browser envelope + `api`-call request), and
+  enforces `projectIds` per the chosen permission model.
 
 The `AgentTask` **type** lands now (slice 1 companion) so reviewers judge the shape
 and the permission options together; the runtime is slice 5.
@@ -124,7 +134,8 @@ and the permission options together; the runtime is slice 5.
 
 - All behavior/runtime: task creation, persistence, scheduling, and permission
   enforcement (slice 5).
-- Envelope changes to `BrowserActionRequest` (`taskId?`, `targetProjectId?`) — added
+- Cross-project routing fields (`taskId?`, `targetProjectId?`) on both call paths —
+  the `BrowserActionRequest` envelope and the `api`-call request — added
   non-breakingly in slice 5, not this PR.
 - Per-step progress/streaming for long-horizon tasks; task pause/resume UX; task
   history and audit-log shapes; multi-user / shared-task ownership; role- or

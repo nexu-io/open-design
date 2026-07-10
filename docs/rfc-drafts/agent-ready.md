@@ -44,22 +44,32 @@ MCP/WebMCP-congruent surface:
 |---|---|---|
 | **Declare** | `AgentToolDescriptor` (`browser` \| `api` union) | tool definition |
 | **List** | `AgentToolManifest` (`protocolVersion`, `runId`, `tools[]`) | `tools/list` |
-| **Search** | `AgentToolSearchQuery` → `AgentToolSearchResult` (paged) | discovery over `tools/list` |
-| **Call** | `BrowserActionRequest` (`invocationId`, `runId`, `tool`, `input`) | `tools/call` |
-| **Result** | `BrowserActionResult` (`ok`-discriminated; `result: JsonValue`) | tool result |
+| **Search** | `AgentToolSearchQuery` → `AgentToolSearchResult` (paged, `api` only) | discovery over `tools/list` |
+| **Call — `browser`** | `BrowserActionRequest` (`invocationId`, `runId`, `tool`, `input`) — dispatch toward a live session | `tools/call` (browser surface) |
+| **Result — `browser`** | `BrowserActionResult` (`ok`-discriminated; `result: JsonValue`) | tool result |
+| **Call — `api`** | the tool's own declared `/api/*` route + `od` subcommand (`ApiToolDescriptor.api` / `.cli`) — no round-trip envelope | `tools/call` (api surface) |
 
 `AgentToolDescriptor` carries `name` (stable, dot-namespaced), `description`
 (model- and catalog-facing), `inputSchema` (JSON Schema as `JsonValue`, so it
 crosses the MCP wire verbatim — WebMCP / MCP-UI / A2UI ready), and a `surface`
 discriminant. A `browser` tool asserts `viewStateOnly: true`; an `api` tool
 carries both its `/api/*` route and its `od` subcommand, so the UI/CLI dual-track
-law is **structural**, not a review checkbox. `protocolVersion` on the manifest
-and the action messages is the literal `typeof AGENT_ACTIONS_PROTOCOL_VERSION`, so
-catalog and calls version together. The action identity is a daemon-minted
-`invocationId`; a provider `tool_call_id` or MCP request id maps to it daemon-side
-and never enters the contract, so `result: JsonValue` means a navigation
-acknowledgement and a future data-returning read serialize identically — no
-navigation special case.
+law is **structural**, not a review checkbox.
+
+**The two surfaces are called through two distinct request paths — the envelope is
+not universal.** An `api` capability is a normal `/api/*` action: the daemon
+invokes its declared route directly (and it is reachable as an `od` subcommand),
+so it needs no dispatch-and-await round-trip and does **not** use
+`BrowserActionRequest`. `BrowserActionRequest` / `BrowserActionResult` exist
+**only** for the `browser` surface — the genuinely new inbound seam — because a
+browser tool runs in a remote context (the live session) the daemon must dispatch
+to and await a result from. On that browser path the action identity is a
+daemon-minted `invocationId`; a provider `tool_call_id` or MCP request id maps to
+it daemon-side and never enters the contract, so `result: JsonValue` means a
+navigation acknowledgement and a future data-returning browser read serialize
+identically — no navigation special case. `protocolVersion` on the manifest and
+on the browser-action messages is the literal `typeof AGENT_ACTIONS_PROTOCOL_VERSION`,
+so catalog and browser calls version together.
 
 ## Complex / multi-step workflows
 

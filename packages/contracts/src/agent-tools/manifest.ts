@@ -3,7 +3,7 @@
 // a large registry. Pure types only: no runtime logic, no imports from
 // apps/daemon/browser/React. The MCP-congruent `tools/list` analog.
 
-import type { AgentToolDescriptor } from './descriptor.js';
+import type { AgentToolDescriptor, ApiToolDescriptor } from './descriptor.js';
 import { AGENT_ACTIONS_PROTOCOL_VERSION } from './actions.js';
 
 /**
@@ -52,9 +52,17 @@ export interface AgentToolSearchQuery {
  * Deliberately returns full descriptors and no ranking `score` — keyword search
  * (the slice-3 default) needs none, and a score can be added later without a
  * breaking change (see the RFC "Non-breaking type hooks").
+ *
+ * Items are `ApiToolDescriptor` only, not the full {@link AgentToolDescriptor}
+ * union: search is the PULL path over the persistent `api` catalog, so the
+ * result type enforces the same invariant as {@link AgentToolSearchQuery.surface}
+ * on the response side — a registry implementation cannot type-check while
+ * leaking `browser` descriptors into a session-less search result. Browser tools
+ * are advertised by PUSH per-session and are never a search result (see the RFC
+ * "Advertisement axis — PUSH vs PULL").
  */
 export interface AgentToolSearchResult {
-  tools: AgentToolDescriptor[];
+  tools: ApiToolDescriptor[];
   /** Opaque cursor to fetch the next page; absent on the final page. */
   nextCursor?: string;
   /** Best-effort total match count; optional so a store need not count to page. */
