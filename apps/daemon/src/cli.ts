@@ -6383,22 +6383,85 @@ async function runCraft(args)         { return runLibraryList('craft', args); }
 // headlessly, not just from the Brands web page (Task 10). Kept as its own
 // function rather than routed through runLibraryList because `show` needs the
 // --deliverable query param that the generic list/show helper doesn't support.
+// ---- od brand ------------------------------------------------------------
+//
+// Dual-track CLI surface for the brand registry (AGENTS.md capability
+// closure): every subcommand drives the same /api/brands* routes the web
+// Brands tab uses. Write subcommands follow the brand-page subproject B
+// spec §6 contract. Flags are parsed per sub-verb because each verb has
+// its own flag whitelist (parseFlags rejects unknown --flags).
+function printBrandHelp() {
+  console.log(`Usage:
+  od brand list                              List brands.
+  od brand show <id> [--deliverable <key>]   Print brand core (+ one deliverable).
+  od brand create --title <t> [--id <id>] [--subtitle <s>] [--tagline <s>]
+                                             Create a brand (id derives from a Latin title when omitted).
+  od brand update <id> [--title <t>] [--presentation-json <json|->]
+                                             Patch title / replace presentation ('-' reads JSON from stdin).
+  od brand doc set <id> <core|key> --prompt-file <path|->
+                                             Save brand.md ('core') or a deliverable doc body ('-' = stdin).
+  od brand deliverable add <id> <key> [--label <s>] [--design-system <ds>] [--prompt-file <path|->]
+                                             Register a deliverable channel (+ optional initial doc body).
+  od brand deliverable remove <id> <key>     Remove a deliverable channel (manifest entry + doc file).
+  od brand asset add <id> <file> [--icon|--logo]
+                                             Upload an image asset (png|jpg|jpeg|webp|svg, max 5MB).
+                                             --icon / --logo also updates the manifest presentation role.
+  od brand delete <id> --yes                 Delete a brand. Refused while projects bind it (409);
+                                             without --yes prints a warning and exits 2 (headless-safe).
+
+Common options:
+  --daemon-url <url>   Marketing AX daemon HTTP base.
+  --json               Emit raw JSON.`);
+}
+
+// Shared request helper for `od brand`: non-2xx exits through
+// structuredHttpFailure (structured envelope + recoverable exit code),
+// so callers only ever see the parsed success body.
+async function brandApiRequest(flags, path, init) {
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+  const resp = await fetch(`${base}${path}`, init);
+  if (!resp.ok) return structuredHttpFailure(resp);
+  return resp.json();
+}
+
+// Extension -> mime for `od brand asset add`. Mirrors the daemon's allowed
+// mime set (brand-routes.ts) so an unsupported file fails fast locally with
+// a usage error instead of a daemon 400 round-trip.
+function brandAssetMimeForFile(filePath) {
+  const dot = filePath.lastIndexOf('.');
+  const ext = dot >= 0 ? filePath.slice(dot).toLowerCase() : '';
+  return {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.svg': 'image/svg+xml',
+  }[ext];
+}
+
+// Read all of stdin as UTF-8 — used by `--presentation-json -`. Doc bodies
+// go through readPromptFromFlags (the repo-wide --prompt-file convention).
+function readCliStdinText() {
+  return new Promise((resolve, reject) => {
+    let buf = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => { buf += chunk; });
+    process.stdin.on('end', () => resolve(buf));
+    process.stdin.on('error', reject);
+  });
+}
+
 async function runBrand(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
-    console.log(`Usage:
-  od brand list                              List brands.
-  od brand show <id> [--deliverable <key>]   Print brand core (+ one deliverable).`);
+    printBrandHelp();
     process.exit(args.length === 0 ? 2 : 0);
   }
   const sub = args[0];
   const rest = args.slice(1);
-  const flags = parseFlags(rest, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
-  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
   switch (sub) {
     case 'list': {
-      const resp = await fetch(`${base}/api/brands`);
-      if (!resp.ok) return structuredHttpFailure(resp);
-      const data = await resp.json();
+      const flags = parseFlags(rest, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
+      const data = await brandApiRequest(flags, '/api/brands');
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       const rows = data?.brands ?? [];
       for (const row of rows) {
@@ -6407,15 +6470,213 @@ async function runBrand(args) {
       return;
     }
     case 'show': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const flags = parseFlags(rest, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
+      const id = positionalArgs(rest, LIBRARY_STRING_FLAGS)[0];
       if (!id) {
         console.error('Usage: od brand show <id> [--deliverable <key>]');
         process.exit(2);
       }
       const qs = flags.deliverable ? `?deliverable=${encodeURIComponent(flags.deliverable)}` : '';
-      const resp = await fetch(`${base}/api/brands/${encodeURIComponent(id)}${qs}`);
-      if (!resp.ok) return structuredHttpFailure(resp);
-      process.stdout.write(JSON.stringify(await resp.json(), null, 2) + '\n');
+      const data = await brandApiRequest(flags, `/api/brands/${encodeURIComponent(id)}${qs}`);
+      process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    case 'create': {
+      const stringFlags = new Set([...LIBRARY_STRING_FLAGS, 'title', 'id', 'subtitle', 'tagline']);
+      const flags = parseFlags(rest, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
+      if (typeof flags.title !== 'string' || !flags.title.trim()) {
+        console.error('Usage: od brand create --title <t> [--id <id>] [--subtitle <s>] [--tagline <s>] [--json]');
+        process.exit(2);
+      }
+      const presentation = {
+        ...(typeof flags.subtitle === 'string' ? { subtitle: flags.subtitle } : {}),
+        ...(typeof flags.tagline === 'string' ? { tagline: flags.tagline } : {}),
+      };
+      const input = {
+        title: flags.title,
+        ...(typeof flags.id === 'string' ? { id: flags.id } : {}),
+        ...(Object.keys(presentation).length > 0 ? { presentation } : {}),
+      };
+      const data = await brandApiRequest(flags, '/api/brands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`Created ${data.id}${data.title ? ` (${data.title})` : ''}`);
+      return;
+    }
+    case 'update': {
+      const stringFlags = new Set([...LIBRARY_STRING_FLAGS, 'title', 'presentation-json']);
+      const flags = parseFlags(rest, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
+      const id = positionalArgs(rest, stringFlags)[0];
+      if (!id) {
+        console.error('Usage: od brand update <id> [--title <t>] [--presentation-json <json|->] [--json]');
+        process.exit(2);
+      }
+      const input = {};
+      if (typeof flags.title === 'string') input.title = flags.title;
+      if (typeof flags['presentation-json'] === 'string') {
+        const raw = flags['presentation-json'] === '-'
+          ? await readCliStdinText()
+          : flags['presentation-json'];
+        try {
+          input.presentation = JSON.parse(raw);
+        } catch {
+          console.error('--presentation-json is not valid JSON');
+          process.exit(2);
+        }
+      }
+      if (Object.keys(input).length === 0) {
+        console.error('update needs at least one of --title --presentation-json');
+        process.exit(2);
+      }
+      const data = await brandApiRequest(flags, `/api/brands/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`Updated ${id}`);
+      return;
+    }
+    case 'doc': {
+      const action = rest[0];
+      const docArgs = rest.slice(1);
+      const stringFlags = new Set([...LIBRARY_STRING_FLAGS, 'prompt-file']);
+      const flags = parseFlags(docArgs, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
+      const [id, key] = positionalArgs(docArgs, stringFlags);
+      if (action !== 'set' || !id || !key) {
+        console.error('Usage: od brand doc set <id> <core|key> --prompt-file <path|-> [--json]');
+        process.exit(2);
+      }
+      const body = await readPromptFromFlags(flags);
+      if (body == null) {
+        console.error('--prompt-file is required (use - to read the body from stdin)');
+        process.exit(2);
+      }
+      const data = await brandApiRequest(
+        flags,
+        `/api/brands/${encodeURIComponent(id)}/docs/${encodeURIComponent(key)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body }),
+        },
+      );
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`Saved ${key === 'core' ? 'brand.md' : `deliverables/${key}`} for ${id}`);
+      return;
+    }
+    case 'deliverable': {
+      const action = rest[0];
+      const dArgs = rest.slice(1);
+      if (action === 'add') {
+        const stringFlags = new Set([...LIBRARY_STRING_FLAGS, 'label', 'design-system', 'prompt-file']);
+        const flags = parseFlags(dArgs, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
+        const [id, key] = positionalArgs(dArgs, stringFlags);
+        if (!id || !key) {
+          console.error('Usage: od brand deliverable add <id> <key> [--label <s>] [--design-system <ds>] [--prompt-file <path|->] [--json]');
+          process.exit(2);
+        }
+        const body = await readPromptFromFlags(flags);
+        const input = {
+          key,
+          ...(typeof flags.label === 'string' ? { label: flags.label } : {}),
+          ...(typeof flags['design-system'] === 'string' ? { designSystem: flags['design-system'] } : {}),
+          ...(body != null ? { body } : {}),
+        };
+        const data = await brandApiRequest(flags, `/api/brands/${encodeURIComponent(id)}/deliverables`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(input),
+        });
+        if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        console.log(`Added deliverable ${key} to ${id}`);
+        return;
+      }
+      if (action === 'remove') {
+        const flags = parseFlags(dArgs, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
+        const [id, key] = positionalArgs(dArgs, LIBRARY_STRING_FLAGS);
+        if (!id || !key) {
+          console.error('Usage: od brand deliverable remove <id> <key> [--json]');
+          process.exit(2);
+        }
+        const data = await brandApiRequest(
+          flags,
+          `/api/brands/${encodeURIComponent(id)}/deliverables/${encodeURIComponent(key)}`,
+          { method: 'DELETE' },
+        );
+        if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        console.log(`Removed deliverable ${key} from ${id}`);
+        return;
+      }
+      console.error('Usage: od brand deliverable add|remove <id> <key>');
+      process.exit(2);
+      return;
+    }
+    case 'asset': {
+      const action = rest[0];
+      const aArgs = rest.slice(1);
+      const flags = parseFlags(aArgs, {
+        string: LIBRARY_STRING_FLAGS,
+        boolean: new Set([...LIBRARY_BOOLEAN_FLAGS, 'icon', 'logo']),
+      });
+      const [id, filePath] = positionalArgs(aArgs, LIBRARY_STRING_FLAGS);
+      if (action !== 'add' || !id || !filePath) {
+        console.error('Usage: od brand asset add <id> <file> [--icon|--logo] [--json]');
+        process.exit(2);
+      }
+      if (flags.icon && flags.logo) {
+        console.error('--icon and --logo are mutually exclusive');
+        process.exit(2);
+      }
+      const mime = brandAssetMimeForFile(filePath);
+      if (!mime) {
+        console.error('unsupported asset file type — allowed: .png .jpg .jpeg .webp .svg');
+        process.exit(2);
+      }
+      const { readFile } = await import('node:fs/promises');
+      let bytes;
+      try {
+        bytes = await readFile(filePath);
+      } catch (err) {
+        console.error(`cannot read ${filePath}: ${err?.message ?? err}`);
+        process.exit(2);
+      }
+      // Node 24 global FormData/Blob — fetch derives the multipart boundary
+      // itself, so no manual Content-Type header here.
+      const form = new FormData();
+      form.append('file', new Blob([bytes], { type: mime }), basename(filePath));
+      const role = flags.icon ? 'icon' : flags.logo ? 'logo' : undefined;
+      const qs = role ? `?role=${role}` : '';
+      const data = await brandApiRequest(flags, `/api/brands/${encodeURIComponent(id)}/assets${qs}`, {
+        method: 'POST',
+        body: form,
+      });
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`Uploaded ${data.path}${role ? ` (${role})` : ''} -> ${data.url}`);
+      return;
+    }
+    case 'delete': {
+      const flags = parseFlags(rest, {
+        string: LIBRARY_STRING_FLAGS,
+        boolean: new Set([...LIBRARY_BOOLEAN_FLAGS, 'yes']),
+      });
+      const id = positionalArgs(rest, LIBRARY_STRING_FLAGS)[0];
+      if (!id) {
+        console.error('Usage: od brand delete <id> --yes [--json]');
+        process.exit(2);
+      }
+      // Headless-safe destructive gate: no interactive confirm prompt — the
+      // flag is the confirmation. Exit 2 keeps scripted callers honest.
+      if (!flags.yes) {
+        console.error(`Refusing to delete brand '${id}' without --yes (removes the brand directory irreversibly).`);
+        process.exit(2);
+      }
+      const data = await brandApiRequest(flags, `/api/brands/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`Deleted ${id}`);
       return;
     }
     default:
