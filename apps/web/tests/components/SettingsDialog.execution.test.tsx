@@ -754,7 +754,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       'https://api.atlascloud.ai/v1',
     );
     expect(screen.getByRole('link', { name: 'Get key ↗' }).getAttribute('href')).toBe(
-      'https://atlascloud.ai/',
+      'https://atlascloud.ai/?utm_source=open_design&utm_medium=provider_preset&utm_campaign=atlascloud_byok',
     );
   });
 

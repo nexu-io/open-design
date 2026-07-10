@@ -181,7 +181,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     ],
     apiKeyConsoleLink: {
       host: 'atlascloud.ai',
-      url: 'https://atlascloud.ai/',
+      url: 'https://atlascloud.ai/?utm_source=open_design&utm_medium=provider_preset&utm_campaign=atlascloud_byok',
     },
   },
   {
