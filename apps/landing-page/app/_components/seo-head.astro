@@ -45,6 +45,8 @@ export interface SeoHeadProps {
   category?: string;
   /** Defaults to "Open Design". */
   author?: string;
+  /** Set when this page has no generated per-locale variants. */
+  localeCanonicalOnly?: boolean;
   /**
    * Optional Google Search Console verification token. When set, renders
    * `<meta name="google-site-verification" content="...">`. Only needed on
@@ -74,11 +76,14 @@ const isArticle = props.kind === 'article';
 const locale = localeFromPath(props.pathname);
 const localeDef = getLocaleDefinition(locale);
 const basePath = stripLocaleFromPath(props.pathname).pathname;
-const alternateLinks = alternateLinksForPath(props.pathname).map((entry) => ({
-  ...entry,
-  href: new URL(entry.hrefPath, Astro.site).toString(),
-}));
-const xDefaultHref = new URL(alternateLinks[0]!.hrefPath, Astro.site).toString();
+const altEntries = alternateLinksForPath(props.pathname);
+const alternateLinks = props.localeCanonicalOnly
+  ? []
+  : altEntries.map((entry) => ({
+      ...entry,
+      href: new URL(entry.hrefPath, Astro.site).toString(),
+    }));
+const xDefaultHref = new URL(altEntries[0]!.hrefPath, Astro.site).toString();
 
 const canonical = new URL(props.pathname, Astro.site).toString();
 const image = props.image ?? new URL(ogDefaultImage, Astro.site).toString();
@@ -187,7 +192,7 @@ const blogJsonLd =
 <meta property='og:url' content={canonical} />
 <meta property='og:image' content={image} />
 <meta property='og:locale' content={localeDef.ogLocale} />
-{LANDING_LOCALES.filter((entry) => entry.code !== locale).map((entry) => (
+{!props.localeCanonicalOnly && LANDING_LOCALES.filter((entry) => entry.code !== locale).map((entry) => (
   <meta property='og:locale:alternate' content={entry.ogLocale} />
 ))}
 

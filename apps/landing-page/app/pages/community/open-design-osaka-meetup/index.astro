@@ -1,0 +1,281 @@
+---
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import SiteAnalytics from '../../../_components/site-analytics.astro';
+import HeaderEnhancer from '../../../_components/header-enhancer.astro';
+import { Header, type HeaderProps } from '../../../_components/header';
+import LocaleSwitcherScript from '../../../_components/locale-switcher-script.astro';
+import SeoHead from '../../../_components/seo-head.astro';
+import SiteFooter from '../../../_components/site-footer.astro';
+import { getCatalogCounts } from '../../../_lib/catalog';
+import { getGithubRepoMeta } from '../../../_lib/github';
+import { getHeaderLocaleSwitcher, getLocaleDefinition, localeFromPath } from '../../../i18n';
+import '../../../globals.css';
+import '../../../sub-pages.css';
+import '../../../_partials/ikigai-one.css';
+
+const locale = localeFromPath(Astro.url.pathname);
+const localeDef = getLocaleDefinition(locale);
+const counts = await getCatalogCounts();
+const github = await getGithubRepoMeta();
+const title = 'Open Design Osaka Meetup Recap';
+const description =
+  'A warm offline meetup in Osaka where designers, developers, educators, founders, and community organizers explored practical AI-powered PPT and website workflows.';
+const datePublished = new Date('2026-07-09');
+const fallbackSite = 'https://open-design.ai/';
+const ogImage = new URL('/stories/open-design-osaka-kyoto-meetup-og.jpg', Astro.site ?? fallbackSite).toString();
+
+const storyMain = `
+<main class="v4 meetup-v4">
+  <section class="v4band v4hero meetup-hero">
+    <div class="v4in">
+      <div class="v4herotop">
+        <div>
+          <p class="v4eye">Community story · Osaka</p>
+          <h1 class="v4h1">A warm room for practical AI creation.</h1>
+          <p class="v4sub">On July 6, Open Design gathered a close-knit group near Nipponbashi Station to test how AI design tools can become editable, local-first, and useful in real work.</p>
+          <div class="v4cta-row">
+            <a class="v4btn-p" href="/tutorials/open-design-ai-ppt-tutorial/">Read the PPT tutorial ↗</a>
+            <a class="v4btn-g" href="/community/ambassadors/">Host a local session ↗</a>
+          </div>
+        </div>
+        <div class="v4snap meetup-snap">
+          <div class="v4snap-head">
+            <img class="v4snap-logo" src="/stories/open-design-osaka-kyoto-meetup-cover.webp" alt="Open Design Osaka meetup" />
+            <div>
+              <div class="v4snap-name">Osaka Meetup</div>
+              <p class="v4snap-desc">A hands-on evening for decks, websites, local examples, and community learning.</p>
+            </div>
+          </div>
+          <div class="v4snap-chips">
+            <span class="v4chip">Designers</span>
+            <span class="v4chip">Developers</span>
+            <span class="v4chip">Educators</span>
+            <span class="v4chip">Founders</span>
+            <span class="v4chip">Community organizers</span>
+          </div>
+          <div class="v4snap-uses"><span>Used Open Design for</span>PPT workflows, real estate brochures, and expressive local websites.</div>
+        </div>
+      </div>
+      <div class="v4statline"></div>
+      <div class="v4statstrip">
+        <div><div class="n">July 6</div><div class="l">Time: a Sunday evening hands-on meetup.</div></div>
+        <div><div class="n">Osaka</div><div class="l">Location: near Nipponbashi Station.</div></div>
+        <div><div class="n">20<span>+</span></div><div class="l">Participants from design, engineering, education, startups, and local communities.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="v4band alt v4promoband">
+    <div class="v4in v4promo-c">
+      <p class="v4promo-eye">The room</p>
+      <figure class="v4promo meetup-wide-photo">
+        <img src="/stories/osaka-kyoto-group-room.jpg" alt="Participants gathered in a warm, close-knit room for the Osaka Open Design meetup." loading="eager" />
+        <figcaption>Participants gathered in a warm, close-knit room for the Osaka Open Design meetup.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="v4band">
+    <div class="v4in narrow">
+      <p class="v4eye">What happened</p>
+      <h2 class="v4h2">It was not a one-way product demo.</h2>
+      <p>Open Design came to Osaka for a casual offline meetup with laptops open on the tables and conversations moving naturally between design, code, community, and what AI creative tools can make possible.</p>
+      <p>The room brought together people with very different backgrounds: designers thinking about visual control, developers curious about HTML and web-native outputs, teachers and students looking for approachable workflows, founders searching for repeatable ways to make polished materials, and community organizers imagining what local AI creation groups could look like.</p>
+      <p>That mix gave the event its energy. It felt more like a compact creative studio for an evening: people watching, asking questions, sharing examples, and testing how Open Design could fit into real work.</p>
+    </div>
+  </section>
+
+  <section class="v4band ink v4quoteband">
+    <div class="v4in narrow">
+      <blockquote class="v4bigq">The most interesting question was not simply, <span class="grn">“Can AI generate something beautiful?”</span> It was, “Can we keep working with the result?”</blockquote>
+      <div class="v4by">Open Design Osaka meetup · July 6</div>
+    </div>
+  </section>
+
+  <section class="v4band alt">
+    <div class="v4in">
+      <div class="v4feat">
+        <div class="v4feat-txt">
+          <p class="v4eye">Workshop · AI PPT</p>
+          <h2 class="v4h2">A full deck workflow, not a magic prompt.</h2>
+          <p class="v4lede">The centerpiece of the evening was a practical tutorial: how to use AI and Open Design to create a professional PPT. The session showed a reliable creative process: make one clear decision at a time, and let the AI help at each stage.</p>
+          <div class="meetup-flow">
+            <span>Style options</span>
+            <span>Direction</span>
+            <span>Editable deck</span>
+            <span>Refinement</span>
+            <span>Charts & motion</span>
+            <span>Present</span>
+          </div>
+          <p class="v4feat-quote">Companion guide: <a href="/tutorials/open-design-ai-ppt-tutorial/">How to Create an AI-Powered PPT with Open Design</a></p>
+        </div>
+        <figure class="v4feat-img">
+          <img src="/stories/osaka-kyoto-workshop-session.jpg" alt="The hands-on workshop walked through an AI-powered PPT workflow from visual direction to editable deck refinement." loading="lazy" />
+          <figcaption>The hands-on workshop walked through an AI-powered PPT workflow from visual direction to editable deck refinement.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="v4band">
+    <div class="v4in">
+      <div class="v4in narrow meetup-case-intro">
+          <p class="v4eye">Use case · 01</p>
+          <h2 class="v4h2">Real estate brochures from an Open Design Japan ambassador.</h2>
+          <p class="v4lede">One participant, who works in real estate in Japan and also serves as an Open Design Japan ambassador, shared how his team has been using Open Design to create real estate brochures.</p>
+          <p class="v4lede">This was grounded and immediately understandable: structured information, property imagery, visual hierarchy, persuasive layout, and a polished sense of trust all had to come together in one editable artifact.</p>
+      </div>
+      <div class="meetup-pair">
+          <figure>
+            <img src="/stories/osaka-kyoto-real-estate-brochure.webp" alt="A real estate brochure example created with Open Design for Osaka investment properties." loading="lazy" />
+            <figcaption>A real estate brochure example created with Open Design for Osaka investment properties.</figcaption>
+          </figure>
+          <figure>
+            <img src="/stories/osaka-kyoto-catman.jpg" alt="The Open Design Japan ambassador shared the brochure workflow during the meetup." loading="lazy" />
+            <figcaption><a href="https://x.com/catmangox">Catman</a>, the Open Design Japan ambassador, shared the brochure workflow during the meetup.</figcaption>
+          </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="v4band alt">
+    <div class="v4in">
+      <div class="v4feat">
+        <div class="v4feat-txt">
+          <p class="v4eye">Use case · 02</p>
+          <h2 class="v4h2">A local website concept from <a href="https://kyototechmeetup.com/ja/">Kyoto Tech Meetup</a>.</h2>
+          <p class="v4lede">Two members of <a href="https://kyototechmeetup.com/ja/">Kyoto Tech Meetup</a> shared a playful website experiment created with Open Design: a dog-themed site that blended character energy with an Osaka landscape.</p>
+          <p class="v4lede">The visual direction was distinctive: dog imagery, Osaka city atmosphere, neon color, and a cyberpunk feeling. It showed how a community idea can quickly become an expressive web artifact through AI-assisted iteration.</p>
+        </div>
+        <figure class="v4feat-img meetup-square">
+          <img src="/stories/osaka-kyoto-kyoto-tech.jpg" alt="Kyoto Tech Meetup members shared a playful dog-themed website concept with an Osaka cyberpunk atmosphere." loading="lazy" />
+          <figcaption><a href="https://kyototechmeetup.com/ja/">Kyoto Tech Meetup</a> members shared a playful dog-themed website concept with an Osaka cyberpunk atmosphere.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="v4band v4verdictband">
+    <div class="v4in narrow">
+      <p class="v4eye">What we learned</p>
+      <blockquote class="v4bigverdict">Open Design clicks when people see the full workflow: rough ideas becoming editable, shareable artifacts.</blockquote>
+      <div class="v4feats3 meetup-lessons">
+        <div><h3>PPT is a strong onboarding path.</h3><p>It is familiar, useful across roles, and easy to evaluate.</p></div>
+        <div><h3>Editability is the differentiator.</h3><p>Participants cared about whether outputs could be adjusted, commented on, and reused.</p></div>
+        <div><h3>Local examples create trust.</h3><p>The brochure and website examples made Open Design feel closer to real work in Japan.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="v4band ink v4final meetup-final">
+    <div class="v4in">
+      <p class="v4eye">Next step</p>
+      <h2 class="v4final-h">Host the next practical AI creation session.</h2>
+      <p class="v4final-p">Open Design grows through local ambassadors who understand their communities, run practical workshops, and help people turn AI curiosity into actual artifacts.</p>
+      <div class="v4cta-row">
+        <a class="v4btn-coral" href="/community/ambassadors/">Apply to become an ambassador ↗</a>
+        <a class="v4btn-gd" href="/tutorials/open-design-ai-ppt-tutorial/">Read the workshop tutorial ↗</a>
+      </div>
+    </div>
+  </section>
+</main>
+`;
+
+const headerHtml = renderToStaticMarkup(
+  createElement<HeaderProps>(Header, {
+    counts,
+    github,
+    brandHref: '/',
+    active: 'community',
+    locale,
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname, {
+      canonicalOnly: true,
+    }),
+  }),
+);
+---
+
+<!doctype html>
+<html lang={localeDef.htmlLang} dir={localeDef.dir} data-locale-canonical='true'>
+  <head>
+    <meta charset='utf-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <SeoHead kind='article' title={title} description={description} pathname={Astro.url.pathname} datePublished={datePublished} category='Community' image={ogImage} localeCanonicalOnly />
+    <SiteAnalytics />
+  </head>
+  <body>
+    <div class='shell'>
+      <div class='site-chrome' data-chrome-headroom>
+        <Fragment set:html={headerHtml} />
+      </div>
+      <Fragment set:html={storyMain} />
+      <SiteFooter counts={counts} locale={locale} />
+    </div>
+    <HeaderEnhancer />
+    <LocaleSwitcherScript />
+    <script is:inline>
+      (function () {
+        var r = document.querySelector('.meetup-v4');
+        if (!r || !('IntersectionObserver' in window)) return;
+        r.classList.add('anim');
+        var io = new IntersectionObserver(
+          function (es) {
+            es.forEach(function (e) {
+              if (e.isIntersecting) {
+                e.target.classList.add('inview');
+                io.unobserve(e.target);
+              }
+            });
+          },
+          { threshold: 0.12, rootMargin: '0px 0px -7% 0px' },
+        );
+        document.querySelectorAll('.meetup-v4 .v4band').forEach(function (b) {
+          io.observe(b);
+        });
+      })();
+    </script>
+    <style is:global>
+      .meetup-v4 { background: var(--paper); }
+      .meetup-v4 .meetup-hero::before {
+        background-image:
+          linear-gradient(180deg, rgba(250,250,250,.76), rgba(250,250,250,.95) 66%, var(--paper)),
+          url(/stories/open-design-osaka-kyoto-meetup-cover.webp);
+        background-position: center;
+      }
+      .meetup-v4 .v4hero { padding-top: 132px; }
+      .meetup-v4 .v4statstrip { grid-template-columns: repeat(3, 1fr); }
+      .meetup-v4 .meetup-snap .v4snap-logo { width: 58px; height: 58px; }
+      .meetup-v4 .v4promo img,
+      .meetup-v4 .v4feat-img img,
+      .meetup-v4 .meetup-stack img { border: 1px solid var(--line); background: #fff; }
+      .meetup-v4 .v4promo figcaption { margin-top: 14px; font-size: 13px; color: var(--ink-faint); font-family: var(--mono); letter-spacing: .02em; }
+      .meetup-v4 .meetup-wide-photo { max-width: 920px; }
+      .meetup-v4 .meetup-wide-photo img { aspect-ratio: 16 / 9; object-fit: cover; }
+      .meetup-v4 .meetup-flow { display: flex; flex-wrap: wrap; gap: 9px; margin: 22px 0 4px; }
+      .meetup-v4 .meetup-flow span { display: inline-flex; align-items: center; min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.58); color: var(--ink-soft); font-family: var(--mono); font-size: 12px; letter-spacing: .02em; }
+      .meetup-v4 .v4feat-quote a { color: var(--coral); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+      .meetup-v4 .v4lede a,
+      .meetup-v4 .v4h2 a,
+      .meetup-v4 figcaption a { color: inherit; text-decoration-color: var(--coral); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+      .meetup-v4 .meetup-case-intro { padding: 0; margin: 0 0 28px; }
+      .meetup-v4 .meetup-pair { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(260px, .82fr); gap: 24px; align-items: start; }
+      .meetup-v4 .meetup-pair figure { margin: 0; }
+      .meetup-v4 .meetup-pair img { display: block; width: 100%; border: 1px solid var(--line); border-radius: var(--spacing-8); background: #fff; box-shadow: 0 34px 70px -34px rgba(20,20,30,.55); }
+      .meetup-v4 .meetup-pair figcaption { margin-top: 12px; font-family: var(--mono); font-size: 12.5px; line-height: 1.45; color: var(--ink-faint); }
+      .meetup-v4 .meetup-pair figure:first-child img { aspect-ratio: 4 / 3; object-fit: cover; object-position: top center; }
+      .meetup-v4 .meetup-pair figure:last-child img { aspect-ratio: 4 / 5; object-fit: cover; }
+      .meetup-v4 .meetup-square img { aspect-ratio: 1 / 1; object-fit: cover; }
+      .meetup-v4 .meetup-lessons { margin-top: 34px; }
+      .meetup-v4 .meetup-final::before {
+        background-image:
+          linear-gradient(rgba(16,16,18,.84), rgba(16,16,18,.92)),
+          url(/stories/osaka-kyoto-group-room.jpg);
+      }
+      @media (max-width: 820px) {
+        .meetup-v4 .v4hero { padding-top: 108px; }
+        .meetup-v4 .meetup-pair { grid-template-columns: 1fr; }
+      }
+    </style>
+  </body>
+</html>

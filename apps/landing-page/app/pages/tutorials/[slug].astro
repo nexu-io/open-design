@@ -46,9 +46,16 @@ const localeDef = getLocaleDefinition(locale);
 const ui = getLandingUiCopy(locale);
 const href = (path: string) => localizedHref(path, locale);
 const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/tutorials/${entry.id}.md`;
-const youtubeUrl = `https://www.youtube.com/watch?v=${entry.data.youtubeId}`;
+const hasVideo = Boolean(entry.data.youtubeId);
+const youtubeUrl = entry.data.youtubeId
+  ? `https://www.youtube.com/watch?v=${entry.data.youtubeId}`
+  : undefined;
 const thumbnailUrl =
-  entry.data.thumbnail ?? `https://i.ytimg.com/vi/${entry.data.youtubeId}/maxresdefault.jpg`;
+  entry.data.thumbnail ??
+  (entry.data.youtubeId
+    ? `https://i.ytimg.com/vi/${entry.data.youtubeId}/maxresdefault.jpg`
+    : '/tutorials/open-design-ai-ppt-tutorial-cover.webp');
+const isPptArticle = entry.id === 'open-design-ai-ppt-tutorial';
 
 const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
@@ -59,7 +66,9 @@ const headerHtml = renderToStaticMarkup(
     brandHref: '/',
     active: 'tutorials',
     locale,
-    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname),
+    localeSwitcher: getHeaderLocaleSwitcher(locale, Astro.url.pathname, {
+      canonicalOnly: isPptArticle,
+    }),
   }),
 );
 
@@ -93,8 +102,9 @@ const localizedCategory = (category: string) => {
 // localized placeholder so the short catalogue entries keep current behavior.
 const localizedLongform =
   locale === DEFAULT_LOCALE ? undefined : getLocalizedTutorial(entry.id, locale);
+const pptCoverVideoUrl = isPptArticle ? '/tutorials/open-design-ai-ppt-motion-demo.mp4' : undefined;
 const tutorialCopy =
-  locale === DEFAULT_LOCALE
+  locale === DEFAULT_LOCALE || isPptArticle
     ? {
         title: entry.data.title,
         summary: entry.data.summary,
@@ -129,7 +139,11 @@ const tutorialCopy =
 ---
 
 <!doctype html>
-<html lang={localeDef.htmlLang} dir={localeDef.dir}>
+<html
+  lang={localeDef.htmlLang}
+  dir={localeDef.dir}
+  data-locale-canonical={isPptArticle ? 'true' : undefined}
+>
   <head>
     <meta charset='utf-8' />
     <meta name='viewport' content='width=device-width, initial-scale=1' />
@@ -140,6 +154,7 @@ const tutorialCopy =
       pathname={Astro.url.pathname}
       datePublished={entry.data.date}
       category={tutorialCopy.category}
+      localeCanonicalOnly={isPptArticle}
     />
     <SiteAnalytics />
   </head>
@@ -149,37 +164,97 @@ const tutorialCopy =
         <Fragment set:html={headerHtml} />
       </div>
 
+      {
+        isPptArticle ? (
+          <main class='ppt-readable-shell'>
+            <article class='ppt-readable'>
+              <div class='container'>
+                <a class='tut-back' href={href('/tutorials/')}>{ui.tutorials.backToTutorials}</a>
+                <div class='ppt-readable-head'>
+                  <span class='tut-card-cat'>
+                    {tutorialCopy.category}
+                    {entry.data.official && (
+                      <span class='tut-badge-official'>{ui.tutorials.official}</span>
+                    )}
+                  </span>
+                  <h1 class='tut-detail-title'>{tutorialCopy.title}</h1>
+                  <p class='tut-detail-summary'>{tutorialCopy.summary}</p>
+                  <div class='tut-detail-meta'>
+                    <span>{entry.data.author}</span>
+                    <span>{fmtDate(entry.data.date)}</span>
+                    <span>{entry.data.durationSeconds ? fmtDuration(entry.data.durationSeconds) : 'Written guide'}</span>
+                  </div>
+                  {pptCoverVideoUrl && (
+                    <div class='ppt-cover-video'>
+                      <video
+                        src={pptCoverVideoUrl}
+                        poster={thumbnailUrl}
+                        autoplay
+                        muted
+                        loop
+                        playsinline
+                        preload='metadata'
+                        aria-label={ui.tutorials.thumbnailAlt(tutorialCopy.title)}
+                      />
+                    </div>
+                  )}
+                </div>
+                <div class='tut-body ppt-body'>
+                  {tutorialCopy.bodyHtml ? <Fragment set:html={tutorialCopy.bodyHtml} /> : <Content />}
+                </div>
+                <hr class='tut-rule' />
+                <div class='tut-foot'>
+                  <a class='tut-back' href={href('/tutorials/')}>{ui.tutorials.backToTutorials}</a>
+                  <a class='tut-source' href={sourceUrl} target='_blank' rel='noreferrer noopener'>{ui.tutorials.viewSource}</a>
+                </div>
+              </div>
+            </article>
+          </main>
+        ) : (
       <main class='tut-detail-shell'>
         <article class='tut-detail'>
           <div class='container'>
             <a class='tut-back' href={href('/tutorials/')}>{ui.tutorials.backToTutorials}</a>
 
-            <a
-              class='tut-player'
-              href={youtubeUrl}
-              target='_blank'
-              rel='noreferrer noopener'
-              aria-label={`${ui.tutorials.watch}: ${tutorialCopy.title}`}
-            >
-              <img
-                class='tut-player-thumb'
-                src={thumbnailUrl}
-                alt={ui.tutorials.thumbnailAlt(tutorialCopy.title)}
-                loading='eager'
-              />
-              <span class='tut-player-overlay' aria-hidden='true'>
-                <span class='tut-player-button'>
-                  <svg viewBox='0 0 68 48' width='68' height='48'>
-                    <path
-                      d='M66.52 7.74c-.78-2.93-2.49-5.41-5.42-6.19C55.79.13 34 0 34 0S12.21.13 6.9 1.55c-2.93.78-4.63 3.26-5.42 6.19C.06 13.05 0 24 0 24s.06 10.95 1.48 16.26c.78 2.93 2.49 5.41 5.42 6.19C12.21 47.87 34 48 34 48s21.79-.13 27.1-1.55c2.93-.78 4.64-3.26 5.42-6.19C67.94 34.95 68 24 68 24s-.06-10.95-1.48-16.26z'
-                      fill='#cc0000'
-                    />
-                    <path d='M27 34V14l18 10z' fill='#fff' />
-                  </svg>
-                </span>
-                <span class='tut-player-cta'>{ui.tutorials.watchOnYouTube}</span>
-              </span>
-            </a>
+            {
+              hasVideo && youtubeUrl ? (
+                <a
+                  class='tut-player'
+                  href={youtubeUrl}
+                  target='_blank'
+                  rel='noreferrer noopener'
+                  aria-label={`${ui.tutorials.watch}: ${tutorialCopy.title}`}
+                >
+                  <img
+                    class='tut-player-thumb'
+                    src={thumbnailUrl}
+                    alt={ui.tutorials.thumbnailAlt(tutorialCopy.title)}
+                    loading='eager'
+                  />
+                  <span class='tut-player-overlay' aria-hidden='true'>
+                    <span class='tut-player-button'>
+                      <svg viewBox='0 0 68 48' width='68' height='48'>
+                        <path
+                          d='M66.52 7.74c-.78-2.93-2.49-5.41-5.42-6.19C55.79.13 34 0 34 0S12.21.13 6.9 1.55c-2.93.78-4.63 3.26-5.42 6.19C.06 13.05 0 24 0 24s.06 10.95 1.48 16.26c.78 2.93 2.49 5.41 5.42 6.19C12.21 47.87 34 48 34 48s21.79-.13 27.1-1.55c2.93-.78 4.64-3.26 5.42-6.19C67.94 34.95 68 24 68 24s-.06-10.95-1.48-16.26z'
+                          fill='#cc0000'
+                        />
+                        <path d='M27 34V14l18 10z' fill='#fff' />
+                      </svg>
+                    </span>
+                    <span class='tut-player-cta'>{ui.tutorials.watchOnYouTube}</span>
+                  </span>
+                </a>
+              ) : (
+                <div class='tut-article-cover'>
+                  <img
+                    src={thumbnailUrl}
+                    alt={ui.tutorials.thumbnailAlt(tutorialCopy.title)}
+                    loading='eager'
+                  />
+                  <span>Written guide</span>
+                </div>
+              )
+            }
 
             <div class='tut-detail-head'>
               <span class='tut-card-cat'>
@@ -194,15 +269,17 @@ const tutorialCopy =
               <div class='tut-detail-meta'>
                 <span>{entry.data.author}</span>
                 <span>{fmtDate(entry.data.date)}</span>
-                <span>{fmtDuration(entry.data.durationSeconds)}</span>
-                <a
-                  class='tut-detail-yt'
-                  href={youtubeUrl}
-                  target='_blank'
-                  rel='noreferrer noopener'
-                >
-                  {ui.tutorials.openOnYouTube}
-                </a>
+                <span>{entry.data.durationSeconds ? fmtDuration(entry.data.durationSeconds) : 'Written guide'}</span>
+                {youtubeUrl && (
+                  <a
+                    class='tut-detail-yt'
+                    href={youtubeUrl}
+                    target='_blank'
+                    rel='noreferrer noopener'
+                  >
+                    {ui.tutorials.openOnYouTube}
+                  </a>
+                )}
               </div>
             </div>
 
@@ -228,11 +305,254 @@ const tutorialCopy =
           </div>
         </article>
       </main>
+        )
+      }
       <SiteFooter counts={counts} locale={locale} />
     </div>
 
     <HeaderEnhancer />
     <LocaleSwitcherScript />
+    <script is:inline>
+      (() => {
+        const blocks = document.querySelectorAll('.ppt-readable .ppt-body pre');
+        blocks.forEach((pre) => {
+          if (pre.parentElement?.classList.contains('ppt-code-wrap')) return;
+          const code = pre.querySelector('code');
+          if (!code) return;
+
+          const wrap = document.createElement('div');
+          wrap.className = 'ppt-code-wrap';
+          pre.before(wrap);
+          wrap.append(pre);
+
+          const button = document.createElement('button');
+          button.className = 'ppt-copy-code';
+          button.type = 'button';
+          button.textContent = 'Copy';
+          button.setAttribute('aria-label', 'Copy prompt');
+          wrap.append(button);
+
+          button.addEventListener('click', async () => {
+            const text = code.textContent || pre.innerText || '';
+            try {
+              await navigator.clipboard.writeText(text);
+              button.textContent = 'Copied';
+              window.setTimeout(() => {
+                button.textContent = 'Copy';
+              }, 1400);
+            } catch {
+              button.textContent = 'Failed';
+              window.setTimeout(() => {
+                button.textContent = 'Copy';
+              }, 1400);
+            }
+          });
+        });
+      })();
+    </script>
+
+    <style is:global>
+      .ppt-readable-shell {
+        position: relative;
+        z-index: 2;
+        padding-top: 132px;
+        background: var(--paper);
+      }
+      .ppt-readable {
+        padding: 48px 0 96px;
+      }
+      .ppt-readable .container {
+        max-width: 880px;
+      }
+      .ppt-readable-head {
+        padding-bottom: 34px;
+        margin-bottom: 40px;
+        border-bottom: 1px solid var(--line);
+      }
+      .ppt-cover-video {
+        margin-top: 34px;
+        border: 1px solid var(--line);
+        border-radius: var(--spacing-8);
+        overflow: hidden;
+        background: rgba(255,255,255,.58);
+        box-shadow: 0 18px 42px rgba(20,20,20,.08);
+      }
+      .ppt-cover-video video {
+        display: block;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        height: auto;
+        object-fit: cover;
+      }
+      .ppt-readable .ppt-body {
+        color: var(--ink-soft);
+        font-family: var(--body);
+        font-size: 18px;
+        line-height: 1.72;
+      }
+      .ppt-readable .ppt-body > blockquote:first-child {
+        margin: 0 0 54px;
+        padding: 0 0 0 24px;
+        border-left: 3px solid var(--coral);
+        color: var(--ink);
+        font-family: var(--serif);
+        font-size: clamp(24px, 3vw, 34px);
+        font-style: italic;
+        line-height: 1.25;
+      }
+      .ppt-readable .ppt-body h1,
+      .ppt-readable .ppt-body h2 {
+        color: var(--ink);
+        font-family: var(--serif);
+        font-weight: 500;
+        letter-spacing: 0;
+      }
+      .ppt-readable .ppt-body h1 {
+        max-width: 760px;
+        margin: 2.2em 0 .72em;
+        font-size: clamp(34px, 4.6vw, 56px);
+        line-height: 1.02;
+      }
+      .ppt-readable .ppt-body h2 {
+        margin: 1.9em 0 .68em;
+        font-size: clamp(25px, 2.7vw, 34px);
+        line-height: 1.12;
+      }
+      .ppt-readable .ppt-body h3 {
+        margin: 1.7em 0 .5em;
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .ppt-readable .ppt-body p { margin: 0 0 1.35em; }
+      .ppt-readable .ppt-media {
+        width: 100%;
+        margin: 30px 0 46px;
+      }
+      .ppt-readable .ppt-media img,
+      .ppt-readable .ppt-media video {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--spacing-8);
+        background: rgba(255,255,255,.58);
+        box-shadow: 0 18px 42px rgba(20,20,20,.08);
+      }
+      .ppt-readable .ppt-media video {
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+      }
+      .ppt-readable .ppt-media figcaption {
+        margin-top: 10px;
+        color: var(--ink-faint);
+        font-family: var(--sans);
+        font-size: 13px;
+        line-height: 1.45;
+        text-align: center;
+      }
+      .ppt-readable .ppt-body a {
+        color: var(--ink);
+        text-decoration-color: var(--coral);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 3px;
+      }
+      .ppt-readable .ppt-body hr {
+        border: 0;
+        border-top: 1px solid var(--line);
+        margin: 58px 0;
+      }
+      .ppt-readable .ppt-body table {
+        display: table;
+        table-layout: fixed;
+        width: 100%;
+        margin: 32px 0 46px;
+        border-collapse: collapse;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,.58);
+      }
+      .ppt-readable .ppt-body th,
+      .ppt-readable .ppt-body td {
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        vertical-align: top;
+        font-size: 14px;
+        line-height: 1.5;
+        word-break: normal;
+        overflow-wrap: anywhere;
+      }
+      .ppt-readable .ppt-body th {
+        color: var(--ink);
+        font-family: var(--sans);
+        font-weight: 700;
+        background: rgba(20,20,20,.04);
+      }
+      .ppt-readable .ppt-body pre {
+        overflow-x: auto;
+        margin: 0;
+        padding: 22px;
+        padding-top: 50px;
+        border: 1px solid var(--line);
+        border-radius: var(--spacing-8);
+        background: #151515;
+        color: #f6f1e8;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .ppt-readable .ppt-body code {
+        font-family: var(--mono);
+        font-size: .9em;
+      }
+      .ppt-readable .ppt-code-wrap {
+        position: relative;
+        margin: 28px 0 42px;
+      }
+      .ppt-readable .ppt-copy-code {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 1;
+        min-width: 76px;
+        height: 34px;
+        border: 1px solid rgba(255,255,255,.72);
+        border-radius: 6px;
+        background: #f6f1e8;
+        color: #151515;
+        box-shadow: 0 8px 18px rgba(0,0,0,.34);
+        font-family: var(--sans);
+        font-size: 12.5px;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+      }
+      .ppt-readable .ppt-copy-code:hover {
+        border-color: #fff;
+        background: #fff;
+        transform: translateY(-1px);
+      }
+      .ppt-readable .ppt-body :not(pre) > code {
+        padding: 2px 5px;
+        border-radius: 5px;
+        background: rgba(20,20,20,.06);
+        color: var(--ink);
+      }
+      .ppt-readable .ppt-body ul,
+      .ppt-readable .ppt-body ol {
+        margin: 0 0 1.45em 1.25em;
+        padding: 0;
+      }
+      .ppt-readable .ppt-body li { margin: .35em 0; }
+      @media (max-width: 820px) {
+        .ppt-readable-shell { padding-top: 108px; }
+        .ppt-readable .ppt-body { font-size: 16.5px; }
+        .ppt-readable .ppt-body table {
+          display: block;
+          overflow-x: auto;
+        }
+      }
+    </style>
 
     <style>
       .tut-detail-shell {
@@ -338,6 +658,39 @@ const tutorialCopy =
         background: rgba(21, 20, 15, 0.62);
         border-color: rgba(255, 255, 255, 0.5);
       }
+      .tut-article-cover {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        margin-bottom: 36px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--bone);
+        box-shadow: var(--shadow);
+      }
+      .tut-article-cover img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+        filter: saturate(0.92) contrast(1.02);
+      }
+      .tut-article-cover span {
+        position: absolute;
+        left: 18px;
+        bottom: 18px;
+        z-index: 1;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(21, 20, 15, 0.72);
+        color: var(--paper);
+        font-family: var(--sans);
+        font-size: 13px;
+        font-weight: 700;
+      }
       .tut-detail-head {
         margin-bottom: 32px;
       }
@@ -431,6 +784,15 @@ const tutorialCopy =
       }
       .tut-body :global(p) {
         margin: 0 0 1.4em;
+      }
+      .tut-body :global(h1) {
+        font-family: var(--serif);
+        font-weight: 500;
+        font-size: clamp(28px, 3vw, 38px);
+        line-height: 1.12;
+        letter-spacing: -0.018em;
+        color: var(--ink);
+        margin: 1.9em 0 0.7em;
       }
       .tut-body :global(h2) {
         font-family: var(--serif);

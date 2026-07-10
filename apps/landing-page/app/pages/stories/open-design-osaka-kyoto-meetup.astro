@@ -1,0 +1,21 @@
+---
+import { localeFromPath, localizedHref } from '../../i18n';
+
+const locale = localeFromPath(Astro.url.pathname);
+const target = localizedHref('/community/open-design-osaka-meetup/', locale);
+---
+
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="refresh" content={`0; url=${target}`} />
+    <link rel="canonical" href={target} />
+    <script is:inline define:vars={{ target }}>
+      window.location.replace(target);
+    </script>
+  </head>
+  <body>
+    <a href={target}>Open Design Osaka Meetup Recap has moved to Community.</a>
+  </body>
+</html>

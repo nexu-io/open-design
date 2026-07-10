@@ -1,0 +1,313 @@
+---
+import Layout from '../../../_components/sub-page-layout.astro';
+import '../../../globals.css';
+import '../../../sub-pages.css';
+import '../../../community.css';
+
+const title = 'Open Design Events';
+const description =
+  'Community events, recaps, and upcoming hands-on sessions for people building with Open Design.';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: title,
+  description,
+  url: new URL(Astro.url.pathname, Astro.site).toString(),
+};
+---
+
+<Layout title={title} description={description} active="community" jsonLd={jsonLd} mainClassName="sub-main">
+  <main class="od-events">
+    <section class="events-hero">
+      <div class="events-wrap">
+        <p class="events-kicker">Community · Events</p>
+        <h1>Events where Open Design becomes hands-on.</h1>
+        <p>
+          Recaps from local rooms, plus upcoming sessions where builders, designers,
+          educators, and community organizers make editable AI artifacts together.
+        </p>
+      </div>
+    </section>
+
+    <section class="events-section">
+      <div class="events-wrap">
+        <div class="events-section-head">
+          <p class="events-kicker">Latest recap</p>
+          <h2>Open Design Osaka Workshop</h2>
+        </div>
+        <a class="event-feature" href="/community/open-design-osaka-meetup/">
+          <span class="event-feature-media">
+            <img
+              src="/stories/osaka-kyoto-group-room.jpg"
+              alt="Participants gathered for the Osaka Open Design meetup"
+              loading="eager"
+            />
+          </span>
+          <span class="event-feature-copy">
+            <span class="event-pill">Recap · Osaka · July 6</span>
+            <strong>Open Design Osaka Meetup Recap</strong>
+            <span>
+              A warm offline session near Nipponbashi Station: AI-powered PPT workflows,
+              real estate brochures, local website concepts, and the lesson that editable
+              artifacts beat one-off generation.
+            </span>
+            <span class="event-link">Read the recap -></span>
+          </span>
+        </a>
+      </div>
+    </section>
+
+    <section class="events-section events-upcoming">
+      <div class="events-wrap">
+        <div class="events-section-head">
+          <p class="events-kicker">Coming soon</p>
+          <h2>Upcoming community sessions.</h2>
+        </div>
+        <div class="event-grid">
+          <a class="event-card" href="/blog/open-design-shanghai-ai-workshop/">
+            <span class="event-card-media">
+              <img
+                src="/blog/open-design-shanghai-ai-workshop-cover.webp"
+                alt="Open Design AI Workshop in Shanghai"
+                loading="lazy"
+              />
+            </span>
+            <span class="event-card-body">
+              <span class="event-pill">Upcoming · Shanghai · July 25</span>
+              <strong>Open Design AI Workshop is coming to Shanghai</strong>
+              <span>
+                A hands-on workshop for students, developers, designers, and AI tool
+                builders to turn prompts and references into real AI artifacts.
+              </span>
+              <span class="event-link">View event details -></span>
+            </span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <style is:global>
+    .od-events {
+      --event-paper: #fafafa;
+      --event-ink: #262626;
+      --event-soft: #595959;
+      --event-muted: #8c8c8c;
+      --event-line: #d9d9d9;
+      --event-green: #63fe13;
+      --event-green-dark: #218c00;
+      background: var(--event-paper);
+      color: var(--event-ink);
+      font-family: var(--sans);
+      padding: 58px 0 68px;
+    }
+
+    .events-wrap {
+      width: min(1100px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .events-hero {
+      padding: 10px 0 0;
+    }
+
+    .events-kicker {
+      margin: 0 0 14px;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.25;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--event-green-dark);
+    }
+
+    .events-hero h1,
+    .events-section-head h2 {
+      margin: 0;
+      color: var(--event-ink);
+      font-family: var(--sans);
+      font-weight: 800;
+      letter-spacing: -0.028em;
+      line-height: .96;
+    }
+
+    .events-hero h1 {
+      max-width: 900px;
+      font-size: clamp(44px, 5.2vw, 72px);
+    }
+
+    .events-hero p:not(.events-kicker) {
+      max-width: 720px;
+      margin: 14px 0 0;
+      color: var(--event-soft);
+      font-size: clamp(17px, 1.6vw, 20px);
+      line-height: 1.5;
+    }
+
+    .events-section {
+      padding: 26px 0 0;
+    }
+
+    .events-upcoming {
+      padding-top: 88px;
+    }
+
+    .events-section-head {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .events-section-head h2 {
+      font-size: clamp(30px, 4vw, 46px);
+      line-height: 1.05;
+    }
+
+    .event-feature,
+    .event-card {
+      display: grid;
+      overflow: hidden;
+      border: 1px solid var(--event-line);
+      border-radius: 10px;
+      background: #fff;
+      color: inherit;
+      text-decoration: none;
+      box-shadow: 0 30px 60px -30px rgba(38, 38, 38, .16);
+      transition: border-color .16s ease, transform .16s ease, background .16s ease;
+    }
+
+    .event-feature:hover,
+    .event-card:hover {
+      border-color: #bfbfbf;
+      background: #f5f5f5;
+      transform: translateY(-3px);
+    }
+
+    .event-feature {
+      grid-template-columns: minmax(0, .82fr) minmax(300px, 1.18fr);
+      min-height: 212px;
+    }
+
+    .event-feature-media,
+    .event-card-media {
+      position: relative;
+      display: block;
+      overflow: hidden;
+      background: #f0f0f0;
+    }
+
+    .event-feature-media {
+      min-height: 260px;
+      border-right: 1px solid var(--event-line);
+    }
+
+    .event-card-media {
+      aspect-ratio: 16 / 9;
+      border-bottom: 1px solid var(--event-line);
+    }
+
+    .event-feature-media img,
+    .event-card-media img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .event-feature-copy,
+    .event-card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+      padding: 30px 38px;
+    }
+
+    .event-feature-copy {
+      justify-content: center;
+    }
+
+    .event-pill {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      min-height: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--event-green);
+      border-radius: 999px;
+      background: #f2ffe6;
+      color: var(--event-green-dark);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .event-feature-copy strong,
+    .event-card-body strong {
+      color: var(--event-ink);
+      font-family: var(--sans);
+      font-weight: 700;
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    .event-feature-copy strong {
+      font-size: clamp(28px, 3.2vw, 42px);
+    }
+
+    .event-card-body strong {
+      font-size: 24px;
+    }
+
+    .event-feature-copy span:not(.event-pill):not(.event-link),
+    .event-card-body span:not(.event-pill):not(.event-link) {
+      color: var(--event-soft);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .event-link {
+      margin-top: 8px;
+      color: var(--event-ink);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .event-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+    }
+
+    .event-card {
+      min-height: 100%;
+    }
+
+    @media (max-width: 860px) {
+      .od-events {
+        padding-top: 58px;
+      }
+
+      .event-feature,
+      .event-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .event-feature-media {
+        min-height: 0;
+        aspect-ratio: 16 / 9;
+        border-right: 0;
+        border-bottom: 1px solid var(--event-line);
+      }
+
+      .event-feature-copy,
+      .event-card-body {
+        padding: 24px;
+      }
+    }
+  </style>
+</Layout>
