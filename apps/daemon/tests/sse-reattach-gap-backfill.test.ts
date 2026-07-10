@@ -15,12 +15,14 @@
 
 import type { Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { startServer } from '../src/server.js';
+import { createChatRunService } from '../src/runtimes/runs.js';
 
 type StartedServer = { url: string; server: Server; shutdown?: () => Promise<void> | void };
 type RunStatus = { id: string; status: string; eventsLogPath: string };
@@ -93,6 +95,76 @@ describe('SSE reattach gap backfill', () => {
     const contiguous = Array.from({ length: ids.length }, (_, i) => cursor + 1 + i);
     expect(ids).toEqual(contiguous);
   });
+});
+
+describe('SSE reattach gap backfill — active run, log writer not yet flushed', () => {
+  let tmpDir: string | null = null;
+
+  afterEach(async () => {
+    if (tmpDir) await rm(tmpDir, { recursive: true, force: true });
+    tmpDir = null;
+  });
+
+  function makeService(sent: Array<{ event: string; id: number }>, logDir: string) {
+    return createChatRunService({
+      createSseResponse: () => ({
+        send: (event: string, _data: unknown, id: number) => { sent.push({ event, id }); return true; },
+        end: vi.fn(),
+        cleanup: vi.fn(),
+      }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+      maxEvents: 50,
+      runsLogDir: logDir as unknown as null,
+    });
+  }
+
+  it('does not evict events that have not yet reached the on-disk log', () => {
+    const runs = makeService([], tmpDirSync());
+    const run = runs.create({ projectId: 'p' }) as { events: Array<{ id: number }>; status: string };
+    run.status = 'running';
+    // Synchronous burst well past maxEvents (50) but under the 2x hard cap. No
+    // async write callback can fire mid-loop, so nothing is durable yet and
+    // therefore nothing may be evicted — the reattach backfill would otherwise
+    // have no source for these records.
+    for (let i = 0; i < 90; i++) runs.emit(run, 'agent', { type: 'text_delta', delta: `t${i}` });
+    expect(run.events[0]?.id).toBe(1);       // nothing evicted past the durability watermark
+    expect(run.events.length).toBeGreaterThan(50);
+  });
+
+  it('reattaches gaplessly on an active run before the log writer has flushed', () => {
+    const sent: Array<{ event: string; id: number }> = [];
+    const runs = makeService(sent, tmpDirSync());
+    const run = runs.create({ projectId: 'p' }) as { status: string };
+    (run as { status: string }).status = 'running';
+    // Fire a synchronous burst past maxEvents (50) but under the 2x hard cap,
+    // then reattach in the same tick — before any write callback has run, so the
+    // on-disk log is still empty. With plain eviction the backfill would read an
+    // empty prefix and the replay would jump to the buffer boundary; retaining
+    // un-durable events keeps the reattach gapless.
+    const total = 95;
+    for (let i = 0; i < total; i++) runs.emit(run, 'agent', { type: 'text_delta', delta: `t${i}` });
+    const cursor = 5;
+    runs.stream(
+      run,
+      { get: (h: string) => (h === 'Last-Event-ID' ? String(cursor) : null), query: {} } as never,
+      { on: () => {} } as never,
+    );
+    const ids = sent.map((s) => s.id);
+    // Gapless: the replay is exactly [cursor+1, cursor+2, ...] with no hole.
+    expect(ids.length).toBeGreaterThan(0);
+    const contiguous = Array.from({ length: ids.length }, (_, i) => cursor + 1 + i);
+    expect(ids).toEqual(contiguous);
+  });
+
+  function tmpDirSync(): string {
+    // afterEach cleans this up; created lazily per test.
+    const dir = `${os.tmpdir()}/od-reattach-active-${randomUUID()}`;
+    mkdirSync(dir, { recursive: true });
+    tmpDir = dir;
+    return dir;
+  }
 });
 
 async function writeFloodClaude(dir: string, name: string, flood: number): Promise<string> {

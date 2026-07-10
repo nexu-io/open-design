@@ -156,16 +156,44 @@ export function createChatRunService({
     const id = run.nextEventId++;
     const record = { id, event, data, timestamp: Date.now() };
     run.events.push(record);
-    if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
     run.updatedAt = Date.now();
     const stream = ensureLogStream(run);
     if (stream) {
       try {
-        stream.write(JSON.stringify(record) + '\n');
+        // The write callback fires once fs.write() has handed this record to the
+        // OS, at which point a readFileSync sees it. Track that watermark so the
+        // reattach gap backfill (stream()) never has to read a record that hasn't
+        // reached the file yet.
+        stream.write(JSON.stringify(record) + '\n', () => {
+          if (id > (run.eventsDurableUpToId ?? 0)) run.eventsDurableUpToId = id;
+        });
       } catch {
         // Stream-level write errors are caught by the on('error') above;
         // swallowing here keeps the SSE fan-out below from being skipped.
       }
+    }
+    // Evict oldest events past the ring-buffer cap, but only once they are
+    // durable on disk — otherwise an evicted-yet-unflushed record is recoverable
+    // from neither memory nor the file, recreating the reattach gap the backfill
+    // is meant to close. When persistence is off or the log stream has errored
+    // out, disk backfill is impossible anyway, so fall back to plain eviction.
+    // A hard 2x cap bounds memory if the writer stalls for a whole buffer.
+    if (run.events.length > maxEvents) {
+      const overflow = run.events.length - maxEvents;
+      const durableThrough = stream
+        ? (run.eventsDurableUpToId ?? 0)
+        : Number.POSITIVE_INFINITY;
+      let evictable = 0;
+      while (
+        evictable < overflow &&
+        run.events[evictable] &&
+        run.events[evictable].id <= durableThrough
+      ) {
+        evictable++;
+      }
+      const hardCapEvict = run.events.length - maxEvents * 2;
+      if (hardCapEvict > evictable) evictable = hardCapEvict;
+      if (evictable > 0) run.events.splice(0, evictable);
     }
     for (const sse of run.clients) sse.send(event, data, id);
     return record;
