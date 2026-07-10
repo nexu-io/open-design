@@ -1,4 +1,5 @@
 import type { ProjectFile, ProjectMetadata } from '../../types';
+import { ProductionCanvasBoard } from './ProductionCanvasBoard';
 import { ProductionTaskCard, productionTaskCardForId, PRODUCTION_TASK_CARD_CATALOG } from './ProductionTaskCard';
 import { ProductionWorkflowRail, type ProductionWorkflowStep } from './ProductionWorkflowRail';
 
@@ -68,6 +69,8 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
           Export draft video
         </button>
       </header>
+
+      <ProductionCanvasBoard />
 
       <div className="production-workspace__grid">
         <section className="production-workspace__pane">

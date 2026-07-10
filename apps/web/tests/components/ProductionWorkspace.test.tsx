@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { ProductionWorkspace } from '../../src/components/production/ProductionWorkspace';
+
+afterEach(() => {
+  cleanup();
+});
 
 describe('ProductionWorkspace', () => {
   it('renders the five production lanes and a beginner-friendly voiceover action', () => {
@@ -31,5 +35,36 @@ describe('ProductionWorkspace', () => {
     expect(screen.getByText('Science explainer')).toBeInTheDocument();
     expect(screen.getByText('Beginner-friendly empty state: break the script into shots when you need more control.'))
       .toBeInTheDocument();
+  });
+
+  it('renders a draggable canvas board for the production cards', () => {
+    render(
+      <ProductionWorkspace
+        projectId="project-1"
+        projectName="Science Explainer"
+        metadata={{
+          kind: 'video',
+          workflowMode: 'production',
+          taskCardId: 'science-explainer',
+          voiceTone: 'professional',
+          voiceProfileId: 'rachel-default',
+        } as never}
+        projectFiles={[]}
+      />,
+    );
+
+    const board = screen.getByTestId('production-canvas-board');
+    const scriptNode = screen.getByTestId('production-canvas-node-script');
+    const firstEdge = screen.getByTestId('production-canvas-edge-script-voice');
+
+    expect(board).toBeInTheDocument();
+    expect(firstEdge).toBeInTheDocument();
+    expect(scriptNode).toHaveStyle({ transform: 'translate(36px, 44px)' });
+
+    fireEvent.pointerDown(scriptNode, { clientX: 72, clientY: 92 });
+    fireEvent.pointerMove(window, { clientX: 172, clientY: 172 });
+    fireEvent.pointerUp(window);
+
+    expect(scriptNode).toHaveStyle({ transform: 'translate(136px, 124px)' });
   });
 });

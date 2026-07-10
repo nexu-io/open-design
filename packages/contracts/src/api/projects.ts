@@ -237,28 +237,28 @@ export type ProjectMetadata =
   | ProjectMetadataCommon
   | (ProjectMetadataCommon & ProductionWorkflowMetadata);
 
-const PRODUCTION_TASK_CARD_CATALOG: readonly ProductionTaskCard[] = Object.freeze([
-    {
-      id: 'science-explainer',
-      title: 'Science explainer',
-      description: 'Explain a concept with clear structure and simple visuals.',
-    },
-    {
-      id: 'talking-head',
-      title: 'Talking-head narration',
-      description: 'Generate a voice-led script with a stable presenter persona.',
-    },
-    {
-      id: 'storyboard',
-      title: 'Storyboard planning',
-      description: 'Break a script into shots, assets, and timing.',
-    },
-    {
-      id: 'product-showcase',
-      title: 'Product showcase',
-      description: 'Present a product with scene-level polish and pacing.',
-    },
-]);
+const PRODUCTION_TASK_CARD_CATALOG = Object.freeze([
+  {
+    id: 'science-explainer',
+    title: 'Science explainer',
+    description: 'Explain a concept with clear structure and simple visuals.',
+  },
+  {
+    id: 'talking-head',
+    title: 'Talking-head narration',
+    description: 'Generate a voice-led script with a stable presenter persona.',
+  },
+  {
+    id: 'storyboard',
+    title: 'Storyboard planning',
+    description: 'Break a script into shots, assets, and timing.',
+  },
+  {
+    id: 'product-showcase',
+    title: 'Product showcase',
+    description: 'Present a product with scene-level polish and pacing.',
+  },
+] satisfies readonly ProductionTaskCard[]);
 
 export function productionTaskCardCatalog(): readonly ProductionTaskCard[] {
   return PRODUCTION_TASK_CARD_CATALOG;

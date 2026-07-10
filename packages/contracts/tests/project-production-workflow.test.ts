@@ -26,7 +26,7 @@ describe('production workflow contracts', () => {
           voice: true,
         },
       }),
-    ).toMatchObject({
+    ).toEqual({
       kind: 'video',
       workflowMode: 'production',
       taskCardId: 'science-explainer',
