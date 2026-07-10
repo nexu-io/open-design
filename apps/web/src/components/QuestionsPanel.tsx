@@ -73,6 +73,14 @@ export function QuestionsPanel({
   // auto-continue countdown. Read (and reset) inside submitAndClearDraft so
   // the single submit chokepoint can label the click event.
   const submitSourceRef = useRef<'continue' | 'skip_button' | 'countdown'>('continue');
+  // Once the user commits an answer we optimistically lock the panel — disabling
+  // Continue/Skip and showing a busy spinner — for the brief window before the
+  // parent's busy/answered signals catch up. Without this, a form-answer send
+  // that is still being dispatched leaves the CTA enabled, so an impatient user
+  // (or the countdown) can re-fire it and pile duplicate sends into the queue.
+  // The ref is the synchronous chokepoint guard; the state drives rendering.
+  const submittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
   const [ready, setReady] = useState(false);
   const [draftAnswers, setDraftAnswers] = useState<QuestionFormAnswers | undefined>(() =>
     readQuestionFormDraft(formKey),
@@ -140,6 +148,12 @@ export function QuestionsPanel({
   // here, so the submit/skip click is reported exactly once.
   const submitAndClearDraft = useCallback(
     (text: string, answers: QuestionFormAnswers) => {
+      // Single-submit invariant: a form occurrence commits exactly one answer.
+      // A repeat click, or the countdown racing a click, must not enqueue a
+      // second send (see the "76 queued" repro).
+      if (submittingRef.current) return;
+      submittingRef.current = true;
+      setSubmitting(true);
       const source = submitSourceRef.current;
       submitSourceRef.current = 'continue';
       if (form && projectId) {
@@ -210,9 +224,20 @@ export function QuestionsPanel({
   // Submission needs the form present, active, fully revealed, and not blocked
   // by a busy/streaming turn. Required-field readiness is tracked separately by
   // `ready` (from QuestionForm) and gates Continue via `canContinue`.
-  const canSubmit = !!form && interactive && !building && !submitDisabled;
+  const canSubmit = !!form && interactive && !building && !submitDisabled && !submitting;
   const canContinue = canSubmit && ready;
   const canSkip = canSubmit;
+
+  // Release the optimistic lock once the world catches up: either the turn is
+  // now busy (`submitDisabled` takes over the disable) or the answer has landed
+  // (`answered`). This also recovers a form that never actually started a turn,
+  // so it stays actionable instead of latching disabled forever.
+  useEffect(() => {
+    if (submitting && (submitDisabled || answered)) {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }, [submitting, submitDisabled, answered]);
 
   // Auto-skip countdown. It only runs while the form is actionable; pausing
   // (busy turn, re-stream) resets it so we never auto-submit a half-ready form.
@@ -281,9 +306,11 @@ export function QuestionsPanel({
         <span className="questions-panel-status">
           {building
             ? t('questions.generating')
-            : canSkip
-              ? t('questions.autoSkipHint')
-              : null}
+            : submitting
+              ? t('questions.submitting')
+              : canSkip
+                ? t('questions.autoSkipHint')
+                : null}
         </span>
         <button
           type="button"
@@ -301,12 +328,20 @@ export function QuestionsPanel({
           type="button"
           className="questions-continue"
           disabled={!canContinue}
+          aria-busy={submitting ? 'true' : undefined}
           onClick={() => {
             submitSourceRef.current = 'continue';
             formRef.current?.submit();
           }}
         >
-          {t('questions.continue')}
+          {submitting ? (
+            <>
+              <span className="questions-continue-spinner" aria-hidden />
+              {t('questions.submitting')}
+            </>
+          ) : (
+            t('questions.continue')
+          )}
         </button>
       </div>
     </div>

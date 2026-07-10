@@ -2529,6 +2529,7 @@ export const tr: Dict = {
   'questions.generating': 'Sorular oluşturuluyor…',
   'questions.skipAll': 'Tümünü atla',
   'questions.autoSkipHint': 'Zamanlayıcı bittiğinde otomatik olarak devam eder',
+  'questions.submitting': 'Gönderiliyor…',
   'sketch.toolSelect': 'Seç (işlem yok)',
   'sketch.toolPen': 'Kalem',
   'sketch.toolText': 'Metin',
