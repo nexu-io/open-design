@@ -218,11 +218,11 @@ export async function cropAtlasRow(
 
 // Same idea as `cropAtlasRow` but keeps every row so the overlay can
 // switch animations on the fly. We downscale to a target cell height
-// (default 80 px → 8x9 grid lands at ~528 KB PNG which fits inside the
-// MAX_DATA_URL_BYTES guard from `image.ts` even for busy spritesheets)
-// while preserving the grid layout 1:1 so background-position math in
-// `PetSpriteFace` stays simple.
-const DEFAULT_FULL_ATLAS_MAX_CELL = 80;
+// of 96 px so the 96 px overlay sprite keeps a 1:1 source cell on
+// standard displays instead of upscaling a smaller 80 px cell. That
+// stays within the localStorage budget while noticeably improving edge
+// clarity on desktop and HiDPI panels.
+const DEFAULT_FULL_ATLAS_MAX_CELL = 96;
 
 export interface PreparedAtlas {
   // PNG data URL of the full atlas, ready to drop into

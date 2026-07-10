@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { useT } from '../../i18n';
 import { Icon } from '../Icon';
 import type { PetConfig } from '../../types';
@@ -11,10 +18,14 @@ import {
 } from './pets';
 import { PetSpriteFace } from './PetSpriteFace';
 
+export type AgentSessionState = 'idle' | 'thinking' | 'done' | 'error';
+
 interface Props {
   pet: PetConfig | undefined;
   onTuck: () => void;
   onOpenSettings: () => void;
+  /** Current AI agent session state. Drives pet animation when no user gesture is active. */
+  agentSessionState?: AgentSessionState;
 }
 
 const STORAGE_KEY = 'open-design:pet-position';
@@ -57,6 +68,51 @@ const DRAG_GESTURE_MIN_PX = 14;
 // jumping/waving so diagonal drags don't strobe between rows.
 const DRAG_AXIS_BIAS = 1.18;
 
+// Autonomous horizontal pacing. This is the concrete "movement mode"
+// for the personalized pet MVP: when the user is not hovering,
+// dragging, or reading the bubble, the companion walks left ↔ right
+// inside the viewport bounds instead of staying parked in one corner.
+const AUTO_WALK_EDGE_PADDING_PX = 8;
+const AUTO_WALK_SPRITE_BOX_PX = 96;
+const AUTO_WALK_SPEED_PX_PER_SEC = 40;
+const AUTO_WALK_TURN_PAUSE_MS = 820;
+const AUTO_WALK_RESUME_PAUSE_MS = 560;
+
+type BubbleStatusTone = 'ready' | 'active' | 'paused';
+
+interface BubbleStatusItem {
+  label: string;
+  value: string;
+  tone: BubbleStatusTone;
+}
+
+function atlasRowLabel(
+  t: ReturnType<typeof useT>,
+  rowId: string,
+): string {
+  switch (rowId) {
+    case 'running-left':
+      return t('pet.atlasRow.running-left');
+    case 'running-right':
+      return t('pet.atlasRow.running-right');
+    case 'waving':
+      return t('pet.atlasRow.waving');
+    case 'jumping':
+      return t('pet.atlasRow.jumping');
+    case 'waiting':
+      return t('pet.atlasRow.waiting');
+    case 'running':
+      return t('pet.atlasRow.running');
+    case 'review':
+      return t('pet.atlasRow.review');
+    case 'failed':
+      return t('pet.atlasRow.failed');
+    case 'idle':
+    default:
+      return t('pet.atlasRow.idle');
+  }
+}
+
 function loadPosition(): Position {
   if (typeof window === 'undefined') return DEFAULT_POSITION;
   try {
@@ -83,7 +139,7 @@ function savePosition(p: Position) {
 // Compact floating sprite + speech bubble. Rendered at the document
 // root via App.tsx so it stays put when the user navigates between
 // the entry and project views.
-export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
+export function PetOverlay({ pet, onTuck, onOpenSettings, agentSessionState }: Props) {
   const t = useT();
   const active = useMemo(() => resolveActivePet(pet), [pet]);
   const [bubbleOpen, setBubbleOpen] = useState(false);
@@ -98,6 +154,11 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
   // interaction state wins as soon as a gesture fires.
   const [ambientRowId, setAmbientRowId] = useState<string | null>(null);
   const [hovered, setHovered] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [movementMode, setMovementMode] = useState<'walk-left' | 'walk-right' | null>('walk-left');
+  const movementModeRef = useRef<'walk-left' | 'walk-right' | null>('walk-left');
+  const walkDirectionRef = useRef<'left' | 'right'>('left');
+  const walkPauseUntilRef = useRef<number>(0);
   const dragRef = useRef<{
     startX: number;
     startY: number;
@@ -125,11 +186,142 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
     savePosition(position);
   }, [position]);
 
+  const agentPoseActive =
+    !dragging &&
+    !hovered &&
+    !bubbleOpen &&
+    agentSessionState != null &&
+    agentSessionState !== 'idle';
+
+  // Agent session state drives pet interaction when no user gesture is active.
+  // User drag/hover/bubble takes priority — agent state only applies while calm.
+  useEffect(() => {
+    if (dragging || hovered || bubbleOpen) return;
+    if (!agentSessionState || agentSessionState === 'idle') {
+      setInteraction((prev) => (
+        prev === 'agent-thinking' || prev === 'agent-done' || prev === 'agent-error'
+          ? 'idle'
+          : prev
+      ));
+      return;
+    }
+    const map: Record<Exclude<AgentSessionState, 'idle'>, PetInteraction> = {
+      thinking: 'agent-thinking',
+      done: 'agent-done',
+      error: 'agent-error',
+    };
+    setInteraction(map[agentSessionState]);
+    // For 'done'/'error' flash back to idle after 2s so the pet doesn't
+    // stay frozen in the completed-hop or failed pose indefinitely.
+    if (agentSessionState === 'done' || agentSessionState === 'error') {
+      const id = window.setTimeout(() => {
+        setInteraction((prev) => (prev === map[agentSessionState] ? 'idle' : prev));
+      }, 2000);
+      return () => window.clearTimeout(id);
+    }
+  }, [agentSessionState, bubbleOpen, dragging, hovered]);
+
   const lines = useMemo(
     () => (active ? [active.greeting, ...ambientLines(active.name)] : []),
     [active],
   );
   const visibleLine = lines.length > 0 ? lines[ambientIdx % lines.length] : '';
+
+  const applyMovementMode = useCallback((next: 'walk-left' | 'walk-right' | null) => {
+    if (movementModeRef.current === next) return;
+    movementModeRef.current = next;
+    setMovementMode(next);
+  }, []);
+
+  const resumeAutoWalk = useCallback((pauseMs = AUTO_WALK_RESUME_PAUSE_MS) => {
+    walkPauseUntilRef.current = performance.now() + pauseMs;
+    applyMovementMode(walkDirectionRef.current === 'left' ? 'walk-left' : 'walk-right');
+  }, [applyMovementMode]);
+
+  if (!active) return null;
+
+  const currentRowId = agentPoseActive
+    ? preferredRowId(interaction)
+    : movementMode === 'walk-left'
+      ? 'running-left'
+      : movementMode === 'walk-right'
+        ? 'running-right'
+        : ambientRowId ?? preferredRowId(interaction);
+  const currentRowLabel = active.atlas
+    ? atlasRowLabel(t, currentRowId)
+    : agentPoseActive
+      ? interaction === 'agent-thinking'
+        ? 'Thinking'
+        : interaction === 'agent-done'
+          ? 'Done'
+          : 'Error'
+      : movementMode
+        ? 'Walking'
+        : interaction === 'waiting'
+          ? 'Waiting'
+          : hovered
+            ? 'Watching'
+            : 'Floating';
+  const statusHeadline = dragging
+    ? 'Drag mode'
+    : bubbleOpen
+      ? 'Status open'
+      : hovered
+        ? 'Focused'
+        : agentPoseActive
+          ? interaction === 'agent-thinking'
+            ? 'Agent thinking'
+            : interaction === 'agent-done'
+              ? 'Agent done'
+              : 'Agent error'
+          : movementMode
+            ? 'Patrolling'
+            : interaction === 'waiting'
+              ? 'Waiting'
+              : 'Idle';
+  const statusSummary = dragging
+    ? 'Following your pointer inside the workspace.'
+    : bubbleOpen
+      ? 'Sharing the current state before the next move.'
+      : hovered
+        ? 'Paused here and reacting to your attention.'
+        : agentPoseActive
+          ? interaction === 'agent-thinking'
+            ? 'Watching the current AI run while it works.'
+            : interaction === 'agent-done'
+              ? 'Reacting to a completed AI run before settling down.'
+              : 'Flagging that the latest AI run needs attention.'
+          : movementMode
+            ? 'Walking edge to edge so the companion feels alive.'
+            : interaction === 'waiting'
+              ? 'Holding position until the next nudge.'
+              : 'Resting quietly between ambient beats.';
+  const bubbleStatusItems: BubbleStatusItem[] = [
+    {
+      label: 'Mode',
+      value: statusHeadline,
+      tone: dragging || movementMode || agentPoseActive ? 'active' : bubbleOpen ? 'ready' : 'paused',
+    },
+    {
+      label: 'Motion',
+      value: currentRowLabel,
+      tone: movementMode || hovered || dragging || agentPoseActive ? 'active' : 'ready',
+    },
+    {
+      label: 'Bubble',
+      value: bubbleOpen ? 'Open' : 'Closed',
+      tone: bubbleOpen ? 'ready' : 'paused',
+    },
+  ];
+  const motionState = dragging
+    ? 'dragging'
+    : movementMode
+      ? 'walking'
+      : bubbleOpen
+        ? 'paused'
+        : hovered
+          ? 'focused'
+          : 'idle';
 
   // (Re)arms the long-idle waiting timer. Called every time the user
   // interacts so an active session never falls into "waiting" mid-drag.
@@ -204,12 +396,89 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
     };
   }, [interaction, active?.id, active?.atlas]);
 
-  if (!active) return null;
+  useEffect(() => {
+    if (!active) return;
+    walkDirectionRef.current = 'left';
+    walkPauseUntilRef.current = performance.now() + AUTO_WALK_TURN_PAUSE_MS;
+    setDragging(false);
+    applyMovementMode('walk-left');
+  }, [active?.id, applyMovementMode]);
 
-  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+  useEffect(() => {
+    if (!active) return;
+    if (bubbleOpen || agentPoseActive) {
+      applyMovementMode(null);
+      return;
+    }
+    if (hovered || dragging) return;
+    resumeAutoWalk();
+  }, [active?.id, bubbleOpen, agentPoseActive, hovered, dragging, applyMovementMode, resumeAutoWalk]);
+
+  // Horizontal autonomous walk. This is the first real movement-mode
+  // pass for the pet: when it is not being interacted with, it paces
+  // inside the viewport and flips direction at the edges.
+  useEffect(() => {
+    if (!active || hovered || dragging || bubbleOpen || agentPoseActive) {
+      applyMovementMode(null);
+      return;
+    }
+
+    let frameId = 0;
+    let previousTs: number | null = null;
+
+    const tick = (ts: number) => {
+      if (previousTs == null) {
+        previousTs = ts;
+        frameId = window.requestAnimationFrame(tick);
+        return;
+      }
+      const dt = Math.min(48, ts - previousTs);
+      previousTs = ts;
+
+      if (ts >= walkPauseUntilRef.current) {
+        const direction = walkDirectionRef.current;
+        const delta = (AUTO_WALK_SPEED_PX_PER_SEC * dt) / 1000;
+        setPosition((curr) => {
+          const minRight = AUTO_WALK_EDGE_PADDING_PX;
+          const maxRight = Math.max(
+            AUTO_WALK_EDGE_PADDING_PX,
+            window.innerWidth - AUTO_WALK_SPRITE_BOX_PX - AUTO_WALK_EDGE_PADDING_PX,
+          );
+          let nextRight = curr.right + (direction === 'left' ? delta : -delta);
+
+          if (nextRight >= maxRight) {
+            nextRight = maxRight;
+            walkDirectionRef.current = 'right';
+            walkPauseUntilRef.current = ts + AUTO_WALK_TURN_PAUSE_MS;
+            applyMovementMode('walk-right');
+          } else if (nextRight <= minRight) {
+            nextRight = minRight;
+            walkDirectionRef.current = 'left';
+            walkPauseUntilRef.current = ts + AUTO_WALK_TURN_PAUSE_MS;
+            applyMovementMode('walk-left');
+          } else {
+            applyMovementMode(direction === 'left' ? 'walk-left' : 'walk-right');
+          }
+
+          nextRight = Math.round(nextRight);
+          if (nextRight === curr.right) return curr;
+          return { ...curr, right: nextRight };
+        });
+      }
+
+      frameId = window.requestAnimationFrame(tick);
+    };
+
+    frameId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [active?.id, active, hovered, dragging, bubbleOpen, agentPoseActive, applyMovementMode]);
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
+    setDragging(true);
+    applyMovementMode(null);
     dragRef.current = {
       startX: event.clientX,
       startY: event.clientY,
@@ -221,7 +490,7 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
     armWaitingTimer();
   };
 
-  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag) return;
     const dx = event.clientX - drag.startX;
@@ -232,8 +501,12 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
     // tracks the cursor while staying anchored to the corner system.
     // The clamp budget (~120px) keeps the 96px sprite plus its drop
     // shadow on-screen even when dragged toward the opposite edge.
-    const nextRight = Math.max(8, Math.min(window.innerWidth - 120, drag.startRight - dx));
-    const nextBottom = Math.max(8, Math.min(window.innerHeight - 120, drag.startBottom - dy));
+    const nextRight = Math.round(
+      Math.max(8, Math.min(window.innerWidth - 120, drag.startRight - dx)),
+    );
+    const nextBottom = Math.round(
+      Math.max(8, Math.min(window.innerHeight - 120, drag.startBottom - dy)),
+    );
     setPosition({ right: nextRight, bottom: nextBottom });
 
     // Classify the gesture direction once it clears the jitter floor
@@ -263,9 +536,10 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
     armWaitingTimer();
   };
 
-  const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+  const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     dragRef.current = null;
+    setDragging(false);
     try {
       event.currentTarget.releasePointerCapture(event.pointerId);
     } catch {
@@ -283,11 +557,15 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
     // pet stops "running" the moment the user lets go. Hovered state
     // wins so a release-into-hover keeps the wave going.
     setInteraction(hovered ? 'hover' : 'idle');
+    if (!hovered && !bubbleOpen && !(drag && !drag.moved)) {
+      resumeAutoWalk();
+    }
     armWaitingTimer();
   };
 
   const onPointerEnter = () => {
     setHovered(true);
+    applyMovementMode(null);
     // Don't override an active drag direction with the hover wave —
     // the user is mid-gesture and they expect the running cycle to
     // keep playing until they let go.
@@ -297,7 +575,12 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
 
   const onPointerLeave = () => {
     setHovered(false);
-    if (!dragRef.current) setInteraction('idle');
+    if (!dragRef.current) {
+      setInteraction('idle');
+      if (!bubbleOpen) {
+        resumeAutoWalk();
+      }
+    }
     armWaitingTimer();
   };
 
@@ -318,6 +601,18 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
         <div className="pet-bubble" role="status">
           <div className="pet-bubble-name">{active.name}</div>
           <div className="pet-bubble-line">{visibleLine}</div>
+          <div className="pet-bubble-summary">
+            <div className="pet-bubble-summary-title">{statusHeadline}</div>
+            <div className="pet-bubble-summary-copy">{statusSummary}</div>
+          </div>
+          <div className="pet-bubble-status-list" aria-label={`${active.name} status summary`}>
+            {bubbleStatusItems.map((item) => (
+              <div key={item.label} className={`pet-bubble-status tone-${item.tone}`}>
+                <span className="pet-bubble-status-label">{item.label}</span>
+                <span className="pet-bubble-status-value">{item.value}</span>
+              </div>
+            ))}
+          </div>
           <div className="pet-bubble-actions">
             <button
               type="button"
@@ -351,6 +646,7 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
         aria-label={t('pet.spriteAria', { name: active.name })}
         data-pet-state={interaction}
         data-pet-ambient={ambientRowId ?? undefined}
+        data-pet-motion={motionState}
         style={{
           // For atlas-backed pets the row swap *is* the animation, so
           // we let the sprite element sit still and animate frames
@@ -364,7 +660,8 @@ export function PetOverlay({ pet, onTuck, onOpenSettings }: Props) {
         <PetSpriteFace
           active={active}
           className="pet-sprite-glyph"
-          rowId={ambientRowId ?? preferredRowId(interaction)}
+          size={AUTO_WALK_SPRITE_BOX_PX}
+          rowId={currentRowId}
         />
         <span className="pet-sprite-shadow" aria-hidden />
       </div>

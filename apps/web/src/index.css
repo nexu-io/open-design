@@ -14128,10 +14128,24 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   cursor: grab;
   user-select: none;
   touch-action: none;
-  transition: transform 160ms ease;
+  transition: transform 160ms ease, filter 160ms ease;
 }
 .pet-sprite:hover {
   transform: translateY(-2px);
+}
+.pet-sprite[data-pet-motion='walking']:hover {
+  transform: translateY(-1px);
+}
+.pet-sprite[data-pet-motion='paused'] {
+  transform: translateY(0);
+}
+.pet-sprite[data-pet-motion='paused'] .pet-sprite-shadow {
+  animation: none;
+  transform: translateX(-50%) scale(0.96);
+  opacity: 0.2;
+}
+.pet-sprite[data-pet-motion='walking'] .pet-sprite-shadow {
+  animation-duration: 2.8s;
 }
 .pet-sprite:active { cursor: grabbing; }
 .pet-sprite-glyph {
@@ -14216,6 +14230,58 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 }
 .pet-bubble-line {
   color: var(--text);
+}
+.pet-bubble-summary {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--pet-accent) 22%, transparent);
+}
+.pet-bubble-summary-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+.pet-bubble-summary-copy {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.pet-bubble-status-list {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+.pet-bubble-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+.pet-bubble-status.tone-active {
+  border-color: color-mix(in srgb, var(--pet-accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--pet-accent) 10%, var(--bg-subtle));
+}
+.pet-bubble-status.tone-ready {
+  border-color: color-mix(in srgb, var(--pet-accent) 30%, var(--border));
+}
+.pet-bubble-status.tone-paused {
+  opacity: 0.84;
+}
+.pet-bubble-status-label {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.pet-bubble-status-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
 }
 .pet-bubble-actions {
   margin-top: 8px;
@@ -15228,8 +15294,8 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
    (container_width − background_width). With background-size set to
    `${frames * 100}% 100%` each `steps()` tick lands on a frame edge. */
 @keyframes pet-frames {
-  from { background-position-x: 0%; }
-  to { background-position-x: 100%; }
+  from { background-position-x: 0px; }
+  to { background-position-x: var(--pet-frames-end-x, 100%); }
 }
 
 /* Full-atlas mode: the sprite renders the active row from a Codex
@@ -15240,19 +15306,16 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
    PetSpriteFace based on `frames / (cols - 1) * 100%`. */
 .pet-image.atlas {
   background-repeat: no-repeat;
-  /* The sprite element switches rows on the fly; smooth out the
-     row transitions so direction changes feel less jarring without
-     blurring the per-frame `steps()` cadence. */
-  transition: background-position-y 220ms ease;
+  will-change: background-position;
 }
 @keyframes pet-atlas-frames {
-  from { background-position-x: 0%; }
+  from { background-position-x: 0px; }
   to { background-position-x: var(--pet-atlas-end-x, 100%); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .pet-image.frames,
-  .pet-image.atlas { animation: none !important; background-position-x: 0% !important; }
+  .pet-image.atlas { animation: none !important; background-position-x: 0px !important; }
 }
 
 /* PetSettings — upload row, frames/fps grid, error caption */

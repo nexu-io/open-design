@@ -18,6 +18,7 @@ import {
   FRAMES_MIN,
   resolveActivePet,
 } from './pets';
+import type { AgentSessionState } from './PetOverlay';
 import { PetSpriteFace } from './PetSpriteFace';
 import { loadPetImageFromFile } from './image';
 import {
@@ -33,6 +34,8 @@ import {
 interface Props {
   cfg: AppConfig;
   setCfg: Dispatch<SetStateAction<AppConfig>>;
+  previewAgentSessionState?: AgentSessionState;
+  onPreviewAgentSessionChange?: (state: AgentSessionState) => void;
 }
 
 // Curated palette so the customize swatch row stays compact and on-brand
@@ -48,7 +51,12 @@ const ACCENT_SWATCHES = [
   '#0d0c0a',
 ];
 
-export function PetSettings({ cfg, setCfg }: Props) {
+export function PetSettings({
+  cfg,
+  setCfg,
+  previewAgentSessionState,
+  onPreviewAgentSessionChange,
+}: Props) {
   const t = useT();
   const pet: PetConfig = cfg.pet ?? { ...DEFAULT_PET, custom: defaultCustomPet() };
   const customGlyphId = useId();
@@ -413,6 +421,10 @@ export function PetSettings({ cfg, setCfg }: Props) {
     adopted: true,
     petId: CUSTOM_PET_ID,
   })!;
+  const showDevAgentPreview =
+    typeof process !== 'undefined'
+    && process.env?.NODE_ENV === 'development'
+    && typeof onPreviewAgentSessionChange === 'function';
 
   // Built-in pets are the bundled spritesheets baked into the repo at
   // `assets/community-pets/<id>/`; the daemon flags them with
@@ -600,6 +612,30 @@ export function PetSettings({ cfg, setCfg }: Props) {
             <span>{pet.custom.greeting || t('pet.customGreetingPlaceholder')}</span>
           </div>
         </div>
+        {showDevAgentPreview ? (
+          <div className="field" style={{ gap: 8 }}>
+            <span className="field-label">Agent state preview (dev)</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {(['idle', 'thinking', 'done', 'error'] as const).map((state) => {
+                const active = previewAgentSessionState === state;
+                return (
+                  <button
+                    key={state}
+                    type="button"
+                    className={`seg-btn small${active ? ' active' : ' ghost'}`}
+                    onClick={() => onPreviewAgentSessionChange?.(state)}
+                    aria-pressed={active}
+                  >
+                    <span>{state}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="hint">
+              Overlay에서 thinking / done / error pose를 바로 확인하는 개발용 프리뷰.
+            </p>
+          </div>
+        ) : null}
         <div className="pet-image-controls">
           <input
             ref={fileInputRef}

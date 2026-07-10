@@ -95,6 +95,7 @@ import {
   requestNotificationPermission,
   showCompletionNotification,
 } from '../utils/notifications';
+import type { AgentSessionState } from './pet/PetOverlay';
 
 export type SettingsSection =
   | 'execution'
@@ -154,6 +155,8 @@ interface Props {
   daemonMediaProvidersFetchState?: 'idle' | 'ok' | 'error';
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
+  previewAgentSessionState?: AgentSessionState;
+  onPreviewAgentSessionChange?: (state: AgentSessionState) => void;
 }
 
 export interface AgentRefreshOptions {
@@ -639,17 +642,19 @@ export function SettingsDialog({
   agents,
   daemonLive,
   appVersionInfo,
-  welcome,
+  welcome = false,
   initialSection = 'execution',
+  composioConfigLoading = false,
   onPersist,
   onPersistComposioKey,
-  composioConfigLoading = false,
   onClose,
   onRefreshAgents,
   daemonMediaProviders,
   daemonMediaProvidersFetchState = 'idle',
   mediaProvidersNotice,
   onReloadMediaProviders,
+  previewAgentSessionState,
+  onPreviewAgentSessionChange,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const analytics = useAnalytics();
@@ -2556,7 +2561,12 @@ export function SettingsDialog({
           ) : null}
 
           {activeSection === 'pet' ? (
-            <PetSettings cfg={cfg} setCfg={setCfg} />
+            <PetSettings
+              cfg={cfg}
+              setCfg={setCfg}
+              previewAgentSessionState={previewAgentSessionState}
+              onPreviewAgentSessionChange={onPreviewAgentSessionChange}
+            />
           ) : null}
 
           {activeSection === 'skills' ? (

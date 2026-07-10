@@ -54,6 +54,7 @@ export function PetSpriteFace({ active, className, size, rowId }: Props) {
 
   const frames = Math.max(1, active.frames ?? 1);
   const fps = Math.max(1, active.fps ?? 6);
+  const renderSize = size ? Math.max(1, Math.round(size)) : undefined;
   if (frames === 1) {
     return (
       <span
@@ -61,15 +62,16 @@ export function PetSpriteFace({ active, className, size, rowId }: Props) {
         aria-hidden
         style={{
           backgroundImage: `url(${active.imageUrl})`,
-          width: size,
-          height: size,
+          width: renderSize,
+          height: renderSize,
         }}
       />
     );
   }
-  // Strip mode — N frames laid out horizontally. The image is
-  // (N × container_width) wide, so the visible frame is selected by
-  // sliding background-position-x from 0% to 100% in (N-1) steps.
+  // Strip mode — N frames laid out horizontally. When the parent passes
+  // a concrete pixel `size`, we also pin the background sheet to exact
+  // pixel dimensions so Retina browsers step whole cells instead of
+  // percentage-derived subpixels.
   // `steps(N, jump-none)` is required because the default jump-end
   // would land on 0/N, 1/N, …, (N-1)/N, which slices each frame mid-cell;
   // jump-none lands on the actual cell boundaries 0/(N-1) … 1.
@@ -80,10 +82,16 @@ export function PetSpriteFace({ active, className, size, rowId }: Props) {
       aria-hidden
       style={{
         backgroundImage: `url(${active.imageUrl})`,
-        backgroundSize: `${frames * 100}% 100%`,
+        backgroundPosition: '0px 0px',
+        backgroundSize: renderSize
+          ? `${frames * renderSize}px ${renderSize}px`
+          : `${frames * 100}% 100%`,
+        ['--pet-frames-end-x' as string]: renderSize
+          ? `-${(frames - 1) * renderSize}px`
+          : '100%',
         animation: `pet-frames ${durationMs}ms steps(${frames}, jump-none) infinite`,
-        width: size,
-        height: size,
+        width: renderSize,
+        height: renderSize,
       }}
     />
   );
@@ -118,40 +126,46 @@ function AtlasSprite({
     ?? rowsDef[0]!;
   const rowFrames = Math.max(1, def.frames);
   const fps = Math.max(1, def.fps);
+  const renderSize = size ? Math.max(1, Math.round(size)) : undefined;
 
-  const [frame, setFrame] = useState(0);
-  // Reset to frame 0 on row change so a freshly-triggered animation
-  // (e.g. tap → waving) starts cleanly instead of mid-cycle.
+  const [animationCycle, setAnimationCycle] = useState(0);
+
+  // Reset atlas playback on row change so a freshly-triggered
+  // interaction starts from frame 0, but keep the per-frame stepping in
+  // CSS. That removes a React state update on every frame tick.
   useEffect(() => {
-    setFrame(0);
-    if (rowFrames <= 1) return;
-    const intervalMs = Math.max(16, Math.round(1000 / fps));
-    const id = window.setInterval(() => {
-      setFrame((f) => (f + 1) % rowFrames);
-    }, intervalMs);
-    return () => window.clearInterval(id);
+    setAnimationCycle((value) => value + 1);
   }, [def.id, def.index, rowFrames, fps]);
 
   // Background math:
-  //   - background-size = (cols × 100%) × (rows × 100%)
-  //     → each grid cell renders at exactly the container size.
-  //   - background-position-x = frame / (cols - 1) × 100%
-  //     → 0% slides to the leftmost cell, 100% to the rightmost,
-  //       intermediate cells land at frame/(cols-1) of the offset range.
-  //   - background-position-y = rowIndex / (rows - 1) × 100%
-  const xPct = cols > 1 ? (frame / (cols - 1)) * 100 : 0;
+  //   - when `size` is known, background-size/background-position use
+  //     exact pixels so each atlas cell stays on integer boundaries.
+  //   - fallback percentage math is kept for callers that only inherit
+  //     container dimensions.
+  const endXPct = cols > 1 ? ((rowFrames - 1) / (cols - 1)) * 100 : 0;
   const yPct = rows > 1 ? (def.index / (rows - 1)) * 100 : 0;
+  const endXPx = renderSize ? (rowFrames - 1) * renderSize : null;
+  const rowYPx = renderSize ? def.index * renderSize : null;
+  const durationMs = Math.max(1, Math.round((rowFrames / fps) * 1000));
 
   return (
     <span
+      key={`${def.id}:${def.index}:${animationCycle}`}
       className={`${className ?? ''} pet-image atlas`.trim()}
       aria-hidden
       style={{
         backgroundImage: `url(${imageUrl})`,
-        backgroundSize: `${cols * 100}% ${rows * 100}%`,
-        backgroundPosition: `${xPct}% ${yPct}%`,
-        width: size,
-        height: size,
+        backgroundSize: renderSize
+          ? `${cols * renderSize}px ${rows * renderSize}px`
+          : `${cols * 100}% ${rows * 100}%`,
+        backgroundPosition: renderSize ? `0px -${rowYPx}px` : `0% ${yPct}%`,
+        ['--pet-atlas-end-x' as string]: endXPx != null ? `-${endXPx}px` : `${endXPct}%`,
+        animation:
+          rowFrames > 1
+            ? `pet-atlas-frames ${durationMs}ms steps(${rowFrames}, jump-none) infinite`
+            : 'none',
+        width: renderSize,
+        height: renderSize,
       }}
     />
   );

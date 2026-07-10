@@ -158,7 +158,11 @@ export type PetInteraction =
   | 'drag-left'
   | 'drag-up'
   | 'drag-down'
-  | 'waiting';
+  | 'waiting'
+  // Agent session states — driven externally via agentSessionState prop
+  | 'agent-thinking'  // AI agent is processing (maps to 'review' atlas row)
+  | 'agent-done'      // Agent just completed a task (maps to 'jumping' for hop)
+  | 'agent-error';    // Agent hit an error (maps to 'failed' atlas row)
 
 // Preferred Codex atlas row id for each interaction state. Hover and
 // drag each map to a dedicated action row so the pet visibly reacts to
@@ -174,6 +178,9 @@ const INTERACTION_ROW_ID: Record<PetInteraction, string> = {
   'drag-up': 'jumping',
   'drag-down': 'waving',
   waiting: 'waiting',
+  'agent-thinking': 'review',
+  'agent-done': 'jumping',
+  'agent-error': 'failed',
 };
 
 const ROW_FALLBACK_ORDER: readonly string[] = [

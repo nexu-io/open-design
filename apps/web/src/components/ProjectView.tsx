@@ -142,6 +142,8 @@ interface Props {
   onAdoptPetInline?: (petId: string) => void;
   onTogglePet?: () => void;
   onOpenPetSettings?: () => void;
+  /** Notifies App of agent session state changes so PetOverlay can animate. */
+  onAgentSessionChange?: (state: 'idle' | 'thinking' | 'done' | 'error') => void;
   onBack: () => void;
   onClearPendingPrompt: () => void;
   onTouchProject: () => void;
@@ -271,6 +273,7 @@ export function ProjectView({
   onAdoptPetInline,
   onTogglePet,
   onOpenPetSettings,
+  onAgentSessionChange,
   onBack,
   onClearPendingPrompt,
   onTouchProject,
@@ -291,6 +294,28 @@ export function ProjectView({
   const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Bubble streaming/error state up to App so PetOverlay can animate.
+  const prevStreamingRef = useRef(false);
+  useEffect(() => {
+    if (!onAgentSessionChange) return;
+    if (streaming) {
+      prevStreamingRef.current = true;
+      onAgentSessionChange('thinking');
+      return;
+    }
+    if (error) {
+      prevStreamingRef.current = false;
+      onAgentSessionChange('error');
+      return;
+    }
+    if (prevStreamingRef.current) {
+      prevStreamingRef.current = false;
+      onAgentSessionChange('done'); // PetOverlay auto-resets to idle after 2s
+      return;
+    }
+    onAgentSessionChange('idle');
+  }, [streaming, error, onAgentSessionChange]);
   const [audioVoiceOptionsError, setAudioVoiceOptionsError] = useState<string | null>(null);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [filesRefresh, setFilesRefresh] = useState(0);

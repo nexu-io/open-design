@@ -9,7 +9,7 @@ import {
 import { EntryView } from './components/EntryView';
 import type { CreateInput } from './components/NewProjectPanel';
 import { MemoryToast } from './components/MemoryToast';
-import { PetOverlay } from './components/pet/PetOverlay';
+import { PetOverlay, type AgentSessionState } from './components/pet/PetOverlay';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
 import {
@@ -894,6 +894,8 @@ export function App() {
     [handleSetPetEnabled],
   );
 
+  const [agentSessionState, setAgentSessionState] = useState<AgentSessionState>('idle');
+
   // Toggle wake/tuck — used by the pet rail and the composer button.
   const handleTogglePet = useCallback(() => {
     setConfig((curr) => {
@@ -998,6 +1000,7 @@ export function App() {
           onAdoptPetInline={handleAdoptPet}
           onTogglePet={handleTogglePet}
           onOpenPetSettings={openPetSettings}
+          onAgentSessionChange={setAgentSessionState}
           onBack={handleBack}
           onClearPendingPrompt={handleClearPendingPrompt}
           onTouchProject={handleTouchProject}
@@ -1039,6 +1042,7 @@ export function App() {
         pet={config.pet?.enabled ? config.pet : undefined}
         onTuck={handleTuckPet}
         onOpenSettings={openPetSettings}
+        agentSessionState={agentSessionState}
       />
       {settingsOpen ? (
         <SettingsDialog
@@ -1071,6 +1075,8 @@ export function App() {
           daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
           mediaProvidersNotice={mediaProvidersNotice}
           onReloadMediaProviders={reloadMediaProvidersFromDaemon}
+          previewAgentSessionState={agentSessionState}
+          onPreviewAgentSessionChange={setAgentSessionState}
         />
       ) : null}
       <MemoryToast onOpenMemory={() => openSettings('memory')} />
