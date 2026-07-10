@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import type { ProjectFile, ProjectMetadata } from '../../types';
 import { ProductionCanvasBoard } from './ProductionCanvasBoard';
@@ -19,7 +19,7 @@ type ProductionProjectMetadata = ProjectMetadata & {
   voiceProfileId?: string;
 };
 
-type ProductionSegmentId = 'hook' | 'body' | 'wrap';
+type ProductionSegmentId = string;
 
 type ProductionLaneId = 'paragraph' | 'voice' | 'shot' | 'assets' | 'output';
 
@@ -101,19 +101,22 @@ function getVoiceProfile(profileId: string | null | undefined) {
 }
 
 function buildNarration(paragraph: string, voiceTone: string, profile: VoiceProfileCard) {
-  return `${profile.role} (${voiceTone}) 旁白：${paragraph}`;
+  const trimmedParagraph = paragraph.trim();
+  return trimmedParagraph
+    ? `${profile.role} (${voiceTone}) 旁白：${paragraph}`
+    : `${profile.role} (${voiceTone}) 旁白：請輸入段落`;
 }
 
 function buildShot(paragraph: string) {
-  return `鏡頭：${paragraph}`;
+  return paragraph.trim() ? `鏡頭：${paragraph}` : '鏡頭：請輸入段落';
 }
 
 function buildAssets(paragraph: string) {
-  return `素材：${paragraph}`;
+  return paragraph.trim() ? `素材：${paragraph}` : '素材：請輸入段落';
 }
 
 function buildOutput(paragraph: string) {
-  return `成片：${paragraph}`;
+  return paragraph.trim() ? `成片：${paragraph}` : '成片：請輸入段落';
 }
 
 function createInitialSegments(voiceTone: string, defaultVoiceProfileId: string): ProductionSegment[] {
@@ -132,6 +135,25 @@ function createInitialSegments(voiceTone: string, defaultVoiceProfileId: string)
       voiceProfileId: chosenProfile.id,
     };
   });
+}
+
+function createEmptySegment(
+  label: string,
+  voiceTone: string,
+  voiceProfileId: string,
+  id: string,
+): ProductionSegment {
+  const profile = getVoiceProfile(voiceProfileId);
+  return {
+    id,
+    label,
+    paragraph: '',
+    narration: buildNarration('', voiceTone, profile),
+    shot: buildShot(''),
+    assets: buildAssets(''),
+    output: buildOutput(''),
+    voiceProfileId: profile.id,
+  };
 }
 
 function createVoicePreview(segments: ProductionSegment[], voiceTone: string) {
@@ -160,6 +182,7 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
   const taskCardCount = PRODUCTION_TASK_CARD_CATALOG.length;
   const voiceTone = productionMetadata?.voiceTone ?? 'professional';
   const defaultVoiceProfileId = productionMetadata?.voiceProfileId ?? VOICE_PROFILE_CARDS[0]!.id;
+  const nextSegmentNumberRef = useRef(DEFAULT_SEGMENT_BLUEPRINTS.length + 1);
   const [segments, setSegments] = useState<ProductionSegment[]>(
     () => createInitialSegments(voiceTone, defaultVoiceProfileId),
   );
@@ -231,6 +254,46 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
         return segment;
       }),
     );
+  };
+
+  const appendSegment = () => {
+    const nextNumber = nextSegmentNumberRef.current;
+    nextSegmentNumberRef.current += 1;
+    setSegments((current) => [
+      ...current,
+      createEmptySegment(`第 ${nextNumber} 段`, voiceTone, defaultVoiceProfileId, `segment-${nextNumber}`),
+    ]);
+  };
+
+  const insertSegmentAfter = (segmentId: ProductionSegmentId) => {
+    setSegments((current) => {
+      const index = current.findIndex((segment) => segment.id === segmentId);
+      const nextNumber = nextSegmentNumberRef.current;
+      nextSegmentNumberRef.current += 1;
+      const nextSegment = createEmptySegment(
+        `第 ${nextNumber} 段`,
+        voiceTone,
+        current[index]?.voiceProfileId ?? defaultVoiceProfileId,
+        `segment-${nextNumber}`,
+      );
+
+      if (index < 0) {
+        return [...current, nextSegment];
+      }
+
+      const next = current.slice();
+      next.splice(index + 1, 0, nextSegment);
+      return next;
+    });
+  };
+
+  const removeSegment = (segmentId: ProductionSegmentId) => {
+    setSegments((current) => {
+      if (current.length <= 1) {
+        return current;
+      }
+      return current.filter((segment) => segment.id !== segmentId);
+    });
   };
 
   const workflowSteps: readonly ProductionWorkflowStep[] = useMemo(
@@ -307,10 +370,39 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
         </section>
 
         <section className="production-workspace__pane production-workspace__pane--lane">
-          <h3>段落</h3>
-          <p>把每段內容寫成明確段落，後面的旁白與分鏡會跟著同步。</p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <h3>段落</h3>
+              <p>把每段內容寫成明確段落，後面的旁白與分鏡會跟著同步。</p>
+            </div>
+            <button type="button" className="production-workspace__secondary-action" onClick={appendSegment}>
+              新增分段
+            </button>
+          </div>
           {segments.map((segment) => (
             <article key={segment.id} className="production-workspace__lane-card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+                <strong>{segment.label}</strong>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="production-workspace__secondary-action"
+                    aria-label={`${segment.label} 下方新增分段`}
+                    onClick={() => insertSegmentAfter(segment.id)}
+                  >
+                    下方新增
+                  </button>
+                  <button
+                    type="button"
+                    className="production-workspace__secondary-action"
+                    aria-label={`${segment.label} 刪除分段`}
+                    disabled={segments.length <= 1}
+                    onClick={() => removeSegment(segment.id)}
+                  >
+                    刪除
+                  </button>
+                </div>
+              </div>
               <label style={{ display: 'grid', gap: 8 }}>
                 <span className="production-workspace__label">{segment.label} 段落</span>
                 <textarea

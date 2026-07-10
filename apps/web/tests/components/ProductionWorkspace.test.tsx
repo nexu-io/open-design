@@ -37,6 +37,7 @@ describe('ProductionWorkspace', () => {
     expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Voice flow (professional)');
     expect(screen.getByRole('textbox', { name: 'Hook 段落' })).toHaveValue('Hook: explain the core idea in one line.');
     expect(screen.getByRole('textbox', { name: 'Body 鏡頭' })).toHaveValue('鏡頭：Body: show the main example with one clear visual.');
+    expect(screen.getByRole('button', { name: '新增分段' })).toBeInTheDocument();
   });
 
   it('renders a draggable canvas board for the production cards', () => {
@@ -158,5 +159,32 @@ describe('ProductionWorkspace', () => {
     expect(screen.getByRole('textbox', { name: 'Hook 旁白' })).toHaveValue(
       'Energetic presenter (professional) 旁白：Hook: explain the core idea in one line.',
     );
+  });
+
+  it('can add and remove script segments', () => {
+    render(
+      <ProductionWorkspace
+        projectId="project-1"
+        projectName="Science Explainer"
+        metadata={{
+          kind: 'video',
+          workflowMode: 'production',
+          taskCardId: 'science-explainer',
+          voiceTone: 'professional',
+          voiceProfileId: 'rachel-default',
+        } as never}
+        projectFiles={[]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '新增分段' }));
+
+    expect(screen.getByRole('textbox', { name: '第 4 段 段落' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: '第 4 段 旁白' })).toHaveValue('Guide host (professional) 旁白：請輸入段落');
+    expect(screen.getByRole('textbox', { name: '第 4 段 鏡頭' })).toHaveValue('鏡頭：請輸入段落');
+
+    fireEvent.click(screen.getByRole('button', { name: '第 4 段 刪除分段' }));
+
+    expect(screen.queryByRole('textbox', { name: '第 4 段 段落' })).not.toBeInTheDocument();
   });
 });
