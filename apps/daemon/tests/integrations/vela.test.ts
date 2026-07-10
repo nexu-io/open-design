@@ -84,8 +84,8 @@ describe('resolveAmrProfile', () => {
     expect(resolveAmrProfile({ OPEN_DESIGN_AMR_PROFILE: 'test' })).toBe('test');
   });
 
-  it('ignores lower-priority VELA_PROFILE values', () => {
-    expect(resolveAmrProfile({ VELA_PROFILE: 'local' })).toBe('prod');
+  it('uses VELA_PROFILE when OPEN_DESIGN_AMR_PROFILE is unset', () => {
+    expect(resolveAmrProfile({ VELA_PROFILE: 'local' })).toBe('local');
     expect(
       resolveAmrProfile({
         OPEN_DESIGN_AMR_PROFILE: 'test',
