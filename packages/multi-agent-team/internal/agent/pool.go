@@ -601,7 +601,7 @@ func (p *Pool) WaitResultContext(ctx context.Context, agentID string, timeout ti
 	case result := <-ma.replyCh:
 		return result, nil
 	case <-ctx.Done():
-		// ctx 取消时优先排空 replyCh：agent 可能刚好在 cancel 瞬间
+		// ctx 取消时先排空 replyCh：agent 可能刚好在 cancel 瞬间
 		// 将结果写入了 replyCh，此时 Go select 会随机选分支，
 		// 不加非阻塞检查可能丢失已完成的结果。
 		select {

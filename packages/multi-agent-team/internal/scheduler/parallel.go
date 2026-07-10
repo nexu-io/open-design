@@ -80,6 +80,7 @@ func (s *ParallelScheduler) Execute(ctx context.Context, plan *ExecutionPlan) ([
 					TaskID:  t.ID,
 					AgentID: t.AssignedTo,
 					Success: false,
+					Skipped: true,
 					Error:   "skipped: team proceeded before agent started",
 				})
 				mu.Unlock()

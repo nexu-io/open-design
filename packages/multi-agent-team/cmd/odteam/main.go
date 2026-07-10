@@ -9,7 +9,7 @@
 //
 //	{"event":"team_start","data":{"mode":"inheritance","agents":2,"teamName":"..."}}
 //	{"event":"agent","data":{"agentId":"designer","type":"text_delta","delta":"..."}}
-//	{"event":"task_result","data":{"agentId":"designer","success":true,"artifacts":1,"duration":"5s"}}
+//	{"event":"task_result","data":{"agentId":"designer","success":true,"skipped":false,"artifacts":1,"duration":"5s"}}
 //	{"event":"team_end","data":{"success":true}}
 //	{"event":"error","data":{"message":"..."}}
 package main
@@ -180,6 +180,7 @@ func main() {
 		emitEvent("task_result", map[string]any{
 			"agentId":   r.AgentID,
 			"success":   r.Success,
+			"skipped":   r.Skipped,
 			"artifacts": len(r.Artifacts),
 			"duration":  r.Metrics.Duration.String(),
 			"error":     r.Error,
@@ -191,13 +192,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	allSuccess := true
+	// 团队成功判定：至少一个 Agent 成功完成 且 没有非 skipped 的失败。
+	// skipped 的 Agent（用户主动跳过/继续）不算失败。
+	// 这样用户点击"跳过等待"后，odteam 退出码 0，daemon 不会将运行标记为 failed。
+	hasSuccess := false
+	hasNonSkippedFailure := false
 	for _, r := range results {
-		if !r.Success {
-			allSuccess = false
-			break
+		if r.Success {
+			hasSuccess = true
+		} else if !r.Skipped {
+			hasNonSkippedFailure = true
 		}
 	}
+	allSuccess := hasSuccess && !hasNonSkippedFailure
 
 	emitEvent("team_end", map[string]any{"success": allSuccess})
 	if !allSuccess {
