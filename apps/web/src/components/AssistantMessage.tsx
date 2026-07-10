@@ -755,7 +755,12 @@ function AssistantMessageImpl({
   const hasUnansweredQuestionForm = useMemo(() => {
     for (const block of blocks) {
       if (block.kind !== "text") continue;
-      for (const seg of splitOnQuestionForms(block.text)) {
+      // Strip <artifact>...</artifact> spans first, same as ProseBlock does
+      // before rendering. A `<question-form>` tag can appear inert inside an
+      // artifact payload (e.g. generated HTML that happens to contain that
+      // literal markup) — that never reaches the Questions banner, so it must
+      // not count as a real pending form.
+      for (const seg of splitOnQuestionForms(stripArtifact(block.text))) {
         if (seg.kind !== "form") continue;
         if (suppressDirectionForms && isDirectionForm(seg.form)) continue;
         const submitted = nextUserContent ? parseSubmittedAnswers(seg.form, nextUserContent) : null;

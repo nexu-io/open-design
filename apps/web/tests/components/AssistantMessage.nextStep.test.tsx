@@ -335,4 +335,42 @@ describe('AssistantMessage next-step affordance', () => {
 
     expect(screen.getByTestId('next-step-actions')).toBeTruthy();
   });
+
+  // Regression for review feedback on #5364: a `<question-form>` tag can
+  // appear inert inside an `<artifact>` payload (e.g. the model generates
+  // HTML that happens to contain that literal markup as sample/demo content)
+  // — that text never reaches the Questions banner, so it must not be
+  // mistaken for a real pending form and suppress Next Step actions.
+  it('does not treat question-form markup embedded inside an artifact as a pending form', () => {
+    // A literal, well-formed <question-form> tag sitting inside the
+    // artifact's own HTML body (e.g. the generated page documents/echoes the
+    // protocol as sample content) — real bytes that would parse as a form
+    // segment if scanned directly, but they're inert once stripArtifact
+    // removes the whole artifact span before rendering.
+    const artifactBody =
+      '<html><body>' +
+      '<question-form id="demo" title="Demo">' +
+      '{"questions":[{"id":"tone","label":"Tone","type":"text"}]}' +
+      '</question-form>' +
+      '</body></html>';
+    const content =
+      'Here is the generated page.\n' +
+      `<artifact type="text/html" identifier="demo.html">${artifactBody}</artifact>`;
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content,
+          events: [{ kind: 'text', text: content } as NonNullable<ChatMessage['events']>[number]],
+          producedFiles: [producedFile('demo.html')],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        isLast
+        {...handlers()}
+      />,
+    );
+
+    expect(screen.queryByTestId('questions-banner')).toBeNull();
+    expect(screen.getByTestId('next-step-actions')).toBeTruthy();
+  });
 });
