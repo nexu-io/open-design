@@ -290,18 +290,31 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
       if (context && !context.permissions.canShareProjects) {
         return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
       }
+      let publishedVersion: number | null;
+      try {
+        ({ version: publishedVersion } = await requestTeamShare(req.params.id, context?.workspaceMemberId));
+      } catch (error) {
+        console.warn('[od] failed to publish team-shared project bytes:', error);
+        return res.status(502).json({ error: 'TEAM_PROJECT_PUBLISH_UNAVAILABLE' });
+      }
+      if (publishedVersion == null) {
+        return res.status(502).json({ error: 'TEAM_PROJECT_PUBLISH_UNAVAILABLE' });
+      }
       try {
         const project = await describeProject?.(req.params.id) ?? null;
         await teamProjectCatalog?.upsert({
           projectId: req.params.id,
           displayName: project?.name ?? null,
-          syncState: 'pending_upload',
+          syncState: 'synced',
         });
       } catch (error) {
         console.warn('[od] failed to write Vela team project catalog:', error);
+        await requestTeamUnshare(req.params.id).catch((unshareError: unknown) => {
+          console.warn('[od] failed to roll back team-shared project after catalog failure:', unshareError);
+        });
         return res.status(502).json({ error: 'TEAM_PROJECT_CATALOG_UNAVAILABLE' });
       }
-      requestTeamShare(req.params.id, context?.workspaceMemberId);
+      return res.json({ ok: true, syncState: projectSyncState(req.params.id), publishedVersion });
     } else if (event === 'project_team_unshare_requested') {
       const context = await workspaceContext.current({
         authorization: req.headers.authorization,

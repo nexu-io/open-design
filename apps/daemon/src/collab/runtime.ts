@@ -58,7 +58,7 @@ export interface CollabRuntime {
    * `ownerMemberId` is the sharer's member id — recorded so a member viewing the
    * project can tell whether it is their own (writer) or someone else's (read-only).
    */
-  requestTeamShare(projectId: string, ownerMemberId?: string): void;
+  requestTeamShare(projectId: string, ownerMemberId?: string): Promise<{ version: number | null }>;
   /**
    * Move a project out of the team space. The resource adapter owns the actual
    * backend removal; the runtime clears local sync bookkeeping after it succeeds.
@@ -174,6 +174,30 @@ export function createCollabRuntime(options: CreateCollabRuntimeOptions = {}): C
   if (options.onPresenceChange) presenceOptions.onChange = options.onPresenceChange;
   const presence = new CollabPresenceTracker(presenceOptions);
   const teamResources = options.teamResources ?? createDevTeamResourceStateProvider();
+
+  async function publishNow(projectId: string, reason: string): Promise<{ version: number | null }> {
+    try {
+      const result = await adapter.publish({ projectId, reason });
+      if (!result) return { version: null };
+      if (unshared.has(projectId)) {
+        await adapter.unpublish?.({ projectId }).catch((error: unknown) => {
+          options.onError?.({ projectId, error });
+        });
+        published.delete(projectId);
+        syncStates.set(projectId, 'local_only');
+        return { version: null };
+      }
+      published.set(projectId, result.version);
+      syncStates.set(projectId, 'synced');
+      options.onPublished?.({ projectId, version: result.version, reason });
+      return { version: result.version };
+    } catch (error) {
+      syncStates.set(projectId, 'sync_failed');
+      options.onError?.({ projectId, error });
+      throw error;
+    }
+  }
+
   return {
     presence,
     scheduler,
@@ -189,16 +213,17 @@ export function createCollabRuntime(options: CreateCollabRuntimeOptions = {}): C
     },
     projectSyncState: (projectId) => syncStates.get(projectId) ?? 'local_only',
     projectOwnerMemberId: (projectId) => owners.get(projectId) ?? null,
-    requestTeamShare(projectId, ownerMemberId) {
+    async requestTeamShare(projectId, ownerMemberId) {
       unshared.delete(projectId);
       // Record the sharer as the project's single writer so members can tell
       // apart their own project from one shared to them.
       if (ownerMemberId) owners.set(projectId, ownerMemberId);
-      // Pending until the publish confirms (onPublished → 'synced' / onError →
-      // 'sync_failed'). Flushing at a run boundary publishes the stable state.
+      // Pending until the publish confirms (success → 'synced' / failure →
+      // 'sync_failed'). Team-share is user-facing, so it must wait for a durable
+      // version instead of returning a false "shared" success while the bytes are
+      // still only local.
       syncStates.set(projectId, 'pending_upload');
-      scheduler.notifyChanged(projectId, 'share');
-      scheduler.runBoundary(projectId);
+      return publishNow(projectId, 'share');
     },
     async requestTeamUnshare(projectId) {
       unshared.add(projectId);

@@ -9,7 +9,11 @@ import {
   buildWorkspaceSeatSummary,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
-import { createCollabRuntime, type CollabRuntime } from '../src/collab/runtime.js';
+import {
+  createCollabRuntime,
+  type CollabRuntime,
+  type CreateCollabRuntimeOptions,
+} from '../src/collab/runtime.js';
 import type { WorkspaceContextProvider } from '../src/collab/workspace-context.js';
 import {
   registerCollabSyncRoutes,
@@ -85,10 +89,14 @@ afterEach(async () => {
 async function startSyncServer(
   workspaceContext?: WorkspaceContextProvider,
   extraDeps?: Omit<RegisterCollabSyncRoutesDeps, 'collab'>,
+  runtimeOptions?: Omit<CreateCollabRuntimeOptions, 'workspaceContext'>,
 ) {
   const app = express();
   app.use(express.json());
-  runtime = createCollabRuntime(workspaceContext ? { workspaceContext } : {});
+  runtime = createCollabRuntime({
+    ...(runtimeOptions ?? {}),
+    ...(workspaceContext ? { workspaceContext } : {}),
+  });
   registerCollabSyncRoutes(app, { collab: runtime, ...extraDeps });
   server = http.createServer(app);
   await new Promise<void>((resolve) => server!.listen(0, resolve));
@@ -160,16 +168,10 @@ describe('collab sync routes', () => {
       body: { event: 'project_team_share_requested', projectId: 'p1' },
     });
     expect(intent.status).toBe(200);
-    // The intent marks it pending immediately; the publish confirms asynchronously.
-    expect(['pending_upload', 'synced']).toContain(intent.body.syncState);
-
-    // Poll until the publish confirms → synced.
-    let state = intent.body.syncState;
-    for (let i = 0; i < 40 && state !== 'synced'; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      state = (await api.json('/api/projects/p1/collab/status')).body.syncState;
-    }
-    expect(state).toBe('synced');
+    // Team-share is user-facing: the route waits for a durable resource version
+    // before reporting success, so teammates never see a catalog-only shell.
+    expect(intent.body.syncState).toBe('synced');
+    expect(intent.body.publishedVersion).toBe(1);
     expect((await api.json('/api/projects/p1/collab/status')).body.publishedVersion).toBe(1);
   });
 
@@ -233,7 +235,8 @@ describe('collab sync routes', () => {
       body: { event: 'project_team_share_requested', projectId: 'p1' },
     });
     expect(res.status).toBe(200);
-    expect(['pending_upload', 'synced']).toContain(res.body.syncState);
+    expect(res.body.syncState).toBe('synced');
+    expect(res.body.publishedVersion).toBe(1);
   });
 
   it('writes and removes the Vela team-project catalog around share intents', async () => {
@@ -266,7 +269,7 @@ describe('collab sync routes', () => {
       {
         projectId: 'p1',
         displayName: 'Electric Studio 2',
-        syncState: 'pending_upload',
+        syncState: 'synced',
       },
     ]);
 
@@ -295,6 +298,41 @@ describe('collab sync routes', () => {
     expect(res.status).toBe(502);
     expect(res.body.error).toBe('TEAM_PROJECT_CATALOG_UNAVAILABLE');
     expect((await api.json('/api/projects/p1/collab/status')).body.syncState).toBe('local_only');
+  });
+
+  it('does not write the team catalog when resource publishing fails', async () => {
+    const writes: unknown[] = [];
+    const api = await startSyncServer(
+      fixedShareContextProvider(true),
+      {
+        teamProjectCatalog: {
+          upsert: async (input) => {
+            writes.push(input);
+          },
+          remove: async () => {},
+        },
+      },
+      {
+        adapter: {
+          publish: async () => {
+            throw new Error('resource hub unavailable');
+          },
+          syncLatest: async () => null,
+          pull: async () => {},
+          unpublish: async () => {},
+        },
+      },
+    );
+
+    const res = await api.json('/api/projects/p1/collab/sync-intent', {
+      method: 'POST',
+      body: { event: 'project_team_share_requested', projectId: 'p1' },
+    });
+
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe('TEAM_PROJECT_PUBLISH_UNAVAILABLE');
+    expect(writes).toEqual([]);
+    expect((await api.json('/api/projects/p1/collab/status')).body.syncState).toBe('sync_failed');
   });
 
   it('pulls the published head for a member (null before any publish)', async () => {
