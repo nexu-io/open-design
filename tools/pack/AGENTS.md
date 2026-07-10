@@ -55,6 +55,7 @@ The runtime updater reads `https://releases.open-design.ai/<channel>/latest/meta
 - Windows selects `platforms.win.artifacts.installer`.
 - The artifact must have a checksum, preferably `sha256Url`; the updater verifies bytes before exposing an install action.
 - `OD_UPDATE_CURRENT_VERSION` may override the packaged version for tests, but user-flow package validation should prefer building the package with the intended `--app-version`.
+- Post-update "what's new" highlights are NOT carried in release `metadata.json`. The daemon's `/api/whats-new` fetches a single hand-curated document on a dedicated R2 bucket (`https://whatsnew.open-design.ai/whats-new.json`, overridable with `OD_WHATS_NEW_URL`); the web home surface shows a one-time card driven by that document's `id`, not the running version. Operators edit that one file after a release — there is no per-version publish tooling.
 
 ### Channel identity rules
 

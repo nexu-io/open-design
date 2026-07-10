@@ -258,6 +258,39 @@ describe('chat run service shutdown', () => {
     });
   });
 
+  it('stores native session recovery metadata on run status bodies', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-a' });
+    (run as any).nativeSessionRecovery = {
+      agentId: 'codex',
+      state: 'captured_not_resumed',
+      acquisition: 'stream-captured',
+      continuation: 'native-resume-by-id',
+      handle: {
+        present: true,
+        kind: 'cli-thread-id',
+        display: null,
+        sha256: 'a'.repeat(64),
+        redacted: true,
+      },
+      guardReason: null,
+      fallbackReason: null,
+      updatedAt: 123,
+    };
+
+    expect(runs.statusBody(run)).toMatchObject({
+      nativeSessionRecovery: {
+        agentId: 'codex',
+        state: 'captured_not_resumed',
+        handle: {
+          display: null,
+          sha256: 'a'.repeat(64),
+          redacted: true,
+        },
+      },
+    });
+  });
+
   it('summarizes OD-owned project storage on run status bodies', () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-a' });
@@ -671,6 +704,55 @@ describe('run event log persistence', () => {
     expect(parsed[0]).toMatchObject({ event: 'agent', data: { type: 'text_delta', delta: 'hello' } });
     expect(parsed[1]).toMatchObject({ event: 'agent', data: { type: 'text_delta', delta: ' world' } });
     expect(parsed[2]).toMatchObject({ event: 'end', data: { status: 'succeeded' } });
+  });
+
+  it('persists native session recovery diagnostics in the run event log', async () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1' });
+
+    runs.emit(run, 'diagnostic', {
+      type: 'native_session_recovery',
+      nativeSessionRecovery: {
+        agentId: 'amr',
+        state: 'resumed',
+        acquisition: 'acp-session-load',
+        continuation: 'acp-session-load',
+        handle: {
+          present: true,
+          kind: 'acp-session-handle',
+          display: null,
+          sha256: 'b'.repeat(64),
+          redacted: true,
+        },
+        guardReason: null,
+        fallbackReason: null,
+        updatedAt: 456,
+      },
+    });
+    runs.finish(run, 'succeeded', 0, null);
+
+    const logPath = path.join(tmpDir, run.id, 'events.jsonl');
+    let text = '';
+    for (let i = 0; i < 50; i++) {
+      if (fs.existsSync(logPath)) {
+        text = fs.readFileSync(logPath, 'utf8');
+        if (text.includes('native_session_recovery')) break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    const parsed = text.trim().split('\n').map((line) => JSON.parse(line));
+    expect(parsed[0]).toMatchObject({
+      event: 'diagnostic',
+      data: {
+        type: 'native_session_recovery',
+        nativeSessionRecovery: {
+          agentId: 'amr',
+          state: 'resumed',
+          handle: { display: null, redacted: true },
+        },
+      },
+    });
   });
 
   it('exposes eventsLogPath on statusBody when runsLogDir is configured', () => {

@@ -226,6 +226,7 @@ describe('AMR runtime def', () => {
           enabled: true,
           default: true,
           cost: { input: 0.14, output: 0.28 },
+          metadata: { cost: 'low', capability: 'standard' },
         },
         { id: 'gpt-image-2' },
         { id: 'deepseek-v4-flash' },
@@ -239,6 +240,7 @@ describe('AMR runtime def', () => {
         default: true,
         inputPriceUsdPerMillion: 0.14,
         outputPriceUsdPerMillion: 0.28,
+        metadata: { cost: 'low', capability: 'standard' },
       },
       { id: 'deepseek-v3.2', label: 'deepseek-v3.2' },
       { id: 'kimi-k2.7-code', label: 'kimi-k2.7-code', enabled: false },
@@ -294,7 +296,7 @@ describe('AMR runtime def', () => {
         FAKE_VELA_MODEL_LIST_JSON: JSON.stringify({
           source: 'remote',
           data: [
-            { id: 'claude-fable-5' },
+            { id: 'claude-fable-5', metadata: { cost: 'medium', capability: 'best_quality' } },
             { id: 'claude-opus-4.6' },
             { id: 'mimo-v2.5-pro' },
             { id: 'gemini-3-flash-preview' },
@@ -308,24 +310,28 @@ describe('AMR runtime def', () => {
           label: 'claude-fable-5',
           inputPriceUsdPerMillion: 10,
           outputPriceUsdPerMillion: 50,
+          metadata: { cost: 'medium', capability: 'best_quality' },
         },
         {
           id: 'claude-opus-4.6',
           label: 'claude-opus-4.6',
           inputPriceUsdPerMillion: 5,
           outputPriceUsdPerMillion: 25,
+          metadata: { cost: 'very_high' },
         },
         {
           id: 'gemini-3-flash-preview',
           label: 'gemini-3-flash-preview',
           inputPriceUsdPerMillion: 0.5,
           outputPriceUsdPerMillion: 3,
+          metadata: { cost: 'low' },
         },
         {
           id: 'mimo-v2.5-pro',
           label: 'mimo-v2.5-pro',
           inputPriceUsdPerMillion: 1.74,
           outputPriceUsdPerMillion: 3.48,
+          metadata: { cost: 'high' },
         },
       ]);
     } finally {

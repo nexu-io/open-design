@@ -1320,6 +1320,7 @@ test('[P2] home starters html details modal exposes header actions and closes fr
   // preview owns the stage. The header "Plugin info" toggle and the inline
   // "More" share menu were removed; the sidebar opens via the preview-edge
   // handle.
+  await expect(dialog.getByRole('button', { name: 'Plugin info', exact: true })).toHaveCount(0);
   await expect(dialog.locator('.ds-modal-sidebar')).toHaveCount(0);
   await dialog.locator('.ds-modal-stage-handle.is-expand').click();
   await expect(dialog.locator('.ds-modal-sidebar')).toBeVisible();

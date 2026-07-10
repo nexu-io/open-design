@@ -674,7 +674,7 @@ export function AvatarMenu({
                   className="inline-switcher__select avatar-select"
                   value={config.model ?? ''}
                   onChange={(value) => onApiModelChange?.(value)}
-                  models={byokModelOptions.map((m) => ({ id: m.id, label: m.label }))}
+                  models={byokModelOptions.map((m) => ({ ...m, label: m.label }))}
                   additionalOptions={
                     config.model && !byokModelOptions.some((m) => m.id === config.model)
                       ? [

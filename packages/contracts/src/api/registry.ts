@@ -1,3 +1,12 @@
+export type ModelCost = 'low' | 'medium' | 'high' | 'very_high';
+
+export type ModelCapability = 'standard' | 'advanced' | 'best_quality';
+
+export interface ModelMetadata {
+  cost?: ModelCost;
+  capability?: ModelCapability;
+}
+
 export interface AgentModelOption {
   id: string;
   label: string;
@@ -9,6 +18,8 @@ export interface AgentModelOption {
   inputPriceUsdPerMillion?: number;
   /** USD price per 1M output tokens when reported by the provider/catalog. */
   outputPriceUsdPerMillion?: number;
+  /** Provider/catalog-owned model picker metadata. */
+  metadata?: ModelMetadata;
 }
 
 /**

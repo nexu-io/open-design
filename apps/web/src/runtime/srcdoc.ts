@@ -14,6 +14,8 @@
  *   { type: 'od:slide-state', active: number, count: number }
  * after every navigation so the host can render its own counter / dots.
  */
+import { injectDeckStageFallback } from '@open-design/contracts/runtime/deck-stage-fallback';
+
 import {
   buildManualEditBridge,
   buildManualEditBridgeStyle,
@@ -26,6 +28,8 @@ export type SrcdocOptions = {
   deck?: boolean;
   baseHref?: string;
   initialSlideIndex?: number;
+  hideDeckChrome?: boolean;
+  deckClickNavigation?: boolean;
   commentBridge?: boolean;
   inspectBridge?: boolean;
   selectionBridge?: boolean;
@@ -33,6 +37,14 @@ export type SrcdocOptions = {
   paletteBridge?: boolean;
   initialPalette?: string | null;
   previewFocusGuard?: boolean;
+  /**
+   * Force every CSS animation/transition to complete instantly so the
+   * document settles at its final visual state and stops repainting. Meant
+   * for static miniatures (deck thumbnail rail): a looping deck animation in
+   * N thumbnail iframes otherwise keeps N compositor layers rasterizing
+   * forever.
+   */
+  freezeMotion?: boolean;
   /** Monotonically-increasing reload counter. When provided, it is embedded as
    * a `data-od-reload-key` attribute on `<html>` so that the srcdoc string
    * differs across reloads even when the underlying HTML bytes are identical.
@@ -267,7 +279,19 @@ export function buildSrcdoc(
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
   const withFocusGuard = options.previewFocusGuard ? injectPreviewFocusGuard(withShim) : withShim;
-  const withDeck = options.deck ? injectDeckBridge(withFocusGuard, options.initialSlideIndex) : withFocusGuard;
+  const withMotionFreeze = options.freezeMotion ? injectMotionFreeze(withFocusGuard) : withFocusGuard;
+  const withDeckStageFallback = options.deck
+    ? injectDeckStageFallback(withMotionFreeze)
+    : withMotionFreeze;
+  const withDeckChrome = options.deck && options.hideDeckChrome
+    ? injectDeckStageShadowChromeHiding(injectDeckChromeHiding(withDeckStageFallback))
+    : withDeckStageFallback;
+  const withDeck = options.deck
+    ? injectDeckBridge(withDeckChrome, {
+        initialSlideIndex: options.initialSlideIndex,
+        clickNavigation: !!options.deckClickNavigation,
+      })
+    : withDeckChrome;
   // Comment + Inspect share an element-selection bridge: both pick a
   // [data-od-id] / [data-screen-label] node and route the host's reply
   // to either the comment popover (annotate) or the inspect panel
@@ -650,10 +674,21 @@ function injectExportCaptureBridge(doc: string): string {
   }
   function notes(){
     var el = document.getElementById('speaker-notes');
-    if (!el) return '';
-    var t = el.textContent || '';
-    try { var j = JSON.parse(t); if (Array.isArray(j)) return j; } catch(_){}
-    return t.replace(/\\s+/g,' ').trim();
+    if (el) {
+      var t = el.textContent || '';
+      try { var j = JSON.parse(t); if (Array.isArray(j)) return j; } catch(_){}
+      var plain = t.replace(/\\s+/g,' ').trim();
+      if (plain) return plain;
+    }
+    var list = [];
+    // Match every .slide in document order — per-slide notes must line up
+    // 1:1 with the slide list regardless of the deck's container nesting.
+    var slideNodes = document.querySelectorAll('.slide');
+    for (var i = 0; i < slideNodes.length; i++) {
+      var noteEl = slideNodes[i].querySelector('.notes');
+      list.push(noteEl ? (noteEl.textContent || '').replace(/\\s+/g, ' ').trim() : '');
+    }
+    return list.length ? list : '';
   }
   function send(msg){ try { window.parent.postMessage(msg, '*'); } catch(_){} }
   function run(req){
@@ -2034,13 +2069,110 @@ html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
 // the scaled stage lands ~1000px off-screen and the user sees a mostly-
 // black preview with a sliver of slide content in the top-left. Skip the
 // override whenever the framework's marker id is present.
-function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
+// Near-zero durations (not `animation-play-state: paused`) are deliberate:
+// pausing an entry animation at t=0 leaves `fill-mode: both` content stuck
+// invisible, while collapsing the duration lets every animation run to its
+// final keyframe immediately — the thumbnail shows the slide's settled state
+// and the compositor never re-rasterizes the frame again.
+// Bare CSS bodies (no `<style>` wrapper) so the shadow-root thumbnail renderer
+// (`DeckSlideThumbnail`) can adopt the exact same rules the iframe path injects,
+// keeping a single source of truth for freeze + chrome-hiding behavior.
+export const DECK_MOTION_FREEZE_CSS = `*, *::before, *::after {
+  animation-duration: 0.001s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001s !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}`;
+
+export const DECK_CHROME_HIDE_CSS = `.deck-counter,
+.deck-hint,
+.deck-nav,
+.deck-floating-nav,
+.deck-floating-reset,
+.deck-controls,
+.slide-nav,
+.slides-nav,
+.slide-controls,
+.slide-counter,
+.presentation-nav,
+.presentation-controls,
+[role="navigation"][aria-label*="Deck"],
+[role="navigation"][aria-label*="deck"],
+[role="navigation"][aria-label*="Slide"],
+[role="navigation"][aria-label*="slide"],
+[data-deck-nav],
+[data-slide-nav] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}`;
+
+function injectMotionFreeze(doc: string): string {
+  return injectBeforeHeadEnd(doc, `<style data-od-motion-freeze>
+${DECK_MOTION_FREEZE_CSS}
+</style>`);
+}
+
+function injectDeckChromeHiding(doc: string): string {
+  return injectBeforeHeadEnd(doc, `<style data-od-deck-chrome-hidden>
+${DECK_CHROME_HIDE_CSS}
+</style>`);
+}
+
+function injectDeckStageShadowChromeHiding(doc: string): string {
+  return injectBeforeBodyEnd(doc, `<script data-od-deck-stage-shadow-chrome-hidden>(function(){
+  var HIDE_ID = 'od-deck-stage-shadow-chrome-hidden';
+  var CSS = '.overlay,.tapzones{display:none!important;visibility:hidden!important;pointer-events:none!important;}';
+  function hideStage(stage){
+    try {
+      if (!stage || !stage.shadowRoot) return false;
+      if (stage.shadowRoot.getElementById(HIDE_ID)) return true;
+      var style = document.createElement('style');
+      style.id = HIDE_ID;
+      style.textContent = CSS;
+      stage.shadowRoot.appendChild(style);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+  function hideAll(){
+    var pending = false;
+    var stages = document.querySelectorAll('deck-stage');
+    for (var i = 0; i < stages.length; i += 1) {
+      if (!hideStage(stages[i])) pending = true;
+    }
+    return pending;
+  }
+  function schedule(){
+    if (!hideAll()) return;
+    setTimeout(schedule, 50);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', schedule, { once: true });
+  } else {
+    schedule();
+  }
+  if (typeof MutationObserver !== 'undefined') {
+    new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+  }
+})();</script>`);
+}
+
+function injectDeckBridge(
+  doc: string,
+  options: { initialSlideIndex?: number; clickNavigation?: boolean } = {},
+): string {
+  const initialSlideIndex = options.initialSlideIndex ?? 0;
   const safeInitialSlideIndex = Number.isFinite(initialSlideIndex)
     ? Math.max(0, Math.floor(initialSlideIndex))
     : 0;
   const hasInlineSlideMessageListener =
     /addEventListener\s*\(\s*['"]message['"]/i.test(doc) && /\bod:slide\b/.test(doc);
   const isFrameworkDeck = /\bid\s*=\s*["']deck-stage["']/i.test(doc);
+  const clickNavigation = !!options.clickNavigation && !isFrameworkDeck;
   const styleFix = isFrameworkDeck
     ? ''
     : `<style data-od-deck-fix>
@@ -2052,6 +2184,11 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   if (${JSON.stringify(isFrameworkDeck)}) {
     window.addEventListener('keydown', function(ev){
       var key = ev && ev.key;
+      if (key === 'Escape') {
+        try { window.parent.postMessage({ type: 'od:present-escape' }, '*'); } catch (_) {}
+        return;
+      }
+      if (ev.metaKey || ev.ctrlKey || ev.altKey || ev.shiftKey) return;
       if (
         key !== 'ArrowRight' &&
         key !== 'PageDown' &&
@@ -2059,11 +2196,18 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
         key !== 'ArrowLeft' &&
         key !== 'PageUp' &&
         key !== 'Home' &&
-        key !== 'End'
+        key !== 'End' &&
+        String(key).toLowerCase() !== 'r'
       ) return;
       var t = ev.target;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       ev.stopPropagation();
+    }, true);
+  } else {
+    window.addEventListener('keydown', function(ev){
+      if (ev && ev.key === 'Escape') {
+        try { window.parent.postMessage({ type: 'od:present-escape' }, '*'); } catch (_) {}
+      }
     }, true);
   }
   function slides(){
@@ -2072,7 +2216,7 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     // fall back to all .slide only when nothing structured matched, so
     // freeform decks that nest slides under an extra wrapper still report
     // the real count instead of leaving the host counter at 1 / 0.
-    var structured = document.querySelectorAll('.deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide');
+    var structured = document.querySelectorAll('deck-stage > .slide, .deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide');
     if (structured.length) return structured;
     return document.querySelectorAll('.slide');
   }
@@ -2388,6 +2532,42 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     var n = Math.abs(diff);
     for (var k = 0; k < n; k++) dispatchKey(key);
     setTimeout(report, 320);
+  }
+  function isInteractiveClickTarget(target){
+    while (target && target !== document.body && target !== document.documentElement) {
+      if (!target.tagName) break;
+      var tag = String(target.tagName || '').toUpperCase();
+      if (
+        tag === 'A' ||
+        tag === 'BUTTON' ||
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        tag === 'SUMMARY' ||
+        tag === 'LABEL' ||
+        tag === 'IFRAME' ||
+        target.isContentEditable ||
+        target.getAttribute('role') === 'button' ||
+        target.getAttribute('role') === 'link'
+      ) {
+        return true;
+      }
+      target = target.parentElement;
+    }
+    return false;
+  }
+  if (${JSON.stringify(clickNavigation)}) {
+    document.addEventListener('click', function(ev){
+      if (ev.defaultPrevented) return;
+      if (ev.button !== undefined && ev.button !== 0) return;
+      if (ev.metaKey || ev.ctrlKey || ev.altKey || ev.shiftKey) return;
+      if (isInteractiveClickTarget(ev.target)) return;
+      var list = slides();
+      if (!list.length) return;
+      ev.preventDefault();
+      if (ev.clientX < window.innerWidth / 2) go('prev');
+      else go('next');
+    }, true);
   }
   var lastCommentTargetSlideIndex = -1;
   function report(){

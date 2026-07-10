@@ -75,6 +75,7 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
   const onPickChip = vi.fn();
   const onPickPlugin = vi.fn();
   const onPickExamplePlugin = vi.fn();
+  const onOpenPluginDetails = vi.fn();
   const onClearActiveChip = vi.fn();
   render(
     <HomeHero
@@ -90,6 +91,7 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
       pendingChipId={null}
       onPickPlugin={onPickPlugin}
       onPickExamplePlugin={onPickExamplePlugin}
+      onOpenPluginDetails={onOpenPluginDetails}
       onPickChip={onPickChip}
       onClearActiveChip={onClearActiveChip}
       contextItemCount={0}
@@ -97,7 +99,7 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
       {...overrides}
     />,
   );
-  return { onPickChip, onPickPlugin, onPickExamplePlugin, onClearActiveChip };
+  return { onPickChip, onPickPlugin, onPickExamplePlugin, onOpenPluginDetails, onClearActiveChip };
 }
 
 describe('HomeHero intent rail', () => {
@@ -149,6 +151,22 @@ describe('HomeHero intent rail', () => {
     expect(screen.queryByTestId('home-hero-rail-video')).toBeNull();
     const node = screen.getByTestId('home-hero-template-trigger');
     expect(node.textContent).toContain('Video');
+  });
+
+  it('keeps the blank project entry visible after a template is selected', () => {
+    const onStartBlankProject = vi.fn();
+    renderHero({ activeChipId: 'deck', onStartBlankProject });
+
+    expect(screen.queryByTestId('home-hero-template-section')).toBeNull();
+    const promptExamples = screen.getByTestId('home-hero-prompt-examples');
+    const blankProject = screen.getByTestId('home-hero-blank-project');
+    expect(blankProject.textContent).toContain('start a blank project');
+    expect(
+      promptExamples.compareDocumentPosition(blankProject) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fireEvent.click(blankProject);
+    expect(onStartBlankProject).toHaveBeenCalledTimes(1);
   });
 
   it('does not reserve an empty active-context row for a hidden chip-bound plugin', () => {
@@ -284,7 +302,7 @@ describe('HomeHero intent rail', () => {
   it('shows matching plugin presets in the example prompt area for the selected tab', () => {
     const deckPlugin = makePlugin('example-deck-a', 'deck', 'Investor deck');
     const imagePlugin = makePlugin('example-image-a', 'image', 'Product image');
-    const { onPickExamplePlugin } = renderHero({
+    const { onPickExamplePlugin, onOpenPluginDetails } = renderHero({
       activeChipId: 'deck',
       pluginOptions: [deckPlugin, imagePlugin],
     });
@@ -292,10 +310,16 @@ describe('HomeHero intent rail', () => {
     const presets = screen.getAllByTestId('home-hero-plugin-preset');
     expect(presets).toHaveLength(1);
     // The preset card is now a thumbnail + name only; the prompt blurb was
-    // dropped from the card face but is still passed through on click below.
+    // dropped from the card face but is still passed through on Use below.
     expect(presets[0]?.textContent).toContain('Investor deck');
 
+    // Clicking the card body opens the preview (detail modal), not the seed.
     fireEvent.click(presets[0]!);
+    expect(onOpenPluginDetails).toHaveBeenCalledWith(deckPlugin);
+    expect(onPickExamplePlugin).not.toHaveBeenCalled();
+
+    // The Use button is what seeds the composer with the preset's brief.
+    fireEvent.click(screen.getByTestId('home-hero-plugin-preset-use-example-deck-a'));
     expect(onPickExamplePlugin).toHaveBeenCalledWith(
       deckPlugin,
       'deck',

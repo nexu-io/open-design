@@ -33,6 +33,7 @@ export type AnalyticsEventName =
   // flow settled (success / cancelled / failed). The entry clicks are
   // `ui_click` `plus_pick` with `resource_kind: 'workspace'`.
   | 'context_link_result'
+  | 'speaker_notes_save_result'
   // Artifact
   | 'artifact_export_result'
   | 'artifact_deploy_result'

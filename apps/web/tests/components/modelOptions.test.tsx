@@ -107,7 +107,7 @@ describe('SearchableModelSelect', () => {
           {
             id: 'deepseek-v4-flash',
             label: 'deepseek-v4-flash',
-            inputPriceUsdPerMillion: 0.14,
+            metadata: { cost: 'low', capability: 'standard' },
           },
         ]}
         value="deepseek-v4-flash"

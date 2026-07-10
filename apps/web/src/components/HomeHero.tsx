@@ -9,8 +9,10 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -77,12 +79,14 @@ import {
 } from '../i18n/content';
 import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
 import { canDuplicatePluginPreview } from './plugins-home/duplicate';
+import { pluginCategoryLabel } from './plugins-home/categoryLabel';
 import { readHomeGuideStage, writeHomeGuideStage } from './home-hero/firstRunGuide';
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
 import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { applyFacetSelection } from './plugins-home/facets';
 import { inferPluginPreview } from './plugins-home/preview';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
+import { useDeckPreviewScale } from '../lib/use-deck-preview-scale';
 import { ComposerPlusMenu, PLUS_SUBMENU_RESOURCE_KIND } from './ComposerPlusMenu';
 import { ContextChipHoverCard } from './ContextChipHoverCard';
 import { workspaceContextDetailLine, workspaceContextKindLabel } from './workspace-context';
@@ -1204,6 +1208,17 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     contextOnlyMcpServers.length > 0 ||
     contextOnlyConnectors.length > 0 ||
     contextWorkspaceItems.length > 0;
+  const blankProjectEntry = onStartBlankProject ? (
+    <button
+      type="button"
+      className="home-hero__blank-project"
+      data-testid="home-hero-blank-project"
+      onClick={onStartBlankProject}
+    >
+      {t('homeHero.startBlankProject')}
+      <Icon name="chevron-right" size={13} aria-hidden />
+    </button>
+  ) : null;
 
   let optionRenderIndex = 0;
 
@@ -2059,17 +2074,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               }}
             />
           </RailGroup>
-          {onStartBlankProject ? (
-            <button
-              type="button"
-              className="home-hero__blank-project"
-              data-testid="home-hero-blank-project"
-              onClick={onStartBlankProject}
-            >
-              {t('homeHero.startBlankProject')}
-              <Icon name="chevron-right" size={13} aria-hidden />
-            </button>
-          ) : null}
         </div>
       )}
 
@@ -2110,6 +2114,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           pendingDuplicatePluginId={pendingDuplicatePluginId}
           locale={locale}
           onPick={pickExamplePluginPreset}
+          onPreview={onOpenPluginDetails}
           onDuplicate={onDuplicateExamplePlugin}
           pulseFirstPreset={guidePulseFirstPreset}
         />
@@ -2147,6 +2152,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           </div>
         </div>
       ) : null}
+
+      {blankProjectEntry}
 
       {error ? (
         <div role="alert" className="home-hero__error">
@@ -2191,6 +2198,7 @@ function PluginPromptPresets({
   chipId,
   locale,
   onPick,
+  onPreview,
   onDuplicate,
   pendingDuplicatePluginId,
   pendingPluginId,
@@ -2201,6 +2209,7 @@ function PluginPromptPresets({
   chipId: string;
   locale: Locale;
   onPick: (record: InstalledPluginRecord, chipId: string, promptText: string) => void;
+  onPreview: (record: InstalledPluginRecord) => void;
   onDuplicate: (record: InstalledPluginRecord) => void;
   pendingDuplicatePluginId: string | null;
   pendingPluginId: string | null;
@@ -2239,6 +2248,7 @@ function PluginPromptPresets({
               duplicateDisabled={pendingDuplicatePluginId !== null || pendingPluginId !== null}
               pulse={pulseFirstPreset && index === 0}
               onPick={onPick}
+              onPreview={onPreview}
               onDuplicate={onDuplicate}
             />
           ))}
@@ -2319,6 +2329,7 @@ function PluginPromptPresetCard({
   locale,
   onDuplicate,
   onPick,
+  onPreview,
   pending,
   pulse = false,
   record,
@@ -2331,6 +2342,9 @@ function PluginPromptPresetCard({
   locale: Locale;
   onDuplicate: (record: InstalledPluginRecord) => void;
   onPick: (record: InstalledPluginRecord, chipId: string, promptText: string) => void;
+  // Preview the template in the detail modal (the card body opens this; Use
+  // seeds the composer input, Remix forks a new project).
+  onPreview: (record: InstalledPluginRecord) => void;
   pending: boolean;
   pulse?: boolean;
   record: InstalledPluginRecord;
@@ -2344,11 +2358,18 @@ function PluginPromptPresetCard({
   const seedPrompt = examplePresetSeedPrompt(record, locale, () =>
     pluginPresetPromptPreview(record, locale, chipId),
   ).text;
-  // Decks ship a fixed 16:9 stage; tag them so the preset thumbnail uses a 16:9
-  // frame the iframe fills natively, instead of letterboxing the stage with a
-  // dark band above it (matches the Community gallery deck treatment).
+  // Deck preset thumbnails render the iframe at a fixed 1280 design width scaled
+  // to fit the preview cell (see useDeckPreviewScale), so a template's first
+  // slide previews proportionally instead of overflowing. The baked-clip path
+  // (preferBaked) is already proportional; this fixes the live-HTML fallback.
   const odMode = (record.manifest?.od as { mode?: unknown } | undefined)?.mode;
+  const presetPreviewRef = useRef<HTMLSpanElement>(null);
+  useDeckPreviewScale(presetPreviewRef, odMode === 'deck' && preview.kind === 'html');
   const title = localizePluginTitle(locale, record);
+  // Commercial category ("品类") chip — same signal the gallery tile and the
+  // Create page picker show, so the example row reads like the reference
+  // template galleries. Null for records without a known category.
+  const categoryLabel = pluginCategoryLabel(record, t);
   const canDuplicate = canDuplicatePluginPreview(record);
   return (
     <span className="home-hero__plugin-preset-cell" role="listitem">
@@ -2358,10 +2379,9 @@ function PluginPromptPresetCard({
         data-testid="home-hero-plugin-preset"
         data-plugin-id={record.id}
         {...(typeof odMode === 'string' ? { 'data-od-mode': odMode } : {})}
-        disabled={disabled}
-        onClick={() => onPick(record, chipId, seedPrompt)}
+        onClick={() => onPreview(record)}
       >
-        <span className="home-hero__plugin-preset-preview" aria-hidden>
+        <span className="home-hero__plugin-preset-preview" aria-hidden ref={presetPreviewRef}>
           <PreviewSurface
             pluginId={record.id}
             pluginTitle={title}
@@ -2373,8 +2393,18 @@ function PluginPromptPresetCard({
             </span>
           ) : null}
         </span>
-        <span className="home-hero__plugin-preset-title">
-          {title}
+        <span className="home-hero__plugin-preset-meta">
+          {categoryLabel ? (
+            <span
+              className="home-hero__plugin-preset-category"
+              data-testid={`home-hero-plugin-preset-category-${record.id}`}
+            >
+              {categoryLabel}
+            </span>
+          ) : null}
+          <span className="home-hero__plugin-preset-title">
+            {title}
+          </span>
         </span>
       </button>
       <span className="home-hero__plugin-preset-actions">
@@ -3371,6 +3401,37 @@ function RailGroup({
   );
 }
 
+function SubTypeChip({
+  sub,
+  isActive,
+  pluginsLoading,
+  onPick,
+}: {
+  sub: HomeHeroSubChip;
+  isActive: boolean;
+  pluginsLoading: boolean;
+  onPick: (sub: HomeHeroSubChip) => void;
+}) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      className={`home-hero__subtype-chip${isActive ? ' is-active' : ''}`}
+      data-sub-chip-id={sub.slug}
+      data-testid={`home-hero-subtype-${sub.slug}`}
+      onClick={() => onPick(sub)}
+      disabled={pluginsLoading}
+      role="tab"
+      aria-selected={isActive}
+    >
+      <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
+      <span className="home-hero__subtype-chip-label">
+        {pluginSubfacetLabel(sub.slug, sub.label, t)}
+      </span>
+    </button>
+  );
+}
+
 function SubTypeRow({
   subChips,
   selectedSlug,
@@ -3386,48 +3447,175 @@ function SubTypeRow({
 }) {
   const t = useT();
   const allActive = selectedSlug === null;
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const measureRef = useRef<HTMLDivElement | null>(null);
+  // How many sub-chips fit on one line after the always-present "All" chip;
+  // the rest collapse into a "More" dropdown so the row never wraps.
+  const [visibleCount, setVisibleCount] = useState(subChips.length);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement | null>(null);
+
+  // Measure against the always-full hidden ghost row so chip widths are stable
+  // no matter what the visible row currently shows, then pick the largest
+  // prefix that fits (reserving room for the More button when it's needed).
+  const measure = useCallback(() => {
+    const row = rowRef.current;
+    const ghost = measureRef.current;
+    if (!row || !ghost) return;
+    const avail = row.clientWidth;
+    if (avail <= 0) return;
+    const gap = 5;
+    const allWidth = ghost.querySelector<HTMLElement>('[data-measure="all"]')?.offsetWidth ?? 0;
+    const moreWidth = ghost.querySelector<HTMLElement>('[data-measure="more"]')?.offsetWidth ?? 0;
+    const chipEls = Array.from(ghost.querySelectorAll<HTMLElement>('[data-measure="chip"]'));
+    // Everything (All + every chip) fits: no More button needed.
+    let full = allWidth;
+    for (const el of chipEls) full += gap + el.offsetWidth;
+    if (full <= avail) {
+      setVisibleCount(chipEls.length);
+      return;
+    }
+    // Overflow: reserve the More button and count the fitting prefix.
+    const budget = avail - gap - moreWidth;
+    let used = allWidth;
+    let count = 0;
+    for (let i = 0; i < chipEls.length; i++) {
+      const next = used + gap + chipEls[i]!.offsetWidth;
+      if (next <= budget) {
+        used = next;
+        count = i + 1;
+      } else {
+        break;
+      }
+    }
+    setVisibleCount(count);
+  }, []);
+
+  useLayoutEffect(() => {
+    measure();
+    const row = rowRef.current;
+    if (!row || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, [measure, subChips]);
+
+  // Close the More menu on outside pointer / Escape.
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    function onDown(e: MouseEvent) {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMoreOpen(false);
+    }
+    window.addEventListener('mousedown', onDown, true);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('mousedown', onDown, true);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [moreOpen]);
+
+  const visibleChips = subChips.slice(0, visibleCount);
+  const overflowChips = subChips.slice(visibleCount);
+  const overflowActive = overflowChips.some((sub) => sub.slug === selectedSlug);
+  const allChip = (
+    <button
+      type="button"
+      className={`home-hero__subtype-chip${allActive ? ' is-active' : ''}`}
+      data-sub-chip-id="all"
+      data-testid="home-hero-subtype-all"
+      onClick={onSelectAll}
+      disabled={pluginsLoading}
+      role="tab"
+      aria-selected={allActive}
+    >
+      <span className="home-hero__subtype-chip-label">{t('common.all')}</span>
+    </button>
+  );
+
   return (
     <div
+      ref={rowRef}
       className="home-hero__subtype-row"
       data-testid="home-hero-subtype-row"
       role="tablist"
       aria-label={t('homeHero.subTypeAria')}
     >
-      <button
-        type="button"
-        className={`home-hero__subtype-chip${allActive ? ' is-active' : ''}`}
-        data-sub-chip-id="all"
-        data-testid="home-hero-subtype-all"
-        onClick={onSelectAll}
-        disabled={pluginsLoading}
-        role="tab"
-        aria-selected={allActive}
-      >
-        <span className="home-hero__subtype-chip-label">{t('common.all')}</span>
-      </button>
-      {subChips.map((sub) => {
-        const isActive = sub.slug === selectedSlug;
-        const cls = ['home-hero__subtype-chip'];
-        if (isActive) cls.push('is-active');
-        return (
+      {allChip}
+      {visibleChips.map((sub) => (
+        <SubTypeChip
+          key={sub.slug}
+          sub={sub}
+          isActive={sub.slug === selectedSlug}
+          pluginsLoading={pluginsLoading}
+          onPick={onPickSubChip}
+        />
+      ))}
+      {overflowChips.length > 0 ? (
+        <div className="home-hero__subtype-more" ref={moreRef}>
           <button
-            key={sub.slug}
             type="button"
-            className={cls.join(' ')}
-            data-sub-chip-id={sub.slug}
-            data-testid={`home-hero-subtype-${sub.slug}`}
-            onClick={() => onPickSubChip(sub)}
+            className={`home-hero__subtype-chip home-hero__subtype-more-btn${overflowActive ? ' is-active' : ''}`}
+            data-testid="home-hero-subtype-more"
+            onClick={() => setMoreOpen((open) => !open)}
             disabled={pluginsLoading}
-            role="tab"
-            aria-selected={isActive}
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
           >
+            <span className="home-hero__subtype-chip-label">{t('homeHero.subTypeMore')}</span>
+            <Icon name="chevron-down" size={12} className="home-hero__subtype-chip-icon" />
+          </button>
+          {moreOpen ? (
+            <div className="home-hero__subtype-more-menu" role="menu" aria-label={t('homeHero.subTypeMore')}>
+              {overflowChips.map((sub) => {
+                const isActive = sub.slug === selectedSlug;
+                return (
+                  <button
+                    key={sub.slug}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={isActive}
+                    className={`home-hero__subtype-more-item${isActive ? ' is-active' : ''}`}
+                    data-testid={`home-hero-subtype-more-${sub.slug}`}
+                    disabled={pluginsLoading}
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onPickSubChip(sub);
+                    }}
+                  >
+                    <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
+                    <span className="home-hero__subtype-chip-label">
+                      {pluginSubfacetLabel(sub.slug, sub.label, t)}
+                    </span>
+                    {isActive ? <Icon name="check" size={13} /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {/* Hidden ghost row: always the full set, used only to measure chip
+          widths so the visible row can compute how many fit. */}
+      <div className="home-hero__subtype-measure" aria-hidden ref={measureRef}>
+        <span className="home-hero__subtype-chip" data-measure="all">
+          <span className="home-hero__subtype-chip-label">{t('common.all')}</span>
+        </span>
+        {subChips.map((sub) => (
+          <span key={sub.slug} className="home-hero__subtype-chip" data-measure="chip">
             <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
             <span className="home-hero__subtype-chip-label">
               {pluginSubfacetLabel(sub.slug, sub.label, t)}
             </span>
-          </button>
-        );
-      })}
+          </span>
+        ))}
+        <span className="home-hero__subtype-chip home-hero__subtype-more-btn" data-measure="more">
+          <span className="home-hero__subtype-chip-label">{t('homeHero.subTypeMore')}</span>
+          <Icon name="chevron-down" size={12} className="home-hero__subtype-chip-icon" />
+        </span>
+      </div>
     </div>
   );
 }

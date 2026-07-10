@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
   useId,
@@ -1590,6 +1591,7 @@ export function ProjectView({
     code?: string | null;
     tone?: 'default' | 'success' | 'error' | 'loading';
     ttlMs?: number;
+    scope?: 'chat-pane';
   } | null>(null);
   // Brand extraction has no SSE; this polls the brand's status and, once the
   // backing extraction finalizes a `user:<id>` design system, surfaces a
@@ -2394,9 +2396,20 @@ export function ProjectView({
   }, []);
 
   const handleWorkspaceContextsChange = useCallback((next: WorkspaceContextItem[]) => {
-    setWorkspaceContexts((current) =>
-      workspaceContextItemsEqual(current, next) ? current : next,
-    );
+    // This runs in a post-commit effect inside FileWorkspace: on any tab
+    // mutation the workspace-context set changes and this setState schedules a
+    // SECOND full render of the entire ProjectView -> FileWorkspace ->
+    // FileViewer tree, on top of the tab-state render that triggered it. The
+    // result only feeds the composer's @-mention context picker, which never
+    // needs to update in the same frame the user closes a tab. Marking it as a
+    // transition lets the urgent tab-close render commit first (tab disappears
+    // immediately) and defers this heavy second pass so it no longer stalls the
+    // interaction.
+    startTransition(() => {
+      setWorkspaceContexts((current) =>
+        workspaceContextItemsEqual(current, next) ? current : next,
+      );
+    });
   }, []);
 
   const refreshProjectFiles = useCallback(async (): Promise<ProjectFile[]> => {
@@ -3111,6 +3124,7 @@ export function ProjectView({
         details: t('chat.brandBrowserAssistDownloadGuideDetails'),
         tone: 'default',
         ttlMs: 12000,
+        scope: 'chat-pane',
       });
       return { ok: true, action: 'opened' };
     },
@@ -7445,6 +7459,21 @@ export function ProjectView({
     ? COMMENT_INSPECTOR_PANEL_WIDTH
     : chatPanelWidthRef.current;
   const chatPanelAriaMinWidth = Math.min(MIN_CHAT_PANEL_WIDTH, chatPanelMaxWidth);
+  const projectActionsToastInChatPane =
+    projectActionsToast?.scope === 'chat-pane' &&
+    !workspaceFocused &&
+    !commentInspectorActive &&
+    Boolean(activeConversationId || conversationLoadError);
+  const projectActionsToastNode = projectActionsToast ? (
+    <Toast
+      message={projectActionsToast.message}
+      details={projectActionsToast.details}
+      code={projectActionsToast.code}
+      tone={projectActionsToast.tone}
+      ttlMs={projectActionsToast.ttlMs}
+      onDismiss={() => setProjectActionsToast(null)}
+    />
+  ) : null;
 
   const renderPreferredChatPanelWidth = useCallback((
     preferredWidth: number,
@@ -8512,6 +8541,13 @@ export function ProjectView({
               }
               createDesignSystemFromProjectBusy={projectDesignSystemCreateStarting}
               onBrandBrowserAssistConfirm={handleBrandBrowserAssistConfirm}
+              chatLogTray={
+                projectActionsToastInChatPane ? (
+                  <div className="project-actions-toast-anchor">
+                    {projectActionsToastNode}
+                  </div>
+                ) : null
+              }
               composerDraftSignal={composerDraftSignal}
               petConfig={config.pet}
               onAdoptPet={onAdoptPetInline}
@@ -8732,11 +8768,14 @@ export function ProjectView({
           questionFormSubmittedAnswers={displayedQuestionFormSubmittedAnswers}
           questionsGenerating={displayedQuestionsGenerating}
           focusQuestionsRequest={focusQuestionsRequest}
-          onSubmitQuestionForm={(text) => {
+          onSubmitQuestionForm={(text, attachments = [], context) => {
             if (currentConversationActionDisabled) return;
             // Submitting question-form answers is a clarification turn, not a
             // fresh create/edit — tag entry_from so the dashboard can separate it.
-            void handleSend(text, [], [], { entryFrom: 'question_answer' });
+            void handleSend(text, attachments, [], {
+              entryFrom: 'question_answer',
+              ...(context ? { context } : {}),
+            });
           }}
         />
       </div>
@@ -8798,16 +8837,7 @@ export function ProjectView({
         />
       ) : null}
       <AnimatePresence>
-        {projectActionsToast ? (
-          <Toast
-            message={projectActionsToast.message}
-            details={projectActionsToast.details}
-            code={projectActionsToast.code}
-            tone={projectActionsToast.tone}
-            ttlMs={projectActionsToast.ttlMs}
-            onDismiss={() => setProjectActionsToast(null)}
-          />
-        ) : null}
+        {projectActionsToast && !projectActionsToastInChatPane ? projectActionsToastNode : null}
         {brandReadyPrompt ? (
           <BrandReadyPrompt
             key="brand-ready-prompt"

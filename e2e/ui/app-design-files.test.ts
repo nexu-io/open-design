@@ -1,6 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { routeAgents } from '@/playwright/mock-factory';
+import { expectAllProjectFilesActive, openAllProjectFiles } from '@/playwright/workspace';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
@@ -352,7 +353,7 @@ async function openDesignFile(page: Page, fileName: string) {
     return;
   }
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: fileName,
   });
@@ -413,7 +414,7 @@ async function runDesignFilesUploadFlow(page: Page) {
   });
 
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'moodboard.png',
   });
@@ -457,7 +458,7 @@ async function runDesignFilesDeleteFlow(page: Page) {
   });
 
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toBeVisible();
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   const fileRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'trash-me.png',
@@ -470,7 +471,7 @@ async function runDesignFilesDeleteFlow(page: Page) {
 
   await expect(fileRow).toHaveCount(0);
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toHaveCount(0);
-  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+  await expectAllProjectFilesActive(page);
   await expect(page.getByRole('tab', { name: /keep-me\.png/i })).toBeVisible();
   await expect
     .poll(async () => {
@@ -497,7 +498,7 @@ test('[P1] design files page keeps the current single-file actions and context h
   await seedProjectFile(page, projectId, 'alpha.html', '<!doctype html><title>alpha</title><h1>alpha</h1>');
   await page.reload();
   await expectWorkspaceReady(page);
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   await expect(page.getByTestId('design-files-upload-trigger')).toBeVisible();
   await expect(page.getByRole('button', { name: /new sketch/i })).toBeVisible();
@@ -730,7 +731,7 @@ test('[P1] design files batch delete removes selected files and keeps cancel ret
   await seedProjectFile(page, projectId, 'batch-keep.txt', 'keep');
   await page.reload();
   await expectWorkspaceReady(page);
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   const alpha = page.getByTestId('design-file-row-batch-alpha.txt');
   const beta = page.getByTestId('design-file-row-batch-beta.txt');
@@ -802,7 +803,7 @@ test('[P1] design files batch download posts selected names to the archive endpo
   await seedProjectFile(page, projectId, 'download-skip.txt', 'skip');
   await page.reload();
   await expectWorkspaceReady(page);
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
 
   const alpha = page.getByTestId('design-file-row-download-alpha.txt');
   const beta = page.getByTestId('design-file-row-download-beta.txt');
@@ -845,7 +846,7 @@ test('[P0] @critical file workspace restores HTML preview after switching throug
     name: 'Risk Dashboard',
   })).toBeVisible();
 
-  await page.getByTestId('design-files-tab').click();
+  await openAllProjectFiles(page);
   const sourceRow = page.locator('[data-testid^="design-file-row-"]', {
     hasText: 'logic.ts',
   });
@@ -907,7 +908,7 @@ async function runDesignFilesTabPersistenceFlow(page: Page) {
   } else {
     // Depending on restoration timing, inactive files can either be restored as
     // tabs already or remain available from the Design Files list.
-    await page.getByTestId('design-files-tab').click();
+    await openAllProjectFiles(page);
     const secondFileRow = page.locator('[data-testid^="design-file-row-"]', {
       hasText: 'second-tab.png',
     });

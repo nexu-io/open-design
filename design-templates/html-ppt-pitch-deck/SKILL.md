@@ -1,17 +1,35 @@
 ---
 name: html-ppt-pitch-deck
-description: Investor-ready 10-slide HTML pitch deck — white + blue→purple gradient hero, big numbers, traction bar chart, $4.5M-style ask page. Use when the user wants a fundraising deck, seed-round pitch, or VC meeting slides.
-triggers:
-  - "pitch deck"
-  - "pitch"
+en_name: "Write a Demo Day Pitch like a Top Accelerator Partner"
+zh_name: "像顶级加速器合伙人一样写 Demo Day 路演"
+description: |
+  Open Design's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Built as a decision-grade fundraising pitch deck for accelerator partners, angels.
+en_description: |
+  Open Design's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Built as a decision-grade fundraising pitch deck for accelerator partners, angels.
+zh_description: |
+  像顶级加速器合伙人一样写 Demo Day 路演——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "fundraising-pitch"
+  - "series-a-pitch-deck"
+  - "finance"
+  - "pitch-deck"
   - "fundraising"
-  - "seed round"
-  - "investor deck"
-  - "vc deck"
-  - "pitch slides"
+  - "investor-deck"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-pitch-deck"
+triggers:
+  - "series-a-pitch-deck"
+  - "fundraising-pitch"
+  - "Write a Demo Day Pitch like a Top Accelerator Partner"
+  - "像顶级加速器合伙人一样写 Demo Day 路演"
+  - "pitch-deck"
+  - "fundraising"
+  - "investor-deck"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: finance
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -20,7 +38,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "Build a 10-slide pitch deck in HTML for my seed round. Use the html-ppt-pitch-deck full-deck template (white + blue→purple gradient, traction bars, $X.XM ask). Confirm three things first: (1) name + one-line pitch, (2) key traction numbers, (3) ask + use of funds."
+  category: "fundraising-pitch"
+  scenario: "finance"
+  example_prompt: "Create \"Write a Demo Day Pitch like a Top Accelerator Partner\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: Open Design's demo-day pitch: hook, traction, moat, and the raise — built to make a partner sit up by page three. Audience: accelerator partners, angels. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent."
 ---
 # HTML PPT · Pitch Deck
 

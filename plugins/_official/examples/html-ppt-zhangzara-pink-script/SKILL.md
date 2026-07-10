@@ -1,23 +1,34 @@
 ---
 name: html-ppt-zhangzara-pink-script
+en_name: "Turn an Anniversary into a Photo Essay like a Wedding Storyteller"
+zh_name: "像婚礼讲述者一样把纪念日做成影像散文"
 description: |
-  Pink Script — After Hours — Black canvas, hot pink accent, pearl-cream paper, Instrument Serif headlines: late-night editorial luxury. Anything that should feel nocturnal, intentional, and a little luxe: fashion brand decks, creator personal brands, after-hours / nightlife / spirits launches, luxury product reveals, editorial features.
+  A wedding-anniversary tribute photo essay — a decade in scenes, the turning points, and the quiet meaning of staying. Built as a decision-grade story deck for couple, family, friends.
+en_description: |
+  A wedding-anniversary tribute photo essay — a decade in scenes, the turning points, and the quiet meaning of staying. Built as a decision-grade story deck for couple, family, friends.
+zh_description: |
+  像婚礼讲述者一样把纪念日做成影像散文——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "life"
+  - "travel-photo-essay-deck"
+  - "personal"
+  - "story"
+  - "photo-essay"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-pink-script"
 triggers:
-  - "pink-script"
-  - "zhangzara-pink-script"
-  - "Pink Script — After Hours"
-  - "nocturnal"
-  - "moody"
-  - "literary"
-  - "sultry"
-  - "fashion brand deck"
-  - "creator personal brand"
+  - "travel-photo-essay-deck"
+  - "life"
+  - "Turn an Anniversary into a Photo Essay like a Wedding Storyteller"
+  - "像婚礼讲述者一样把纪念日做成影像散文"
+  - "story"
+  - "personal"
+  - "photo-essay"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/pink-script"
   upstream_license: MIT
   preview:
@@ -27,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "life"
+  scenario: "personal"
+  example_prompt: "Create \"Turn an Anniversary into a Photo Essay like a Wedding Storyteller\" as a decision-grade Life & story deck in this template's own visual system. Subject: A wedding-anniversary tribute photo essay — a decade in scenes, the turning points, and the quiet meaning of staying. Audience: couple, family, friends. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once."
 ---
 
 # Pink Script — After Hours

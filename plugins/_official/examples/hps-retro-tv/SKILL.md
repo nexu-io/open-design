@@ -1,21 +1,35 @@
 ---
 name: hps-retro-tv
-description: Retro TV deck — 80s/90s picture-tube nostalgia as a locked single-theme HTML deck. Warm cream canvas with CRT scanlines overlaid on every slide, curved-glass tube vignette, amber #e67e14 / brick-red #c73a1f accents, Playfair Display headlines with heavy offset shadows, test-card color bars and antenna/dial SVG decor. Based on the retro-tv theme from lewislulu/html-ppt-skill. Use when the user wants a warm, nostalgic, broadcast-era presentation, media pitch, retro product launch, or year-in-review deck.
+en_name: "Turn Home Movies into a Family-History Story like a Documentary Editor"
+zh_name: "像纪录片剪辑师一样把家庭影像做成家族史"
+description: |
+  A family history told through five decades of home movies — the opening question, the eras, and what the footage reveals. Built as a decision-grade story deck for family, close friends.
+en_description: |
+  A family history told through five decades of home movies — the opening question, the eras, and what the footage reveals. Built as a decision-grade story deck for family, close friends.
+zh_description: |
+  像纪录片剪辑师一样把家庭影像做成家族史——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "life"
+  - "travel-photo-essay-deck"
+  - "personal"
+  - "story"
+  - "photo-essay"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "hps-retro-tv"
 triggers:
-  - "retro tv"
-  - "crt"
-  - "scanlines"
-  - "picture tube"
-  - "broadcast deck"
-  - "nostalgic presentation"
-  - "复古电视"
-  - "显像管"
-  - "扫描线"
-  - "老电视"
+  - "travel-photo-essay-deck"
+  - "life"
+  - "Turn Home Movies into a Family-History Story like a Documentary Editor"
+  - "像纪录片剪辑师一样把家庭影像做成家族史"
+  - "story"
+  - "personal"
+  - "photo-essay"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
-  scenario: product
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -24,9 +38,11 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "Use Retro TV to turn my content into a single-file 80s picture-tube HTML deck: warm cream canvas with CRT scanlines on every slide, amber and brick-red accents, Playfair Display headlines with heavy shadows, test-card color bars and antenna decor. Start from the seed example.html — keep its token sheet, slide scaffold and keyboard runtime exactly as-is, replace slide content only, and use real content with no lorem ipsum."
   example_prompt_i18n:
     zh-CN: "用复古显像管把我的内容做成一套 80 年代老电视机风格的单文件 HTML 幻灯片：暖奶油底每页叠加 CRT 扫描线、琥珀与砖红 accent、Playfair Display 厚重投影大标题、检验图彩条和天线装饰。从种子 example.html 出发——完整保留 token 表、slide 骨架和键盘运行时，只替换幻灯片内容，使用真实内容，不要 lorem ipsum。"
+  category: "life"
+  scenario: "personal"
+  example_prompt: "Create \"Turn Home Movies into a Family-History Story like a Documentary Editor\" as a decision-grade Life & story deck in this template's own visual system. Subject: A family history told through five decades of home movies — the opening question, the eras, and what the footage reveals. Audience: family, close friends. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once."
 ---
 
 # Retro TV（复古显像管）

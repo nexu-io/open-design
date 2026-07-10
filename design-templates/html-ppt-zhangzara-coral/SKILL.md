@@ -1,22 +1,35 @@
 ---
 name: html-ppt-zhangzara-coral
+en_name: "Plan a Community-Growth Campaign like a Head of Growth"
+zh_name: "像增长负责人一样规划社区增长战役"
 description: |
-  Coral — Cream and coral on near-black, set in oversized Bebas Neue. Anything that should feel warm-graphic and editorial: fashion, beauty, fitness, F&B, lifestyle brands, agency credentials.
+  Open Design's community-growth campaign across GitHub, Discord, and X: the loops, the content calendar, and the pipeline math. Built as a decision-grade marketing & GTM deck for growth team, community lead.
+en_description: |
+  Open Design's community-growth campaign across GitHub, Discord, and X: the loops, the content calendar, and the pipeline math. Built as a decision-grade marketing & GTM deck for growth team, community lead.
+zh_description: |
+  像增长负责人一样规划社区增长战役——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "marketing-gtm"
+  - "annual-marketing-plan"
+  - "marketing"
+  - "launch"
+  - "campaign"
+  - "pipeline"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-coral"
 triggers:
-  - "coral"
-  - "zhangzara-coral"
-  - "bold"
-  - "warm"
-  - "graphic"
-  - "punchy"
-  - "fashion / beauty pitch"
-  - "fitness brand"
+  - "annual-marketing-plan"
+  - "marketing-gtm"
+  - "Plan a Community-Growth Campaign like a Head of Growth"
+  - "像增长负责人一样规划社区增长战役"
+  - "launch"
+  - "campaign"
+  - "pipeline"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/coral"
   upstream_license: MIT
   preview:
@@ -26,6 +39,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "marketing-gtm"
+  scenario: "marketing"
+  example_prompt: "Create \"Plan a Community-Growth Campaign like a Head of Growth\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's community-growth campaign across GitHub, Discord, and X: the loops, the content calendar, and the pipeline math. Audience: growth team, community lead. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth."
 ---
 
 # Coral

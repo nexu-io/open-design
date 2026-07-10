@@ -38,7 +38,10 @@ import { emittedRenderableQuestionForm } from '../question-form-detect.js';
 // Tool names cover Claude-style, Codex-style, and the ACP/MCP shapes
 // the daemon proxies. Keep aligned with the web-side `WRITE_NAMES` /
 // `EDIT_NAMES` sets in `apps/web/src/runtime/file-ops.ts`.
-const WRITE_OR_EDIT_TOOL_NAMES: ReadonlySet<string> = new Set([
+// Exported so the incremental side-effect ledger
+// (`run-lifecycle-analytics.ts`) pairs write/edit tool calls by the same
+// tool-name set the batch counter uses, keeping the two in lock-step.
+export const WRITE_OR_EDIT_TOOL_NAMES: ReadonlySet<string> = new Set([
   'Write',
   'create_file',
   'Edit',
@@ -47,7 +50,8 @@ const WRITE_OR_EDIT_TOOL_NAMES: ReadonlySet<string> = new Set([
   'multi_edit',
 ]);
 
-function extractToolFilePath(input: unknown): string | null {
+// Exported so the incremental ledger extracts the written path identically.
+export function extractToolFilePath(input: unknown): string | null {
   if (!input || typeof input !== 'object') return null;
   const obj = input as { file_path?: unknown; path?: unknown };
   if (typeof obj.file_path === 'string' && obj.file_path) return obj.file_path;
@@ -121,13 +125,13 @@ export interface RunEventLike {
 // event and reference it via `toolUseId` on the subsequent
 // `tool_result`; see `apps/daemon/src/langfuse-bridge.ts#collectToolCalls`
 // for the canonical implementation.
-function readToolUseId(data: unknown): string | null {
+export function readToolUseId(data: unknown): string | null {
   if (!data || typeof data !== 'object') return null;
   const obj = data as { id?: unknown };
   return typeof obj.id === 'string' && obj.id ? obj.id : null;
 }
 
-function readToolResultId(data: unknown): string | null {
+export function readToolResultId(data: unknown): string | null {
   if (!data || typeof data !== 'object') return null;
   const obj = data as { toolUseId?: unknown };
   return typeof obj.toolUseId === 'string' && obj.toolUseId
@@ -135,7 +139,7 @@ function readToolResultId(data: unknown): string | null {
     : null;
 }
 
-function readToolResultIsError(data: unknown): boolean {
+export function readToolResultIsError(data: unknown): boolean {
   if (!data || typeof data !== 'object') return false;
   return (data as { isError?: unknown }).isError === true;
 }

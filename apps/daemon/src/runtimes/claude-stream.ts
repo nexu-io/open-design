@@ -484,6 +484,13 @@ export function createClaudeStreamHandler(
     }
 
     if (obj.type === 'result') {
+      // An is_error result is an error termination, not a clean turn: the CLI
+      // is about to exit non-zero (error_during_execution, error_max_turns,
+      // resume failures) and the human-readable cause lives in errors[], not
+      // in any assistant message. Washing it into a plain usage event lets the
+      // close handler classify the run as succeeded with nothing surfaced.
+      // Mirrors the qoder-stream result contract.
+      const isError = obj.is_error === true;
       onEvent({
         type: 'usage',
         usage: obj.usage ?? null,
@@ -493,9 +500,33 @@ export function createClaudeStreamHandler(
           (typeof obj.stop_reason === 'string' && obj.stop_reason) ||
           (typeof obj.terminal_reason === 'string' && obj.terminal_reason) ||
           null,
+        ...(isError ? { isError: true } : {}),
       });
+      if (isError) {
+        onEvent({
+          type: 'error',
+          message: errorResultMessage(obj),
+          code: typeof obj.subtype === 'string' && obj.subtype ? obj.subtype : 'result_error',
+          // Marks this as the run's terminal error (the CLI is exiting), not an
+          // in-stream hiccup. Consumers with their own result-frame
+          // classification (connection test #4501) skip terminal errors.
+          terminal: true,
+        });
+      }
       return;
     }
+  }
+
+  function errorResultMessage(obj: Record<string, unknown>): string {
+    if (Array.isArray(obj.errors)) {
+      const parts = obj.errors.filter(
+        (entry): entry is string => typeof entry === 'string' && entry.length > 0,
+      );
+      if (parts.length > 0) return parts.join('\n');
+    }
+    if (typeof obj.result === 'string' && obj.result.trim()) return obj.result;
+    if (typeof obj.subtype === 'string' && obj.subtype) return `Claude run failed: ${obj.subtype}`;
+    return 'Claude run failed';
   }
 
   function assistantText(content: unknown[]): string {

@@ -345,4 +345,50 @@ describe('QuestionFormView', () => {
       { accent: '#000000', weight: '0' },
     );
   });
+
+  it('submits selected file objects without persisting file names as drafts', () => {
+    const fileForm = {
+      id: 'references',
+      title: 'References',
+      questions: [
+        {
+          id: 'assets',
+          label: 'Reference assets',
+          type: 'file',
+          multiple: true,
+          accept: 'image/*,.pdf',
+          required: true,
+        },
+      ],
+    } as QuestionForm;
+    const onSubmit = vi.fn();
+    const onDraftChange = vi.fn();
+    const { container } = render(
+      <QuestionFormView
+        form={fileForm}
+        interactive
+        onSubmit={onSubmit}
+        onDraftChange={onDraftChange}
+      />,
+    );
+
+    const submit = screen.getByRole('button', { name: 'Send answers' }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement | null;
+    if (!input) throw new Error('expected file input');
+    const first = new File(['a'], 'mood.png', { type: 'image/png' });
+    const second = new File(['b'], 'brief.pdf', { type: 'application/pdf' });
+    fireEvent.change(input, { target: { files: [first, second] } });
+
+    expect(onDraftChange).toHaveBeenLastCalledWith({});
+    expect(submit.disabled).toBe(false);
+    fireEvent.click(submit);
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      '[form answers — references]\n- Reference assets: mood.png, brief.pdf',
+      { assets: ['mood.png', 'brief.pdf'] },
+      [{ questionId: 'assets', questionLabel: 'Reference assets', files: [first, second] }],
+    );
+  });
 });

@@ -1,17 +1,35 @@
 ---
 name: html-ppt-course-module
-description: Online-course / workshop module deck — warm paper background + Playfair serif, persistent left sidebar of learning objectives, MCQ self-check page. Use for teaching modules, training materials, workshop slides.
-triggers:
-  - "course module"
-  - "course slides"
+en_name: "Build a New-Hire Onboarding Module like a Top Enablement Lead"
+zh_name: "像顶级赋能负责人一样做新人培训模块"
+description: |
+  A first-30-days onboarding module for new hospitality hires — the behaviors, the practice, the checks, and the manager follow-up. Built as a decision-grade professional training deck for new hires, managers.
+en_description: |
+  A first-30-days onboarding module for new hospitality hires — the behaviors, the practice, the checks, and the manager follow-up. Built as a decision-grade professional training deck for new hires, managers.
+zh_description: |
+  像顶级赋能负责人一样做新人培训模块——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "professional-training"
+  - "employee-onboarding-deck"
+  - "education"
+  - "training-deck"
   - "workshop"
-  - "training deck"
-  - "lesson"
-  - "教学"
-  - "课件"
+  - "course-module"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-course-module"
+triggers:
+  - "employee-onboarding-deck"
+  - "professional-training"
+  - "Build a New-Hire Onboarding Module like a Top Enablement Lead"
+  - "像顶级赋能负责人一样做新人培训模块"
+  - "training-deck"
+  - "workshop"
+  - "course-module"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
-  scenario: education
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html
@@ -20,7 +38,9 @@ od:
     requires: false
   speaker_notes: true
   animations: true
-  example_prompt: "Use the html-ppt-course-module template to build a 7-slide module deck. Confirm: module title, 3-5 learning objectives (these stick on the left rail), and the MCQ self-check question. Then assemble the deck with serif headings on warm paper."
+  category: "professional-training"
+  scenario: "education"
+  example_prompt: "Create \"Build a New-Hire Onboarding Module like a Top Enablement Lead\" as a decision-grade Professional training deck in this template's own visual system. Subject: A first-30-days onboarding module for new hospitality hires — the behaviors, the practice, the checks, and the manager follow-up. Audience: new hires, managers. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a learner perform the target task the next day."
 ---
 # HTML PPT · Course Module
 

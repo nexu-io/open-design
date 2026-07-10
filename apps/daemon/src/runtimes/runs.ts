@@ -38,6 +38,12 @@ export function createChatRunService({
   // external coding agent can `tail` the file in its own shell during
   // a long OD generation, instead of polling blindly and giving up.
   runsLogDir = null,
+  // Optional observer invoked for every emitted event BEFORE the in-memory
+  // ring buffer is truncated. The daemon uses it to fold committed side
+  // effects (tool calls, artifact writes) into a per-run accumulator that
+  // outlives buffer truncation. Kept generic here: this service does not
+  // interpret event semantics, it just hands each record to the observer.
+  onEventEmitted = null,
 }) {
   const runs = new Map();
 
@@ -155,6 +161,11 @@ export function createChatRunService({
     }
     const id = run.nextEventId++;
     const record = { id, event, data, timestamp: Date.now() };
+    // Fold committed side effects BEFORE the ring buffer can drop this record,
+    // so the finalization-time verdict survives truncation of run.events.
+    if (onEventEmitted) {
+      try { onEventEmitted(run, record); } catch { /* observer must never break emit */ }
+    }
     run.events.push(record);
     if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
     run.updatedAt = Date.now();
@@ -203,6 +214,7 @@ export function createChatRunService({
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
     toolBundle: summarizeRunToolBundle(run.toolBundle),
     ...(run.promptCache ? { promptCache: run.promptCache } : {}),
+    ...(run.nativeSessionRecovery ? { nativeSessionRecovery: run.nativeSessionRecovery } : {}),
     ...(run.browserUse ? { browserUse: run.browserUse } : {}),
   });
 

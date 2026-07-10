@@ -1,0 +1,20 @@
+{
+  "name": "chat-motion-overlay-template",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "remotion studio",
+    "render:mov": "remotion render src/index.ts ChatMotionOverlay out/chat-motion-overlay.mov --image-format=png --pixel-format=yuva444p10le --codec=prores --prores-profile=4444",
+    "render:webm": "remotion render src/index.ts ChatMotionOverlay out/chat-motion-overlay.webm --image-format=png --pixel-format=yuva420p --codec=vp9"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "^4.0.0"
+  },
+  "devDependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.5.0"
+  }
+}

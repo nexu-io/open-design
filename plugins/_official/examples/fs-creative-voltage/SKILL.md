@@ -1,24 +1,45 @@
 ---
 name: fs-creative-voltage
-description: "Creative Voltage decks: retro-modern electric blue × deep navy split panels, neon yellow badges, halftone dot textures, and script flourishes on a fixed 1920×1080 stage that scales to any viewport. Syne + Space Mono + Yellowtail. Single-file, zero-dependency HTML."
+en_name: "Write a Seed Pitch like a Top Pre-Seed Founder"
+zh_name: "像顶级 pre-seed 创始人一样写种子路演"
+description: |
+  Open Design's seed pitch: the open, local alternative to closed AI design — why now, the wedge, and the ask. Built as a decision-grade fundraising pitch deck for pre-seed & seed VCs.
+en_description: |
+  Open Design's seed pitch: the open, local alternative to closed AI design — why now, the wedge, and the ask. Built as a decision-grade fundraising pitch deck for pre-seed & seed VCs.
+zh_description: |
+  像顶级 pre-seed 创始人一样写种子路演——一份可商业交付的融资路演 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "fundraising-pitch"
+  - "series-a-pitch-deck"
+  - "finance"
+  - "pitch-deck"
+  - "fundraising"
+  - "investor-deck"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "fs-creative-voltage"
 triggers:
-  - "creative voltage"
-  - "electric blue slides"
-  - "neon yellow deck"
-  - "halftone slides"
-  - "retro modern deck"
-  - "创意伏特"
+  - "series-a-pitch-deck"
+  - "fundraising-pitch"
+  - "Write a Seed Pitch like a Top Pre-Seed Founder"
+  - "像顶级 pre-seed 创始人一样写种子路演"
+  - "pitch-deck"
+  - "fundraising"
+  - "investor-deck"
+  - "html deck"
+  - "html slides"
 od:
   mode: deck
   surface: web
-  category: slides
   upstream: "https://github.com/zarazhangrui/frontend-slides"
   preview:
     type: html
     entry: example.html
-  example_prompt: "Use the Creative Voltage theme to turn my content into a single-file HTML deck: electric blue × deep navy split panels, neon yellow badges, halftone dot textures, script flourishes, Syne + Space Mono typography, on a fixed 1920×1080 stage with keyboard navigation and hash routing. Start from example.html and replace only the content — keep the design system."
   example_prompt_i18n:
     zh-CN: "用「创意伏特」主题把我的内容做成单文件 HTML 幻灯片：电光蓝 × 深海军撞色分割版面、荧光黄徽章、halftone 网点纹理、script 手写点缀，Syne + Space Mono 字体，固定 1920×1080 舞台等比缩放、键盘导航 + hash 路由。从 example.html 出发只替换内容，保留设计系统。"
+  category: "fundraising-pitch"
+  scenario: "finance"
+  example_prompt: "Create \"Write a Seed Pitch like a Top Pre-Seed Founder\" as a decision-grade Fundraising pitch deck in this template's own visual system. Subject: Open Design's seed pitch: the open, local alternative to closed AI design — why now, the wedge, and the ask. Audience: pre-seed & seed VCs. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would an investor know why this is venture-scale and urgent."
 ---
 
 # Creative Voltage (fs-creative-voltage)

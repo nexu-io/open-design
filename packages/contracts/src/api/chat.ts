@@ -373,6 +373,67 @@ export interface ChatRunCreateResponse {
   pluginId?: string | null;
 }
 
+export type NativeSessionRecoveryState =
+  | 'not_applicable'
+  | 'no_recoverable_session'
+  | 'captured_not_resumed'
+  | 'resume_attempted'
+  | 'resumed'
+  | 'resume_skipped'
+  | 'auto_reseeded';
+
+export type NativeSessionHandleKind =
+  | 'opaque-id'
+  | 'cli-thread-id'
+  | 'acp-session-handle'
+  | 'session-file-path'
+  | 'unknown';
+
+export type NativeSessionAcquisitionMode =
+  | 'daemon-specified'
+  | 'stream-captured'
+  | 'acp-session-load'
+  | 'session-file-discovered'
+  | 'none'
+  | 'unknown';
+
+export type NativeSessionContinuationMode =
+  | 'native-resume-by-id'
+  | 'acp-session-load'
+  | 'session-file-resume'
+  | 'none'
+  | 'unknown';
+
+export type NativeSessionRecoveryReason =
+  | 'model_changed'
+  | 'cwd_changed'
+  | 'conversation_advanced'
+  | 'missing_cursor'
+  | 'resume_failed'
+  | 'unsupported'
+  | 'none';
+
+export interface NativeSessionRecoveryHandle {
+  present: boolean;
+  kind: NativeSessionHandleKind;
+  /** Always null unless a future per-agent rule declares the handle safe. */
+  display: string | null;
+  /** Stable correlation value for support without exposing the raw handle. */
+  sha256: string | null;
+  redacted: boolean;
+}
+
+export interface NativeSessionRecoveryMetadata {
+  agentId: string | null;
+  state: NativeSessionRecoveryState;
+  acquisition: NativeSessionAcquisitionMode;
+  continuation: NativeSessionContinuationMode;
+  handle: NativeSessionRecoveryHandle;
+  guardReason: NativeSessionRecoveryReason | null;
+  fallbackReason: NativeSessionRecoveryReason | null;
+  updatedAt: number;
+}
+
 export interface ChatRunStatusResponse {
   id: string;
   projectId: string | null;
@@ -431,6 +492,8 @@ export interface ChatRunStatusResponse {
     hit: boolean;
     missReason: 'new-session' | 'missing-stored-hash' | 'stable-prompt-changed' | null;
   };
+  /** Sanitized native-session recovery state for resume-capable agents. */
+  nativeSessionRecovery?: NativeSessionRecoveryMetadata;
   /** Browser Use availability for runs that requested in-app browser automation. */
   browserUse?: BrowserUseRunState;
   /** Effective storage/provenance for the workspace used by this run. */

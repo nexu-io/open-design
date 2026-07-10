@@ -517,6 +517,34 @@ describe('DesignBrowserPanel <webview> navigation', () => {
     expect(webview.getAttribute('src')).toBe('https://unsplash.com');
   });
 
+  it('swallows benign Electron webview ERR_ABORTED loadURL rejections', async () => {
+    const { container } = render(
+      <DesignBrowserPanel
+        projectId="proj-webview-aborted-load"
+        initialUrl="https://example.com"
+        onOpenFile={() => {}}
+        onRefreshFiles={() => {}}
+      />,
+    );
+
+    const webview = container.querySelector('webview.db-webview') as HTMLElement & {
+      loadURL?: (url: string) => Promise<void>;
+    };
+    const loadURL = vi.fn().mockRejectedValue(
+      new Error("ERR_ABORTED (-3) loading 'https://mobbin.com/'"),
+    );
+    webview.loadURL = loadURL;
+
+    const input = screen.getByLabelText('Browser address') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'mobbin.com' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => expect(loadURL).toHaveBeenCalledWith('https://mobbin.com'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(webview.getAttribute('src')).toBe('https://example.com');
+    expect(getAddressDisplay(container).url).toBe('https://mobbin.com');
+  });
+
   it('derives back and forward availability from the committed navigation stack', () => {
     const { container } = render(
       <DesignBrowserPanel projectId="proj-webview-3" onOpenFile={() => {}} onRefreshFiles={() => {}} />,

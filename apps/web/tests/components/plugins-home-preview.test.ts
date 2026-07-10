@@ -141,6 +141,24 @@ describe('inferPluginPreview', () => {
     expect(gallery.loopHoldMs).toBe(2500);
   });
 
+  it('keeps commercial slide templates on live HTML even when a stale baked preview exists', () => {
+    const record = make({
+      id: 'commercial-deck',
+      tags: ['commercial-slide-agent'],
+      preview: { type: 'html', entry: './example.html' },
+      bakedPreview: {
+        poster: '/api/plugin-previews/commercial-deck/old/poster.jpg',
+        video: '/api/plugin-previews/commercial-deck/old/preview.mp4',
+      },
+    });
+
+    const gallery = inferPluginPreview(record, { preferBaked: true });
+    expect(gallery.kind).toBe('html');
+    if (gallery.kind !== 'html') return;
+    expect(gallery.src).toBe('/api/plugins/commercial-deck/preview');
+    expect(gallery.label).toBe('example.html');
+  });
+
   it('falls back to the first exampleOutputs entry when no preview block is set', () => {
     const out = inferPluginPreview(
       make({

@@ -1,23 +1,34 @@
 ---
 name: html-ppt-zhangzara-retro-zine
+en_name: "Make a Neighborhood Zine Story like an Indie Photo Editor"
+zh_name: "像独立图片编辑一样做街区 zine 故事"
 description: |
-  Retro Zine — Beige paper with green accent and Bebas Neue + Caveat: a riso-printed zine in HTML form. Anything that should feel printed, lo-fi, and crafted: indie zines and publications, music / arts brands, creator portfolios, small-batch craft launches, community decks.
+  A neighborhood zine on the disappearing corner shops — portraits, voices, and what a block loses when they close. Built as a decision-grade story deck for community, local readers.
+en_description: |
+  A neighborhood zine on the disappearing corner shops — portraits, voices, and what a block loses when they close. Built as a decision-grade story deck for community, local readers.
+zh_description: |
+  像独立图片编辑一样做街区 zine 故事——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。
+tags:
+  - "life"
+  - "travel-photo-essay-deck"
+  - "personal"
+  - "story"
+  - "photo-essay"
+  - "decision-deck"
+  - "commercial-slide-agent"
+  - "html-ppt-zhangzara-retro-zine"
 triggers:
-  - "retro-zine"
-  - "zhangzara-retro-zine"
-  - "Retro Zine"
-  - "crafted"
-  - "lo-fi"
-  - "scrappy"
-  - "warm"
-  - "indie zine / publication"
-  - "music or arts brand"
+  - "travel-photo-essay-deck"
+  - "life"
+  - "Make a Neighborhood Zine Story like an Indie Photo Editor"
+  - "像独立图片编辑一样做街区 zine 故事"
+  - "story"
+  - "personal"
+  - "photo-essay"
   - "html deck"
   - "html slides"
-  - "zhangzara"
 od:
   mode: deck
-  scenario: marketing
   upstream: "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/retro-zine"
   upstream_license: MIT
   preview:
@@ -27,6 +38,9 @@ od:
     requires: false
   speaker_notes: false
   animations: false
+  category: "life"
+  scenario: "personal"
+  example_prompt: "Create \"Make a Neighborhood Zine Story like an Indie Photo Editor\" as a decision-grade Life & story deck in this template's own visual system. Subject: A neighborhood zine on the disappearing corner shops — portraits, voices, and what a block loses when they close. Audience: community, local readers. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once."
 ---
 
 # Retro Zine

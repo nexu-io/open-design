@@ -836,6 +836,7 @@ const DAEMON_OWNED_KEYS = new Set<keyof AppConfig>([
   'installationId',
   'telemetry',
   'privacyDecisionAt',
+  'allowSilentUpdates',
 ]);
 
 const AGENT_CLI_SECRET_ENV_KEYS = new Set([
@@ -942,6 +943,11 @@ export function mergeDaemonConfig(
       content: next.telemetry?.content ?? true,
       artifactManifest: next.telemetry?.artifactManifest ?? false,
     };
+  }
+  if (daemonConfig.allowSilentUpdates !== undefined) {
+    next.allowSilentUpdates = daemonConfig.allowSilentUpdates;
+  } else {
+    delete next.allowSilentUpdates;
   }
   if (daemonConfig.customInstructions !== undefined) {
     next.customInstructions = daemonConfig.customInstructions ?? undefined;
@@ -1066,6 +1072,7 @@ export async function syncConfigToDaemon(
     installationId: config.installationId,
     telemetry: config.telemetry,
     privacyDecisionAt: config.privacyDecisionAt,
+    allowSilentUpdates: config.allowSilentUpdates,
     customInstructions: config.customInstructions ?? null,
     projectLocations: config.projectLocations ?? [],
     defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',
