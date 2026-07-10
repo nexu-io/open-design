@@ -5,6 +5,7 @@ import type {
   InspectOverrideMap,
   InspectOverridePayload,
   InspectSpliceScan,
+  StrokePoint,
 } from './types';
 
 // Allow-list of CSS properties the host will persist on Save. Mirrors the
@@ -394,4 +395,120 @@ export function applyInspectOverridesToSource(source: string, css: string): stri
     return out.slice(0, headOpenEnd) + block + out.slice(headOpenEnd);
   }
   return block + out;
+}
+
+// ---------------------------------------------------------------------------
+// Geometry + CSS-length helpers for the board/inspect overlays. All pure math
+// over plain point/rect records (no DOM), so they test with zero doubles.
+// ---------------------------------------------------------------------------
+
+// Parse an `rgb()`/`rgba()`/`#rgb`/`#rrggbb` value into a `#rrggbb` string,
+// defaulting to black when the value is missing or unrecognized.
+export function rgbToHex(value: string | undefined): string {
+  if (!value) return '#000000';
+  const v = value.trim();
+  if (v.startsWith('#') && (v.length === 7 || v.length === 4)) {
+    if (v.length === 4) {
+      return '#' + [1, 2, 3].map((i) => {
+        const c = v.charAt(i);
+        return c + c;
+      }).join('');
+    }
+    return v;
+  }
+  const m = v.match(/rgba?\(\s*([0-9.]+)[ ,]+([0-9.]+)[ ,]+([0-9.]+)/i);
+  if (!m) return '#000000';
+  const toHex = (n: string) => {
+    const x = Math.max(0, Math.min(255, Math.round(Number(n))));
+    return x.toString(16).padStart(2, '0');
+  };
+  return '#' + toHex(m[1] ?? '0') + toHex(m[2] ?? '0') + toHex(m[3] ?? '0');
+}
+
+// Parse a CSS length to a number. Inspect's current sliders all clamp to a
+// non-negative range (padding, font-size, border-radius), so we reject
+// negatives at parse time too — otherwise a `-12px` source value would be
+// silently floored to 0 by the slider clamp without the regex agreeing.
+// If a future control needs negative values (e.g. margin), thread an
+// explicit `allowNegative` flag rather than reintroducing `-?` here.
+export function pxToNumber(value: string | undefined): number {
+  if (!value) return 0;
+  const m = value.trim().match(/^(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : 0;
+}
+
+export function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+export function isClosedLoop(points: StrokePoint[]): boolean {
+  if (points.length < 4) return false;
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  return Math.hypot(first.x - last.x, first.y - last.y) <= 28;
+}
+
+export function rectContains(
+  outer: { x: number; y: number; width: number; height: number },
+  inner: { x: number; y: number; width: number; height: number },
+): boolean {
+  return (
+    outer.x <= inner.x &&
+    outer.y <= inner.y &&
+    outer.x + outer.width >= inner.x + inner.width &&
+    outer.y + outer.height >= inner.y + inner.height
+  );
+}
+
+export function pathIntersectsRect(
+  points: StrokePoint[],
+  rect: { left: number; top: number; width: number; height: number },
+): boolean {
+  if (points.length === 0) return false;
+  const x1 = rect.left;
+  const y1 = rect.top;
+  const x2 = rect.left + rect.width;
+  const y2 = rect.top + rect.height;
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index]!;
+    if (point.x >= x1 && point.x <= x2 && point.y >= y1 && point.y <= y2) {
+      return true;
+    }
+    const next = points[index + 1];
+    if (!next) continue;
+    if (
+      lineIntersectsLine(point, next, { x: x1, y: y1 }, { x: x2, y: y1 }) ||
+      lineIntersectsLine(point, next, { x: x2, y: y1 }, { x: x2, y: y2 }) ||
+      lineIntersectsLine(point, next, { x: x2, y: y2 }, { x: x1, y: y2 }) ||
+      lineIntersectsLine(point, next, { x: x1, y: y2 }, { x: x1, y: y1 })
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function pointInPolygon(point: StrokePoint, polygon: StrokePoint[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const pi = polygon[i]!;
+    const pj = polygon[j]!;
+    const intersects =
+      pi.y > point.y !== pj.y > point.y &&
+      point.x <
+        ((pj.x - pi.x) * (point.y - pi.y)) / ((pj.y - pi.y) || Number.EPSILON) + pi.x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function lineIntersectsLine(a1: StrokePoint, a2: StrokePoint, b1: StrokePoint, b2: StrokePoint): boolean {
+  const denominator =
+    (a2.x - a1.x) * (b2.y - b1.y) - (a2.y - a1.y) * (b2.x - b1.x);
+  if (denominator === 0) return false;
+  const ua =
+    ((b2.x - b1.x) * (a1.y - b1.y) - (b2.y - b1.y) * (a1.x - b1.x)) / denominator;
+  const ub =
+    ((a2.x - a1.x) * (a1.y - b1.y) - (a2.y - a1.y) * (a1.x - b1.x)) / denominator;
+  return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
 }
