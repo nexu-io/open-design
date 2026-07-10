@@ -87,13 +87,11 @@ describe('SSE reattach gap backfill', () => {
     const body = await res.text();
     const ids = [...body.matchAll(/^id:\s*(\d+)/gm)].map((m) => Number(m[1]));
 
-    // INVARIANT: the replay resumes exactly at cursor+1 and skips nothing.
-    expect(ids[0]).toBe(cursor + 1);
-    expect(ids).toContain(cursor + 1);
-    // No gap anywhere in the replayed prefix down to the buffer boundary.
-    for (let i = 1; i < ids.length; i++) {
-      expect(ids[i]).toBe(ids[i - 1] + 1);
-    }
+    // INVARIANT: the replay resumes exactly at cursor+1 and skips nothing — the
+    // ids are a contiguous run [cursor+1, cursor+2, ...] with no gap.
+    expect(ids.length).toBeGreaterThan(0);
+    const contiguous = Array.from({ length: ids.length }, (_, i) => cursor + 1 + i);
+    expect(ids).toEqual(contiguous);
   });
 });
 
