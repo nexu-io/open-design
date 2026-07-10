@@ -1009,6 +1009,35 @@ describe('deployToDisplayDev', () => {
     });
   });
 
+  it.each([200, 201])('maps display.dev %i non-JSON responses to upstream unavailable', async (status) => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      if (url.endsWith('/v1/public/artifacts')) {
+        return new Response('<!doctype html><title>Login</title>', {
+          status,
+          headers: { 'content-type': 'text/html' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    }));
+
+    await expect(deployToDisplayDev({
+      config: { token: '', apiUrl: 'https://api.display.dev' },
+      files: [{ file: 'index.html', sourcePath: 'index.html', data: '<!doctype html><h1>Hello</h1>', contentType: 'text/html' }],
+      projectId: 'project-1',
+    })).rejects.toMatchObject({
+      status: 502,
+      code: 'UPSTREAM_UNAVAILABLE',
+      message: 'display.dev returned a non-JSON response.',
+      details: { upstreamStatus: status },
+    });
+  });
+
   it('publishes authenticated artifacts with visibility fields', async () => {
     const calls: Array<{ url: string; method?: string; auth?: string | null; body?: FormData }> = [];
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {

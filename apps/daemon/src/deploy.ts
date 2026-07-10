@@ -2353,12 +2353,11 @@ async function readDisplayDevJson(resp: Response): Promise<JsonObject> {
   try {
     return await resp.json() as JsonObject;
   } catch {
-    const status = resp.status || 502;
     throw new DeployError(
       'display.dev returned a non-JSON response.',
-      displayDevRouteStatusForStatus(status),
-      undefined,
-      displayDevApiErrorCodeForStatus(status),
+      502,
+      { upstreamStatus: resp.status || null },
+      'UPSTREAM_UNAVAILABLE',
     );
   }
 }
