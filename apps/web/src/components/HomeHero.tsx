@@ -1204,7 +1204,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     <section ref={homeHeroRef} className="home-hero" data-testid="home-hero">
       <div className="home-hero__brand" aria-hidden>
         <span className="home-hero__brand-mark">
-          <img src="/app-icon.svg" alt="" draggable={false} />
+          <img src="/brand-icon.svg" alt="" draggable={false} />
         </span>
         <span className="home-hero__brand-name">Open Design</span>
       </div>

@@ -138,6 +138,8 @@ function formatBillingTier(tier: string, t: ReturnType<typeof useI18n>['t']): st
 export function EntryNavRail({
   view,
   onViewChange,
+  onNewProject,
+  newProjectDisabled,
   open,
   context,
   billing,
@@ -418,6 +420,17 @@ export function EntryNavRail({
           <input type="text" placeholder={t('common.search')} readOnly tabIndex={-1} />
         </div>
 
+        {context ? (
+          <NavButton
+            ariaLabel={t('entry.navNewProject')}
+            tooltip={t('entry.navNewProject')}
+            onClick={onNewProject}
+            disabled={newProjectDisabled}
+            testId="entry-nav-new-project"
+          >
+            <Icon name="plus" size={18} />
+          </NavButton>
+        ) : null}
         <NavButton
           active={isHome}
           ariaLabel={t('entry.navRecents')}

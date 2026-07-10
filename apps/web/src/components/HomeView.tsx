@@ -100,8 +100,6 @@ import {
 } from './home-hero/plugin-authoring';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { SkillDetailsModal } from './SkillDetailsModal';
-import { HomeTemplatesReveal } from './HomeTemplatesReveal';
-import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import { localizePluginTitle } from './plugins-home/localization';
 import type { PluginUseAction } from './plugins-home/useActions';
@@ -2123,6 +2121,7 @@ export function HomeView({
         designSystems={designSystems}
         sharedProjectIds={homeSharedProjectIds}
         projectOwnerMemberIds={homeProjectOwnerMemberIds}
+        limit={7}
         {...(projectsLoading !== undefined ? { loading: projectsLoading } : {})}
         onOpen={(id) => {
           // P0 ui_click area=recent_projects element=project_card — emit
@@ -2151,24 +2150,6 @@ export function HomeView({
         {...(onDuplicateProject ? { onDuplicate: onDuplicateProject } : {})}
         {...(onRenameProject ? { onRename: onRenameProject } : {})}
       />
-
-      <HomeTemplatesReveal
-        enabled={!projectsLoading && projects.length === 0}
-      >
-        <PluginsHomeSection
-          plugins={plugins}
-          loading={pluginsLoading}
-          activePluginId={active?.record.id ?? null}
-          pendingApplyId={pendingApplyId}
-          pendingDuplicateId={pendingDuplicatePluginId}
-          onUse={(record, action) => void routePluginUse(record, action)}
-          onDuplicate={(record) => void duplicateExamplePlugin(record)}
-          onOpenDetails={handleCommunityOpenDetails}
-          onBrowseRegistry={onBrowseRegistry}
-          preferDefaultFacet={false}
-          cardLayout="gallery"
-        />
-      </HomeTemplatesReveal>
 
       <AnimatePresence>
         {detailsRecord ? (
