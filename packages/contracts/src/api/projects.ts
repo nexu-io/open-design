@@ -5,6 +5,8 @@ import type {
   ProjectContextMcpServerRef,
   ProjectContextPluginRef,
 } from './context.js';
+import type { ProjectSyncIntent, ProjectSyncIntentEvent, ProjectSyncState } from './project-sync.js';
+import type { TeamResourceState } from './team-resources.js';
 
 export type ProjectKind =
   | 'prototype'
@@ -307,6 +309,83 @@ export interface ProjectResponse {
 // `resolveProjectDir(...)` so the web client never reconstructs the path.
 export interface ProjectDetailResponse extends ProjectResponse {
   resolvedDir: string;
+}
+
+export type ProjectVisibility = 'personal' | 'team';
+
+// Local D-lane placeholder until the B-owned CurrentWorkspaceContext is
+// imported into open-design. The route adapter keeps this replaceable.
+export type WorkspaceProjectRole = 'owner' | 'admin' | 'member';
+
+// C owns project sync orchestration. D exposes this on its read model and emits
+// intent metadata when visibility changes, but it does not upload or mirror
+// project content directly.
+export type WorkspaceProjectSyncIntentEvent = ProjectSyncIntentEvent;
+
+export type WorkspaceProjectSyncIntent = ProjectSyncIntent;
+
+export type ProjectDisabledReason =
+  | 'workspace_locked'
+  | 'workspace_deleted'
+  | 'permission_denied'
+  | 'sync_pending'
+  | 'resource_frozen';
+
+export interface ProjectAccessFlags {
+  canOpen: boolean;
+  canRename: boolean;
+  canDelete: boolean;
+  canDuplicate: boolean;
+  canMoveToTeam: boolean;
+  canMoveToPersonal: boolean;
+  canExport: boolean;
+  canSendTo: boolean;
+  canRestoreVersion: boolean;
+  disabledReason?: ProjectDisabledReason;
+}
+
+export interface WorkspaceProjectSummary {
+  id: string;
+  name: string;
+  workspaceId: string;
+  visibility: ProjectVisibility;
+  resourceState: TeamResourceState;
+  createdByWorkspaceMemberId: string | null;
+  updatedByWorkspaceMemberId?: string | null;
+  /**
+   * E resource-hub mapping seam. When present, this is Spec E's
+   * ResourceRecord.id for a `kind: 'project'` cloud resource. Personal projects
+   * are local-only and normally keep this null; team-visible projects receive
+   * the cloud resource through C's orchestration of E's upload/version/mirror
+   * mechanism.
+   */
+  resourceHubResourceId?: string | null;
+  /** Set when a previously shared cloud resource should be tombstoned. */
+  cloudTombstonedAt?: number | null;
+  currentUserAccess: ProjectAccessFlags;
+  syncState?: ProjectSyncState;
+  pendingSyncIntent?: WorkspaceProjectSyncIntent;
+  createdAt: number;
+  updatedAt: number;
+  metadata?: ProjectMetadata;
+  project: Project;
+}
+
+export interface WorkspaceProjectsResponse {
+  projects: WorkspaceProjectSummary[];
+}
+
+export interface MoveWorkspaceProjectRequest {
+  visibility: ProjectVisibility;
+}
+
+export interface BatchDeleteWorkspaceProjectsRequest {
+  projectIds: string[];
+}
+
+export interface BatchMoveWorkspaceProjectsRequest {
+  projectIds: string[];
+  visibility: ProjectVisibility;
 }
 
 export interface CreateProjectResponse extends ProjectResponse {

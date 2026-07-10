@@ -11,6 +11,13 @@
 // pull a version that is not yet durable. The adapter is expected to resolve only
 // on durable success (E's atomic write); this scheduler adds the coalescing.
 
+import type { ResourceHubPrincipal } from '../integrations/resource-hub.js';
+
+export interface ResourcePublishInput {
+  projectId: string;
+  principal?: ResourceHubPrincipal;
+}
+
 export interface ResourcePublishAdapter {
   /**
    * Publish the current state of a project's sync unit to the resource hub and
@@ -18,26 +25,26 @@ export interface ResourcePublishAdapter {
    * written (content-first / pointer-last). Returns the new version, or null if
    * there was nothing to publish.
    */
-  publish(input: { projectId: string; reason: string }): Promise<{ version: number } | null>;
+  publish(input: ResourcePublishInput & { reason: string }): Promise<{ version: number } | null>;
   /**
    * Read the currently-published head for a project. The scheduler decides
    * *when* a member pulls; the adapter reports what head is available. Optional:
    * the local stub reports the in-memory head; the real hub adapter resolves the
    * published ref. Returns null when nothing has been published yet.
    */
-  syncLatest?(input: { projectId: string }): Promise<{ version: number } | null>;
+  syncLatest?(input: ResourcePublishInput): Promise<{ version: number } | null>;
   /**
    * Materialize the published tree into the member's local copy. Optional: the
    * local stub has no bytes to fetch; the real hub adapter fetches the missing
    * blobs and writes the files. The scheduler decides *when* to pull.
    */
-  pull?(input: { projectId: string }): Promise<void>;
+  pull?(input: ResourcePublishInput): Promise<void>;
   /**
    * Remove the project from the shared team index. Existing immutable versions may
    * remain in the hub, but team members should no longer discover/pull it from the
    * team project list. Optional: older/local adapters can no-op.
    */
-  unpublish?(input: { projectId: string }): Promise<void>;
+  unpublish?(input: ResourcePublishInput): Promise<void>;
 }
 
 export interface CollabPublishSchedulerOptions {

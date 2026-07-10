@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { amrVelaProfileEnv } from '../integrations/vela-profile.js';
+import { projectResourceIdFor } from '../integrations/vela-team-projects.js';
+import type { ResourceHubPrincipal } from '../integrations/resource-hub.js';
 import type { ResourcePublishAdapter } from './publish-scheduler.js';
 
 // The `vela resource` transport for the publish/pull machinery (T7c). Instead of
@@ -27,8 +29,8 @@ export interface VelaCliResourceAdapterOptions {
   describeProject?: (projectId: string) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>;
   /** Where a member materializes pulled content. Defaults to the project dir. */
   resolvePullDir?: (projectId: string) => string | Promise<string>;
-  /** projectId → hub resourceId. Colon-free (routed as a path param). */
-  resourceIdFor?: (projectId: string) => string;
+  /** (projectId, principal) → hub resourceId. Colon-free (routed as a path param). */
+  resourceIdFor?: (projectId: string, principal?: ResourceHubPrincipal | null) => string;
   /** Hub resource kind (project / design_system / plugin / skill). */
   kind?: string;
   /**
@@ -50,7 +52,7 @@ export function createVelaCliResourceAdapter(
   options: VelaCliResourceAdapterOptions,
 ): ResourcePublishAdapter {
   const resolvePullDir = options.resolvePullDir ?? options.resolveProjectDir;
-  const resourceIdFor = options.resourceIdFor ?? ((projectId: string) => `project-${projectId}`);
+  const resourceIdFor = options.resourceIdFor ?? projectResourceIdFor;
   const kind = options.kind ?? PROJECT_KIND;
   const run = options.run ?? defaultRunVelaResource;
 
@@ -59,10 +61,10 @@ export function createVelaCliResourceAdapter(
   }
 
   return {
-    publish({ projectId }) {
+    publish({ projectId, principal }) {
       return gated(async () => {
         const dir = await options.resolveProjectDir(projectId);
-        const args = ['push', kind, resourceIdFor(projectId), dir, '--ref', PUBLISHED_REF, '--json'];
+        const args = ['push', kind, resourceIdFor(projectId, principal), dir, '--ref', PUBLISHED_REF, '--json'];
         const metadata = await options.describeProject?.(projectId);
         if (metadata && Object.keys(metadata).length > 0) {
           args.push('--metadata-json', JSON.stringify(metadata));
@@ -73,26 +75,26 @@ export function createVelaCliResourceAdapter(
       }, null);
     },
 
-    syncLatest({ projectId }) {
+    syncLatest({ projectId, principal }) {
       return gated(async () => {
         // `head` reports the published version without downloading — a null
         // version means nothing is published yet.
-        const out = await run(['head', resourceIdFor(projectId), '--ref', PUBLISHED_REF, '--json']);
+        const out = await run(['head', resourceIdFor(projectId, principal), '--ref', PUBLISHED_REF, '--json']);
         const version = parseVersion(out);
         return version == null ? null : { version };
       }, null);
     },
 
-    async pull({ projectId }) {
+    async pull({ projectId, principal }) {
       await gated(async () => {
         const dir = await resolvePullDir(projectId);
-        await run(['pull', kind, resourceIdFor(projectId), dir, '--ref', PUBLISHED_REF, '--json']);
+        await run(['pull', kind, resourceIdFor(projectId, principal), dir, '--ref', PUBLISHED_REF, '--json']);
       }, undefined);
     },
 
-    async unpublish({ projectId }) {
+    async unpublish({ projectId, principal }) {
       await gated(async () => {
-        await run(['remove', resourceIdFor(projectId), '--json']);
+        await run(['remove', resourceIdFor(projectId, principal), '--json']);
       }, undefined);
     },
   };

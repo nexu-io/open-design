@@ -2,13 +2,13 @@ import type { Express } from 'express';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { ProjectMetadata, ProjectSyncIntentEvent, TeamProject } from '@open-design/contracts';
+import { contextToResourceHubPrincipal } from '../collab/resource-hub-publish-adapter.js';
 import type { CollabRuntime } from '../collab/runtime.js';
-import type { VelaTeamProjectCatalog } from '../collab/vela-cli-team-projects.js';
+import type { ResourceHubPrincipal } from '../integrations/resource-hub.js';
+import { projectResourceIdFor } from '../integrations/vela-team-projects.js';
 import { readProjectManifest } from '../project-locations.js';
 
-/** The fields register-on-pull reads out of a pulled project's manifest (a
- *  `.open-design/project.json`-type file under the materialized dir). Every field
- *  is optional so a manifest-less pull still registers under a placeholder name. */
+/** The fields register-on-pull reads out of a pulled project's manifest. */
 export interface PulledProjectManifest {
   name?: string;
   skillId?: string | null;
@@ -17,9 +17,6 @@ export interface PulledProjectManifest {
   updatedAt?: number;
 }
 
-/** The record register-on-pull inserts so a pulled shared project appears in
- *  `/api/projects` and can be opened. Read-only is NOT a flag here — the member
- *  isn't the owner, so `useProjectCollab` keeps it single-writer read-only. */
 export interface RegisterPulledProjectInput {
   id: string;
   name: string;
@@ -30,17 +27,26 @@ export interface RegisterPulledProjectInput {
   updatedAt: number;
 }
 
-/** Local project-store seam for register-on-pull. Kept behind an interface so the
- *  route stays free of `db`/SQLite while the daemon wires it to the real store. */
 export interface PulledProjectStore {
-  /** Read an existing local project record, when available. */
   get?: (projectId: string) => { name?: string | null } | null;
-  /** Whether a project is already registered locally (idempotency guard). */
   has(projectId: string): boolean;
-  /** Register a freshly pulled shared project as a local project record. */
   register(input: RegisterPulledProjectInput): void;
-  /** Update a placeholder pulled project once the materialized tree yields a real name. */
   update?: (input: RegisterPulledProjectInput) => void;
+}
+
+interface TeamProjectCatalogWriter {
+  upsert(
+    input: {
+      projectId: string;
+      resourceId?: string;
+      displayName?: string | null;
+      syncState?: 'pending_upload' | 'syncing' | 'synced' | 'failed';
+      lastSyncedVersionId?: string | null;
+      metadata?: Record<string, unknown> | null;
+    },
+    principal?: ResourceHubPrincipal | null,
+  ): Promise<unknown>;
+  remove(projectId: string, principal?: ResourceHubPrincipal | null): Promise<unknown>;
 }
 
 export interface RegisterCollabSyncRoutesDeps {
@@ -56,58 +62,15 @@ export interface RegisterCollabSyncRoutesDeps {
     | 'pullLatest'
     | 'workspaceContext'
   >;
-  /**
-   * Resolve the member who shared a project (its single writer), from the team
-   * hub — server-authoritative and read at status time, so a member's read-only
-   * state derives from the hub rather than a client-supplied id or an in-memory
-   * pull record that a daemon restart would lose. Returns null when the project is
-   * not team-shared (off-team / hub unconfigured / owned by nobody in the list),
-   * in which case the project is a normal editable local project.
-   */
   resolveSharedProjectOwner?: (projectId: string) => Promise<string | null>;
-  /**
-   * Resolve the full team-project discovery record from the hub. Pull
-   * registration uses this before manifest/title inference so a member's local
-   * project card preserves the real shared project name and metadata without
-   * needing a manifest in the pulled tree.
-   */
   resolveSharedProject?: (projectId: string) => Promise<TeamProject | null>;
-  /**
-   * Resolve a member id to their {displayName, role} from the collab-cloud
-   * member directory, so `/collab/status` can hand the client the owner's name
-   * (for a "这是 麻薯 创建的共享项目" banner) instead of only an opaque id.
-   * Returns null when the directory is unconfigured / the member is unknown, in
-   * which case the status simply omits the name. STUB source: B's roster is the
-   * real name source; the collab-cloud directory stands in until B exposes it.
-   */
   resolveOwnerDisplayName?: (
     memberId: string,
   ) => Promise<{ displayName: string; role: 'owner' | 'admin' | 'member' } | null>;
-  /**
-   * Authoritative team-project directory writer. In Vela mode this shells
-   * through the Vela CLI, reusing the CLI session identity rather than letting
-   * the daemon talk to the Vela backend directly. If this write fails, sharing
-   * fails too: the project must not look "in workspace" locally while teammates
-   * cannot discover it from the catalog.
-   */
-  teamProjectCatalog?: Pick<VelaTeamProjectCatalog, 'upsert' | 'remove'>;
-  /** Resolve the local project title/metadata used to populate Vela's catalog. */
+  teamProjectCatalog?: TeamProjectCatalogWriter;
   describeProject?: (projectId: string) => Promise<PulledProjectManifest | null> | PulledProjectManifest | null;
-  /**
-   * Optional project-store seam. When present, `POST /api/projects/:id/collab/pull`
-   * registers the pulled shared project locally (idempotently) so a member can
-   * open it like any other project. Omitted in unit contexts that only exercise
-   * the sync triggers, in which case a pull materializes content but does not
-   * register a local record.
-   */
   projectStore?: PulledProjectStore;
-  /**
-   * Resolve the on-disk dir a pull materializes into, so registration can read
-   * the shared project's manifest for its real name. Should mirror the pull dir
-   * the collab runtime writes to. Required alongside `projectStore`.
-   */
   resolvePullDir?: (projectId: string) => string;
-  /** Injectable manifest reader; defaults to `.open-design/project.json`. */
   readManifest?: (projectDir: string) => Promise<PulledProjectManifest | null>;
 }
 
@@ -174,12 +137,39 @@ async function resolvePulledProjectName(
     ?? PULLED_PROJECT_PLACEHOLDER_NAME;
 }
 
-/**
- * Team collaboration sync trigger, exposed as a client-driven capability . The client is authoritative about whether it is in a shared context, so
- * it drives the trigger — the daemon does not need D's visibility fact to gate
- * this. Publishing content + advancing the published ref is the resource hub; here
- * we only coalesce and flush.
- */
+function headerValue(req: { get(name: string): string | undefined }, name: string): string | null {
+  const value = req.get(name);
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function headerBool(req: { get(name: string): string | undefined }, name: string, fallback: boolean): boolean {
+  const value = headerValue(req, name);
+  if (value === null) return fallback;
+  if (value === 'false') return false;
+  if (value === 'true') return true;
+  return fallback;
+}
+
+function headerPrincipalForRequest(req: { get(name: string): string | undefined }): ResourceHubPrincipal | null {
+  const teamId = headerValue(req, 'x-od-workspace-id');
+  const memberId = headerValue(req, 'x-od-workspace-member-id');
+  if (!teamId || !memberId) return null;
+  const role = headerValue(req, 'x-od-workspace-role') ?? 'member';
+  const lifecycleState = headerValue(req, 'x-od-workspace-lifecycle-state') ?? 'active';
+  return {
+    teamId,
+    memberId,
+    role: role === 'owner' || role === 'admin' ? role : 'member',
+    lifecycleState:
+      lifecycleState === 'billing_past_due' ||
+      lifecycleState === 'locked' ||
+      lifecycleState === 'deleting' ||
+      lifecycleState === 'deleted'
+        ? lifecycleState
+        : 'active',
+  };
+}
+
 export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncRoutesDeps): void {
   const {
     scheduler,
@@ -203,12 +193,32 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
   } = deps;
   const readManifest = deps.readManifest ?? readProjectManifest;
 
-  // Register a freshly pulled shared project as a local project record so it
-  // appears in `/api/projects` and can be opened. Idempotent (a project the
-  // member already has locally is left untouched) and best-effort — the pull
-  // response never fails on a registration hiccup. The real name comes from the
-  // pulled project's manifest when the materialized tree carries one; otherwise
-  // it registers under a placeholder ("共享项目") until a manifest is present.
+  async function principalForRequest(req: {
+    get(name: string): string | undefined;
+    headers: { authorization?: string | string[] | undefined };
+  }) {
+    const authorization = Array.isArray(req.headers.authorization)
+      ? req.headers.authorization[0]
+      : req.headers.authorization;
+    return headerPrincipalForRequest(req) ?? contextToResourceHubPrincipal(await workspaceContext.current({ authorization }));
+  }
+
+  async function canShareProjectsForRequest(req: {
+    get(name: string): string | undefined;
+    headers: { authorization?: string | string[] | undefined };
+  }) {
+    const headerPrincipal = headerPrincipalForRequest(req);
+    if (headerPrincipal) {
+      const legacyWriteEnabled = headerBool(req, 'x-od-workspace-write-enabled', true);
+      const canWriteSyncedFiles = headerBool(req, 'x-od-workspace-can-write-synced-files', legacyWriteEnabled);
+      return headerBool(req, 'x-od-workspace-can-share-projects', canWriteSyncedFiles);
+    }
+    const authorization = Array.isArray(req.headers.authorization)
+      ? req.headers.authorization[0]
+      : req.headers.authorization;
+    return (await workspaceContext.current({ authorization }))?.permissions.canShareProjects ?? true;
+  }
+
   async function registerPulledProject(projectId: string): Promise<void> {
     if (!projectStore || !resolvePullDir) return;
     const existing = projectStore.get?.(projectId);
@@ -252,58 +262,45 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
     projectStore.register(input);
   }
 
-  // An author-side edit landed. The publish is coalesced within the scheduler's
-  // window so a burst of edits collapses into one publish.
   app.post('/api/projects/:id/collab/changed', (req, res) => {
     scheduler.notifyChanged(req.params.id, 'change');
     res.json({ ok: true });
   });
 
-  // Run boundary — flush any pending publish immediately (publish the stable
-  // end-of-run state rather than waiting out the debounce).
   app.post('/api/projects/:id/collab/publish', (req, res) => {
     scheduler.notifyChanged(req.params.id, 'run');
     scheduler.runBoundary(req.params.id);
     res.json({ ok: true });
   });
 
-  // visibility-to-sync orchestration seam. The visibility surface flips project visibility and emits a
-  // ProjectSyncIntent here; the sync trigger owns the reaction. `project_team_share_requested`
-  // marks the project pending and flushes a publish (which drives E's resource
-  // mechanism behind the scheduler). `project_visibility_changed` is accepted as
-  // a no-op signal for now (the share request is the actionable one).
   app.post('/api/projects/:id/collab/sync-intent', async (req, res) => {
     const event = (req.body as { event?: unknown } | undefined)?.event;
     if (typeof event !== 'string' || !SYNC_INTENT_EVENTS.has(event as ProjectSyncIntentEvent)) {
       return res.status(400).json({ error: 'invalid sync intent event' });
     }
+    const projectId = req.params.id;
+    const principal = await principalForRequest(req);
+    const context = await workspaceContext.current({ authorization: req.headers.authorization });
+
     if (event === 'project_team_share_requested') {
-      // The caller sharing the project is its single writer; record their id so
-      // members can distinguish it from a project of their own.
-      const context = await workspaceContext.current({
-        authorization: req.headers.authorization,
-      });
-      // Server-side permission gate, mirroring team resource sharing: a team
-      // member without `canShareProjects` is refused — the client hides the
-      // affordance, but the daemon must not trust the client to enforce it. No
-      // team context stays a silent no-op (the publish adapter no-ops off-team).
-      if (context && !context.permissions.canShareProjects) {
+      if (!(await canShareProjectsForRequest(req))) {
         return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
       }
-      const existingSharedProject = await resolveSharedProject?.(req.params.id) ?? null;
+      const sharerMemberId = principal?.memberId ?? context?.workspaceMemberId;
+      const existingSharedProject = await resolveSharedProject?.(projectId) ?? null;
       if (
         existingSharedProject?.ownerMemberId &&
-        existingSharedProject.ownerMemberId !== context?.workspaceMemberId
+        existingSharedProject.ownerMemberId !== sharerMemberId
       ) {
         return res.json({
           ok: true,
           syncState: 'synced',
-          publishedVersion: publishedVersion(req.params.id),
+          publishedVersion: publishedVersion(projectId, principal),
         });
       }
       let nextPublishedVersion: number | null;
       try {
-        ({ version: nextPublishedVersion } = await requestTeamShare(req.params.id, context?.workspaceMemberId));
+        ({ version: nextPublishedVersion } = await requestTeamShare(projectId, principal ?? sharerMemberId));
       } catch (error) {
         console.warn('[od] failed to publish team-shared project bytes:', error);
         return res.status(502).json({ error: 'TEAM_PROJECT_PUBLISH_UNAVAILABLE' });
@@ -312,50 +309,51 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
         return res.status(502).json({ error: 'TEAM_PROJECT_PUBLISH_UNAVAILABLE' });
       }
       try {
-        const project = await describeProject?.(req.params.id) ?? null;
-        await teamProjectCatalog?.upsert({
-          projectId: req.params.id,
-          displayName: project?.name ?? null,
-          syncState: 'synced',
-          ...(project ? { metadata: { ...project } } : {}),
-        });
+        const project = await describeProject?.(projectId) ?? null;
+        await teamProjectCatalog?.upsert(
+          {
+            projectId,
+            ...(principal ? { resourceId: projectResourceIdFor(projectId, principal) } : {}),
+            displayName: project?.name ?? null,
+            syncState: 'synced',
+            ...(project ? { metadata: { ...project } } : {}),
+          },
+          principal,
+        );
       } catch (error) {
         console.warn('[od] failed to write Vela team project catalog:', error);
-        await requestTeamUnshare(req.params.id).catch((unshareError: unknown) => {
+        await requestTeamUnshare(projectId, principal).catch((unshareError: unknown) => {
           console.warn('[od] failed to roll back team-shared project after catalog failure:', unshareError);
         });
         return res.status(502).json({ error: 'TEAM_PROJECT_CATALOG_UNAVAILABLE' });
       }
       return res.json({
         ok: true,
-        syncState: projectSyncState(req.params.id),
+        syncState: projectSyncState(projectId, principal),
         publishedVersion: nextPublishedVersion,
       });
-    } else if (event === 'project_team_unshare_requested') {
-      const context = await workspaceContext.current({
-        authorization: req.headers.authorization,
-      });
-      if (context && !context.permissions.canShareProjects) {
+    }
+
+    if (event === 'project_team_unshare_requested') {
+      if (!(await canShareProjectsForRequest(req))) {
         return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
       }
       try {
-        await teamProjectCatalog?.remove(req.params.id);
+        await teamProjectCatalog?.remove(projectId, principal);
       } catch (error) {
         console.warn('[od] failed to remove Vela team project catalog entry:', error);
         return res.status(502).json({ error: 'TEAM_PROJECT_CATALOG_UNAVAILABLE' });
       }
-      await requestTeamUnshare(req.params.id);
+      await requestTeamUnshare(projectId, principal);
     }
-    res.json({ ok: true, syncState: projectSyncState(req.params.id) });
+
+    res.json({ ok: true, syncState: projectSyncState(projectId, principal) });
   });
 
-  // Member pull trigger (the sync trigger owns *when*; the resource hub fetches + extracts the bytes behind the
-  // adapter). Returns the head version that was pulled.
   app.post('/api/projects/:id/collab/pull', async (req, res) => {
     const projectId = req.params.id;
-    const result = await pullLatest(projectId);
-    // Register the pulled project locally so it opens like any other project.
-    // Best-effort: a registration failure must not fail the pull itself.
+    const principal = await principalForRequest(req);
+    const result = await pullLatest(projectId, principal);
     if (result.version !== null) {
       try {
         await registerPulledProject(projectId);
@@ -366,28 +364,11 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
     res.json({ ok: true, version: result.version });
   });
 
-  // Members poll this to learn the published head version they should pull and
-  // the current sync state (local_only / pending_upload / synced / sync_failed).
   app.get('/api/projects/:id/collab/status', async (req, res) => {
     const projectId = req.params.id;
-    let syncState = projectSyncState(projectId);
-    let ownerMemberId = projectOwnerMemberId(projectId);
-    // Read-only is DERIVED from the team hub at read time, not cached from a pull.
-    // In-memory state (`syncStates`/`owners`) only tracks THIS daemon's own share
-    // lifecycle (an author publishing their project). A project with no local
-    // lifecycle (`local_only`) is still read-only for a member if the hub lists it
-    // as shared by someone else — so read-only survives a daemon restart (which
-    // clears the in-memory maps) and an already-pulled project opened without a
-    // re-pull. The owner's own project resolves to their own id here, so their
-    // client still computes isOwner=true and keeps editing. When this hub read
-    // becomes a slow vela proxy, cache it behind the version probe (see
-    // team-projects.ts TODO) rather than hitting it on every status poll.
-    // Derive whenever the owner is UNKNOWN (not just on local_only): an author who
-    // published (locally or via the file-sync watcher) has syncState='synced' but
-    // an empty in-memory owners map after a restart, so gating on local_only left
-    // ownerMemberId null → the OWNER's own client failed the isOwner check and went
-    // read-only on their own project. Filling the owner from the hub whenever it is
-    // null fixes that while keeping a non-owner member read-only.
+    const principal = await principalForRequest(req);
+    let syncState = projectSyncState(projectId, principal);
+    let ownerMemberId = projectOwnerMemberId(projectId, principal);
     if (ownerMemberId == null && resolveSharedProjectOwner) {
       try {
         const hubOwner = await resolveSharedProjectOwner(projectId);
@@ -396,12 +377,9 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
           ownerMemberId = hubOwner;
         }
       } catch {
-        // Hub unavailable: fall back to the local (editable) state.
+        // Hub unavailable: fall back to the local state.
       }
     }
-    // Resolve the owner's display name + role from the collab-cloud directory so
-    // the client can render a named "shared project" banner. Best-effort — a
-    // directory miss/outage just omits the name, keeping the status usable.
     let ownerDisplayName: string | undefined;
     let ownerRole: 'owner' | 'admin' | 'member' | undefined;
     if (ownerMemberId && resolveOwnerDisplayName) {
@@ -415,14 +393,11 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
         /* directory unavailable: omit the name */
       }
     }
-    // Report the hub's published head (not this daemon's in-memory counter) so a
-    // member — who never published — still sees the owner's latest version and
-    // knows when to pull. Falls back to the in-memory head on a hub hiccup.
     let head: number | null;
     try {
-      head = await publishedHead(projectId);
+      head = await publishedHead(projectId, principal);
     } catch {
-      head = publishedVersion(projectId);
+      head = publishedVersion(projectId, principal);
     }
     res.json({
       publishedVersion: head,

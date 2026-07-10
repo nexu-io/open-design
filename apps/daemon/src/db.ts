@@ -70,6 +70,26 @@ function migrate(db: SqliteDb): void {
       updated_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS workspace_projects (
+      project_id TEXT NOT NULL,
+      workspace_id TEXT NOT NULL,
+      visibility TEXT NOT NULL CHECK (visibility IN ('personal', 'team')),
+      resource_state TEXT NOT NULL CHECK (resource_state IN ('active', 'frozen', 'deleted')),
+      created_by_workspace_member_id TEXT,
+      updated_by_workspace_member_id TEXT,
+      resource_hub_resource_id TEXT,
+      cloud_tombstoned_at INTEGER,
+      sync_state TEXT,
+      version INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY(workspace_id, project_id),
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_workspace_projects_workspace_visibility
+      ON workspace_projects(workspace_id, visibility, updated_at DESC);
+
     CREATE TABLE IF NOT EXISTS templates (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -268,6 +288,14 @@ function migrate(db: SqliteDb): void {
   if (!cols.some((c: DbRow) => c.name === 'custom_instructions')) {
     db.exec(`ALTER TABLE projects ADD COLUMN custom_instructions TEXT`);
   }
+  const workspaceProjectCols = db.prepare(`PRAGMA table_info(workspace_projects)`).all() as DbRow[];
+  if (!workspaceProjectCols.some((c: DbRow) => c.name === 'resource_hub_resource_id')) {
+    db.exec(`ALTER TABLE workspace_projects ADD COLUMN resource_hub_resource_id TEXT`);
+  }
+  if (!workspaceProjectCols.some((c: DbRow) => c.name === 'cloud_tombstoned_at')) {
+    db.exec(`ALTER TABLE workspace_projects ADD COLUMN cloud_tombstoned_at INTEGER`);
+  }
+  migrateWorkspaceProjectsCompositePrimaryKey(db);
   const conversationCols = db.prepare(`PRAGMA table_info(conversations)`).all() as DbRow[];
   if (!conversationCols.some((c: DbRow) => c.name === 'session_mode')) {
     db.exec(`ALTER TABLE conversations ADD COLUMN session_mode TEXT NOT NULL DEFAULT 'design'`);
@@ -403,6 +431,47 @@ function migrate(db: SqliteDb): void {
   migrateLibrary(db);
   migratePlugins(db);
   migrateResourceSharing(db);
+}
+
+function migrateWorkspaceProjectsCompositePrimaryKey(db: SqliteDb): void {
+  const cols = db.prepare(`PRAGMA table_info(workspace_projects)`).all() as DbRow[];
+  const projectPk = cols.find((c: DbRow) => c.name === 'project_id')?.pk ?? 0;
+  const workspacePk = cols.find((c: DbRow) => c.name === 'workspace_id')?.pk ?? 0;
+  if (projectPk > 0 && workspacePk > 0) return;
+
+  db.exec(`
+    DROP INDEX IF EXISTS idx_workspace_projects_workspace_visibility;
+    ALTER TABLE workspace_projects RENAME TO workspace_projects_legacy_single_project;
+    CREATE TABLE workspace_projects (
+      project_id TEXT NOT NULL,
+      workspace_id TEXT NOT NULL,
+      visibility TEXT NOT NULL CHECK (visibility IN ('personal', 'team')),
+      resource_state TEXT NOT NULL CHECK (resource_state IN ('active', 'frozen', 'deleted')),
+      created_by_workspace_member_id TEXT,
+      updated_by_workspace_member_id TEXT,
+      resource_hub_resource_id TEXT,
+      cloud_tombstoned_at INTEGER,
+      sync_state TEXT,
+      version INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY(workspace_id, project_id),
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+    INSERT INTO workspace_projects
+      (project_id, workspace_id, visibility, resource_state,
+       created_by_workspace_member_id, updated_by_workspace_member_id,
+       resource_hub_resource_id, cloud_tombstoned_at,
+       sync_state, version, created_at, updated_at)
+    SELECT project_id, workspace_id, visibility, resource_state,
+           created_by_workspace_member_id, updated_by_workspace_member_id,
+           resource_hub_resource_id, cloud_tombstoned_at,
+           sync_state, version, created_at, updated_at
+      FROM workspace_projects_legacy_single_project;
+    DROP TABLE workspace_projects_legacy_single_project;
+    CREATE INDEX IF NOT EXISTS idx_workspace_projects_workspace_visibility
+      ON workspace_projects(workspace_id, visibility, updated_at DESC);
+  `);
 }
 
 function migratePreviewCommentsSlideKey(db: SqliteDb): void {
@@ -698,6 +767,163 @@ export function listProjects(db: SqliteDb) {
     )
     .all() as DbRow[];
   return rows.map(normalizeProject);
+}
+
+export function getWorkspaceProject(db: SqliteDb, workspaceId: string, projectId: string) {
+  return db
+    .prepare(
+      `SELECT project_id AS projectId,
+              workspace_id AS workspaceId,
+              visibility,
+              resource_state AS resourceState,
+              created_by_workspace_member_id AS createdByWorkspaceMemberId,
+              updated_by_workspace_member_id AS updatedByWorkspaceMemberId,
+              resource_hub_resource_id AS resourceHubResourceId,
+              cloud_tombstoned_at AS cloudTombstonedAt,
+              sync_state AS syncState,
+              version,
+              created_at AS createdAt,
+              updated_at AS updatedAt
+         FROM workspace_projects
+        WHERE workspace_id = ? AND project_id = ?`,
+    )
+    .get(workspaceId, projectId) as DbRow | undefined;
+}
+
+export function listWorkspaceProjects(db: SqliteDb, workspaceId: string) {
+  return db
+    .prepare(
+      `SELECT p.id,
+              p.name,
+              p.skill_id AS skillId,
+              p.design_system_id AS designSystemId,
+              p.pending_prompt AS pendingPrompt,
+              p.metadata_json AS metadataJson,
+              p.applied_plugin_snapshot_id AS appliedPluginSnapshotId,
+              p.custom_instructions AS customInstructions,
+              p.created_at AS createdAt,
+              p.updated_at AS updatedAt,
+              wp.project_id AS workspaceProjectId,
+              wp.workspace_id AS workspaceId,
+              wp.visibility AS workspaceVisibility,
+              wp.resource_state AS resourceState,
+              wp.created_by_workspace_member_id AS createdByWorkspaceMemberId,
+              wp.updated_by_workspace_member_id AS updatedByWorkspaceMemberId,
+              wp.resource_hub_resource_id AS resourceHubResourceId,
+              wp.cloud_tombstoned_at AS cloudTombstonedAt,
+              wp.sync_state AS syncState,
+              wp.version AS workspaceVersion,
+              wp.created_at AS workspaceCreatedAt,
+              wp.updated_at AS workspaceUpdatedAt
+         FROM workspace_projects wp
+         JOIN projects p ON p.id = wp.project_id
+        WHERE wp.workspace_id = ?
+        ORDER BY p.updated_at DESC`,
+    )
+    .all(workspaceId) as DbRow[];
+}
+
+export function listTeamWorkspaceProjectShares(db: SqliteDb) {
+  return db
+    .prepare(
+      `SELECT project_id AS projectId,
+              workspace_id AS workspaceId,
+              created_by_workspace_member_id AS createdByWorkspaceMemberId,
+              updated_by_workspace_member_id AS updatedByWorkspaceMemberId,
+              sync_state AS syncState
+         FROM workspace_projects
+        WHERE visibility = 'team'
+          AND resource_state != 'deleted'`,
+    )
+    .all() as DbRow[];
+}
+
+export function ensureWorkspaceProject(db: SqliteDb, input: DbRow) {
+  const now = Date.now();
+  const existing = getWorkspaceProject(db, input.workspaceId, input.projectId);
+  if (existing) return existing;
+  db.prepare(
+    `INSERT INTO workspace_projects
+       (project_id, workspace_id, visibility, resource_state,
+        created_by_workspace_member_id, updated_by_workspace_member_id,
+        resource_hub_resource_id, cloud_tombstoned_at,
+        sync_state, version, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    input.projectId,
+    input.workspaceId,
+    input.visibility ?? 'personal',
+    input.resourceState ?? 'active',
+    input.createdByWorkspaceMemberId ?? null,
+    input.updatedByWorkspaceMemberId ?? input.createdByWorkspaceMemberId ?? null,
+    input.resourceHubResourceId ?? null,
+    input.cloudTombstonedAt ?? null,
+    input.syncState ?? 'local_only',
+    input.version ?? 1,
+    input.createdAt ?? now,
+    input.updatedAt ?? now,
+  );
+  return getWorkspaceProject(db, input.workspaceId, input.projectId);
+}
+
+export function updateWorkspaceProject(db: SqliteDb, workspaceId: string, projectId: string, patch: DbRow) {
+  const existing = getWorkspaceProject(db, workspaceId, projectId);
+  if (!existing) return null;
+  const next: DbRow = {
+    ...existing,
+    ...patch,
+    resourceHubResourceId: patch.resourceHubResourceId === undefined
+      ? existing.resourceHubResourceId
+      : patch.resourceHubResourceId,
+    cloudTombstonedAt: patch.cloudTombstonedAt === undefined
+      ? existing.cloudTombstonedAt
+      : patch.cloudTombstonedAt,
+    updatedAt: typeof patch.updatedAt === 'number' ? patch.updatedAt : Date.now(),
+  };
+  db.prepare(
+    `UPDATE workspace_projects
+        SET workspace_id = ?,
+            visibility = ?,
+            resource_state = ?,
+            created_by_workspace_member_id = ?,
+            updated_by_workspace_member_id = ?,
+            resource_hub_resource_id = ?,
+            cloud_tombstoned_at = ?,
+            sync_state = ?,
+            version = ?,
+            updated_at = ?
+      WHERE workspace_id = ? AND project_id = ?`,
+  ).run(
+    workspaceId,
+    next.visibility,
+    next.resourceState,
+    next.createdByWorkspaceMemberId ?? null,
+    next.updatedByWorkspaceMemberId ?? null,
+    next.resourceHubResourceId ?? null,
+    next.cloudTombstonedAt ?? null,
+    next.syncState ?? null,
+    next.version ?? 1,
+    next.updatedAt,
+    workspaceId,
+    projectId,
+  );
+  return getWorkspaceProject(db, workspaceId, projectId);
+}
+
+export function deleteWorkspaceProject(db: SqliteDb, workspaceId: string, projectId: string): void {
+  db.prepare(
+    `DELETE FROM workspace_projects
+      WHERE workspace_id = ? AND project_id = ?`,
+  ).run(workspaceId, projectId);
+}
+
+export function countWorkspaceProjectRefs(db: SqliteDb, projectId: string): number {
+  const row = db.prepare(
+    `SELECT COUNT(*) AS count
+       FROM workspace_projects
+      WHERE project_id = ?`,
+  ).get(projectId) as { count?: number } | undefined;
+  return Number(row?.count ?? 0);
 }
 
 export function listLatestProjectRunStatuses(db: SqliteDb) {

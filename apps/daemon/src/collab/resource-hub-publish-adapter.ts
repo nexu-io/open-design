@@ -7,6 +7,7 @@ import {
   type ResourceHubClient,
   type ResourceHubPrincipal,
 } from '../integrations/resource-hub.js';
+import { projectResourceIdFor } from '../integrations/vela-team-projects.js';
 import { materializeRef, packTree, pushTree } from '../resource-drive.js';
 import type { ResourcePublishAdapter } from './publish-scheduler.js';
 
@@ -33,15 +34,15 @@ export function contextToResourceHubPrincipal(
 export interface ResourceHubPublishAdapterOptions {
   client: ResourceHubClient;
   /** Resolve the current principal (null = no team identity → degrade to no-op). */
-  getPrincipal: () => ResourceHubPrincipal | null | Promise<ResourceHubPrincipal | null>;
+  getPrincipal: (projectId?: string) => ResourceHubPrincipal | null | Promise<ResourceHubPrincipal | null>;
   /** The project's source directory to publish (managed-project root). */
   resolveProjectDir: (projectId: string) => string | Promise<string>;
   /** Optional resource-index metadata for team project discovery/cards. */
   describeProject?: (projectId: string) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>;
   /** Where a member materializes pulled content. Defaults to the project dir. */
   resolvePullDir?: (projectId: string) => string | Promise<string>;
-  /** projectId → hub resourceId. Colon-free (the hub routes it as a path param). */
-  resourceIdFor?: (projectId: string) => string;
+  /** (projectId, principal) → hub resourceId. Colon-free (the hub routes it as a path param). */
+  resourceIdFor?: (projectId: string, principal?: ResourceHubPrincipal | null) => string;
   /**
    * Hub resource kind. Defaults to `project`; a design-system or plugin share
    * passes its own kind so the same publish/pull machinery serves every
@@ -77,14 +78,14 @@ export function createResourceHubPublishAdapter(
 ): ResourcePublishAdapter {
   const { client, getPrincipal, resolveProjectDir } = options;
   const resolvePullDir = options.resolvePullDir ?? resolveProjectDir;
-  const resourceIdFor = options.resourceIdFor ?? ((projectId: string) => `project-${projectId}`);
+  const resourceIdFor = options.resourceIdFor ?? projectResourceIdFor;
   const kind = options.kind ?? PROJECT_KIND;
 
   // The resource must exist before a version is published. Get-or-create keeps
   // publish idempotent across the first and later shares of a project.
   async function ensureResourceId(principal: ResourceHubPrincipal, projectId: string): Promise<string> {
-    const resourceId = resourceIdFor(projectId);
     const metadata = await options.describeProject?.(projectId);
+    const resourceId = resourceIdFor(projectId, principal);
     try {
       const existing = await client.getResource(principal, resourceId);
       if (metadata && Object.keys(metadata).length > 0) {
@@ -103,8 +104,8 @@ export function createResourceHubPublishAdapter(
   }
 
   return {
-    async publish({ projectId }) {
-      const principal = await getPrincipal();
+    async publish({ projectId, principal: inputPrincipal }) {
+      const principal = inputPrincipal ?? await getPrincipal(projectId);
       if (!principal) return null; // no team identity → nothing to publish
       const packed = await packTree(await resolveProjectDir(projectId), {
         exclude: (name) => isMemberMirrorExcluded(name),
@@ -116,14 +117,15 @@ export function createResourceHubPublishAdapter(
       return { version: version.version };
     },
 
-    async syncLatest({ projectId }) {
-      const principal = await getPrincipal();
+    async syncLatest({ projectId, principal: inputPrincipal }) {
+      const principal = inputPrincipal ?? await getPrincipal(projectId);
       if (!principal) return null;
-      const resourceId = resourceIdFor(projectId);
+      const resourceId = resourceIdFor(projectId, principal);
       let ref;
       try {
         ref = await client.getRef(principal, resourceId, PUBLISHED_REF);
-      } catch {
+      } catch (error) {
+        if (!(error instanceof ResourceHubError) || error.status !== 404) throw error;
         return null; // nothing published yet
       }
       const versions = await client.listVersions(principal, resourceId);
@@ -132,10 +134,10 @@ export function createResourceHubPublishAdapter(
     },
 
     // Member pull: fetch + safely land the published tree into the local copy.
-    async pull({ projectId }) {
-      const principal = await getPrincipal();
+    async pull({ projectId, principal: inputPrincipal }) {
+      const principal = inputPrincipal ?? await getPrincipal(projectId);
       if (!principal) return; // no team identity → nothing to pull
-      await materializeRef(client, principal, resourceIdFor(projectId), PUBLISHED_REF, await resolvePullDir(projectId));
+      await materializeRef(client, principal, resourceIdFor(projectId, principal), PUBLISHED_REF, await resolvePullDir(projectId));
     },
   };
 }
@@ -149,7 +151,7 @@ export function createResourceHubPublishAdapter(
  */
 export function createResourceHubPublishAdapterFromEnv(
   resolveProjectDir: (projectId: string) => string | Promise<string>,
-  getPrincipal?: () => ResourceHubPrincipal | null | Promise<ResourceHubPrincipal | null>,
+  getPrincipal?: (projectId?: string) => ResourceHubPrincipal | null | Promise<ResourceHubPrincipal | null>,
   describeProject?: (projectId: string) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>,
   env: NodeJS.ProcessEnv = process.env,
 ): ResourcePublishAdapter | null {

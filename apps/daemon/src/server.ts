@@ -461,7 +461,7 @@ import {
   sanitizeName,
   sanitizePath,
   searchProjectFiles,
-  resolveProjectDir,
+  stageProjectDirsForDelete,
   resolveProjectFilePath,
   writeProjectFile,
   reconcileHtmlArtifactManifest,
@@ -474,6 +474,7 @@ import {
   deleteConversation,
   deletePreviewComment,
   deleteProject as dbDeleteProject,
+  deleteWorkspaceProject,
   deleteTemplate,
   getConversation,
   getDeployment,
@@ -482,7 +483,10 @@ import {
   getMessageTelemetryFinalizationState,
   getPreviewComment,
   getProject,
+  countWorkspaceProjectRefs,
+  getWorkspaceProject,
   getTemplate,
+  ensureWorkspaceProject,
   insertConversation,
   insertProject,
   insertRoutine,
@@ -498,6 +502,8 @@ import {
   listMessages,
   listPreviewComments,
   listProjects,
+  listTeamWorkspaceProjectShares,
+  listWorkspaceProjects,
   listRoutines,
   listRoutineRuns,
   listTabs,
@@ -513,6 +519,7 @@ import {
   updatePreviewCommentAnchor,
   updatePreviewCommentStatus,
   updateProject,
+  updateWorkspaceProject,
   updateRoutine,
   updateRoutineRun,
   clearAgentSession,
@@ -580,13 +587,17 @@ import { registerTeamResourceRoutes } from './routes/team-resources.js';
 import { registerTeamResourceShareRoutes } from './routes/team-resource-share.js';
 import { createCollabRuntime } from './collab/runtime.js';
 import { createCollabPublishWatcher } from './collab/collab-publish-watcher.js';
+import { resolveProjectShareDir } from './collab/project-share-dir.js';
 import { createTeamProjectsLister } from './collab/team-projects.js';
 import { createTeamResourceShareService } from './collab/team-resource-share.js';
 import { contextToResourceHubPrincipal } from './collab/resource-hub-publish-adapter.js';
 import { createCollabCloudClientFromEnv } from './integrations/collab-cloud.js';
 import { createCollabCloudService } from './collab/collab-cloud-service.js';
 import { createVelaCliCollabClientFromEnv } from './collab/vela-cli-collab-client.js';
-import { createVelaCliTeamProjectCatalogFromEnv } from './collab/vela-cli-team-projects.js';
+import {
+  createVelaCliTeamProjectCatalogClientFromEnv,
+  createVelaCliTeamProjectCatalogFromEnv,
+} from './collab/vela-cli-team-projects.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
 import {
   assembleExample,
@@ -3827,15 +3838,45 @@ export async function startServer({
       ...(project.metadata ? { metadata: project.metadata } : {}),
     };
   };
-  const collab = createCollabRuntime({
-    resolveProjectDir: (projectId) => {
-      const project = getProject(db, projectId);
-      return resolveProjectDir(PROJECTS_DIR, projectId, project?.metadata);
-    },
-    describeProject: describeCollabProject,
-  });
   const velaCliCollabClient = createVelaCliCollabClientFromEnv();
   const velaCliTeamProjectCatalog = createVelaCliTeamProjectCatalogFromEnv();
+  const velaCliWorkspaceTeamProjectCatalog = createVelaCliTeamProjectCatalogClientFromEnv();
+  function persistWorkspaceProjectSyncState(
+    projectId: string,
+    workspaceId: string | null | undefined,
+    syncState: 'synced' | 'sync_failed',
+  ) {
+    if (!workspaceId) return;
+    updateWorkspaceProject(db, workspaceId, projectId, { syncState });
+  }
+  const collab = createCollabRuntime({
+    resolveProjectDir: (projectId) =>
+      resolveProjectShareDir(PROJECTS_DIR, projectId, getProject(db, projectId), resolveProjectDir),
+    describeProject: describeCollabProject,
+    ...(velaCliTeamProjectCatalog ? { teamProjectCatalog: velaCliTeamProjectCatalog } : {}),
+    onPublished: ({ projectId, principal }) => {
+      persistWorkspaceProjectSyncState(projectId, principal?.teamId, 'synced');
+    },
+    onError: ({ projectId, principal }) => {
+      persistWorkspaceProjectSyncState(projectId, principal?.teamId, 'sync_failed');
+    },
+  });
+  for (const share of listTeamWorkspaceProjectShares(db)) {
+    const ownerMemberId = share.createdByWorkspaceMemberId ?? share.updatedByWorkspaceMemberId;
+    if (!share.projectId || !share.workspaceId || !ownerMemberId) continue;
+    collab.rememberTeamShare(
+      share.projectId,
+      {
+        memberId: ownerMemberId,
+        teamId: share.workspaceId,
+        role: 'member',
+        lifecycleState: 'active',
+      },
+      share.syncState === 'synced' || share.syncState === 'sync_failed' || share.syncState === 'pending_upload'
+        ? share.syncState
+        : 'pending_upload',
+    );
+  }
   const collabCloudClient = velaCliCollabClient ?? createCollabCloudClientFromEnv();
   registerCollabPresenceRoutes(app, { collab, cloud: velaCliCollabClient });
 
@@ -4215,10 +4256,17 @@ export async function startServer({
   const uploadDeps = { upload, importUpload, handleProjectUpload };
   const projectStoreDeps = {
     getProject,
+    getWorkspaceProject,
+    ensureWorkspaceProject,
+    listWorkspaceProjects,
+    updateWorkspaceProject,
+    deleteWorkspaceProject,
+    countWorkspaceProjectRefs,
     insertProject,
     updateProject,
     dbDeleteProject,
     removeProjectDir,
+    stageProjectDirsForDelete,
     validateLinkedDirs,
   };
   const projectFileDeps = {
@@ -4480,6 +4528,10 @@ export async function startServer({
     appConfig: appConfigDeps,
     agents: agentDeps,
     validation: validationDeps,
+    // C-lane sync seam for D's project-visibility routes: a personal→team move
+    // calls requestTeamShare on success to publish the project for the team.
+    collabSync: { requestTeamShare: (projectId, ownerMemberId) => collab.requestTeamShare(projectId, ownerMemberId) },
+    ...(velaCliWorkspaceTeamProjectCatalog ? { teamProjectCatalog: velaCliWorkspaceTeamProjectCatalog } : {}),
     // Collab-cloud comment seams (no-op off-team / when unconfigured): stamp the
     // server-authoritative author, gate status/delete on the caller vs the
     // comment author / project owner, and push the comment lifecycle (create/edit,

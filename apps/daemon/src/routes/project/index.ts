@@ -12,6 +12,7 @@ import {
   type ProjectFileVersionPromptSource,
   type ProjectFileVersionSource,
   type ProjectFileVersionWarning,
+  type ProjectSyncState,
 } from '@open-design/contracts';
 import { readMeta as readBrandMeta } from '../../brands/store.js';
 import { createProjectArtifactFile } from '../../artifacts/create.js';
@@ -54,8 +55,16 @@ import {
 import { auditDesignSystemPackage } from '../../tools-connectors-cli.js';
 import { parseOrchestratorWorkspace } from '../../workspace-contract.js';
 import { registerProjectConversationRoutes } from './conversations.js';
+import {
+  projectResourceIdFor,
+  velaProjectSyncStateToProject,
+  type VelaTeamProjectCatalogClient,
+  type VelaTeamProjectRecord,
+} from '../../integrations/vela-team-projects.js';
+import type { ResourceHubPrincipal } from '../../integrations/resource-hub.js';
 
-export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation'> {
+export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'agents' | 'validation' | 'collabSync'> {
+  teamProjectCatalog?: VelaTeamProjectCatalogClient;
   /**
    * Collab-cloud comment seams, threaded to the nested preview-comment routes.
    * `resolveAuthorMemberId` stamps the server-authoritative author AND identifies
@@ -1144,7 +1153,21 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { sendApiError, createSseResponse } = ctx.http;
   const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR, BRANDS_DIR, USER_DESIGN_SYSTEMS_DIR } = ctx.paths;
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
-  const { insertProject, validateLinkedDirs, getProject, updateProject, dbDeleteProject, removeProjectDir } = ctx.projectStore;
+  const {
+    insertProject,
+    validateLinkedDirs,
+    getProject,
+    updateProject,
+    dbDeleteProject,
+    removeProjectDir,
+    stageProjectDirsForDelete,
+    ensureWorkspaceProject,
+    getWorkspaceProject,
+    listWorkspaceProjects,
+    updateWorkspaceProject,
+    deleteWorkspaceProject,
+    countWorkspaceProjectRefs,
+  } = ctx.projectStore;
   const { writeProjectFile, readProjectFile, ensureProject, listFiles, listTabs, setTabs, resolveProjectDir } = ctx.projectFiles;
   const { insertConversation } = ctx.conversations;
   const { getTemplate, listTemplates, deleteTemplate, insertTemplate, findTemplateByNameAndProject, updateTemplate } = ctx.templates;
@@ -1152,6 +1175,274 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { subscribeFileEvents, activeProjectEventSinks } = ctx.events;
   const { randomId } = ctx.ids;
   const { validateProjectDesignSystemId, validateProjectSkillId } = ctx.validation;
+  const { collabSync, teamProjectCatalog } = ctx;
+  type WorkspaceProjectContext = {
+    workspaceId: string;
+    appUserId: string;
+    workspaceMemberId: string;
+    role: 'owner' | 'admin' | 'member';
+    memberStatus: 'active' | 'removed';
+    lifecycleState: 'active' | 'billing_past_due' | 'locked' | 'deleting' | 'deleted';
+    canShareProjects: boolean;
+    canWriteSyncedFiles: boolean;
+  };
+
+  // Temporary adapter until the B-owned CurrentWorkspaceContext is wired into
+  // the daemon. Keep D's project CRUD behind this seam so the header fallback
+  // can be replaced without changing visibility and permission logic.
+  function headerValue(req: any, name: string): string | null {
+    const value = req.get(name);
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  }
+  function headerBool(req: any, name: string, fallback: boolean): boolean {
+    const value = headerValue(req, name);
+    if (value === null) return fallback;
+    if (value === 'false') return false;
+    if (value === 'true') return true;
+    return fallback;
+  }
+  function workspaceProjectContext(req: any, workspaceId: string): WorkspaceProjectContext | null {
+    const workspaceMemberId = headerValue(req, 'x-od-workspace-member-id');
+    if (!workspaceMemberId) return null;
+    const lifecycleState = headerValue(req, 'x-od-workspace-lifecycle-state') ?? 'active';
+    const role = headerValue(req, 'x-od-workspace-role') ?? 'member';
+    const legacyWriteEnabled = headerBool(req, 'x-od-workspace-write-enabled', true);
+    const canWriteSyncedFiles = headerBool(req, 'x-od-workspace-can-write-synced-files', legacyWriteEnabled);
+    return {
+      workspaceId,
+      appUserId: headerValue(req, 'x-od-app-user-id') ?? 'local-user',
+      workspaceMemberId,
+      role: role === 'owner' || role === 'admin' ? role : 'member',
+      memberStatus: headerValue(req, 'x-od-workspace-member-status') === 'removed' ? 'removed' : 'active',
+      lifecycleState: lifecycleState === 'billing_past_due' || lifecycleState === 'locked' || lifecycleState === 'deleting' || lifecycleState === 'deleted'
+        ? lifecycleState
+        : 'active',
+      canShareProjects: headerBool(req, 'x-od-workspace-can-share-projects', canWriteSyncedFiles),
+      canWriteSyncedFiles,
+    };
+  }
+  function sendMissingWorkspaceContext(res: Response) {
+    return sendApiError(res, 401, 'WORKSPACE_CONTEXT_REQUIRED', 'workspace context is required');
+  }
+  function isWorkspaceLocked(ctx: WorkspaceProjectContext): boolean {
+    return ctx.lifecycleState === 'locked' || ctx.lifecycleState === 'deleted';
+  }
+  function pendingSyncIntent(projectId: string, workspaceId: string, visibility: 'personal' | 'team') {
+    return {
+      event: visibility === 'team' ? 'project_team_share_requested' : 'project_visibility_changed',
+      projectId,
+      workspaceId,
+    };
+  }
+  class TeamProjectCatalogListError extends Error {
+    constructor(readonly cause: unknown) {
+      super('team project catalog list failed');
+      this.name = 'TeamProjectCatalogListError';
+    }
+  }
+  function projectAccess(wp: any, ctx: WorkspaceProjectContext) {
+    const frozen = wp.resourceState === 'frozen' || wp.resourceState === 'deleted' || isWorkspaceLocked(ctx);
+    const selfCreated = wp.createdByWorkspaceMemberId != null && wp.createdByWorkspaceMemberId === ctx.workspaceMemberId;
+    const privileged = ctx.role === 'owner' || ctx.role === 'admin';
+    const canMutate = !frozen && ctx.canWriteSyncedFiles && ctx.memberStatus === 'active' && (privileged || selfCreated);
+    const disabledReason = frozen
+      ? ctx.lifecycleState === 'deleted' || wp.resourceState === 'deleted'
+        ? 'workspace_deleted'
+        : 'workspace_locked'
+      : canMutate
+        ? undefined
+        : 'permission_denied';
+    return {
+      canOpen: !frozen && ctx.memberStatus === 'active',
+      canRename: canMutate,
+      canDelete: canMutate,
+      canDuplicate: canMutate,
+      canMoveToTeam: canMutate && ctx.canShareProjects && wp.visibility === 'personal',
+      // Team→personal needs a real unshare/tombstone seam first; otherwise the
+      // Vela catalog can keep advertising a supposedly personal project.
+      canMoveToPersonal: false,
+      canExport: !frozen && ctx.memberStatus === 'active',
+      canSendTo: !frozen && ctx.memberStatus === 'active',
+      canRestoreVersion: canMutate,
+      ...(disabledReason ? { disabledReason } : {}),
+    };
+  }
+  function normalizeWorkspaceProjectRow(row: any, ctx: WorkspaceProjectContext) {
+    let metadata: unknown;
+    try {
+      metadata = row.metadataJson ? JSON.parse(row.metadataJson) : undefined;
+    } catch {
+      metadata = undefined;
+    }
+    const project = {
+      id: row.id,
+      name: row.name,
+      skillId: row.skillId,
+      designSystemId: row.designSystemId,
+      pendingPrompt: row.pendingPrompt ?? undefined,
+      metadata,
+      appliedPluginSnapshotId: row.appliedPluginSnapshotId ?? undefined,
+      customInstructions: row.customInstructions ?? undefined,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+    const resourceState = isWorkspaceLocked(ctx) && row.workspaceVisibility === 'team'
+      ? 'frozen'
+      : row.resourceState;
+    const wp = {
+      visibility: row.workspaceVisibility,
+      resourceState,
+      createdByWorkspaceMemberId: row.createdByWorkspaceMemberId ?? null,
+    };
+    return {
+      id: project.id,
+      name: project.name,
+      workspaceId: row.workspaceId,
+      visibility: row.workspaceVisibility,
+      resourceState,
+      createdByWorkspaceMemberId: row.createdByWorkspaceMemberId ?? null,
+      updatedByWorkspaceMemberId: row.updatedByWorkspaceMemberId ?? null,
+      resourceHubResourceId: row.resourceHubResourceId ?? null,
+      cloudTombstonedAt: row.cloudTombstonedAt ?? null,
+      currentUserAccess: projectAccess(wp, ctx),
+      syncState: row.syncState ?? 'local_only',
+      ...(row.syncState === 'pending_upload'
+        ? { pendingSyncIntent: pendingSyncIntent(project.id, row.workspaceId, row.workspaceVisibility) }
+        : {}),
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      metadata,
+      project,
+    };
+  }
+  function workspaceProjectPrincipal(ctx: WorkspaceProjectContext): ResourceHubPrincipal {
+    return {
+      memberId: ctx.workspaceMemberId,
+      teamId: ctx.workspaceId,
+      role: ctx.role,
+      lifecycleState: ctx.lifecycleState,
+    };
+  }
+  function msFromIso(value: string): number {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : Date.now();
+  }
+  function accessForRemoteTeamProject(remote: VelaTeamProjectRecord, ctx: WorkspaceProjectContext) {
+    const frozen = remote.access.frozen || isWorkspaceLocked(ctx);
+    const canView = remote.access.canView && !frozen && ctx.memberStatus === 'active';
+    const disabledReason = frozen
+      ? isWorkspaceLocked(ctx)
+        ? 'workspace_locked'
+        : 'resource_frozen'
+      : canView
+        ? undefined
+        : 'permission_denied';
+    return {
+      canOpen: canView,
+      canRename: false,
+      canDelete: false,
+      canDuplicate: false,
+      canMoveToTeam: false,
+      canMoveToPersonal: false,
+      canExport: canView,
+      canSendTo: canView,
+      canRestoreVersion: false,
+      ...(disabledReason ? { disabledReason } : {}),
+    };
+  }
+  function remoteTeamProjectSummary(
+    remote: VelaTeamProjectRecord,
+    ctx: WorkspaceProjectContext,
+  ) {
+    const createdAt = msFromIso(remote.createdAt);
+    const updatedAt = msFromIso(remote.updatedAt);
+    const syncState: ProjectSyncState = velaProjectSyncStateToProject(remote.syncState);
+    const resourceState = remote.access.frozen || isWorkspaceLocked(ctx) ? 'frozen' : 'active';
+    const name = remote.displayName?.trim() || remote.projectId;
+    const project = {
+      id: remote.projectId,
+      name,
+      skillId: null,
+      designSystemId: null,
+      createdAt,
+      updatedAt,
+    };
+    return {
+      id: remote.resourceId,
+      name,
+      workspaceId: ctx.workspaceId,
+      visibility: 'team',
+      resourceState,
+      createdByWorkspaceMemberId: remote.ownerMemberId,
+      updatedByWorkspaceMemberId: remote.ownerMemberId,
+      resourceHubResourceId: remote.resourceId,
+      cloudTombstonedAt: null,
+      currentUserAccess: accessForRemoteTeamProject(remote, ctx),
+      syncState,
+      createdAt,
+      updatedAt,
+      project,
+    };
+  }
+  async function listRemoteTeamProjectSummaries(localRows: any[], ctx: WorkspaceProjectContext) {
+    if (!teamProjectCatalog) return [];
+    const localResourceIds = new Set(localRows.map((row) => row.resourceHubResourceId).filter(Boolean));
+    let remoteProjects: VelaTeamProjectRecord[];
+    try {
+      remoteProjects = await teamProjectCatalog.list(workspaceProjectPrincipal(ctx));
+    } catch (error) {
+      throw new TeamProjectCatalogListError(error);
+    }
+    const seenResourceIds = new Set<string>();
+    return remoteProjects
+      .filter((project) => project.access.canView)
+      .filter((project) => !localResourceIds.has(project.resourceId))
+      .filter((project) => {
+        if (seenResourceIds.has(project.resourceId)) return false;
+        seenResourceIds.add(project.resourceId);
+        return true;
+      })
+      .map((project) => remoteTeamProjectSummary(project, ctx));
+  }
+  function ensureWorkspaceProjection(project: any, ctx: WorkspaceProjectContext, visibility = 'personal') {
+    const existing = getWorkspaceProject(db, ctx.workspaceId, project.id);
+    return existing ?? ensureWorkspaceProject(db, {
+      projectId: project.id,
+      workspaceId: ctx.workspaceId,
+      visibility,
+      resourceState: 'active',
+      createdByWorkspaceMemberId: null,
+      updatedByWorkspaceMemberId: null,
+      syncState: 'local_only',
+      resourceHubResourceId: null,
+      cloudTombstonedAt: null,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+    });
+  }
+  function workspaceProjectRowVisibleForLocations(
+    row: any,
+    locations: Array<{ id: string; path: string; builtIn?: boolean }>,
+  ): boolean {
+    let metadata: unknown;
+    try {
+      metadata = row.metadataJson ? JSON.parse(row.metadataJson) : undefined;
+    } catch {
+      metadata = undefined;
+    }
+    return projectVisibleForLocations({ metadata }, locations);
+  }
+  function workspaceProjectRowsForIds(
+    projectIds: string[],
+    ctx: WorkspaceProjectContext,
+    locations: Array<{ id: string; path: string; builtIn?: boolean }>,
+  ) {
+    for (const id of projectIds) {
+      const project = getProject(db, id);
+      if (project && projectVisibleForLocations(project, locations)) ensureWorkspaceProjection(project, ctx, 'personal');
+    }
+    return listWorkspaceProjects(db, ctx.workspaceId).filter((row: any) => workspaceProjectRowVisibleForLocations(row, locations));
+  }
   async function loadPluginRegistryView() {
     const [skills, designSystems] = await Promise.all([
       listSkills(SKILLS_DIR),
@@ -1432,6 +1723,214 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       res.json(body);
     } catch (err: any) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
+  app.get('/api/workspaces/:workspaceId/projects', async (req, res) => {
+    try {
+      const ctx = workspaceProjectContext(req, req.params.workspaceId);
+      if (!ctx) return sendMissingWorkspaceContext(res);
+      if (ctx.memberStatus === 'removed') {
+        /** @type {import('@open-design/contracts').WorkspaceProjectsResponse} */
+        const body = { projects: [] };
+        return res.json(body);
+      }
+      const locations = await configuredProjectLocations();
+      for (const project of listProjects(db).filter((item: any) => projectVisibleForLocations(item, locations))) {
+        ensureWorkspaceProjection(project, ctx, 'personal');
+      }
+      const view = typeof req.query.view === 'string' ? req.query.view : 'all';
+      if (view !== 'all' && view !== 'recent' && view !== 'drafts' && view !== 'team') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'view must be all, recent, drafts, or team');
+      }
+      const owner = typeof req.query.owner === 'string' ? req.query.owner : 'all';
+      const visibility = typeof req.query.visibility === 'string' ? req.query.visibility : 'all';
+      const rows = listWorkspaceProjects(db, ctx.workspaceId).filter((row: any) => workspaceProjectRowVisibleForLocations(row, locations));
+      const queryCanIncludeTeam =
+        view !== 'drafts' &&
+        view !== 'recent' &&
+        visibility !== 'personal' &&
+        (view === 'team' || visibility === 'team' || (view === 'all' && visibility === 'all'));
+      const needsRemoteTeamProjects = queryCanIncludeTeam;
+      const mergedProjects = [
+        ...rows.map((row: any) => normalizeWorkspaceProjectRow(row, ctx)),
+        ...(needsRemoteTeamProjects ? await listRemoteTeamProjectSummaries(rows, ctx) : []),
+      ];
+      const projects = mergedProjects
+        .filter((project: any) => {
+          if (view === 'drafts') {
+            if (project.visibility !== 'personal' || project.createdByWorkspaceMemberId !== ctx.workspaceMemberId) return false;
+          }
+          if (view === 'recent' && project.visibility !== 'personal') return false;
+          if (view === 'team' && project.visibility !== 'team') return false;
+          if ((visibility === 'personal' || visibility === 'team') && project.visibility !== visibility) return false;
+          if (owner === 'mine' && project.createdByWorkspaceMemberId !== ctx.workspaceMemberId) return false;
+          if (owner === 'others' && project.createdByWorkspaceMemberId === ctx.workspaceMemberId) return false;
+          return true;
+        });
+      /** @type {import('@open-design/contracts').WorkspaceProjectsResponse} */
+      const body = { projects };
+      res.json(body);
+    } catch (err: any) {
+      if (err?.name === 'TeamProjectCatalogListError') {
+        return sendApiError(res, 502, 'TEAM_PROJECT_CATALOG_UNAVAILABLE', err.message);
+      }
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
+  function validVisibility(value: unknown): value is 'personal' | 'team' {
+    return value === 'personal' || value === 'team';
+  }
+  function parseProjectIds(value: unknown): string[] | null {
+    if (!Array.isArray(value) || value.length === 0) return null;
+    const ids = [];
+    for (const id of value) {
+      if (typeof id !== 'string' || !id.trim() || !isSafeId(id)) return null;
+      ids.push(id);
+    }
+    return ids;
+  }
+
+  function workspaceMoveAllowed(summary: any, targetVisibility: 'personal' | 'team'): boolean {
+    if (targetVisibility === 'team') return summary.currentUserAccess.canMoveToTeam;
+    return summary.currentUserAccess.canMoveToPersonal;
+  }
+  function requestTeamShares(projectIds: string[], ctx: WorkspaceProjectContext, visibility: 'personal' | 'team') {
+    if (visibility !== 'team') return;
+    for (const projectId of projectIds) {
+      collabSync.requestTeamShare(projectId, workspaceProjectPrincipal(ctx));
+    }
+  }
+  function ownerForTeamShare(summary: any, ctx: WorkspaceProjectContext, visibility: 'personal' | 'team') {
+    if (visibility !== 'team') return summary?.createdByWorkspaceMemberId ?? null;
+    return summary?.createdByWorkspaceMemberId ?? ctx.workspaceMemberId;
+  }
+
+  app.post('/api/workspaces/:workspaceId/projects/:projectId/move', async (req, res) => {
+    try {
+      const ctx = workspaceProjectContext(req, req.params.workspaceId);
+      if (!ctx) return sendMissingWorkspaceContext(res);
+      const project = getProject(db, req.params.projectId);
+      const locations = await configuredProjectLocations();
+      if (!project || !projectVisibleForLocations(project, locations)) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const visibility = req.body?.visibility;
+      if (!validVisibility(visibility)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'visibility must be personal or team');
+      }
+      if (visibility === 'personal') {
+        return sendApiError(res, 403, 'PROJECT_UNSHARE_UNSUPPORTED', 'moving team projects back to personal is not supported yet');
+      }
+      const wp = ensureWorkspaceProjection(project, ctx, 'personal');
+      const row = listWorkspaceProjects(db, ctx.workspaceId).find((item: any) => item.id === project.id);
+      if (!row || !wp) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const summary = normalizeWorkspaceProjectRow(row, ctx);
+      if (!workspaceMoveAllowed(summary, visibility)) {
+        return sendApiError(res, 403, 'PROJECT_DELETE_FORBIDDEN', 'project move forbidden');
+      }
+      updateWorkspaceProject(db, ctx.workspaceId, project.id, {
+        visibility,
+        createdByWorkspaceMemberId: ownerForTeamShare(summary, ctx, visibility),
+        updatedByWorkspaceMemberId: ctx.workspaceMemberId,
+        resourceHubResourceId: visibility === 'team' ? projectResourceIdFor(project.id, workspaceProjectPrincipal(ctx)) : null,
+        cloudTombstonedAt: visibility === 'team' ? null : Date.now(),
+        syncState: visibility === 'team' ? 'pending_upload' : 'local_only',
+      });
+      requestTeamShares([project.id], ctx, visibility);
+      const updatedRow = listWorkspaceProjects(db, ctx.workspaceId).find((item: any) => item.id === project.id);
+      res.json({ project: normalizeWorkspaceProjectRow(updatedRow, ctx) });
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.post('/api/workspaces/:workspaceId/projects/batch-move', async (req, res) => {
+    try {
+      const ctx = workspaceProjectContext(req, req.params.workspaceId);
+      if (!ctx) return sendMissingWorkspaceContext(res);
+      const visibility = req.body?.visibility;
+      const projectIds = parseProjectIds(req.body?.projectIds);
+      if (!validVisibility(visibility) || !projectIds) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'projectIds and visibility are required');
+      }
+      if (visibility === 'personal') {
+        return sendApiError(res, 403, 'PROJECT_UNSHARE_UNSUPPORTED', 'moving team projects back to personal is not supported yet');
+      }
+      const locations = await configuredProjectLocations();
+      const rows = workspaceProjectRowsForIds(projectIds, ctx, locations);
+      const summaries = projectIds.map((id: string) => {
+        const row = rows.find((item: any) => item.id === id);
+        return row ? normalizeWorkspaceProjectRow(row, ctx) : null;
+      });
+      if (summaries.some((item: any) => !item)) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const forbidden = summaries.filter((item: any) => !workspaceMoveAllowed(item, visibility));
+      if (forbidden.length > 0) {
+        return sendApiError(res, 403, 'PROJECT_BATCH_CONTAINS_FORBIDDEN_ITEMS', 'batch contains forbidden projects');
+      }
+      const moveMany = db.transaction((ids: string[]) => {
+        for (const id of ids) {
+          const summary = summaries.find((item: any) => item?.id === id);
+          updateWorkspaceProject(db, ctx.workspaceId, id, {
+            visibility,
+            createdByWorkspaceMemberId: ownerForTeamShare(summary, ctx, visibility),
+            updatedByWorkspaceMemberId: ctx.workspaceMemberId,
+            resourceHubResourceId: visibility === 'team' ? projectResourceIdFor(id, workspaceProjectPrincipal(ctx)) : null,
+            cloudTombstonedAt: visibility === 'team' ? null : Date.now(),
+            syncState: visibility === 'team' ? 'pending_upload' : 'local_only',
+          });
+        }
+      });
+      moveMany(projectIds);
+      requestTeamShares(projectIds, ctx, visibility);
+      const updatedRows = listWorkspaceProjects(db, ctx.workspaceId);
+      const projects = projectIds.map((id: string) => normalizeWorkspaceProjectRow(updatedRows.find((row: any) => row.id === id), ctx));
+      res.json({ ok: true, projects });
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.post('/api/workspaces/:workspaceId/projects/batch-delete', async (req, res) => {
+    try {
+      const ctx = workspaceProjectContext(req, req.params.workspaceId);
+      if (!ctx) return sendMissingWorkspaceContext(res);
+      const projectIds = parseProjectIds(req.body?.projectIds);
+      if (!projectIds) return sendApiError(res, 400, 'BAD_REQUEST', 'projectIds are required');
+      const locations = await configuredProjectLocations();
+      const rows = workspaceProjectRowsForIds(projectIds, ctx, locations);
+      const summaries = projectIds.map((id: string) => {
+        const row = rows.find((item: any) => item.id === id);
+        return row ? normalizeWorkspaceProjectRow(row, ctx) : null;
+      });
+      if (summaries.some((item: any) => !item)) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const shared = summaries.filter((item: any) => item.visibility === 'team');
+      if (shared.length > 0) {
+        return sendApiError(res, 403, 'PROJECT_UNSHARE_UNSUPPORTED', 'deleting shared team projects is not supported yet');
+      }
+      const forbidden = summaries.filter((item: any) => !item.currentUserAccess.canDelete);
+      if (forbidden.length > 0) {
+        return sendApiError(res, 403, 'PROJECT_BATCH_CONTAINS_FORBIDDEN_ITEMS', 'batch contains forbidden projects');
+      }
+      const finalProjectIds = projectIds.filter((id: string) => countWorkspaceProjectRefs(db, id) <= 1);
+      const deleteMany = db.transaction((ids: string[], finalIds: string[]) => {
+        for (const id of ids) deleteWorkspaceProject(db, ctx.workspaceId, id);
+        for (const id of finalIds) {
+          if (countWorkspaceProjectRefs(db, id) === 0) dbDeleteProject(db, id);
+        }
+      });
+      const stagedDelete = finalProjectIds.length > 0
+        ? await stageProjectDirsForDelete(PROJECTS_DIR, finalProjectIds, randomId())
+        : null;
+      try {
+        deleteMany(projectIds, finalProjectIds);
+      } catch (error) {
+        await stagedDelete?.rollback();
+        throw error;
+      }
+      await stagedDelete?.commit();
+      res.json({ ok: true, deletedProjectIds: projectIds });
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
   });
 

@@ -1317,6 +1317,49 @@ export async function removeProjectDir(projectsRoot, projectId) {
   await rm(dir, { recursive: true, force: true });
 }
 
+export async function stageProjectDirsForDelete(projectsRoot, projectIds, batchId) {
+  const uniqueProjectIds = Array.from(new Set(projectIds));
+  const stagingRoot = path.join(projectsRoot, '.delete-staging', batchId);
+  const staged = [];
+  await mkdir(stagingRoot, { recursive: true });
+  try {
+    for (const projectId of uniqueProjectIds) {
+      const source = projectDir(projectsRoot, projectId);
+      const target = path.join(stagingRoot, projectId);
+      try {
+        await rename(source, target);
+        staged.push({ projectId, source, target });
+      } catch (error) {
+        if (error?.code === 'ENOENT') continue;
+        throw error;
+      }
+    }
+  } catch (error) {
+    await Promise.allSettled(
+      staged
+        .slice()
+        .reverse()
+        .map((entry) => rename(entry.target, entry.source)),
+    );
+    await rm(stagingRoot, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
+  return {
+    async rollback() {
+      await Promise.allSettled(
+        staged
+          .slice()
+          .reverse()
+          .map((entry) => rename(entry.target, entry.source)),
+      );
+      await rm(stagingRoot, { recursive: true, force: true }).catch(() => {});
+    },
+    async commit() {
+      await rm(stagingRoot, { recursive: true, force: true });
+    },
+  };
+}
+
 function resolveSafe(dir, name) {
   const safePath = validateProjectPath(name);
   const target = path.resolve(dir, safePath);

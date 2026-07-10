@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import http from 'node:http';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -15,6 +15,7 @@ import {
   type CreateCollabRuntimeOptions,
 } from '../src/collab/runtime.js';
 import type { WorkspaceContextProvider } from '../src/collab/workspace-context.js';
+import { projectResourceIdFor } from '../src/integrations/vela-team-projects.js';
 import {
   registerCollabSyncRoutes,
   type PulledProjectStore,
@@ -104,11 +105,16 @@ async function startSyncServer(
   if (!address || typeof address === 'string') throw new Error('server did not bind to a TCP port');
   const base = `http://127.0.0.1:${address.port}`;
   return {
-    async json(route: string, options: { method?: string; body?: unknown } = {}) {
+    async json(
+      route: string,
+      options: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
+    ) {
       const init: RequestInit = { method: options.method ?? 'GET' };
       if (options.body !== undefined) {
-        init.headers = { 'content-type': 'application/json' };
+        init.headers = { 'content-type': 'application/json', ...options.headers };
         init.body = JSON.stringify(options.body);
+      } else if (options.headers) {
+        init.headers = options.headers;
       }
       const response = await fetch(`${base}${route}`, init);
       return { status: response.status, body: (await response.json()) as Record<string, any> };
@@ -126,6 +132,218 @@ async function startSyncServer(
 }
 
 describe('collab sync routes', () => {
+  it('keeps publish callbacks scoped to every workspace sharing the same project', async () => {
+    const onPublished = vi.fn();
+    const publish = vi.fn(async (input: { principal?: { memberId?: string } }) => ({
+      version: input.principal?.memberId === 'member-a' ? 11 : 22,
+    }));
+    runtime = createCollabRuntime({
+      adapter: { publish },
+      onPublished,
+    });
+    const projectId = 'shared-project';
+    const workspaceA = {
+      memberId: 'member-a',
+      teamId: 'workspace-a',
+      role: 'admin' as const,
+      lifecycleState: 'active' as const,
+    };
+    const workspaceB = {
+      memberId: 'member-b',
+      teamId: 'workspace-b',
+      role: 'admin' as const,
+      lifecycleState: 'active' as const,
+    };
+
+    runtime.requestTeamShare(projectId, workspaceA);
+    runtime.requestTeamShare(projectId, workspaceB);
+
+    for (let i = 0; i < 40 && (publish.mock.calls.length < 2 || onPublished.mock.calls.length < 2); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect((publish.mock.calls as unknown as Array<[Record<string, unknown>]>).map((call) => call[0])).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ projectId, principal: workspaceA }),
+        expect.objectContaining({ projectId, principal: workspaceB }),
+      ]),
+    );
+    expect(onPublished.mock.calls.map((call) => call[0]?.principal)).toEqual(
+      expect.arrayContaining([workspaceA, workspaceB]),
+    );
+    expect(runtime.publishedVersion(projectId, workspaceA)).toBe(11);
+    expect(runtime.publishedVersion(projectId, workspaceB)).toBe(22);
+    expect(runtime.projectOwnerMemberId(projectId, workspaceA)).toBe('member-a');
+    expect(runtime.projectOwnerMemberId(projectId, workspaceB)).toBe('member-b');
+
+    publish.mockClear();
+    onPublished.mockClear();
+    runtime.scheduler.notifyChanged(projectId, 'save');
+    runtime.scheduler.runBoundary(projectId);
+
+    for (
+      let i = 0;
+      i < 40 &&
+      (publish.mock.calls.length < 2 ||
+        runtime.publishedVersion(projectId, workspaceA) === null ||
+        runtime.publishedVersion(projectId, workspaceB) === null);
+      i += 1
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect((publish.mock.calls as unknown as Array<[Record<string, unknown>]>).map((call) => call[0])).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ projectId, reason: 'save', principal: workspaceA }),
+        expect.objectContaining({ projectId, reason: 'save', principal: workspaceB }),
+      ]),
+    );
+    expect(onPublished.mock.calls.map((call) => call[0]?.principal)).toEqual(
+      expect.arrayContaining([workspaceA, workspaceB]),
+    );
+    expect(runtime.publishedVersion(projectId, workspaceA)).toBe(11);
+    expect(runtime.publishedVersion(projectId, workspaceB)).toBe(22);
+  });
+
+  it('reports ordinary publish failures to every workspace sharing the same project', async () => {
+    let failPublish = false;
+    const onError = vi.fn();
+    const publish = vi.fn(async (input: { principal?: { memberId?: string } }) => {
+      if (failPublish) throw new Error('resource hub unavailable');
+      return { version: input.principal?.memberId === 'member-a' ? 11 : 22 };
+    });
+    runtime = createCollabRuntime({
+      adapter: { publish },
+      onError,
+    });
+    const projectId = 'shared-project';
+    const workspaceA = {
+      memberId: 'member-a',
+      teamId: 'workspace-a',
+      role: 'admin' as const,
+      lifecycleState: 'active' as const,
+    };
+    const workspaceB = {
+      memberId: 'member-b',
+      teamId: 'workspace-b',
+      role: 'admin' as const,
+      lifecycleState: 'active' as const,
+    };
+
+    runtime.requestTeamShare(projectId, workspaceA);
+    runtime.requestTeamShare(projectId, workspaceB);
+
+    for (
+      let i = 0;
+      i < 40 &&
+      (publish.mock.calls.length < 2 ||
+        runtime.publishedVersion(projectId, workspaceA) === null ||
+        runtime.publishedVersion(projectId, workspaceB) === null);
+      i += 1
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    publish.mockClear();
+    onError.mockClear();
+
+    failPublish = true;
+    runtime.scheduler.notifyChanged(projectId, 'change');
+    runtime.scheduler.runBoundary(projectId);
+
+    for (
+      let i = 0;
+      i < 40 &&
+      (onError.mock.calls.length < 2 ||
+        runtime.projectSyncState(projectId, workspaceA) !== 'sync_failed' ||
+        runtime.projectSyncState(projectId, workspaceB) !== 'sync_failed');
+      i += 1
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(onError.mock.calls.map((call) => call[0]?.principal)).toEqual(
+      expect.arrayContaining([workspaceA, workspaceB]),
+    );
+    expect(runtime.projectSyncState(projectId, workspaceA)).toBe('sync_failed');
+    expect(runtime.projectSyncState(projectId, workspaceB)).toBe('sync_failed');
+  });
+
+  it('keeps team-project catalog resource ids scoped per workspace principal', async () => {
+    const teamProjectCatalog = {
+      list: vi.fn(),
+      upsert: vi.fn(async () => null),
+    };
+    runtime = createCollabRuntime({
+      teamProjectCatalog,
+    });
+    const projectId = 'landing';
+    const workspaceA = {
+      memberId: 'member-a',
+      teamId: 'workspace-a',
+      role: 'admin' as const,
+      lifecycleState: 'active' as const,
+    };
+    const workspaceB = {
+      memberId: 'member-b',
+      teamId: 'workspace-b',
+      role: 'admin' as const,
+      lifecycleState: 'active' as const,
+    };
+
+    runtime.requestTeamShare(projectId, workspaceA);
+    runtime.requestTeamShare(projectId, workspaceB);
+
+    for (let i = 0; i < 40 && teamProjectCatalog.upsert.mock.calls.length < 2; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    const resourceIds = (
+      teamProjectCatalog.upsert.mock.calls as unknown as Array<[{
+        resourceId?: string;
+      }]>
+    ).map((call) => call[0]?.resourceId);
+    expect(resourceIds).toEqual(
+      expect.arrayContaining([
+        projectResourceIdFor(projectId, workspaceA),
+        projectResourceIdFor(projectId, workspaceB),
+      ]),
+    );
+    expect(projectResourceIdFor(projectId, workspaceA)).not.toBe(projectResourceIdFor(projectId, workspaceB));
+  });
+
+  it('restores persisted team-share principals after runtime restart', async () => {
+    const projectId = 'shared-after-restart';
+    const workspace = {
+      memberId: 'member-owner',
+      teamId: 'workspace-restart',
+      role: 'member' as const,
+      lifecycleState: 'active' as const,
+    };
+    const initialPublish = vi.fn(async () => ({ version: 1 }));
+    runtime = createCollabRuntime({
+      adapter: { publish: initialPublish },
+    });
+    runtime.requestTeamShare(projectId, workspace);
+    for (let i = 0; i < 40 && initialPublish.mock.calls.length < 1; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    runtime.dispose();
+
+    const publish = vi.fn(async () => ({ version: 2 }));
+    runtime = createCollabRuntime({
+      adapter: { publish },
+    });
+    runtime.rememberTeamShare(projectId, workspace, 'synced');
+
+    expect(runtime.projectOwnerMemberId(projectId, workspace)).toBe('member-owner');
+    runtime.scheduler.notifyChanged(projectId, 'change');
+    runtime.scheduler.runBoundary(projectId);
+
+    for (let i = 0; i < 40 && publish.mock.calls.length < 1; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({
+      projectId,
+      principal: workspace,
+    }));
+  });
+
   it('publishes on request and advances the published version monotonically', async () => {
     const api = await startSyncServer();
     expect((await api.json('/api/projects/p1/collab/status')).body.publishedVersion).toBeNull();
@@ -381,6 +599,38 @@ describe('collab sync routes', () => {
     expect(res.body.error).toBe('TEAM_PROJECT_PUBLISH_UNAVAILABLE');
     expect(writes).toEqual([]);
     expect((await api.json('/api/projects/p1/collab/status')).body.syncState).toBe('sync_failed');
+  });
+
+  it('uses header-only workspace identity for sync intent, status, and pull', async () => {
+    const api = await startSyncServer({ current: async () => null });
+    const headers = {
+      'x-od-workspace-id': 'ws-header',
+      'x-od-workspace-member-id': 'member-header',
+      'x-od-workspace-role': 'admin',
+    };
+
+    const intent = await api.json('/api/projects/p1/collab/sync-intent', {
+      method: 'POST',
+      headers,
+      body: { event: 'project_team_share_requested', projectId: 'p1' },
+    });
+    expect(intent.status).toBe(200);
+    expect(['pending_upload', 'synced']).toContain(intent.body.syncState);
+
+    let status = await api.json('/api/projects/p1/collab/status', { headers });
+    for (let i = 0; i < 40 && status.body.syncState !== 'synced'; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      status = await api.json('/api/projects/p1/collab/status', { headers });
+    }
+    expect(status.body).toMatchObject({
+      syncState: 'synced',
+      ownerMemberId: 'member-header',
+      publishedVersion: 1,
+    });
+
+    const pull = await api.json('/api/projects/p1/collab/pull', { method: 'POST', headers });
+    expect(pull.status).toBe(200);
+    expect(pull.body.version).toBe(1);
   });
 
   it('pulls the published head for a member (null before any publish)', async () => {
