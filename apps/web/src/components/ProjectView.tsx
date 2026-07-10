@@ -198,7 +198,6 @@ import { historyWithApiAttachmentContext } from '../api-attachment-context';
 import { filterImplicitProducedFiles } from '../produced-files';
 import { AvatarMenu } from './AvatarMenu';
 import { EntrySettingsMenu } from './EntrySettingsMenu';
-import { HandoffButton } from './HandoffButton';
 import { Icon } from './Icon';
 import { localizePluginTitle } from './plugins-home/localization';
 import { DesignSystemPicker } from './DesignSystemPicker';
@@ -8408,35 +8407,23 @@ export function ProjectView({
           onLaunchTerminalAuth={handleLaunchAntigravityOauth}
           conversationId={activeConversationId}
           headerActions={(
-            <>
-              <HandoffButton
-                projectId={project.id}
-                projectName={project.name}
-                projectDir={projectDetail.resolvedDir}
-                agents={agents}
-                artifactId={headerArtifact.artifact_id}
-                artifactKind={headerArtifact.artifact_kind}
-                metricsConsent={config.telemetry?.metrics === true}
-                installationId={config.installationId}
-              />
-              <EntrySettingsMenu
-                config={config}
-                onThemeChange={handleThemeChange}
-                onOpenSettings={onOpenSettings}
-                trackingPageName="artifact"
-                onTrackTriggerClick={() => {
-                  // Spec row 52: the settings gear in the artifact header.
-                  // Carry the active artifact so settings slices line up with
-                  // the rest of the artifact_header funnel.
-                  trackArtifactHeaderClick(analytics.track, {
-                    page_name: 'artifact',
-                    area: 'artifact_header',
-                    element: 'settings',
-                    ...headerArtifact,
-                  });
-                }}
-              />
-            </>
+            <EntrySettingsMenu
+              config={config}
+              onThemeChange={handleThemeChange}
+              onOpenSettings={onOpenSettings}
+              trackingPageName="artifact"
+              onTrackTriggerClick={() => {
+                // Spec row 52: the settings gear in the artifact header.
+                // Carry the active artifact so settings slices line up with
+                // the rest of the artifact_header funnel.
+                trackArtifactHeaderClick(analytics.track, {
+                  page_name: 'artifact',
+                  area: 'artifact_header',
+                  element: 'settings',
+                  ...headerArtifact,
+                });
+              }}
+            />
           )}
           questionForm={displayedQuestionForm}
           questionFormPreview={displayedQuestionFormPreview}
