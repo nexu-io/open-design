@@ -98,7 +98,7 @@ export function createChatRunService({
       retryRestartTimer: null,
       stdinOpen: false,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
-      eventsLogStream: null,
+      eventsLogFd: null,
       // Set once finish() has closed the log stream, so a late post-finish emit
       // can't lazily re-open a stream nothing will ever close (FD leak).
       eventsLogClosed: false,
@@ -119,29 +119,26 @@ export function createChatRunService({
   // not exist yet; mkdir is recursive so it's safe to call repeatedly.
   // Disk failures are best-effort — if we can't write, the run still
   // proceeds (SSE clients keep getting events from memory).
-  const ensureLogStream = (run) => {
+  const ensureLogFd = (run) => {
     if (!run.eventsLogPath) return null;
-    if (run.eventsLogStream) return run.eventsLogStream;
-    // finish() has already closed + nulled this run's log stream. Re-opening it
+    if (run.eventsLogFd != null) return run.eventsLogFd;
+    // finish() has already closed + nulled this run's log fd. Re-opening it
     // here for a late event (async child-close diagnostic, trailing tool
     // callback, telemetry) would leak a file descriptor that nothing ever
     // closes. We gate on the explicit `eventsLogClosed` flag — NOT on terminal
     // status — so finish()'s own `end` emit (which runs while status is already
-    // terminal but before the stream is closed) can still open + write + close
+    // terminal but before the fd is closed) can still open + write + close
     // the log for a run that had no prior events. Late events still reach
     // memory + SSE clients below; we just stop persisting them to the closed
     // log. (#3408 P1 FD-leak fix; cf. #4163.)
     if (run.eventsLogClosed) return null;
     try {
       fs.mkdirSync(path.dirname(run.eventsLogPath), { recursive: true });
-      run.eventsLogStream = fs.createWriteStream(run.eventsLogPath, { flags: 'a' });
-      // Don't crash the daemon on a stream-level error; just stop
-      // trying to use this stream so subsequent emits silently skip.
-      run.eventsLogStream.on('error', () => {
-        try { run.eventsLogStream?.destroy(); } catch { /* ignore */ }
-        run.eventsLogStream = null;
-      });
-      return run.eventsLogStream;
+      // Append-mode fd for synchronous writes (see emit): each record is durable
+      // on disk before emit() returns, so the reattach backfill can always
+      // recover an evicted event without a durability watermark or race window.
+      run.eventsLogFd = fs.openSync(run.eventsLogPath, 'a');
+      return run.eventsLogFd;
     } catch {
       return null;
     }
@@ -157,54 +154,29 @@ export function createChatRunService({
     const record = { id, event, data, timestamp: Date.now() };
     run.events.push(record);
     run.updatedAt = Date.now();
-    const stream = ensureLogStream(run);
-    if (stream) {
+    const fd = ensureLogFd(run);
+    if (fd != null) {
       try {
-        // The write callback fires once fs.write() has handed this record to the
-        // OS, at which point a readFileSync sees it. Track that watermark so the
-        // reattach gap backfill (stream()) never has to read a record that hasn't
-        // reached the file yet.
-        stream.write(JSON.stringify(record) + '\n', () => {
-          if (id > (run.eventsDurableUpToId ?? 0)) run.eventsDurableUpToId = id;
-        });
+        // Synchronous append: the record is durable on disk before emit()
+        // returns. The reattach backfill (stream()) reads events.jsonl, so an
+        // event must be on the file before the ring buffer can evict it below —
+        // a synchronous write guarantees that by construction, with no
+        // durability watermark and no window where an evicted record sits on
+        // neither memory nor disk.
+        fs.writeSync(fd, JSON.stringify(record) + '\n');
       } catch {
-        // Stream-level write errors are caught by the on('error') above;
-        // swallowing here keeps the SSE fan-out below from being skipped.
+        // Disk failure is best-effort: stop using this fd so later emits skip
+        // persistence. The run still proceeds and SSE clients keep getting
+        // events from memory; an unwritten record simply behaves like the
+        // no-persistence path below.
+        try { fs.closeSync(fd); } catch { /* ignore */ }
+        run.eventsLogFd = null;
       }
     }
-    // Evict oldest events past the ring-buffer cap, but only once they are
-    // durable on disk — otherwise an evicted-yet-unflushed record is recoverable
-    // from neither memory nor the file, recreating the reattach gap the backfill
-    // is meant to close. When persistence is off or the log stream has errored
-    // out, disk backfill is impossible anyway, so fall back to plain eviction.
-    // A hard 2x cap bounds memory if the writer stalls for a whole buffer.
-    if (run.events.length > maxEvents) {
-      const overflow = run.events.length - maxEvents;
-      const durableThrough = stream
-        ? (run.eventsDurableUpToId ?? 0)
-        : Number.POSITIVE_INFINITY;
-      let evictable = 0;
-      while (
-        evictable < overflow &&
-        run.events[evictable] &&
-        run.events[evictable].id <= durableThrough
-      ) {
-        evictable++;
-      }
-      // Memory backstop only: force eviction past 2x the cap even if those
-      // records are not yet durable. This is the sole path that can drop an
-      // un-durable record, and it is unreachable through the normal emit path —
-      // events arrive on separate stdout ticks, so the write callback fires and
-      // advances the watermark between bursts, keeping the live buffer near the
-      // cap. Reaching 2x un-durable events requires the writer to stall for a
-      // whole buffer, i.e. a failing disk; that stream errors out and the branch
-      // above has already fallen back to plain eviction (disk backfill is
-      // impossible anyway). So this backstop never silently drops a recoverable
-      // record in practice — it only bounds memory under a broken writer.
-      const hardCapEvict = run.events.length - maxEvents * 2;
-      if (hardCapEvict > evictable) evictable = hardCapEvict;
-      if (evictable > 0) run.events.splice(0, evictable);
-    }
+    // Every persisted record is already durable on disk, so evicting the oldest
+    // over-cap records can never strand one where the reattach backfill can't
+    // find it.
+    if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
     for (const sse of run.clients) sse.send(event, data, id);
     return record;
   };
@@ -263,10 +235,10 @@ export function createChatRunService({
     run.clients.clear();
     for (const waiter of run.waiters) waiter(statusBody(run));
     run.waiters.clear();
-    // Close the event log stream now that no more events will be
-    // emitted for this run. The file stays on disk for tail/grep.
-    try { run.eventsLogStream?.end(); } catch { /* ignore */ }
-    run.eventsLogStream = null;
+    // Close the event log fd now that no more events will be emitted for this
+    // run. The file stays on disk for tail/grep.
+    try { if (run.eventsLogFd != null) fs.closeSync(run.eventsLogFd); } catch { /* ignore */ }
+    run.eventsLogFd = null;
     // Any event emitted after this point must not lazily re-open the log.
     run.eventsLogClosed = true;
     scheduleCleanup(run);
@@ -555,6 +527,11 @@ export function createChatRunService({
     run.updatedAt = Date.now();
     for (const waiter of run.waiters) waiter(statusBody(run));
     run.waiters.clear();
+    // Close the log fd if this run ever opened one, so dropping a run never
+    // leaks a descriptor. Normally null (drop targets runs that never emitted).
+    try { if (run.eventsLogFd != null) fs.closeSync(run.eventsLogFd); } catch { /* ignore */ }
+    run.eventsLogFd = null;
+    run.eventsLogClosed = true;
   };
 
   return {

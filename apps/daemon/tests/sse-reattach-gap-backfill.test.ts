@@ -15,7 +15,7 @@
 
 import type { Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -120,30 +120,37 @@ describe('SSE reattach gap backfill — active run, log writer not yet flushed',
     });
   }
 
-  it('does not evict events that have not yet reached the on-disk log', () => {
+  it('persists every event to disk before evicting it from the ring buffer', () => {
     const runs = makeService([], tmpDirSync());
-    const run = runs.create({ projectId: 'p' }) as { events: Array<{ id: number }>; status: string };
+    const run = runs.create({ projectId: 'p' }) as {
+      events: Array<{ id: number }>; status: string; eventsLogPath: string;
+    };
     run.status = 'running';
-    // Synchronous burst well past maxEvents (50) but under the 2x hard cap. No
-    // async write callback can fire mid-loop, so nothing is durable yet and
-    // therefore nothing may be evicted — the reattach backfill would otherwise
-    // have no source for these records.
-    for (let i = 0; i < 90; i++) runs.emit(run, 'agent', { type: 'text_delta', delta: `t${i}` });
-    expect(run.events[0]?.id).toBe(1);       // nothing evicted past the durability watermark
-    expect(run.events.length).toBeGreaterThan(50);
+    // Burst past maxEvents (50): the oldest records leave the in-memory buffer.
+    // Each was written synchronously, so it must already be on disk and thus
+    // recoverable by the reattach backfill — no window where an evicted record
+    // is on neither memory nor disk.
+    for (let i = 0; i < 120; i++) runs.emit(run, 'agent', { type: 'text_delta', delta: `t${i}` });
+    expect(run.events.length).toBe(50);   // ring buffer capped
+    expect(run.events[0]?.id).toBe(71);   // ids 1..70 evicted from memory
+    const persistedIds = readFileSync(run.eventsLogPath, 'utf8')
+      .trim().split('\n').filter(Boolean).map((l) => (JSON.parse(l) as { id: number }).id);
+    expect(persistedIds).toContain(1);    // the evicted head is on disk
+    expect(persistedIds).toContain(70);
+    expect(persistedIds.length).toBe(120);
   });
 
-  it('reattaches gaplessly on an active run before the log writer has flushed', () => {
+  it('reattaches gaplessly on an active run whose ring buffer already truncated', () => {
     const sent: Array<{ event: string; id: number }> = [];
     const runs = makeService(sent, tmpDirSync());
     const run = runs.create({ projectId: 'p' }) as { status: string };
     (run as { status: string }).status = 'running';
-    // Fire a synchronous burst past maxEvents (50) but under the 2x hard cap,
-    // then reattach in the same tick — before any write callback has run, so the
-    // on-disk log is still empty. With plain eviction the backfill would read an
-    // empty prefix and the replay would jump to the buffer boundary; retaining
-    // un-durable events keeps the reattach gapless.
-    const total = 95;
+    // Burst past the cap on an active (non-terminal) run: the earliest events are
+    // evicted from memory but persisted synchronously, so the on-disk log holds
+    // them. Reattaching mid-run with a stale cursor must replay the evicted
+    // prefix from disk and stay gapless — the exact active-run reconnect this fix
+    // targets.
+    const total = 200;
     for (let i = 0; i < total; i++) runs.emit(run, 'agent', { type: 'text_delta', delta: `t${i}` });
     const cursor = 5;
     runs.stream(
