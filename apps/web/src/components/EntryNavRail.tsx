@@ -136,8 +136,6 @@ function formatBillingTier(tier: string, t: ReturnType<typeof useI18n>['t']): st
 export function EntryNavRail({
   view,
   onViewChange,
-  onNewProject,
-  newProjectDisabled,
   open,
   context,
   billing,
@@ -407,7 +405,7 @@ export function EntryNavRail({
             aria-label={brandLabel}
             data-testid="entry-nav-logo"
           >
-            <img src="/app-icon.svg" alt="" aria-hidden draggable={false} />
+            <img src="/brand-icon.svg" alt="" aria-hidden draggable={false} />
           </button>
         )}
 
@@ -415,16 +413,6 @@ export function EntryNavRail({
           <Icon name="search" size={14} />
           <input type="text" placeholder={t('common.search')} readOnly tabIndex={-1} />
         </div>
-
-        <NavButton
-          ariaLabel={t('entry.navNewProject')}
-          tooltip={t('entry.navNewProject')}
-          onClick={onNewProject}
-          disabled={newProjectDisabled}
-          testId="entry-nav-new-project"
-        >
-          <Icon name="plus" size={18} />
-        </NavButton>
 
         <NavButton
           active={isHome}
@@ -581,7 +569,7 @@ export function EntryNavRail({
               </a>
             ) : null}
           </>
-        ) : (
+        ) : context ? (
           <>
             <div className="entry-nav-rail__section-divider" aria-hidden />
             <NavButton
@@ -628,6 +616,28 @@ export function EntryNavRail({
               testId="entry-nav-integrations"
             >
               <Icon name="integrations-filled" size={18} />
+            </NavButton>
+          </>
+        ) : (
+          <>
+            <div className="entry-nav-rail__section-divider" aria-hidden />
+            <NavButton
+              active={view === 'design-systems'}
+              ariaLabel={t('entry.navDesignSystems')}
+              tooltip={t('entry.navDesignSystems')}
+              onClick={() => selectView('design-systems')}
+              testId="entry-nav-design-systems"
+            >
+              <Icon name="palette" size={18} />
+            </NavButton>
+            <NavButton
+              active={view === 'plugins'}
+              ariaLabel={t('entry.navExtensions')}
+              tooltip={t('entry.navExtensions')}
+              onClick={() => selectView('plugins')}
+              testId="entry-nav-plugins"
+            >
+              <Icon name="grid" size={18} />
             </NavButton>
           </>
         )}
