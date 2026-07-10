@@ -98,20 +98,6 @@ export function ManualEditPanel({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const targetForInspector = selectedTarget;
   const panelTitle = targetForInspector ? readableManualEditTargetName(targetForInspector) : t('manualEdit.fallbackTitle');
-  function parseRotationDeg(t: string): string {
-    var m = (t || '').match(/rotate\((-?[0-9.]+)deg\)/);
-    return m ? m[1]! : '0';
-  }
-  const alignBtnStyle: CSSProperties = {
-    background: 'none',
-    border: '1px solid var(--separator)',
-    borderRadius: 4,
-    cursor: 'pointer',
-    padding: '2px 6px',
-    fontSize: 14,
-    lineHeight: '18px',
-    color: 'var(--fg)',
-  };
   useEffect(() => {
     selectedTargetRef.current = selectedTarget;
   }, [selectedTarget]);

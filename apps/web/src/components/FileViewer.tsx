@@ -6317,29 +6317,24 @@ function HtmlViewer({
         return;
       }
       if (data.type === 'od-edit-add-element') {
-        var nId = data.id || ('od-n-' + Date.now());
-        var pHtml = String(data.html || '<div></div>');
-        var pLeft = String(data.left || '100px');
-        var pTop = String(data.top || '100px');
-        var pWidth = String(data.width || '200px');
-        var pHeight = String(data.height || '120px');
-        var pTag = String(data.tag || 'div');
+        const nId = data.id || ('od-n-' + Date.now());
+        const pHtml = String(data.html || '<div></div>');
         void applyManualEdit({
           id: nId,
           kind: 'add-element',
           parentId: String(data.parentId || '__body__'),
           html: pHtml,
-          tagName: pTag,
-          left: pLeft,
-          top: pTop,
-          width: pWidth,
-          height: pHeight,
-        }, 'Add ' + pTag);
+          tagName: String(data.tag || 'div'),
+          left: String(data.left || '100px'),
+          top: String(data.top || '100px'),
+          width: String(data.width || '200px'),
+          height: String(data.height || '120px'),
+        }, 'Add ' + String(data.tag || 'div'));
         return;
       }
       if (data.type === 'od-edit-style-commit') {
-        var sk = String(data.prop || '');
-        var sv = String(data.value || '');
+        const sk = String(data.prop || '');
+        const sv = String(data.value || '');
         if (sk && data.id) {
           void applyManualEdit({
             id: String(data.id),
