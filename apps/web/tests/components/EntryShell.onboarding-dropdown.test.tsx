@@ -142,4 +142,34 @@ describe('OnboardingDropdown', () => {
     expect(screen.getByText('No matches')).toBeTruthy();
     expect(screen.queryByText('No compatible text models were returned.')).toBeNull();
   });
+
+  it('renders model tag and cost metadata as option text', () => {
+    render(
+      <OnboardingDropdown
+        label="Model"
+        placeholder="Select a model"
+        value="deepseek-v4-flash"
+        options={[
+          {
+            value: 'deepseek-v4-flash',
+            label: 'deepseek-v4-flash',
+            meta: 'Low cost',
+            tag: 'Standard',
+            tagKind: 'standard',
+          },
+        ]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /deepseek-v4-flash/ }));
+
+    const option = screen.getByRole('option', { name: /^deepseek-v4-flash$/ });
+    expect(option.textContent).toContain('Low cost');
+    expect(option.textContent).toContain('Standard');
+    expect(option).toHaveAccessibleName('deepseek-v4-flash');
+    expect(option).toHaveAccessibleDescription('Low cost Standard');
+    expect(option.querySelector('[data-description]')).toBeNull();
+    expect(option.querySelector('[data-label]')).toBeNull();
+  });
 });

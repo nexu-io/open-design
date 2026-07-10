@@ -15,6 +15,7 @@ import type {
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
   ReplaceProjectWorkingDirResponse,
+  ProjectFileTextPreviewResponse,
   ProjectFileVersion,
   ProjectFileVersionSource,
   ProjectFileVersionResponse,
@@ -27,6 +28,7 @@ import type {
   AgentInfo,
   AppVersionInfo,
   AppVersionResponse,
+  WhatsNewResponse,
   ChatAttachment,
   CodexPetSummary,
   CodexPetsResponse,
@@ -1234,6 +1236,24 @@ export async function fetchLatestGithubReleaseInfo(): Promise<LatestGithubReleas
   }
 }
 
+export async function fetchWhatsNew(): Promise<WhatsNewResponse | null> {
+  try {
+    const resp = await fetch('/api/whats-new');
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as Partial<WhatsNewResponse>;
+    if (typeof json.version !== 'string') {
+      return null;
+    }
+    return {
+      version: json.version,
+      id: typeof json.id === 'string' ? json.id : null,
+      content: json.content ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export type SkillExampleResult =
   | { html: string }
   // The skill declares a non-HTML preview surface (image / markdown / …)
@@ -1699,6 +1719,47 @@ export async function fetchProjectFileText(
       name,
       projectId,
       url: requestUrl,
+    });
+    return null;
+  }
+}
+
+export async function fetchProjectFileTextPreview(
+  projectId: string,
+  name: string,
+  options?: { limit?: number; cacheBustKey?: string | number },
+): Promise<ProjectFileTextPreviewResponse | null> {
+  const segments = name
+    .split('/')
+    .filter((segment) => segment.length > 0)
+    .map(encodeURIComponent)
+    .join('/');
+  if (!segments) return null;
+  const params = new URLSearchParams();
+  if (options?.limit != null) params.set('limit', String(options.limit));
+  if (options?.cacheBustKey != null) params.set('cacheBust', String(options.cacheBustKey));
+  const query = params.toString();
+  const url = `/api/projects/${encodeURIComponent(projectId)}/text-preview/${segments}${query ? `?${query}` : ''}`;
+
+  try {
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) {
+      console.warn('[fetchProjectFileTextPreview] failed:', {
+        name,
+        projectId,
+        status: resp.status,
+        statusText: resp.statusText,
+        url,
+      });
+      return null;
+    }
+    return (await resp.json()) as ProjectFileTextPreviewResponse;
+  } catch (err) {
+    console.warn('[fetchProjectFileTextPreview] failed:', {
+      error: err,
+      name,
+      projectId,
+      url,
     });
     return null;
   }

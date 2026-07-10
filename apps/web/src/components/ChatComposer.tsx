@@ -23,6 +23,7 @@ import { useAnalytics } from '../analytics/provider';
 import {
   trackChatPanelClick,
   trackComposerBarClick,
+  trackComposerSessionModeClick,
   trackContextLinkResult,
   trackDesignToolboxClick,
   trackFigmaHelpModalSurfaceView,
@@ -33,6 +34,7 @@ import type {
   ComposerBarClickProps,
   DesignToolboxClickProps,
 } from '@open-design/contracts/analytics';
+import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir, dirExists, applyLibraryAsset, fetchLibraryAssetElementHtml } from "../providers/registry";
 import { WorkingDirPicker } from './WorkingDirPicker';
@@ -3002,7 +3004,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             {footerAccessory}
             <SessionModeToggle
               mode={sessionMode}
-              onChange={onSessionModeChange}
+              onChange={(next) => {
+                if (next !== sessionMode) {
+                  trackComposerSessionModeClick(analytics.track, {
+                    page_name: 'chat_panel',
+                    area: 'chat_composer',
+                    element: 'session_mode_toggle',
+                    mode_before: sessionModeToTracking(sessionMode),
+                    mode_after: sessionModeToTracking(next),
+                    project_id: projectId ?? undefined,
+                  });
+                }
+                onSessionModeChange?.(next);
+              }}
             />
             {showStopButton ? (
               <button

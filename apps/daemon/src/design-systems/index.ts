@@ -90,6 +90,7 @@ export type DesignSystemStaticFileDetail = {
 
 export type DesignSystemPackageInfo = {
   manifest?: DesignSystemProjectManifest;
+  availableFiles?: string[];
   sourceEvidence?: {
     scannedFileCount?: number;
     tokenCount?: number;
@@ -404,10 +405,47 @@ export async function readDesignSystemPackageInfo(
   if (manifest === null) return null;
 
   const sourceEvidence = await readDesignSystemSourceEvidence(brandRoot, manifest);
+  const availableFiles = await listAvailableDesignSystemPackageFiles(brandRoot, manifest);
   return {
     manifest,
+    ...(availableFiles.length > 0 ? { availableFiles } : {}),
     ...(sourceEvidence ? { sourceEvidence } : {}),
   };
+}
+
+async function listAvailableDesignSystemPackageFiles(
+  brandRoot: string,
+  manifest: DesignSystemProjectManifest,
+): Promise<string[]> {
+  const candidates = new Set<string>(DESIGN_SYSTEM_STATIC_SYSTEM_FILES);
+  const add = (filePath: string | undefined): void => {
+    const cleanPath = typeof filePath === 'string' ? sanitizeRelativeFilePath(filePath) : null;
+    if (cleanPath) candidates.add(cleanPath);
+  };
+
+  add(manifest.files.design);
+  add(manifest.files.tokens);
+  add(manifest.files.components);
+  add(manifest.files.designTokens);
+  add(manifest.files.tailwind);
+  add(manifest.usage);
+  add(manifest.componentsManifest);
+  for (const page of manifest.preview?.pages ?? []) add(page.path);
+  for (const font of manifest.fonts ?? []) add(font.file);
+
+  const out: string[] = [];
+  const resolvedRoot = path.resolve(brandRoot);
+  for (const relativePath of Array.from(candidates).sort()) {
+    const filePath = path.resolve(brandRoot, relativePath);
+    if (filePath !== resolvedRoot && !filePath.startsWith(`${resolvedRoot}${path.sep}`)) continue;
+    try {
+      const stats = await stat(filePath);
+      if (stats.isFile()) out.push(relativePath);
+    } catch (err) {
+      if (!isAbsenceError(err)) throw err;
+    }
+  }
+  return out;
 }
 
 /**
@@ -1229,6 +1267,49 @@ export async function updateUserDesignSystem(
     defaultStatus: 'draft',
   });
   return listed.find((s) => s.id === `user:${dirId}`) ?? null;
+}
+
+// A design-system workspace project mirrors its design system's title:
+// ensureUserDesignSystemWorkspaceProject re-stamps the project name from
+// the registry title every time the workspace is ensured, so a rename
+// applied only to the project row silently reverts on the next open.
+// Renames on these projects must instead be written through to the
+// design-system title — the sync then carries the new name back onto the
+// project and both records agree.
+export function workspaceRenameDesignSystemId(project: {
+  designSystemId?: string | null;
+  metadata?: unknown;
+}): string | null {
+  const id = typeof project?.designSystemId === 'string' ? project.designSystemId : '';
+  if (!id.startsWith('user:')) return null;
+  const metadata = project?.metadata;
+  const importedFrom =
+    metadata && typeof metadata === 'object'
+      ? (metadata as Record<string, unknown>).importedFrom
+      : undefined;
+  return importedFrom === 'design-system' ? id : null;
+}
+
+// 'not-applicable': the project is not a design-system workspace (or the
+// name is blank) — the rename does not involve a design system at all.
+// 'propagated': the bound design system's title now matches the new name.
+// 'failed': the project IS bound to a user design system but the title
+// could not be written through (e.g. the entry is missing on disk).
+// Callers must not persist the project-row rename on 'failed' — doing so
+// recreates the silent revert this write-through exists to prevent.
+export type WorkspaceRenamePropagation = 'not-applicable' | 'propagated' | 'failed';
+
+export async function propagateWorkspaceProjectRename(
+  root: string,
+  project: { designSystemId?: string | null; metadata?: unknown },
+  name: unknown,
+): Promise<WorkspaceRenamePropagation> {
+  const id = workspaceRenameDesignSystemId(project);
+  if (!id) return 'not-applicable';
+  const title = typeof name === 'string' ? name.trim() : '';
+  if (!title) return 'not-applicable';
+  const updated = await updateUserDesignSystem(root, id, { title });
+  return updated != null ? 'propagated' : 'failed';
 }
 
 export async function linkUserDesignSystemProject(

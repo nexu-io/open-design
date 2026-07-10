@@ -82,6 +82,60 @@ test('spawnEnvForAgent applies configured Codex env without mutating the base en
   assert.equal('CODEX_BIN' in base, false);
 });
 
+test('spawnEnvForAgent backfills Windows cache directory env for Trae CLI launches', () => {
+  const env = withPlatform('win32', () =>
+    spawnEnvForAgent(
+      'trae-cli',
+      {
+        Path: 'C:\\Windows\\System32',
+        USERPROFILE: 'C:\\Users\\ai',
+      },
+      {},
+      {},
+    ),
+  );
+
+  assert.equal(env.USERPROFILE, 'C:\\Users\\ai');
+  assert.equal(env.APPDATA, 'C:\\Users\\ai\\AppData\\Roaming');
+  assert.equal(env.LOCALAPPDATA, 'C:\\Users\\ai\\AppData\\Local');
+  assert.equal(env.TEMP, 'C:\\Users\\ai\\AppData\\Local\\Temp');
+  assert.equal(env.TMP, 'C:\\Users\\ai\\AppData\\Local\\Temp');
+});
+
+test('spawnEnvForAgent keeps Windows cache directory env inside sandbox roots', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-win-cache-'));
+  try {
+    const env = withPlatform('win32', () =>
+      spawnEnvForAgent(
+        'trae-cli',
+        {
+          OD_DATA_DIR: dataDir,
+          OD_SANDBOX_MODE: '1',
+          Path: 'C:\\Windows\\System32',
+          USERPROFILE: 'C:\\Users\\ai',
+        },
+        {},
+        {},
+      ),
+    );
+
+    const agentHome = join(dataDir, 'sandbox', 'agent-home');
+    const tempDir = join(dataDir, 'sandbox', 'tmp');
+    const normalize = (value: string | undefined): string =>
+      (value ?? '').replaceAll('\\', '/');
+
+    assert.equal(env.USERPROFILE, agentHome);
+    assert.ok(normalize(env.APPDATA).startsWith(`${normalize(agentHome)}/`));
+    assert.ok(normalize(env.LOCALAPPDATA).startsWith(`${normalize(agentHome)}/`));
+    assert.equal(env.TEMP, tempDir);
+    assert.equal(env.TMP, tempDir);
+    assert.ok(!normalize(env.APPDATA).includes('C:/Users/ai'));
+    assert.ok(!normalize(env.LOCALAPPDATA).includes('C:/Users/ai'));
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('spawnEnvForAgent reapplies sandbox state roots after configured env overrides', () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-'));
   try {

@@ -251,6 +251,21 @@ export interface Dict {
   'settings.onboardingOrgSizeLabel': string;
   'settings.onboardingUseCaseLabel': string;
   'settings.onboardingSourceLabel': string;
+  'settings.onboardingSourceX': string;
+  'settings.onboardingSourceGithub': string;
+  'settings.onboardingSourceYoutube': string;
+  'settings.onboardingSourceTiktok': string;
+  'settings.onboardingSourceReddit': string;
+  'settings.onboardingSourceLinkedin': string;
+  'settings.onboardingSourceMetaSocial': string;
+  'settings.onboardingSourceSearch': string;
+  'settings.onboardingSourceAiTool': string;
+  'settings.onboardingSourceFriend': string;
+  'settings.onboardingSourceCommunity': string;
+  'settings.onboardingSourceEmail': string;
+  'settings.onboardingSourceBlog': string;
+  'settings.onboardingSourceOther': string;
+  'settings.onboardingSourceOtherPlaceholder': string;
   'settings.onboardingSelectPlaceholder': string;
   'settings.onboardingSelectMultiplePlaceholder': string;
   'settings.onboardingOrgSolo': string;
@@ -279,16 +294,6 @@ export interface Dict {
   'settings.onboardingUseDeck': string;
   'settings.onboardingUseEngineering': string;
   'settings.onboardingUseAgency': string;
-  'settings.onboardingSourceGithub': string;
-  'settings.onboardingSourceFriend': string;
-  'settings.onboardingSourceSocial': string;
-  'settings.onboardingSourceProductHunt': string;
-  'settings.onboardingSourceCommunity': string;
-  'settings.onboardingSourceYoutube': string;
-  'settings.onboardingSourceBlog': string;
-  'settings.onboardingSourceAiTool': string;
-  'settings.onboardingSourceSearch': string;
-  'settings.onboardingSourceEvent': string;
   'settings.onboardingBack': string;
   'settings.onboardingContinue': string;
   'settings.onboardingFinish': string;
@@ -380,6 +385,7 @@ export interface Dict {
   'settings.amrBalance': string;
   'settings.amrPlan': string;
   'settings.amrUpgrade': string;
+  'settings.amrModelUpgradeHint': string;
   'settings.amrLoginErrorCompact': string;
   'settings.apiSection': string;
   'settings.quickFillProvider': string;
@@ -400,6 +406,16 @@ export interface Dict {
   'settings.modelsLoadedCount': string;
   'settings.modelSourceAccount': string;
   'settings.modelSourceSuggested': string;
+  'modelCapability.standard': string;
+  'modelCapability.advanced': string;
+  'modelCapability.bestQuality': string;
+  'modelCapability.standardDescription': string;
+  'modelCapability.advancedDescription': string;
+  'modelCapability.bestQualityDescription': string;
+  'modelCost.upToHalf': string;
+  'modelCost.halfToOne': string;
+  'modelCost.oneToFour': string;
+  'modelCost.overFour': string;
   'settings.fetchModels': string;
   'settings.fetchModelsTitle': string;
   'settings.fetchModelsRunning': string;
@@ -513,6 +529,8 @@ export interface Dict {
   'settings.runtimePackaged': string;
   'settings.runtimeDevelopment': string;
   'settings.versionUnavailable': string;
+  'settings.allowSilentUpdates': string;
+  'settings.allowSilentUpdatesDesc': string;
   'settings.installLatest': string;
   'settings.alreadyLatest': string;
   'settings.updateCheck': string;
@@ -932,6 +950,7 @@ export interface Dict {
   'updater.installerOpenBody': string;
   'updater.installerOpened': string;
   'updater.later': string;
+  'updater.allowSilentUpdates': string;
   'updater.openFailedFallback': string;
   'updater.installRestart': string;
   'updater.installingRestart': string;
@@ -947,6 +966,12 @@ export interface Dict {
   'updater.readyGeneric': string;
   'updater.readyVersion': string;
   'updater.upToDate': string;
+
+  // Post-update "what's new" card on the home surface. Release-configured
+  // copy comes from the release feed; these keys cover the card chrome and
+  // the generic fallback when a version ships without highlights.
+  'whatsNew.cta': string;
+  'whatsNew.dismissAria': string;
 
   // Newsletter email field on the onboarding About-you step.
   'newsletter.label': string;
@@ -1067,6 +1092,7 @@ export interface Dict {
   'homeHero.confirmReplaceBody': string;
   'homeHero.confirmReplace': string;
   'homeHero.chip.prototype': string;
+  'homeHero.chip.webClone': string;
   'homeHero.chip.liveArtifact': string;
   'homeHero.chip.deck': string;
   'homeHero.chip.image': string;
@@ -1089,6 +1115,7 @@ export interface Dict {
   'homeHero.chip.mobile': string;
   'homeHero.chip.document': string;
   'homeHero.chip.prototypeDesc': string;
+  'homeHero.chip.webCloneDesc': string;
   'homeHero.chip.wireframeDesc': string;
   'homeHero.chip.mobileDesc': string;
   'homeHero.chip.deckDesc': string;
@@ -1097,9 +1124,14 @@ export interface Dict {
   'homeHero.chip.videoDesc': string;
   'homeHero.chip.audioDesc': string;
   'homeHero.chip.hyperframesDesc': string;
+  'homeHero.chip.webgl': string;
+  'homeHero.chip.webglDesc': string;
+  'homeHero.chip.worker': string;
+  'homeHero.chip.workerDesc': string;
   'homeHero.chip.liveArtifactDesc': string;
   'homeHero.chip.createBrandKitDesc': string;
   'homeHero.chip.prototypeNext': string;
+  'homeHero.chip.webCloneNext': string;
   'homeHero.chip.wireframeNext': string;
   'homeHero.chip.mobileNext': string;
   'homeHero.chip.deckNext': string;
@@ -1107,6 +1139,7 @@ export interface Dict {
   'homeHero.chip.imageNext': string;
   'homeHero.chip.videoNext': string;
   'homeHero.chip.audioNext': string;
+  'homeHero.chip.webClonePromptSeed': string;
   'homeWorkingDir.trigger': string;
   'homeWorkingDir.pick': string;
   'homeWorkingDir.replace': string;
@@ -1208,6 +1241,9 @@ export interface Dict {
   'pluginsHome.searchPlaceholder': string;
   'pluginsHome.searchAria': string;
   'pluginsHome.clearSearch': string;
+  'pluginsHome.sortAria': string;
+  'pluginsHome.sortHot': string;
+  'pluginsHome.sortNewest': string;
   'pluginsHome.facet.import': string;
   'pluginsHome.facet.create': string;
   'pluginsHome.facet.export': string;
@@ -1633,6 +1669,7 @@ export interface Dict {
   'automations.openResult': string;
   'automations.run': string;
   'automations.runNowTitle': string;
+  'automations.targetCreateEachRun': string;
   'automations.history': string;
   'automations.hideHistory': string;
   'automations.edit': string;
@@ -1658,6 +1695,7 @@ export interface Dict {
   'automations.runHistoryEmpty': string;
   'automations.runHistoryTitle': string;
   'automations.runHistoryLatest': string;
+  'automations.promptPlaceholder': string;
   'automations.crystallize': string;
   'automations.crystallizing': string;
   'automations.crystallizeTitle': string;
@@ -2395,6 +2433,24 @@ export interface Dict {
   'chat.amrError.balanceMessage': string;
   'chat.amrError.authorizeCta': string;
   'chat.amrError.rechargeCta': string;
+  'chat.amrBalanceGate.title': string;
+  'chat.amrBalanceGate.message': string;
+  'chat.amrBalanceGate.benefitsTitle': string;
+  'chat.amrBalanceGate.benefit1': string;
+  'chat.amrBalanceGate.benefit2': string;
+  'chat.amrBalanceGate.benefit3': string;
+  'chat.amrBalanceGate.benefit4': string;
+  'chat.amrBalanceGate.laterCta': string;
+  'chat.amrBalanceGate.plansCta': string;
+  'chat.amrBalanceGate.signedOutTitle': string;
+  'chat.amrBalanceGate.signedOutMessage': string;
+  'chat.amrBalanceGate.signInCta': string;
+  'chat.amrBalanceGate.watchingWallet': string;
+  'chat.amrLowBalance.title': string;
+  'chat.amrLowBalance.message': string;
+  'chat.amrLowBalance.rechargeCta': string;
+  'chat.amrLowBalance.proceedCta': string;
+  'chat.amrLowBalance.dontRemind': string;
   'chat.antigravityError.launchTerminalCta': string;
   'chat.antigravityError.launchSwitchModelCta': string;
   'chat.connectionDropped': string;
@@ -2403,9 +2459,27 @@ export interface Dict {
   'chat.runError.title.connectionDropped': string;
   'chat.runError.title.signInRequired': string;
   'chat.runError.title.rateLimited': string;
+  'chat.runError.title.cliMissing': string;
+  'chat.runError.title.promptTooLarge': string;
+  'chat.runError.title.modelUnavailable': string;
+  'chat.runError.title.upstreamUnavailable': string;
+  'chat.runError.title.toolLoop': string;
+  'chat.runError.title.outputInvalid': string;
+  'chat.runError.title.runtimeConfig': string;
+  'chat.runError.title.quotaExhausted': string;
   'chat.runError.title.generic': string;
   'chat.runError.signInMessage.amr': string;
   'chat.runError.signInMessage.other': string;
+  'chat.runError.cliMissingMessage': string;
+  'chat.runError.promptTooLargeMessage': string;
+  'chat.runError.modelUnavailableMessage': string;
+  'chat.runError.rateLimitedMessage': string;
+  'chat.runError.upstreamUnavailableMessage': string;
+  'chat.runError.toolLoopMessage': string;
+  'chat.runError.outputInvalidMessage': string;
+  'chat.runError.runtimeConfigMessage': string;
+  'chat.runError.quotaExhaustedMessage': string;
+  'chat.runError.workspaceCreditsMessage': string;
   'chat.runError.agentFallback': string;
   'chat.runError.sourceLabel': string;
   'chat.runError.sourceExpandAria': string;
@@ -2978,6 +3052,41 @@ export interface Dict {
   'chat.example3Title': string;
   'chat.example3Tag': string;
   'chat.example3Prompt': string;
+
+  // Home personalized recommendation (first-run onboarding starting point)
+  'home.recommendation.eyebrow': string;
+  'home.recommendation.primaryCta': string;
+  'home.recommendation.change': string;
+  'home.recommendation.browseAll': string;
+  'home.recommendation.defaultProjectName': string;
+  'home.recommendation.startFailed': string;
+  'studio.firstArtifactHint.title': string;
+  'studio.firstArtifactHint.body': string;
+  'studio.firstArtifactHint.dismiss': string;
+  'home.starter.product_ui_prototype.title': string;
+  'home.starter.product_ui_prototype.desc': string;
+  'home.starter.product_ui_prototype.firstPrompt': string;
+  'home.starter.product_ui_component.title': string;
+  'home.starter.product_ui_component.desc': string;
+  'home.starter.product_ui_component.firstPrompt': string;
+  'home.starter.product_ui_lowfi.title': string;
+  'home.starter.product_ui_lowfi.desc': string;
+  'home.starter.product_ui_lowfi.firstPrompt': string;
+  'home.starter.marketing_landing.title': string;
+  'home.starter.marketing_landing.desc': string;
+  'home.starter.marketing_landing.firstPrompt': string;
+  'home.starter.marketing_multivariant.title': string;
+  'home.starter.marketing_multivariant.desc': string;
+  'home.starter.marketing_multivariant.firstPrompt': string;
+  'home.starter.internal_dashboard.title': string;
+  'home.starter.internal_dashboard.desc': string;
+  'home.starter.internal_dashboard.firstPrompt': string;
+  'home.starter.internal_report.title': string;
+  'home.starter.internal_report.desc': string;
+  'home.starter.internal_report.firstPrompt': string;
+  'home.starter.general_menu.title': string;
+  'home.starter.general_menu.desc': string;
+  'home.starter.general_menu.firstPrompt': string;
   'chat.example4Title': string;
   'chat.example4Tag': string;
   'chat.example4Prompt': string;

@@ -53,6 +53,24 @@ function PrototypeArt() {
   );
 }
 
+function WebCloneArt() {
+  // Website clone: a source browser window behind, its local clone in front
+  // (SURFACE-filled so the overlap occludes), and an accent transfer arrow
+  // carrying the site across.
+  return (
+    <Frame>
+      <rect x="7" y="8" width="28" height="20" rx="3" stroke={INK} strokeWidth="2" strokeOpacity="0.55" />
+      <line x1="7" y1="14" x2="35" y2="14" stroke={INK} strokeWidth="2" strokeOpacity="0.55" />
+      <rect x="25" y="14" width="28" height="20" rx="3" fill={SURFACE} stroke={INK} strokeWidth="2" />
+      <line x1="25" y1="20" x2="53" y2="20" stroke={INK} strokeWidth="2" />
+      <rect x="29" y="24" width="9" height="4" rx="1.5" fill={ACCENT} />
+      <line x1="42" y1="26" x2="49" y2="26" stroke={INK} strokeWidth="2" />
+      <path d="M14 33 H21" stroke={ACCENT} strokeWidth="2.5" />
+      <path d="M18.5 30 L22 33 L18.5 36" stroke={ACCENT} strokeWidth="2.5" />
+    </Frame>
+  );
+}
+
 function WireframeArt() {
   // Lo-fi greybox screen: a dashed frame (the wireframe tell) over placeholder
   // blocks and an accent CTA placeholder.
@@ -186,6 +204,7 @@ function AudioArt() {
 
 const ART_BY_CHIP: Record<string, () => ReactElement> = {
   prototype: PrototypeArt,
+  'web-clone': WebCloneArt,
   wireframe: WireframeArt,
   mobile: MobileArt,
   deck: DeckArt,

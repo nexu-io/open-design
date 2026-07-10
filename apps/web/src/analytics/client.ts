@@ -15,6 +15,7 @@ import {
   clearExceptionTrackingContext,
   setExceptionTrackingContext,
 } from './error-tracking';
+import { pinFirstSessionForCapture } from './identity';
 
 interface AnalyticsContext {
   anonymousId: string;
@@ -22,6 +23,10 @@ interface AnalyticsContext {
   clientType: AnalyticsClientType;
   locale: string;
   appVersion: string;
+  // Whether this is the install's first analytics session (see
+  // identity.ts#isFirstSession). Optional so callers that don't care
+  // (error tracking) can omit it.
+  isFirstSession?: boolean;
 }
 
 let client: PostHog | null = null;
@@ -49,7 +54,7 @@ let configureGlobals: AnalyticsConfigureGlobals = {
 let lastRegisterPayload: Record<string, unknown> | null = null;
 
 // Returns the installationId the daemon stamped on /api/analytics/config
-// after the user opted in via Privacy → "Share usage data". The provider
+// after the user opted in via Privacy → "Share". The provider
 // uses this in preference to its locally-generated UUID so PostHog,
 // Langfuse, and any future sink share a single anonymous identity.
 //
@@ -99,6 +104,7 @@ export function setConfigureGlobals(next: AnalyticsConfigureGlobals): void {
 // id as `app_user_id`), so it must survive reset()/identify() flows the
 // same way the configure globals do.
 let registeredUserId: string | null = null;
+let pendingPersonProperties: Record<string, unknown> | null = null;
 
 // Called from the AnalyticsProvider when the AMR login status resolves
 // (boot fetch or a login/logout mid-session). Passing null unregisters the
@@ -121,6 +127,44 @@ export function setAnalyticsUserId(userId: string | null): void {
     } else {
       client.unregister('user_id');
     }
+  } catch {
+    // best-effort — capture should never throw out of this path.
+  }
+}
+
+export function setAnalyticsPersonProperties(
+  properties: Record<string, unknown>,
+): void {
+  const compacted = compactPersonProperties(properties);
+  if (!compacted) return;
+  pendingPersonProperties = {
+    ...(pendingPersonProperties ?? {}),
+    ...compacted,
+  };
+  flushPersonProperties();
+}
+
+function flushPersonProperties(): void {
+  if (!client || !pendingPersonProperties) return;
+  try {
+    const properties = pendingPersonProperties;
+    const posthog = client as unknown as {
+      setPersonProperties?: (props: Record<string, unknown>) => void;
+      people?: { set?: (props: Record<string, unknown>) => void };
+      capture?: (event: string, props: Record<string, unknown>) => void;
+    };
+    if (typeof posthog.setPersonProperties === 'function') {
+      posthog.setPersonProperties(properties);
+      pendingPersonProperties = null;
+      return;
+    }
+    if (typeof posthog.people?.set === 'function') {
+      posthog.people.set(properties);
+      pendingPersonProperties = null;
+      return;
+    }
+    posthog.capture?.('$set', { $set: properties });
+    pendingPersonProperties = null;
   } catch {
     // best-effort — capture should never throw out of this path.
   }
@@ -212,7 +256,7 @@ export async function getAnalyticsClient(
         // various automation flags). The list also rejects some real users
         // — embedded webviews, fingerprinted browsers, e2e CI runs — which
         // is unacceptable for product analytics that needs to count every
-        // session. We instead rely on the Privacy → "Share usage data"
+        // session. We instead rely on the Privacy → "Share"
         // toggle as the single consent gate and treat every UA equally.
         opt_out_useragent_filter: true,
 
@@ -261,7 +305,7 @@ export async function getAnalyticsClient(
         // and over-redact every content surface — the same
         // "redact-by-default, single audit point" philosophy scrub.ts
         // uses for events (see scrub.ts header). Replay stays gated by the
-        // existing Privacy → "Share usage data" consent: posthog-js's
+        // existing Privacy → "Share" consent: posthog-js's
         // global opt_out_capturing() halts replay too (see applyConsent()).
         //
         // The three redaction layers, in order of how much they cover:
@@ -298,6 +342,10 @@ export async function getAnalyticsClient(
             client_type: context.clientType,
             locale: context.locale,
             session_id: context.sessionId,
+            // Onboarding-funnel dimension (spec §11.1 common fields).
+            ...(context.isFirstSession !== undefined
+              ? { is_first_session: context.isFirstSession }
+              : {}),
             // v2 rename: was `anonymous_id`. Value is unchanged — the same
             // installationId / local-UUID fallback.
             device_id: distinctId,
@@ -307,6 +355,7 @@ export async function getAnalyticsClient(
             ...(registeredUserId ? { user_id: registeredUserId } : {}),
           };
           instance.register(lastRegisterPayload);
+          flushPersonProperties();
           // Re-bridge the error-tracking context once posthog-js is fully
           // initialized. `bootstrapExceptionTracking` may have already
           // wired this up at app boot via its own fetch; this duplicate
@@ -323,6 +372,16 @@ export async function getAnalyticsClient(
         },
       });
       client = posthog;
+      // Pin the first-analytics-session marker only now — init returned without
+      // throwing and capture is live. This is the single consent gate every
+      // caller (mount, locale effect, track(), and the setConsent opt-in
+      // re-init) funnels through, so an install that first booted with
+      // analytics OFF and opts in later records its real first analytics
+      // session as first. Pinning earlier (before import()/init) would burn the
+      // marker on a boot where init actually failed and no session was ever
+      // captured (see identity.ts#isFirstSession). Idempotent + best-effort.
+      pinFirstSessionForCapture();
+      flushPersonProperties();
       return posthog;
     } catch {
       // Network failure, missing endpoint, third-party fork without keys —
@@ -411,9 +470,35 @@ function restoreSuperProperties(patch?: Record<string, unknown>): void {
   lastRegisterPayload = next;
   try {
     client.register(next);
+    flushPersonProperties();
   } catch {
     // best-effort.
   }
+}
+
+function compactPersonProperties(
+  properties: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(properties)) {
+    if (!key || value == null) continue;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed || trimmed === 'unknown') continue;
+      out[key] = trimmed;
+      continue;
+    }
+    if (Array.isArray(value)) {
+      const list = value
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry && entry !== 'unknown');
+      if (list.length > 0) out[key] = list;
+      continue;
+    }
+    out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 export function capture(

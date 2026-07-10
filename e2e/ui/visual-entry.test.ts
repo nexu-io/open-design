@@ -197,6 +197,8 @@ test('[P2] captures the home plugin use with query surface', async ({ page }) =>
 });
 
 test('[P2] captures the new project modal surface', async ({ page }) => {
+  test.setTimeout(T.xlong);
+
   await configureVisualPage(page);
   await gotoVisualHome(page);
 

@@ -185,7 +185,7 @@ Hooking up a new agent (e.g. some new shop's `foo-coder` CLI) is one entry in [`
 }
 ```
 
-That's it — daemon will detect it on `PATH`, the picker shows it, the chat path works. If the CLI emits **typed events** (like Claude Code's `--output-format stream-json`), wire a parser in [`apps/daemon/src/claude-stream.ts`](apps/daemon/src/claude-stream.ts) and set `streamFormat: 'claude-stream-json'`.
+That's it — daemon will detect it on `PATH`, the picker shows it, the chat path works. If the CLI emits **typed events** (like Claude Code's `--output-format stream-json`), wire a parser in [`apps/daemon/src/runtimes/claude-stream.ts`](apps/daemon/src/runtimes/claude-stream.ts) and set `streamFormat: 'claude-stream-json'`.
 
 Bar for merging:
 

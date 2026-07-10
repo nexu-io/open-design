@@ -8,6 +8,9 @@ import type {
   AgentTestRequest,
   AppVersionInfo,
   AppVersionResponse,
+  WhatsNewContent,
+  WhatsNewLocaleContent,
+  WhatsNewResponse,
   AudioKind,
   ChatAttachment,
   ChatCommentAttachment,
@@ -446,6 +449,7 @@ export interface AppConfig {
   // resolved. This is independent from installationId so Delete my data can
   // rotate or clear the anonymous id without re-opening the consent banner.
   privacyDecisionAt?: number | null;
+  allowSilentUpdates?: boolean;
   // Privacy preferences governing what (if anything) is shipped to the
   // PostHog / Langfuse telemetry endpoints. `metrics` and `content`
   // default ON (set by `DEFAULT_CONFIG.telemetry` in state/config.ts) so
@@ -518,9 +522,23 @@ export interface ExamplePreview {
   html: string;
 }
 
+export type ModelCost = 'low' | 'medium' | 'high' | 'very_high';
+
+export type ModelCapability = 'standard' | 'advanced' | 'best_quality';
+
+export interface ModelMetadata {
+  cost?: ModelCost;
+  capability?: ModelCapability;
+}
+
 export interface AgentModelOption {
   id: string;
   label: string;
+  enabled?: boolean;
+  default?: boolean;
+  inputPriceUsdPerMillion?: number;
+  outputPriceUsdPerMillion?: number;
+  metadata?: ModelMetadata;
 }
 
 export type Surface = 'web' | 'image' | 'video' | 'audio';
@@ -557,6 +575,9 @@ export type {
   AgentTestRequest,
   AppVersionInfo,
   AppVersionResponse,
+  WhatsNewContent,
+  WhatsNewLocaleContent,
+  WhatsNewResponse,
   AudioKind,
   ConnectionTestKind,
   ConnectionTestProtocol,

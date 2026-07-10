@@ -1,0 +1,7 @@
+interface:
+  display_name: "聊天动效叠层"
+  short_description: "把聊天内容生成多风格可配置的透明视频动效片段"
+  default_prompt: "Use $chat-motion-overlay to turn this chat transcript or screenshot into a configurable chat motion overlay clip."
+
+policy:
+  allow_implicit_invocation: true

@@ -102,6 +102,36 @@ describe('BYOK draft validation', () => {
     ).toBe(true);
   });
 
+  it('treats a syntactically-valid internal-IP base URL as non-blocking, deferring to the daemon (#3225)', () => {
+    // The Test / model-fetch actions gate on blockingByokDraftIssues; an
+    // internal endpoint must not be blocked here or the operator can never
+    // reach the daemon's OD_ALLOWED_INTERNAL_HOSTS decision.
+    const result = validateByokDraft('openai', {
+      apiKey: 'sk-internal',
+      baseUrl: 'http://10.0.0.5:4000/v1',
+      model: 'gpt-4o',
+    });
+    expect(result.issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'base_url_invalid' }),
+      ]),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it('still flags a genuinely malformed base URL as base_url_invalid', () => {
+    const result = validateByokDraft('openai', {
+      apiKey: 'sk-internal',
+      baseUrl: 'ftp://api.example.com',
+      model: 'gpt-4o',
+    });
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'base_url_invalid' }),
+      ]),
+    );
+  });
+
   it('can enforce first-party key shape when the first-party Base URL looks mistyped', () => {
     const withoutHint = validateByokDraft('anthropic', {
       apiKey: 'sk-openai-key',
@@ -253,5 +283,28 @@ describe('BYOK draft validation', () => {
         providerDefaultModel: 'provider-model',
       }),
     ).toEqual({ model: 'provider-model', source: 'provider_default' });
+  });
+
+  it('skips disabled provider models when choosing an automatic preference', () => {
+    expect(
+      resolveByokModelPreference({
+        currentModel: '',
+        accountModels: [
+          { id: 'disabled-model', label: 'Disabled model', enabled: false },
+          { id: 'enabled-model', label: 'Enabled model' },
+        ],
+        providerDefaultModel: 'provider-model',
+      }),
+    ).toEqual({ model: 'enabled-model', source: 'account' });
+
+    expect(
+      resolveByokModelPreference({
+        currentModel: '',
+        accountModels: [
+          { id: 'disabled-default', label: 'Disabled default', enabled: false },
+        ],
+        providerDefaultModel: 'disabled-default',
+      }),
+    ).toEqual({ model: '', source: 'empty' });
   });
 });

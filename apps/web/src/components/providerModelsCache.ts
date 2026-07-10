@@ -35,7 +35,7 @@ export function mergeProviderModelOptions(
     const id = model.id.trim();
     if (!id || seen.has(id)) return;
     seen.add(id);
-    out.push({ id, label: model.label.trim() || id });
+    out.push({ ...model, id, label: model.label.trim() || id });
   };
   for (const model of fetchedModels) add(model);
   for (const id of suggestedModelIds) add({ id, label: id });

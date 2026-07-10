@@ -14,6 +14,16 @@ describe('saveAsDialogOptionsForFilename', () => {
     expect(opts!.filters[0]).toEqual({ name: 'PDF Document', extensions: ['pdf'] });
   });
 
+  // The Save As dialog must opt out of shell recent-items writes. On Windows a
+  // OneDrive-backed Downloads folder can stall the native dialog's UI thread
+  // (AppHangB1); `dontAddToRecent` trims that shell work. Every intercepted
+  // extension shares the same options builder, so one assertion guards them all.
+  test('every intercepted download opts out of recent items', () => {
+    for (const name of ['a.pdf', 'a.pptx', 'a.png']) {
+      expect(saveAsDialogOptionsForFilename(name)!.properties).toContain('dontAddToRecent');
+    }
+  });
+
   test('PPTX still prompts with a PowerPoint filter', () => {
     const opts = saveAsDialogOptionsForFilename('deck.pptx');
     expect(opts!.filters[0]).toEqual({ name: 'PowerPoint Presentation', extensions: ['pptx'] });

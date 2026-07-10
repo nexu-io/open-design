@@ -1,8 +1,6 @@
 import { writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
 
-import { BrowserWindow, app, dialog, ipcMain, shell } from "electron";
+import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 
 import { DIAGNOSTICS_FILENAME_PREFIX, diagnosticsFileName } from "@open-design/diagnostics";
 
@@ -30,19 +28,21 @@ export async function exportDiagnosticsToFile(
   parentWindow: BrowserWindow | null,
 ): Promise<DesktopDiagnosticsExportResult> {
   const filename = diagnosticsFileName(DIAGNOSTICS_FILENAME_PREFIX);
-  const downloadsDir = (() => {
-    try {
-      return app.getPath("downloads");
-    } catch {
-      return homedir();
-    }
-  })();
-  const defaultPath = join(downloadsDir, filename);
-
+  // Seed only the filename, never a directory. Forcing `defaultPath` into the
+  // Downloads folder made the native Windows Save dialog open *inside* it, and
+  // when Downloads is OneDrive-backed the shell's folder-type discovery +
+  // cloud-provider status enumeration can stall the dialog's UI thread long
+  // enough for Windows to flag the owner window "not responding" (AppHangB1).
+  // The PDF/PPTX save flows already pass a bare filename; match them and let
+  // the OS restore the user's last-used, already-warm location.
+  // `dontAddToRecent` further avoids shell recent-items writes against that
+  // same slow folder. ponytail: mitigates the trigger; a fully wedged OneDrive
+  // shell is an OS-side stall no app option can unblock.
   const dialogOptions = {
     title: "Export Open Design diagnostics",
-    defaultPath,
+    defaultPath: filename,
     filters: [{ name: "Zip archive", extensions: ["zip"] }],
+    properties: ["dontAddToRecent" as const],
   };
   const choice = parentWindow != null
     ? await dialog.showSaveDialog(parentWindow, dialogOptions)

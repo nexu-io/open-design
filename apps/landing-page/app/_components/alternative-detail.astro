@@ -13,6 +13,7 @@
 import Layout from './sub-page-layout.astro';
 import { getInfoPageCopy, getAlternativeCopy } from '../info-page-i18n';
 import { localeFromPath, localizedHref } from '../i18n';
+import { downloadFirstCtas } from '../cta-actions';
 import '../_partials/comparison-v4.css';
 
 interface Props {
@@ -38,6 +39,10 @@ const features = page.features;
 
 const ctaHref = (a: { href: string; external?: boolean }) =>
   a.external ? a.href : href(a.href);
+
+// Comparison pages lead with the desktop download — see cta-actions.ts.
+const heroCtas = rich ? downloadFirstCtas(rich.heroCtaActions) : [];
+const finalCtas = rich ? downloadFirstCtas(rich.ctaActions) : [];
 
 const faqEntries = (rich?.faq ?? page.faq).map(({ name, text }) => ({ name, text }));
 
@@ -93,7 +98,7 @@ const jsonLd = [
             <h1 class="v4h1">{page.heading}</h1>
             <p class="v4dek">{rich.heroCtaLead}</p>
             <div class="v4cta-row">
-              {rich.heroCtaActions.map((a) => (
+              {heroCtas.map((a) => (
                 <a
                   class={a.variant === 'primary' ? 'v4btn-p' : 'v4btn-g'}
                   href={ctaHref(a)}
@@ -203,7 +208,7 @@ const jsonLd = [
             <h2 class="v4final-h">{rich.ctaTitle}</h2>
             <p class="v4final-p">{rich.ctaBody}</p>
             <div class="v4cta-row">
-              {rich.ctaActions.map((a) => (
+              {finalCtas.map((a) => (
                 <a
                   class={a.variant === 'primary' ? 'v4btn-coral' : 'v4btn-gd'}
                   href={ctaHref(a)}
@@ -312,9 +317,8 @@ const jsonLd = [
             <p>{page.ctaBody}</p>
           </div>
           <div class="info-cta-actions">
-            <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
-            <a class="btn btn-ghost" href={href('/quickstart/')}>{common.quickstart}</a>
-            <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+            <a class="btn btn-primary" href={href('/download/')}>{common.downloadDesktop}</a>
+            <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
           </div>
           <div class="info-cta-meta">
             <span class="stamp">● {common.apache}</span>

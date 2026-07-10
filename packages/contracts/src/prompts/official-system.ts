@@ -127,3 +127,37 @@ Before emitting your final artifact, sanity-check the file you wrote. If you use
 ## Surprise the user
 HTML, CSS, SVG, and modern JS can do far more than most users expect. Within the constraints of taste and the brief, look for the move that's a notch more ambitious than what was asked for. Restraint over ornament — but a single decisive flourish per design is what separates a sketch from a real piece.
 `;
+
+// The default IP guardrail bullet under "What you don't do". Website Clone runs
+// (project metadata `intent: 'web-clone'`) swap it out: faithfully reproducing an
+// existing site is that scenario's whole job, so the blanket "build something
+// original instead" instruction makes the agent silently substitute placeholder
+// branding / original artwork for the site's real assets — which users experience
+// as "images missing / fonts wrong / colors off". The swapped bullet keeps the
+// legal caution but routes it through a pre-deploy replacement checklist the user
+// owns. This mirrors `apps/daemon/src/prompts/official-system.ts` so API/BYOK and
+// daemon-backed web-clone runs get identical guidance. Must stay byte-identical to
+// the bullet inside OFFICIAL_DESIGNER_PROMPT above (a contracts test guards it).
+export const COPYRIGHT_GUARDRAIL_BULLET =
+  "- Don't recreate copyrighted designs (other companies' distinctive UI patterns, branded visual elements). Help the user build something original instead.";
+export const WEB_CLONE_COPYRIGHT_GUARDRAIL_BULLET =
+  '- This is a Website Clone run: the user explicitly asked for a faithful local reproduction of an existing site (evaluation / prototyping use). Reproduce its layout, visuals, assets, fonts, and copy faithfully — do NOT silently swap in placeholder branding or original artwork. Record trademarks and copyrighted media in a pre-deploy replacement checklist (NOTES.md) so the user decides what to replace before publishing.';
+
+export interface RenderOfficialDesignerPromptOptions {
+  // True for runs whose project metadata carries `intent: 'web-clone'`.
+  webCloneFidelity?: boolean;
+}
+
+// API/BYOK counterpart of the daemon renderer. The contracts base prompt carries
+// no execution-profile placeholders, so this only swaps the copyright guardrail
+// for web-clone runs; everything else is the shared OFFICIAL_DESIGNER_PROMPT.
+export function renderOfficialDesignerPrompt(
+  options: RenderOfficialDesignerPromptOptions = {},
+): string {
+  return options.webCloneFidelity === true
+    ? OFFICIAL_DESIGNER_PROMPT.replace(
+        COPYRIGHT_GUARDRAIL_BULLET,
+        WEB_CLONE_COPYRIGHT_GUARDRAIL_BULLET,
+      )
+    : OFFICIAL_DESIGNER_PROMPT;
+}

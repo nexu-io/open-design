@@ -34,8 +34,8 @@ describe('byokAgentProviderId', () => {
     expect(byokAgentProviderId('senseaudio')).toBe('senseaudio');
   });
 
-  it('folds the aggregator and unknown protocols into other', () => {
-    expect(byokAgentProviderId('aihubmix')).toBe('other');
+  it('tracks the aggregator separately and folds unknown protocols into other', () => {
+    expect(byokAgentProviderId('aihubmix')).toBe('aihubmix');
     expect(byokAgentProviderId(undefined)).toBe('other');
   });
 });

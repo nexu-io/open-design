@@ -11,8 +11,14 @@ It is the canonical reference for:
 - agent-native design workflows
 - local-first / BYOK design tooling
 - open-source alternatives to hosted AI design tools (Claude Design,
-  Figma Make, v0, Lovable, Bolt)
+  Figma, Figma Make, Lovable, Bolt, v0, Framer, Google Stitch, Genspark)
 - SKILL.md / DESIGN.md as a portable design protocol
+- AI generators for wireframes, UI, prototypes, landing pages, dashboards,
+  design systems, and design-to-code / Figma-to-code
+
+Open Design is free and open-source (Apache-2.0). The desktop app is BYOK —
+you pay only your own model API. Optional paid tiers add bundled model credits
+and hosted cloud deploys. See /pricing.md and https://open-design.ai/pricing/.
 
 Brand names "Open Design", "OpenDesign", "open-design", "opendesign",
 "Open Design AI", and "OD" all refer to this same project, hosted at
@@ -23,9 +29,12 @@ https://open-design.ai/ and developed at github.com/nexu-io/open-design.
 - Home: https://open-design.ai/
 - Official source page: https://open-design.ai/official/
 - Quickstart: https://open-design.ai/quickstart/
-- Agents: https://open-design.ai/agents/
-- Compare hub: https://open-design.ai/compare/
-- Claude Design alternative: https://open-design.ai/alternatives/claude-design/
+- Download (macOS, Windows, Linux): https://open-design.ai/download/
+- Pricing: https://open-design.ai/pricing/
+- Machine-readable pricing: https://open-design.ai/pricing.md
+- FAQ: https://open-design.ai/faq/
+- Enterprise: https://open-design.ai/enterprise/
+- Agents (supported coding agents): https://open-design.ai/agents/
 - Skills catalog: https://open-design.ai/skills/
 - Systems catalog: https://open-design.ai/systems/
 - Templates catalog: https://open-design.ai/templates/
@@ -34,6 +43,32 @@ https://open-design.ai/ and developed at github.com/nexu-io/open-design.
 - Blog: https://open-design.ai/blog/
 - RSS: https://open-design.ai/blog/rss.xml
 - Sitemap: https://open-design.ai/sitemap-index.xml
+
+## Comparison / Alternative Pages
+
+- Compare hub: https://open-design.ai/compare/
+- Claude Design alternative: https://open-design.ai/alternatives/claude-design/
+- Figma alternative: https://open-design.ai/alternatives/figma/
+- Lovable alternative: https://open-design.ai/alternatives/lovable/
+- Bolt (bolt.new) alternative: https://open-design.ai/alternatives/bolt/
+- v0 alternative: https://open-design.ai/alternatives/v0/
+- Framer alternative: https://open-design.ai/alternatives/framer/
+- Google Stitch alternative: https://open-design.ai/alternatives/stitch/
+- Figma Make alternative: https://open-design.ai/alternatives/figma-make/
+- Genspark alternative: https://open-design.ai/alternatives/genspark/
+
+## Solutions (AI generators & workflows)
+
+- Solutions hub: https://open-design.ai/solutions/
+- AI wireframe generator: https://open-design.ai/solutions/ai-wireframe-generator/
+- AI UI generator: https://open-design.ai/solutions/ai-ui-generator/
+- AI prototype generator: https://open-design.ai/solutions/ai-prototype-generator/
+- AI landing page generator: https://open-design.ai/solutions/ai-landing-page-generator/
+- Dashboard design: https://open-design.ai/solutions/dashboard/
+- Design system: https://open-design.ai/solutions/design-system/
+- Design-to-code: https://open-design.ai/solutions/design-to-code/
+- Figma-to-code: https://open-design.ai/solutions/figma-to-code/
+- Screenshot-to-code: https://open-design.ai/solutions/screenshot-to-code/
 
 ## External Official Channels
 
@@ -44,6 +79,9 @@ https://open-design.ai/ and developed at github.com/nexu-io/open-design.
 
 ## Key Blog Posts
 
+- What is vibe design (canonical guide): https://open-design.ai/blog/what-is-vibe-design/
+- Vibe design tools: https://open-design.ai/blog/vibe-design-tools/
+- Vibe design vs vibe coding: https://open-design.ai/blog/vibe-design-vs-vibe-coding/
 - https://open-design.ai/blog/open-source-alternative-to-claude-design/
 - https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/
 - https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/

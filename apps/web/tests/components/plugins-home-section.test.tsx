@@ -107,6 +107,7 @@ function pluginIds(): Array<string | null> {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   window.localStorage.clear();
 });
 
@@ -140,6 +141,32 @@ const sample: InstalledPluginRecord[] = [
 ];
 
 describe('PluginsHomeSection (community gallery)', () => {
+  it('caps the initial gallery render so template loading does not mount the full catalog at once', () => {
+    class MockIntersectionObserver {
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+      takeRecords = () => [];
+    }
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
+    const manyPlugins = Array.from({ length: 30 }, (_value, index) =>
+      makePlugin({
+        id: `prototype-gallery-${index + 1}`,
+        mode: 'prototype',
+        tags: ['dashboard'],
+        preview: { type: 'html', entry: './example.html' },
+      }),
+    );
+
+    renderSection(manyPlugins, {
+      cardLayout: 'gallery',
+      preferDefaultFacet: false,
+    });
+
+    expect(pluginIds()).toHaveLength(12);
+    expect(screen.getByRole('list').querySelector('.plugins-home__load-more-sentinel')).toBeTruthy();
+  });
+
   it('surfaces gallery tile actions without restoring the heavier split Use menu', () => {
     const onUse = vi.fn();
     const onDuplicate = vi.fn();
@@ -381,5 +408,57 @@ describe('PluginsHomeSection (category bar)', () => {
       'video-cinematic',
       'video-short',
     ]);
+  });
+});
+
+describe('PluginsHomeSection (sort toggle)', () => {
+  // Distinct timestamps so "newest" produces an observable re-order:
+  // visual appeal would lead with the poster-preview tile, freshness
+  // leads with the most recently updated record.
+  const timestamped: InstalledPluginRecord[] = [
+    {
+      ...makePlugin({
+        id: 'shiny-but-old',
+        mode: 'image',
+        tags: ['logo'],
+        preview: { type: 'image', entry: './final/logo.png', poster: './final/logo.png' },
+      }),
+      installedAt: 100,
+      updatedAt: 100,
+    },
+    {
+      ...makePlugin({ id: 'plain-but-fresh', mode: 'prototype', tags: ['dashboard'] }),
+      installedAt: 300,
+      updatedAt: 300,
+    },
+    {
+      ...makePlugin({ id: 'plain-and-mid', mode: 'prototype', tags: ['dashboard'] }),
+      installedAt: 200,
+      updatedAt: 200,
+    },
+  ];
+
+  it('defaults to hot and re-ranks by freshness when Newest is picked', () => {
+    renderSection(timestamped, { preferDefaultFacet: false });
+
+    // Hot (default): the poster-preview tile outranks the text-only ones.
+    expect(pluginIds()[0]).toBe('shiny-but-old');
+    expect(screen.getByTestId('plugins-home-sort-hot').getAttribute('aria-checked')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('plugins-home-sort-newest'));
+
+    expect(pluginIds()).toEqual(['plain-but-fresh', 'plain-and-mid', 'shiny-but-old']);
+    expect(screen.getByTestId('plugins-home-sort-newest').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('remembers the picked order across remounts', () => {
+    const first = renderSection(timestamped, { preferDefaultFacet: false });
+    fireEvent.click(screen.getByTestId('plugins-home-sort-newest'));
+    first.unmount();
+
+    renderSection(timestamped, { preferDefaultFacet: false });
+
+    expect(screen.getByTestId('plugins-home-sort-newest').getAttribute('aria-checked')).toBe('true');
+    expect(pluginIds()).toEqual(['plain-but-fresh', 'plain-and-mid', 'shiny-but-old']);
   });
 });

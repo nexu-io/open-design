@@ -1,0 +1,99 @@
+/* Post-update "what's new" card. Anchored to the bottom-right of the home
+   surface (mirrors the reference toast placement) and layered under modal
+   dialogs so it never blocks a deliberate user flow. The release title leans
+   on the brand serif (same as the home hero) to match the marketing design. */
+.card {
+  position: fixed;
+  right: 24px;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  z-index: 1400;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(448px, calc(100vw - 48px));
+  padding: 16px 18px 18px;
+  border: 1px solid var(--border, #d0d7de);
+  border-radius: 18px;
+  background: var(--bg-panel, var(--bg, #fff));
+  color: var(--text, #1f2328);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.18);
+}
+
+/* Version eyebrow on the left, close on the right. */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.eyebrow {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--text-muted, var(--text));
+  font-variant-numeric: tabular-nums;
+}
+
+.close {
+  flex: 0 0 auto;
+  margin: -2px -4px -2px 0;
+}
+
+/* Main title + CTA share the left column; the illustration stretches to its
+   full height on the right so the card reads balanced with no dead space. */
+.content {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--serif, Georgia, 'Times New Roman', serif);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.25;
+  color: var(--text, #1f2328);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.image {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 136px;
+  min-height: 128px;
+  object-fit: cover;
+  border-radius: 14px;
+}
+
+@media (max-width: 640px) {
+  .card {
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+
+  .title {
+    font-size: 20px;
+  }
+
+  .image {
+    width: 108px;
+  }
+}

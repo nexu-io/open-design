@@ -50,12 +50,14 @@ import type { LiveArtifact, LiveArtifactWorkspaceEntry, PreviewComment, ProjectF
 import { I18nProvider } from '../../src/i18n';
 import type { Dict } from '../../src/i18n/types';
 import { emptyManualEditStyles } from '../../src/edit-mode/types';
+import { __resetPreviewIsolationCache } from '../../src/runtime/powered-preview';
 import { readExpandedIndexCss } from '../helpers/read-expanded-css';
 
 const TEST_SNAPSHOT_DATA_URL = 'data:image/png;base64,c25hcHNob3Q=';
 
 afterEach(() => {
   cleanup();
+  __resetPreviewIsolationCache();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   Reflect.deleteProperty(navigator, 'clipboard');
@@ -887,6 +889,88 @@ describe('FileViewer SVG artifacts', () => {
     const reloadedFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     expect(reloadedFrame).toBe(frame);
     expect(reloadedFrame.getAttribute('src')).toBe('/api/projects/project-1/raw/page.html?v=1710000000&r=1&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot');
+  });
+
+  it('keeps powered HTML previews on the powered URL when file-watch refreshes', async () => {
+    const replaceMock = vi.fn();
+    const frameWindows = new WeakMap<HTMLIFrameElement, Window>();
+    vi.spyOn(HTMLIFrameElement.prototype, 'contentWindow', 'get').mockImplementation(function (this: HTMLIFrameElement) {
+      let fakeWindow = frameWindows.get(this);
+      if (!fakeWindow) {
+        fakeWindow = {
+          document: document.implementation.createHTMLDocument('preview'),
+          location: { replace: replaceMock },
+          postMessage: vi.fn(),
+        } as unknown as Window;
+        frameWindows.set(this, fakeWindow);
+      }
+      return fakeWindow;
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (url === '/api/preview/isolation') {
+        return new Response(JSON.stringify({
+          supported: true,
+          baseOrigin: 'http://127.0.0.1:43111',
+        }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('', { status: 404 });
+    }));
+
+    const file = baseFile({
+      name: 'worker.html',
+      path: 'worker.html',
+      mime: 'text/html',
+      kind: 'html',
+      mtime: 1000,
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Worker Preview',
+        entry: 'worker.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const workerHtml = '<!doctype html><html><body><script>new Worker("worker.js")</script></body></html>';
+    const poweredSrc = 'http://localhost:43111/api/projects/project-1/powered/worker.html?v=1000&r=0';
+
+    const { rerender } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml={workerHtml}
+      />,
+    );
+
+    await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(frame.getAttribute('data-od-powered')).toBe('true');
+      expect(frame.getAttribute('src')).toBe(poweredSrc);
+    });
+
+    rerender(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        filesRefreshKey={7}
+        liveHtml={workerHtml}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith(`${poweredSrc}&fr=7`);
+    });
+    const refreshUrls = replaceMock.mock.calls.map(([url]) => String(url));
+    expect(refreshUrls.some((url) => url.includes('/raw/'))).toBe(false);
   });
 
   it('remounts the srcDoc HTML preview when reload is requested', () => {

@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Website Clone Preview</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f3ef;
+      --ink: #201f1d;
+      --muted: #77716a;
+      --line: #d9d2ca;
+      --accent: #d45f3f;
+      --green: #23b381;
+      --panel: #fffaf5;
+      --shadow: 0 24px 70px rgba(55, 42, 31, 0.14);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 32px;
+    }
+
+    main {
+      width: min(1080px, 100%);
+      display: grid;
+      gap: 28px;
+    }
+
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 28px;
+      align-items: end;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(42px, 7vw, 84px);
+      line-height: 0.9;
+      letter-spacing: 0;
+      max-width: 680px;
+    }
+
+    .kicker {
+      margin: 0 0 14px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .copy {
+      width: min(330px, 100%);
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.45;
+    }
+
+    .stage {
+      position: relative;
+      min-height: 440px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .browser {
+      position: absolute;
+      width: 48%;
+      min-width: 300px;
+      border: 1px solid var(--line);
+      background: #fff;
+      box-shadow: 0 18px 50px rgba(44, 34, 25, 0.14);
+    }
+
+    .browser.source {
+      left: 7%;
+      top: 56px;
+    }
+
+    .browser.clone {
+      right: 7%;
+      bottom: 52px;
+    }
+
+    .bar {
+      height: 34px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 12px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--line);
+    }
+
+    .dot.hot {
+      background: var(--accent);
+    }
+
+    .page {
+      padding: 22px;
+      min-height: 198px;
+    }
+
+    .stripe {
+      height: 12px;
+      border-radius: 999px;
+      background: #ece5de;
+      margin-bottom: 12px;
+    }
+
+    .stripe.short {
+      width: 52%;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .tile {
+      min-height: 72px;
+      border: 1px solid var(--line);
+      background: #fbf7f2;
+    }
+
+    .tile.accent {
+      background: #f3d0c3;
+      border-color: #dda58f;
+    }
+
+    .transfer {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 168px;
+      height: 168px;
+      transform: translate(-50%, -50%);
+      border: 1px solid var(--line);
+      background: #201f1d;
+      color: #fffaf5;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      box-shadow: 0 20px 54px rgba(32, 31, 29, 0.22);
+    }
+
+    .transfer span {
+      display: block;
+      margin-top: 8px;
+      color: var(--green);
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .step {
+      border-top: 2px solid var(--line);
+      padding-top: 12px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .step strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--ink);
+      font-size: 15px;
+    }
+
+    @media (max-width: 760px) {
+      body {
+        padding: 18px;
+      }
+
+      .hero,
+      .steps {
+        grid-template-columns: 1fr;
+        display: grid;
+      }
+
+      .browser {
+        position: relative;
+        width: auto;
+        min-width: 0;
+      }
+
+      .browser.source,
+      .browser.clone {
+        inset: auto;
+      }
+
+      .stage {
+        display: grid;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .transfer {
+        position: relative;
+        inset: auto;
+        width: auto;
+        height: 96px;
+        transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero" aria-label="Website clone overview">
+      <div>
+        <p class="kicker">Web clone skill</p>
+        <h1>Recreate the site from a real URL.</h1>
+      </div>
+      <p class="copy">Recon the source, capture routes and interactions, build the clone locally, then audit the result.</p>
+    </section>
+
+    <section class="stage" aria-label="Website clone flow preview">
+      <article class="browser source" aria-label="Source website">
+        <div class="bar"><span class="dot hot"></span><span class="dot"></span><span class="dot"></span> source.example</div>
+        <div class="page">
+          <div class="stripe"></div>
+          <div class="stripe short"></div>
+          <div class="grid">
+            <div class="tile accent"></div>
+            <div class="tile"></div>
+            <div class="tile"></div>
+          </div>
+        </div>
+      </article>
+
+      <div class="transfer">Evidence first<span>-></span></div>
+
+      <article class="browser clone" aria-label="Local clone">
+        <div class="bar"><span class="dot hot"></span><span class="dot"></span><span class="dot"></span> local clone</div>
+        <div class="page">
+          <div class="stripe"></div>
+          <div class="stripe short"></div>
+          <div class="grid">
+            <div class="tile accent"></div>
+            <div class="tile"></div>
+            <div class="tile"></div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="steps" aria-label="Workflow steps">
+      <p class="step"><strong>1. URL</strong>Start from the site the user wants to reproduce.</p>
+      <p class="step"><strong>2. Recon</strong>Crawl routes, assets, styles, and interaction evidence.</p>
+      <p class="step"><strong>3. Build</strong>Create a local HTML/CSS/JS reproduction.</p>
+      <p class="step"><strong>4. Audit</strong>Compare, remove tracking, and document gaps.</p>
+    </section>
+  </main>
+</body>
+</html>

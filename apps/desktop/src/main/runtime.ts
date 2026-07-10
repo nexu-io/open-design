@@ -224,6 +224,19 @@ export function signDesktopImportToken(
   return [options.nonce, options.exp, signature].join(DESKTOP_IMPORT_TOKEN_FIELD_SEP);
 }
 
+/**
+ * An HTTP 5xx main-frame document is a failed load. Electron resolves
+ * `loadURL` for any response that carries a body — `did-fail-load` fires
+ * only for net::ERR_* failures — so an error document (e.g. the packaged
+ * od:// proxy's synthetic 502) parks the renderer on a dead page the
+ * recovery loop never sees. Route it into the same renderer-failed
+ * reload path as a network failure. Electron reports non-HTTP
+ * navigations with 0 / -1, which must never trip this.
+ */
+export function isRendererFailureHttpStatus(httpResponseCode: number): boolean {
+  return httpResponseCode >= 500;
+}
+
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
 // Minimum time the light splash window stays on screen before we reveal the main
@@ -402,6 +415,14 @@ export type DesktopRuntimeOptions = {
    */
   splashStartedAt?: number;
   updater?: DesktopUpdater;
+  /**
+   * Fired once the main window is actually revealed (the web app mounted and
+   * the window is shown) — the real "app is running" moment, distinct from
+   * `createDesktopRuntime` returning (which starts async bootstrap via
+   * `void tick()` and returns before the first load). Used to mark the session
+   * as having reached running for abnormal-exit detection.
+   */
+  onRevealed?: () => void;
 };
 
 const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
@@ -1412,6 +1433,7 @@ interface SaveAsDialogOptions {
   title: string;
   defaultPath: string;
   filters: Array<{ name: string; extensions: string[] }>;
+  properties: Array<"dontAddToRecent">;
 }
 
 // Pure: the Save As dialog options for a downloaded filename, or null when the
@@ -1434,7 +1456,7 @@ export function saveAsDialogOptionsForFilename(filename: string): SaveAsDialogOp
           { name: "PowerPoint Presentation", extensions: ["pptx"] },
           { name: "All Files", extensions: ["*"] },
         ];
-  return { title: "Save As", defaultPath: filename, filters };
+  return { title: "Save As", defaultPath: filename, filters, properties: ["dontAddToRecent"] };
 }
 
 function attachDownloadSaveAsDialog(window: BrowserWindow): void {
@@ -1561,7 +1583,11 @@ async function showDirectoryPickerForSender(
   const parent =
     BrowserWindow.fromWebContents(sender) ?? BrowserWindow.getFocusedWindow();
   const pickerOptions: Electron.OpenDialogOptions = {
-    properties: ["openDirectory", "createDirectory"],
+    // `dontAddToRecent` avoids shell recent-items / jump-list writes against
+    // the browsed folder. Combined with not seeding a cloud-backed default
+    // location, this trims the shell work that stalls the native picker on
+    // OneDrive-backed folders (see AppHangB1 note in diagnostics.ts).
+    properties: ["openDirectory", "createDirectory", "dontAddToRecent"],
   };
   return parent
     ? dialog.showOpenDialog(parent, pickerOptions)
@@ -1888,6 +1914,20 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   window.webContents.on("did-fail-load", (_event, errorCode, _description, _url, isMainFrame) => {
     if (isMainFrame && errorCode !== -3) markRendererFailed();
   });
+  // `did-fail-load` never fires for an HTTP error *document* — a 5xx response
+  // with a body is a successful load to Electron — so a 502 page (e.g. the
+  // packaged od:// proxy's exhaustion fallback) would otherwise sit on screen
+  // until a manual reload. `did-navigate` is main-frame-only and carries the
+  // HTTP status (-1 for non-HTTP navigations); in-page SPA routing emits
+  // `did-navigate-in-page` instead, so app navigation never trips this.
+  window.webContents.on("did-navigate", (_event, url, httpResponseCode) => {
+    if (!isRendererFailureHttpStatus(httpResponseCode)) return;
+    console.error("[open-design desktop] main window loaded an HTTP error document", {
+      httpResponseCode,
+      url,
+    });
+    markRendererFailed();
+  });
 
   const sendUpdaterStatus = (status = options.updater?.snapshot() ?? unavailableUpdaterStatus()) => {
     if (window.isDestroyed()) return;
@@ -2172,6 +2212,13 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     window.focus();
     ensureWindowVisible(window);
     if (splash != null && !splash.isDestroyed()) splash.close();
+    // The app is now truly up (mounted + shown). Fire once — revealed guards
+    // re-entry — so callers can mark "reached running".
+    try {
+      options.onRevealed?.();
+    } catch {
+      // A callback fault must not break reveal.
+    }
   };
 
   // Hold the splash until BOTH (a) the web bundle reports it has mounted — it
@@ -2240,13 +2287,18 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       // restored from the background recovers instead of staying blank.
       if (url != null && (url !== currentUrl || rendererFailed)) {
         pendingUrl = url;
+        // Clear the failure flag BEFORE the load: `did-navigate` (which
+        // re-flags an HTTP 5xx error document) fires before `loadURL`'s
+        // promise resolves, so clearing afterwards would clobber a failure
+        // detected mid-load. A rejecting `loadURL` re-flags via
+        // `did-fail-load`, so net-error behavior is unchanged.
+        rendererFailed = false;
         // Load the web app into the still-hidden main window as soon as it is
         // discovered; it mounts behind the splash so the swap is instant.
         console.info("[open-design desktop] main window loadURL start", { currentUrl, url });
         await window.loadURL(url);
         console.info("[open-design desktop] main window loadURL success", { url });
         currentUrl = url;
-        rendererFailed = false;
         pendingUrl = null;
         const nextPetUrl = desktopPetUrl(url);
         if (!petWindow.isDestroyed() && nextPetUrl !== currentPetUrl) {
@@ -2261,7 +2313,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       } else if (url == null) {
         pendingUrl = null;
       }
-      schedule(currentUrl == null ? PENDING_POLL_MS : RUNNING_POLL_MS);
+      // A renderer still flagged failed (e.g. the document that just "loaded"
+      // was an HTTP 5xx error page) re-polls at the same prompt cadence as the
+      // connection-refused recovery path.
+      schedule(currentUrl == null || rendererFailed ? PENDING_POLL_MS : RUNNING_POLL_MS);
     } catch (error) {
       pendingUrl = null;
       console.error("desktop web discovery failed", error);

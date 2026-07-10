@@ -10,6 +10,10 @@ import { deriveUploadCohort } from './analytics/upload-tracking';
 import { setPendingDesignSystemCreateEntry } from './analytics/ds-create-entry';
 import { detectClientType } from './analytics/identity';
 import {
+  stashOnboardingEntryForProject,
+  type OnboardingEntry,
+} from './onboarding/onboarding-entry';
+import {
   deriveConfigureGlobals,
   projectKindFromMetadataToTracking,
   fidelityToTracking,
@@ -132,10 +136,15 @@ type AppCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   initialRunContext?: RunContextSelection | null;
   conversationMode?: ChatSessionMode;
   autoSendFirstMessage?: boolean;
+  /** The home submit already ran the Open Design Cloud balance gate (and the
+   *  user acknowledged any soft warning), so the project's first auto-send
+   *  must not re-gate — re-prompting a decision the user just made. */
+  amrGatePrechecked?: boolean;
   requestId?: string;
   pendingFiles?: File[];
   userWorkingDirToken?: string;
   linkedDirs?: string[] | null;
+  onboardingEntry?: OnboardingEntry;
 };
 
 const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
@@ -390,6 +399,7 @@ function AppInner() {
   configRef.current = config;
   const latestPersistedConfigRef = useRef(config);
   latestPersistedConfigRef.current = config;
+  const settingsDraftConfigRef = useRef<AppConfig | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Surfaced when a Home-picked working dir could not be applied to a freshly
   // created project (expired/invalid desktop token, daemon rejection). Without
@@ -759,20 +769,31 @@ function AppInner() {
   // unmounted before their poll settled.
   useEffect(() => {
     let cancelled = false;
-    const sync = async () => {
-      const status = await fetchVelaLoginStatus();
+    const sync = async (options: { refresh?: boolean } = {}) => {
+      const status = await fetchVelaLoginStatus(options);
       if (!cancelled && status) setAmrLoginStatus(status);
+      if (!cancelled && status?.loggedIn === true && options.refresh) {
+        restartAmrPolling();
+      }
     };
     void sync();
     const onStatusEvent = () => {
       void sync();
     };
+    const onReturnToApp = () => {
+      if (document.visibilityState === 'hidden') return;
+      void sync({ refresh: true });
+    };
     window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+    window.addEventListener('focus', onReturnToApp);
+    document.addEventListener('visibilitychange', onReturnToApp);
     return () => {
       cancelled = true;
       window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
+      window.removeEventListener('focus', onReturnToApp);
+      document.removeEventListener('visibilitychange', onReturnToApp);
     };
-  }, [daemonLive]);
+  }, [daemonLive, restartAmrPolling]);
 
   useEffect(() => {
     analytics.setUserId(
@@ -1169,6 +1190,27 @@ function AppInner() {
     ]);
   }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
 
+  const handleSettingsDraftChange = useCallback((draft: AppConfig) => {
+    settingsDraftConfigRef.current = draft;
+  }, []);
+
+  const handlePrivacyConsentChoice = useCallback((share: boolean) => {
+    const base = settingsDraftConfigRef.current ?? latestPersistedConfigRef.current;
+    const installationId = share
+      ? base.installationId ?? generateInstallationIdSafe()
+      : null;
+    void handleConfigPersist({
+      ...base,
+      installationId,
+      privacyDecisionAt: Date.now(),
+      telemetry: {
+        ...(base.telemetry ?? {}),
+        metrics: share,
+        content: share,
+      },
+    });
+  }, [handleConfigPersist]);
+
   /**
    * Explicit Composio API-key save. Called from the section-local
    * "Save key" button so secrets never ride the autosave keystroke
@@ -1537,6 +1579,16 @@ function AppInner() {
             `od:auto-send-first:${result.project.id}`,
             '1',
           );
+          if (input.amrGatePrechecked) {
+            window.sessionStorage.setItem(
+              `od:auto-send-amr-gate-ok:${result.project.id}`,
+              '1',
+            );
+          } else {
+            window.sessionStorage.removeItem(
+              `od:auto-send-amr-gate-ok:${result.project.id}`,
+            );
+          }
           if (firstMessageAttachments.length > 0) {
             window.sessionStorage.setItem(
               `od:auto-send-attachments:${result.project.id}`,
@@ -1561,6 +1613,23 @@ function AppInner() {
           /* sessionStorage may be unavailable (e.g. SSR / private mode); fall
              back to manual send. */
         }
+      }
+      // Home recommendation handoff: now that the project exists and its id is
+      // known, stash the onboarding entry keyed by that id. Studio consumes it
+      // by the same id on mount. Keying by id (instead of a single global slot
+      // written before create) removes the race where opening an unrelated
+      // project mid-create could steal the personalized funnel context, and
+      // means a failed/aborted create leaves nothing behind.
+      if (input.onboardingEntry) {
+        // Cache the prefilled seed prompt WITH the entry so the first-prompt
+        // funnel's `has_prefilled_prompt` comparison base survives a
+        // reopen-before-send (project.pendingPrompt is wiped on first mount).
+        stashOnboardingEntryForProject(result.project.id, {
+          ...input.onboardingEntry,
+          ...(derivedPendingPrompt
+            ? { seedPrompt: derivedPendingPrompt.trim() }
+            : {}),
+        });
       }
       const project = result.appliedPluginSnapshotId
         ? {
@@ -1859,13 +1928,15 @@ function AppInner() {
     void patchProject(id, { name: trimmed });
   }, []);
 
-  // Return to wherever the user opened this project from (Projects, Tasks, a
-  // design system, …) by popping the history stack. Falls back to the Projects
-  // list only when there is no in-app history behind us (a deep link / fresh
-  // load straight onto the project URL) — see `goBack`.
   const handleBack = useCallback(() => {
+    const currentProjectId = route.kind === 'project' ? route.projectId : null;
     goBack({ kind: 'home', view: 'projects' });
-  }, []);
+    if (currentProjectId && typeof window !== 'undefined') {
+      window.setTimeout(() => {
+        iframeKeepAlivePool.evictProject(currentProjectId, { includeActive: true });
+      }, 0);
+    }
+  }, [iframeKeepAlivePool, route]);
 
   const handleClearPendingPrompt = useCallback(() => {
     const projectId = route.kind === 'project' ? route.projectId : null;
@@ -2404,6 +2475,7 @@ function AppInner() {
           initialHighlight={settingsHighlight}
           composioConfigLoading={composioConfigLoading}
           onPersist={handleConfigPersist}
+          onDraftChange={handleSettingsDraftChange}
           onPersistComposioKey={handleConfigPersistComposioKey}
           onClose={() => {
             // Closing the dialog is the canonical "I'm done" gesture
@@ -2419,6 +2491,7 @@ function AppInner() {
               setConfig(next);
             }
             setSettingsOpen(false);
+            settingsDraftConfigRef.current = null;
             setSettingsHighlight(null);
           }}
           onRefreshAgents={refreshAgents}
@@ -2468,21 +2541,14 @@ function AppInner() {
           transition={{ type: 'spring', stiffness: 400, damping: 28 }}
         >
         <PrivacyConsentModal
-          onAccept={() => {
-            // Default opt-in: clicking "I get it" enables the same telemetry
-            // surface the previous two-button "Share usage data" path opted
-            // into. The banner footer + PrivacySection give the user a
-            // one-click path to flip everything off later.
+          onShare={() => {
             // The banner owns only the privacy decision; it does not drive
-            // navigation. Onboarding is gated by `onboardingCompleted` on
-            // its own and runs in parallel.
-            const installationId = generateInstallationIdSafe();
-            void handleConfigPersist({
-              ...latestPersistedConfigRef.current,
-              installationId,
-              privacyDecisionAt: Date.now(),
-              telemetry: { metrics: true, content: true },
-            });
+            // navigation. Choosing Share keeps the current anonymous identity
+            // when one already exists and enables the telemetry surface.
+            handlePrivacyConsentChoice(true);
+          }}
+          onDecline={() => {
+            handlePrivacyConsentChoice(false);
           }}
         />
       </motion.div>

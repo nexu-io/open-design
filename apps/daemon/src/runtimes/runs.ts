@@ -38,6 +38,12 @@ export function createChatRunService({
   // external coding agent can `tail` the file in its own shell during
   // a long OD generation, instead of polling blindly and giving up.
   runsLogDir = null,
+  // Optional observer invoked for every emitted event BEFORE the in-memory
+  // ring buffer is truncated. The daemon uses it to fold committed side
+  // effects (tool calls, artifact writes) into a per-run accumulator that
+  // outlives buffer truncation. Kept generic here: this service does not
+  // interpret event semantics, it just hands each record to the observer.
+  onEventEmitted = null,
 }) {
   const runs = new Map();
 
@@ -70,6 +76,14 @@ export function createChatRunService({
       mediaExecution: normalizeMediaExecutionPolicyForRun(meta.mediaExecution),
       toolBundle: normalizeRunToolBundleForRun(meta.toolBundle),
       browserUse: meta.browserUse && typeof meta.browserUse === 'object' ? meta.browserUse : null,
+      sessionMode:
+        meta.sessionMode === 'chat' || meta.sessionMode === 'design' || meta.sessionMode === 'plan'
+          ? meta.sessionMode
+          : null,
+      context:
+        meta.context && typeof meta.context === 'object' && !Array.isArray(meta.context)
+          ? meta.context
+          : null,
       status: 'queued',
       createdAt: now,
       updatedAt: now,
@@ -147,6 +161,11 @@ export function createChatRunService({
     }
     const id = run.nextEventId++;
     const record = { id, event, data, timestamp: Date.now() };
+    // Fold committed side effects BEFORE the ring buffer can drop this record,
+    // so the finalization-time verdict survives truncation of run.events.
+    if (onEventEmitted) {
+      try { onEventEmitted(run, record); } catch { /* observer must never break emit */ }
+    }
     run.events.push(record);
     if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
     run.updatedAt = Date.now();
@@ -187,12 +206,15 @@ export function createChatRunService({
     signal: run.signal,
     error: run.error ?? null,
     errorCode: run.errorCode ?? null,
+    failureCategory: run.failureCategory ?? null,
+    failureDetail: run.failureDetail ?? null,
     resumable: run.resumable ?? false,
     eventsLogPath: run.eventsLogPath ?? null,
-    workspace: run.workspace ?? projectWorkspaceProvenance(run.projectMetadata),
+    workspace: projectWorkspaceProvenance(run.projectMetadata),
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
     toolBundle: summarizeRunToolBundle(run.toolBundle),
     ...(run.promptCache ? { promptCache: run.promptCache } : {}),
+    ...(run.nativeSessionRecovery ? { nativeSessionRecovery: run.nativeSessionRecovery } : {}),
     ...(run.browserUse ? { browserUse: run.browserUse } : {}),
   });
 
@@ -202,7 +224,24 @@ export function createChatRunService({
     run.exitCode = code;
     run.signal = signal;
     run.updatedAt = Date.now();
-    emit(run, 'end', { code, signal, status, resumable: run.resumable ?? false });
+    // Release run-scoped resources the starter registered (e.g. the minted
+    // tool-token grant + agent event-sink entries). This runs on EVERY
+    // terminal path — including a startup throw that never reached the child
+    // lifecycle cleanup — so a failed run can never leave its capability token
+    // live for the token TTL. Best-effort + one-shot.
+    if (typeof run.onFinalize === 'function') {
+      const finalize = run.onFinalize;
+      run.onFinalize = null;
+      try { finalize(); } catch { /* best-effort */ }
+    }
+    emit(run, 'end', {
+      code,
+      signal,
+      status,
+      resumable: run.resumable ?? false,
+      failureCategory: run.failureCategory ?? null,
+      failureDetail: run.failureDetail ?? null,
+    });
     for (const sse of run.clients) sse.end();
     run.clients.clear();
     for (const waiter of run.waiters) waiter(statusBody(run));
@@ -297,11 +336,18 @@ export function createChatRunService({
     return Number.isFinite(raw) && raw > 0 ? raw : 500;
   };
 
-  const killChild = (run, signal) => {
-    if (!run.child || childHasExited(run.child)) return false;
-    if (process.platform !== 'win32' && Number.isInteger(run.processGroupId)) {
+  // Signal an EXPLICIT child + its captured process group, rather than
+  // whatever currently occupies `run.child`. Escalation timers (SIGTERM ->
+  // SIGKILL) that outlive a same-run retry MUST target the exact generation
+  // they were scheduled for: after a retry swaps `run.child` to a fresh
+  // child, signalling the shared field would kill the healthy new attempt and
+  // leave the stalled old child unreaped. Callers that legitimately want the
+  // current child use `killChild` below.
+  const signalChildProcess = (child, processGroupId, signal) => {
+    if (!child || childHasExited(child)) return false;
+    if (process.platform !== 'win32' && Number.isInteger(processGroupId)) {
       try {
-        process.kill(-run.processGroupId, signal);
+        process.kill(-processGroupId, signal);
         return true;
       } catch (err) {
         if (err?.code !== 'ESRCH') {
@@ -312,11 +358,14 @@ export function createChatRunService({
       }
     }
     try {
-      return run.child.kill(signal);
+      return child.kill(signal);
     } catch {
       return false;
     }
   };
+
+  const killChild = (run, signal) =>
+    signalChildProcess(run.child, run.processGroupId, signal);
 
   const cancelGraceMs = () => {
     const raw = Number(process.env.OD_CHAT_RUN_CANCEL_GRACE_MS || process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
@@ -437,6 +486,11 @@ export function createChatRunService({
   const drop = (run) => {
     if (!run) return;
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+    if (typeof run.onFinalize === 'function') {
+      const finalize = run.onFinalize;
+      run.onFinalize = null;
+      try { finalize(); } catch { /* best-effort */ }
+    }
     runs.delete(run.id);
     for (const sse of run.clients) {
       try { sse.end(); } catch { /* best-effort detach */ }
@@ -466,6 +520,7 @@ export function createChatRunService({
     drop,
     signalChild: killChild,
     statusBody,
+    signalChildProcess,
     isTerminal(status) {
       return TERMINAL_RUN_STATUSES.has(status);
     },

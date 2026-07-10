@@ -1,0 +1,85 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-web-clone",
+  "title": "Website Clone",
+  "title_i18n": {
+    "en": "Website Clone",
+    "zh-CN": "网站复刻",
+    "zh-TW": "網站復刻"
+  },
+  "version": "0.1.0",
+  "description": "Clone or visually recreate a website using source-first reconnaissance, route crawling, interaction probes, asset capture, and post-clone audit notes.",
+  "description_i18n": {
+    "en": "Clone or visually recreate a website using source-first reconnaissance, route crawling, interaction probes, asset capture, and post-clone audit notes.",
+    "zh-CN": "使用源码优先的侦察、路由抓取、交互探针、素材采集和复刻审计，复刻或视觉还原一个网站。",
+    "zh-TW": "使用原始碼優先的偵察、路由抓取、互動探針、素材擷取與復刻稽核，復刻或視覺還原一個網站。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Jane xiaoer / Open Design",
+    "url": "https://github.com/Jane-xiaoer/claude-skill-web-clone"
+  },
+  "homepage": "https://github.com/Jane-xiaoer/claude-skill-web-clone",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "web",
+    "website",
+    "web-clone",
+    "website-clone",
+    "site-clone",
+    "reproduce-site",
+    "visual-clone"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "web-clone",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./index.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Clone or visually recreate this website: {{targetUrl}}. Use the web-clone workflow: find real source first, recon the site, choose a fidelity path, build a local clone, remove tracking, and write NOTES.md plus clone/audit evidence.",
+        "zh-CN": "复刻这个网站：{{targetUrl}}。使用 web-clone 流程：先找真实源码，再侦察站点、选择保真路径、构建本地复刻、删除追踪脚本，并写好 NOTES.md 与复刻/审计证据。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "targetUrl",
+        "label": "Target URL",
+        "type": "string",
+        "required": false,
+        "placeholder": "https://example.com"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "ref": "web-clone"
+        }
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write",
+      "shell"
+    ]
+  }
+}

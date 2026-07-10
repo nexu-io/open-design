@@ -3,18 +3,16 @@
  *
  * Mirrors the vela subscription modal (`apps/web/src/components/commerce/
  * plans/pricing-plans.tsx`: `PLANS_BY_LOCALE` + the copy tables). The card body
- * now renders the FULLY-EXPANDED benefit list per tier — the credit and
- * deliverable rows lead, then every included benefit, with no "includes all
- * <tier> plan" heading — matching the modal's rendered output. Only the NUMBERS
- * sync from the public pricing contract (see app/_lib/pricing.ts); this file
- * holds the localized TEXT (taglines, feature bullets, section labels, and the
+ * renders the FULLY-EXPANDED benefit list per tier — the credit and concurrency
+ * rows lead, then every included benefit, with no "includes all <tier> plan"
+ * heading — matching the modal's rendered output. Only the NUMBERS sync from
+ * the public pricing contract (see app/_lib/pricing.ts); this file holds the
+ * localized TEXT (taglines, feature bullets, section labels, and the
  * number-formatting templates). When vela revises that copy, mirror it here.
  *
- * vela ships 10 plan locales; this module ports the three the marketing site
- * needs first — en-US, zh-CN, zh-TW — and falls back to English for every
- * other landing locale. To add another (ja/ko/de/fr/ru/es/pt all exist in
- * vela), copy its `PLANS_BY_LOCALE` + copy-table entry into a new
- * `PricingContent` below and register it in `CONTENT_BY_LOCALE`.
+ * vela ships 10 plan locales; this module ports all of them — en-US, zh-CN,
+ * zh-TW, ja, ko, de, fr, ru, es, pt — and falls back to English for every
+ * other landing locale.
  */
 import type { LandingLocaleCode } from '../i18n';
 
@@ -22,14 +20,23 @@ export type PlanTierId = 'plus' | 'pro' | 'max';
 
 export interface PlanCopy {
   tagline: string;
-  /** Green savings anchor line. */
-  costAnchor: string;
   ctaLabel: string;
+  /** Localized concurrent-task benefit row (count baked in per tier). */
+  concurrency: string;
   /**
-   * Fully-expanded benefit bullets, shown under the credit + deliverable lead
+   * Fully-expanded benefit bullets, shown under the credit + concurrency lead
    * rows — no "includes all <tier>" heading. Each string is one ✓ bullet and
    * may include `{skillsCount}` / `{systemsCount}` catalog placeholders.
    */
+  features: string[];
+}
+
+/** Free-tier card copy. The Free tier is not part of the paid pricing
+ * contract; its card is content-only ($0, no billing interval). */
+export interface FreePlanCopy {
+  tagline: string;
+  ctaLabel: string;
+  concurrency: string;
   features: string[];
 }
 
@@ -42,12 +49,13 @@ export interface PricingLabels {
   premiumModels: string;
   standardModels: string;
   recommended: string;
-  // Lead benefit rows. `{amount}` `{pct}` `{range}` filled at render.
+  // Lead benefit rows. `{amount}` `{pct}` filled at render.
   creditBenefit: string;
   creditBonus: string;
-  deliverableBenefit: string;
-  /** Hover tooltip explaining how a "design deliverable" is counted. */
-  taskTooltip: { line1: string; line2: string; note: string };
+  /** Free card price subline ($0 · forever). */
+  freeForever: string;
+  /** Free card lead benefit row (trial credit grant). */
+  freeTrialCreditLabel: string;
   // Number-formatting templates. Placeholders: {pct} {totalUsd} {savingsUsd}
   // {amountUsd}. Filled at build time and re-filled by the inline sync script.
   firstMonthTag: string;
@@ -64,35 +72,38 @@ export interface PricingLabels {
 
 export interface PricingContent {
   labels: PricingLabels;
+  free: FreePlanCopy;
   plans: Record<PlanTierId, PlanCopy>;
 }
 
-// Model rosters are proper nouns — identical across locales.
-export const PREMIUM_MODELS = [
-  'Claude Opus 4.8',
-  'Claude Opus 4.7',
-  'GPT-5.5 Pro',
-  'GPT-5.5',
-  'Gemini 3.1 Pro',
+// Model rosters are proper nouns — identical across locales, mirrored 1:1 from
+// the vela modal (names byte-identical so the two surfaces read the same).
+// Every paid tier shares one hosted-model roster (plans differ by credit
+// grant, not by model access). `trial: true` marks models the Free trial pool
+// also opens up; the Free card sorts those first and greys out the rest.
+export interface PricingModel {
+  name: string;
+  trial?: boolean;
+}
+
+export const PREMIUM_MODELS: readonly PricingModel[] = [
+  { name: 'Claude-Fable-5' },
+  { name: 'Claude-Opus-4.8' },
+  { name: 'Claude-Opus-4.7' },
+  { name: 'GPT-5.5-Pro' },
+  { name: 'GPT-5.5' },
+  { name: 'Gemini-3.1-Pro' },
+  { name: 'Grok-4.5', trial: true },
 ] as const;
 
 export const STANDARD_MODELS = [
   'GLM-5.2',
-  'Kimi K2.7',
-  'DeepSeek V4',
-  'MiMo V2.5 Pro',
-  'MiniMax M2.7',
+  'Kimi-K2.7',
+  'DeepSeek-V4',
+  'MiMo-V2.5-Pro',
+  'MiniMax-M2.7',
+  'Qwen-3.7-Max',
 ] as const;
-
-/**
- * Monthly delivery-capacity range per tier (locale-independent). Scales with
- * the credit multiplier: Plus $20 → Pro $120 (6×) → Max $300 (15×).
- */
-export const DELIVERABLE_RANGES: Record<PlanTierId, string> = {
-  plus: '4-8',
-  pro: '25-50',
-  max: '70-140',
-};
 
 /**
  * Limited-time credit bonus over the base grant, surfaced as a badge next to
@@ -128,23 +139,25 @@ const EN: PricingContent = {
     recommended: 'Recommended',
     creditBenefit: '{amount} model credits / mo',
     creditBonus: 'Limited +{pct}% bonus',
-    deliverableBenefit: '{range} commercial-grade design deliverables / mo',
-    taskTooltip: {
-      line1: '1 marketing poster / 1 landing page ≈ 1 task',
-      line2: '1 multi-screen prototype ≈ 2–4 tasks',
-      note: 'Actual count depends on task complexity and the model you pick',
-    },
+    freeForever: 'Free forever',
+    freeTrialCreditLabel: 'Limited trial model credits (valid for 7 days)',
     firstMonthTag: '{pct}% off 1st month',
     yearlyDiscountTag: '{pct}% off',
     yearlySubline: 'Billed yearly · {totalUsd} / year (save {savingsUsd})',
     monthlyRenewal: 'Then {amountUsd} / mo',
     yearlySaveCta: 'Save {savingsUsd} yearly',
   },
+  free: {
+    tagline: 'Limited-time free trial; configure your own agent or BYOK afterwards',
+    ctaLabel: 'Start free',
+    concurrency: '1 concurrent task',
+    features: ['BYOK provider keys', 'Community support'],
+  },
   plans: {
     plus: {
       tagline: 'Independent projects, solo delivery · Zero-config',
-      costAnchor: 'Ship designs 10x faster, save $1,000+/mo',
       ctaLabel: 'Upgrade to Plus',
+      concurrency: '2 concurrent tasks',
       features: [
         'BYOK provider keys',
         'Zero-config professional design agent',
@@ -156,8 +169,8 @@ const EN: PricingContent = {
     },
     pro: {
       tagline: 'One person, a whole design team · Zero-config',
-      costAnchor: 'Ship designs 10x faster, save $4,000+/mo',
       ctaLabel: 'Upgrade to Pro',
+      concurrency: '5 concurrent tasks',
       features: [
         'BYOK provider keys',
         'Zero-config professional design agent',
@@ -169,8 +182,8 @@ const EN: PricingContent = {
     },
     max: {
       tagline: 'Outsourced design costs, slashed · Zero-config',
-      costAnchor: 'Ship designs 10x faster, save $10,000+/mo',
       ctaLabel: 'Upgrade to Max',
+      concurrency: '10 concurrent tasks',
       features: [
         'BYOK provider keys',
         'Zero-config professional design agent',
@@ -198,23 +211,25 @@ const ZH_CN: PricingContent = {
     recommended: '推荐',
     creditBenefit: '每月 {amount} 模型额度',
     creditBonus: '限时加赠 {pct}%',
-    deliverableBenefit: '每月 {range} 份商业级设计',
-    taskTooltip: {
-      line1: '一张营销海报 / 一个落地页 ≈ 1 份',
-      line2: '一套多页交互原型 ≈ 2–4 份',
-      note: '实际任务数量取决于任务复杂度和所选模型',
-    },
+    freeForever: '永久免费',
+    freeTrialCreditLabel: '有限的模型体验额度（7 天内有效）',
     firstMonthTag: '首月 {pct}% Off',
     yearlyDiscountTag: '{pct}% Off',
     yearlySubline: '按年计费 · {totalUsd}/年（省 {savingsUsd}）',
     monthlyRenewal: '次月起 {amountUsd}/月',
     yearlySaveCta: '年付立省 {savingsUsd}',
   },
+  free: {
+    tagline: '限时免费体验，结束后需配置 Agent 或 BYOK',
+    ctaLabel: '免费开始',
+    concurrency: '1 个任务并发',
+    features: ['BYOK 自带密钥', '社区支持'],
+  },
   plans: {
     plus: {
       tagline: '独立项目、零散需求，单人交付 · 零配置即用',
-      costAnchor: '设计交付提速 10 倍，每月省下 $1,000+',
       ctaLabel: '升级 Plus',
+      concurrency: '2 个任务并发',
       features: [
         'BYOK 自带密钥',
         '零配置专业设计 Agent',
@@ -226,8 +241,8 @@ const ZH_CN: PricingContent = {
     },
     pro: {
       tagline: '一个人产出整个设计团队的活 · 零配置即用',
-      costAnchor: '设计交付提速 10 倍，每月省下 $4,000+',
       ctaLabel: '升级 Pro',
+      concurrency: '5 个任务并发',
       features: [
         'BYOK 自带密钥',
         '零配置专业设计 Agent',
@@ -239,8 +254,8 @@ const ZH_CN: PricingContent = {
     },
     max: {
       tagline: '把外包设计费砸到零头 · 零配置即用',
-      costAnchor: '设计交付提速 10 倍，每月省下 $10,000+',
       ctaLabel: '升级 Max',
+      concurrency: '10 个任务并发',
       features: [
         'BYOK 自带密钥',
         '零配置专业设计 Agent',
@@ -268,23 +283,25 @@ const ZH_TW: PricingContent = {
     recommended: '推薦',
     creditBenefit: '每月 {amount} 模型額度',
     creditBonus: '限時加贈 {pct}%',
-    deliverableBenefit: '每月 {range} 份商業級設計',
-    taskTooltip: {
-      line1: '一張行銷海報 / 一個落地頁 ≈ 1 份',
-      line2: '一套多頁互動原型 ≈ 2–4 份',
-      note: '實際任務數量取決於任務複雜度與所選模型',
-    },
+    freeForever: '永久免費',
+    freeTrialCreditLabel: '有限的模型體驗額度（7 天內有效）',
     firstMonthTag: '首月 {pct}% Off',
     yearlyDiscountTag: '{pct}% Off',
     yearlySubline: '按年計費 · {totalUsd} / 年（省 {savingsUsd}）',
     monthlyRenewal: '次月起 {amountUsd} / 月',
     yearlySaveCta: '年付立省 {savingsUsd}',
   },
+  free: {
+    tagline: '限時免費體驗，結束後需配置 Agent 或 BYOK',
+    ctaLabel: '免費開始',
+    concurrency: '1 個任務並行',
+    features: ['BYOK 自帶密鑰', '社群支援'],
+  },
   plans: {
     plus: {
       tagline: '獨立專案、零散需求，單人交付 · 零配置即用',
-      costAnchor: '設計交付提速 10 倍，每月省下 $1,000+',
       ctaLabel: '升級 Plus',
+      concurrency: '2 個任務並行',
       features: [
         'BYOK 自帶密鑰',
         '零配置專業設計 Agent',
@@ -296,8 +313,8 @@ const ZH_TW: PricingContent = {
     },
     pro: {
       tagline: '一個人產出整個設計團隊的活 · 零配置即用',
-      costAnchor: '設計交付提速 10 倍，每月省下 $4,000+',
       ctaLabel: '升級 Pro',
+      concurrency: '5 個任務並行',
       features: [
         'BYOK 自帶密鑰',
         '零配置專業設計 Agent',
@@ -309,8 +326,8 @@ const ZH_TW: PricingContent = {
     },
     max: {
       tagline: '把外包設計費砍到零頭 · 零配置即用',
-      costAnchor: '設計交付提速 10 倍，每月省下 $10,000+',
       ctaLabel: '升級 Max',
+      concurrency: '10 個任務並行',
       features: [
         'BYOK 自帶密鑰',
         '零配置專業設計 Agent',
@@ -338,23 +355,25 @@ const ES: PricingContent = {
     recommended: 'Recomendado',
     creditBenefit: '{amount} en créditos de modelo / mes',
     creditBonus: '+{pct}% extra (limitado)',
-    deliverableBenefit: '{range} entregables de diseño nivel comercial / mes',
-    taskTooltip: {
-      line1: '1 póster / 1 landing page ≈ 1 tarea',
-      line2: '1 prototipo multipantalla ≈ 2–4 tareas',
-      note: 'La cantidad real depende de la complejidad y del modelo elegido',
-    },
+    freeForever: 'Gratis para siempre',
+    freeTrialCreditLabel: 'Créditos de prueba de modelos limitados (válidos por 7 días)',
     firstMonthTag: '1.er mes {pct}% off',
     yearlyDiscountTag: '{pct}% off',
     yearlySubline: 'Facturado anual · {totalUsd} / año (ahorra {savingsUsd})',
     monthlyRenewal: 'Luego {amountUsd} / mes',
     yearlySaveCta: 'Ahorra {savingsUsd} al año',
   },
+  free: {
+    tagline: 'Prueba gratis por tiempo limitado; después configura tu agent o usa BYOK',
+    ctaLabel: 'Empezar gratis',
+    concurrency: '1 tarea simultánea',
+    features: ['Claves BYOK de proveedores', 'Soporte de la comunidad'],
+  },
   plans: {
     plus: {
       tagline: 'Proyectos independientes, entrega en solitario · Sin configuración',
-      costAnchor: 'Entrega diseños 10x más rápido y ahorra $1,000+/mes',
       ctaLabel: 'Subir a Plus',
+      concurrency: '2 tareas simultáneas',
       features: [
         'Claves BYOK de proveedores',
         'Agent de diseño profesional sin configuración',
@@ -366,8 +385,8 @@ const ES: PricingContent = {
     },
     pro: {
       tagline: 'Una persona produce el trabajo de todo un equipo · Sin configuración',
-      costAnchor: 'Entrega diseños 10x más rápido y ahorra $4,000+/mes',
       ctaLabel: 'Subir a Pro',
+      concurrency: '5 tareas simultáneas',
       features: [
         'Claves BYOK de proveedores',
         'Agent de diseño profesional sin configuración',
@@ -379,8 +398,8 @@ const ES: PricingContent = {
     },
     max: {
       tagline: 'Reduce el gasto en diseño externo a una fracción · Sin configuración',
-      costAnchor: 'Entrega diseños 10x más rápido y ahorra $10,000+/mes',
       ctaLabel: 'Subir a Max',
+      concurrency: '10 tareas simultáneas',
       features: [
         'Claves BYOK de proveedores',
         'Agent de diseño profesional sin configuración',
@@ -408,23 +427,25 @@ const PT_BR: PricingContent = {
     recommended: 'Recomendado',
     creditBenefit: '{amount} em créditos de modelo / mês',
     creditBonus: '+{pct}% bônus (limitado)',
-    deliverableBenefit: '{range} entregáveis de design nível comercial / mês',
-    taskTooltip: {
-      line1: '1 pôster / 1 landing page ≈ 1 tarefa',
-      line2: '1 protótipo multi-tela ≈ 2–4 tarefas',
-      note: 'A quantidade real depende da complexidade e do modelo escolhido',
-    },
+    freeForever: 'Grátis para sempre',
+    freeTrialCreditLabel: 'Créditos de teste de modelos limitados (válidos por 7 dias)',
     firstMonthTag: '1º mês {pct}% off',
     yearlyDiscountTag: '{pct}% off',
     yearlySubline: 'Cobrado anualmente · {totalUsd} / ano (economize {savingsUsd})',
     monthlyRenewal: 'Depois {amountUsd} / mês',
     yearlySaveCta: 'Economize {savingsUsd} por ano',
   },
+  free: {
+    tagline: 'Teste grátis por tempo limitado; depois configure seu agent ou use BYOK',
+    ctaLabel: 'Começar grátis',
+    concurrency: '1 tarefa simultânea',
+    features: ['Chaves BYOK de provedores', 'Suporte da comunidade'],
+  },
   plans: {
     plus: {
       tagline: 'Projetos independentes, entrega individual · Sem configuração',
-      costAnchor: 'Entregue designs 10x mais rápido, economize $1,000+/mês',
       ctaLabel: 'Atualizar para Plus',
+      concurrency: '2 tarefas simultâneas',
       features: [
         'Chaves BYOK de provedores',
         'Agent de design profissional sem configuração',
@@ -436,8 +457,8 @@ const PT_BR: PricingContent = {
     },
     pro: {
       tagline: 'Uma pessoa entrega o trabalho de um time inteiro · Sem configuração',
-      costAnchor: 'Entregue designs 10x mais rápido, economize $4,000+/mês',
       ctaLabel: 'Atualizar para Pro',
+      concurrency: '5 tarefas simultâneas',
       features: [
         'Chaves BYOK de provedores',
         'Agent de design profissional sem configuração',
@@ -449,8 +470,8 @@ const PT_BR: PricingContent = {
     },
     max: {
       tagline: 'Reduza o custo de design terceirizado a uma fração · Sem configuração',
-      costAnchor: 'Entregue designs 10x mais rápido, economize $10,000+/mês',
       ctaLabel: 'Atualizar para Max',
+      concurrency: '10 tarefas simultâneas',
       features: [
         'Chaves BYOK de provedores',
         'Agent de design profissional sem configuração',
@@ -478,23 +499,25 @@ const RU: PricingContent = {
     recommended: 'Рекомендуется',
     creditBenefit: '{amount} кредитов моделей / мес.',
     creditBonus: '+{pct}% бонус (ограничено)',
-    deliverableBenefit: '{range} дизайн-результата коммерческого уровня / мес.',
-    taskTooltip: {
-      line1: '1 постер / 1 лендинг ≈ 1 задача',
-      line2: '1 многоэкранный прототип ≈ 2–4 задачи',
-      note: 'Реальное число зависит от сложности задачи и выбранной модели',
-    },
+    freeForever: 'Всегда бесплатно',
+    freeTrialCreditLabel: 'Ограниченные пробные кредиты на модели (действуют 7 дней)',
     firstMonthTag: '1-й мес. {pct}% off',
     yearlyDiscountTag: '{pct}% off',
     yearlySubline: 'Оплата за год · {totalUsd} / год (экономия {savingsUsd})',
     monthlyRenewal: 'Затем {amountUsd} / мес.',
     yearlySaveCta: 'Сэкономить {savingsUsd} за год',
   },
+  free: {
+    tagline: 'Бесплатный пробный период; затем настройте агента или BYOK',
+    ctaLabel: 'Начать бесплатно',
+    concurrency: '1 одновременная задача',
+    features: ['Ключи провайдеров BYOK', 'Поддержка сообщества'],
+  },
   plans: {
     plus: {
       tagline: 'Самостоятельные проекты, в одиночку · Без настройки',
-      costAnchor: 'Дизайн в 10 раз быстрее, экономия $1,000+/мес',
       ctaLabel: 'Перейти на Plus',
+      concurrency: '2 одновременные задачи',
       features: [
         'Ключи провайдеров BYOK',
         'Профессиональный design agent без настройки',
@@ -506,8 +529,8 @@ const RU: PricingContent = {
     },
     pro: {
       tagline: 'Один человек — работа целой дизайн-команды · Без настройки',
-      costAnchor: 'Дизайн в 10 раз быстрее, экономия $4,000+/мес',
       ctaLabel: 'Перейти на Pro',
+      concurrency: '5 одновременных задач',
       features: [
         'Ключи провайдеров BYOK',
         'Профессиональный design agent без настройки',
@@ -519,8 +542,8 @@ const RU: PricingContent = {
     },
     max: {
       tagline: 'Сократите расходы на аутсорс дизайна до минимума · Без настройки',
-      costAnchor: 'Дизайн в 10 раз быстрее, экономия $10,000+/мес',
       ctaLabel: 'Перейти на Max',
+      concurrency: '10 одновременных задач',
       features: [
         'Ключи провайдеров BYOK',
         'Профессиональный design agent без настройки',
@@ -548,23 +571,25 @@ const FR: PricingContent = {
     recommended: 'Recommandé',
     creditBenefit: '{amount} de crédits de modèle / mois',
     creditBonus: '+{pct}% bonus (limité)',
-    deliverableBenefit: '{range} livrables de design de niveau commercial / mois',
-    taskTooltip: {
-      line1: '1 affiche / 1 page de destination ≈ 1 tâche',
-      line2: '1 prototype multi-écran ≈ 2–4 tâches',
-      note: 'Le nombre réel dépend de la complexité et du modèle choisi',
-    },
+    freeForever: 'Gratuit pour toujours',
+    freeTrialCreditLabel: "Crédits d'essai de modèles limités (valables 7 jours)",
     firstMonthTag: '1er mois {pct}% off',
     yearlyDiscountTag: '{pct}% off',
     yearlySubline: 'Facturé annuellement · {totalUsd} / an (économisez {savingsUsd})',
     monthlyRenewal: 'Puis {amountUsd} / mois',
     yearlySaveCta: 'Économisez {savingsUsd} par an',
   },
+  free: {
+    tagline: 'Essai gratuit à durée limitée ; ensuite configurez votre agent ou BYOK',
+    ctaLabel: 'Commencer gratuitement',
+    concurrency: '1 tâche simultanée',
+    features: ['Clés fournisseur BYOK', 'Support communautaire'],
+  },
   plans: {
     plus: {
       tagline: 'Projets indépendants, livraison en solo · Sans configuration',
-      costAnchor: 'Livrez vos designs 10x plus vite, économisez $1,000+/mois',
       ctaLabel: 'Passer à Plus',
+      concurrency: '2 tâches simultanées',
       features: [
         'Clés fournisseur BYOK',
         'Agent de design professionnel sans configuration',
@@ -576,8 +601,8 @@ const FR: PricingContent = {
     },
     pro: {
       tagline: 'Une personne produit le travail de toute une équipe · Sans configuration',
-      costAnchor: 'Livrez vos designs 10x plus vite, économisez $4,000+/mois',
       ctaLabel: 'Passer à Pro',
+      concurrency: '5 tâches simultanées',
       features: [
         'Clés fournisseur BYOK',
         'Agent de design professionnel sans configuration',
@@ -589,8 +614,8 @@ const FR: PricingContent = {
     },
     max: {
       tagline: 'Réduisez le coût du design externalisé à une fraction · Sans configuration',
-      costAnchor: 'Livrez vos designs 10x plus vite, économisez $10,000+/mois',
       ctaLabel: 'Passer à Max',
+      concurrency: '10 tâches simultanées',
       features: [
         'Clés fournisseur BYOK',
         'Agent de design professionnel sans configuration',
@@ -618,23 +643,25 @@ const KO: PricingContent = {
     recommended: '추천',
     creditBenefit: '매월 모델 크레딧 {amount}',
     creditBonus: '한정 {pct}% 추가 증정',
-    deliverableBenefit: '매월 상업 표준급 디자인 결과물 {range}건',
-    taskTooltip: {
-      line1: '마케팅 포스터 1개 / 랜딩 페이지 1개 ≈ 1건',
-      line2: '멀티 화면 프로토타입 1세트 ≈ 2–4건',
-      note: '실제 수량은 작업 복잡도와 선택한 모델에 따라 달라집니다',
-    },
+    freeForever: '영구 무료',
+    freeTrialCreditLabel: '제한된 모델 체험 크레딧 (7일간 유효)',
     firstMonthTag: '첫 달 {pct}% Off',
     yearlyDiscountTag: '{pct}% off',
     yearlySubline: '연간 청구 · {totalUsd} /년 ({savingsUsd} 절약)',
     monthlyRenewal: '이후 {amountUsd} /월',
     yearlySaveCta: '연간 {savingsUsd} 절약',
   },
+  free: {
+    tagline: '기간 한정 무료 체험, 종료 후 Agent 구성 또는 BYOK 필요',
+    ctaLabel: '무료로 시작',
+    concurrency: '동시 작업 1개',
+    features: ['BYOK 제공자 키', '커뮤니티 지원'],
+  },
   plans: {
     plus: {
       tagline: '독립 프로젝트, 1인 납품 · 설정 없이 바로 사용',
-      costAnchor: '디자인 작업 10배 빠르게, 월 $1,000+ 절감',
       ctaLabel: 'Plus로 업그레이드',
+      concurrency: '동시 작업 2개',
       features: [
         'BYOK 제공자 키',
         '무설정 전문 디자인 Agent',
@@ -646,8 +673,8 @@ const KO: PricingContent = {
     },
     pro: {
       tagline: '한 사람이 디자인 팀 전체의 결과물을 · 설정 없이 바로 사용',
-      costAnchor: '디자인 작업 10배 빠르게, 월 $4,000+ 절감',
       ctaLabel: 'Pro로 업그레이드',
+      concurrency: '동시 작업 5개',
       features: [
         'BYOK 제공자 키',
         '무설정 전문 디자인 Agent',
@@ -659,8 +686,8 @@ const KO: PricingContent = {
     },
     max: {
       tagline: '외주 디자인 비용을 푼돈 수준으로 · 설정 없이 바로 사용',
-      costAnchor: '디자인 작업 10배 빠르게, 월 $10,000+ 절감',
       ctaLabel: 'Max로 업그레이드',
+      concurrency: '동시 작업 10개',
       features: [
         'BYOK 제공자 키',
         '무설정 전문 디자인 Agent',
@@ -688,23 +715,25 @@ const DE: PricingContent = {
     recommended: 'Empfohlen',
     creditBenefit: '{amount} Modell-Credits / Monat',
     creditBonus: '+{pct}% Bonus (befristet)',
-    deliverableBenefit: '{range} Design-Ergebnisse in kommerzieller Qualität / Monat',
-    taskTooltip: {
-      line1: '1 Marketing-Poster / 1 Landingpage ≈ 1 Aufgabe',
-      line2: '1 mehrseitiger Prototyp ≈ 2–4 Aufgaben',
-      note: 'Die tatsächliche Anzahl hängt von Komplexität und gewähltem Modell ab',
-    },
+    freeForever: 'Für immer kostenlos',
+    freeTrialCreditLabel: 'Begrenztes Modell-Testguthaben (7 Tage gültig)',
     firstMonthTag: '1. Monat {pct}% off',
     yearlyDiscountTag: '{pct}% off',
     yearlySubline: 'Jährlich abgerechnet · {totalUsd} / Jahr ({savingsUsd} sparen)',
     monthlyRenewal: 'Danach {amountUsd} / Monat',
     yearlySaveCta: '{savingsUsd} jährlich sparen',
   },
+  free: {
+    tagline: 'Zeitlich begrenzte Gratis-Testphase; danach eigenen Agent konfigurieren oder BYOK',
+    ctaLabel: 'Kostenlos starten',
+    concurrency: '1 gleichzeitige Aufgabe',
+    features: ['BYOK-Anbieterschlüssel', 'Community-Support'],
+  },
   plans: {
     plus: {
       tagline: 'Eigenständige Projekte, Lieferung im Alleingang · Ohne Einrichtung',
-      costAnchor: 'Designs 10x schneller liefern, spare $1,000+/Monat',
       ctaLabel: 'Auf Plus upgraden',
+      concurrency: '2 gleichzeitige Aufgaben',
       features: [
         'BYOK-Anbieterschlüssel',
         'Professioneller Design-Agent ohne Einrichtung',
@@ -716,8 +745,8 @@ const DE: PricingContent = {
     },
     pro: {
       tagline: 'Eine Person liefert die Arbeit eines ganzen Teams · Ohne Einrichtung',
-      costAnchor: 'Designs 10x schneller liefern, spare $4,000+/Monat',
       ctaLabel: 'Auf Pro upgraden',
+      concurrency: '5 gleichzeitige Aufgaben',
       features: [
         'BYOK-Anbieterschlüssel',
         'Professioneller Design-Agent ohne Einrichtung',
@@ -729,8 +758,8 @@ const DE: PricingContent = {
     },
     max: {
       tagline: 'Outsourcing-Designkosten auf einen Bruchteil senken · Ohne Einrichtung',
-      costAnchor: 'Designs 10x schneller liefern, spare $10,000+/Monat',
       ctaLabel: 'Auf Max upgraden',
+      concurrency: '10 gleichzeitige Aufgaben',
       features: [
         'BYOK-Anbieterschlüssel',
         'Professioneller Design-Agent ohne Einrichtung',
@@ -758,23 +787,25 @@ const JA: PricingContent = {
     recommended: 'おすすめ',
     creditBenefit: '毎月 {amount} 分のモデルクレジット',
     creditBonus: '期間限定 {pct}% 増量',
-    deliverableBenefit: '毎月 {range} 件の商用標準級デザイン成果物',
-    taskTooltip: {
-      line1: 'マーケティングポスター1点 / ランディングページ1点 ≈ 1件',
-      line2: 'マルチ画面プロトタイプ1式 ≈ 2〜4件',
-      note: '実際の件数はタスクの複雑さと選択モデルによって変わります',
-    },
+    freeForever: 'ずっと無料',
+    freeTrialCreditLabel: '限定的なモデル体験クレジット（7 日間有効）',
     firstMonthTag: '初月 {pct}% Off',
     yearlyDiscountTag: '{pct}% off',
     yearlySubline: '年額請求 · {totalUsd} / 年（{savingsUsd} 節約）',
     monthlyRenewal: '次月以降 {amountUsd} / 月',
     yearlySaveCta: '年額で {savingsUsd} 節約',
   },
+  free: {
+    tagline: '期間限定の無料体験。終了後は Agent 設定または BYOK が必要',
+    ctaLabel: '無料で開始',
+    concurrency: '同時実行タスク 1 件',
+    features: ['BYOK プロバイダーキー', 'コミュニティサポート'],
+  },
   plans: {
     plus: {
       tagline: '独立した案件を一人で納品 · 設定不要',
-      costAnchor: 'デザイン納品が10倍速、月 $1,000+ 節約',
       ctaLabel: 'Plus にアップグレード',
+      concurrency: '同時実行タスク 2 件',
       features: [
         'BYOK プロバイダーキー',
         '設定不要のプロ向けデザイン Agent',
@@ -786,8 +817,8 @@ const JA: PricingContent = {
     },
     pro: {
       tagline: '一人でデザインチーム一つ分の成果を · 設定不要',
-      costAnchor: 'デザイン納品が10倍速、月 $4,000+ 節約',
       ctaLabel: 'Pro にアップグレード',
+      concurrency: '同時実行タスク 5 件',
       features: [
         'BYOK プロバイダーキー',
         '設定不要のプロ向けデザイン Agent',
@@ -799,8 +830,8 @@ const JA: PricingContent = {
     },
     max: {
       tagline: '外注デザイン費を最小限に · 設定不要',
-      costAnchor: 'デザイン納品が10倍速、月 $10,000+ 節約',
       ctaLabel: 'Max にアップグレード',
+      concurrency: '同時実行タスク 10 件',
       features: [
         'BYOK プロバイダーキー',
         '設定不要のプロ向けデザイン Agent',

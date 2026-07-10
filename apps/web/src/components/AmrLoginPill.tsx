@@ -44,6 +44,7 @@ interface AmrLoginPillProps {
   revealPendingCancelAction?: boolean;
   showConsoleAction?: boolean;
   iconOnlySignOut?: boolean;
+  onSignInStarted?: () => void;
   onStatusChange?: (status: VelaLoginStatus | null) => void;
 }
 
@@ -278,6 +279,7 @@ export function AmrLoginPill({
   revealPendingCancelAction = false,
   showConsoleAction = false,
   iconOnlySignOut = false,
+  onSignInStarted,
   onStatusChange,
 }: AmrLoginPillProps) {
   const { t } = useI18n();
@@ -458,6 +460,7 @@ export function AmrLoginPill({
       loginStartedAtRef.current = startedAt;
       setErrorMessage(null);
       setPending('login');
+      onSignInStarted?.();
       const attribution = amrEntrySourceDetail
         ? recordAmrEntry(analytics.track, amrEntrySourceDetail, new Date(), {
             metricsConsent,
@@ -487,6 +490,7 @@ export function AmrLoginPill({
       analytics.track,
       installationId,
       metricsConsent,
+      onSignInStarted,
       startPolling,
       t,
     ],

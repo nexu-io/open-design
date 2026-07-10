@@ -14,6 +14,18 @@ import type { MediaExecutionPolicy } from './media.js';
 import type { AppliedPluginSnapshot } from '../plugins/apply.js';
 import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
 import type { TrackingRuntimeType } from '../analytics/public-params.js';
+import type {
+  TrackingRunFailureCategory,
+  TrackingRunFailureDetail,
+} from '../analytics/events.js';
+
+// The daemon's run-failure taxonomy, re-exported under product-facing names so
+// the run-status/error surface can carry the specific cause the daemon already
+// classified (see apps/daemon/src/run-failure-classification.ts) instead of
+// only the coarse `errorCode`. Same string unions as the analytics events, so
+// producer and consumer can't drift.
+export type RunFailureCategory = TrackingRunFailureCategory;
+export type RunFailureDetail = TrackingRunFailureDetail;
 
 export type ChatRole = 'user' | 'assistant';
 export type ChatSessionMode = 'design' | 'chat' | 'plan';
@@ -192,6 +204,12 @@ export interface ChatAnalyticsHints {
   turnIndex?: number;
   isFirstRun?: boolean;
   hasExistingArtifact?: boolean;
+  // Per-project run turn index (0-based, project-lifetime on this device):
+  // "within THIS project, which prompt / follow-up number is this?". Unlike
+  // `turnIndex` (session-wide, spans all projects and resets each browser
+  // session), this persists in localStorage keyed by project id. Optional:
+  // omitted when storage is unavailable (SSR / privacy mode).
+  projectTurnIndex?: number;
   // Active execution runtime for THIS run, computed client-side at launch
   // (the only layer that can tell BYOK from amr_cloud). The daemon stamps it
   // onto run_created / run_finished, overriding its own BYOK-blind
@@ -355,6 +373,67 @@ export interface ChatRunCreateResponse {
   pluginId?: string | null;
 }
 
+export type NativeSessionRecoveryState =
+  | 'not_applicable'
+  | 'no_recoverable_session'
+  | 'captured_not_resumed'
+  | 'resume_attempted'
+  | 'resumed'
+  | 'resume_skipped'
+  | 'auto_reseeded';
+
+export type NativeSessionHandleKind =
+  | 'opaque-id'
+  | 'cli-thread-id'
+  | 'acp-session-handle'
+  | 'session-file-path'
+  | 'unknown';
+
+export type NativeSessionAcquisitionMode =
+  | 'daemon-specified'
+  | 'stream-captured'
+  | 'acp-session-load'
+  | 'session-file-discovered'
+  | 'none'
+  | 'unknown';
+
+export type NativeSessionContinuationMode =
+  | 'native-resume-by-id'
+  | 'acp-session-load'
+  | 'session-file-resume'
+  | 'none'
+  | 'unknown';
+
+export type NativeSessionRecoveryReason =
+  | 'model_changed'
+  | 'cwd_changed'
+  | 'conversation_advanced'
+  | 'missing_cursor'
+  | 'resume_failed'
+  | 'unsupported'
+  | 'none';
+
+export interface NativeSessionRecoveryHandle {
+  present: boolean;
+  kind: NativeSessionHandleKind;
+  /** Always null unless a future per-agent rule declares the handle safe. */
+  display: string | null;
+  /** Stable correlation value for support without exposing the raw handle. */
+  sha256: string | null;
+  redacted: boolean;
+}
+
+export interface NativeSessionRecoveryMetadata {
+  agentId: string | null;
+  state: NativeSessionRecoveryState;
+  acquisition: NativeSessionAcquisitionMode;
+  continuation: NativeSessionContinuationMode;
+  handle: NativeSessionRecoveryHandle;
+  guardReason: NativeSessionRecoveryReason | null;
+  fallbackReason: NativeSessionRecoveryReason | null;
+  updatedAt: number;
+}
+
 export interface ChatRunStatusResponse {
   id: string;
   projectId: string | null;
@@ -383,6 +462,15 @@ export interface ChatRunStatusResponse {
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  /** Coarse failure family the daemon classified this failure into (auth,
+   *  rate_limit, model_unavailable, …). Lets the UI refine guidance beyond the
+   *  raw `errorCode` — e.g. distinguishing a transient 429 from a hard quota
+   *  that share `errorCode: 'RATE_LIMITED'`. Absent on success / older daemons. */
+  failureCategory?: RunFailureCategory | null;
+  /** Fine-grained failure cause within the category (hard_quota,
+   *  cli_not_installed, invalid_api_key, …). Primary key the UI maps to a named
+   *  failure type + fix. Absent on success / older daemons. */
+  failureDetail?: RunFailureDetail | null;
   /** True when this terminal failure can be recovered by resuming the agent's
    *  existing CLI session (a transient upstream drop / inactivity timeout on a
    *  session-resuming runtime), rather than only restarting from scratch. The
@@ -404,6 +492,8 @@ export interface ChatRunStatusResponse {
     hit: boolean;
     missReason: 'new-session' | 'missing-stored-hash' | 'stable-prompt-changed' | null;
   };
+  /** Sanitized native-session recovery state for resume-capable agents. */
+  nativeSessionRecovery?: NativeSessionRecoveryMetadata;
   /** Browser Use availability for runs that requested in-app browser automation. */
   browserUse?: BrowserUseRunState;
   /** Effective storage/provenance for the workspace used by this run. */
@@ -464,7 +554,17 @@ export type PersistedAgentEvent =
   // `code` carries the structured API error code for `label: 'error'`
   // status events (e.g. AGENT_AUTH_REQUIRED, RATE_LIMITED). Clients use it to
   // decide error-specific affordances such as the hosted-AMR nudge.
-  | { kind: 'status'; label: string; detail?: string; code?: string }
+  // `failureCategory` / `failureDetail` carry the daemon's finer classification
+  // for the same failure, so the error card can name a specific type + fix even
+  // when many causes share one `code` (e.g. hard_quota vs a transient 429).
+  | {
+      kind: 'status';
+      label: string;
+      detail?: string;
+      code?: string;
+      failureCategory?: RunFailureCategory;
+      failureDetail?: RunFailureDetail;
+    }
   | { kind: 'text'; text: string }
   | { kind: 'conversation_title'; title: string }
   | { kind: 'thinking'; text: string }
@@ -488,6 +588,22 @@ export type PersistedAgentEvent =
     }
   | { kind: 'tool_use'; id: string; name: string; input: unknown }
   | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  | {
+      kind: 'diagnostic';
+      name: string;
+      source?: string;
+      elapsedMs?: number;
+      reason?: string;
+      suppressedChars?: number;
+      suppressedChunks?: number;
+      openedBlocks?: number;
+      closedBlocks?: number;
+      fileCount?: number;
+      files?: string[];
+      pendingCandidateChars?: number;
+      suppressing?: boolean;
+      shape?: Record<string, unknown>;
+    }
   | {
       kind: 'plugin_candidate';
       candidateId: string;

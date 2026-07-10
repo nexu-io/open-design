@@ -7,8 +7,9 @@ import type {
   ProviderModelsRequest,
   ProviderModelsResponse,
 } from '@open-design/contracts/api/providerModels';
+import type { ModelCapability, ModelCost, ModelMetadata } from '@open-design/contracts';
 import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
-import { redactSecrets, validateBaseUrlResolved } from '../connectionTest.js';
+import { redactSecrets, validateUserProviderBaseUrl } from '../connectionTest.js';
 import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
 import { aihubmixHeaders, aihubmixCatalogUrl, parseAIHubMixCatalog } from './aihubmix.js';
 
@@ -87,7 +88,8 @@ function uniqueModels(models: ProviderModelOption[]): ProviderModelOption[] {
     const id = model.id.trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    out.push({ id, label: model.label.trim() || id });
+    const label = model.label.trim() || id;
+    out.push({ ...model, id, label });
   }
   return out.sort((a, b) => a.id.localeCompare(b.id));
 }
@@ -108,6 +110,12 @@ function isOpenAiChatModelId(id: string): boolean {
     normalized.includes('dall-e') ||
     normalized.includes('stable-diffusion') ||
     normalized.includes('flux') ||
+    // BAAI's BGE embedding family (e.g. `BAAI/bge-large-en-v1.5`, served by
+    // gateways like SiliconFlow) doesn't match any of the substrings above —
+    // `bge-reranker-*` variants are already caught by the `rerank` check, but
+    // the plain embedding models slip through and 404 when a chat-completion
+    // test is run against them (issue #5367).
+    /(?:^|[/_-])bge(?:[-_]|$)/u.test(normalized) ||
     (
       normalized.includes('wan') &&
       /(?:^|[-_.:])(?:t2v|i2v|v2v)(?:[-_.:]|$)/u.test(normalized)
@@ -123,11 +131,51 @@ function extractOpenAiModels(data: unknown): ProviderModelOption[] {
   if (!Array.isArray(items)) return [];
   return uniqueModels(
     items
-      .map((item) => (item as { id?: unknown })?.id)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0)
-      .filter(isOpenAiChatModelId)
-      .map((id) => ({ id, label: id })),
+      .map(openAiModelOption)
+      .filter((model): model is ProviderModelOption => model != null),
   );
+}
+
+function openAiModelOption(item: unknown): ProviderModelOption | null {
+  if (!item || typeof item !== 'object') return null;
+  const obj = item as { id?: unknown; metadata?: unknown };
+  const id = typeof obj?.id === 'string' ? obj.id : '';
+  if (!id || !isOpenAiChatModelId(id)) return null;
+  const metadata = extractModelMetadata(obj.metadata);
+  return {
+    id,
+    label: id,
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
+function extractModelMetadata(value: unknown): ModelMetadata | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const metadata = value as { cost?: unknown; capability?: unknown };
+  const cost = parseModelCost(metadata.cost);
+  const capability = parseModelCapability(metadata.capability);
+  if (!cost && !capability) return null;
+  return {
+    ...(cost ? { cost } : {}),
+    ...(capability ? { capability } : {}),
+  };
+}
+
+function parseModelCost(value: unknown): ModelCost | null {
+  return value === 'low' ||
+    value === 'medium' ||
+    value === 'high' ||
+    value === 'very_high'
+    ? value
+    : null;
+}
+
+function parseModelCapability(value: unknown): ModelCapability | null {
+  return value === 'standard' ||
+    value === 'advanced' ||
+    value === 'best_quality'
+    ? value
+    : null;
 }
 
 function extractAnthropicModels(data: unknown): ProviderModelOption[] {
@@ -256,7 +304,7 @@ export async function listProviderModels(
     };
   }
 
-  const validated = await validateBaseUrlResolved(input.baseUrl);
+  const validated = await validateUserProviderBaseUrl(input.baseUrl);
   if (validated.error || !validated.parsed) {
     return {
       ok: false,

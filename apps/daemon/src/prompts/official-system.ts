@@ -161,8 +161,29 @@ Rules:
 - Do not wrap summaries, prose, paths, or fake tool output inside \`<artifact>\`.
 - After \`</artifact>\`, stop. Do not narrate a filesystem write or invent tool calls.`;
 
+// The default IP guardrail bullet under "What you don't do". Website Clone
+// runs swap it out (see `renderOfficialDesignerPrompt` options): faithfully
+// reproducing an existing site is that scenario's entire job, so the blanket
+// "build something original instead" instruction makes the agent silently
+// substitute placeholder branding / original artwork for the site's real
+// assets — which users experience as "images missing / fonts wrong / colors
+// off". The swapped bullet keeps the legal caution but routes it through a
+// pre-deploy replacement checklist the user owns, instead of a silent
+// downgrade. Must stay byte-identical to the bullet inside
+// OFFICIAL_DESIGNER_PROMPT above (a test guards the substitution).
+export const COPYRIGHT_GUARDRAIL_BULLET =
+  "- Don't recreate copyrighted designs (other companies' distinctive UI patterns, branded visual elements). Help the user build something original instead.";
+export const WEB_CLONE_COPYRIGHT_GUARDRAIL_BULLET =
+  '- This is a Website Clone run: the user explicitly asked for a faithful local reproduction of an existing site (evaluation / prototyping use). Reproduce its layout, visuals, assets, fonts, and copy faithfully — do NOT silently swap in placeholder branding or original artwork. Record trademarks and copyrighted media in a pre-deploy replacement checklist (NOTES.md) so the user decides what to replace before publishing.';
+
+export interface RenderOfficialDesignerPromptOptions {
+  // True for runs whose project metadata carries `intent: 'web-clone'`.
+  webCloneFidelity?: boolean;
+}
+
 export function renderOfficialDesignerPrompt(
   executionProfile: ExecutionProfile = 'filesystem',
+  options: RenderOfficialDesignerPromptOptions = {},
 ): string {
   const executionContext =
     executionProfile === 'text_artifact'
@@ -172,7 +193,10 @@ export function renderOfficialDesignerPrompt(
     executionProfile === 'text_artifact'
       ? TEXT_ARTIFACT_WORKFLOW_HANDOFF
       : FILESYSTEM_WORKFLOW_HANDOFF;
-  return OFFICIAL_DESIGNER_PROMPT
+  const rendered = OFFICIAL_DESIGNER_PROMPT
     .replace(EXECUTION_CONTEXT_PLACEHOLDER, executionContext)
     .replace(WORKFLOW_HANDOFF_PLACEHOLDER, workflowHandoff);
+  return options.webCloneFidelity === true
+    ? rendered.replace(COPYRIGHT_GUARDRAIL_BULLET, WEB_CLONE_COPYRIGHT_GUARDRAIL_BULLET)
+    : rendered;
 }

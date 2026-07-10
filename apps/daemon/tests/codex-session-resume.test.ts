@@ -6,6 +6,8 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
+import { writeMcpConfig } from '../src/mcp-config.js';
+import { clearToken, setToken } from '../src/mcp-tokens.js';
 
 // End-to-end coverage for codex native (capture-style) session resume.
 //
@@ -59,6 +61,19 @@ describe('codex native session resume', () => {
     if (binDir) await removeTempDir(binDir);
     binDir = null;
     restoreEnv(originalEnv);
+    // The MCP-directive red-spec below writes an authenticated `github` server
+    // into the process-wide OD_DATA_DIR (tests/setup.ts shares one root for the
+    // whole daemon Vitest run). Reset it after every test so that state cannot
+    // leak into later test files and make them suite-order dependent.
+    // `writeMcpConfig` unconditionally overwrites to an empty server list and
+    // `clearToken` is a documented no-op when the entry is absent, so neither
+    // needs to tolerate "nothing was written" — let a real teardown failure
+    // surface instead of silently degrading the isolation guarantee.
+    const dataDir = process.env.OD_DATA_DIR;
+    if (dataDir) {
+      await writeMcpConfig(dataDir, { servers: [] });
+      await clearToken(dataDir, 'github');
+    }
   });
 
   it('captures the thread id on turn 1 and resumes it (without resending history) on turn 2', async () => {
@@ -223,6 +238,80 @@ describe('codex native session resume', () => {
     // full transcript instead of silently dropping the intervening turn.
     expect(afterIntervening.argv).not.toContain('resume');
     expect(afterIntervening.argv[0]).toBe('exec');
+  });
+
+  // Guards the fix that moved the connected-external-MCP directive out of the
+  // cached `daemonSystemPrompt` and into the per-turn instruction slice. The
+  // directive reflects live OAuth Bearer validity, so keeping it in the cached
+  // prefix churned the whole prompt-cache prefix (history included) whenever a
+  // token expired mid-conversation. Now it must ride in the per-turn slice, i.e.
+  // be re-sent on EVERY turn — including a clean resume, which never re-sends the
+  // cached stable block. On origin/main the directive lived in the stable block,
+  // so a clean resume dropped it and the turn-2 assertion below goes red.
+  it('re-sends the connected-MCP directive in the per-turn slice on resume turns', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-codex-mcp-bin-'));
+    const { bin, logPath } = await writeCapturingCodex(binDir, 'codex-mcp');
+
+    clearTelemetryEnv();
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'codex',
+      agentCliEnv: { codex: { CODEX_BIN: bin } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    // A connected external MCP server = enabled config + a live (non-expired)
+    // OAuth Bearer. That is exactly what makes the daemon render the
+    // "already authenticated" directive.
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for the MCP directive test');
+    await writeMcpConfig(dataDir, {
+      servers: [
+        {
+          id: 'github',
+          label: 'GitHub',
+          transport: 'http',
+          url: 'https://mcp.test.invalid/github',
+          enabled: true,
+        },
+      ],
+    });
+    await setToken(dataDir, 'github', {
+      accessToken: 'live-access-token',
+      tokenType: 'Bearer',
+      expiresAt: Date.now() + 3_600_000,
+      savedAt: Date.now(),
+    });
+
+    const conversationId = await createConversation(started.url);
+    const turn1 = await sendRunAndWait(started.url, conversationId, 'first user request');
+    expect(turn1.status).toBe('succeeded');
+    const turn2 = await sendRunAndWait(
+      started.url,
+      conversationId,
+      'second user request please',
+    );
+    expect(turn2.status).toBe('succeeded');
+
+    const runs = await readChatTurnExecs(logPath, conversationId);
+    expect(runs).toHaveLength(2);
+    const [create, resume] = runs as [ExecInvocation, ExecInvocation];
+
+    const MCP_MARKER = 'External MCP servers — already authenticated';
+    // A marker that only appears inside the cached stable block (daemonSystemPrompt).
+    const STABLE_BLOCK_MARKER = '# Identity and workflow charter (background)';
+
+    // Turn 1 (fresh seed) carries the directive.
+    expect(create.stdin).toContain(MCP_MARKER);
+    expect(create.stdin).toContain('`github`');
+
+    // Turn 2 is a clean resume: the cached stable block is NOT re-sent...
+    expect(resume.argv.slice(0, 2)).toEqual(['exec', 'resume']);
+    expect(resume.stdin).not.toContain(STABLE_BLOCK_MARKER);
+    // ...but the MCP directive IS, because it now lives in the per-turn slice.
+    expect(resume.stdin).toContain(MCP_MARKER);
+    expect(resume.stdin).toContain('`github`');
   });
 });
 
