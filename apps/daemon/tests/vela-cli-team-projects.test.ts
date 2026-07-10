@@ -12,6 +12,7 @@ describe('Vela CLI team-project catalog adapter', () => {
               projectId: 'p1',
               ownerMemberId: 'wm-owner',
               displayName: 'Electric Studio 2',
+              syncState: 'synced',
               createdAt: '2026-07-01T00:00:00.000Z',
               updatedAt: '2026-07-02T00:00:00.000Z',
             },
@@ -28,6 +29,46 @@ describe('Vela CLI team-project catalog adapter', () => {
         name: 'Electric Studio 2',
         createdAt: Date.parse('2026-07-01T00:00:00.000Z'),
         updatedAt: Date.parse('2026-07-02T00:00:00.000Z'),
+      },
+    ]);
+  });
+
+  it('hides catalog rows whose project bytes are not synced yet', async () => {
+    const catalog = createVelaCliTeamProjectCatalog({
+      run: async () => JSON.stringify({
+        projects: [
+          {
+            projectId: 'pending',
+            ownerMemberId: 'wm-owner',
+            displayName: 'Pending Upload',
+            syncState: 'pending_upload',
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+          {
+            projectId: 'failed',
+            ownerMemberId: 'wm-owner',
+            displayName: 'Failed Upload',
+            syncState: 'failed',
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+          {
+            projectId: 'synced',
+            ownerMemberId: 'wm-owner',
+            displayName: 'Ready Project',
+            syncState: 'synced',
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    });
+
+    await expect(catalog.list()).resolves.toEqual([
+      {
+        projectId: 'synced',
+        ownerMemberId: 'wm-owner',
+        sharedAt: '2026-07-01T00:00:00.000Z',
+        name: 'Ready Project',
+        createdAt: Date.parse('2026-07-01T00:00:00.000Z'),
       },
     ]);
   });

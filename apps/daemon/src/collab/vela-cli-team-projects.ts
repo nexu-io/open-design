@@ -90,6 +90,13 @@ export function shouldUseVelaCliTeamProjectCatalog(env: NodeJS.ProcessEnv = proc
 function toTeamProject(input: unknown): TeamProject | null {
   if (!input || typeof input !== 'object') return null;
   const record = input as TeamProjectWire;
+  // A catalog row is discoverable only after project bytes are durable in the
+  // resource hub. Older local data may still contain pending rows from the
+  // previous fire-and-forget share flow; hide them so teammates do not open
+  // empty project shells.
+  if (typeof record.syncState === 'string' && record.syncState !== 'synced') {
+    return null;
+  }
   if (
     typeof record.projectId !== 'string' ||
     typeof record.ownerMemberId !== 'string' ||
