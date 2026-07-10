@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 describe('ProductionWorkspace', () => {
-  it('renders the five production lanes and a beginner-friendly voiceover action', () => {
+  it('renders the five production lanes and voice profile cards', () => {
     render(
       <ProductionWorkspace
         projectId="project-1"
@@ -26,18 +26,17 @@ describe('ProductionWorkspace', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { name: 'Script' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Voice' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Storyboard' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Assets' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Output' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Generate voiceover' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '段落' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '旁白' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '鏡頭' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '素材' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '成片' })).toBeInTheDocument();
     expect(screen.getByText('Science explainer')).toBeInTheDocument();
-    expect(screen.getByLabelText('Editable script draft')).toHaveValue(
-      'Hook: explain the core idea in one line.\nBody: show the main example with one clear visual.\nWrap-up: finish with a useful takeaway or CTA.',
-    );
-    expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Voice profile (professional) will speak 3 beats');
-    expect(screen.getByTestId('production-storyboard-shots')).toHaveTextContent('Shot 1: Hook: explain the core idea in one line.');
+    expect(screen.getByTestId('production-voice-profile-cards')).toBeInTheDocument();
+    expect(screen.getByTestId('production-voice-profile-card-guide-host')).toHaveTextContent('Guide host');
+    expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Voice flow (professional)');
+    expect(screen.getByRole('textbox', { name: 'Hook 段落' })).toHaveValue('Hook: explain the core idea in one line.');
+    expect(screen.getByRole('textbox', { name: 'Body 鏡頭' })).toHaveValue('鏡頭：Body: show the main example with one clear visual.');
   });
 
   it('renders a draggable canvas board for the production cards', () => {
@@ -98,7 +97,7 @@ describe('ProductionWorkspace', () => {
     expect(screen.getByTestId('production-canvas-status')).toHaveTextContent('No active connection');
   });
 
-  it('syncs the voice and storyboard panels when the script changes', () => {
+  it('syncs the voice and storyboard panels when a paragraph changes', () => {
     render(
       <ProductionWorkspace
         projectId="project-1"
@@ -114,16 +113,50 @@ describe('ProductionWorkspace', () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText('Editable script draft'), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Hook 段落' }), {
       target: {
         value: 'Opening: frame the question.\nDemo: show the key step.\nEnding: leave the viewer with a clear next move.',
       },
     });
 
-    expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Voice profile (professional) will speak 3 beats');
-    expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Opening: frame the question.');
-    expect(screen.getByTestId('production-storyboard-shots')).toHaveTextContent('Shot 2: Demo: show the key step.');
-    expect(screen.getByTestId('production-storyboard-shots')).toHaveTextContent('Shot 3: Ending: leave the viewer with a clear next move.');
-    expect(screen.getByRole('heading', { name: 'Script' })).toBeInTheDocument();
+    expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Voice flow (professional)');
+    expect(screen.getByRole('textbox', { name: 'Hook 旁白' })).toHaveValue(
+      'Guide host (professional) 旁白：Opening: frame the question.\nDemo: show the key step.\nEnding: leave the viewer with a clear next move.',
+    );
+    expect(screen.getByRole('textbox', { name: 'Hook 鏡頭' })).toHaveValue(
+      '鏡頭：Opening: frame the question.\nDemo: show the key step.\nEnding: leave the viewer with a clear next move.',
+    );
+    expect(screen.getByRole('textbox', { name: 'Hook 素材' })).toHaveValue(
+      '素材：Opening: frame the question.\nDemo: show the key step.\nEnding: leave the viewer with a clear next move.',
+    );
+    expect(screen.getByRole('textbox', { name: 'Hook 成片' })).toHaveValue(
+      '成片：Opening: frame the question.\nDemo: show the key step.\nEnding: leave the viewer with a clear next move.',
+    );
+  });
+
+  it('can bind a voice profile to a segment lane', () => {
+    render(
+      <ProductionWorkspace
+        projectId="project-1"
+        projectName="Science Explainer"
+        metadata={{
+          kind: 'video',
+          workflowMode: 'production',
+          taskCardId: 'science-explainer',
+          voiceTone: 'professional',
+          voiceProfileId: 'guide-host',
+        } as never}
+        projectFiles={[]}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Hook 角色綁定' }), {
+      target: { value: 'energetic-presenter' },
+    });
+
+    expect(screen.getByTestId('production-voice-profile-card-energetic-presenter')).toHaveTextContent('1 lanes');
+    expect(screen.getByRole('textbox', { name: 'Hook 旁白' })).toHaveValue(
+      'Energetic presenter (professional) 旁白：Hook: explain the core idea in one line.',
+    );
   });
 });
