@@ -14,7 +14,10 @@
 - `{character_library_paths}` — 기획안 `source:"library"` 캐릭터 컷 원본 절대 경로
   (없으면 "없음")
 - `{craft_path}` — craft/braze-custom-html.md 절대 경로
-- `{references}` — visual-layout-patterns.md + format-design-guide.md 절대 경로
+- `{references}` — visual-layout-patterns.md + format-design-guide.md + liquid-guide.md
+  절대 경로 (liquid-guide.md는 Liquid 축 판정 정본 — Braze 전용 문법(태그 안 변수 중첩
+  `{% if {{${attr}}} == nil %}` 허용)이 일반 Liquid 지식과 달라, 미전달 시 정본 준수
+  마크업을 문법 오류로 오탐한다 — 도그푸딩 실측 2026-07-10)
 
 ## 서브에이전트 임무 (dispatch 프롬프트 본문)
 
@@ -45,8 +48,10 @@
        확인. 통짜 생성 예외 경로 산출 PNG에는 시트 대조를 그대로 적용.
      · 레이어 배치 품질 — 히어로 스케일(프레임 폭 40~60%)·겹침이 헤드라인 가독을
        해치지 않는가·캐릭터 얼굴 가림 금지·시선 흐름 (§6 룰)
-   - **Liquid** — 형식(`{{${}}}`/`{{custom_attribute.${}}}`), 카탈로그 내 식별자만
-     (카탈로그 밖 = P0), abort_message가 루프 밖, nil 체크 형식.
+   - **Liquid** — 판정 기준 = `{references}`의 liquid-guide.md (일반 Liquid 지식으로
+     판정 금지 — Braze는 태그 안 변수 중첩을 허용한다). 형식(`{{${}}}`/
+     `{{custom_attribute.${}}}`), 카탈로그 내 식별자만(카탈로그 밖 = P0),
+     abort_message가 루프 밖, nil 체크 형식(`{% if {{${attr}}} == nil %}` — 정본).
    - **듀얼 산출 정합** — 발송본에 `data:image` 잔존 = P0, 프리뷰에
      `__BRAZE_MEDIA__` 잔존 = P0, 두 파일의 DOM 구조 동일성(요소·id 순서 diff —
      src/url 값만 달라야 함, 다르면 P0. make_preview.py 이외 수기 개입 신호).
