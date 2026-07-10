@@ -2,6 +2,15 @@
 // transport, or DOM dependency, so slice rules and their tests can import them
 // without pulling in the orchestrator (ADR 0002).
 
+/** A point in preview/board coordinate space (pointer path, lasso vertex). */
+export type StrokePoint = { x: number; y: number };
+
+/** An axis-aligned rectangle in `{ x, y, width, height }` form. */
+export type Rect = { x: number; y: number; width: number; height: number };
+
+/** An axis-aligned rectangle in `{ left, top, width, height }` form. */
+export type RectLTWH = { left: number; top: number; width: number; height: number };
+
 /**
  * Loosely-typed inbound shape of a single entry in an `od:inspect-overrides`
  * message. The host does not trust the iframe payload, so every field is

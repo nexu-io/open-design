@@ -13,8 +13,20 @@ export {
   applyInspectOverridesToSource,
 } from './rules';
 
+// Pure geometry + CSS-length helpers for the board/inspect overlays.
+export {
+  rgbToHex,
+  pxToNumber,
+  clamp,
+  isClosedLoop,
+  rectContains,
+  pathIntersectsRect,
+  pointInPolygon,
+} from './rules';
+
 // UI-only types the orchestrator reads back.
 export type {
   InspectOverrideEntry,
   InspectOverrideMap,
+  StrokePoint,
 } from './types';
