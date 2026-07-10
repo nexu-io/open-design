@@ -8316,6 +8316,7 @@ export function ProjectView({
       projectName={project.name}
       metadata={currentProject.metadata}
       projectFiles={projectFiles}
+      config={config}
     />
   ) : (
     <FileWorkspace
