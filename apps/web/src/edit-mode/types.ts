@@ -221,6 +221,20 @@ export interface ManualEditDragEndMessage {
   type: 'od-edit-drag-end';
   id: string;
 }
+
+export interface ManualEditMultiSelectMessage {
+  type: 'od-edit-multi-select';
+  ids: string[];
+}
+
+export interface ManualEditSetSelectedIdsMessage {
+  type: 'od-edit-set-selected-ids';
+  ids: string[];
+}
+
+export interface ManualEditPositionCommitBatchMessage {
+  type: 'od-edit-position-commit-batch';
+  positions: Array<{ id: string; left: string; top: string; width: string; height: string }>;
 }
 
 export type ManualEditBridgeMessage =
@@ -236,7 +250,10 @@ export type ManualEditBridgeMessage =
   | ManualEditDragCommitMessage
   | ManualEditPositionCommitMessage
   | ManualEditDragStartMessage
-  | ManualEditDragEndMessage;
+  | ManualEditDragEndMessage
+  | ManualEditMultiSelectMessage
+  | ManualEditSetSelectedIdsMessage
+  | ManualEditPositionCommitBatchMessage;
 
 export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign', 'lineHeight', 'letterSpacing',
