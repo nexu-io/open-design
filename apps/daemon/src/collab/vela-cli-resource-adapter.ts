@@ -60,6 +60,13 @@ export function createVelaCliResourceAdapter(
     return (await options.hasTeamIdentity()) ? fn() : fallback;
   }
 
+  function resourceIdsFor(projectId: string, principal?: ResourceHubPrincipal | null): string[] {
+    const primary = resourceIdFor(projectId, principal);
+    if (!principal) return [primary];
+    const legacy = resourceIdFor(projectId, null);
+    return legacy === primary ? [primary] : [primary, legacy];
+  }
+
   return {
     publish({ projectId, principal }) {
       return gated(async () => {
@@ -79,16 +86,28 @@ export function createVelaCliResourceAdapter(
       return gated(async () => {
         // `head` reports the published version without downloading — a null
         // version means nothing is published yet.
-        const out = await run(['head', resourceIdFor(projectId, principal), '--ref', PUBLISHED_REF, '--json']);
-        const version = parseVersion(out);
-        return version == null ? null : { version };
+        for (const resourceId of resourceIdsFor(projectId, principal)) {
+          const out = await run(['head', resourceId, '--ref', PUBLISHED_REF, '--json']);
+          const version = parseVersion(out);
+          if (version != null) return { version };
+        }
+        return null;
       }, null);
     },
 
     async pull({ projectId, principal }) {
       await gated(async () => {
         const dir = await resolvePullDir(projectId);
-        await run(['pull', kind, resourceIdFor(projectId, principal), dir, '--ref', PUBLISHED_REF, '--json']);
+        let lastError: unknown;
+        for (const resourceId of resourceIdsFor(projectId, principal)) {
+          try {
+            await run(['pull', kind, resourceId, dir, '--ref', PUBLISHED_REF, '--json']);
+            return;
+          } catch (error) {
+            lastError = error;
+          }
+        }
+        throw lastError;
       }, undefined);
     },
 

@@ -15,6 +15,19 @@ function recordingRun(outputs: Record<string, string>) {
   return { run, calls };
 }
 
+function scriptedRun(steps: Array<{ match: string[]; output?: string; error?: Error }>) {
+  const calls: string[][] = [];
+  const run = async (args: string[]): Promise<string> => {
+    calls.push(args);
+    const step = steps.shift();
+    if (!step) throw new Error(`unexpected call: ${args.join(' ')}`);
+    expect(args).toEqual(step.match);
+    if (step.error) throw step.error;
+    return step.output ?? '';
+  };
+  return { run, calls };
+}
+
 const OPTS = {
   resolveProjectDir: (id: string) => `/projects/${id}`,
   resolvePullDir: (id: string) => `/copies/${id}`,
@@ -74,11 +87,55 @@ describe('createVelaCliResourceAdapter', () => {
     expect(await adapter.syncLatest!({ projectId: 'p1' })).toBeNull();
   });
 
+  it('falls back to the legacy unscoped resource id when a scoped head is empty', async () => {
+    const principal = { teamId: 't1', memberId: 'm1', role: 'member', lifecycleState: 'active' } as const;
+    const { run, calls } = scriptedRun([
+      {
+        match: ['head', 'project-t1-m1-p1', '--ref', 'published', '--json'],
+        output: JSON.stringify({ resourceId: 'project-t1-m1-p1', ref: 'published', version: null }),
+      },
+      {
+        match: ['head', 'project-p1', '--ref', 'published', '--json'],
+        output: JSON.stringify({ version: 9 }),
+      },
+    ]);
+    const adapter = createVelaCliResourceAdapter({
+      ...OPTS,
+      resourceIdFor: (id, inputPrincipal) =>
+        inputPrincipal ? `project-${inputPrincipal.teamId}-${inputPrincipal.memberId}-${id}` : `project-${id}`,
+      run,
+    });
+    expect(await adapter.syncLatest!({ projectId: 'p1', principal })).toEqual({ version: 9 });
+    expect(calls).toHaveLength(2);
+  });
+
   it('pulls into the pull dir', async () => {
     const { run, calls } = recordingRun({ pull: '{}' });
     const adapter = createVelaCliResourceAdapter({ ...OPTS, run });
     await adapter.pull!({ projectId: 'p1' });
     expect(calls[0]).toEqual(['pull', 'design_system', 'project-p1', '/copies/p1', '--ref', 'published', '--json']);
+  });
+
+  it('falls back to the legacy unscoped resource id when a scoped pull is missing', async () => {
+    const principal = { teamId: 't1', memberId: 'm1', role: 'member', lifecycleState: 'active' } as const;
+    const { run, calls } = scriptedRun([
+      {
+        match: ['pull', 'design_system', 'project-t1-m1-p1', '/copies/p1', '--ref', 'published', '--json'],
+        error: new Error('resource_not_found'),
+      },
+      {
+        match: ['pull', 'design_system', 'project-p1', '/copies/p1', '--ref', 'published', '--json'],
+        output: '{}',
+      },
+    ]);
+    const adapter = createVelaCliResourceAdapter({
+      ...OPTS,
+      resourceIdFor: (id, inputPrincipal) =>
+        inputPrincipal ? `project-${inputPrincipal.teamId}-${inputPrincipal.memberId}-${id}` : `project-${id}`,
+      run,
+    });
+    await adapter.pull!({ projectId: 'p1', principal });
+    expect(calls).toHaveLength(2);
   });
 
   it('removes a project from the team resource index', async () => {

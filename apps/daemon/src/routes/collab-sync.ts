@@ -203,6 +203,30 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
     return headerPrincipalForRequest(req) ?? contextToResourceHubPrincipal(await workspaceContext.current({ authorization }));
   }
 
+  async function resourcePrincipalForSharedProject(
+    projectId: string,
+    req: {
+      get(name: string): string | undefined;
+      headers: { authorization?: string | string[] | undefined };
+    },
+  ): Promise<ResourceHubPrincipal | null> {
+    const viewerPrincipal = await principalForRequest(req);
+    let sharedProject: TeamProject | null = null;
+    try {
+      sharedProject = await resolveSharedProject?.(projectId) ?? null;
+    } catch {
+      sharedProject = null;
+    }
+    if (!sharedProject?.ownerMemberId || !viewerPrincipal?.teamId) {
+      return viewerPrincipal;
+    }
+    return {
+      ...viewerPrincipal,
+      memberId: sharedProject.ownerMemberId,
+      role: sharedProject.ownerMemberId === viewerPrincipal.memberId ? viewerPrincipal.role : 'member',
+    };
+  }
+
   async function canShareProjectsForRequest(req: {
     get(name: string): string | undefined;
     headers: { authorization?: string | string[] | undefined };
@@ -352,7 +376,7 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
 
   app.post('/api/projects/:id/collab/pull', async (req, res) => {
     const projectId = req.params.id;
-    const principal = await principalForRequest(req);
+    const principal = await resourcePrincipalForSharedProject(projectId, req);
     const result = await pullLatest(projectId, principal);
     if (result.version !== null) {
       try {
@@ -367,6 +391,7 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
   app.get('/api/projects/:id/collab/status', async (req, res) => {
     const projectId = req.params.id;
     const principal = await principalForRequest(req);
+    const resourcePrincipal = await resourcePrincipalForSharedProject(projectId, req);
     let syncState = projectSyncState(projectId, principal);
     let ownerMemberId = projectOwnerMemberId(projectId, principal);
     if (ownerMemberId == null && resolveSharedProjectOwner) {
@@ -395,7 +420,7 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
     }
     let head: number | null;
     try {
-      head = await publishedHead(projectId, principal);
+      head = await publishedHead(projectId, resourcePrincipal);
     } catch {
       head = publishedVersion(projectId, principal);
     }
