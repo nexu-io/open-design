@@ -90,6 +90,11 @@ od:
      150~220자) — 미달·초과는 compose 에러. 커버 훅·서브와 본문 타이틀은 줄당 잉크
      912px 이내(초과 = compose 에러 → 글자수 축소). 규칙·예외는 card-structure.md).
      캡션은 8블록 템플릿, 해시태그는 별도 배열. 본문 레이아웃은 기본형(basic) 고정 — cards.json 최상위 body_layout 기본값. 자유형(free)은 후속 트랙(현재 compose가 명시 에러로 거부).
+     **시트 등재 브랜드 권장**: 브랜드 cardnews 컨텍스트에 캐릭터 시트가 등재된 브랜드는
+     본문 카드 `bg`에 `pose`·`expression`을 콘텐츠 매칭으로 채운다(경고→worried/surprised,
+     핵심답→neutral/happy, 보관·체크→point/crouch) — 시트의 액션·표정 어휘를 살려 세트
+     단조를 방지한다(card-structure.md 다양성 제약 #5, review-subagent 포즈·표정 단조 대응).
+     시트 미등재 브랜드는 생략.
    - 5b. **표지 배경 생성** — `references/imagegen-pipeline.md` Read 후 그 지시대로
      imagegen 서브에이전트 1회 dispatch(순차 — 스타일 앵커). 프롬프트는 메인이 스캐폴드로
      전량 조립(브랜드 팔레트·비주얼 무드·portrait·no-text 필수·텍스트 영역 단순화).
