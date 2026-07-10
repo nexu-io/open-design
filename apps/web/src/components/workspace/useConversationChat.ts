@@ -238,6 +238,13 @@ export function useConversationChat(
         onAgentEvent: (ev: AgentEvent) => {
           textBuffer.appendEvent(ev);
         },
+        // The run succeeded but its final turn was cut off at the model's
+        // output-length cap — mark the message so it renders the "response was
+        // cut off — Continue" notice. Fires just before onDone, whose updater
+        // preserves this flag.
+        onTruncated: () => {
+          updateAssistant(assistantId, (prev) => ({ ...prev, truncated: true }));
+        },
         onDone: () => {
           textBuffer.flush();
           const endedAt = Date.now();

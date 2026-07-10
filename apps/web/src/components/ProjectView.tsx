@@ -6456,6 +6456,23 @@ export function ProjectView({
     [currentConversationActionDisabled, handleSend],
   );
 
+  // Continue a run whose final turn was cut off at the model's output-length
+  // cap. Ask the agent to finish the existing file in place — the daemon prompt
+  // contract tells it to append to the truncated deliverable rather than
+  // rebuild from scratch (see official-system.ts "Continue a cut-off file"). #4137
+  const handleContinueTruncated = useCallback(
+    (_assistantMessage: ChatMessage) => {
+      if (currentConversationActionDisabled) return;
+      const prompt =
+        'Your previous response was cut off at the output-length limit, so the ' +
+        'file you were writing is incomplete. Do not start over or create a new ' +
+        'file — open the file you were editing, find where it stopped, and ' +
+        'continue writing in place until the document is complete and valid.';
+      void handleSend(prompt, [], []);
+    },
+    [currentConversationActionDisabled, handleSend],
+  );
+
   const selectedPluginActionAgent =
     config.mode === 'daemon' && config.agentId
       ? agentsById.get(config.agentId)
@@ -8486,6 +8503,7 @@ export function ProjectView({
               onboardingStarterPath={onboardingEntryRef.current?.productType ?? null}
               onOpenQuestions={openQuestionsTab}
               onContinueRemainingTasks={handleContinueRemainingTasks}
+              onContinueTruncated={handleContinueTruncated}
               onAssistantFeedback={handleAssistantFeedback}
               onArtifactShare={handleArtifactShare}
               onArtifactDownload={handleArtifactDownload}

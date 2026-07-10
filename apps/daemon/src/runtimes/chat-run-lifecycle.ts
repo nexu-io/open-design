@@ -74,6 +74,7 @@ export function classifyChatRunCloseStatus(params: {
 type ClaudeStreamJsonBookkeepingRun = {
   stdinOpen?: boolean;
   turnCompletedCleanly?: boolean;
+  lastTurnTruncated?: boolean;
   child?: {
     stdin?: {
       destroyed?: boolean;
@@ -81,6 +82,21 @@ type ClaudeStreamJsonBookkeepingRun = {
     } | null;
   } | null;
 };
+
+/**
+ * A model stop reason that means the response was cut off because it hit the
+ * output-length cap, NOT because the turn finished on its own. `max_tokens` is
+ * Anthropic/Claude Code; `length` is the OpenAI-compatible spelling. These are
+ * terminal (the turn IS over) but incomplete — the deliverable the agent was
+ * mid-writing was left unfinished. The daemon used to fold these into the
+ * generic "clean turn" bucket (`stopReason !== 'tool_use'`), so a page that ran
+ * past the token budget looked like a success with no signal that it was
+ * chopped. Callers use this to flag the run as truncated so the UI can offer a
+ * Continue affordance and the next turn can be told to finish the file in place.
+ */
+export function isOutputTruncationStopReason(value: unknown): boolean {
+  return value === 'max_tokens' || value === 'length';
+}
 
 export function applyClaudeStreamJsonRunBookkeeping(
   run: ClaudeStreamJsonBookkeepingRun,
@@ -100,6 +116,13 @@ export function applyClaudeStreamJsonRunBookkeeping(
   if (!cleanTerminalTurn) return;
 
   run.turnCompletedCleanly = true;
+  // A `max_tokens` / `length` terminal turn ended cleanly from the process's
+  // point of view — the child exits normally and we still want the partial
+  // artifact — but the content was cut off mid-generation. Record that so the
+  // run status / SSE `end` frame can surface it and the user can continue.
+  if (isOutputTruncationStopReason(event.stopReason)) {
+    run.lastTurnTruncated = true;
+  }
   if (run.stdinOpen) {
     if (run.child?.stdin && !run.child.stdin.destroyed) {
       try { run.child.stdin.end(); } catch {}

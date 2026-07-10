@@ -3969,6 +3969,14 @@ export async function startServer({
       ...(pluginBlock ? { pluginBlock } : {}),
       ...(activeStageBlocks ? { activeStageBlocks } : {}),
       userInstructions,
+      // Project-level custom instructions are the user's persistent "design
+      // rules" for this project. They live on the project row (set via PATCH
+      // /api/projects/:id) and must apply to EVERY conversation in the project,
+      // not just the one where they were set. The composer already renders a
+      // "## Custom instructions (project-level)" block for this field — it was
+      // simply never populated here, so a new session silently dropped the
+      // rules. Wiring it makes them persist across sessions. #4137
+      projectInstructions: project?.customInstructions ?? undefined,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
@@ -5059,6 +5067,9 @@ export async function startServer({
       // this reset, a clean-but-empty attempt 1 would vouch for a crashed
       // attempt 2, classifying the run 'succeeded' off a stale flag.
       run.turnCompletedCleanly = false;
+      // The truncation verdict is likewise per-attempt: a retry that produces a
+      // complete turn must not inherit a prior attempt's cut-off flag.
+      run.lastTurnTruncated = false;
       lifecycle.resetForAttempt(run.retryAttemptCount ?? 0);
       run.analyticsTelemetry = {
         startRequestedAt: run.analyticsTelemetry?.startRequestedAt ?? run.createdAt,

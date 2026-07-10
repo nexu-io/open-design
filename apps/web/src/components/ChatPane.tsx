@@ -525,6 +525,9 @@ interface Props {
   // Focus the right-hand Questions tab from the chat banner.
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
+  // Continue a run cut off at the output-length cap: ask the agent to finish
+  // the deliverable in place rather than rebuild it.
+  onContinueTruncated?: (assistantMessage: ChatMessage) => void;
   onAssistantFeedback?: (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => void;
   // Client-side action for a brand-browser-assist od-card: open/focus the
   // Browser tab. Routed through the stable callbacks ref.
@@ -815,6 +818,7 @@ export function ChatPane({
   composerPlaceholder,
   onOpenQuestions,
   onContinueRemainingTasks,
+  onContinueTruncated,
   onAssistantFeedback,
   onBrandBrowserAssistConfirm,
   onArtifactShare,
@@ -976,6 +980,7 @@ export function ChatPane({
   // LATEST handler. See areAssistantMessagePropsEqual in AssistantMessage.tsx.
   const assistantCallbacksRef = useRef<AssistantCallbacks>({
     onContinueRemainingTasks,
+    onContinueTruncated,
     onAssistantFeedback,
     onBrandBrowserAssistConfirm,
     onArtifactShare,
@@ -989,6 +994,7 @@ export function ChatPane({
   });
   assistantCallbacksRef.current = {
     onContinueRemainingTasks,
+    onContinueTruncated,
     onAssistantFeedback,
     onBrandBrowserAssistConfirm,
     onArtifactShare,
@@ -2361,6 +2367,7 @@ export function ChatPane({
                 nextUserContentByAssistantId={nextUserContentByAssistantId}
                 assistantCallbacksRef={assistantCallbacksRef}
                 onContinueRemainingTasks={onContinueRemainingTasks}
+                onContinueTruncated={onContinueTruncated}
                 onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
                 onArtifactShare={onArtifactShare}
                 onToolboxAction={handleToolboxAction}
@@ -2738,6 +2745,7 @@ interface AssistantCallbacks {
   onContinueRemainingTasks:
     | ((assistantMessage: ChatMessage, todos: TodoItem[]) => void)
     | undefined;
+  onContinueTruncated: ((assistantMessage: ChatMessage) => void) | undefined;
   onAssistantFeedback:
     | ((message: ChatMessage, change: ChatMessageFeedbackChange) => void)
     | undefined;
@@ -2805,6 +2813,7 @@ function ChatRows({
   nextUserContentByAssistantId,
   assistantCallbacksRef,
   onContinueRemainingTasks,
+  onContinueTruncated,
   onBrandBrowserAssistConfirm,
   onArtifactShare,
   onToolboxAction,
@@ -2859,6 +2868,7 @@ function ChatRows({
   nextUserContentByAssistantId: Map<string, string>;
   assistantCallbacksRef: MutableRefObject<AssistantCallbacks>;
   onContinueRemainingTasks?: (assistantMessage: ChatMessage, todos: TodoItem[]) => void;
+  onContinueTruncated?: (assistantMessage: ChatMessage) => void;
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
   onArtifactShare?: (fileName: string) => void;
   onToolboxAction?: (id: DesignToolboxActionId) => void;
@@ -2985,6 +2995,11 @@ function ChatRows({
         onContinueRemainingTasks={
           m.id === lastAssistantId && onContinueRemainingTasks
             ? (todos) => assistantCallbacksRef.current.onContinueRemainingTasks?.(m, todos)
+            : undefined
+        }
+        onContinueTruncated={
+          m.id === lastAssistantId && onContinueTruncated
+            ? () => assistantCallbacksRef.current.onContinueTruncated?.(m)
             : undefined
         }
         onForkFromMessage={

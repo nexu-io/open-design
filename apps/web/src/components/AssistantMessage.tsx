@@ -354,6 +354,9 @@ interface Props {
   // shows a banner that focuses the tab on click.
   onOpenQuestions?: (request?: QuestionFormOpenRequest) => void;
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
+  // Continue a run whose final turn was cut off at the model's output-length
+  // cap. Sends a follow-up asking the agent to finish the deliverable in place.
+  onContinueTruncated?: () => void;
   onForkFromMessage?: () => void;
   forking?: boolean;
   onFeedback?: (change: ChatMessageFeedbackChange) => void;
@@ -485,6 +488,7 @@ function AssistantMessageImpl({
   nextUserContent,
   onOpenQuestions,
   onContinueRemainingTasks,
+  onContinueTruncated,
   onForkFromMessage,
   forking = false,
   onFeedback,
@@ -921,6 +925,12 @@ function AssistantMessageImpl({
             todos={unfinishedTodos}
             canContinue={canContinueTodos}
             onContinue={() => onContinueRemainingTasks?.(unfinishedTodos)}
+          />
+        ) : null}
+        {!streaming && isLast && message.truncated ? (
+          <TruncatedNotice
+            canContinue={!!onContinueTruncated}
+            onContinue={() => onContinueTruncated?.()}
           />
         ) : null}
         {showCompletionRow ? (
@@ -2059,6 +2069,38 @@ function UnfinishedTodosPanel({
           {t("assistant.unfinishedMore", { n: hiddenCount })}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+// Shown under the last assistant message when its run finished but the final
+// turn was cut off at the model's output-length cap (see
+// ChatRunStatusResponse.truncated). Tells the user the deliverable is
+// incomplete and offers a one-click Continue that asks the agent to finish the
+// existing file in place rather than rebuild it. #4137
+function TruncatedNotice({
+  canContinue,
+  onContinue,
+}: {
+  canContinue: boolean;
+  onContinue: () => void;
+}) {
+  const t = useT();
+  return (
+    <div className="truncated-notice" role="status" data-testid="truncated-notice">
+      <div className="truncated-notice-head">
+        <span className="truncated-notice-title">{t("assistant.truncatedTitle")}</span>
+        {canContinue ? (
+          <button
+            type="button"
+            className="truncated-notice-continue"
+            onClick={onContinue}
+          >
+            {t("assistant.truncatedContinue")}
+          </button>
+        ) : null}
+      </div>
+      <div className="truncated-notice-body">{t("assistant.truncatedBody")}</div>
     </div>
   );
 }

@@ -139,6 +139,13 @@ Rules:
 - Do not emit a source-code \`<artifact>\` block. The file panel and preview already reflect written project files.
 - After writing files and running the final self-check, output a short ordinary assistant summary. Name the files, describe the result, and stop.
 
+## Continue a cut-off file — never rebuild it
+A previous turn's deliverable can be left **incomplete** when the response hits the model's output-length limit (the file ends mid-tag or mid-\`<script>\`, with no closing \`</html>\`). This is common on large, complex pages. When the user then asks you to *continue*, *finish*, *keep going*, or "it stopped halfway":
+- **Do NOT start over and do NOT create a new file.** Rebuilding from scratch loses the user's work and usually gets cut off again at the same place.
+- Read the existing on-disk file, find exactly where it stopped, and **continue writing in place** — append the remaining markup/CSS/JS to that same file with Edit/Write so the document becomes complete. Preserve everything already written above the cut point verbatim.
+- Then run the same end-of-turn structural self-check on the now-complete file (no unclosed tags, balanced braces, a closing \`</html>\`).
+- If a single page is so large it keeps hitting the limit, tighten scope (split into supporting files, or trim redundant markup) rather than silently truncating again.
+
 **When NOT to emit \`<artifact>\`:**
 - Always, in filesystem runs. \`<artifact>\` is reserved for text-artifact/BYOK execution where no file tools are available.
 - Never wrap a summary, prose, file path reference, bash output, explanation, or full source file inside \`<artifact>\`.`;

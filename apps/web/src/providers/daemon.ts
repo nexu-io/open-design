@@ -268,6 +268,14 @@ export interface DaemonStreamHandlers extends StreamHandlers {
    * tool name so the UI can gate the live preview to code-writing tools.
    */
   onToolInputDelta?: (id: string, name: string, delta: string) => void;
+  /**
+   * Fired once, just before `onDone`, when the run finished successfully but its
+   * final turn was cut off at the model's output-length cap (see
+   * ChatRunStatusResponse.truncated). Lets the chat mark the message so it can
+   * render a "response was cut off — Continue" notice. Not fired on normal
+   * completion, failure, or cancellation.
+   */
+  onTruncated?: () => void;
 }
 
 export interface DaemonStreamOptions {
@@ -1019,6 +1027,11 @@ async function consumeDaemonRun({
   // frame — both mirror the same finalize-time classification.
   let endFailureCategory: ChatRunStatusResponse['failureCategory'] = null;
   let endFailureDetail: ChatRunStatusResponse['failureDetail'] = null;
+  // Set when the daemon reports this (succeeded) run's final turn was cut off at
+  // the model's output-length cap. Carried onto the completed message so the
+  // chat can show a "response was cut off — Continue" notice. See
+  // ChatRunStatusResponse.truncated.
+  let endTruncated = false;
   let lastEventId: string | null = initialLastEventId ?? null;
   let canceled = false;
   const cancelRun = () => {
@@ -1159,6 +1172,7 @@ async function consumeDaemonRun({
             exitCode = typeof event.data.code === 'number' ? event.data.code : null;
             exitSignal = typeof event.data.signal === 'string' ? event.data.signal : null;
             if (event.data.resumable === true) endResumable = true;
+            if (event.data.truncated === true) endTruncated = true;
             if (event.data.failureCategory) endFailureCategory = event.data.failureCategory;
             if (event.data.failureDetail) endFailureDetail = event.data.failureDetail;
             // `serverDeclaredSuccess` records whether the server explicitly
@@ -1180,6 +1194,7 @@ async function consumeDaemonRun({
           exitSignal = status.signal ?? null;
           serverDeclaredSuccess = status.status === 'succeeded';
           if (status.resumable === true) endResumable = true;
+          if (status.truncated === true) endTruncated = true;
           // Carry the daemon failure classification off this terminal status
           // too — this error-frame-then-status recovery path breaks before the
           // SSE `end` frame, so without it markErrorRunFailure() below stamps
@@ -1216,6 +1231,7 @@ async function consumeDaemonRun({
         // end-event success.
         serverDeclaredSuccess = status.status === 'succeeded';
         if (status.resumable === true) endResumable = true;
+        if (status.truncated === true) endTruncated = true;
         if (status.failureCategory) endFailureCategory = status.failureCategory;
         if (status.failureDetail) endFailureDetail = status.failureDetail;
         onRunStatus?.(endStatus);
@@ -1278,6 +1294,9 @@ async function consumeDaemonRun({
       );
       return;
     }
+    // Clean success. If the final turn was cut off at the output-length cap,
+    // signal it before onDone so the message can render its Continue notice.
+    if (endTruncated) handlers.onTruncated?.();
     handlers.onDone(acc);
   } finally {
     cancelSignal?.removeEventListener('abort', cancelRun);

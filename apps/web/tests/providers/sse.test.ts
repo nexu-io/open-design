@@ -215,6 +215,64 @@ describe('streamViaDaemon', () => {
     expect(err.resumable).toBe(true);
   });
 
+  it('signals onTruncated for a succeeded run whose final turn hit the output-length cap (#4137)', async () => {
+    const handlers = { ...createDaemonHandlers(), onTruncated: vi.fn() };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse(
+          'event: agent\ndata: {"type":"text_delta","delta":"<!doctype html><html><head>"}\n\n' +
+            'event: end\ndata: {"code":0,"status":"succeeded","truncated":true}\n\n',
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'build a big landing page' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    // A truncated turn is still a success — the partial file is kept — but the
+    // chat must be told it was cut off so it can offer Continue.
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(handlers.onTruncated).toHaveBeenCalledTimes(1);
+    expect(handlers.onDone).toHaveBeenCalledTimes(1);
+    // Ordering: the truncation signal fires before the done handler finalizes.
+    expect(handlers.onTruncated.mock.invocationCallOrder[0]!).toBeLessThan(
+      handlers.onDone.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('does not signal onTruncated for a normal succeeded run', async () => {
+    const handlers = { ...createDaemonHandlers(), onTruncated: vi.fn() };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'small tweak' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onTruncated).not.toHaveBeenCalled();
+    expect(handlers.onDone).toHaveBeenCalledTimes(1);
+  });
+
   it('sends run-scoped media execution policy to the daemon', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

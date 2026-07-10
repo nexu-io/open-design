@@ -3819,6 +3819,9 @@ export interface Dict {
   'assistant.unfinishedSummary': string;
   'assistant.unfinishedMore': string;
   'assistant.continueRemaining': string;
+  'assistant.truncatedTitle': string;
+  'assistant.truncatedBody': string;
+  'assistant.truncatedContinue': string;
   'chat.resumeRunCta': string;
   'assistant.outTokens': string;
   'assistant.producedFiles': string;

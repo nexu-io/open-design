@@ -478,6 +478,14 @@ export interface ChatRunStatusResponse {
    *  conversation resumes the persisted session. Absent/false on success,
    *  non-resumable failures, and runtimes without CLI session resume. */
   resumable?: boolean;
+  /** True when the run's final turn stopped because it hit the model's
+   *  output-length cap (`stop_reason: max_tokens` / `finish_reason: length`)
+   *  rather than finishing on its own. The turn still ends `succeeded` — the
+   *  partial deliverable is kept — but the on-disk file is incomplete. The chat
+   *  surfaces a "response was cut off" notice with a Continue action so the user
+   *  can have the agent finish the file in place. Absent/false when the turn
+   *  completed normally or the runtime does not report a stop reason. */
+  truncated?: boolean;
   /** Absolute path to the per-run JSONL event log the daemon mirrors
    *  the SSE stream to (see runs.ts `runsLogDir`). Null when the
    *  daemon was launched without event persistence configured. */
@@ -630,6 +638,11 @@ export interface ChatMessage {
    *  session-resuming runtime). Drives the chat's Continue affordance; mirrors
    *  ChatRunStatusResponse.resumable. */
   resumable?: boolean;
+  /** True when this (succeeded) message's run was cut off at the model's
+   *  output-length cap, so its deliverable is incomplete. Drives the chat's
+   *  "response was cut off — Continue" notice; mirrors
+   *  ChatRunStatusResponse.truncated. */
+  truncated?: boolean;
   lastRunEventId?: string;
   startedAt?: number;
   endedAt?: number;

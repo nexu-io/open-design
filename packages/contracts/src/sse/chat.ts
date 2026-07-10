@@ -86,6 +86,11 @@ export interface ChatSseEndPayload {
    *  runtime). Lets the chat offer a Continue affordance without a separate
    *  run-status fetch. Mirrors ChatRunStatusResponse.resumable. */
   resumable?: boolean;
+  /** True when this (succeeded) run's final turn was cut off at the model's
+   *  output-length cap and the deliverable is incomplete. Lets the chat render
+   *  the "response was cut off — Continue" notice straight off the terminal
+   *  frame. Mirrors ChatRunStatusResponse.truncated. */
+  truncated?: boolean;
   /** Daemon failure classification for a `failed` run, so the chat can render
    *  specific guidance straight off the terminal frame without a status refetch.
    *  Mirror ChatRunStatusResponse.failureCategory / failureDetail. */

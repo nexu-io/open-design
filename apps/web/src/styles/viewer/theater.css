@@ -648,6 +648,50 @@
   color: var(--text-muted);
 }
 
+/* Truncation notice: shown under the last assistant message when its run was
+   cut off at the model's output-length cap (#4137). Mirrors the unfinished-todos
+   panel so the two "continue" affordances read as one family. */
+.truncated-notice {
+  margin-top: 10px;
+  width: min(520px, 100%);
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--amber) 8%, var(--bg-panel));
+  color: var(--text);
+}
+.truncated-notice-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.truncated-notice-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+.truncated-notice-continue {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border-strong));
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+.truncated-notice-continue:hover {
+  background: var(--bg-subtle);
+}
+.truncated-notice-body {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
 /* ============================================================
    Coming-soon disabled affordance for viewer toolbar buttons
    ============================================================ */

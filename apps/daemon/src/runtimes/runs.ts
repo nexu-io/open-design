@@ -209,6 +209,7 @@ export function createChatRunService({
     failureCategory: run.failureCategory ?? null,
     failureDetail: run.failureDetail ?? null,
     resumable: run.resumable ?? false,
+    truncated: run.lastTurnTruncated ?? false,
     eventsLogPath: run.eventsLogPath ?? null,
     workspace: projectWorkspaceProvenance(run.projectMetadata),
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
@@ -239,6 +240,7 @@ export function createChatRunService({
       signal,
       status,
       resumable: run.resumable ?? false,
+      truncated: run.lastTurnTruncated ?? false,
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
     });
