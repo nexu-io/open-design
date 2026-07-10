@@ -500,6 +500,8 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
       const defaults = PROVIDER_DEFAULTS[chatProvider.provider];
       const baseUrl =
         (typeof chatProvider.baseUrl === 'string' && chatProvider.baseUrl.trim())
+        || (chatProvider.provider === 'anthropic' && process.env.ANTHROPIC_BASE_URL)
+        || (chatProvider.provider === 'openai' && process.env.OPENAI_BASE_URL)
         || defaults.baseUrl;
       // Azure with no resource URL is unrecoverable — same guard as
       // the override path above.

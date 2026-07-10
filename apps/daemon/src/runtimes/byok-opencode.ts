@@ -7,8 +7,8 @@ const DEFAULT_CONTEXT_TOKEN_LIMIT = 128_000;
 const DEFAULT_OUTPUT_TOKEN_LIMIT = 16_384;
 
 const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ByokChatProviderConfig['protocol'], string> = {
-  anthropic: 'https://api.anthropic.com/v1',
-  openai: 'https://api.openai.com/v1',
+  anthropic: process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1',
+  openai: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
   azure: '',
   google: 'https://generativelanguage.googleapis.com/v1beta',
   ollama: 'https://ollama.com',

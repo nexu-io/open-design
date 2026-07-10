@@ -115,6 +115,7 @@ export async function createProject(input: {
       let message = 'Could not create project';
       try {
         const body = await resp.json() as { error?: unknown };
+        console.warn('[createProject] HTTP', resp.status, 'body:', JSON.stringify(body));
         if (
           body.error &&
           typeof body.error === 'object' &&
@@ -125,7 +126,7 @@ export async function createProject(input: {
           message = body.error.message;
         }
       } catch {
-        // Keep the generic fallback when the error body is absent or invalid.
+        console.warn('[createProject] HTTP', resp.status, '(non-JSON body)');
       }
       throw new Error(message);
     }
