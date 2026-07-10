@@ -29,8 +29,8 @@ od:
 
 <!--
 Role: Braze Custom-HTML IAM 7단계 제작 워크플로우 — brand-agnostic OD 포트
-Key Features: <question-form> 인터뷰/컨펌, braze_plan_v1 기획안, od braze CLI 통합, Variant A/B 병렬 HTML 생성, craft/braze-custom-html.md 자가 검증
-Dependencies: 활성 브랜드 컨텍스트(system prompt의 "Active brand" + "Brand deliverable context" 블록), BRAZE-DOMAIN.md §1·§2·§5, DATA-MODEL-BRAZE.md §0·§4, craft/braze-custom-html.md, references/ (size-patterns, format-design-guide, interaction-standard, liquid-guide)
+Key Features: <question-form> 인터뷰/컨펌, braze_plan_v1 기획안(image 오브제 컴포지션 확장), od braze CLI 통합, 오브제 imagegen·Variant A/B 빌더·검수 서브에이전트 위임(인라인 폴백), 듀얼 산출(발송본 placeholder/프리뷰 data-URI)
+Dependencies: 활성 브랜드 컨텍스트(system prompt의 "Active brand" + "Brand deliverable context" 블록), BRAZE-DOMAIN.md §1·§2·§5, DATA-MODEL-BRAZE.md §0·§4, craft/braze-custom-html.md, references/ (size-patterns, format-design-guide, interaction-standard, liquid-guide, imagegen-pipeline, variant-builder-subagent, review-subagent, visual-layout-patterns)
 Notes: bodoc 브랜드 특화 사실(플래너→전문가, bodoc:// 딥링크, 특정 어트리뷰트) 하드코딩 금지. 브랜드 사실은 활성 브랜드 컨텍스트(Active brand + Brand deliverable context 블록)에서만 로드.
 -->
 
@@ -222,11 +222,39 @@ od braze plan <braze_message_id> --plan-file - << 'EOF'
     { "label": "<주 CTA 텍스트>", "deeplink": "<딥링크>" },
     { "label": "<보조 CTA 텍스트>" }
   ],
-  "image": { "needed": false, "ratio": null, "format": "PNG" },
+  "image": {
+    "needed": true,
+    "format": "PNG",
+    "assets": [
+      { "id": "char",   "source": "library",  "role": "character",
+        "ref": "clock/consult.png", "note": "가운+클립보드 — 상담 톤" },
+      { "id": "ticket", "source": "generate", "role": "object",
+        "style": "3d-icon", "concept": "보험 진단 리포트 카드, 체크마크", "ratio": "1:1" },
+      { "id": "orb",    "source": "css",      "role": "decor", "note": "파스텔 말풍선 오브 2개" }
+    ],
+    "composition": "클락 중앙 우측, 리포트 카드 좌측 겹침, 오브는 상단 배경"
+  },
   "rejections": []
 }
 EOF
 ```
+
+### image 필드 결정 규칙 (Claude 자율 — 인터뷰하지 않음)
+
+- `needed`: 공지(announcement)·기능 안내 순수 목적 = `false` 기본, 그 외(혜택·
+  전환·리텐션·축하) = `true` 기본. 기획안 카드에 근거 1줄 명시.
+- `assets[].source`: `library`(브랜드 캐릭터 컷 직접 사용 — 캐논 100%·비용 0,
+  브랜드 deliverable 컨텍스트의 에셋 라이브러리에서 선택) / `generate`(imagegen —
+  메타포 오브제) / `css`(코드 장식 — 생성 없음).
+- `assets[].style`: `flat-icon` | `2d-illust` | `3d-illust` | `3d-icon` — **실사
+  없음**. 목적·톤 기반 선택 근거는 `references/visual-layout-patterns.md` §3.
+- 오브제 concept = 메시지 메타포 (§4 사례표) — "보여야 하는 것"을 concept에,
+  오독 위험 요소를 note에 기록.
+- `composition` = 레이어 배치 스케치 1문장 (텍스트존·오브제존·CTA존 3분할 문법 —
+  visual-layout-patterns.md §1).
+- 스키마는 daemon 계약 변경 없음 — `braze_plan_v1`은 JSON blob 저장이라 필드
+  추가는 하위 호환 (검증 = version 체크뿐, braze-routes.ts). 기획안 카드에
+  에셋 표(id/source/style/concept)를 포함해 사용자 컨펌을 받는다.
 
 ### 카피 작성 원칙 (헤딩·본문)
 
@@ -258,6 +286,7 @@ EOF
 | 트리거 이벤트 | <triggerEvent> (session_start / push_click / any_purchase / specific_purchase / custom_event) |
 | 주 CTA | <cta[0].label> |
 | 보조 CTA | <cta[1].label> |
+| 이미지 | needed + 에셋 요약 (id·source·style·concept) + composition |
 ```
 
 ### 자가 카피 검토 (Step 3~4 사이)
@@ -322,6 +351,11 @@ P0(발송 차단) 발견 시 → 기획안 수정 후 재확인. P1·P2는 평�
   - CTA(주/보조), 톤, 타입
 - 트리거/스케줄, 성과지표
 
+③-b **컴포지션 플랜** (image.needed=true일 때)
+- 에셋 표: id / source / style / concept / ratio / placeholder 토큰(`__BRAZE_MEDIA__/obj-<id>.png`)
+- composition 스케치 + 레이아웃 유형 (visual-layout-patterns.md §2 5형 중 선택 근거)
+- library 컷 원본 경로 (브랜드 에셋 라이브러리 기준)
+
 ④ **부록**
 - 개인화 변수 선정/제외 표 + 근거
 - 디자인 방향: 차용 레퍼런스, 토큰 매핑, variant 차별화
@@ -346,28 +380,38 @@ od braze brief <braze_message_id> --brief-file <path>
 
 ---
 
-## Step 4 — HTML 제작
+## Step 4a — 오브제 에셋 생성 (imagegen 서브에이전트)
 
-### 활성 브랜드 DESIGN.md 필수 확인
+`image.needed=false`면 skip. 그 외:
 
-```
-Read: design-systems/<brand>/DESIGN.md
-```
+1. `Read: design-templates/braze-iam/references/imagegen-pipeline.md` (dispatch
+   계약·프롬프트 스캐폴드·폴백 절차 정본)
+2. `mkdir -p {artifact_dir}/assets`
+3. `source:"generate"` 에셋 전부를 **한 턴 병렬 dispatch** — 에셋별 서브에이전트
+   1개, 프롬프트는 메인이 스캐폴드로 조립. 실패분만 순차 재시도 1회(성공분 보존).
+4. `source:"library"` 에셋: 브랜드 에셋 라이브러리 원본을
+   `{artifact_dir}/assets/obj-<id>.png`로 복사 (생성 호출 없음).
+5. 재시도도 실패한 에셋은 기획안 강등(css/생략) 여부를 사용자에게 보고 —
+   조용한 누락 금지.
 
-브랜드 토큰(색상·타이포·간격·radius·shadow), 컴포넌트 패턴, anti-patterns를 확인한다. 이것이 **단일 디자인 계약**이며 아래 외부 레퍼런스보다 우선한다.
+dispatch 도구가 없는 런타임 = 인라인 순차로 동일 계약 (imagegen-pipeline.md 절차 그대로).
 
-### 참조 문서 읽기 (필수)
+## Step 4b — Variant 제작 (빌더 서브에이전트 위임)
 
-```
-Read: design-templates/braze-iam/references/size-patterns.md    # 컨테이너 CSS
-Read: design-templates/braze-iam/references/format-design-guide.md  # 포맷별 레이아웃
-Read: design-templates/braze-iam/references/interaction-standard.md  # 애니메이션
-```
+메인은 제작하지 않는다:
 
-Liquid 변수가 1개 이상이면:
-```
-Read: design-templates/braze-iam/references/liquid-guide.md
-```
+1. `Read: design-templates/braze-iam/references/variant-builder-subagent.md`
+2. Variant A/B **2개 병렬 dispatch** — 입력(brief 경로·기획안 전문·브랜드 컨텍스트
+   소스 경로·DESIGN.md·references 5종+craft·에셋 manifest·composition·산출 디렉토리)을
+   지시문 계약대로 채운다.
+3. 각 빌더 산출 = 발송본 `variant-x.html`(placeholder) + 프리뷰
+   `variant-x-preview.html`(make_preview.py 기계 변환). 반환 `OK ...` 2건 확인.
+4. FAIL 반환 시: 사유가 카피/기획 문제면 Step 3 수정 후 재dispatch, 실행 문제면
+   해당 variant만 재dispatch 1회.
+
+dispatch 도구가 없는 런타임 = 인라인 순차 제작으로 동일 산출물 계약. 이때 아래
+"HTML 보일러플레이트"·"id 속성 강제 규칙"·"Liquid 작성" 절과
+`references/` 문서를 직접 Read해 빌더 지시문의 전 규율을 자가 적용한다.
 
 ### HTML 보일러플레이트 — Braze 기술 제약 (craft/braze-custom-html.md 참조)
 
@@ -441,30 +485,17 @@ brazeBridge.BridgeReady(function() {
 - nil 체크: `{% if {{${attr}}} == nil %}` (빈 문자열 비교 금지)
 - 시간 변수: UTC ISO → epoch → `| plus: TZ_OFFSET_SEC` → 포맷
 
-### Variant A / B 병렬 제작
-
-카피·Liquid는 동일, **디자인 접근을 달리**한 두 파일을 병렬 제작.
-
-| Variant | 디자인 레퍼런스 참고 방향 | 레이아웃 차별화 |
-|---|---|---|
-| A | 기본 구조 (아이콘·텍스트 위계 중심) | 브랜드 primary 톤 |
-| B | 대안 구조 (배경·서피스·그래픽 차별화) | 대비 강조 또는 미니멀 |
-
-산출물:
-- `variant-a.html` ← 최종 발송본 A
-- `variant-b.html` ← 최종 발송본 B
-
-**프로덕션 발송본 룰** (둘 다 적용):
-- 프리뷰 폴백 스크립트 블록 포함 금지
-- raw rgba 인라인 금지 → 브랜드 토큰 사용
-- 모든 요소에 `id="iam-..."` 부여
-- Liquid 변수는 그대로 유지 (Braze 엔진이 치환)
-
 ---
 
-## Step 5 — 자가 리뷰 (craft 체크리스트)
+## Step 5 — 검수 (report-only 서브에이전트)
 
-두 variant 각각에 대해 `craft/braze-custom-html.md` 체크리스트로 **메인 에이전트 자가 검토**를 수행한다.
+1. `Read: design-templates/braze-iam/references/review-subagent.md`
+2. 신선 컨텍스트 검수자 **1 dispatch** — 입력(HTML 4파일·에셋 PNG 전장·brief·
+   기획안·브랜드 컨텍스트·DESIGN.md·craft·references)을 지시문 계약대로 채운다.
+   검수자는 report-only — 채점표·P0/P1 목록만 반환한다.
+3. **수정 반영은 메인**: P0·감점 항목을 발송본에 수정 → `make_preview.py` 재실행
+   (프리뷰 수기 수정 금지) → 재검수 dispatch 1회.
+4. dispatch 불가 런타임 = 아래 체크리스트로 인라인 자가검수 (동일 채점표).
 
 ### Braze 기술 체크리스트
 
@@ -510,7 +541,7 @@ od braze produce <braze_message_id> --variant <uuid-B> --artifact <path/to/varia
 
 ### 종료 조건 (variant별)
 
-1. **자동 종료**: Braze 기술 P0 = 0건, 브랜드 가이드 P0 = 0건 → 해당 variant 완료
+1. **자동 종료**: 검수 게이트 P0 = 0건 (재검수 서브에이전트 판정) → 해당 variant 완료
 2. **반복 한계 가드**: `MAX_ITERATIONS = 3`. P0 남아도 더 이상 반복하지 않고 발송 보류 권고 처리
 3. 두 variant 모두 완료 시 Step 7 진입
 
@@ -540,6 +571,11 @@ HTML IAM은 REST API로 전송 불가 (BRAZE-DOMAIN §4.1-4.2). 수동 핸드오
 
 1. Braze 대시보드 → Campaigns → Create Campaign → In-App Message
 2. Message type: **Custom HTML**
+2-b. **미디어 업로드 (image.needed=true일 때)**: `{artifact_dir}/assets/*.png`
+   목록을 표로 제시 → Braze 대시보드 Media Library에 업로드 → 발송본의
+   `__BRAZE_MEDIA__/<name>`을 업로드된 미디어 URL로 치환하라고 안내한다
+   (에디터 붙여넣기 전 수행). **data-URI 인라인 발송본 금지** — Braze 에디터
+   버퍼링 실측. `variant-x-preview.html`은 로컬 FileViewer 확인 전용이다.
 3. `variant-a.html` / `variant-b.html` 내용을 HTML 에디터에 붙여넣기 (또는 HTML Upload 기능 사용)
 4. 트리거 이벤트 설정: 기획안의 후보 트리거 중 선택 (BRAZE-DOMAIN §5.2)
 5. 타겟 세그먼트·빈도 제한 설정
@@ -562,6 +598,7 @@ A: variant-a.html (<상태>)
 B: variant-b.html (<상태>)
 기획안: braze_plan_v1 (DB)
 기획 문서: braze/<messageId>-<slug>/brief.md (디자인 프로젝트 파일)
+에셋: assets/*.png N건 — Media Library 업로드 + placeholder 치환 필요
 
 Braze 대시보드 핸드오프 필요 — REST API로 IAM 전송 불가 (BRAZE-DOMAIN §4.4)
 트리거 이벤트 설정 후보: <candidates>
@@ -580,3 +617,6 @@ Braze 대시보드 핸드오프 필요 — REST API로 IAM 전송 불가 (BRAZE-
 - 이미지: PNG/JPEG/GIF만. WebP 금지 (BRAZE-DOMAIN §1.3)
 - CTA ≤ 2개 (BRAZE-DOMAIN §1.2)
 - HTML IAM은 REST로 전달 불가 → 대시보드 수동 핸드오프 (BRAZE-DOMAIN §4.4)
+- 발송본에 data-URI 금지 (에디터 버퍼링) — placeholder `__BRAZE_MEDIA__/<name>` 유지, 프리뷰만 인라인
+- 이미지 생성 = codex `gpt-5.5` 고정 + 실사 금지 (스타일 4종) — references/imagegen-pipeline.md
+- 서브에이전트 위임 실패(도구 없음) 시 인라인 동일 절차 — 단계 생략 금지
