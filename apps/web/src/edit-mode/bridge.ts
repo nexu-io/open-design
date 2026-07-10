@@ -604,9 +604,12 @@ export function buildManualEditBridge(enabled: boolean): string {
   function createHandles(el){
     removeHandles();
     if (!el || el === document.body || el === document.documentElement) return;
+    // Guard: element destroyed by srcdoc reload after position commit
+    if (!el.isConnected) return;
     selectedElForHandles = el;
     var rect = el.getBoundingClientRect();
     var containerEl = el.offsetParent || document.body;
+    if (!containerEl || !containerEl.isConnected) return;
     var containerRect = containerEl.getBoundingClientRect();
     var positions = [
       { h: 'nw', cursor: 'nwse-resize', left: rect.left - containerRect.left - HANDLE_SIZE/2, top: rect.top - containerRect.top - HANDLE_SIZE/2 },
