@@ -586,6 +586,7 @@ import { contextToResourceHubPrincipal } from './collab/resource-hub-publish-ada
 import { createCollabCloudClientFromEnv } from './integrations/collab-cloud.js';
 import { createCollabCloudService } from './collab/collab-cloud-service.js';
 import { createVelaCliCollabClientFromEnv } from './collab/vela-cli-collab-client.js';
+import { createVelaCliTeamProjectCatalogFromEnv } from './collab/vela-cli-team-projects.js';
 import { registerTelemetryRoutes } from './routes/telemetry.js';
 import {
   assembleExample,
@@ -3814,25 +3815,27 @@ export async function startServer({
   // The scheduler publishes/pulls through the resource-hub adapter — the real
   // hub when OD_RESOURCE_HUB_URL + workspace member env are set, else a local
   // stub. resolveProjectDir lets the hub adapter pack/land managed projects.
+  const describeCollabProject = (projectId: string) => {
+    const project = getProject(db, projectId);
+    if (!project) return null;
+    return {
+      name: project.name,
+      skillId: project.skillId ?? null,
+      designSystemId: project.designSystemId ?? null,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+      ...(project.metadata ? { metadata: project.metadata } : {}),
+    };
+  };
   const collab = createCollabRuntime({
     resolveProjectDir: (projectId) => {
       const project = getProject(db, projectId);
       return resolveProjectDir(PROJECTS_DIR, projectId, project?.metadata);
     },
-    describeProject: (projectId) => {
-      const project = getProject(db, projectId);
-      if (!project) return null;
-      return {
-        name: project.name,
-        skillId: project.skillId ?? null,
-        designSystemId: project.designSystemId ?? null,
-        createdAt: project.createdAt,
-        updatedAt: project.updatedAt,
-        ...(project.metadata ? { metadata: project.metadata } : {}),
-      };
-    },
+    describeProject: describeCollabProject,
   });
   const velaCliCollabClient = createVelaCliCollabClientFromEnv();
+  const velaCliTeamProjectCatalog = createVelaCliTeamProjectCatalogFromEnv();
   const collabCloudClient = velaCliCollabClient ?? createCollabCloudClientFromEnv();
   registerCollabPresenceRoutes(app, { collab, cloud: velaCliCollabClient });
 
@@ -3862,7 +3865,10 @@ export async function startServer({
   // project's owner from the team hub (the same list the discovery endpoint
   // serves) rather than trusting a client-supplied id, so a pulled project is
   // recorded read-only under its true single writer.
-  const teamProjectsLister = createTeamProjectsLister({ workspaceContext: collab.workspaceContext });
+  const teamProjectsLister = createTeamProjectsLister({
+    workspaceContext: collab.workspaceContext,
+    ...(velaCliTeamProjectCatalog ? { teamProjectCatalog: velaCliTeamProjectCatalog } : {}),
+  });
   const resolveSharedProject = async (projectId: string) => {
     const list = await teamProjectsLister();
     return list.find((entry) => entry.projectId === projectId) ?? null;
@@ -3925,6 +3931,8 @@ export async function startServer({
     resolvePullDir: (projectId) => resolveProjectDir(PROJECTS_DIR, projectId),
     resolveSharedProject,
     resolveSharedProjectOwner,
+    describeProject: describeCollabProject,
+    ...(velaCliTeamProjectCatalog ? { teamProjectCatalog: velaCliTeamProjectCatalog } : {}),
     // Resolve the owner's display name + role from the collab-cloud directory so
     // /collab/status can hand the client a named "shared project" banner.
     ...(collabCloud

@@ -17,7 +17,7 @@ import { InviteDialog } from './InviteDialog';
 import { STATUS_LABEL_KEYS } from './DesignsTab';
 import { isDesignSystemProject, isPublishedDesignSystemProject } from './design-system-project';
 import { useTeamMembers } from '../collab/useTeamMembers';
-import { useWorkspaceContext } from '../collab/useWorkspaceContext';
+import { notifyTeamProjectsChanged, useWorkspaceContext } from '../collab/useWorkspaceContext';
 
 /** Which project space this strip renders. Drives the per-card 共享 badge
  *  (hidden in the all-shared team space) and the "{creator}创建" line: 'recent'
@@ -372,7 +372,10 @@ export function RecentProjectsStrip({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ event: 'project_team_share_requested', projectId: project.id }),
       });
-      if (res.ok) setSharedIds((prev) => new Set(prev).add(project.id));
+      if (res.ok) {
+        setSharedIds((prev) => new Set(prev).add(project.id));
+        notifyTeamProjectsChanged();
+      }
     } catch {
       // Best-effort: leave the project un-badged on a transient failure.
     } finally {

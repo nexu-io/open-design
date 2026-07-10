@@ -88,6 +88,10 @@ import {
   type ProjectFolder,
 } from '../types';
 import type { ChatSessionMode, WorkspaceContextItem, WorkspaceTeamProjectsResponse } from '@open-design/contracts';
+import {
+  notifyTeamProjectsChanged,
+  TEAM_PROJECTS_CHANGED_EVENT,
+} from '../collab/useWorkspaceContext';
 import { createTerminal, killTerminal } from '../state/projects';
 import type { QuestionForm } from '../artifacts/question-form';
 import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
@@ -2442,11 +2446,14 @@ export function FileWorkspace({
 
   useEffect(() => {
     let cancelled = false;
-    void projectIsSharedWithWorkspace(projectId).then((shared) => {
+    const refreshShareAccess = () => void projectIsSharedWithWorkspace(projectId).then((shared) => {
       if (!cancelled) setProjectShareAccess(shared ? 'workspace' : 'private');
     });
+    refreshShareAccess();
+    window.addEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
     return () => {
       cancelled = true;
+      window.removeEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
     };
   }, [projectId, projectShareMenuOpen]);
 
@@ -2506,6 +2513,7 @@ export function FileWorkspace({
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setProjectShareAccess(nextAccess);
+      notifyTeamProjectsChanged();
       setLauncherToast(
         nextAccess === 'workspace'
           ? t('fileViewer.workspaceShareSuccess')

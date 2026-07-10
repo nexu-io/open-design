@@ -44,6 +44,10 @@ import {
   measurePreviewBlockOffsets,
 } from './markdown-scroll-sync';
 import { useT, useI18n } from '../i18n';
+import {
+  notifyTeamProjectsChanged,
+  TEAM_PROJECTS_CHANGED_EVENT,
+} from '../collab/useWorkspaceContext';
 import type { Dict, Locale } from '../i18n/types';
 import {
   fetchLiveArtifact,
@@ -5314,11 +5318,14 @@ function ReactComponentViewer({
 
   useEffect(() => {
     let cancelled = false;
-    void projectIsSharedWithWorkspace(projectId).then((shared) => {
+    const refreshShareAccess = () => void projectIsSharedWithWorkspace(projectId).then((shared) => {
       if (!cancelled) setShareAccess(shared ? 'workspace' : 'private');
     });
+    refreshShareAccess();
+    window.addEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
     return () => {
       cancelled = true;
+      window.removeEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
     };
   }, [projectId, shareMenuOpen]);
 
@@ -5365,6 +5372,7 @@ function ReactComponentViewer({
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setShareAccess(nextAccess);
+      notifyTeamProjectsChanged();
     } catch (error) {
       console.warn('[FileViewer] failed to update workspace project sharing', error);
     } finally {
@@ -6130,11 +6138,14 @@ function HtmlViewer({
 
   useEffect(() => {
     let cancelled = false;
-    void projectIsSharedWithWorkspace(projectId).then((shared) => {
+    const refreshShareAccess = () => void projectIsSharedWithWorkspace(projectId).then((shared) => {
       if (!cancelled) setShareAccess(shared ? 'workspace' : 'private');
     });
+    refreshShareAccess();
+    window.addEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
     return () => {
       cancelled = true;
+      window.removeEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
     };
   }, [projectId, deployMenuOpen]);
 
@@ -6179,6 +6190,7 @@ function HtmlViewer({
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setShareAccess(nextAccess);
+      notifyTeamProjectsChanged();
       setShareGuideToast(
         nextAccess === 'workspace'
           ? t('fileViewer.workspaceShareSuccess')

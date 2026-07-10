@@ -236,6 +236,67 @@ describe('collab sync routes', () => {
     expect(['pending_upload', 'synced']).toContain(res.body.syncState);
   });
 
+  it('writes and removes the Vela team-project catalog around share intents', async () => {
+    const writes: unknown[] = [];
+    const removes: string[] = [];
+    const api = await startSyncServer(fixedShareContextProvider(true), {
+      describeProject: () => ({
+        name: 'Electric Studio 2',
+        skillId: null,
+        designSystemId: null,
+        createdAt: 1,
+        updatedAt: 2,
+      }),
+      teamProjectCatalog: {
+        upsert: async (input) => {
+          writes.push(input);
+        },
+        remove: async (projectId) => {
+          removes.push(projectId);
+        },
+      },
+    });
+
+    const share = await api.json('/api/projects/p1/collab/sync-intent', {
+      method: 'POST',
+      body: { event: 'project_team_share_requested', projectId: 'p1' },
+    });
+    expect(share.status).toBe(200);
+    expect(writes).toEqual([
+      {
+        projectId: 'p1',
+        displayName: 'Electric Studio 2',
+        syncState: 'pending_upload',
+      },
+    ]);
+
+    const unshare = await api.json('/api/projects/p1/collab/sync-intent', {
+      method: 'POST',
+      body: { event: 'project_team_unshare_requested', projectId: 'p1' },
+    });
+    expect(unshare.status).toBe(200);
+    expect(removes).toEqual(['p1']);
+  });
+
+  it('does not pretend a project is shared when the Vela catalog write fails', async () => {
+    const api = await startSyncServer(fixedShareContextProvider(true), {
+      teamProjectCatalog: {
+        upsert: async () => {
+          throw new Error('catalog unavailable');
+        },
+        remove: async () => {},
+      },
+    });
+
+    const res = await api.json('/api/projects/p1/collab/sync-intent', {
+      method: 'POST',
+      body: { event: 'project_team_share_requested', projectId: 'p1' },
+    });
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe('TEAM_PROJECT_CATALOG_UNAVAILABLE');
+    expect((await api.json('/api/projects/p1/collab/status')).body.syncState).toBe('local_only');
+  });
+
   it('pulls the published head for a member (null before any publish)', async () => {
     const api = await startSyncServer();
     const before = await api.json('/api/projects/p1/collab/pull', { method: 'POST' });

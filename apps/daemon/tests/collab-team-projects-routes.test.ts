@@ -4,6 +4,7 @@ import http from 'node:http';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
+  type TeamProject,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { registerCollabContextRoutes } from '../src/routes/collab-context.js';
@@ -142,7 +143,7 @@ describe('GET /api/workspace/projects/team', () => {
     const calls: string[][] = [];
     const listTeamProjects = createTeamProjectsLister({
       workspaceContext,
-      env: { OD_RESOURCE_TRANSPORT: 'vela-cli' },
+      env: { OD_RESOURCE_TRANSPORT: 'vela-cli', OD_TEAM_PROJECTS_TRANSPORT: 'resource-hub' },
       runVelaResource: async (args) => {
         calls.push(args);
         return JSON.stringify({ resources: HUB_RESOURCES });
@@ -168,6 +169,40 @@ describe('GET /api/workspace/projects/team', () => {
         },
       ],
     });
+  });
+
+  it('lists shared projects through Vela team-project catalog when enabled', async () => {
+    const workspaceContext = teamContextProvider();
+    const projects: TeamProject[] = [
+      {
+        projectId: 'p1',
+        ownerMemberId: 'wm-owner',
+        sharedAt: '2026-07-01T00:00:00.000Z',
+        name: 'Launch Deck',
+      },
+    ];
+    const calls: string[] = [];
+    const listTeamProjects = createTeamProjectsLister({
+      workspaceContext,
+      env: { OD_TEAM_PROJECTS_TRANSPORT: 'vela-cli', OD_RESOURCE_TRANSPORT: 'vela-cli' },
+      runVelaResource: async () => {
+        throw new Error('resource transport should not be used');
+      },
+      teamProjectCatalog: {
+        list: async () => {
+          calls.push('list');
+          return projects;
+        },
+        upsert: async () => {},
+        remove: async () => {},
+      },
+    });
+    const api = await startServer({ workspaceContext, listTeamProjects });
+
+    const res = await api.get('/api/workspace/projects/team');
+    expect(res.status).toBe(200);
+    expect(calls).toEqual(['list']);
+    expect(res.body).toEqual({ projects });
   });
 
   it('returns an empty list off-team (no principal)', async () => {

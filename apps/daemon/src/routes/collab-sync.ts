@@ -3,6 +3,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { ProjectMetadata, ProjectSyncIntentEvent, TeamProject } from '@open-design/contracts';
 import type { CollabRuntime } from '../collab/runtime.js';
+import type { VelaTeamProjectCatalog } from '../collab/vela-cli-team-projects.js';
 import { readProjectManifest } from '../project-locations.js';
 
 /** The fields register-on-pull reads out of a pulled project's manifest (a
@@ -82,6 +83,16 @@ export interface RegisterCollabSyncRoutesDeps {
   resolveOwnerDisplayName?: (
     memberId: string,
   ) => Promise<{ displayName: string; role: 'owner' | 'admin' | 'member' } | null>;
+  /**
+   * Authoritative team-project directory writer. In Vela mode this shells
+   * through the Vela CLI, reusing the CLI session identity rather than letting
+   * the daemon talk to the Vela backend directly. If this write fails, sharing
+   * fails too: the project must not look "in workspace" locally while teammates
+   * cannot discover it from the catalog.
+   */
+  teamProjectCatalog?: Pick<VelaTeamProjectCatalog, 'upsert' | 'remove'>;
+  /** Resolve the local project title/metadata used to populate Vela's catalog. */
+  describeProject?: (projectId: string) => Promise<PulledProjectManifest | null> | PulledProjectManifest | null;
   /**
    * Optional project-store seam. When present, `POST /api/projects/:id/collab/pull`
    * registers the pulled shared project locally (idempotently) so a member can
@@ -187,6 +198,8 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
     resolveSharedProjectOwner,
     resolveSharedProject,
     resolveOwnerDisplayName,
+    teamProjectCatalog,
+    describeProject,
   } = deps;
   const readManifest = deps.readManifest ?? readProjectManifest;
 
@@ -277,6 +290,17 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
       if (context && !context.permissions.canShareProjects) {
         return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
       }
+      try {
+        const project = await describeProject?.(req.params.id) ?? null;
+        await teamProjectCatalog?.upsert({
+          projectId: req.params.id,
+          displayName: project?.name ?? null,
+          syncState: 'pending_upload',
+        });
+      } catch (error) {
+        console.warn('[od] failed to write Vela team project catalog:', error);
+        return res.status(502).json({ error: 'TEAM_PROJECT_CATALOG_UNAVAILABLE' });
+      }
       requestTeamShare(req.params.id, context?.workspaceMemberId);
     } else if (event === 'project_team_unshare_requested') {
       const context = await workspaceContext.current({
@@ -284,6 +308,12 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
       });
       if (context && !context.permissions.canShareProjects) {
         return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
+      }
+      try {
+        await teamProjectCatalog?.remove(req.params.id);
+      } catch (error) {
+        console.warn('[od] failed to remove Vela team project catalog entry:', error);
+        return res.status(502).json({ error: 'TEAM_PROJECT_CATALOG_UNAVAILABLE' });
       }
       await requestTeamUnshare(req.params.id);
     }

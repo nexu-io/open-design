@@ -94,6 +94,19 @@ export interface TeamProjectsState {
 // a teammate sees a newly shared project within a few seconds, while focus and
 // visibility changes still refresh immediately.
 const TEAM_PROJECTS_POLL_MS = 5_000;
+export const TEAM_PROJECTS_CHANGED_EVENT = 'od:team-projects-changed';
+const TEAM_PROJECTS_CHANGED_STORAGE_KEY = 'od.teamProjects.changedAt';
+
+export function notifyTeamProjectsChanged(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(TEAM_PROJECTS_CHANGED_EVENT));
+  try {
+    window.localStorage.setItem(TEAM_PROJECTS_CHANGED_STORAGE_KEY, String(Date.now()));
+  } catch {
+    // localStorage can be unavailable in restricted contexts; the in-window event
+    // already refreshed the current client.
+  }
+}
 
 export function useTeamProjects(): TeamProjectsState {
   const [projects, setProjects] = useState<TeamProject[]>([]);
@@ -161,10 +174,20 @@ export function useTeamProjects(): TeamProjectsState {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') void loadFull();
     };
+    const onTeamProjectsChanged = () => {
+      void loadFull();
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === TEAM_PROJECTS_CHANGED_STORAGE_KEY) void loadFull();
+    };
     window.addEventListener('focus', onFocus);
+    window.addEventListener(TEAM_PROJECTS_CHANGED_EVENT, onTeamProjectsChanged);
+    window.addEventListener('storage', onStorage);
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener(TEAM_PROJECTS_CHANGED_EVENT, onTeamProjectsChanged);
+      window.removeEventListener('storage', onStorage);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [loadFull]);

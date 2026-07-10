@@ -1,21 +1,9 @@
 // Team-wide shared-project discovery. A member with an empty local project list
 // still needs to SEE the projects the owner (or any teammate) shared to the
-// team: those live on the resource hub as `kind: 'project'` resources until the
-// member pulls one down. This reads the hub's resource index for the caller's
-// team and maps each shared project back to the local projectId a member pulls +
-// opens. In the Vela 收口 path, the read shells out to `vela resource shared`
-// instead of the daemon holding backend credentials; the SDK path is retained for
-// tests and non-CLI local fixtures. Both paths degrade to an empty list when
-// there is no team identity or the hub is not configured.
-//
-// OWNERSHIP / TEMPORARY: the source of truth for team project visibility (which
-// projects are in the team space) is the D-lane directory service on vela, NOT
-// this C-lane hub read. This lister exists so the team edition is locally
-// point-and-click debuggable before D's vela endpoint lands: it derives the list
-// from the projects C already publishes to the hub on a share. When D's service
-// is ready, the daemon should proxy vela here (daemon as the cache/收口 layer)
-// and this hub-derived read becomes the offline fallback. Keep the data source
-// swap contained to this file + the version helper below.
+// team. The authoritative team-space directory is Vela's team-project catalog,
+// accessed through the Vela CLI so the daemon never holds Vela backend
+// credentials. The resource-hub derived read is retained only as a local/test
+// fallback; project bytes still live in the resource hub.
 
 import { execFile } from 'node:child_process';
 import type { ProjectMetadata, TeamProject } from '@open-design/contracts';
@@ -30,6 +18,11 @@ import {
   buildVelaResourceEnv,
   shouldUseVelaCliResourceTransport,
 } from './vela-cli-resource-adapter.js';
+import {
+  createVelaCliTeamProjectCatalog,
+  shouldUseVelaCliTeamProjectCatalog,
+  type VelaTeamProjectCatalog,
+} from './vela-cli-team-projects.js';
 import type { WorkspaceContextProvider } from './workspace-context.js';
 
 const PROJECT_KIND = 'project';
@@ -91,6 +84,8 @@ export interface CreateTeamProjectsListerOptions {
   client?: ResourceHubClient;
   /** Injectable CLI runner for tests; defaults to spawning `vela resource`. */
   runVelaResource?: (args: string[]) => Promise<string>;
+  /** Injectable Vela team-project catalog; defaults to `vela team-projects`. */
+  teamProjectCatalog?: VelaTeamProjectCatalog;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -110,6 +105,13 @@ export function createTeamProjectsLister(
       await options.workspaceContext.current({}),
     );
     if (!principal) return [];
+
+    if (shouldUseVelaCliTeamProjectCatalog(env)) {
+      const catalog =
+        options.teamProjectCatalog ??
+        createVelaCliTeamProjectCatalog();
+      return catalog.list();
+    }
 
     if (shouldUseVelaCliResourceTransport(env)) {
       const stdout = await runVelaResource(['shared', '--json']);
