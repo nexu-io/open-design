@@ -2639,12 +2639,48 @@
   gap: 10px;
 }
 .home-hero__template-heading {
-  padding: 0 2px;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
   color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
   font-size: 12.5px;
   font-weight: 600;
   line-height: 1.3;
   text-align: center;
+  transition:
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out);
+}
+.home-hero__template-heading:hover,
+.home-hero__template-heading:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.home-hero__template-heading svg {
+  opacity: 0.72;
+  transition: transform 140ms var(--ease-out);
+}
+.home-hero__template-section.is-open .home-hero__template-heading svg {
+  transform: rotate(180deg);
+}
+.home-hero__template-body {
+  width: 100%;
+}
+.home-hero__template-body-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
 }
 .home-hero__blank-project {
   appearance: none;

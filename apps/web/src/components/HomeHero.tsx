@@ -385,6 +385,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // Footer Template pill preview: the create-rail card the pointer is over,
   // so hovering a card below previews it in the pill (cleared on rail-leave).
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
+  const [templateSectionOpen, setTemplateSectionOpen] = useState(true);
   // A committed pick or Clear must win over a lingering hover-preview. The rail
   // that sets previewTemplateId unmounts the instant a template becomes active,
   // so its onMouseLeave never fires; without this reset the stale preview keeps
@@ -2010,45 +2011,61 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       ) : null}
 
       {activeCreateChip ? null : (
-        <div className="home-hero__template-section" data-testid="home-hero-template-section">
-          <div className="home-hero__template-heading">
-            {t('homeHero.startWithTemplate')}
-          </div>
-          <RailGroup
-            group="create"
-            activeChipId={activeChipId}
-            pendingChipId={pendingChipId}
-            pendingPluginId={pendingPluginId}
-            pluginsLoading={pluginsLoading}
-            onPickChip={handlePickTaskChip}
-            variant="tabs"
-            pulseChipId={guidePulseChipId}
-            onHoverChip={setPreviewTemplateId}
+        <div
+          className={`home-hero__template-section${templateSectionOpen ? ' is-open' : ''}`}
+          data-testid="home-hero-template-section"
+        >
+          <button
+            type="button"
+            className="home-hero__template-heading"
+            aria-expanded={templateSectionOpen}
+            data-testid="home-hero-template-toggle"
+            onClick={() => setTemplateSectionOpen((open) => !open)}
           >
-            <ShortcutsMenu
-              activeChipId={activeChipId}
-              pendingChipId={pendingChipId}
-              pendingPluginId={pendingPluginId}
-              pluginsLoading={pluginsLoading}
-              open={shortcutsOpen}
-              refNode={shortcutsMenuRef}
-              onOpenChange={setShortcutsOpen}
-              onPickChip={(chip) => {
-                setShortcutsOpen(false);
-                handlePickTaskChip(chip);
-              }}
-            />
-          </RailGroup>
-          {onStartBlankProject ? (
-            <button
-              type="button"
-              className="home-hero__blank-project"
-              data-testid="home-hero-blank-project"
-              onClick={onStartBlankProject}
-            >
-              {t('homeHero.startBlankProject')}
-              <Icon name="chevron-right" size={13} aria-hidden />
-            </button>
+            <span>{t('homeHero.startWithTemplate')}</span>
+            <Icon name="chevron-down" size={13} aria-hidden />
+          </button>
+          {templateSectionOpen ? (
+            <div className="home-hero__template-body">
+              <div className="home-hero__template-body-inner">
+                <RailGroup
+                  group="create"
+                  activeChipId={activeChipId}
+                  pendingChipId={pendingChipId}
+                  pendingPluginId={pendingPluginId}
+                  pluginsLoading={pluginsLoading}
+                  onPickChip={handlePickTaskChip}
+                  variant="tabs"
+                  pulseChipId={guidePulseChipId}
+                  onHoverChip={setPreviewTemplateId}
+                >
+                  <ShortcutsMenu
+                    activeChipId={activeChipId}
+                    pendingChipId={pendingChipId}
+                    pendingPluginId={pendingPluginId}
+                    pluginsLoading={pluginsLoading}
+                    open={shortcutsOpen}
+                    refNode={shortcutsMenuRef}
+                    onOpenChange={setShortcutsOpen}
+                    onPickChip={(chip) => {
+                      setShortcutsOpen(false);
+                      handlePickTaskChip(chip);
+                    }}
+                  />
+                </RailGroup>
+                {onStartBlankProject ? (
+                  <button
+                    type="button"
+                    className="home-hero__blank-project"
+                    data-testid="home-hero-blank-project"
+                    onClick={onStartBlankProject}
+                  >
+                    {t('homeHero.startBlankProject')}
+                    <Icon name="chevron-right" size={13} aria-hidden />
+                  </button>
+                ) : null}
+              </div>
+            </div>
           ) : null}
         </div>
       )}
