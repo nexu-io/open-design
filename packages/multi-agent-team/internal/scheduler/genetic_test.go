@@ -91,6 +91,23 @@ func (fp *fakePool) WaitResult(agentID string, timeout time.Duration) (*agent.Ta
 	}
 }
 
+func (fp *fakePool) WaitResultContext(ctx context.Context, agentID string, timeout time.Duration) (*agent.TaskResult, error) {
+	fp.mu.Lock()
+	fa, ok := fp.agents[agentID]
+	fp.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("agent not found: %s", agentID)
+	}
+	select {
+	case r := <-fa.replyCh:
+		return r, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("wait cancelled for agent %s: %w", agentID, ctx.Err())
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("timeout waiting for agent %s", agentID)
+	}
+}
+
 func (fp *fakePool) ListRuntimes() []protocol.AgentRuntime {
 	return fp.runtimes
 }

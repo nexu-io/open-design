@@ -25,6 +25,7 @@ type GeneticScheduler struct {
 type GeneticPool interface {
 	AssignTask(agentID string, task *agent.TaskAssignment) error
 	WaitResult(agentID string, timeout time.Duration) (*agent.TaskResult, error)
+	WaitResultContext(ctx context.Context, agentID string, timeout time.Duration) (*agent.TaskResult, error)
 	ListRuntimes() []protocol.AgentRuntime
 }
 

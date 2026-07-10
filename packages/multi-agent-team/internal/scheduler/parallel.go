@@ -11,18 +11,25 @@ import (
 	"github.com/nexu-io/open-design/packages/multi-agent-team/pkg/protocol"
 )
 
+// ParallelPool 并行调度器所需的最小池接口。
+// *agent.Pool 实现了此接口，调用方无需修改。
+type ParallelPool interface {
+	AssignTask(agentID string, task *agent.TaskAssignment) error
+	WaitResultContext(ctx context.Context, agentID string, timeout time.Duration) (*agent.TaskResult, error)
+}
+
 // ParallelScheduler 并行调度器：同一层级的 Agent 并行执行不同维度
 // 适用场景：多视角设计（视觉 + 文案 + 前端同时工作）
 // SkipCh: 当用户在前端点击"跳过/继续"时，通过此 channel 通知调度器提前终止
 // 剩余未完成的 Agent。已完成的 Agent 结果会作为共享意图呈现返回，避免用户
 // 阻塞等待全部 Agent 完成。
 type ParallelScheduler struct {
-	pool   *agent.Pool
+	pool   ParallelPool
 	bus    *bus.CommunicationBus
 	skipCh <-chan struct{}
 }
 
-func NewParallelScheduler(pool *agent.Pool, b *bus.CommunicationBus) *ParallelScheduler {
+func NewParallelScheduler(pool ParallelPool, b *bus.CommunicationBus) *ParallelScheduler {
 	return &ParallelScheduler{pool: pool, bus: b}
 }
 
@@ -112,9 +119,16 @@ func (s *ParallelScheduler) executeTask(ctx context.Context, task Task) *TaskRes
 		return &TaskResult{TaskID: task.ID, AgentID: task.AssignedTo, Success: false, Error: err.Error()}
 	}
 
-	result, err := s.pool.WaitResult(task.AssignedTo, timeout)
+	result, err := s.pool.WaitResultContext(ctx, task.AssignedTo, timeout)
 	if err != nil {
-		return &TaskResult{TaskID: task.ID, AgentID: task.AssignedTo, Success: false, Error: err.Error()}
+		skipped := ctx.Err() != nil
+		return &TaskResult{
+			TaskID:  task.ID,
+			AgentID: task.AssignedTo,
+			Success: false,
+			Skipped: skipped,
+			Error:   err.Error(),
+		}
 	}
 
 	return &TaskResult{

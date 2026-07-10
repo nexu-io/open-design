@@ -584,6 +584,28 @@ func (p *Pool) WaitResult(agentID string, timeout time.Duration) (*TaskResult, e
 	}
 }
 
+// WaitResultContext 等待 Agent 任务结果，支持通过 context 取消等待。
+// 当 ctx 被取消（如并行调度器的 proceed signal 触发 cancel）时，
+// 立即返回 nil，避免调用者阻塞在已在执行的 agent 上。
+func (p *Pool) WaitResultContext(ctx context.Context, agentID string, timeout time.Duration) (*TaskResult, error) {
+	p.mu.RLock()
+	ma, ok := p.agents[agentID]
+	p.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("agent not found: %s", agentID)
+	}
+
+	select {
+	case result := <-ma.replyCh:
+		return result, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("wait cancelled for agent %s: %w", agentID, ctx.Err())
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("timeout waiting for agent %s result", agentID)
+	}
+}
+
 // GetRuntime 获取 Agent 运行时信息
 func (p *Pool) GetRuntime(agentID string) (*protocol.AgentRuntime, error) {
 	p.mu.RLock()

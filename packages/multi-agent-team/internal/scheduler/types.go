@@ -22,6 +22,7 @@ type TaskResult struct {
 	TaskID    string               `json:"task_id"`
 	AgentID   string               `json:"agent_id"`
 	Success   bool                 `json:"success"`
+	Skipped   bool                 `json:"skipped,omitempty"`
 	Artifacts []*protocol.Artifact `json:"artifacts,omitempty"`
 	Error     string               `json:"error,omitempty"`
 	Metrics   agent.TaskMetrics    `json:"metrics"`
