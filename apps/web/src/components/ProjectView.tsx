@@ -1576,6 +1576,7 @@ export function ProjectView({
     code?: string | null;
     tone?: 'default' | 'success' | 'error' | 'loading';
     ttlMs?: number;
+    scope?: 'chat-pane';
   } | null>(null);
   // Brand extraction has no SSE; this polls the brand's status and, once the
   // backing extraction finalizes a `user:<id>` design system, surfaces a
@@ -3097,6 +3098,7 @@ export function ProjectView({
         details: t('chat.brandBrowserAssistDownloadGuideDetails'),
         tone: 'default',
         ttlMs: 12000,
+        scope: 'chat-pane',
       });
       return { ok: true, action: 'opened' };
     },
@@ -7424,6 +7426,21 @@ export function ProjectView({
     ? COMMENT_INSPECTOR_PANEL_WIDTH
     : chatPanelWidthRef.current;
   const chatPanelAriaMinWidth = Math.min(MIN_CHAT_PANEL_WIDTH, chatPanelMaxWidth);
+  const projectActionsToastInChatPane =
+    projectActionsToast?.scope === 'chat-pane' &&
+    !workspaceFocused &&
+    !commentInspectorActive &&
+    Boolean(activeConversationId || conversationLoadError);
+  const projectActionsToastNode = projectActionsToast ? (
+    <Toast
+      message={projectActionsToast.message}
+      details={projectActionsToast.details}
+      code={projectActionsToast.code}
+      tone={projectActionsToast.tone}
+      ttlMs={projectActionsToast.ttlMs}
+      onDismiss={() => setProjectActionsToast(null)}
+    />
+  ) : null;
 
   const renderPreferredChatPanelWidth = useCallback((
     preferredWidth: number,
@@ -8490,6 +8507,13 @@ export function ProjectView({
               }
               createDesignSystemFromProjectBusy={projectDesignSystemCreateStarting}
               onBrandBrowserAssistConfirm={handleBrandBrowserAssistConfirm}
+              chatLogTray={
+                projectActionsToastInChatPane ? (
+                  <div className="project-actions-toast-anchor">
+                    {projectActionsToastNode}
+                  </div>
+                ) : null
+              }
               composerDraftSignal={composerDraftSignal}
               petConfig={config.pet}
               onAdoptPet={onAdoptPetInline}
@@ -8776,16 +8800,7 @@ export function ProjectView({
         />
       ) : null}
       <AnimatePresence>
-        {projectActionsToast ? (
-          <Toast
-            message={projectActionsToast.message}
-            details={projectActionsToast.details}
-            code={projectActionsToast.code}
-            tone={projectActionsToast.tone}
-            ttlMs={projectActionsToast.ttlMs}
-            onDismiss={() => setProjectActionsToast(null)}
-          />
-        ) : null}
+        {projectActionsToast && !projectActionsToastInChatPane ? projectActionsToastNode : null}
         {brandReadyPrompt ? (
           <BrandReadyPrompt
             key="brand-ready-prompt"

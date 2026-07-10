@@ -656,6 +656,10 @@ interface Props {
   currentDesignSystemId?: string | null;
   onActiveDesignSystemChange?: (project: Project) => void;
   onShowToast?: (message: string) => void;
+  // Optional transient UI owned by the project shell. Rendering it inside the
+  // scroll-area wrapper keeps it structurally above the variable-height
+  // composer instead of guessing a bottom offset from outside ChatPane.
+  chatLogTray?: ReactNode;
   // Project header slot. The former standalone chrome header row was removed;
   // its back button, project title (editable) and design-system picker moved
   // into the top of the chat pane. ProjectView owns the project record so it
@@ -877,6 +881,7 @@ export function ChatPane({
   currentDesignSystemId,
   onActiveDesignSystemChange,
   onShowToast,
+  chatLogTray,
   onBack,
   backLabel,
   projectHeader,
@@ -2204,7 +2209,7 @@ export function ChatPane({
       </div>
       {tab === 'chat' ? (
         <>
-          <div className="chat-log-wrap">
+          <div className={`chat-log-wrap${chatLogTray ? ' has-chat-log-tray' : ''}`}>
             <div
               className={[
                 'chat-log',
@@ -2624,6 +2629,7 @@ export function ChatPane({
                   the viewport, then shrinks as the reply streams in below. */}
               <div className="chat-log-tail-spacer" ref={tailSpacerRef} aria-hidden />
             </div>
+            {chatLogTray}
             {/* Always mounted so the CSS transition can play in both
                 directions; the `chat-jump-btn-active` class flips the
                 slide + opacity, and `aria-hidden` + `tabIndex={-1}`
