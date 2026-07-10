@@ -24,6 +24,9 @@ export {
   pointInPolygon,
 } from './rules';
 
+// Pure display formatters.
+export { formatJsonFileTextForDisplay } from './formatters';
+
 // UI-only types the orchestrator reads back.
 export type {
   InspectOverrideEntry,
