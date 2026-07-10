@@ -540,7 +540,7 @@ describe('deploy provider routes', () => {
     }
   });
 
-  it('fails authenticated display.dev deployment responses when access hydration fails', async () => {
+  it('keeps authenticated display.dev deploy responses successful when access hydration fails', async () => {
     const dataDir = process.env.OD_DATA_DIR;
     if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-hydration-fail-route-'));
@@ -671,13 +671,14 @@ describe('deploy provider routes', () => {
           }),
         });
         const deployText = await deployResp.text();
-        expect(deployResp.status, deployText).toBe(503);
-        expect(JSON.parse(deployText)).toMatchObject({
-          error: {
-            code: 'UPSTREAM_UNAVAILABLE',
-            message: 'temporary display.dev outage',
-          },
+        expect(deployResp.status, deployText).toBe(200);
+        const deployBody = JSON.parse(deployText);
+        expect(deployBody).toMatchObject({
+          providerId: DISPLAYDEV_PROVIDER_ID,
+          url: 'https://display.dsp.so/owned1234-demo',
+          status: 'ready',
         });
+        expect(deployBody).not.toHaveProperty('displayDev');
         expect(artifactGetCalls).toBe(1);
 
         const deploymentsResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
@@ -713,25 +714,19 @@ describe('deploy provider routes', () => {
   it.each([
     {
       upstreamStatus: 404,
-      expectedStatus: 502,
-      expectedCode: 'UPSTREAM_UNAVAILABLE',
       message: 'display.dev artifact was not found',
     },
     {
       upstreamStatus: 403,
-      expectedStatus: 403,
-      expectedCode: 'FORBIDDEN',
       message: 'display.dev access denied',
     },
     {
       upstreamStatus: 409,
-      expectedStatus: 409,
-      expectedCode: 'CONFLICT',
       message: 'display.dev version conflict',
     },
   ])(
-    'maps display.dev upstream $upstreamStatus hydration failures to $expectedCode',
-    async ({ upstreamStatus, expectedStatus, expectedCode, message }) => {
+    'keeps display.dev deploy responses successful when upstream $upstreamStatus access hydration fails',
+    async ({ upstreamStatus, message }) => {
       const dataDir = process.env.OD_DATA_DIR;
       if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
       const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-upstream-code-route-'));
@@ -805,13 +800,14 @@ describe('deploy provider routes', () => {
             }),
           });
           const deployText = await deployResp.text();
-          expect(deployResp.status, deployText).toBe(expectedStatus);
-          expect(JSON.parse(deployText)).toMatchObject({
-            error: {
-              code: expectedCode,
-              message,
-            },
+          expect(deployResp.status, deployText).toBe(200);
+          const deployBody = JSON.parse(deployText);
+          expect(deployBody).toMatchObject({
+            providerId: DISPLAYDEV_PROVIDER_ID,
+            url: 'https://display.dsp.so/owned1234-demo',
+            status: 'ready',
           });
+          expect(deployBody).not.toHaveProperty('displayDev');
         } finally {
           vi.unstubAllGlobals();
         }

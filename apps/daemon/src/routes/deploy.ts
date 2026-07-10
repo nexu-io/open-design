@@ -229,14 +229,19 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         createdAt: prior?.createdAt ?? now,
         updatedAt: now,
       });
-      const responseDeployment = providerId === DISPLAYDEV_PROVIDER_ID
-        ? await hydrateDisplayDevDeploymentAccess(body, {
+      let responseDeployment = body;
+      if (providerId === DISPLAYDEV_PROVIDER_ID) {
+        try {
+          responseDeployment = await hydrateDisplayDevDeploymentAccess(body, {
             DISPLAYDEV_PROVIDER_ID,
             DeployError,
             readDeployConfig,
             fetchDisplayDevArtifactAccessSettings,
-          })
-        : body;
+          });
+        } catch {
+          responseDeployment = body;
+        }
+      }
       res.json(publicDeployment(responseDeployment));
     } catch (err: any) {
       const status = err instanceof DeployError ? err.status : 400;
