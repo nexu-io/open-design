@@ -10,6 +10,9 @@ const tasteEditorialExamplePath = fileURLToPath(
 const simpleDeckExamplePath = fileURLToPath(
   new URL('../../../../design-templates/simple-deck/example.html', import.meta.url),
 );
+const weeklyReportExamplePath = fileURLToPath(
+  new URL('../../../../design-templates/html-ppt-weekly-report/example.html', import.meta.url),
+);
 
 function setupTasteEditorialDeck() {
   const html = readFileSync(tasteEditorialExamplePath, 'utf8');
@@ -84,6 +87,16 @@ function setupSimpleDeck() {
     },
   });
   return dom;
+}
+
+function setupWeeklyReportDeck() {
+  const html = readFileSync(weeklyReportExamplePath, 'utf8');
+  return new JSDOM(html, {
+    pretendToBeVisual: true,
+    runScripts: 'dangerously',
+    url: 'https://example.test/weekly-report.html',
+    virtualConsole: new VirtualConsole(),
+  });
 }
 
 function activeSlideIndex(win: DOMWindow) {
@@ -166,5 +179,48 @@ describe('design template deck navigation', () => {
 
     expect(counter?.textContent?.trim()).toBe('3 / 6');
     expect(win.document.documentElement.scrollLeft).toBe(2000);
+  });
+
+  it('renders weekly-report bar labels as real nodes and scales heights from source values', () => {
+    const dom = setupWeeklyReportDeck();
+    const { window: win } = dom;
+    const render = (win as typeof win & { renderWeeklyReportBarCharts?: (root?: ParentNode) => void })
+      .renderWeeklyReportBarCharts;
+    const host = win.document.createElement('div');
+
+    host.innerHTML = `
+      <div class="chart-bars">
+        <div class="col"><div class="bar-value"></div><div class="bar-track"><div class="b" data-value="1" data-label="1"></div></div><div class="lbl">A</div></div>
+        <div class="col"><div class="bar-value"></div><div class="bar-track"><div class="b" data-value="5" data-label="5"></div></div><div class="lbl">B</div></div>
+        <div class="col"><div class="bar-value"></div><div class="bar-track"><div class="b" data-value="25" data-label="25"></div></div><div class="lbl">C</div></div>
+      </div>
+    `;
+    win.document.body.append(host);
+    render?.(host);
+
+    const labels = Array.from(host.querySelectorAll<HTMLElement>('.bar-value')).map((el) => el.textContent?.trim());
+    const heights = Array.from(host.querySelectorAll<HTMLElement>('.b')).map((el) => el.style.getPropertyValue('--bar-height'));
+
+    expect(labels).toEqual(['1', '5', '25']);
+    expect(heights).toEqual(['4%', '20%', '100%']);
+  });
+
+  it('keeps weekly-report review chips and shipped metadata on one line', () => {
+    const dom = setupWeeklyReportDeck();
+    const { window: win } = dom;
+    const targetPill = win.document.querySelector<HTMLElement>('.chart .pill');
+    const kpiDelta = win.document.querySelector<HTMLElement>('.kpi .delta');
+    const shippedTag = win.document.querySelector<HTMLElement>('.ship-item .tag');
+    const shippedOwner = win.document.querySelector<HTMLElement>('.ship-item .owner');
+
+    expect(targetPill).toBeTruthy();
+    expect(kpiDelta).toBeTruthy();
+    expect(shippedTag).toBeTruthy();
+    expect(shippedOwner).toBeTruthy();
+    expect(win.getComputedStyle(targetPill!).whiteSpace).toBe('nowrap');
+    expect(win.getComputedStyle(kpiDelta!).whiteSpace).toBe('nowrap');
+    expect(win.getComputedStyle(shippedTag!).whiteSpace).toBe('nowrap');
+    expect(win.getComputedStyle(shippedOwner!).whiteSpace).toBe('nowrap');
+    expect(win.getComputedStyle(shippedOwner!).flexShrink).toBe('0');
   });
 });

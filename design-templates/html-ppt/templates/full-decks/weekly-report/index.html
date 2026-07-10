@@ -60,14 +60,14 @@
     <div class="chart mt-l">
       <div class="row" style="justify-content:space-between"><h4>Paid conv. rate · weekly</h4><span class="pill" style="background:var(--surface-2);color:var(--text-2)">target: 4.0%</span></div>
       <div class="chart-bars">
-        <div class="col"><div class="b" data-v="3.1%" style="height:58%"></div><div class="lbl">W08</div></div>
-        <div class="col"><div class="b" data-v="3.3%" style="height:64%"></div><div class="lbl">W09</div></div>
-        <div class="col"><div class="b" data-v="3.5%" style="height:72%"></div><div class="lbl">W10</div></div>
-        <div class="col"><div class="b" data-v="3.6%" style="height:75%"></div><div class="lbl">W11</div></div>
-        <div class="col"><div class="b" data-v="3.4%" style="height:68%"></div><div class="lbl">W12</div></div>
-        <div class="col"><div class="b" data-v="3.0%" style="height:55%"></div><div class="lbl">W13</div></div>
-        <div class="col"><div class="b" data-v="3.4%" style="height:68%"></div><div class="lbl">W14</div></div>
-        <div class="col"><div class="b" data-v="3.8%" style="height:88%"></div><div class="lbl">W15</div></div>
+        <div class="col"><div class="bar-value">3.1%</div><div class="bar-track"><div class="b" data-value="3.1" data-label="3.1%"></div></div><div class="lbl">W08</div></div>
+        <div class="col"><div class="bar-value">3.3%</div><div class="bar-track"><div class="b" data-value="3.3" data-label="3.3%"></div></div><div class="lbl">W09</div></div>
+        <div class="col"><div class="bar-value">3.5%</div><div class="bar-track"><div class="b" data-value="3.5" data-label="3.5%"></div></div><div class="lbl">W10</div></div>
+        <div class="col"><div class="bar-value">3.6%</div><div class="bar-track"><div class="b" data-value="3.6" data-label="3.6%"></div></div><div class="lbl">W11</div></div>
+        <div class="col"><div class="bar-value">3.4%</div><div class="bar-track"><div class="b" data-value="3.4" data-label="3.4%"></div></div><div class="lbl">W12</div></div>
+        <div class="col"><div class="bar-value">3.0%</div><div class="bar-track"><div class="b" data-value="3.0" data-label="3.0%"></div></div><div class="lbl">W13</div></div>
+        <div class="col"><div class="bar-value">3.4%</div><div class="bar-track"><div class="b" data-value="3.4" data-label="3.4%"></div></div><div class="lbl">W14</div></div>
+        <div class="col"><div class="bar-value">3.8%</div><div class="bar-track"><div class="b" data-value="3.8" data-label="3.8%"></div></div><div class="lbl">W15</div></div>
       </div>
       <p class="dim mt-m" style="font-size:13px;margin-top:36px">Drop in W13 tracked to a broken Stripe webhook (fixed W14). Rebound in W15 is driven by the new onboarding checklist.</p>
     </div>
@@ -123,5 +123,31 @@
   </section>
 
 </div>
+<script>
+  function renderWeeklyReportBarCharts(root = document) {
+    root.querySelectorAll('.chart-bars').forEach((chart) => {
+      const bars = Array.from(chart.querySelectorAll('.b'));
+      const values = bars
+        .map((bar) => Number.parseFloat(bar.getAttribute('data-value') ?? '0'))
+        .filter((value) => Number.isFinite(value) && value >= 0);
+      const max = values.length ? Math.max(...values) : 0;
+
+      bars.forEach((bar) => {
+        const value = Number.parseFloat(bar.getAttribute('data-value') ?? '0');
+        const safeValue = Number.isFinite(value) && value >= 0 ? value : 0;
+        const height = max > 0 ? (safeValue / max) * 100 : 0;
+        bar.style.setProperty('--bar-height', `${height}%`);
+
+        const label = bar.closest('.col')?.querySelector('.bar-value');
+        if (label instanceof HTMLElement) {
+          label.textContent = bar.getAttribute('data-label') ?? `${safeValue}`;
+        }
+      });
+    });
+  }
+
+  renderWeeklyReportBarCharts();
+  window.renderWeeklyReportBarCharts = renderWeeklyReportBarCharts;
+</script>
 <script src="../../../assets/runtime.js"></script>
 </body></html>
