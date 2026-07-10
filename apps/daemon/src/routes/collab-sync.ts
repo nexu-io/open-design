@@ -290,14 +290,25 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
       if (context && !context.permissions.canShareProjects) {
         return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
       }
-      let publishedVersion: number | null;
+      const existingSharedProject = await resolveSharedProject?.(req.params.id) ?? null;
+      if (
+        existingSharedProject?.ownerMemberId &&
+        existingSharedProject.ownerMemberId !== context?.workspaceMemberId
+      ) {
+        return res.json({
+          ok: true,
+          syncState: 'synced',
+          publishedVersion: publishedVersion(req.params.id),
+        });
+      }
+      let nextPublishedVersion: number | null;
       try {
-        ({ version: publishedVersion } = await requestTeamShare(req.params.id, context?.workspaceMemberId));
+        ({ version: nextPublishedVersion } = await requestTeamShare(req.params.id, context?.workspaceMemberId));
       } catch (error) {
         console.warn('[od] failed to publish team-shared project bytes:', error);
         return res.status(502).json({ error: 'TEAM_PROJECT_PUBLISH_UNAVAILABLE' });
       }
-      if (publishedVersion == null) {
+      if (nextPublishedVersion == null) {
         return res.status(502).json({ error: 'TEAM_PROJECT_PUBLISH_UNAVAILABLE' });
       }
       try {
@@ -315,7 +326,11 @@ export function registerCollabSyncRoutes(app: Express, deps: RegisterCollabSyncR
         });
         return res.status(502).json({ error: 'TEAM_PROJECT_CATALOG_UNAVAILABLE' });
       }
-      return res.json({ ok: true, syncState: projectSyncState(req.params.id), publishedVersion });
+      return res.json({
+        ok: true,
+        syncState: projectSyncState(req.params.id),
+        publishedVersion: nextPublishedVersion,
+      });
     } else if (event === 'project_team_unshare_requested') {
       const context = await workspaceContext.current({
         authorization: req.headers.authorization,

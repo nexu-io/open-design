@@ -239,6 +239,47 @@ describe('collab sync routes', () => {
     expect(res.body.publishedVersion).toBe(1);
   });
 
+  it('treats an already shared project owned by another member as shared instead of republishing it', async () => {
+    let publishCalls = 0;
+    const api = await startSyncServer(
+      fixedShareContextProvider(true),
+      {
+        resolveSharedProject: async () => ({
+          projectId: 'p1',
+          ownerMemberId: 'wm-owner',
+          sharedAt: new Date(1).toISOString(),
+          name: 'Owner Project',
+        }),
+        teamProjectCatalog: {
+          upsert: async () => {
+            throw new Error('catalog should not be written');
+          },
+          remove: async () => {},
+        },
+      },
+      {
+        adapter: {
+          publish: async () => {
+            publishCalls += 1;
+            throw new Error('resource hub should not be called');
+          },
+          syncLatest: async () => null,
+          pull: async () => {},
+          unpublish: async () => {},
+        },
+      },
+    );
+
+    const res = await api.json('/api/projects/p1/collab/sync-intent', {
+      method: 'POST',
+      body: { event: 'project_team_share_requested', projectId: 'p1' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.syncState).toBe('synced');
+    expect(publishCalls).toBe(0);
+  });
+
   it('writes and removes the Vela team-project catalog around share intents', async () => {
     const writes: unknown[] = [];
     const removes: string[] = [];
