@@ -112,6 +112,7 @@ describe('ProductionWorkspace', () => {
     expect(screen.getByTestId('production-voice-preview')).toHaveTextContent('Voice flow (professional)');
     expect(screen.getByRole('textbox', { name: 'Hook 段落' })).toHaveValue('Hook: explain the core idea in one line.');
     expect(screen.getByRole('textbox', { name: 'Body 鏡頭' })).toHaveValue('鏡頭：Body: show the main example with one clear visual.');
+    expect(screen.getByText('0 media jobs queued for FAL.ai.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '新增分段' })).toBeInTheDocument();
   });
 

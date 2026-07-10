@@ -14,6 +14,7 @@ import {
   createVoicePreview,
   runProductionGeneration,
   type GenerationKind,
+  type ProductionMediaJob,
   type ProductionSegment,
 } from '../../production-generation';
 
@@ -161,6 +162,7 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
   const [segments, setSegments] = useState<ProductionSegment[]>(
     () => createInitialSegments(voiceTone, defaultVoiceProfileId),
   );
+  const [mediaJobs] = useState<ProductionMediaJob[]>([]);
   const [generationBusy, setGenerationBusy] = useState<GenerationKind | null>(null);
   const [generationNotice, setGenerationNotice] = useState<string | null>(null);
 
@@ -624,6 +626,7 @@ export function ProductionWorkspace({ projectId, projectName, metadata, projectF
             </article>
           ))}
           <p style={{ marginTop: 16 }}>{storyboardShots.length} shots ready for export.</p>
+          <p style={{ marginTop: 8, color: '#94a3b8' }}>{mediaJobs.length} media jobs queued for FAL.ai.</p>
         </section>
       </div>
     </section>

@@ -1,4 +1,5 @@
 import type { ProductionSegment } from './types';
+import type { MediaJobStatus, ProductionMediaJob, MediaJobKind } from './types';
 
 export function buildNarration(paragraph: string, voiceTone: string, voiceLabel: string) {
   const trimmedParagraph = paragraph.trim();
@@ -43,3 +44,36 @@ export function createStoryboardShots(segments: ProductionSegment[]) {
   return segments.map((segment) => `${segment.label}: ${segment.shot}`);
 }
 
+export function createProductionMediaJob(input: {
+  id: string;
+  segmentId: string;
+  kind: MediaJobKind;
+  model: string;
+  prompt: string;
+  referenceAssetIds?: readonly string[];
+}): ProductionMediaJob {
+  return {
+    id: input.id,
+    segmentId: input.segmentId,
+    kind: input.kind,
+    status: 'idle',
+    provider: 'fal',
+    model: input.model,
+    prompt: input.prompt,
+    referenceAssetIds: input.referenceAssetIds ?? [],
+    resultAssetIds: [],
+  };
+}
+
+export function updateProductionMediaJobStatus(
+  job: ProductionMediaJob,
+  status: MediaJobStatus,
+  patch: Partial<Pick<ProductionMediaJob, 'resultAssetIds' | 'error'>>,
+): ProductionMediaJob {
+  return {
+    ...job,
+    status,
+    resultAssetIds: patch.resultAssetIds ?? job.resultAssetIds,
+    error: patch.error,
+  };
+}
