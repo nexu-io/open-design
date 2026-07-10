@@ -3688,6 +3688,7 @@ export interface Dict {
   'fileViewer.publishSingleFileDescription': string;
   'fileViewer.openFileRequired': string;
   'fileViewer.publishFile': string;
+  'fileViewer.unpublishFile': string;
   'fileViewer.workspaceShareSuccess': string;
   'fileViewer.workspaceShareFailed': string;
   'fileViewer.workspaceUnshareSuccess': string;

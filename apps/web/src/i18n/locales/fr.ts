@@ -2906,6 +2906,7 @@ export const fr: Dict = {
   'fileViewer.publishSingleFileDescription': 'Make the current file externally visible. Anyone with the published link can view it online.',
   'fileViewer.openFileRequired': 'Open a file to use this.',
   'fileViewer.publishFile': 'Publish file',
+  'fileViewer.unpublishFile': 'Annuler la publication',
   'fileViewer.workspaceShareSuccess': 'Shared with workspace members',
   'fileViewer.workspaceShareFailed': 'Could not share with workspace',
   'fileViewer.workspaceUnshareSuccess': 'Moved back to private',

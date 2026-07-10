@@ -10912,9 +10912,6 @@ function HtmlViewer({
                     </div>
                     {unifiedActionTab === 'share' && rawCanShare ? (
                       <div className="chrome-unified-panel chrome-unified-panel--share">
-                      <div className="share-menu-section-label" role="presentation">
-                        {t('fileViewer.shareMenuShareLink')}
-                      </div>
                       <div className="chrome-share-card">
                         <div className="chrome-share-card__header">
                           <span className="share-menu-icon"><RemixIcon name="team-line" size={16} /></span>
@@ -10977,9 +10974,6 @@ function HtmlViewer({
                           ) : null}
                         </div>
                       </div>
-                      <div className="share-menu-section-label" role="presentation">
-                        {t('fileViewer.shareMenuPublishOnline')}
-                      </div>
                       <div className="chrome-share-card">
                         <div className="chrome-share-card__header">
                           <span className="share-menu-icon"><RemixIcon name="broadcast-line" size={16} /></span>
@@ -11013,7 +11007,7 @@ function HtmlViewer({
                                 className="chrome-publish-button chrome-publish-button--ghost"
                                 onClick={() => setFilePublished(false)}
                               >
-                                {t('common.cancel')}
+                                {t('fileViewer.unpublishFile')}
                               </button>
                             </div>
                           </>
