@@ -55,7 +55,7 @@ def main() -> int:
     parser.add_argument('--threshold', type=int, default=40)
     args = parser.parse_args()
 
-    img = Image.open(args.src)
+    img = Image.open(args.src).convert('RGBA')  # palette/grayscale PNGs 반환 int → RGB 튜플로 변환 위해
     bg = args.color or estimate_bg(img)
     out = key_out(img, bg, args.threshold)
     out.save(args.dst, 'PNG')
