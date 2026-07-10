@@ -334,8 +334,11 @@ func buildExecutionPlan(cfg *config.TeamConfig, prompt string) *scheduler.Execut
 			Timeout:    600,
 		}
 
-		// 对于继承/串行模式，建立线性依赖链
-		if cfg.Team.Mode == "inheritance" || cfg.Team.Mode == "serial" {
+		// 对于继承/串行/混合模式，建立线性依赖链
+		// 混合模式下依赖链使 HybridScheduler 按 role pipeline 分层：
+		// Layer 0: designer (无依赖) → Layer 1: developer → Layer 2: copywriter
+		// 每层将 prevLayerArtifacts 传递给下一层，确保真正的串行主干
+		if cfg.Team.Mode == "inheritance" || cfg.Team.Mode == "serial" || cfg.Team.Mode == "hybrid" {
 			if i > 0 {
 				task.Dependencies = []string{fmt.Sprintf("task-%s", cfg.Team.Agents[i-1].ID)}
 			}

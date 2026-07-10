@@ -118,13 +118,29 @@ function goTargetEnv(platform: "linux" | "mac" | "win"): Record<string, string> 
 }
 
 /**
+ * Check whether the Go toolchain is available on the host by running
+ * `go version`. Returns false when Go is not installed (e.g. inside
+ * electronuserland/builder:base container images).
+ */
+async function isGoAvailable(): Promise<boolean> {
+  try {
+    await execFileAsync("go", ["version"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Compile the odteam Go binary for the target platform using the Go toolchain
  * on the host. Cross-compilation is used for win (from mac/linux) and linux
  * (from mac) via GOOS/GOARCH env vars.
  *
- * If the `go` binary is not on PATH but the pre-built binary already exists
- * (e.g. compiled on the host before a containerized Linux build), the
- * existing binary path is returned without recompiling.
+ * When the Go toolchain is available the binary is always rebuilt so the
+ * packaged artifact matches the current source. Reusing a pre-existing binary
+ * is only allowed as a fallback when Go is not on PATH (e.g. containerized
+ * Linux builds inside electronuserland/builder:base where the host pre-builds
+ * the binary before starting the container).
  *
  * Throws if Go is not available AND the binary does not already exist, so
  * packaging never silently produces a resource tree without odteam.
@@ -140,11 +156,17 @@ export async function buildOdTeamBinary({
   const outputDir = join(workspaceRoot, OD_TEAM_PACKAGE_DIR, "cmd", "odteam");
   const outputPath = join(outputDir, binName);
 
-  // If the binary already exists (e.g. pre-built on the host before a
-  // containerized build), skip recompilation. This covers the container case
-  // where Go is not installed inside electronuserland/builder:base.
-  if (existsSync(outputPath)) {
-    return outputPath;
+  // Only reuse a pre-existing binary when Go is not available — this is the
+  // containerized build path (electronuserland/builder:base). When Go is
+  // present we always rebuild so a stale binary is never packaged.
+  if (!(await isGoAvailable())) {
+    if (existsSync(outputPath)) {
+      return outputPath;
+    }
+    throw new Error(
+      `Go toolchain is not available and no pre-built odteam binary found at ${outputPath}. ` +
+      `Build odteam on the host first: cd packages/multi-agent-team && go build -o cmd/odteam/${binName} ./cmd/odteam/`,
+    );
   }
 
   const goEnv = goTargetEnv(platform);

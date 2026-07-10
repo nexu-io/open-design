@@ -11,14 +11,21 @@ import (
 	"github.com/nexu-io/open-design/packages/multi-agent-team/pkg/protocol"
 )
 
+// HybridPool 混合调度器所需的最小池接口。
+// *agent.Pool 实现了此接口，调用方无需修改。
+type HybridPool interface {
+	AssignTask(agentID string, task *agent.TaskAssignment) error
+	WaitResult(agentID string, timeout time.Duration) (*agent.TaskResult, error)
+}
+
 // HybridScheduler 混合调度器：串行主干 + 阶段内并行
 // 适用场景：复杂项目（研究阶段并行 → 设计阶段并行 → 开发阶段串行）
 type HybridScheduler struct {
-	pool *agent.Pool
+	pool HybridPool
 	bus  *bus.CommunicationBus
 }
 
-func NewHybridScheduler(pool *agent.Pool, b *bus.CommunicationBus) *HybridScheduler {
+func NewHybridScheduler(pool HybridPool, b *bus.CommunicationBus) *HybridScheduler {
 	return &HybridScheduler{pool: pool, bus: b}
 }
 
