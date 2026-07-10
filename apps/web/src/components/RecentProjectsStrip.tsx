@@ -194,12 +194,16 @@ export function RecentProjectsStrip({
   // Project → team-space sharing (the project card entry). The daemon gates on
   // `canShareProjects` (403 off-team / no rights), so we only badge on success.
   const [sharingId, setSharingId] = useState<string | null>(null);
+  const [unsharingId, setUnsharingId] = useState<string | null>(null);
   const [sharedIds, setSharedIds] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const [unsharedIds, setUnsharedIds] = useState<ReadonlySet<string>>(() => new Set<string>());
   const [shareErrorProjectId, setShareErrorProjectId] = useState<string | null>(null);
+  const [shareErrorKind, setShareErrorKind] = useState<'share' | 'unshare'>('share');
   // A project counts as team-shared if the hub already lists it (persistent —
   // survives refresh) OR we shared it in this session (optimistic, before the
   // team-projects poll catches up). The union is what makes the badge stick.
-  const isShared = (id: string) => sharedProjectIds?.has(id) === true || sharedIds.has(id);
+  const isShared = (id: string) =>
+    !unsharedIds.has(id) && (sharedProjectIds?.has(id) === true || sharedIds.has(id));
   // The card's "{creator}创建" line. A project the team hub attributes to another
   // member resolves through the directory to that member's display name; my own
   // shares and every local (non-shared) project read "我创建". Falls back to a
@@ -378,14 +382,51 @@ export function RecentProjectsStrip({
         throw new Error(`share failed with status ${res.status}`);
       }
       setSharedIds((prev) => new Set(prev).add(project.id));
+      setUnsharedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(project.id);
+        return next;
+      });
       notifyTeamProjectsChanged();
       setMenuOpenId(null);
     } catch (err) {
       console.warn('[RecentProjectsStrip] share project to team failed:', err);
       setShareErrorProjectId(project.id);
+      setShareErrorKind('share');
       setMenuOpenId(project.id);
     } finally {
       setSharingId(null);
+    }
+  }
+
+  async function handleUnshareFromTeam(project: Project) {
+    setShareErrorProjectId(null);
+    setMenuOpenId(project.id);
+    setUnsharingId(project.id);
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(project.id)}/collab/sync-intent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ event: 'project_team_unshare_requested', projectId: project.id }),
+      });
+      if (!res.ok) {
+        throw new Error(`unshare failed with status ${res.status}`);
+      }
+      setUnsharedIds((prev) => new Set(prev).add(project.id));
+      setSharedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(project.id);
+        return next;
+      });
+      notifyTeamProjectsChanged();
+      setMenuOpenId(null);
+    } catch (err) {
+      console.warn('[RecentProjectsStrip] unshare project from team failed:', err);
+      setShareErrorProjectId(project.id);
+      setShareErrorKind('unshare');
+      setMenuOpenId(project.id);
+    } finally {
+      setUnsharingId(null);
     }
   }
 
@@ -751,25 +792,45 @@ export function RecentProjectsStrip({
                           <span>{t('designs.menuDuplicate')}</span>
                         </button>
                       ) : null}
-                      <button
-                        type="button"
-                        role="menuitem"
-                        disabled={sharingId === project.id || shared || !creator.ownedBySelf}
-                        title={!creator.ownedBySelf ? t('recentProjects.ownOnlyMutation') : undefined}
-                        onClick={() => void handleShareToTeam(project)}
-                      >
-                        <Icon name="share" size={12} />
-                        <span>
-                          {sharingId === project.id
-                            ? t('recentProjects.shareInProgress')
-                            : shared
-                              ? t('recentProjects.sharedInTeam')
-                              : t('recentProjects.moveToTeam')}
-                        </span>
-                      </button>
+                      {shared && creator.ownedBySelf ? (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={unsharingId === project.id}
+                          onClick={() => void handleUnshareFromTeam(project)}
+                        >
+                          <Icon name="close" size={12} />
+                          <span>
+                            {unsharingId === project.id
+                              ? t('recentProjects.unshareInProgress')
+                              : t('recentProjects.moveOutOfTeam')}
+                          </span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={sharingId === project.id || shared || !creator.ownedBySelf}
+                          title={!creator.ownedBySelf ? t('recentProjects.ownOnlyMutation') : undefined}
+                          onClick={() => void handleShareToTeam(project)}
+                        >
+                          <Icon name="share" size={12} />
+                          <span>
+                            {sharingId === project.id
+                              ? t('recentProjects.shareInProgress')
+                              : shared
+                                ? t('recentProjects.sharedInTeam')
+                                : t('recentProjects.moveToTeam')}
+                          </span>
+                        </button>
+                      )}
                       {shareErrorProjectId === project.id ? (
                         <div className="recent-projects__card-menu-error" role="alert">
-                          {t('recentProjects.shareFailed')}
+                          {t(
+                            shareErrorKind === 'unshare'
+                              ? 'recentProjects.unshareFailed'
+                              : 'recentProjects.shareFailed',
+                          )}
                         </div>
                       ) : null}
                       {onDelete ? (

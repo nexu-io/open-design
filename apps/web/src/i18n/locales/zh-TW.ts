@@ -1006,6 +1006,9 @@ export const zhTW: Dict = {
   "recentProjects.shareInProgress": "分享中…",
   "recentProjects.sharedInTeam": "已在團隊空間",
   "recentProjects.moveToTeam": "轉入團隊空間",
+  "recentProjects.unshareInProgress": "移出中…",
+  "recentProjects.moveOutOfTeam": "移出團隊空間",
+  "recentProjects.unshareFailed": "移出團隊空間失敗，請稍後重試。",
   "recentProjects.shareFailed": "轉入團隊空間失敗，請稍後重試。",
   "pluginsHome.title": "社群",
   "pluginsHome.subtitle":

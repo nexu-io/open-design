@@ -1386,6 +1386,9 @@ export interface Dict {
   'recentProjects.shareInProgress': string;
   'recentProjects.sharedInTeam': string;
   'recentProjects.moveToTeam': string;
+  'recentProjects.unshareInProgress': string;
+  'recentProjects.moveOutOfTeam': string;
+  'recentProjects.unshareFailed': string;
   'recentProjects.shareFailed': string;
   'pluginsHome.title': string;
   'pluginsHome.subtitle': string;

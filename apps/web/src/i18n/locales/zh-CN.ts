@@ -1003,6 +1003,9 @@ export const zhCN: Dict = {
   "recentProjects.shareInProgress": "分享中…",
   "recentProjects.sharedInTeam": "已在团队空间",
   "recentProjects.moveToTeam": "转入团队空间",
+  "recentProjects.unshareInProgress": "移出中…",
+  "recentProjects.moveOutOfTeam": "移出团队空间",
+  "recentProjects.unshareFailed": "移出团队空间失败，请稍后重试。",
   "recentProjects.shareFailed": "转入团队空间失败，请稍后重试。",
   "pluginsHome.title": "Community",
   "pluginsHome.subtitle":
