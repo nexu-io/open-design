@@ -40,6 +40,7 @@ const patchProject = vi.fn();
 const patchPreviewCommentStatus = vi.fn();
 const saveTabs = vi.fn();
 const writeProjectTextFile = vi.fn();
+const fetchProjectFileText = vi.fn();
 const cancelBrandExtraction = vi.fn();
 const originalFetch = globalThis.fetch;
 
@@ -135,6 +136,7 @@ vi.mock('../../src/providers/registry', () => ({
   fetchProjectDesignSystemPackageAudit: (...args: unknown[]) => fetchProjectDesignSystemPackageAudit(...args),
   fetchLiveArtifacts: (...args: unknown[]) => fetchLiveArtifacts(...args),
   fetchProjectFiles: (...args: unknown[]) => fetchProjectFiles(...args),
+  fetchProjectFileText: (...args: unknown[]) => fetchProjectFileText(...args),
   fetchSkill: (...args: unknown[]) => fetchSkill(...args),
   patchPreviewCommentStatus: (...args: unknown[]) => patchPreviewCommentStatus(...args),
   upsertPreviewComment: vi.fn(),
@@ -220,6 +222,7 @@ async function waitForReadyChatPaneProps() {
       url?: string;
     }) => Promise<{ ok: boolean; action?: string; message?: string } | void> | { ok: boolean; action?: string; message?: string } | void;
     onSend?: (prompt: string, attachments: unknown[], comments: unknown[]) => Promise<void>;
+    onContinueBrandExtraction?: () => void;
     initialDraft?: string;
   };
 }
@@ -1025,6 +1028,89 @@ describe('ProjectView daemon cleanup', () => {
     });
     expect(toast.closest('.project-actions-toast-anchor')).toBeTruthy();
     expect(toast.closest('.split-chat-slot')).toBeTruthy();
+    expect(toast.closest('.chat-log-wrap')?.className).toContain('has-chat-log-tray');
+  });
+
+  it('anchors the brand browser-assist extraction error toast in the chat pane instead of the global toast surface', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-brand', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    streamViaDaemon.mockResolvedValue(undefined);
+    // No saved page-snapshot archive → the local read reports a miss, so the
+    // recovery flow falls through to the daemon retry.
+    fetchProjectFileText.mockResolvedValue(null);
+
+    chatPaneSpy.mockClear();
+    fileWorkspaceSpy.mockClear();
+
+    render(
+      <ProjectView
+        project={{
+          id: 'brand-project',
+          name: 'Refly Design System',
+          skillId: null,
+          designSystemId: null,
+          metadata: {
+            kind: 'brand',
+            importedFrom: 'brand-extraction',
+            brandId: 'refly-ai',
+            brandSourceUrl: 'https://refly.ai/',
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const chatProps = await waitForReadyChatPaneProps();
+    expect(chatProps.onContinueBrandExtraction).toBeTypeOf('function');
+    const continueBrandExtraction = chatProps.onContinueBrandExtraction as () => void;
+
+    // The daemon continue-extraction call fails and there is no desktop host /
+    // browser fallback in jsdom, so the recovery flow surfaces the read-failed
+    // error toast — the surface this test pins to the chat pane. Stubbed only
+    // for the retry so the initial mount keeps the default fetch.
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('offline');
+    }) as never;
+
+    await act(async () => {
+      continueBrandExtraction();
+    });
+
+    const toast = await waitFor(() => {
+      const node = document.querySelector('.od-toast.tone-error');
+      expect(node).toBeTruthy();
+      return node as HTMLElement;
+    });
+    // Regression guard for #5413: browser-assist recovery errors must render in
+    // the in-flow chat-pane tray, not the viewport-fixed global toast surface
+    // that straddled the split boundary and floated over the Browser pane.
+    expect(toast.closest('.project-actions-toast-anchor')).toBeTruthy();
     expect(toast.closest('.chat-log-wrap')?.className).toContain('has-chat-log-tray');
   });
 

@@ -7824,6 +7824,7 @@ export function ProjectView({
             details: null,
             tone: 'error',
             ttlMs: 7000,
+            scope: 'chat-pane',
           });
           return { status: 'handled' };
         }
@@ -7846,6 +7847,7 @@ export function ProjectView({
             details: null,
             tone: 'error',
             ttlMs: 6000,
+            scope: 'chat-pane',
           });
           return { status: 'handled' };
         }
@@ -7875,6 +7877,7 @@ export function ProjectView({
             details: null,
             tone: 'error',
             ttlMs: 5000,
+            scope: 'chat-pane',
           });
           return;
         }
@@ -7923,6 +7926,7 @@ export function ProjectView({
         details: t('chat.brandBrowserAssistDownloadGuideDetails'),
         tone: 'error',
         ttlMs: 7000,
+        scope: 'chat-pane',
       });
     })()
       .catch((err) => {
@@ -7932,6 +7936,7 @@ export function ProjectView({
           details: null,
           tone: 'error',
           ttlMs: 5000,
+          scope: 'chat-pane',
         });
       })
       .finally(() => {
