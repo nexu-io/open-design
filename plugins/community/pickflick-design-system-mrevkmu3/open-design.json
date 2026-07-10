@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "pickflick-design-system-mrevkmu3",
+  "title": "PickFlick Design System",
+  "version": "0.1.0",
+  "description": "Dark-cinema design system for a film club app. Built on the web-prototype seed, adapted for dark backgrounds, gold accents, and film-strip UI patterns.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
