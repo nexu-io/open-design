@@ -48,8 +48,14 @@
    `{cwd}/bg/` 디렉토리는 메인이 표지 dispatch 전에 만들어 둔다 — 순서 계약 1):
 
    ```bash
-   codex exec --skip-git-repo-check --sandbox workspace-write -C {cwd} "<지시문>"
+   codex exec -c model="gpt-5.5" --skip-git-repo-check --sandbox workspace-write -C {cwd} "<지시문>"
    ```
+
+   **이미지 생성 모델은 `gpt-5.5` 고정** (`-c model="gpt-5.5"`) — codex 기본 모델
+   (예: `gpt-5.6-luna`)은 CLI 버전/계정 제약으로 image_generation 호출이 400
+   ("requires a newer version of Codex") 실패하고, `gpt-5.1-codex*`는 ChatGPT 계정
+   미지원(400). `gpt-5.5`만 실사 이미지 생성이 동작한다(도그푸딩 실측). 모델 플래그
+   누락 시 기본 모델로 떨어져 세트 전체 생성이 조용히 실패한다.
 
    `<지시문>` 조립: `{anchor_paths}`가 "없음"이 아니면 `먼저 view_image로 다음 이미지를
    확인하라: {anchor_paths}` 를 앞에 붙이고, `{prompt}` 전문 + `생성된 이미지를
