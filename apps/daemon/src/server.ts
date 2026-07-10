@@ -512,6 +512,7 @@ import { registerTerminalRoutes } from './terminal-routes.js';
 import { createTerminalService } from './terminals.js';
 import { registerSocialShareRoutes } from './social-share-routes.js';
 import { registerBrazeRoutes } from './braze-routes.js';
+import { registerBrandWriteRoutes } from './brand-routes.js';
 import { registerMemoryRoutes } from './routes/memory.js';
 import { registerStaticResourceRoutes } from './routes/static-resource.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routes/routine.js';
@@ -5847,6 +5848,7 @@ export async function startServer({
   });
   registerSocialShareRoutes(app, { http: httpDeps });
   registerBrazeRoutes(app, { db, http: httpDeps, paths: pathDeps });
+  registerBrandWriteRoutes(app, { brandsDir: BRANDS_DIR, db });
   registerProjectRoutes(app, {
     db,
     design,
