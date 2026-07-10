@@ -86,6 +86,19 @@ function jsonInit(method: string, payload: unknown): RequestInit {
   };
 }
 
+// multipart 업로드 헬퍼 — Node 24 글로벌 FormData/Blob (CLI `asset add`와 동일 구성, 스펙 §6)
+async function uploadAsset(
+  base: string,
+  brandId: string,
+  options: { name?: string; mime?: string; bytes?: Uint8Array; role?: string } = {},
+): Promise<JsonFetchResult> {
+  const form = new FormData();
+  const bytes = options.bytes ?? new Uint8Array([0x89, 0x50, 0x4e, 0x47]); // PNG 매직 조각 — 내용 검증은 mime 기준이라 충분
+  form.append('file', new Blob([bytes], { type: options.mime ?? 'image/png' }), options.name ?? 'icon.png');
+  const query = options.role ? `?role=${encodeURIComponent(options.role)}` : '';
+  return jsonFetch(`${base}/api/brands/${brandId}/assets${query}`, { method: 'POST', body: form });
+}
+
 describe('POST /api/brands', () => {
   it('creates a brand from a Latin title (slug id) and scaffolds manifest + brand.md', async () => {
     const { base, brandsDir } = await startHarness();
@@ -264,6 +277,65 @@ describe('DELETE /api/brands/:id/deliverables/:key', () => {
     const { base, brandsDir } = await startHarness();
     writeBrandFixture(brandsDir, 'acme');
     const { status } = await jsonFetch(`${base}/api/brands/acme/deliverables/ghost`, { method: 'DELETE' });
+    expect(status).toBe(404);
+  });
+});
+
+describe('POST /api/brands/:id/assets', () => {
+  it('uploads a png and returns { path, url } with the file written under assets/', async () => {
+    const { base, brandsDir } = await startHarness();
+    writeBrandFixture(brandsDir, 'acme');
+    const { status, body } = await uploadAsset(base, 'acme', { name: 'hero.png' });
+    expect(status).toBe(200);
+    expect(body.path).toBe('assets/hero.png');
+    expect(body.url).toBe('/api/brands/acme/assets/hero.png');
+    expect(existsSync(path.join(brandsDir, 'acme', 'assets', 'hero.png'))).toBe(true);
+    // role 미지정 — presentation은 건드리지 않는다
+    const manifest = JSON.parse(readFileSync(path.join(brandsDir, 'acme', 'manifest.json'), 'utf8'));
+    expect(manifest.presentation).toBeUndefined();
+  });
+
+  it('updates manifest presentation.icon when role=icon', async () => {
+    const { base, brandsDir } = await startHarness();
+    writeBrandFixture(brandsDir, 'acme');
+    const { status, body } = await uploadAsset(base, 'acme', { name: 'icon.png', role: 'icon' });
+    expect(status).toBe(200);
+    expect(body.path).toBe('assets/icon.png');
+    const manifest = JSON.parse(readFileSync(path.join(brandsDir, 'acme', 'manifest.json'), 'utf8'));
+    expect(manifest.presentation?.icon).toBe('icon.png');
+  });
+
+  it('updates manifest presentation.logo when role=logo', async () => {
+    const { base, brandsDir } = await startHarness();
+    writeBrandFixture(brandsDir, 'acme');
+    const { status } = await uploadAsset(base, 'acme', { name: 'logo.webp', mime: 'image/webp', role: 'logo' });
+    expect(status).toBe(200);
+    const manifest = JSON.parse(readFileSync(path.join(brandsDir, 'acme', 'manifest.json'), 'utf8'));
+    expect(manifest.presentation?.logo).toBe('logo.webp');
+  });
+
+  it('rejects a disallowed mime with 400 (fileFilter error must not leak as 500)', async () => {
+    const { base, brandsDir } = await startHarness();
+    writeBrandFixture(brandsDir, 'acme');
+    const { status } = await uploadAsset(base, 'acme', { name: 'notes.txt', mime: 'text/plain' });
+    expect(status).toBe(400);
+    expect(existsSync(path.join(brandsDir, 'acme', 'assets', 'notes.txt'))).toBe(false);
+  });
+
+  it('rejects a 6MB file with 413 (LIMIT_FILE_SIZE convention — not 400)', async () => {
+    const { base, brandsDir } = await startHarness();
+    writeBrandFixture(brandsDir, 'acme');
+    const { status } = await uploadAsset(base, 'acme', {
+      name: 'huge.png',
+      bytes: new Uint8Array(6 * 1024 * 1024),
+    });
+    expect(status).toBe(413);
+    expect(existsSync(path.join(brandsDir, 'acme', 'assets', 'huge.png'))).toBe(false);
+  });
+
+  it('returns 404 for an unknown brand', async () => {
+    const { base } = await startHarness();
+    const { status } = await uploadAsset(base, 'nope');
     expect(status).toBe(404);
   });
 });

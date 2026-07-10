@@ -1,14 +1,18 @@
 /**
- * Role: 브랜드 쓰기 HTTP 라우트 (/api/brands POST·PUT·DELETE) — 레지스트리 함수 위의 얇은 표면
+ * Role: 브랜드 쓰기 HTTP 라우트 (/api/brands POST·PUT·DELETE + asset 업로드) — 레지스트리 함수 위의 얇은 표면
  * Key Features: 생성 201, manifest 패치, docs core·:key 저장(단일 핸들러 core 분기),
- *               deliverable add/remove, DELETE 바인딩 프로젝트 409 { projectCount }
- * Dependencies: express, ./brands.js (레지스트리 쓰기 함수 + BrandWriteError), better-sqlite3 db (주입)
+ *               deliverable add/remove, asset 업로드(multer 5MB·mime 게이트·role=icon|logo),
+ *               DELETE 바인딩 프로젝트 409 { projectCount }
+ * Dependencies: express, multer, ./brands.js (레지스트리 쓰기 함수 + BrandWriteError),
+ *               ./projects.js (decodeMultipartFilename), better-sqlite3 db (주입)
  * Notes: brandsDir·db 주입형 — 테스트가 tmp 루트 + 격리 db로 등록할 수 있게 server.ts 전역에
  *        의존하지 않는다 (design-system-tool 라우트와 동형). 검증·경로 게이트는 레지스트리 내부,
  *        여기서는 BrandWriteError 코드 → 400/409 매핑과 null/false → 404 판정만 담당.
- *        asset 업로드 라우트는 별도(multer 의존) — server.ts 소유.
+ *        asset 업로드도 여기 소유 — server.ts의 sendMulterError는 module-private이라
+ *        LIMIT_FILE_SIZE→413 컨벤션을 로컬 매퍼로 동형 유지한다.
  */
 import type { Express, Response } from 'express';
+import multer from 'multer';
 
 import type { BrandCreateInput, BrandDeliverableInput, BrandUpdateInput } from '@marketing-ax/contracts';
 
@@ -20,9 +24,11 @@ import {
   readBrandCore,
   removeBrandDeliverable,
   updateBrandManifest,
+  writeBrandAsset,
   writeBrandCore,
   writeBrandDeliverableDoc,
 } from './brands.js';
+import { decodeMultipartFilename } from './projects.js';
 
 export interface BrandWriteRoutesDeps {
   brandsDir: string;
@@ -38,6 +44,45 @@ function brandWriteErrorStatus(code: BrandWriteError['code']): number {
 function sendBrandWriteFailure(res: Response, err: unknown): void {
   if (err instanceof BrandWriteError) {
     res.status(brandWriteErrorStatus(err.code)).json({ error: err.message, code: err.code });
+    return;
+  }
+  res.status(500).json({ error: String(err) });
+}
+
+const BRAND_ASSET_MAX_BYTES = 5 * 1024 * 1024;
+// 허용 이미지 mime — 스펙 §3 (png·jpeg·webp·svg)
+const BRAND_ASSET_ALLOWED_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
+
+// fileFilter 거부 전용 typed 에러 — multer.MulterError가 아니므로 방치하면 500으로 새는 함정을
+// instanceof로 명시 400 매핑하기 위한 마커 (스펙 §3 asset 행)
+class BrandAssetMimeError extends Error {
+  constructor(mimetype: string) {
+    super(`unsupported asset mime: ${mimetype}`);
+    this.name = 'BrandAssetMimeError';
+  }
+}
+
+// pluginUpload 관례(memoryStorage) + 브랜드 에셋 전용 5MB 캡
+const brandAssetUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: BRAND_ASSET_MAX_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (!BRAND_ASSET_ALLOWED_MIMES.has(file.mimetype)) {
+      return cb(new BrandAssetMimeError(file.mimetype));
+    }
+    cb(null, true);
+  },
+});
+
+// server.ts sendMulterError와 동형 매핑 (module-private이라 import 불가) — LIMIT_FILE_SIZE만 413, 나머지 multer 한계는 400
+function sendBrandAssetUploadError(res: Response, err: unknown): void {
+  if (err instanceof BrandAssetMimeError) {
+    res.status(400).json({ error: err.message, code: 'UNSUPPORTED_MIME' });
+    return;
+  }
+  if (err instanceof multer.MulterError) {
+    const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    res.status(status).json({ error: err.message, code: err.code });
     return;
   }
   res.status(500).json({ error: String(err) });
@@ -95,6 +140,31 @@ export function registerBrandWriteRoutes(app: Express, { brandsDir, db }: BrandW
     } catch (err) {
       sendBrandWriteFailure(res, err);
     }
+  });
+
+  // 에셋 업로드 — multer 파싱 에러(413/400)를 콜백에서 직접 매핑하고, 성공 시 레지스트리 writeBrandAsset에 위임.
+  // 파일명 sanitize는 writeBrandAsset 내부(sanitizeName) 책임 — 여기서 재-sanitize하지 않는다.
+  app.post('/api/brands/:id/assets', (req, res) => {
+    brandAssetUpload.single('file')(req, res, async (err: unknown) => {
+      if (err) return sendBrandAssetUploadError(res, err);
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: 'file is required' });
+      // role은 쿼리 또는 폼 필드 — icon|logo 외 값은 조용히 무시하지 않고 400 (스펙 §3)
+      const rawRole = req.query.role ?? (req.body as Record<string, unknown> | undefined)?.role;
+      if (rawRole !== undefined && rawRole !== 'icon' && rawRole !== 'logo') {
+        return res.status(400).json({ error: 'role must be icon or logo' });
+      }
+      try {
+        // multer@1은 multipart 파일명을 latin1로 넘긴다 — 비ASCII 원복 후 저장 (server.ts 업로드 라우트 관례)
+        const name = decodeMultipartFilename(file.originalname);
+        const result = await writeBrandAsset(brandsDir, req.params.id, name, file.buffer, rawRole);
+        if (!result) return res.status(404).json({ error: 'brand not found' });
+        // url은 기존 iconUrl/logoUrl 서빙 라우트(/api/brands/:id/assets/<file>)와 동일 shape
+        res.json({ path: result.path, url: `/api/brands/${req.params.id}/${result.path}` });
+      } catch (uploadErr) {
+        sendBrandWriteFailure(res, uploadErr);
+      }
+    });
   });
 
   // 채널 추가 — 키 형식/중복은 레지스트리 typed 에러(400/409), 미존재 브랜드는 null(404)
