@@ -1,6 +1,14 @@
 // UI-only types for the file-viewer slice. Pure data shapes with no React,
 // transport, or DOM dependency, so slice rules and their tests can import them
 // without pulling in the orchestrator (ADR 0002).
+import type { Dict } from '../../i18n/types';
+
+/**
+ * The i18n translate function the slice's formatters accept. Structurally
+ * identical to the orchestrator's own alias — duplicated by intent (ADR 0002:
+ * only wire DTOs and transport adapters are shared for correctness).
+ */
+export type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
 /** A point in preview/board coordinate space (pointer path, lasso vertex). */
 export type StrokePoint = { x: number; y: number };

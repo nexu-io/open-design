@@ -25,7 +25,14 @@ export {
 } from './rules';
 
 // Pure display formatters.
-export { formatJsonFileTextForDisplay } from './formatters';
+export {
+  formatJsonFileTextForDisplay,
+  formatAbsoluteDateTime,
+  formatRelativeTime,
+  formatDurationMs,
+  formatVersionDateTime,
+  formatCommentTime,
+} from './formatters';
 
 // UI-only types the orchestrator reads back.
 export type {
