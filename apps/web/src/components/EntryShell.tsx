@@ -993,7 +993,12 @@ export function EntryShell({
           footerExtra={railFooterActions}
         />
         <main className="entry-main entry-main--scroll" ref={entryMainScrollRef}>
-          <div className="entry-main__topbar">
+          <div
+            className={[
+              'entry-main__topbar',
+              view === 'home' && railOpen ? 'entry-main__topbar--home-clean' : '',
+            ].filter(Boolean).join(' ')}
+          >
             <button
               type="button"
               className="entry-rail-toggle"
@@ -1004,83 +1009,87 @@ export function EntryShell({
             >
               <Icon name="panel-left" size={20} />
             </button>
-            <div className="entry-main__topbar-chips entry-main__topbar-chips--icon-only">
-              {/* The workspace switcher moved into the nav rail's team state. */}
-              <GithubStarBadge />
-              <a
-                className="entry-workspace-chip od-tooltip"
-                href={enterpriseUrl(uiLocale)}
-                target="_blank"
-                rel="noreferrer noopener"
-                onClick={() => {
-                  trackHomeToolbarClick(analytics.track, {
-                    page_name: 'home',
-                    area: 'toolbar',
-                    element: 'workspace_teams',
-                  });
-                }}
-                data-tooltip={t('entry.workspaceTeamsTitle')}
-                data-tooltip-placement="bottom"
-                aria-label={t('entry.workspaceTeamsAria')}
-                data-testid="entry-workspace-teams"
-              >
-                <Icon
-                  name="sparkles"
-                  size={14}
-                  className="entry-workspace-chip__icon"
-                />
-                <span className="entry-workspace-chip__label">
-                  {t('entry.workspaceTeamsLabel')}
-                </span>
-              </a>
-              <a
-                className="entry-discord-badge od-tooltip"
-                href={DISCORD_URL}
-                aria-label={discordAriaLabel}
-                data-tooltip={discordAriaLabel}
-                data-tooltip-placement="bottom"
-                data-testid="entry-discord-badge"
-              >
-                <Icon name="discord" size={14} className="entry-discord-badge__icon" />
-                <span className="entry-discord-badge__label">{t('entry.discordLabel')}</span>
-                {discordOnlineLabel ? (
-                  <>
-                    <span className="entry-discord-badge__sep" aria-hidden>
-                      ·
+            {view === 'home' ? null : (
+              <>
+                <div className="entry-main__topbar-chips entry-main__topbar-chips--icon-only">
+                  {/* The workspace switcher moved into the nav rail's team state. */}
+                  <GithubStarBadge />
+                  <a
+                    className="entry-workspace-chip od-tooltip"
+                    href={enterpriseUrl(uiLocale)}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    onClick={() => {
+                      trackHomeToolbarClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'toolbar',
+                        element: 'workspace_teams',
+                      });
+                    }}
+                    data-tooltip={t('entry.workspaceTeamsTitle')}
+                    data-tooltip-placement="bottom"
+                    aria-label={t('entry.workspaceTeamsAria')}
+                    data-testid="entry-workspace-teams"
+                  >
+                    <Icon
+                      name="sparkles"
+                      size={14}
+                      className="entry-workspace-chip__icon"
+                    />
+                    <span className="entry-workspace-chip__label">
+                      {t('entry.workspaceTeamsLabel')}
                     </span>
-                    <span className="entry-discord-badge__online">
-                      {discordOnlineLabel}
+                  </a>
+                  <a
+                    className="entry-discord-badge od-tooltip"
+                    href={DISCORD_URL}
+                    aria-label={discordAriaLabel}
+                    data-tooltip={discordAriaLabel}
+                    data-tooltip-placement="bottom"
+                    data-testid="entry-discord-badge"
+                  >
+                    <Icon name="discord" size={14} className="entry-discord-badge__icon" />
+                    <span className="entry-discord-badge__label">{t('entry.discordLabel')}</span>
+                    {discordOnlineLabel ? (
+                      <>
+                        <span className="entry-discord-badge__sep" aria-hidden>
+                          ·
+                        </span>
+                        <span className="entry-discord-badge__online">
+                          {discordOnlineLabel}
+                        </span>
+                      </>
+                    ) : null}
+                  </a>
+                  {executionSwitcher}
+                  <button
+                    type="button"
+                    className="use-everywhere-chip od-tooltip"
+                    onClick={() => {
+                      trackHomeToolbarClick(analytics.track, {
+                        page_name: 'home',
+                        area: 'toolbar',
+                        element: 'use_everywhere',
+                      });
+                      openIntegrationTab('use-everywhere');
+                    }}
+                    data-tooltip={t('entry.useEverywhereTitle')}
+                    data-tooltip-placement="bottom"
+                    aria-label={t('entry.useEverywhereAria')}
+                    data-testid="entry-use-everywhere-button"
+                  >
+                    <span className="use-everywhere-chip__icon" aria-hidden>
+                      <Icon name="hammer" size={13} />
                     </span>
-                  </>
-                ) : null}
-              </a>
-              {view === 'home' ? null : executionSwitcher}
-              <button
-                type="button"
-                className="use-everywhere-chip od-tooltip"
-                onClick={() => {
-                  trackHomeToolbarClick(analytics.track, {
-                    page_name: 'home',
-                    area: 'toolbar',
-                    element: 'use_everywhere',
-                  });
-                  openIntegrationTab('use-everywhere');
-                }}
-                data-tooltip={t('entry.useEverywhereTitle')}
-                data-tooltip-placement="bottom"
-                aria-label={t('entry.useEverywhereAria')}
-                data-testid="entry-use-everywhere-button"
-              >
-                <span className="use-everywhere-chip__icon" aria-hidden>
-                  <Icon name="hammer" size={13} />
-                </span>
-                <span className="use-everywhere-chip__label">
-                  {t('entry.useEverywhereTitle')}
-                </span>
-              </button>
-            </div>
-            <UpdaterPopup />
-            {avatarMenu}
+                    <span className="use-everywhere-chip__label">
+                      {t('entry.useEverywhereTitle')}
+                    </span>
+                  </button>
+                </div>
+                <UpdaterPopup />
+                {avatarMenu}
+              </>
+            )}
           </div>
           <div
             className={[

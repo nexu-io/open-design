@@ -2119,6 +2119,7 @@ export function HomeView({
       <RecentProjectsStrip
         projects={projects}
         designSystems={designSystems}
+        heading={t('recentProjects.title')}
         sharedProjectIds={homeSharedProjectIds}
         projectOwnerMemberIds={homeProjectOwnerMemberIds}
         limit={7}
