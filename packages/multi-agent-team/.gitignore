@@ -1,4 +1,33 @@
-# Build artifacts
+# Compiled binaries
+odteam
 cmd/odteam/odteam
 cmd/demoserver/demoserver
 cmd/profilereport/profilereport
+
+# Test binaries
+*.test
+
+# Coverage and profiling output
+*.out
+*.prof
+*.profraw
+
+# Go workspace (if used)
+go.work
+go.work.sum
+
+# Vendored dependencies
+vendor/
+
+# Large demo/media files (not source code)
+*.mp4
+*.mov
+
+# IDE and editor files (also covered by root .gitignore, but explicit for safety)
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files (also covered by root .gitignore)
+.DS_Store
