@@ -973,6 +973,7 @@ export const th: Dict = {
   'recentProjects.shareInProgress': 'Sharing…',
   'recentProjects.sharedInTeam': 'In team space',
   'recentProjects.moveToTeam': 'Move to team space',
+  'recentProjects.shareFailed': 'Could not move to team space. Try again.',
   'pluginsHome.title': 'คอมมูนิตี้',
   'pluginsHome.subtitle': 'เวิร์กโฟลว์ Open Design พร้อมใช้งานที่มาพร้อมกับรันไทม์นี้ เลือกหนึ่งรายการเพื่อโหลดพรอมป์ต์เริ่มต้น หรือเรียกดูรีจิสตรีเพื่อดูเพิ่มเติม',
   'pluginsHome.browseRegistry': 'เรียกดู registry',

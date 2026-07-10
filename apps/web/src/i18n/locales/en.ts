@@ -973,6 +973,7 @@ export const en: Dict = {
   'recentProjects.shareInProgress': 'Sharing…',
   'recentProjects.sharedInTeam': 'In team space',
   'recentProjects.moveToTeam': 'Move to team space',
+  'recentProjects.shareFailed': 'Could not move to team space. Try again.',
   'pluginsHome.title': 'Community',
   'pluginsHome.subtitle': 'Ready-to-use Open Design workflows bundled with this runtime. Pick one to load a starter prompt, or browse the registry for more.',
   'pluginsHome.browseRegistry': 'Browse registry',

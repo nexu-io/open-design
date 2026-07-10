@@ -973,6 +973,7 @@ export const de: Dict = {
   'recentProjects.shareInProgress': 'Sharing…',
   'recentProjects.sharedInTeam': 'In team space',
   'recentProjects.moveToTeam': 'Move to team space',
+  'recentProjects.shareFailed': 'Could not move to team space. Try again.',
   'pluginsHome.title': 'Community',
   'pluginsHome.subtitle': 'Sofort einsatzbereite Open Design Workflows, die mit dieser Laufzeitumgebung gebündelt sind. Wähle einen aus, um einen Starter-Prompt zu laden, oder durchsuche die Registry für mehr.',
   'pluginsHome.browseRegistry': 'Registry durchsuchen',

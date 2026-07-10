@@ -973,6 +973,7 @@ export const pl: Dict = {
   'recentProjects.shareInProgress': 'Sharing…',
   'recentProjects.sharedInTeam': 'In team space',
   'recentProjects.moveToTeam': 'Move to team space',
+  'recentProjects.shareFailed': 'Could not move to team space. Try again.',
   'pluginsHome.title': 'Społeczność',
   'pluginsHome.subtitle': 'Gotowe do użycia przepływy pracy Open Design dołączone do tego środowiska uruchomieniowego. Wybierz jeden, aby wczytać początkowy prompt, lub przeglądaj rejestr, aby znaleźć więcej.',
   'pluginsHome.browseRegistry': 'Przeglądaj rejestr',

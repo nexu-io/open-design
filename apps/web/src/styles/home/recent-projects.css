@@ -575,6 +575,13 @@
 .recent-projects__card-menu button.danger {
   color: var(--red);
 }
+.recent-projects__card-menu-error {
+  max-width: 190px;
+  padding: 6px 10px 8px;
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.35;
+}
 .recent-projects__select-check {
   position: absolute;
   top: 8px;

@@ -973,6 +973,7 @@ export const ko: Dict = {
   'recentProjects.shareInProgress': 'Sharing…',
   'recentProjects.sharedInTeam': 'In team space',
   'recentProjects.moveToTeam': 'Move to team space',
+  'recentProjects.shareFailed': 'Could not move to team space. Try again.',
   'pluginsHome.title': '커뮤니티',
   'pluginsHome.subtitle': '이 런타임에 번들로 제공되는 바로 사용 가능한 Open Design 워크플로입니다. 하나를 선택해 시작용 프롬프트를 불러오거나, 레지스트리에서 더 둘러보세요.',
   'pluginsHome.browseRegistry': '레지스트리 둘러보기',

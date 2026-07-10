@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Button } from '@open-design/components';
-import type { DesignSystemEditClickProps, TrackingProjectKind } from '@open-design/contracts/analytics';
+import type { DesignSystemEditClickProps, TrackingArtifactKind, TrackingProjectKind } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackFileManagerClick,
@@ -156,6 +156,7 @@ async function projectIsSharedWithWorkspace(projectId: string): Promise<boolean>
 interface Props {
   projectId: string;
   projectKind: TrackingProjectKind;
+  projectName?: string;
   // Basename of the project's chosen working directory (e.g. "openclaw").
   // Threaded to DesignFilesPanel as the breadcrumb root label. Undefined for
   // default-storage projects.
@@ -252,6 +253,11 @@ interface Props {
   // are restored.
   chatConfig?: AppConfig;
   chatAgentsById?: Map<string, AgentInfo>;
+  handoffAgents?: AgentInfo[];
+  handoffArtifactId?: string;
+  handoffArtifactKind?: TrackingArtifactKind;
+  metricsConsent?: boolean;
+  installationId?: string | null;
   chatLocale?: string;
   conversations?: Conversation[];
   /** The primary chat's active conversation. */
@@ -279,9 +285,8 @@ interface Props {
   // right end of the Design Files tab row. The former standalone chrome header
   // row was removed; these moved here alongside the FileViewer present/Share
   // portal that targets the same actions container.
+  fileActionsBefore?: ReactNode;
   headerActions?: ReactNode;
-  /** Project chrome slot rendered before version/share controls. */
-  presenceSlot?: ReactNode;
   // Active discovery question form, surfaced in the right-hand Questions tab
   // instead of inline in the chat. Owned by ProjectView (derived from the
   // latest assistant message).
@@ -565,6 +570,7 @@ interface WorkspaceActionToast {
 export function FileWorkspace({
   projectId,
   projectKind,
+  projectName,
   rootDirName,
   reloading,
   resolvedDir,
@@ -621,6 +627,11 @@ export function FileWorkspace({
   onCommentModeChange,
   chatConfig,
   chatAgentsById,
+  handoffAgents,
+  handoffArtifactId,
+  handoffArtifactKind,
+  metricsConsent,
+  installationId,
   chatLocale,
   conversations = [],
   activeConversationId = null,
@@ -634,8 +645,8 @@ export function FileWorkspace({
   onWorkspaceContextsChange,
   messages = [],
   conversationId,
+  fileActionsBefore,
   headerActions,
-  presenceSlot,
   questionForm = null,
   questionFormPreview = null,
   questionFormKey = null,
@@ -2765,17 +2776,14 @@ export function FileWorkspace({
         {/* Pinned to the right for project/file actions; the tab launcher sits
             next to the file tabs so its spatial relationship stays clear. */}
         <div className="ws-tabs-actions">
+          {fileActionsBefore ? (
+            <div className="ws-tabs-file-actions-before">{fileActionsBefore}</div>
+          ) : null}
           <div
             id={APP_CHROME_FILE_ACTIONS_ID}
             className="ws-tabs-file-actions"
             data-app-chrome-file-actions="true"
           >
-            {presenceSlot ? (
-              <>
-                {presenceSlot}
-                <span className="ws-presence-action-divider" aria-hidden="true" />
-              </>
-            ) : null}
             {!activeFile ? (
               <>
                 {!viewerOnly ? (
@@ -2892,7 +2900,7 @@ export function FileWorkspace({
               </>
             ) : null}
           </div>
-          {headerActions && !viewerOnly ? (
+          {headerActions ? (
             <div className="ws-tabs-project-actions">{headerActions}</div>
           ) : null}
         </div>
@@ -3217,6 +3225,13 @@ export function FileWorkspace({
               activeFile.name,
               slideNavDeliverableNonce,
             )}
+            projectName={projectName}
+            projectDir={resolvedDir}
+            agents={handoffAgents}
+            artifactId={handoffArtifactId}
+            artifactKind={handoffArtifactKind}
+            metricsConsent={metricsConsent}
+            installationId={installationId}
           />
         ) : (
           <div className="viewer-empty">

@@ -973,6 +973,7 @@ export const tr: Dict = {
   'recentProjects.shareInProgress': 'Sharing…',
   'recentProjects.sharedInTeam': 'In team space',
   'recentProjects.moveToTeam': 'Move to team space',
+  'recentProjects.shareFailed': 'Could not move to team space. Try again.',
   'pluginsHome.title': 'Topluluk',
   'pluginsHome.subtitle': 'Bu çalışma zamanıyla birlikte gelen, kullanıma hazır Open Design iş akışları. Başlangıç istemi yüklemek için birini seçin veya daha fazlası için kayıt defterine göz atın.',
   'pluginsHome.browseRegistry': 'Kayıt defterine göz at',

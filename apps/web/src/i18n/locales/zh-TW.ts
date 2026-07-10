@@ -1006,6 +1006,7 @@ export const zhTW: Dict = {
   "recentProjects.shareInProgress": "分享中…",
   "recentProjects.sharedInTeam": "已在團隊空間",
   "recentProjects.moveToTeam": "轉入團隊空間",
+  "recentProjects.shareFailed": "轉入團隊空間失敗，請稍後重試。",
   "pluginsHome.title": "社群",
   "pluginsHome.subtitle":
     "隨附於此執行環境、可立即使用的 Open Design 工作流程。挑選一個以載入起始提示，或瀏覽登錄檔取得更多。",

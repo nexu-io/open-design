@@ -973,6 +973,7 @@ export const esES: Dict = {
   'recentProjects.shareInProgress': 'Sharing…',
   'recentProjects.sharedInTeam': 'In team space',
   'recentProjects.moveToTeam': 'Move to team space',
+  'recentProjects.shareFailed': 'Could not move to team space. Try again.',
   'pluginsHome.title': 'Comunidad',
   'pluginsHome.subtitle': 'Flujos de trabajo de Open Design listos para usar incluidos con este runtime. Elige uno para cargar un prompt inicial o explora el registro para ver más.',
   'pluginsHome.browseRegistry': 'Explorar registro',

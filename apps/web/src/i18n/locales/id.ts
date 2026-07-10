@@ -973,6 +973,7 @@ export const id: Dict = {
   'recentProjects.shareInProgress': 'Sharing…',
   'recentProjects.sharedInTeam': 'In team space',
   'recentProjects.moveToTeam': 'Move to team space',
+  'recentProjects.shareFailed': 'Could not move to team space. Try again.',
   'pluginsHome.title': 'Komunitas',
   'pluginsHome.subtitle': 'Alur kerja Open Design siap pakai yang disertakan dengan runtime ini. Pilih salah satu untuk memuat prompt awal, atau jelajahi registry untuk lebih banyak.',
   'pluginsHome.browseRegistry': 'Jelajahi registry',

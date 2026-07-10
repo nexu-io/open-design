@@ -973,6 +973,7 @@ export const hu: Dict = {
   'recentProjects.shareInProgress': 'Sharing…',
   'recentProjects.sharedInTeam': 'In team space',
   'recentProjects.moveToTeam': 'Move to team space',
+  'recentProjects.shareFailed': 'Could not move to team space. Try again.',
   'pluginsHome.title': 'Közösség',
   'pluginsHome.subtitle': 'Ehhez a futtatókörnyezethez csomagolt, használatra kész Open Design munkafolyamatok. Válasszon egyet egy kezdő prompt betöltéséhez, vagy böngésszen a registry-ben továbbiakért.',
   'pluginsHome.browseRegistry': 'Registry böngészése',

@@ -973,6 +973,7 @@ export const ar: Dict = {
   'recentProjects.shareInProgress': 'Sharing…',
   'recentProjects.sharedInTeam': 'In team space',
   'recentProjects.moveToTeam': 'Move to team space',
+  'recentProjects.shareFailed': 'Could not move to team space. Try again.',
   'pluginsHome.title': 'المجتمع',
   'pluginsHome.subtitle': 'سير عمل Open Design جاهز للاستخدام ومرفق بهذا التشغيل. اختر واحدًا لتحميل موجّه بدء، أو تصفّح السجل للمزيد.',
   'pluginsHome.browseRegistry': 'تصفح السجل',

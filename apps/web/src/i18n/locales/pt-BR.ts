@@ -973,6 +973,7 @@ export const ptBR: Dict = {
   'recentProjects.shareInProgress': 'Sharing…',
   'recentProjects.sharedInTeam': 'In team space',
   'recentProjects.moveToTeam': 'Move to team space',
+  'recentProjects.shareFailed': 'Could not move to team space. Try again.',
   'pluginsHome.title': 'Comunidade',
   'pluginsHome.subtitle': 'Fluxos de trabalho do Open Design prontos para uso e incluídos neste runtime. Escolha um para carregar um prompt inicial ou navegue pelo registro para ver mais.',
   'pluginsHome.browseRegistry': 'Navegar no registro',

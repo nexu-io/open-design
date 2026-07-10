@@ -973,6 +973,7 @@ export const ja: Dict = {
   'recentProjects.shareInProgress': 'Sharing…',
   'recentProjects.sharedInTeam': 'In team space',
   'recentProjects.moveToTeam': 'Move to team space',
+  'recentProjects.shareFailed': 'Could not move to team space. Try again.',
   'pluginsHome.title': 'コミュニティ',
   'pluginsHome.subtitle': 'このランタイムに同梱された、すぐに使える Open Design ワークフロー。1つ選んでスタータープロンプトを読み込むか、レジストリでさらに探せます。',
   'pluginsHome.browseRegistry': 'レジストリを見る',

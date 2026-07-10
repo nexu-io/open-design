@@ -6,6 +6,7 @@ import {
   buildSocialSharePayload,
   OPEN_DESIGN_GITHUB_REPO_URL,
   type CollabMemberRole,
+  type AgentInfo,
   type ProjectFileVersion,
   type SocialShareRequest,
   type SocialShareResponse,
@@ -15,6 +16,7 @@ import {
   anonymizeArtifactId,
   artifactKindToTracking,
   type TrackingFileVersionSource,
+  type TrackingArtifactKind,
   type TrackingProjectKind,
   type TrackingDeployProvider,
 } from '@open-design/contracts/analytics';
@@ -1221,6 +1223,13 @@ interface Props {
   // Read-only viewer of a team-shared project: the viewer can comment but not
   // edit, export, share, download, or send changes to Chat.
   viewerOnly?: boolean;
+  projectName?: string;
+  projectDir?: string | null;
+  agents?: AgentInfo[];
+  artifactId?: string;
+  artifactKind?: TrackingArtifactKind;
+  metricsConsent?: boolean;
+  installationId?: string | null;
 }
 
 export function FileViewer({
@@ -1246,6 +1255,13 @@ export function FileViewer({
   downloadRequest,
   slideNavRequest,
   viewerOnly = false,
+  projectName,
+  projectDir,
+  agents,
+  artifactId,
+  artifactKind,
+  metricsConsent,
+  installationId,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -1291,6 +1307,13 @@ export function FileViewer({
         downloadRequest={downloadRequest}
         slideNavRequest={slideNavRequest}
         viewerOnly={viewerOnly}
+        projectName={projectName}
+        projectDir={projectDir}
+        agents={agents}
+        artifactId={artifactId}
+        artifactKind={artifactKind}
+        metricsConsent={metricsConsent}
+        installationId={installationId}
       />
     );
   }
@@ -1300,6 +1323,13 @@ export function FileViewer({
         projectId={projectId}
         file={file}
         onOpenFileReplacing={onOpenFileReplacing}
+        projectName={projectName}
+        projectDir={projectDir}
+        agents={agents}
+        artifactId={artifactId}
+        artifactKind={artifactKind}
+        metricsConsent={metricsConsent}
+        installationId={installationId}
       />
     );
   }
@@ -5234,10 +5264,24 @@ function ReactComponentViewer({
   projectId,
   file,
   onOpenFileReplacing,
+  projectName,
+  projectDir,
+  agents,
+  artifactId,
+  artifactKind: handoffArtifactKind,
+  metricsConsent = false,
+  installationId,
 }: {
   projectId: string;
   file: ProjectFile;
   onOpenFileReplacing?: (openName: string, closeName: string) => void;
+  projectName?: string;
+  projectDir?: string | null;
+  agents?: AgentInfo[];
+  artifactId?: string;
+  artifactKind?: TrackingArtifactKind;
+  metricsConsent?: boolean;
+  installationId?: string | null;
 }) {
   const t = useT();
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
@@ -5653,7 +5697,17 @@ function ReactComponentViewer({
                     ) : null}
                     {unifiedActionTab === 'send' ? (
                       <div className="chrome-unified-panel chrome-unified-panel--handoff">
-                        <HandoffButton projectId={projectId} />
+                        <HandoffButton
+                          projectId={projectId}
+                          projectName={projectName}
+                          projectDir={projectDir}
+                          agents={agents}
+                          artifactId={artifactId}
+                          artifactKind={handoffArtifactKind}
+                          metricsConsent={metricsConsent}
+                          installationId={installationId}
+                          embedded
+                        />
                       </div>
                     ) : null}
                   </div>
@@ -5800,6 +5854,13 @@ function HtmlViewer({
   downloadRequest,
   slideNavRequest,
   viewerOnly = false,
+  projectName,
+  projectDir,
+  agents,
+  artifactId,
+  artifactKind: handoffArtifactKind,
+  metricsConsent = false,
+  installationId,
 }: {
   projectId: string;
   projectKind: TrackingProjectKind;
@@ -5823,6 +5884,13 @@ function HtmlViewer({
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
   // Read-only viewer of a team-shared project: comment-only, no edit/export.
   viewerOnly?: boolean;
+  projectName?: string;
+  projectDir?: string | null;
+  agents?: AgentInfo[];
+  artifactId?: string;
+  artifactKind?: TrackingArtifactKind;
+  metricsConsent?: boolean;
+  installationId?: string | null;
 }) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -10838,7 +10906,7 @@ function HtmlViewer({
               ) : null}
             </div>
           ) : null}
-          {versioningAvailable && !viewerOnly && (rawCanShare || rawCanDownload) ? (
+          {versioningAvailable && (rawCanShare || rawCanDownload) ? (
             <button
               type="button"
               className="chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only"
@@ -10857,23 +10925,7 @@ function HtmlViewer({
           {rawCanShare || rawCanDownload ? (
             <div className="chrome-file-action-menus" ref={shareRef}>
               <div className="share-menu chrome-share-menu chrome-share-menu--unified">
-                {rawCanShare ? (
-                  <button
-                    type="button"
-                    className={
-                      'chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only chrome-action-unified'
-                    }
-                    aria-haspopup="menu"
-                    aria-expanded={deployMenuOpen && unifiedActionTab === 'share'}
-                    aria-label={shareMenuLabel}
-                    title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
-                    onClick={openShareMenu}
-                  >
-                    <RemixIcon name="share-forward-line" size={15} />
-                    <span>{shareMenuLabel}</span>
-                  </button>
-                ) : null}
-                {rawCanDownload ? (
+                {rawCanShare || rawCanDownload ? (
                   <button
                     type="button"
                     className={
@@ -10881,13 +10933,13 @@ function HtmlViewer({
                       (exportReadyNudge ? ' export-ready-nudge' : '')
                     }
                     aria-haspopup="menu"
-                    aria-expanded={deployMenuOpen && unifiedActionTab === 'export'}
-                    aria-label={t('fileViewer.download')}
+                    aria-expanded={deployMenuOpen}
+                    aria-label={shareMenuLabel}
                     title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
-                    onClick={openDownloadMenu}
+                    onClick={rawCanShare ? openShareMenu : openDownloadMenu}
                   >
-                    <RemixIcon name="download-line" size={15} />
-                    <span>{t('fileViewer.download')}</span>
+                    <RemixIcon name="share-forward-line" size={15} />
+                    <span>{shareMenuLabel}</span>
                   </button>
                 ) : null}
                 {deployMenuOpen && (rawCanShare || rawCanDownload) ? (
@@ -11300,7 +11352,17 @@ function HtmlViewer({
                     ) : null}
                     {unifiedActionTab === 'send' ? (
                       <div className="chrome-unified-panel chrome-unified-panel--handoff">
-                        <HandoffButton projectId={projectId} />
+                        <HandoffButton
+                          projectId={projectId}
+                          projectName={projectName}
+                          projectDir={projectDir}
+                          agents={agents}
+                          artifactId={artifactId}
+                          artifactKind={handoffArtifactKind}
+                          metricsConsent={metricsConsent}
+                          installationId={installationId}
+                          embedded
+                        />
                       </div>
                     ) : null}
                   </div>

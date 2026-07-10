@@ -1003,6 +1003,7 @@ export const zhCN: Dict = {
   "recentProjects.shareInProgress": "分享中…",
   "recentProjects.sharedInTeam": "已在团队空间",
   "recentProjects.moveToTeam": "转入团队空间",
+  "recentProjects.shareFailed": "转入团队空间失败，请稍后重试。",
   "pluginsHome.title": "Community",
   "pluginsHome.subtitle":
     "当前运行环境内置的 Open Design 工作流。选择一个加载 starter prompt，或浏览插件市场查看更多。",

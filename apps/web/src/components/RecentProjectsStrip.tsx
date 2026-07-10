@@ -195,6 +195,7 @@ export function RecentProjectsStrip({
   // `canShareProjects` (403 off-team / no rights), so we only badge on success.
   const [sharingId, setSharingId] = useState<string | null>(null);
   const [sharedIds, setSharedIds] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const [shareErrorProjectId, setShareErrorProjectId] = useState<string | null>(null);
   // A project counts as team-shared if the hub already lists it (persistent —
   // survives refresh) OR we shared it in this session (optimistic, before the
   // team-projects poll catches up). The union is what makes the badge stick.
@@ -364,7 +365,8 @@ export function RecentProjectsStrip({
   // to publish it for teammates. Server-side gated on `canShareProjects`, so a
   // non-team / unpermitted caller gets a 403 and the project stays un-badged.
   async function handleShareToTeam(project: Project) {
-    setMenuOpenId(null);
+    setShareErrorProjectId(null);
+    setMenuOpenId(project.id);
     setSharingId(project.id);
     try {
       const res = await fetch(`/api/projects/${encodeURIComponent(project.id)}/collab/sync-intent`, {
@@ -372,12 +374,16 @@ export function RecentProjectsStrip({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ event: 'project_team_share_requested', projectId: project.id }),
       });
-      if (res.ok) {
-        setSharedIds((prev) => new Set(prev).add(project.id));
-        notifyTeamProjectsChanged();
+      if (!res.ok) {
+        throw new Error(`share failed with status ${res.status}`);
       }
-    } catch {
-      // Best-effort: leave the project un-badged on a transient failure.
+      setSharedIds((prev) => new Set(prev).add(project.id));
+      notifyTeamProjectsChanged();
+      setMenuOpenId(null);
+    } catch (err) {
+      console.warn('[RecentProjectsStrip] share project to team failed:', err);
+      setShareErrorProjectId(project.id);
+      setMenuOpenId(project.id);
     } finally {
       setSharingId(null);
     }
@@ -715,6 +721,7 @@ export function RecentProjectsStrip({
                   aria-expanded={menuOpenId === project.id}
                     onClick={(event) => {
                       event.stopPropagation();
+                      setShareErrorProjectId(null);
                       setMenuOpenId((current) => current === project.id ? null : project.id);
                     }}
                   >
@@ -760,6 +767,11 @@ export function RecentProjectsStrip({
                               : t('recentProjects.moveToTeam')}
                         </span>
                       </button>
+                      {shareErrorProjectId === project.id ? (
+                        <div className="recent-projects__card-menu-error" role="alert">
+                          {t('recentProjects.shareFailed')}
+                        </div>
+                      ) : null}
                       {onDelete ? (
                         <button
                           type="button"

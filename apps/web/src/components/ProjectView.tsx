@@ -8309,6 +8309,7 @@ export function ProjectView({
         ) : null}
         <FileWorkspace
           projectId={project.id}
+          projectName={project.name}
           viewerOnly={projectCollab.viewerOnly}
           readonlyNotice={readonlyNoticeText}
           projectKind={projectKindFromMetadataToTracking(currentProject.metadata) ?? 'prototype'}
@@ -8374,7 +8375,7 @@ export function ProjectView({
           githubConnected={githubConnected}
           commentPortalId={commentInspectorPortalId}
           onCommentModeChange={setCommentInspectorActive}
-          presenceSlot={projectCollab.enabled ? (
+          fileActionsBefore={projectCollab.enabled ? (
             <PresenceBar
               members={projectCollab.present}
               selfMember={projectCollab.member}
@@ -8383,6 +8384,11 @@ export function ProjectView({
           ) : null}
           chatConfig={config}
           chatAgentsById={agentsById}
+          handoffAgents={agents}
+          handoffArtifactId={headerArtifact.artifact_id}
+          handoffArtifactKind={headerArtifact.artifact_kind}
+          metricsConsent={config.telemetry?.metrics === true}
+          installationId={config.installationId}
           chatLocale={locale}
           conversations={conversations}
           activeConversationId={activeConversationId}

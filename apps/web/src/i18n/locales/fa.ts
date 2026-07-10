@@ -973,6 +973,7 @@ export const fa: Dict = {
   'recentProjects.shareInProgress': 'Sharing…',
   'recentProjects.sharedInTeam': 'In team space',
   'recentProjects.moveToTeam': 'Move to team space',
+  'recentProjects.shareFailed': 'Could not move to team space. Try again.',
   'pluginsHome.title': 'انجمن',
   'pluginsHome.subtitle': 'گردش‌کارهای آماده Open Design که همراه این runtime ارائه شده‌اند. یکی را برای بارگذاری یک پرامپت شروع انتخاب کنید، یا برای موارد بیشتر در رجیستری بگردید.',
   'pluginsHome.browseRegistry': 'مرور رجیستری',
