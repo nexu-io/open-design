@@ -846,6 +846,52 @@ export interface Dict {
   'brands.coreDocLabel': string;
   'brands.projectCount': string;
   'brands.paletteChannelMeta': string;
+  // Brands — create modal (subproject B)
+  'brands.newButton': string;
+  'brands.newTitle': string;
+  'brands.newFieldTitle': string;
+  'brands.newFieldId': string;
+  'brands.newFieldIdHint': string;
+  'brands.newSubmit': string;
+  'brands.newDuplicateId': string;
+  'brands.newFailed': string;
+  // Brands — detail edit mode
+  'brands.edit': string;
+  'brands.save': string;
+  'brands.cancel': string;
+  'brands.saveFailed': string;
+  'brands.fieldSubtitle': string;
+  'brands.fieldToneLabel': string;
+  'brands.fieldTypographyFamily': string;
+  'brands.fieldTypographyRoles': string;
+  'brands.fieldTypographyWeights': string;
+  'brands.fieldNeutralPalette': string;
+  'brands.fieldCommaHint': string;
+  // Brands — doc editor
+  'brands.docEdit': string;
+  'brands.docSaveFailed': string;
+  // Brands — channel add/remove
+  'brands.channelAdd': string;
+  'brands.channelAddKey': string;
+  'brands.channelAddKeyHint': string;
+  'brands.channelAddLabel': string;
+  'brands.channelAddDesignSystem': string;
+  'brands.channelAddSubmit': string;
+  'brands.channelAddFailed': string;
+  'brands.channelRemove': string;
+  'brands.channelRemoveConfirm': string;
+  'brands.channelRemoveFailed': string;
+  // Brands — icon/logo upload
+  'brands.uploadIcon': string;
+  'brands.uploadLogo': string;
+  'brands.uploadFailed': string;
+  'brands.uploadTooLarge': string;
+  // Brands — delete (danger zone)
+  'brands.deleteZone': string;
+  'brands.delete': string;
+  'brands.deleteConfirm': string;
+  'brands.deleteBlocked': string;
+  'brands.deleteFailed': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;
   'workspaceTabs.marketplace': string;
