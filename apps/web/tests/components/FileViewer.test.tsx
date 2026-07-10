@@ -7004,3 +7004,63 @@ describe('LiveArtifactRefreshHistoryPanel', () => {
     expect(markup).not.toContain('>Never<');
   });
 });
+
+describe('FileViewer deck navigation toolbar', () => {
+  function renderDeck() {
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({
+          name: 'deck.html',
+          path: 'deck.html',
+          mime: 'text/html',
+          kind: 'html',
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Deck',
+            entry: 'deck.html',
+            renderer: 'html',
+            exports: ['html'],
+          },
+        })}
+        isDeck
+        liveHtml={'<html><body><section class="slide">one</section><section class="slide">two</section><section class="slide">three</section></body></html>'}
+      />,
+    );
+    return screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+  }
+
+  function reportSlideState(frame: HTMLIFrameElement, active: number, count: number) {
+    window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'od:slide-state', active, count },
+    }));
+  }
+
+  const counter = () => document.querySelector('.deck-nav-counter');
+  const prevButton = () => screen.getByLabelText('Previous slide') as HTMLButtonElement;
+  const nextButton = () => screen.getByLabelText('Next slide') as HTMLButtonElement;
+
+  // The bridge reports keyboard-driven navigation as `od:slide-state`; the toolbar
+  // has to follow it, not just toolbar clicks. See srcdoc-deck-bridge-keyboard-sync.
+  it('follows reported slide state for the counter and the prev/next buttons', async () => {
+    const frame = renderDeck();
+
+    reportSlideState(frame, 0, 3);
+    await waitFor(() => expect(counter()?.textContent).toBe('1 / 3'));
+    expect(prevButton().disabled).toBe(true);
+    expect(nextButton().disabled).toBe(false);
+
+    reportSlideState(frame, 1, 3);
+    await waitFor(() => expect(counter()?.textContent).toBe('2 / 3'));
+    expect(prevButton().disabled).toBe(false);
+    expect(nextButton().disabled).toBe(false);
+
+    reportSlideState(frame, 2, 3);
+    await waitFor(() => expect(counter()?.textContent).toBe('3 / 3'));
+    expect(prevButton().disabled).toBe(false);
+    expect(nextButton().disabled).toBe(true);
+  });
+});
