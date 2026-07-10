@@ -450,6 +450,11 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('## Media generation (if asked)');
     expect(out).toContain('### Run-scoped BYOK media defaults');
     expect(out).toContain('- Image model: `senseaudio-image-1.0-260319`');
+    expect(out).toContain('IMAGE_MODEL="senseaudio-image-1.0-260319"');
+    expect(out).toContain('--model "$IMAGE_MODEL"');
+    expect(out).toContain('For image generation prefer your configured model: `senseaudio-image-1.0-260319`.');
+    expect(out).not.toContain('--model flux-pro-ultra');
+    expect(out).not.toContain('For the best fal image model use `--model flux-pro-ultra`');
   });
 
   it('keeps unrestricted enabled media contract unchanged', () => {
