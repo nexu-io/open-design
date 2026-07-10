@@ -23,7 +23,12 @@
 // personal_byok workspace still has full team features.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
+import type {
+  WorkspaceBillingCatalog,
+  WorkspaceBillingSummary,
+  WorkspaceCollabContext,
+  WorkspaceTeamBillingPlanId,
+} from '@open-design/contracts';
 import { EntryHelpMenu } from './EntryHelpMenu';
 import { Icon } from './Icon';
 import { InviteDialog } from './InviteDialog';
@@ -178,6 +183,7 @@ export function EntryNavRail({
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [billingCatalog, setBillingCatalog] = useState<WorkspaceBillingCatalog | null>(null);
   // Whether the real billing summary offers a checkout (A's subscription flow).
   const canUpgrade = Boolean(billing?.availableActions?.includes('subscription_checkout'));
 
@@ -186,14 +192,35 @@ export function EntryNavRail({
   // open the returned Stripe URL. A null url (CLI / session / A's route
   // unavailable, e.g. A #660 not yet in local vela) leaves the dialog open so
   // the user can retry — it never crashes.
-  async function handleUpgrade() {
+  useEffect(() => {
+    if (!isTeam || !context?.workspaceId) {
+      setBillingCatalog(null);
+      return;
+    }
+    let canceled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/workspace/billing/catalog');
+        const body = (await res.json()) as { catalog?: WorkspaceBillingCatalog | null };
+        if (!canceled) setBillingCatalog(body.catalog ?? null);
+      } catch {
+        if (!canceled) setBillingCatalog(null);
+      }
+    })();
+    return () => {
+      canceled = true;
+    };
+  }, [context?.workspaceId, isTeam]);
+
+  async function handleUpgrade(planId?: WorkspaceTeamBillingPlanId, minSeats?: number) {
     if (checkingOut) return;
     setCheckingOut(true);
     try {
+      const seats = Math.max(1, context?.seatSummary.usedSeats ?? 1, minSeats ?? 1);
       const res = await fetch('/api/workspace/billing/checkout', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ planId, seats }),
       });
       const body = (await res.json()) as { checkoutUrl?: string | null };
       if (body?.checkoutUrl) {
@@ -633,9 +660,10 @@ export function EntryNavRail({
       <InsufficientCreditsDialog
         open={upgradeOpen}
         plan="free"
+        billingCatalog={billingCatalog}
         creditsRemaining={creditsBalance}
         onClose={() => setUpgradeOpen(false)}
-        onUpgrade={() => void handleUpgrade()}
+        onUpgrade={(_target, planId, minSeats) => void handleUpgrade(planId, minSeats)}
         onBuyPack={() => setUpgradeOpen(false)}
       />
     </nav>

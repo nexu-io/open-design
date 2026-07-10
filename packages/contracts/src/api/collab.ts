@@ -310,11 +310,39 @@ export interface WorkspaceBillingResponse {
   summary: WorkspaceBillingSummary | null;
 }
 
+export type WorkspaceTeamBillingPlanId = 'team_plus' | 'team_pro' | 'team_max';
+
+export interface WorkspaceTeamBillingPlan {
+  planId: WorkspaceTeamBillingPlanId;
+  seatUnitAmountCents: number;
+  currency: 'usd';
+  minSeats: number;
+  status: 'active' | 'disabled';
+}
+
+/**
+ * GET /api/workspace/billing/catalog. Team subscription plan prices surfaced
+ * through Vela CLI (`vela billing team-catalog --format json`) so the client does
+ * not hardcode A-lane pricing. `catalog` is null when the CLI/session/backend is
+ * unavailable.
+ */
+export interface WorkspaceBillingCatalog {
+  workspaceId: string;
+  billingInterval: 'monthly';
+  plans: WorkspaceTeamBillingPlan[];
+}
+
+export interface WorkspaceBillingCatalogResponse {
+  catalog: WorkspaceBillingCatalog | null;
+}
+
 /**
  * Request to start a team-subscription checkout (the "升级" action behind the
- * nav credits chip). Seats defaults server-side when omitted.
+ * nav credits chip). Plan id is a Vela team subscription plan; seats defaults
+ * server-side when omitted.
  */
 export interface WorkspaceBillingCheckoutRequest {
+  planId?: WorkspaceTeamBillingPlanId;
   seats?: number;
 }
 

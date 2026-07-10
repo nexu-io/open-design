@@ -3,7 +3,10 @@ import type {
   CollabCloudMemberDirectoryEntry,
   CollabCloudMembersResponse,
   TeamProject,
+  WorkspaceBillingCatalog,
+  WorkspaceBillingCatalogResponse,
   WorkspaceBillingCheckoutResponse,
+  WorkspaceTeamBillingPlanId,
   WorkspaceBillingResponse,
   WorkspaceBillingSummary,
   WorkspaceContextResponse,
@@ -26,7 +29,11 @@ import {
   type CreateInviteOutcome,
   type CreateWorkspaceInviteInput,
 } from '../collab/invite-create.js';
-import { fetchBillingCheckoutUrl, fetchVelaBillingSummary } from '../integrations/vela-billing.js';
+import {
+  fetchBillingCheckoutUrl,
+  fetchVelaBillingCatalog,
+  fetchVelaBillingSummary,
+} from '../integrations/vela-billing.js';
 
 export interface RegisterCollabContextRoutesDeps {
   workspaceContext: WorkspaceContextProvider;
@@ -36,8 +43,14 @@ export interface RegisterCollabContextRoutesDeps {
   createInvite?: (input: CreateWorkspaceInviteInput) => Promise<CreateInviteOutcome>;
   /** Injectable for tests; defaults to the vela billing CLI 收口. */
   fetchBilling?: () => Promise<WorkspaceBillingSummary | null>;
+  /** Injectable for tests; defaults to the vela billing catalog CLI 收口. */
+  fetchBillingCatalog?: (workspaceId: string) => Promise<WorkspaceBillingCatalog | null>;
   /** Injectable for tests; defaults to the vela billing checkout CLI 收口. */
-  startCheckout?: (input: { seats?: number }) => Promise<string | null>;
+  startCheckout?: (input: {
+    workspaceId?: string;
+    planId?: WorkspaceTeamBillingPlanId;
+    seats?: number;
+  }) => Promise<string | null>;
   /** Injectable for tests; defaults to the resource-hub team-project lister
    *  built from the same workspace context + env-configured hub client the share
    *  path uses. */
@@ -97,8 +110,12 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
   const createInvite =
     deps.createInvite ?? ((input: CreateWorkspaceInviteInput) => createWorkspaceInvite(input));
   const fetchBilling = deps.fetchBilling ?? (() => fetchVelaBillingSummary());
+  const fetchBillingCatalog =
+    deps.fetchBillingCatalog ?? ((workspaceId: string) => fetchVelaBillingCatalog(workspaceId));
   const startCheckout =
-    deps.startCheckout ?? ((input: { seats?: number }) => fetchBillingCheckoutUrl(input));
+    deps.startCheckout ??
+    ((input: { workspaceId?: string; planId?: WorkspaceTeamBillingPlanId; seats?: number }) =>
+      fetchBillingCheckoutUrl(input));
   const listTeamProjects =
     deps.listTeamProjects ?? createTeamProjectsLister({ workspaceContext });
   const listMembers = deps.listMembers ?? (async () => []);
@@ -199,13 +216,33 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
     res.json(body);
   });
 
+  app.get('/api/workspace/billing/catalog', async (req, res) => {
+    const authorization = req.header('authorization') ?? undefined;
+    const context = await workspaceContext.current({ authorization });
+    const workspaceId = context?.workspaceId?.trim() ?? '';
+    const catalog = workspaceId ? await fetchBillingCatalog(workspaceId) : null;
+    const body: WorkspaceBillingCatalogResponse = { catalog };
+    res.json(body);
+  });
+
   // The "升级" action behind the credits chip: start a team-subscription
   // checkout via the vela billing CLI 收口 and hand back the Stripe URL to open.
   // A null url means the CLI / session / A's checkout route is unavailable.
   app.post('/api/workspace/billing/checkout', async (req, res) => {
-    const body = (req.body ?? {}) as { seats?: unknown };
+    const authorization = req.header('authorization') ?? undefined;
+    const context = await workspaceContext.current({ authorization });
+    const workspaceId = context?.workspaceId?.trim() ?? '';
+    const body = (req.body ?? {}) as { planId?: unknown; seats?: unknown };
+    const planId = parseTeamBillingPlanId(body.planId);
     const seats = typeof body.seats === 'number' && body.seats > 0 ? Math.floor(body.seats) : undefined;
-    const checkoutUrl = await startCheckout(seats != null ? { seats } : {});
+    const checkoutInput: {
+      workspaceId?: string;
+      planId?: WorkspaceTeamBillingPlanId;
+      seats?: number;
+    } = { workspaceId };
+    if (planId) checkoutInput.planId = planId;
+    if (seats !== undefined) checkoutInput.seats = seats;
+    const checkoutUrl = await startCheckout(checkoutInput);
     const response: WorkspaceBillingCheckoutResponse = { checkoutUrl };
     res.json(response);
   });
@@ -229,4 +266,8 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
     const response: WorkspaceContextResponse = { context };
     res.json(response);
   });
+}
+
+function parseTeamBillingPlanId(value: unknown): WorkspaceTeamBillingPlanId | null {
+  return value === 'team_plus' || value === 'team_pro' || value === 'team_max' ? value : null;
 }

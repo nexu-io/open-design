@@ -117,6 +117,71 @@ describe('collab context routes', () => {
   });
 });
 
+describe('workspace billing routes', () => {
+  it('returns the real team billing catalog for the current workspace', async () => {
+    const calls: string[] = [];
+    const api = await startContextServer({
+      fetchBillingCatalog: async (workspaceId) => {
+        calls.push(workspaceId);
+        return {
+          workspaceId,
+          billingInterval: 'monthly',
+          plans: [
+            {
+              planId: 'team_plus',
+              seatUnitAmountCents: 3900,
+              currency: 'usd',
+              minSeats: 1,
+              status: 'active',
+            },
+          ],
+        };
+      },
+    });
+    await api.req('/api/workspace/context', { method: 'PUT', body: TEAM_CONTEXT });
+
+    const res = await api.req('/api/workspace/billing/catalog');
+
+    expect(res.status).toBe(200);
+    expect(calls).toEqual(['wm-1']);
+    expect(res.body).toEqual({
+      catalog: {
+        workspaceId: 'wm-1',
+        billingInterval: 'monthly',
+        plans: [
+          {
+            planId: 'team_plus',
+            seatUnitAmountCents: 3900,
+            currency: 'usd',
+            minSeats: 1,
+            status: 'active',
+          },
+        ],
+      },
+    });
+  });
+
+  it('starts checkout with workspace-derived id and selected team plan', async () => {
+    const calls: Array<{ workspaceId?: string; planId?: string; seats?: number }> = [];
+    const api = await startContextServer({
+      startCheckout: async (input) => {
+        calls.push(input);
+        return 'https://checkout.stripe.test/cs_team';
+      },
+    });
+    await api.req('/api/workspace/context', { method: 'PUT', body: TEAM_CONTEXT });
+
+    const res = await api.req('/api/workspace/billing/checkout', {
+      method: 'POST',
+      body: { workspaceId: 'spoofed', planId: 'team_pro', seats: 3 },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ checkoutUrl: 'https://checkout.stripe.test/cs_team' });
+    expect(calls).toEqual([{ workspaceId: 'wm-1', planId: 'team_pro', seats: 3 }]);
+  });
+});
+
 describe('POST /api/workspace/invite', () => {
   it('creates each invite against the current workspaceId and reports per-row results', async () => {
     const calls: Array<{ email: string; role: string; workspaceId: string }> = [];

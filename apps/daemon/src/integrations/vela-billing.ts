@@ -1,5 +1,9 @@
 import { execFile } from 'node:child_process';
-import type { WorkspaceBillingSummary } from '@open-design/contracts';
+import type {
+  WorkspaceBillingCatalog,
+  WorkspaceBillingSummary,
+  WorkspaceTeamBillingPlanId,
+} from '@open-design/contracts';
 import { amrVelaProfileEnv } from './vela-profile.js';
 
 // A-lane billing 收口. Instead of the daemon holding billing credentials, it
@@ -40,6 +44,10 @@ export async function fetchVelaBillingSummary(
 }
 
 export interface BillingCheckoutOptions {
+  /** Team workspace id whose subscription is being purchased. */
+  workspaceId?: string;
+  /** Vela team subscription plan id. */
+  planId?: WorkspaceTeamBillingPlanId;
   /** Seats to purchase for the team subscription (>= 1). */
   seats?: number;
   /** Where Stripe returns the user after success / cancel. */
@@ -59,8 +67,21 @@ export interface BillingCheckoutOptions {
 export async function fetchBillingCheckoutUrl(
   options: BillingCheckoutOptions = {},
 ): Promise<string | null> {
+  const workspaceId = options.workspaceId?.trim();
+  if (!workspaceId) return null;
+  const planId = options.planId ?? 'team_plus';
   const seats = options.seats && options.seats > 0 ? Math.floor(options.seats) : 1;
-  const args = ['checkout', '--seats', String(seats), '--format', 'json'];
+  const args = [
+    'checkout',
+    '--workspace-id',
+    workspaceId,
+    '--plan-id',
+    planId,
+    '--seats',
+    String(seats),
+    '--format',
+    'json',
+  ];
   if (options.successUrl) args.push('--success-url', options.successUrl);
   if (options.cancelUrl) args.push('--cancel-url', options.cancelUrl);
   const run = options.run ?? defaultRunVelaBilling;
@@ -78,6 +99,28 @@ export async function fetchBillingCheckoutUrl(
   } catch {
     return null;
   }
+}
+
+export async function fetchVelaBillingCatalog(
+  workspaceId: string,
+  options: FetchVelaBillingOptions = {},
+): Promise<WorkspaceBillingCatalog | null> {
+  const trimmedWorkspaceId = workspaceId.trim();
+  if (!trimmedWorkspaceId) return null;
+  const run = options.run ?? defaultRunVelaBilling;
+  let stdout: string;
+  try {
+    stdout = await run([
+      'team-catalog',
+      '--workspace-id',
+      trimmedWorkspaceId,
+      '--format',
+      'json',
+    ]);
+  } catch {
+    return null;
+  }
+  return parseBillingCatalog(stdout);
 }
 
 /** Map the `vela billing summary` JSON into the client-facing summary. */
@@ -103,8 +146,61 @@ export function parseBillingSummary(stdout: string): WorkspaceBillingSummary | n
   };
 }
 
+export function parseBillingCatalog(stdout: string): WorkspaceBillingCatalog | null {
+  const trimmed = stdout.trim();
+  if (!trimmed) return null;
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(trimmed) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const workspaceId = str(raw.workspaceId);
+  const billingInterval = raw.billingInterval === 'monthly' ? 'monthly' : null;
+  if (!workspaceId || !billingInterval || !Array.isArray(raw.plans)) return null;
+  const plans = raw.plans
+    .map((plan): WorkspaceBillingCatalog['plans'][number] | null => {
+      if (!plan || typeof plan !== 'object') return null;
+      const record = plan as Record<string, unknown>;
+      const planId = parseTeamPlanId(record.planId);
+      const seatUnitAmountCents = Number(record.seatUnitAmountCents);
+      const minSeats = Number(record.minSeats);
+      const currency = record.currency === 'usd' ? 'usd' : null;
+      const status =
+        record.status === 'active' || record.status === 'disabled'
+          ? record.status
+          : null;
+      if (
+        !planId ||
+        !currency ||
+        !status ||
+        !Number.isFinite(seatUnitAmountCents) ||
+        seatUnitAmountCents <= 0 ||
+        !Number.isFinite(minSeats) ||
+        minSeats <= 0
+      ) {
+        return null;
+      }
+      return {
+        planId,
+        seatUnitAmountCents,
+        currency,
+        minSeats,
+        status,
+      };
+    })
+    .filter((plan): plan is WorkspaceBillingCatalog['plans'][number] => plan !== null);
+  return { workspaceId, billingInterval, plans };
+}
+
 function str(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function parseTeamPlanId(value: unknown): WorkspaceTeamBillingPlanId | null {
+  return value === 'team_plus' || value === 'team_pro' || value === 'team_max'
+    ? value
+    : null;
 }
 
 const defaultRunVelaBilling: RunVelaBilling = (args) =>

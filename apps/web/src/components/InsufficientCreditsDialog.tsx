@@ -11,7 +11,8 @@
 // confirm action is wired by the caller to the real billing 收口
 // (`POST /api/workspace/billing/checkout`).
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { WorkspaceBillingCatalog, WorkspaceTeamBillingPlanId } from '@open-design/contracts';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
 
@@ -29,18 +30,22 @@ interface TierOption {
   monthly: number;
   /** Per-month price (¥) when billed annually. */
   annual: number;
+  /** Vela team subscription plan id when this option comes from the real catalog. */
+  teamPlanId?: WorkspaceTeamBillingPlanId;
+  /** Minimum seats enforced by Vela for this plan. */
+  minSeats?: number;
+  currency?: 'usd' | 'cny';
 }
 
-const PLUS: TierOption = { plan: 'plus', labelKey: 'entry.upgradePlanPlus', descKey: 'entry.upgradePlanPlusDesc', monthly: 39, annual: 29 };
-const PRO: TierOption = { plan: 'pro', labelKey: 'entry.upgradePlanPro', descKey: 'entry.upgradePlanProDesc', monthly: 99, annual: 79 };
-const MAX: TierOption = { plan: 'max', labelKey: 'entry.upgradePlanMax', descKey: 'entry.upgradePlanMaxDesc', monthly: 199, annual: 159 };
-const TEAM: TierOption = { plan: 'team', labelKey: 'entry.upgradePlanTeam', descKey: 'entry.upgradePlanTeamDesc', monthly: 119, annual: 99 };
+const PLUS: TierOption = { plan: 'plus', labelKey: 'entry.upgradePlanPlus', descKey: 'entry.upgradePlanPlusDesc', monthly: 39, annual: 29, teamPlanId: 'team_plus' };
+const PRO: TierOption = { plan: 'pro', labelKey: 'entry.upgradePlanPro', descKey: 'entry.upgradePlanProDesc', monthly: 99, annual: 79, teamPlanId: 'team_pro' };
+const MAX: TierOption = { plan: 'max', labelKey: 'entry.upgradePlanMax', descKey: 'entry.upgradePlanMaxDesc', monthly: 199, annual: 159, teamPlanId: 'team_max' };
 
 // Tiers reachable from each plan, in order. Max / 团队版 use auto recharge.
 const UPGRADE_TARGETS: Record<DemoPlan, TierOption[]> = {
-  free: [PLUS, PRO, MAX, TEAM],
-  plus: [PRO, MAX, TEAM],
-  pro: [MAX, TEAM],
+  free: [PLUS, PRO, MAX],
+  plus: [PRO, MAX],
+  pro: [MAX],
   max: [],
   team: [],
 };
@@ -59,12 +64,13 @@ interface Props {
   plan: DemoPlan;
   onClose: () => void;
   /** Confirmed an upgrade to a higher tier. */
-  onUpgrade: (target: DemoPlan) => void;
+  onUpgrade: (target: DemoPlan, planId?: WorkspaceTeamBillingPlanId, minSeats?: number) => void;
   /** Saved an auto-recharge setting for top tiers. */
   onBuyPack: (packLabel: string) => void;
   autoRechargeScope?: 'team' | 'member';
   autoRechargeMemberName?: string;
   creditsRemaining?: number | null;
+  billingCatalog?: WorkspaceBillingCatalog | null;
 }
 
 export function InsufficientCreditsDialog({
@@ -76,9 +82,12 @@ export function InsufficientCreditsDialog({
   autoRechargeScope = 'team',
   autoRechargeMemberName = '李娜',
   creditsRemaining = null,
+  billingCatalog = null,
 }: Props) {
   const t = useT();
-  const targets = UPGRADE_TARGETS[plan];
+  const catalogTargets = useMemo(() => catalogToTierOptions(billingCatalog), [billingCatalog]);
+  const targets = catalogTargets.length > 0 ? catalogTargets : UPGRADE_TARGETS[plan];
+  const usesRealTeamCatalog = catalogTargets.length > 0;
   const isTopTier = targets.length === 0;
   const isMemberRecharge = autoRechargeScope === 'member';
   const creditsExhausted = typeof creditsRemaining === 'number' && creditsRemaining <= 0;
@@ -90,6 +99,14 @@ export function InsufficientCreditsDialog({
   const [selectedLimit, setSelectedLimit] = useState<AutoRechargeLimit>('50');
   // Billing cycle for tier upgrades — defaults to annual (年付).
   const [cycle, setCycle] = useState<BillingCycle>('annual');
+
+  useEffect(() => {
+    setSelectedTier(targets[0]?.plan ?? 'team');
+  }, [targets]);
+
+  useEffect(() => {
+    if (usesRealTeamCatalog) setCycle('monthly');
+  }, [usesRealTeamCatalog]);
 
   if (!open) return null;
 
@@ -160,28 +177,30 @@ export function InsufficientCreditsDialog({
           </div>
         ) : (
           <div className="credit-upgrade__options">
-            <div className="credit-upgrade__cycle" role="tablist" aria-label={t('entry.upgradeBillingCycleAria')}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={cycle === 'annual'}
-                className={`credit-upgrade__cycle-tab${cycle === 'annual' ? ' is-active' : ''}`}
-                onClick={() => setCycle('annual')}
-              >
-                {t('entry.upgradeAnnual')} <span className="credit-upgrade__cycle-save">{t('entry.upgradeAnnualSave')}</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={cycle === 'monthly'}
-                className={`credit-upgrade__cycle-tab${cycle === 'monthly' ? ' is-active' : ''}`}
-                onClick={() => setCycle('monthly')}
-              >
-                {t('entry.upgradeMonthly')}
-              </button>
-            </div>
+            {!usesRealTeamCatalog ? (
+              <div className="credit-upgrade__cycle" role="tablist" aria-label={t('entry.upgradeBillingCycleAria')}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={cycle === 'annual'}
+                  className={`credit-upgrade__cycle-tab${cycle === 'annual' ? ' is-active' : ''}`}
+                  onClick={() => setCycle('annual')}
+                >
+                  {t('entry.upgradeAnnual')} <span className="credit-upgrade__cycle-save">{t('entry.upgradeAnnualSave')}</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={cycle === 'monthly'}
+                  className={`credit-upgrade__cycle-tab${cycle === 'monthly' ? ' is-active' : ''}`}
+                  onClick={() => setCycle('monthly')}
+                >
+                  {t('entry.upgradeMonthly')}
+                </button>
+              </div>
+            ) : null}
             {targets.map((tier) => {
-              const price = cycle === 'annual' ? tier.annual : tier.monthly;
+              const price = cycle === 'annual' && !usesRealTeamCatalog ? tier.annual : tier.monthly;
               return (
                 <button
                   key={tier.plan}
@@ -195,9 +214,9 @@ export function InsufficientCreditsDialog({
                     <span className="credit-upgrade__option-desc">{t(tier.descKey)}</span>
                   </span>
                   <span className="credit-upgrade__option-price">
-                    ¥{price}
+                    {tier.currency === 'usd' ? '$' : '¥'}{price}
                     <span className="credit-upgrade__option-unit">
-                      {tier.plan === 'team'
+                      {usesRealTeamCatalog || tier.plan === 'team'
                         ? t('entry.upgradePriceUnitSeat')
                         : t('entry.upgradePriceUnitMonth')}
                     </span>
@@ -205,13 +224,15 @@ export function InsufficientCreditsDialog({
                 </button>
               );
             })}
-            <p className="credit-upgrade__prorate">
+            {!usesRealTeamCatalog ? (
+              <p className="credit-upgrade__prorate">
               <Icon name="info" size={13} />
               {cycle === 'annual'
                 ? t('entry.upgradeProrateAnnualPrefix')
                 : t('entry.upgradeProrateMonthlyPrefix')}
               {t('entry.upgradeProrateSuffix')}
-            </p>
+              </p>
+            ) : null}
           </div>
         )}
 
@@ -229,10 +250,13 @@ export function InsufficientCreditsDialog({
             </button>
           ) : (
             <button
-              type="button"
-              className="entry-invite__btn is-primary"
-              onClick={() => onUpgrade(selectedTier)}
-            >
+	              type="button"
+	              className="entry-invite__btn is-primary"
+	              onClick={() => {
+	                const tier = targets.find((option) => option.plan === selectedTier);
+	                onUpgrade(selectedTier, tier?.teamPlanId, tier?.minSeats);
+	              }}
+	            >
               <Icon name="sparkles" size={14} /> {t('entry.upgradeConfirm')}
             </button>
           )}
@@ -240,4 +264,40 @@ export function InsufficientCreditsDialog({
       </div>
     </div>
   );
+}
+
+function catalogToTierOptions(catalog: WorkspaceBillingCatalog | null): TierOption[] {
+  if (!catalog) return [];
+  const options: TierOption[] = [];
+  for (const plan of catalog.plans) {
+    if (plan.status !== 'active') continue;
+    const mapped = teamPlanToDemoPlan(plan.planId);
+    if (!mapped) continue;
+    options.push({
+      plan: mapped.plan,
+      labelKey: mapped.labelKey,
+      descKey: mapped.descKey,
+      monthly: plan.seatUnitAmountCents / 100,
+      annual: plan.seatUnitAmountCents / 100,
+      teamPlanId: plan.planId,
+      minSeats: plan.minSeats,
+      currency: 'usd',
+    });
+  }
+  return options;
+}
+
+function teamPlanToDemoPlan(
+  planId: WorkspaceTeamBillingPlanId,
+): Pick<TierOption, 'plan' | 'labelKey' | 'descKey'> | null {
+  if (planId === 'team_plus') {
+    return { plan: 'plus', labelKey: 'entry.upgradePlanPlus', descKey: 'entry.upgradePlanPlusDesc' };
+  }
+  if (planId === 'team_pro') {
+    return { plan: 'pro', labelKey: 'entry.upgradePlanPro', descKey: 'entry.upgradePlanProDesc' };
+  }
+  if (planId === 'team_max') {
+    return { plan: 'max', labelKey: 'entry.upgradePlanMax', descKey: 'entry.upgradePlanMaxDesc' };
+  }
+  return null;
 }
