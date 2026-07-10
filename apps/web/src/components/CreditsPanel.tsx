@@ -1,7 +1,7 @@
 // Credits popover — opened from the ✨ credits chip in the nav-rail account row.
 // Ported from the design demo (markup + classes are the demo's). The data is
 // real (A-lane billing via the vela CLI 收口): plan/tier/balance come from the
-// live billing summary, and 升级 opens the real Stripe checkout.
+// live billing summary, and 升级 links out to Vela Web where billing lives.
 
 import { Icon } from './Icon';
 import { useT } from '../i18n';
@@ -11,7 +11,7 @@ export interface CreditsInfo {
   planName: string;
   /** Short tier label (unused in the panel body; kept for parity with the chip). */
   tierLabel: string;
-  /** Whether to show the 升级 CTA (real billing `subscription_checkout` action). */
+  /** Whether to show the 升级 CTA (owner/admin with a Vela Web billing URL). */
   showUpgrade: boolean;
   /** Remaining usable credits (top-line number). Null → unknown ("—"). */
   balance: number | null;
@@ -24,7 +24,7 @@ interface Props {
   onClose: () => void;
   info: CreditsInfo;
   onUpgrade: () => void;
-  /** While a checkout session is being started (disables the 升级 button). */
+  /** While an external billing surface is being opened (disables the 升级 button). */
   upgrading?: boolean;
   memberCreditNotice?: boolean;
 }

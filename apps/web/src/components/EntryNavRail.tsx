@@ -9,8 +9,8 @@
 //     (theme / language / settings / GitHub help / feature request / add account
 //     / sign out). Falls back to the brand logo when there is no cloud identity
 //     (context === null).
-//   • Credits chip — plan tier (derived from `context.planId`) + a placeholder
-//     balance (real credits land later via the vela CLI 收口, like resources).
+//   • Credits chip — real plan tier + balance when A's vela CLI billing summary
+//     is available, with upgrade linking out to Vela Web.
 //   • Search box (readonly, decorative).
 //   • 最近 (Recents) → home, Community → community.
 //   • Team block (only when `context.workspaceType === 'team'`): an inline team
@@ -23,17 +23,12 @@
 // personal_byok workspace still has full team features.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type {
-  WorkspaceBillingCatalog,
-  WorkspaceBillingSummary,
-  WorkspaceCollabContext,
-  WorkspaceTeamBillingPlanId,
-} from '@open-design/contracts';
+import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
 import { Icon } from './Icon';
 import { InviteDialog } from './InviteDialog';
 import { CreditsPanel } from './CreditsPanel';
-import { InsufficientCreditsDialog } from './InsufficientCreditsDialog';
 import { useI18n } from '../i18n';
+import { notifyWorkspaceBillingRefresh } from '../collab/useWorkspaceContext';
 import type { EntryHomeView } from '../router';
 
 const REPO_URL = 'https://github.com/nexu-io/open-design';
@@ -105,7 +100,7 @@ function NavButton({ active, ariaLabel, tooltip, onClick, disabled, testId, chil
 // not the local client. We link out to it, deriving the section path from the one
 // workspace-settings URL the context carries. Best-effort: swap/append the section
 // segment, falling back to the raw settings URL when the path can't be rewritten.
-function teamConsoleUrl(base: string, section: 'members' | 'dashboard' | 'settings'): string {
+function teamConsoleUrl(base: string, section: 'members' | 'dashboard' | 'settings' | 'billing'): string {
   try {
     const url = new URL(base);
     const segments = url.pathname.split('/').filter(Boolean);
@@ -185,57 +180,19 @@ export function EntryNavRail({
   const [teamOpen, setTeamOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
-  const [checkingOut, setCheckingOut] = useState(false);
-  const [billingCatalog, setBillingCatalog] = useState<WorkspaceBillingCatalog | null>(null);
-  // Whether the real billing summary offers a checkout (A's subscription flow).
-  const canUpgrade = Boolean(billing?.availableActions?.includes('subscription_checkout'));
+  const billingUpgradeUrl =
+    context?.billingRecovery?.recoveryUrl?.trim() ||
+    (workspaceSettingsUrl ? teamConsoleUrl(workspaceSettingsUrl, 'billing') : null);
+  // Product decision: plan selection / payment lives in Vela Web. The local
+  // client opens that billing surface, then refreshes `/api/workspace/billing`
+  // when focus returns so direct web upgrades sync back into the credits chip.
+  const canUpgrade = Boolean(billingUpgradeUrl && permissions?.canManageBilling);
 
-  // "确认支付并升级" inside the plan-picker dialog: start a team-subscription
-  // checkout via the daemon's billing 收口 (spawns `vela billing checkout`) and
-  // open the returned Stripe URL. A null url (CLI / session / A's route
-  // unavailable, e.g. A #660 not yet in local vela) leaves the dialog open so
-  // the user can retry — it never crashes.
-  useEffect(() => {
-    if (!isTeam || !context?.workspaceId) {
-      setBillingCatalog(null);
-      return;
-    }
-    let canceled = false;
-    void (async () => {
-      try {
-        const res = await fetch('/api/workspace/billing/catalog');
-        const body = (await res.json()) as { catalog?: WorkspaceBillingCatalog | null };
-        if (!canceled) setBillingCatalog(body.catalog ?? null);
-      } catch {
-        if (!canceled) setBillingCatalog(null);
-      }
-    })();
-    return () => {
-      canceled = true;
-    };
-  }, [context?.workspaceId, isTeam]);
-
-  async function handleUpgrade(planId?: WorkspaceTeamBillingPlanId, minSeats?: number) {
-    if (checkingOut) return;
-    setCheckingOut(true);
-    try {
-      const seats = Math.max(1, context?.seatSummary.usedSeats ?? 1, minSeats ?? 1);
-      const res = await fetch('/api/workspace/billing/checkout', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ planId, seats }),
-      });
-      const body = (await res.json()) as { checkoutUrl?: string | null };
-      if (body?.checkoutUrl) {
-        window.open(body.checkoutUrl, '_blank', 'noopener,noreferrer');
-        setUpgradeOpen(false);
-      }
-    } catch {
-      // Best-effort: leave the dialog open so the user can retry.
-    } finally {
-      setCheckingOut(false);
-    }
+  function openBillingUpgrade() {
+    if (!billingUpgradeUrl) return;
+    setCreditsOpen(false);
+    window.open(billingUpgradeUrl, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => notifyWorkspaceBillingRefresh(), 3000);
   }
 
   const selectView = (next: EntryView) => {
@@ -304,10 +261,7 @@ export function EntryNavRail({
                 grantTip: t('entry.creditsGrantTip'),
               }}
               onUpgrade={() => {
-                // First step: the chip's 升级 opens the plan-picker dialog; the
-                // real checkout runs from the dialog's 确认支付并升级 button.
-                setCreditsOpen(false);
-                setUpgradeOpen(true);
+                openBillingUpgrade();
               }}
               memberCreditNotice={isTeam && !canManageMembers}
             />
@@ -667,20 +621,6 @@ export function EntryNavRail({
       </div>
 
       <InviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} />
-
-      {/* Plan-picker shown when the user taps 升级 on the credits chip. Pinned to
-          'free' so the full 个人版 Plus/Pro/Max + 团队版 tier chooser renders (we
-          don't ship the demo's DemoControlBar plan switcher). 确认支付并升级 runs
-          the real billing 收口 (handleUpgrade). */}
-      <InsufficientCreditsDialog
-        open={upgradeOpen}
-        plan="free"
-        billingCatalog={billingCatalog}
-        creditsRemaining={creditsBalance}
-        onClose={() => setUpgradeOpen(false)}
-        onUpgrade={(_target, planId, minSeats) => void handleUpgrade(planId, minSeats)}
-        onBuyPack={() => setUpgradeOpen(false)}
-      />
     </nav>
   );
 }

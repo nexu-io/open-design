@@ -321,10 +321,10 @@ export interface WorkspaceTeamBillingPlan {
 }
 
 /**
- * GET /api/workspace/billing/catalog. Team subscription plan prices surfaced
- * through Vela CLI (`vela billing team-catalog --format json`) so the client does
- * not hardcode A-lane pricing. `catalog` is null when the CLI/session/backend is
- * unavailable.
+ * GET /api/workspace/billing/catalog. Compatibility/diagnostic shape for Vela
+ * team subscription plans when A exposes them through the CLI. The local client
+ * does not render pricing or own checkout; upgrade opens Vela Web and billing
+ * state syncs back through `WorkspaceBillingSummary`.
  */
 export interface WorkspaceBillingCatalog {
   workspaceId: string;
@@ -337,9 +337,9 @@ export interface WorkspaceBillingCatalogResponse {
 }
 
 /**
- * Request to start a team-subscription checkout (the "升级" action behind the
- * nav credits chip). Plan id is a Vela team subscription plan; seats defaults
- * server-side when omitted.
+ * Compatibility request to start a team-subscription checkout via Vela CLI.
+ * The current product surface links the user to Vela Web instead of rendering
+ * an in-client plan picker.
  */
 export interface WorkspaceBillingCheckoutRequest {
   planId?: WorkspaceTeamBillingPlanId;
@@ -348,8 +348,7 @@ export interface WorkspaceBillingCheckoutRequest {
 
 /**
  * Result of starting a team-subscription checkout via the vela billing CLI 收口.
- * `checkoutUrl` is the Stripe URL the client opens; null when the CLI / session
- * / backend route is unavailable (the client shows an error instead).
+ * Kept as a compatibility contract; the primary C-line UI opens Vela Web.
  */
 export interface WorkspaceBillingCheckoutResponse {
   checkoutUrl: string | null;

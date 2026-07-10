@@ -210,6 +210,7 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
   // plan tier + credit balance here. The daemon shells out to `vela billing
   // summary` (same vela session as resources); a null summary means the CLI /
   // session is unavailable and the client keeps its context-derived tier hint.
+  // This route is also the sync-back path after a user upgrades in Vela Web.
   app.get('/api/workspace/billing', async (_req, res) => {
     const summary = await fetchBilling();
     const body: WorkspaceBillingResponse = { summary };
@@ -225,9 +226,9 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
     res.json(body);
   });
 
-  // The "升级" action behind the credits chip: start a team-subscription
-  // checkout via the vela billing CLI 收口 and hand back the Stripe URL to open.
-  // A null url means the CLI / session / A's checkout route is unavailable.
+  // Compatibility checkout route. The current product UI opens Vela Web for
+  // upgrade/payment, but keeping this endpoint avoids breaking existing tests
+  // and lets A's CLI checkout path be exercised directly when needed.
   app.post('/api/workspace/billing/checkout', async (req, res) => {
     const authorization = req.header('authorization') ?? undefined;
     const context = await workspaceContext.current({ authorization });

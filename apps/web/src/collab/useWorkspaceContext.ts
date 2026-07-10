@@ -54,25 +54,79 @@ export function useWorkspaceContext(): WorkspaceContextState {
  */
 export function useWorkspaceBilling(): WorkspaceBillingSummary | null {
   const [summary, setSummary] = useState<WorkspaceBillingSummary | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch('/api/workspace/billing');
-        if (!res.ok) return;
-        const body = (await res.json()) as WorkspaceBillingResponse;
-        if (!cancelled) setSummary(body.summary ?? null);
-      } catch {
-        if (!cancelled) setSummary(null);
-      }
-    })();
+    mountedRef.current = true;
     return () => {
-      cancelled = true;
+      mountedRef.current = false;
     };
   }, []);
 
+  const loadBilling = useCallback(async (clearOnFailure: boolean) => {
+    try {
+      const res = await fetch('/api/workspace/billing', { cache: 'no-store' });
+      if (!res.ok) {
+        if (clearOnFailure && mountedRef.current) setSummary(null);
+        return;
+      }
+      const body = (await res.json()) as WorkspaceBillingResponse;
+      if (mountedRef.current) setSummary(body.summary ?? null);
+    } catch {
+      if (clearOnFailure && mountedRef.current) setSummary(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBilling(true);
+  }, [loadBilling]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') void loadBilling(false);
+    }, WORKSPACE_BILLING_POLL_MS);
+    return () => clearInterval(interval);
+  }, [loadBilling]);
+
+  useEffect(() => {
+    const refresh = () => {
+      void loadBilling(true);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === WORKSPACE_BILLING_REFRESH_STORAGE_KEY) refresh();
+    };
+    window.addEventListener('focus', refresh);
+    window.addEventListener('pageshow', refresh);
+    window.addEventListener(WORKSPACE_BILLING_REFRESH_EVENT, refresh);
+    window.addEventListener('storage', onStorage);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('pageshow', refresh);
+      window.removeEventListener(WORKSPACE_BILLING_REFRESH_EVENT, refresh);
+      window.removeEventListener('storage', onStorage);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [loadBilling]);
+
   return summary;
+}
+
+const WORKSPACE_BILLING_POLL_MS = 30_000;
+export const WORKSPACE_BILLING_REFRESH_EVENT = 'od:workspace-billing-refresh';
+const WORKSPACE_BILLING_REFRESH_STORAGE_KEY = 'od.workspaceBilling.refreshAt';
+
+export function notifyWorkspaceBillingRefresh(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(WORKSPACE_BILLING_REFRESH_EVENT));
+  try {
+    window.localStorage.setItem(WORKSPACE_BILLING_REFRESH_STORAGE_KEY, String(Date.now()));
+  } catch {
+    // The in-window event is enough when localStorage is unavailable.
+  }
 }
 
 export interface TeamProjectsState {
