@@ -378,6 +378,27 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
+  it('keeps Atlas Cloud as an OpenAI-compatible known provider without changing the OpenAI default', () => {
+    const openai = switchApiProtocolConfig(baseConfig, 'openai');
+    const atlas = updateCurrentApiProtocolConfig(openai, {
+      baseUrl: 'https://api.atlascloud.ai/v1',
+      model: 'qwen/qwen3.5-flash',
+      apiProviderBaseUrl: 'https://api.atlascloud.ai/v1',
+    });
+
+    expect(openai).toMatchObject({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+    expect(atlas).toMatchObject({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.atlascloud.ai/v1',
+      model: 'qwen/qwen3.5-flash',
+      apiProviderBaseUrl: 'https://api.atlascloud.ai/v1',
+    });
+  });
+
   it('auto-fills Google defaults when switching from a selected known provider', () => {
     expect(switchApiProtocolConfig(baseConfig, 'google')).toMatchObject({
       mode: 'api',

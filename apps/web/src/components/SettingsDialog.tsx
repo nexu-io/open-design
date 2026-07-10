@@ -2675,7 +2675,7 @@ export function SettingsDialog({
   };
 
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
-  const apiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
+  const defaultApiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
   const byokProviderPresets: ReadonlyArray<ByokProviderPreset> = [
     {
       id: 'anthropic',
@@ -2690,6 +2690,13 @@ export function SettingsDialog({
       protocol: 'openai',
       baseUrl: 'https://api.openai.com/v1',
       model: 'gpt-4o',
+    },
+    {
+      id: 'atlascloud',
+      title: 'Atlas Cloud',
+      protocol: 'openai',
+      baseUrl: 'https://api.atlascloud.ai/v1',
+      model: 'qwen/qwen3.5-flash',
     },
     {
       id: 'google-ai-studio',
@@ -3160,6 +3167,8 @@ export function SettingsDialog({
           (p) => p.baseUrl === cfg.apiProviderBaseUrl && p.baseUrl === cfg.baseUrl,
         );
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
+  const apiKeyConsoleLink =
+    selectedProvider?.apiKeyConsoleLink ?? defaultApiKeyConsoleLink;
   const showProviderPreset =
     protocolProviders.length > 0 && !isFixedOriginGateway(apiProtocol);
   // Fixed-origin gateways resolve their Base URL automatically; nothing for the
