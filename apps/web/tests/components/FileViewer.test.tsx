@@ -5874,7 +5874,7 @@ describe('FileViewer SVG artifacts', () => {
       if (url === '/api/deploy/config?providerId=displaydev-self') {
         return new Response(JSON.stringify({
           providerId: 'displaydev-self',
-          configured: true,
+          configured: false,
           tokenMask: '',
           target: 'preview',
         }), { status: 200 });
@@ -5935,7 +5935,7 @@ describe('FileViewer SVG artifacts', () => {
       if (url === '/api/deploy/config?providerId=displaydev-self') {
         return new Response(JSON.stringify({
           providerId: 'displaydev-self',
-          configured: true,
+          configured: false,
           tokenMask: '',
           target: 'preview',
         }), { status: 200 });
@@ -8206,20 +8206,14 @@ describe('FileViewer SVG artifacts', () => {
           providerId: 'displaydev-self',
           configured: false,
           tokenMask: '',
+          apiUrl: 'https://api.display.dev',
+          target: 'preview',
         }), { status: 200 });
       }
       if (url === '/api/deploy/config' && method === 'PUT') {
         return new Response(JSON.stringify({
-          providerId: 'displaydev-self',
-          configured: true,
-          tokenMask: '',
-          displayDev: {
-            defaultArtifactName: '',
-            defaultVisibility: 'company',
-            defaultSharedWith: [],
-            defaultShowBranding: 'inherit',
-          },
-        }), { status: 200 });
+          error: { code: 'UNEXPECTED_CONFIG_SAVE', message: 'anonymous display.dev deploy should not save config' },
+        }), { status: 500 });
       }
       if (url === '/api/projects/project-1/deploy' && method === 'POST') {
         deployRequest.body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
@@ -8276,6 +8270,12 @@ describe('FileViewer SVG artifacts', () => {
       providerId: 'displaydev-self',
       fileName: 'index.html',
     });
+    const configSaveCalls = fetchMock.mock.calls.filter(([input, init]) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      return url === '/api/deploy/config' && method === 'PUT';
+    });
+    expect(configSaveCalls).toHaveLength(0);
     const deployResultCalls = analyticsTrackMock.mock.calls.filter(([event]) => (
       event === 'artifact_deploy_result'
     ));

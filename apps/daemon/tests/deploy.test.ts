@@ -30,6 +30,7 @@ import {
   listCloudflarePagesZones,
   normalizeDeployHookScriptUrl,
   prepareDeployPreflight,
+  publicDisplayDevConfig,
   publicDeployConfig,
   readDisplayDevConfig,
   readVercelConfig,
@@ -239,6 +240,12 @@ describe('deploy config', () => {
         token: '',
         apiUrl: 'https://api.display.dev',
       });
+      expect(publicDisplayDevConfig(empty)).toMatchObject({
+        providerId: DISPLAYDEV_PROVIDER_ID,
+        configured: false,
+        tokenMask: '',
+        apiUrl: 'https://api.display.dev',
+      });
 
       const saved = await writeDisplayDevConfig({
         token: 'Bearer dsp_live_secret',
@@ -277,6 +284,7 @@ describe('deploy config', () => {
         clearToken: true,
       });
 
+      expect(cleared.configured).toBe(false);
       expect(cleared.tokenMask).toBe('');
       expect(await readDisplayDevConfig()).toMatchObject({
         token: '',

@@ -303,9 +303,7 @@ export function publicDisplayDevConfig(config: Partial<DeployConfig>) {
   const displayDev = normalizeDisplayDevConfigHints(config?.displayDev);
   const body: JsonObject = {
     providerId: DISPLAYDEV_PROVIDER_ID,
-    // display.dev has a usable anonymous publish path, so it is deployable
-    // even when no token has been saved.
-    configured: true,
+    configured: Boolean(config?.token),
     tokenMask: config?.token ? SAVED_DISPLAYDEV_TOKEN_MASK : '',
     teamId: '',
     teamSlug: '',

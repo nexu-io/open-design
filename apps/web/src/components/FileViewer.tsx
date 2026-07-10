@@ -14534,6 +14534,7 @@ function HtmlViewer({
         cloudflareHints?.lastDomainPrefix !== deployConfig?.cloudflarePages?.lastDomainPrefix,
       );
       const displayDevConfigChanged = displayDevDefaultsChanged();
+      const providerRequiresConfiguredCredentials = deployProviderId !== DISPLAYDEV_PROVIDER_ID;
       const needsConfigSave =
         hasNewToken ||
         clearsDisplayDevToken ||
@@ -14542,7 +14543,7 @@ function HtmlViewer({
         teamSlug.trim() !== (deployConfig?.teamSlug || '') ||
         cloudflareAccountId.trim() !== (deployConfig?.accountId || '') ||
         cloudflareHintsChanged ||
-        !deployConfig?.configured;
+        (providerRequiresConfiguredCredentials && !deployConfig?.configured);
       if (needsConfigSave) {
         const nextConfig = await saveDeployConfig();
         if (!nextConfig) {
@@ -14551,7 +14552,7 @@ function HtmlViewer({
           fireDeployResult('failed', 'CONFIG_REQUIRED');
           return;
         }
-        if (!nextConfig?.configured) {
+        if (providerRequiresConfiguredCredentials && !nextConfig?.configured) {
           const option = getDeployProviderOption(deployProviderId);
           const label = t(option.labelKey);
           throw new Error(

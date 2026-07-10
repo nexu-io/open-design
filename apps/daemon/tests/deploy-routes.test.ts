@@ -94,6 +94,17 @@ describe('deploy provider routes', () => {
         projectName: '',
       });
 
+      const emptyDisplayResp = await fetch(
+        `${baseUrl}/api/deploy/config?providerId=${DISPLAYDEV_PROVIDER_ID}`,
+      );
+      expect(emptyDisplayResp.status).toBe(200);
+      expect(await emptyDisplayResp.json()).toMatchObject({
+        providerId: DISPLAYDEV_PROVIDER_ID,
+        configured: false,
+        tokenMask: '',
+        apiUrl: 'https://api.display.dev',
+      });
+
       const displayResp = await fetch(`${baseUrl}/api/deploy/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
