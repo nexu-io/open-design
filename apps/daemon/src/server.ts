@@ -5779,6 +5779,11 @@ export async function startServer({
     // "agent finished the deliverable and went idle" rather than
     // "agent stalled with nothing to show" (issue #1451).
     let artifactRegistered = false;
+    // Tracks whether any stream routed through `sendAgentEvent` emitted user-
+    // visible content or a deliverable. ACP sessions and plain stdout streams
+    // are covered by their own success/failure paths, and the empty-output
+    // guard below skips them via `trackingSubstantiveOutput`.
+    let agentProducedOutput = false;
     // Only daemon-initiated quiet-period termination should be treated
     // as `succeeded` in the close handler. A later unrelated SIGTERM /
     // SIGKILL (external `kill`, OOM, container shutdown) must keep its
@@ -5868,6 +5873,17 @@ export async function startServer({
         // daemon-initiated so an unrelated later signal (external
         // kill, OOM) is NOT silently reclassified to `succeeded` —
         // only signals from this watchdog branch should be.
+        artifactQuietShutdownRequested = true;
+        if (acpSession?.abort) {
+          acpSession.abort();
+        }
+        if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
+        scheduleForcedChildShutdown();
+        return;
+      }
+      // cursor-agent / prompt-via-stdin: turn finished (usage) but child
+      // may idle on open stdin until the watchdog fires (#3372 family).
+      if (run.turnCompletedCleanly && agentProducedOutput) {
         artifactQuietShutdownRequested = true;
         if (acpSession?.abort) {
           acpSession.abort();
@@ -6467,12 +6483,6 @@ export async function startServer({
     // printed to stdout), no token ever reaches the user, so TTFT must not
     // be recorded for that failure mode. See PR #3412.
     let firstBufferedStdoutAt: number | null = null;
-    // Tracks whether any stream the run is using actually emitted user-
-    // visible content or a deliverable. Only the streams routed through
-    // `sendAgentEvent` contribute to this flag; ACP sessions and plain stdout
-    // streams are covered by their own success/failure paths and the
-    // empty-output guard below skips them via `trackingSubstantiveOutput`.
-    let agentProducedOutput = false;
     let trackingSubstantiveOutput = false;
     // Event types that count as "the agent actually produced a response or a
     // deliverable." Lifecycle markers (`status`), meter readings (`usage`),
@@ -6770,6 +6780,13 @@ export async function startServer({
         agentProducedOutput = true;
       }
       emitAgentEvent(ev);
+      // json-event-stream adapters (cursor-agent) keep stdin open; close on
+      // terminal usage so the child exits instead of idle-stalling (#3372).
+      if (def.promptViaStdin || def.id === 'cursor-agent') {
+        try {
+          applyClaudeStreamJsonRunBookkeeping(run, ev);
+        } catch {}
+      }
     };
     const parseBufferedAntigravityGeminiJsonEventStream = () => {
       if (
