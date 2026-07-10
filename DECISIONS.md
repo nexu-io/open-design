@@ -279,3 +279,11 @@
 - 검증 = daemon 4605/0 fail, web 실패 8건 중 7건 main-baseline worktree 재실행으로 pre-existing 확증, 1건(prefill od-default 단언)만 브랜치 도입 → 테스트 갱신. "0 new fail" 판정은 반드시 baseline 대조로 (출처: Task 11 스윕)
 - 기본 라우터는 설치별 1회 설정 필수: 미설정 시 무관 발화가 od-default 폴백 (설계 정상) — 팀 배포 시 `od config set defaultRouterPluginId example-bodoc-router` 온보딩 단계에 포함 (출처: 라이브 acceptance 사용자 스크린샷 리포트)
 - 팔로우업 이월: MCP create(skipDiscoveryBrief) 라우팅 스펙 결정, 라우터 handoff 후 designSystemId 컬럼 create-time 스탬프 유지(이종 DS 라우터면 오주입), effectiveCreateKind 헬퍼 추출(kind 주입 규칙 2곳 중복), run-start pin-없음 경로, dangling 라우터 스냅샷 GC (출처: 최종 whole-branch 리뷰)
+
+## 2026-07-10 — 브랜드 페이지 서브프로젝트 B 스펙+플랜 (생성·편집·삭제 풀 CRUD)
+- 저장 루트 = BRANDS_DIR 단일 루트 직접 CRUD(bodoc 포함 편집): DS식 user: 이중 루트 미채택 — 도그푸딩 즉효 우선, packaged read-only 리소스 루트 대응은 후속 분리 (출처: HANDOFF 브랜드 페이지 서브프로젝트 B 0/9, 사용자 확정)
+- 편집 표면 = manifest 폼 + 문서 본문(brand.md·deliverables/*.md) + 채널 추가/삭제 + 아이콘·로고 업로드, 삭제 = projectCount>0 409 차단: dangling brand_id 방지 (출처: 사용자 확정)
+- 쓰기 라우트 = `registerBrandWriteRoutes(app, {brandsDir, db})` 주입형 헬퍼 필수: 기존 brands-routes.test.ts 풀부팅 복사 시 BRANDS_DIR가 실제 repo brands/로 폴백 → 쓰기 테스트가 working tree 오염 + 중복 409 비결정. 정본 = design-system-tool-routes.test.ts mkdtemp 패턴 (출처: plan-reviewer Critical)
+- DS slugify 재사용 금지: module-private + `|| 'design-system'` 폴백이 비라틴 title 400 분기를 죽임 → 브랜드 로컬 slugify(공백 반환). createBrand는 typed BrandWriteError(id-required/invalid-id/duplicate-id)로 400/409 구분 (출처: plan-reviewer High×2)
+- asset 크기 초과 = 413(sendMulterError 컨벤션·400 아님), mime 거부 = 명시 400 매핑(fileFilter 에러 방치 시 500), /docs/core는 단일 :key 핸들러 내 특수 분기(라우트 순서 함정) (출처: plan-reviewer High+Medium)
+- 스펙·플랜 위치 = docs/superpowers/{specs,plans}/2026-07-10-brand-page-subproject-b*.md, gitignored라 git add -f 커밋(선례 동일). 커밋 7abc80d8c (출처: HANDOFF)
