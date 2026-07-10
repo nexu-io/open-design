@@ -29,5 +29,8 @@ export const kimiAgentDef = {
     },
     streamFormat: 'json-event-stream',
     eventParser: 'kimi',
+    // Direct `kimi -p ... --output-format stream-json` mode does not expose
+    // the ACP `mcpServers` launch descriptor. Leave runtime MCP fields unset
+    // so UI/server capability gates do not advertise per-run MCP injection.
     maxPromptArgBytes: 30_000,
 } satisfies RuntimeAgentDef;

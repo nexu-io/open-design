@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import { createLiveArtifactsMcpTools, handleLiveArtifactsMcpRequest } from '../../src/mcp-live-artifacts-server.js';
-import { AGENT_DEFS, assert, buildLiveArtifactsMcpServersForAgent, hermes } from './helpers/test-helpers.js';
+import { AGENT_DEFS, assert, buildLiveArtifactsMcpServersForAgent, hermes, kimi } from './helpers/test-helpers.js';
 
 test('live artifact MCP discovery is limited to mature ACP agents', () => {
   for (const agent of AGENT_DEFS) {
@@ -30,6 +30,12 @@ test('live artifact MCP discovery is limited to mature ACP agents', () => {
 
 test('live artifact MCP discovery is disabled when run-scoped tool auth is unavailable', () => {
   assert.deepEqual(buildLiveArtifactsMcpServersForAgent(hermes, { enabled: false }), []);
+});
+
+test('Kimi direct stream-json mode does not claim ACP MCP discovery', () => {
+  assert.equal(kimi.mcpDiscovery, undefined);
+  assert.equal(kimi.externalMcpInjection, undefined);
+  assert.deepEqual(buildLiveArtifactsMcpServersForAgent(kimi), []);
 });
 
 test('live artifact MCP discovery can use daemon-resolved CLI command', () => {
