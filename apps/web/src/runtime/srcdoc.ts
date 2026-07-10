@@ -2573,6 +2573,13 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
       for (var i = 0; i < list.length; i++) {
         mo.observe(list[i], { attributes: true, attributeFilter: ['class', 'style', 'hidden', 'aria-hidden'] });
       }
+      // Transform-driven decks leave the slides untouched and translate a
+      // track element instead, so watching only the slides misses navigation
+      // the artifact drives itself (its own keyboard handler). Scroll decks
+      // are covered by the scroll listener and class-toggle decks by the
+      // slide observer above; the track is the remaining path to the host counter.
+      var track = transformTrack(list);
+      if (track) mo.observe(track, { attributes: true, attributeFilter: ['style'] });
     } catch (e) {}
     setTimeout(restoreInitialSlide, 100);
   }
