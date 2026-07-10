@@ -26,8 +26,6 @@ import { parseSubmittedAnswers } from './QuestionForm';
 import { useI18n } from '../i18n';
 import {
   fetchChatRunStatus,
-  GENERIC_DAEMON_DISCONNECT_CODE,
-  GENERIC_DAEMON_DISCONNECT_MESSAGE,
   fetchVelaLoginStatus,
   listActiveChatRuns,
   listProjectRuns,
@@ -46,7 +44,6 @@ import {
   fetchProjectFileText,
   fetchSkill,
   patchPreviewCommentStatus,
-  projectRawUrl,
   uploadProjectFiles,
   upsertPreviewComment,
   writeProjectTextFile,
@@ -258,7 +255,6 @@ import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
 import { effectiveAgentModelChoice } from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
-import { mediaModelProviderId } from '../media/models';
 import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 import {
   useByokImageModelOptions,
@@ -269,6 +265,60 @@ import {
   buildFinalizeCredentialsMissingToast,
   buildFinalizeRequest,
 } from '../lib/resolve-finalize-request';
+import {
+  MIN_CHAT_PANEL_WIDTH,
+  MAX_CHAT_PANEL_WIDTH,
+  MIN_WORKSPACE_PANEL_WIDTH,
+  SPLIT_RESIZE_HANDLE_WIDTH,
+  mergeSavedPreviewComment,
+  mergeServerMessagesIntoConversation,
+  ensureConversationPresent,
+  workspacePanelMinWidthForSplit,
+  maxChatPanelWidthForSplit,
+  clampPreferredChatPanelWidth,
+  clampChatPanelWidth,
+  projectSplitClassName,
+  projectSplitStyle,
+  applySplitChatPanelWidth,
+  buildQuestionFormKey,
+  brandBrowserSnapshotMatchesSource,
+  workspaceContextItemEqual,
+  workspaceContextItemsEqual,
+  projectMediaVoiceSeed,
+  isDesignSystemWorkspaceMetadata,
+  isStoredChatAttachment,
+  isStoredRunContextSelection,
+  isBrandStatusValue,
+  brandExtractionAllowsEditing,
+  byokModelSeedForProtocol,
+  byokMediaDefaultsForRun,
+  isGenericDaemonDisconnect,
+  hasGenericDisconnectFailureEvent,
+  appendLiveArtifactEventItem,
+  designSystemFeedbackAttachments,
+  buildBrandAgentExtractionContinuationPrompt,
+  designSystemNameForSourceProject,
+  buildCreateDesignSystemFromProjectPrompt,
+  chatAttachmentsFromPreviewCommentImages,
+  mergeChatAttachments,
+  historyWithWorkspaceContext,
+  commentTaskQuery,
+  commentTaskContextAttachment,
+  designSystemNeedsWorkPrompt,
+  fallbackDesignSystemSummaryForProject,
+  projectViewTransportPort,
+} from '../features/project-view';
+
+// Re-export the public pure helpers that previously lived in this file so the
+// existing ProjectView.*/FileWorkspace test net keeps importing them from here
+// with zero churn. Their home is now the project-view slice (ADR 0002).
+export {
+  mergeSavedPreviewComment,
+  mergeServerMessagesIntoConversation,
+  projectSplitClassName,
+  projectSplitStyle,
+  buildQuestionFormKey,
+} from '../features/project-view';
 
 type BrandBrowserSnapshot =
   | { status: 'ready'; html: string; css: string; baseUrl: string }
@@ -300,80 +350,6 @@ type ProjectChatSendMeta = ChatSendMeta & {
    *  so the user is never double-prompted for one task. */
   amrGatePrechecked?: boolean;
 };
-
-export function mergeSavedPreviewComment(current: PreviewComment[], saved: PreviewComment): PreviewComment[] {
-  const existingIndex = current.findIndex((comment) => comment.id === saved.id);
-  if (existingIndex < 0) return [...current, saved];
-  return current.map((comment, index) => (index === existingIndex ? saved : comment));
-}
-
-function mergeServerMessageWithLocal(server: ChatMessage, local?: ChatMessage): ChatMessage {
-  if (!local) return server;
-  const merged: ChatMessage = { ...server };
-  if (local.role === 'assistant' && server.role === 'assistant') {
-    if ((local.content?.length ?? 0) > (server.content?.length ?? 0)) {
-      merged.content = local.content;
-    }
-    if ((local.events?.length ?? 0) > (server.events?.length ?? 0)) {
-      merged.events = local.events;
-    }
-  }
-  if (!server.producedFiles?.length && local.producedFiles?.length) {
-    merged.producedFiles = local.producedFiles;
-  }
-  if (!server.preTurnFileNames?.length && local.preTurnFileNames?.length) {
-    merged.preTurnFileNames = local.preTurnFileNames;
-  }
-  if (!server.lastRunEventId && local.lastRunEventId) {
-    merged.lastRunEventId = local.lastRunEventId;
-  }
-  if (!server.startedAt && local.startedAt) {
-    merged.startedAt = local.startedAt;
-  }
-  if (!server.endedAt && local.endedAt) {
-    merged.endedAt = local.endedAt;
-  }
-  if (!server.runStatus && local.runStatus) {
-    merged.runStatus = local.runStatus;
-  }
-  return merged;
-}
-
-export function mergeServerMessagesIntoConversation(
-  current: ChatMessage[],
-  serverMessages: ChatMessage[],
-): ChatMessage[] {
-  const currentById = new Map(current.map((message) => [message.id, message]));
-  const serverIds = new Set(serverMessages.map((message) => message.id));
-  const merged = serverMessages.map((message) =>
-    mergeServerMessageWithLocal(message, currentById.get(message.id)),
-  );
-  for (const message of current) {
-    if (!serverIds.has(message.id)) merged.push(message);
-  }
-  return merged;
-}
-
-function ensureConversationPresent(
-  conversations: Conversation[],
-  conversationId: string,
-  projectId: string,
-): Conversation[] {
-  if (conversations.some((conversation) => conversation.id === conversationId)) {
-    return conversations;
-  }
-  const now = Date.now();
-  return [
-    {
-      id: conversationId,
-      projectId,
-      title: null,
-      createdAt: now,
-      updatedAt: now,
-    },
-    ...conversations,
-  ];
-}
 
 interface Props {
   project: Project;
@@ -468,11 +444,7 @@ const BRAND_KIT_FILE = 'brand.html';
 const BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS = [120, 500, 1_200, 2_000] as const;
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 const DEFAULT_CHAT_PANEL_WIDTH = 460;
-const MIN_CHAT_PANEL_WIDTH = 345;
-const MAX_CHAT_PANEL_WIDTH = 720;
 const COMMENT_INSPECTOR_PANEL_WIDTH = 320;
-const MIN_WORKSPACE_PANEL_WIDTH = 400;
-const SPLIT_RESIZE_HANDLE_WIDTH = 8;
 const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
   'BYOK API runs require OpenCode. Install OpenCode, then rescan local agents in Settings before retrying.';
 const BEDROCK_BYOK_UNSUPPORTED_MESSAGE =
@@ -483,37 +455,6 @@ const DESIGN_SYSTEM_AUDIT_AUTO_REPAIR_ATTEMPTS = 2;
 // Embedded-browser navigation bursts settle well within this; the local cache
 // is written immediately so nothing is lost if the daemon write is coalesced.
 const TAB_PERSIST_DEBOUNCE_MS = 400;
-// The generic browser-side SSE reconnect-budget exhaustion message emitted by
-// consumeDaemonRun when the daemon status fetch still shows the run as
-// queued/running (providers/daemon.ts).  Both the live-stream onError and the
-// reattach-stream onError share this message; neither constitutes an
-// authoritative terminal failure.  Use isGenericDaemonDisconnect() at both
-// sites so generic disconnects stay eligible for attachRecoverableRuns to
-// re-query daemon authoritative status on the next tick.
-function isGenericDaemonDisconnect(err: unknown): boolean {
-  return err instanceof Error && (
-    (err as Error & { code?: string }).code === GENERIC_DAEMON_DISCONNECT_CODE ||
-    err.message === GENERIC_DAEMON_DISCONNECT_MESSAGE
-  );
-}
-
-// A persisted status/error event represents a generic daemon disconnect when
-// either its structured `code` matches GENERIC_DAEMON_DISCONNECT_CODE, OR
-// (legacy rows persisted before this code was introduced) its `detail`
-// equals the canonical GENERIC_DAEMON_DISCONNECT_MESSAGE with no code set.
-// Mirrors isGenericDaemonDisconnect() above, which checks the equivalent
-// code-or-message pair on live Error objects for the same reason.
-function hasGenericDisconnectFailureEvent(message: ChatMessage): boolean {
-  return (message.events ?? []).some(
-    (event) =>
-      event.kind === 'status' &&
-      event.label === 'error' &&
-      (event.code === GENERIC_DAEMON_DISCONNECT_CODE ||
-        event.detail === GENERIC_DAEMON_DISCONNECT_MESSAGE),
-  );
-}
-const MIN_NORMAL_SPLIT_WIDTH =
-  MIN_CHAT_PANEL_WIDTH + SPLIT_RESIZE_HANDLE_WIDTH + MIN_WORKSPACE_PANEL_WIDTH;
 type DesignSystemReviewEntry = NonNullable<ProjectMetadata['designSystemReview']>[string];
 type DesignSystemReviewAgentTask = NonNullable<DesignSystemReviewEntry['agentTask']>;
 interface DesignSystemReviewDetails {
@@ -522,253 +463,11 @@ interface DesignSystemReviewDetails {
   agentTask?: DesignSystemReviewAgentTask;
 }
 
-function workspacePanelMinWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return MIN_WORKSPACE_PANEL_WIDTH;
-  return splitWidth < MIN_NORMAL_SPLIT_WIDTH ? 0 : MIN_WORKSPACE_PANEL_WIDTH;
-}
-
-function maxChatPanelWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return MAX_CHAT_PANEL_WIDTH;
-  const workspaceMinWidth = workspacePanelMinWidthForSplit(splitWidth);
-  const viewportAwareMax = splitWidth - SPLIT_RESIZE_HANDLE_WIDTH - workspaceMinWidth;
-  return Math.max(0, Math.min(MAX_CHAT_PANEL_WIDTH, Math.floor(viewportAwareMax)));
-}
-
-function clampPreferredChatPanelWidth(width: number): number {
-  return Math.min(MAX_CHAT_PANEL_WIDTH, Math.max(MIN_CHAT_PANEL_WIDTH, Math.round(width)));
-}
-
-function clampChatPanelWidth(width: number, maxWidth = MAX_CHAT_PANEL_WIDTH): number {
-  const effectiveMax = Math.max(0, Math.min(MAX_CHAT_PANEL_WIDTH, Math.floor(maxWidth)));
-  const effectiveMin = Math.min(MIN_CHAT_PANEL_WIDTH, effectiveMax);
-  return Math.min(effectiveMax, Math.max(effectiveMin, Math.round(width)));
-}
-
-function designSystemFeedbackAttachments(
-  projectFiles: ProjectFile[],
-  sectionFiles: string[],
-): ChatAttachment[] {
-  const fileLookup = new Map(projectFiles.map((file) => [file.name, file]));
-  return sectionFiles
-    .map((name) => fileLookup.get(name))
-    .filter((file): file is ProjectFile => Boolean(file))
-    .slice(0, 8)
-    .map((file) => ({
-      path: file.name,
-      name: file.name,
-      kind: file.kind === 'image' ? 'image' : 'file',
-      size: file.size,
-    }));
-}
-
 function brandExtractionPreviewFileName(projectFiles: readonly ProjectFile[]): string {
   return (
     projectFiles.find((file) => file.name === 'brand.html')?.name ??
     projectFiles.find((file) => file.name.endsWith('/brand.html'))?.name ??
     'brand.html'
-  );
-}
-
-function buildBrandAgentExtractionContinuationPrompt(input: {
-  promptSeed?: string | null;
-  metadata?: ProjectMetadata | null;
-  projectFiles: readonly ProjectFile[];
-}): string {
-  const trimmed = input.promptSeed?.trim() ?? '';
-  const brandId = input.metadata?.brandId?.trim() || '(current brand id)';
-  const sourceUrl = input.metadata?.brandSourceUrl?.trim() || 'the source website';
-  const base = /DESIGN SYSTEM EXTRACTION|ready design system is NOT guaranteed/i.test(trimmed)
-    ? trimmed
-    : [
-        `Continue the AI design-system extraction for ${sourceUrl}.`,
-        `Brand id: ${brandId}`,
-        '',
-        'The programmatic pass has not produced a ready design system yet. Continue from the current brand.html scaffold and saved project files; do not assume the design system is ready, and do not create a duplicate design-system id.',
-        '',
-        'Inspect brand.html, brand.json, DESIGN.md, BRAND.md, context/, logos/, imagery/, fonts/, and system assets. Measure the source website when reachable. If the live page is an anti-bot verification interstitial, ask the user to clear it in the Browser tab before continuing.',
-        '',
-        `Write valid partial brand.json updates progressively, run od brand preview ${brandId} after meaningful field groups, then run od brand finalize ${brandId} when the kit is complete. Fix validation errors and keep updating the same registered design system in place.`,
-      ].join('\n');
-  const visibleFiles = input.projectFiles
-    .filter((file) => file.name.trim())
-    .slice(0, 80)
-    .map((file) => `  - ${file.name}${file.size > 0 ? ` (${Math.round(file.size / 1024)}KB)` : ''}`);
-  if (visibleFiles.length === 0 || base.includes('Current brand extraction continuation context:')) {
-    return base;
-  }
-  return [
-    base,
-    '',
-    'Current brand extraction continuation context:',
-    `- Source URL: ${sourceUrl}`,
-    `- Brand id: ${brandId}`,
-    '- Files visible in the project right now:',
-    ...visibleFiles,
-  ].join('\n');
-}
-
-function designSystemNameForSourceProject(project: Project): string {
-  const sourceName = project.name.trim() || 'Untitled';
-  return /\bdesign system\b/i.test(sourceName)
-    ? sourceName
-    : `${sourceName} Design System`;
-}
-
-function buildCreateDesignSystemFromProjectPrompt(input: {
-  project: Project;
-  projectFiles: readonly ProjectFile[];
-  activeDesignSystem?: DesignSystemSummary | null;
-}): string {
-  const visibleFiles = input.projectFiles
-    .filter((file) => file.name.trim())
-    .slice(0, 140)
-    .map((file) => `  - ${file.name}${file.size > 0 ? ` (${Math.round(file.size / 1024)}KB)` : ''}`);
-  const metadataJson = input.project.metadata
-    ? JSON.stringify(input.project.metadata, null, 2)
-    : '{}';
-  const activeDesignSystem = input.activeDesignSystem
-    ? [
-        `- Active design system id: ${input.activeDesignSystem.id}`,
-        `- Active design system title: ${input.activeDesignSystem.title}`,
-      ]
-    : ['- Active design system: (none)'];
-  return [
-    'Create this project as a complete Open Design design system workspace.',
-    '',
-    'Autonomy requirement:',
-    '- Do not ask setup or clarification questions during design-system generation.',
-    '- Do not emit `<question-form>`, "Quick brief — 30 seconds", direction cards, choice cards, or any UI that waits for user input.',
-    '- The source project already contains the evidence. Choose sensible defaults where details are missing and begin generating the design-system artifacts immediately.',
-    '',
-    'Source project handoff:',
-    `- Source project id: ${input.project.id}`,
-    `- Source project name: ${input.project.name}`,
-    ...activeDesignSystem,
-    '- Read `context/source-context.md` first. It lists the copied project files and original project metadata.',
-    '- Treat every copied file, uploaded asset, reference image, browser snapshot, sketch, generated artifact, and context note in this workspace as design-system evidence.',
-    '- Use the copied project outputs to infer real visual language, components, layout, interaction patterns, copy tone, tokens, typography, spacing, assets, and anti-patterns.',
-    '- Do not create another project or another design-system id. Update this new design-system project in place.',
-    '',
-    'Source project metadata:',
-    '```json',
-    metadataJson,
-    '```',
-    '',
-    'Visible copied files to inspect:',
-    ...(visibleFiles.length > 0 ? visibleFiles : ['  - (none listed yet; rely on context/source-context.md after the copy finishes)']),
-    input.projectFiles.length > visibleFiles.length
-      ? `  - ...and ${input.projectFiles.length - visibleFiles.length} more files listed in context/source-context.md`
-      : '',
-    '',
-    'Expected output:',
-    '- A clear `DESIGN.md` with product context, visual foundations, color, type, spacing, layout, components, motion, voice, and anti-patterns.',
-    '- A reusable package: `README.md`, `SKILL.md`, `colors_and_type.css`, provenance notes, `assets/`, `build/` when runtime icons exist, optional `fonts/`, focused `preview/` cards, preserved source examples, and `ui_kits/app/`.',
-    '- Preserve real source assets when evidence provides them: logos, app icons, tray icons, avatars, wordmarks, imagery, and font files belong in `assets/`, `build/`, or `fonts/`, not only in prose.',
-    '- Preserve high-signal source/component examples outside `context/` when copied files include substantial implementation or artifact code. Do not replace them with tiny stubs.',
-    '- Split review previews into focused cards for colors, typography, spacing, radius/shadows, components, brand assets, and applied UI surfaces. Preview cards must visibly load preserved files when available.',
-    '- Build `ui_kits/app/` as an applied interface kit that reflects the source project, with an index page and component files when the evidence supports them. Do not leave it as a generic static mock.',
-    '- Keep `README.md`, `SKILL.md`, `DESIGN.md`, preview manifest text, and `ui_kits/app/README.md` synchronized with the final file structure.',
-    '',
-    'Completion gate:',
-    '- Finish only after the project contains reviewable design-system artifacts and the right-side Design System tab can inspect them.',
-    '- Before your final response, run `"$OD_NODE_BIN" "$OD_BIN" tools connectors design-system-package-audit --path . --fail-on-warnings`.',
-    '- Fix every audit error and design-quality warning. If an issue cannot be fixed because source evidence is missing, explain that blocker instead of claiming the design system is ready.',
-    '',
-    'When finished, summarize the generated files and name the first previews reviewers should inspect.',
-  ].filter(Boolean).join('\n');
-}
-
-function chatAttachmentsFromPreviewCommentImages(
-  images: PreviewCommentAttachment[] | undefined,
-): ChatAttachment[] {
-  if (!Array.isArray(images)) return [];
-  const seen = new Set<string>();
-  const out: ChatAttachment[] = [];
-  for (const image of images) {
-    const path = image.path.trim();
-    if (!path || seen.has(path)) continue;
-    seen.add(path);
-    out.push({
-      path,
-      name: image.name.trim() || path.split('/').pop() || path,
-      kind: 'image',
-    });
-  }
-  return out;
-}
-
-function mergeChatAttachments(...groups: ChatAttachment[][]): ChatAttachment[] {
-  const seen = new Set<string>();
-  const out: ChatAttachment[] = [];
-  for (const group of groups) {
-    for (const attachment of group) {
-      const path = attachment.path.trim();
-      if (!path || seen.has(path)) continue;
-      seen.add(path);
-      out.push({ ...attachment, path });
-    }
-  }
-  return out;
-}
-
-function historyWithWorkspaceContext(
-  history: ChatMessage[],
-  messageId: string,
-  context: ChatSendMeta['context'] | undefined,
-): ChatMessage[] {
-  const items = context?.workspaceItems ?? [];
-  if (items.length === 0) return history;
-  const block = [
-    '',
-    '',
-    '<active-workspace-context>',
-    'Open Design selected or inferred these workspace contexts for this turn. Treat absolute paths as reference context unless the user explicitly asks to edit them.',
-    ...items.map((item, index) => {
-      const details = [
-        item.path ? `path: ${item.path}` : null,
-        item.absolutePath ? `absolute: ${item.absolutePath}` : null,
-        item.url ? `url: ${item.url}` : null,
-        item.title ? `title: ${item.title}` : null,
-        item.tabId ? `tab: ${item.tabId}` : null,
-      ].filter(Boolean).join(' | ');
-      return `${index + 1}. ${item.kind}: ${item.label}${details ? ` | ${details}` : ''}`;
-    }),
-    '</active-workspace-context>',
-  ].join('\n');
-  return history.map((message) =>
-    message.id === messageId && message.role === 'user'
-      ? { ...message, content: `${message.content}${block}` }
-      : message,
-  );
-}
-
-function commentTaskQuery(attachment: ChatCommentAttachment): string {
-  return (attachment.comment ?? '').trim();
-}
-
-function commentTaskContextAttachment(attachment: ChatCommentAttachment): ChatCommentAttachment {
-  return {
-    ...attachment,
-    comment: '',
-    commentContext: 'query',
-  };
-}
-
-function designSystemNeedsWorkPrompt(
-  sectionTitle: string,
-  feedback: string,
-  sectionFiles: string[],
-): string {
-  const fileList =
-    sectionFiles.length > 0
-      ? sectionFiles.map((name) => `- @${name}`).join('\n')
-      : '- No generated files are registered for this section yet.';
-  return (
-    `Needs work on the design system section "${sectionTitle}".\n\n` +
-    `User feedback:\n${feedback}\n\n` +
-    `Relevant section files:\n${fileList}\n\n` +
-    'Revise the design-system project files directly. Keep DESIGN.md, tokens, previews, UI kit examples, and assets consistent with the feedback. ' +
-    'After editing, summarize what changed and which files should be reviewed again.'
   );
 }
 
@@ -897,331 +596,6 @@ function clearDesignSystemAuditAutoRepair(projectId: string): void {
   } catch {
     /* ignore */
   }
-}
-
-function isDesignSystemWorkspaceMetadata(metadata: ProjectMetadata | undefined): boolean {
-  return metadata?.importedFrom === 'design-system';
-}
-
-function isStoredChatAttachment(value: unknown): value is ChatAttachment {
-  if (value === null || typeof value !== 'object') return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.path === 'string' &&
-    record.path.length > 0 &&
-    typeof record.name === 'string' &&
-    record.name.length > 0 &&
-    (record.kind === 'image' || record.kind === 'file') &&
-    (record.size === undefined || typeof record.size === 'number') &&
-    (record.order === undefined || typeof record.order === 'number')
-  );
-}
-
-function isStoredStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string');
-}
-
-function isStoredWorkspaceContextItem(value: unknown): value is WorkspaceContextItem {
-  if (value === null || typeof value !== 'object') return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.id === 'string' &&
-    record.id.length > 0 &&
-    typeof record.kind === 'string' &&
-    record.kind.length > 0 &&
-    typeof record.label === 'string' &&
-    record.label.length > 0 &&
-    (record.tabId === undefined || typeof record.tabId === 'string') &&
-    (record.path === undefined || typeof record.path === 'string') &&
-    (record.absolutePath === undefined || typeof record.absolutePath === 'string') &&
-    (record.url === undefined || typeof record.url === 'string') &&
-    (record.title === undefined || typeof record.title === 'string')
-  );
-}
-
-function isStoredRunContextSelection(value: unknown): value is RunContextSelection {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    (record.skillIds === undefined || isStoredStringArray(record.skillIds)) &&
-    (record.pluginIds === undefined || isStoredStringArray(record.pluginIds)) &&
-    (record.mcpServerIds === undefined || isStoredStringArray(record.mcpServerIds)) &&
-    (record.connectorIds === undefined || isStoredStringArray(record.connectorIds)) &&
-    (
-      record.workspaceItems === undefined ||
-      (Array.isArray(record.workspaceItems) &&
-        record.workspaceItems.every(isStoredWorkspaceContextItem))
-    )
-  );
-}
-
-function fallbackDesignSystemSummaryForProject(
-  project: Project,
-  designSystemId: string | null,
-): DesignSystemSummary | null {
-  if (!designSystemId || !isDesignSystemProject(project)) return null;
-  const metadata = project.metadata;
-  const sourceUrl = metadata?.brandSourceUrl?.trim() || null;
-  const title =
-    metadata?.sourceFileName?.trim()
-    || project.name.replace(/\s+Design System\s*$/i, '').trim()
-    || project.name
-    || 'Design system';
-  return {
-    id: designSystemId,
-    title,
-    category: 'Brands',
-    summary: sourceUrl ? `Draft design system extracted from ${sourceUrl}.` : '',
-    swatches: [],
-    surface: 'web',
-    source: 'user',
-    status: 'draft',
-    isEditable: true,
-    projectId: project.id,
-    ...(sourceUrl
-      ? { provenance: { sourceUrls: [sourceUrl], sourceNotes: `Extracting from ${sourceUrl}` } }
-      : {}),
-  };
-}
-
-function isBrandStatusValue(value: unknown): value is BrandStatus {
-  return value === 'extracting' || value === 'needs_input' || value === 'ready' || value === 'failed';
-}
-
-function brandExtractionAllowsEditing(status: BrandStatus | null): boolean {
-  return status === 'ready' || status === 'failed';
-}
-
-function normalizedBrandBrowserHost(parsed: URL): string {
-  const hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
-  return parsed.port ? `${hostname}:${parsed.port}` : hostname;
-}
-
-type BrowserExtractionUrlParts = {
-  host: string;
-  pathname: string;
-  search: string;
-};
-
-function normalizedBrandBrowserPathname(pathname: string): string {
-  const withoutTrailingSlash = pathname.replace(/\/+$/, '');
-  return withoutTrailingSlash || '/';
-}
-
-function browserExtractionUrlParts(value: string | null | undefined): BrowserExtractionUrlParts | null {
-  const url = value?.trim();
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    return {
-      host: normalizedBrandBrowserHost(parsed),
-      pathname: normalizedBrandBrowserPathname(parsed.pathname),
-      search: parsed.search,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function isBrandBrowserHomeRedirectPath(pathname: string): boolean {
-  if (pathname === '/home') return true;
-  return /^\/[a-z]{2}(?:-[a-z]{2})?$/i.test(pathname);
-}
-
-function brandBrowserSnapshotMatchesSource(
-  snapshotBaseUrl: string,
-  sourceUrl: string | null | undefined,
-): boolean {
-  const snapshot = browserExtractionUrlParts(snapshotBaseUrl);
-  const source = browserExtractionUrlParts(sourceUrl);
-  if (!snapshot || !source || snapshot.host !== source.host) return false;
-  if (snapshot.pathname === source.pathname && snapshot.search === source.search) return true;
-  return (
-    source.pathname === '/'
-    && source.search === ''
-    && snapshot.search === ''
-    && isBrandBrowserHomeRedirectPath(snapshot.pathname)
-  );
-}
-
-function workspaceContextItemEqual(
-  a: WorkspaceContextItem | null,
-  b: WorkspaceContextItem | null,
-): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  return (
-    a.id === b.id &&
-    a.kind === b.kind &&
-    a.label === b.label &&
-    (a.tabId ?? '') === (b.tabId ?? '') &&
-    (a.path ?? '') === (b.path ?? '') &&
-    (a.absolutePath ?? '') === (b.absolutePath ?? '') &&
-    (a.url ?? '') === (b.url ?? '') &&
-    (a.title ?? '') === (b.title ?? '')
-  );
-}
-
-function workspaceContextItemsEqual(
-  a: WorkspaceContextItem[],
-  b: WorkspaceContextItem[],
-): boolean {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-  return a.every((item, index) => workspaceContextItemEqual(item, b[index] ?? null));
-}
-
-function appendLiveArtifactEventItem(
-  prev: LiveArtifactEventItem[],
-  event: LiveArtifactEventItem['event'],
-): LiveArtifactEventItem[] {
-  liveArtifactEventSequence += 1;
-  const next = [...prev, { id: liveArtifactEventSequence, event }];
-  return next.length > 50 ? next.slice(next.length - 50) : next;
-}
-
-export function projectSplitClassName(workspaceFocused: boolean): string {
-  return workspaceFocused ? 'split split-focus' : 'split';
-}
-
-// React key for the on-screen question form. Deliberately does NOT include the
-// form's parsed `id`: there is at most one (first) form per assistant message,
-// so `${conversation}:${message}` is already a stable, unique identity for the
-// occurrence. Folding the parsed id in would remount the panel mid-stream — the
-// preview shows the `discovery` fallback until the body `id` streams in, and a
-// form that emits answerable questions before its `id` would flip identity
-// while the user is mid-answer, dropping their selections. A distinct later
-// form lives in a different assistant message, so it still gets its own key
-// (and replays the reveal) without relying on the id.
-export function buildQuestionFormKey(
-  conversationId: string | null,
-  assistantMessageId: string | null,
-  hasForm: boolean,
-): string | null {
-  return conversationId && assistantMessageId && hasForm
-    ? `${conversationId}:${assistantMessageId}`
-    : null;
-}
-
-type ProjectSplitStyle = CSSProperties & {
-  '--project-chat-panel-width': string;
-  '--project-workspace-panel-track': string;
-};
-
-export function projectSplitStyle(
-  workspaceFocused: boolean,
-  chatPanelWidth: number,
-  workspacePanelTrack: string,
-): ProjectSplitStyle | undefined {
-  if (workspaceFocused) return undefined;
-  return {
-    '--project-chat-panel-width': `${chatPanelWidth}px`,
-    '--project-workspace-panel-track': workspacePanelTrack,
-    gridTemplateColumns: `${chatPanelWidth}px ${SPLIT_RESIZE_HANDLE_WIDTH}px ${workspacePanelTrack}`,
-  };
-}
-
-function applySplitChatPanelWidth(
-  split: HTMLDivElement | null,
-  width: number,
-  workspacePanelTrack: string,
-): void {
-  if (!split) return;
-  split.style.setProperty('--project-chat-panel-width', `${width}px`);
-  split.style.gridTemplateColumns =
-    `${width}px ${SPLIT_RESIZE_HANDLE_WIDTH}px ${workspacePanelTrack}`;
-}
-
-// The media model the user picked in the New Project → Media dialog, keyed by
-// surface. For BYOK providers (AIHubMix) media is produced by the generate_*
-// chat tools whose default model comes from the per-request byok*Model field —
-// NOT the `od media generate` dispatcher — so without this seed the dialog pick
-// is dropped and the conversation falls back to the Settings default. Returns
-// undefined for non-media projects (and when the field is empty) so callers fall
-// back to the Settings default exactly as before. The daemon re-validates the id
-// against the active provider's registry, so a mismatched pick is safely ignored.
-function projectMediaModelSeed(
-  metadata: ProjectMetadata | null | undefined,
-  surface: 'image' | 'video' | 'speech',
-): string | undefined {
-  if (!metadata) return undefined;
-  if (surface === 'image' && metadata.kind === 'image') {
-    return metadata.imageModel?.trim() || undefined;
-  }
-  if (surface === 'video' && metadata.kind === 'video') {
-    return metadata.videoModel?.trim() || undefined;
-  }
-  if (surface === 'speech' && metadata.kind === 'audio' && metadata.audioKind === 'speech') {
-    return metadata.audioModel?.trim() || undefined;
-  }
-  return undefined;
-}
-
-function projectMediaVoiceSeed(
-  metadata: ProjectMetadata | null | undefined,
-): string | undefined {
-  if (metadata?.kind === 'audio' && metadata.audioKind === 'speech') {
-    return metadata.voice?.trim() || undefined;
-  }
-  return undefined;
-}
-
-// Carry the creation-time model pick into the conversation ONLY when it belongs
-// to the active BYOK provider. Guards against clobbering a user's Settings
-// default with a model from a different provider — e.g. a SenseAudio user whose
-// image project was created with the dialog's default `gpt-image-2` keeps their
-// configured SenseAudio model instead of being forced to the registry default.
-// AIHubMix's live (`aihubmix-` prefixed) ids resolve via mediaModelProviderId
-// without waiting on the async catalogue, so the AIHubMix path still seeds.
-function byokModelSeedForProtocol(
-  metadata: ProjectMetadata | null | undefined,
-  surface: 'image' | 'video' | 'speech',
-  protocol: string | undefined,
-): string | undefined {
-  const picked = projectMediaModelSeed(metadata, surface);
-  if (!picked) return undefined;
-  return mediaModelProviderId(picked) === protocol ? picked : undefined;
-}
-
-function firstNonBlank(...values: Array<string | null | undefined>): string {
-  return values.find((value) => value?.trim())?.trim() ?? '';
-}
-
-function byokMediaDefaultsForRun(input: {
-  imageModelOverride: string;
-  videoModelOverride: string;
-  speechModelOverride: string;
-  speechVoiceOverride: string;
-  config: Pick<AppConfig, 'byokImageModel' | 'byokVideoModel' | 'byokSpeechModel' | 'byokSpeechVoice'>;
-  imageModelOptions: readonly { id: string }[];
-  videoModelOptions: readonly { id: string }[];
-  speechModelOptions: readonly { id: string }[];
-}): ByokMediaDefaults {
-  const imageModel = firstNonBlank(
-    input.imageModelOverride,
-    input.config.byokImageModel,
-    input.imageModelOptions[0]?.id,
-  );
-  const videoModel = firstNonBlank(
-    input.videoModelOverride,
-    input.config.byokVideoModel,
-    input.videoModelOptions[0]?.id,
-  );
-  const speechModel = firstNonBlank(
-    input.speechModelOverride,
-    input.config.byokSpeechModel,
-    input.speechModelOptions[0]?.id,
-  );
-  const speechVoice = firstNonBlank(
-    input.speechVoiceOverride,
-    input.config.byokSpeechVoice,
-  );
-  return {
-    ...(imageModel ? { imageModel } : {}),
-    ...(videoModel ? { videoModel } : {}),
-    ...(speechModel ? { speechModel } : {}),
-    ...(speechVoice ? { speechVoice } : {}),
-  };
 }
 
 function byokOpenCodeProviderFromConfig(
@@ -2404,15 +1778,9 @@ export function ProjectView({
       const mtime = file?.mtime ?? 0;
       const cached = htmlContentCacheRef.current.get(name);
       if (cached && cached.mtime === mtime) return cached.text;
-      try {
-        const response = await fetch(projectRawUrl(project.id, name));
-        const text = response.ok ? await response.text() : null;
-        htmlContentCacheRef.current.set(name, { mtime, text });
-        return text;
-      } catch {
-        htmlContentCacheRef.current.set(name, { mtime, text: null });
-        return null;
-      }
+      const text = await projectViewTransportPort.readProjectRawText(project.id, name);
+      htmlContentCacheRef.current.set(name, { mtime, text });
+      return text;
     },
     [project.id],
   );
@@ -5887,22 +5255,12 @@ export function ProjectView({
             }
           : undefined;
         if (userText.length > 0) {
-          try {
-            await fetch('/api/memory/extract', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                userMessage: userText,
-                projectId: project.id,
-                conversationId: runConversationId,
-                chatProvider: byokChatProvider,
-              }),
-            });
-          } catch {
-            // Best-effort: memory extraction must never block the
-            // chat. The daemon's SSE bus will catch up the Memory tab
-            // on the next event.
-          }
+          await projectViewTransportPort.extractMemory({
+            userMessage: userText,
+            projectId: project.id,
+            conversationId: runConversationId,
+            chatProvider: byokChatProvider,
+          });
         }
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
         const byokOpenCodeHistory = await historyWithApiAttachmentContext(

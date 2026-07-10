@@ -1,0 +1,72 @@
+// Public API of the project-view slice. Consumers (the `ProjectView`
+// orchestrator, which lives outside the slice) import ONLY from here — never
+// from the slice's internal files. Barrels mark boundaries: this is the slice
+// boundary, and `scripts/check-web-slice-boundaries.ts` fails any outside-in
+// deep import that reaches past it (ADR 0002).
+
+// Layout constants shared with the orchestrator's resize interactions.
+export {
+  MIN_CHAT_PANEL_WIDTH,
+  MAX_CHAT_PANEL_WIDTH,
+  MIN_WORKSPACE_PANEL_WIDTH,
+  SPLIT_RESIZE_HANDLE_WIDTH,
+  MIN_NORMAL_SPLIT_WIDTH,
+} from './constants';
+
+// Local helper types.
+export type { BrowserExtractionUrlParts, ProjectSplitStyle } from './types';
+
+// Pure decision rules.
+export {
+  mergeSavedPreviewComment,
+  mergeServerMessagesIntoConversation,
+  ensureConversationPresent,
+  workspacePanelMinWidthForSplit,
+  maxChatPanelWidthForSplit,
+  clampPreferredChatPanelWidth,
+  clampChatPanelWidth,
+  projectSplitClassName,
+  projectSplitStyle,
+  applySplitChatPanelWidth,
+  buildQuestionFormKey,
+  normalizedBrandBrowserPathname,
+  browserExtractionUrlParts,
+  isBrandBrowserHomeRedirectPath,
+  brandBrowserSnapshotMatchesSource,
+  workspaceContextItemEqual,
+  workspaceContextItemsEqual,
+  isDesignSystemWorkspaceMetadata,
+  isStoredChatAttachment,
+  isStoredStringArray,
+  isStoredWorkspaceContextItem,
+  isStoredRunContextSelection,
+  isBrandStatusValue,
+  brandExtractionAllowsEditing,
+  projectMediaModelSeed,
+  projectMediaVoiceSeed,
+  byokModelSeedForProtocol,
+  firstNonBlank,
+  byokMediaDefaultsForRun,
+  isGenericDaemonDisconnect,
+  hasGenericDisconnectFailureEvent,
+  appendLiveArtifactEventItem,
+} from './rules';
+
+// Pure formatters (prompt / attachment / summary builders).
+export {
+  designSystemFeedbackAttachments,
+  buildBrandAgentExtractionContinuationPrompt,
+  designSystemNameForSourceProject,
+  buildCreateDesignSystemFromProjectPrompt,
+  chatAttachmentsFromPreviewCommentImages,
+  mergeChatAttachments,
+  historyWithWorkspaceContext,
+  commentTaskQuery,
+  commentTaskContextAttachment,
+  designSystemNeedsWorkPrompt,
+  fallbackDesignSystemSummaryForProject,
+} from './formatters';
+
+// Transport port + its default binding.
+export type { ProjectViewTransportPort } from './ports';
+export { projectViewTransportPort } from './dependencies';
