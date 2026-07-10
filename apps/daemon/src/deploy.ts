@@ -162,6 +162,46 @@ export async function readDisplayDevConfig(): Promise<DeployConfig> {
   }
 }
 
+async function readDisplayDevConfigForWrite(): Promise<DeployConfig> {
+  try {
+    const raw = await readFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), 'utf8');
+    const parsed = JSON.parse(raw);
+    let apiUrl = DISPLAYDEV_API;
+    let displayDev: DisplayDevConfigHints = {};
+    try {
+      apiUrl = validateDisplayDevApiUrl(parsed?.apiUrl);
+    } catch {
+      apiUrl = DISPLAYDEV_API;
+    }
+    try {
+      displayDev = normalizeDisplayDevConfigHints(parsed?.displayDev);
+    } catch {
+      displayDev = {};
+    }
+    return {
+      token: typeof parsed?.token === 'string' ? parsed.token : '',
+      apiUrl,
+      displayDev,
+    };
+  } catch (err) {
+    if (isErrnoException(err) && err.code === 'ENOENT') {
+      return {
+        token: '',
+        apiUrl: DISPLAYDEV_API,
+        displayDev: {},
+      };
+    }
+    if (err instanceof SyntaxError) {
+      return {
+        token: '',
+        apiUrl: DISPLAYDEV_API,
+        displayDev: {},
+      };
+    }
+    throw err;
+  }
+}
+
 export async function writeVercelConfig(input: DeployConfigInput) {
   const current = await readVercelConfig();
   const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
@@ -202,7 +242,7 @@ export async function writeCloudflarePagesConfig(input: DeployConfigInput) {
 }
 
 export async function writeDisplayDevConfig(input: DeployConfigInput) {
-  const current = await readDisplayDevConfig();
+  const current = await readDisplayDevConfigForWrite();
   const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
   const displayDev = normalizeDisplayDevConfigHints(input?.displayDev, current.displayDev);
   const apiUrl = Object.prototype.hasOwnProperty.call(input ?? {}, 'apiUrl')

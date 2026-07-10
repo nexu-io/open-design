@@ -388,6 +388,61 @@ describe('deploy config', () => {
       await rm(stateRoot, { recursive: true, force: true });
     }
   });
+
+  it('repairs malformed saved display.dev config on write', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-displaydev-config-test-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      await writeFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), JSON.stringify({
+        token: 'dsp_live_old',
+        apiUrl: 'api.display.test:3331',
+        displayDev: {
+          defaultVisibility: 'publik',
+          defaultShowBranding: 'sometimes',
+          defaultSharedWith: ['team@example.com', 123],
+        },
+      }));
+
+      await expect(readDisplayDevConfig()).rejects.toMatchObject({
+        status: 400,
+      });
+
+      const saved = await writeDisplayDevConfig({
+        token: 'Bearer dsp_live_new',
+        apiUrl: 'https://api.display.test:3331/',
+        displayDev: {
+          defaultVisibility: 'private',
+          defaultShowBranding: 'hide',
+          defaultSharedWith: ['team@example.com'],
+        },
+      });
+
+      expect(saved).toMatchObject({
+        providerId: DISPLAYDEV_PROVIDER_ID,
+        tokenMask: SAVED_DISPLAYDEV_TOKEN_MASK,
+        apiUrl: 'https://api.display.test:3331',
+        displayDev: {
+          defaultVisibility: 'private',
+          defaultShowBranding: 'hide',
+          defaultSharedWith: ['team@example.com'],
+        },
+      });
+      expect(await readDisplayDevConfig()).toMatchObject({
+        token: 'dsp_live_new',
+        apiUrl: 'https://api.display.test:3331',
+        displayDev: {
+          defaultVisibility: 'private',
+          defaultShowBranding: 'hide',
+          defaultSharedWith: ['team@example.com'],
+        },
+      });
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('deploy file set', () => {

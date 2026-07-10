@@ -337,11 +337,17 @@ async function hydrateDisplayDevDeploymentAccess<T extends DeployRouteDeployment
       return displayDevConfig;
     };
     return Promise.all(
-      deploymentOrDeployments.map((deployment) => hydrateSingleDisplayDevDeploymentAccess(
-        deployment,
-        deps,
-        getDisplayDevConfig,
-      )),
+      deploymentOrDeployments.map(async (deployment) => {
+        try {
+          return await hydrateSingleDisplayDevDeploymentAccess(
+            deployment,
+            deps,
+            getDisplayDevConfig,
+          );
+        } catch {
+          return deployment;
+        }
+      }),
     );
   }
   return hydrateSingleDisplayDevDeploymentAccess(

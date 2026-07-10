@@ -562,6 +562,16 @@ describe('deploy provider routes', () => {
       });
       expect(createProjectResp.status).toBe(200);
 
+      const saveVercelResp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: VERCEL_PROVIDER_ID,
+          token: 'vercel-token-secret',
+        }),
+      });
+      expect(saveVercelResp.status).toBe(200);
+
       const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -588,6 +598,29 @@ describe('deploy provider routes', () => {
               : String(input);
         const method = init?.method || (input instanceof Request ? input.method : 'GET');
         if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url.includes('/v13/deployments') && method === 'POST') {
+          return new Response(JSON.stringify({
+            id: 'vercel-hydration-ok',
+            readyState: 'READY',
+            url: 'vercel-hydration.example',
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url.includes('/v13/deployments/vercel-hydration-ok') && method === 'GET') {
+          return new Response(JSON.stringify({
+            id: 'vercel-hydration-ok',
+            readyState: 'READY',
+            url: 'vercel-hydration.example',
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url === 'https://vercel-hydration.example' && method === 'HEAD') {
+          return new Response('', { status: 200 });
+        }
         if (url.endsWith('/v1/artifacts') && method === 'POST') {
           return new Response(JSON.stringify({
             shortId: 'owned1234',
@@ -618,6 +651,17 @@ describe('deploy provider routes', () => {
       });
       vi.stubGlobal('fetch', fetchMock);
       try {
+        const vercelResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: VERCEL_PROVIDER_ID,
+          }),
+        });
+        const vercelText = await vercelResp.text();
+        expect(vercelResp.status, vercelText).toBe(200);
+
         const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -638,13 +682,23 @@ describe('deploy provider routes', () => {
 
         const deploymentsResp = await fetch(`${baseUrl}/api/projects/${projectId}/deployments`);
         const deploymentsText = await deploymentsResp.text();
-        expect(deploymentsResp.status, deploymentsText).toBe(503);
-        expect(JSON.parse(deploymentsText)).toMatchObject({
-          error: {
-            code: 'UPSTREAM_UNAVAILABLE',
-            message: 'temporary display.dev outage on list',
-          },
-        });
+        expect(deploymentsResp.status, deploymentsText).toBe(200);
+        const deploymentsBody = JSON.parse(deploymentsText) as { deployments: Array<any> };
+        expect(deploymentsBody.deployments).toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            providerId: VERCEL_PROVIDER_ID,
+            url: 'https://vercel-hydration.example',
+            status: 'ready',
+          }),
+          expect.objectContaining({
+            providerId: DISPLAYDEV_PROVIDER_ID,
+            url: 'https://display.dsp.so/owned1234-demo',
+          }),
+        ]));
+        const displayDevDeployment = deploymentsBody.deployments.find((deployment) => (
+          deployment.providerId === DISPLAYDEV_PROVIDER_ID
+        ));
+        expect(displayDevDeployment).not.toHaveProperty('displayDev');
         expect(artifactGetCalls).toBe(2);
       } finally {
         vi.unstubAllGlobals();
