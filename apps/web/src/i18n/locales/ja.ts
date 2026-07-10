@@ -3121,6 +3121,7 @@ export const ja: Dict = {
   'questions.generating': '質問を生成中…',
   'questions.skipAll': 'すべてスキップ',
   'questions.autoSkipHint': 'タイマー終了時に自動で続行します',
+  'questions.submitting': '送信中…',
   'sketch.toolSelect': '選択（操作なし）',
   'sketch.toolPen': 'ペン',
   'sketch.toolText': 'テキスト',

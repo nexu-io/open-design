@@ -3121,6 +3121,7 @@ export const fa: Dict = {
   'questions.generating': 'در حال تولید سؤالات…',
   'questions.skipAll': 'رد کردن همه',
   'questions.autoSkipHint': 'با پایان تایمر به‌طور خودکار ادامه می‌یابد',
+  'questions.submitting': 'در حال ارسال…',
   'sketch.toolSelect': 'انتخاب (غیرفعال)',
   'sketch.toolPen': 'قلم',
   'sketch.toolText': 'متن',

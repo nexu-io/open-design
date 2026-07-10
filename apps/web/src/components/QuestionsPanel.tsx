@@ -88,6 +88,19 @@ export function QuestionsPanel({
   const [ready, setReady] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // Once the user commits an answer we optimistically lock the panel — disabling
+  // Continue/Skip and showing a busy spinner — for the window before the
+  // parent's busy/answered signals catch up (and across the async file upload).
+  // Without it, a form-answer send that is still being dispatched leaves the CTA
+  // enabled, so an impatient user (or the countdown) can re-fire it and pile
+  // duplicate sends into the queue. The ref is the synchronous chokepoint guard;
+  // the state drives rendering.
+  const submittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
+  const releaseSubmitLock = useCallback(() => {
+    submittingRef.current = false;
+    setSubmitting(false);
+  }, []);
   const [draftAnswers, setDraftAnswers] = useState<QuestionFormAnswers | undefined>(() =>
     readQuestionFormDraft(formKey),
   );
@@ -159,6 +172,13 @@ export function QuestionsPanel({
       answers: QuestionFormAnswers,
       fileSubmissions: QuestionFormFileSubmission[] = [],
     ) => {
+      // Single-submit invariant: a form occurrence commits exactly one answer.
+      // A repeat click, or the countdown racing a click, must not enqueue a
+      // second send (see the "76 queued" repro). Released below if an upload
+      // fails so the user can retry.
+      if (submittingRef.current) return;
+      submittingRef.current = true;
+      setSubmitting(true);
       let attachments: ChatAttachment[] = [];
       let context: RunContextSelection | undefined;
       let submittedText = text;
@@ -166,6 +186,7 @@ export function QuestionsPanel({
         if (!projectId) {
           submitSourceRef.current = 'continue';
           setUploadError(t('questions.uploadNeedsProject'));
+          releaseSubmitLock();
           return;
         }
         setUploadingFiles(true);
@@ -197,6 +218,7 @@ export function QuestionsPanel({
               ? t('questions.uploadPartialFailed', { uploaded, failed })
               : t('questions.uploadFailed', { failed })) + detail,
           );
+          releaseSubmitLock();
           return;
         }
         attachments = result.uploaded.map((attachment, index) => ({
@@ -243,7 +265,7 @@ export function QuestionsPanel({
         onSubmit(submittedText);
       }
     },
-    [analytics.track, form, formKey, onSubmit, projectId, t],
+    [analytics.track, form, formKey, onSubmit, projectId, releaseSubmitLock, t],
   );
   // If this occurrence already finished its reveal in a prior mount, show it in
   // full immediately rather than replaying the animation on remount.
@@ -284,9 +306,18 @@ export function QuestionsPanel({
   // Submission needs the form present, active, fully revealed, and not blocked
   // by a busy/streaming turn. Required-field readiness is tracked separately by
   // `ready` (from QuestionForm) and gates Continue via `canContinue`.
-  const canSubmit = !!form && interactive && !building && !submitDisabled && !uploadingFiles;
+  const canSubmit =
+    !!form && interactive && !building && !submitDisabled && !uploadingFiles && !submitting;
   const canContinue = canSubmit && ready;
   const canSkip = canSubmit;
+
+  // Release the optimistic lock once the world catches up: either the turn is
+  // now busy (`submitDisabled` takes over the disable) or the answer has landed
+  // (`answered`). This also recovers a form that never actually started a turn,
+  // so it stays actionable instead of latching disabled forever.
+  useEffect(() => {
+    if (submitting && (submitDisabled || answered)) releaseSubmitLock();
+  }, [submitting, submitDisabled, answered, releaseSubmitLock]);
 
   // Auto-skip countdown. It only runs while the form is actionable; pausing
   // (busy turn, re-stream) resets it so we never auto-submit a half-ready form.
@@ -359,9 +390,11 @@ export function QuestionsPanel({
               ? t('questions.uploadingFiles')
               : uploadError
                 ? uploadError
-                : canSkip
-                  ? t('questions.autoSkipHint')
-                  : null}
+                : submitting
+                  ? t('questions.submitting')
+                  : canSkip
+                    ? t('questions.autoSkipHint')
+                    : null}
         </span>
         <button
           type="button"
@@ -379,12 +412,20 @@ export function QuestionsPanel({
           type="button"
           className="questions-continue"
           disabled={!canContinue}
+          aria-busy={submitting ? 'true' : undefined}
           onClick={() => {
             submitSourceRef.current = 'continue';
             formRef.current?.submit();
           }}
         >
-          {t('questions.continue')}
+          {submitting ? (
+            <>
+              <span className="questions-continue-spinner" aria-hidden />
+              {t('questions.submitting')}
+            </>
+          ) : (
+            t('questions.continue')
+          )}
         </button>
       </div>
     </div>

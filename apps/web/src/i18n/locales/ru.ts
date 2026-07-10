@@ -3121,6 +3121,7 @@ export const ru: Dict = {
   'questions.generating': 'Генерация вопросов…',
   'questions.skipAll': 'Пропустить всё',
   'questions.autoSkipHint': 'Автоматически продолжается по истечении таймера',
+  'questions.submitting': 'Отправка…',
   'sketch.toolSelect': 'Выбор (без действий)',
   'sketch.toolPen': 'Ручка',
   'sketch.toolText': 'Текст',

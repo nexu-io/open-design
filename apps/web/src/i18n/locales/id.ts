@@ -3121,6 +3121,7 @@ export const id: Dict = {
   'questions.generating': 'Generating questions…',
   'questions.skipAll': 'Skip all',
   'questions.autoSkipHint': 'Auto-continues when the timer ends',
+  'questions.submitting': 'Mengirim…',
   'sketch.toolSelect': 'Pilih',
   'sketch.toolPen': 'Pena',
   'sketch.toolText': 'Teks',

@@ -3349,6 +3349,7 @@ export const zhCN: Dict = {
   "questions.generating": "正在生成问题…",
   "questions.skipAll": "一键跳过",
   "questions.autoSkipHint": "倒计时结束后将自动继续",
+  "questions.submitting": "正在提交…",
   "sketch.toolSelect": "选择（占位）",
   "sketch.toolPen": "钢笔",
   "sketch.toolText": "文本",

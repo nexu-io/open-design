@@ -3121,6 +3121,7 @@ export const fr: Dict = {
   'questions.generating': 'Génération des questions…',
   'questions.skipAll': 'Tout ignorer',
   'questions.autoSkipHint': 'Continue automatiquement quand le minuteur se termine',
+  'questions.submitting': 'Envoi en cours…',
   'sketch.toolSelect': 'Sélection (sans effet)',
   'sketch.toolPen': 'Stylo',
   'sketch.toolText': 'Texte',

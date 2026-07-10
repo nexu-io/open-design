@@ -3907,6 +3907,7 @@ export interface Dict {
   'questions.generating': string;
   'questions.skipAll': string;
   'questions.autoSkipHint': string;
+  'questions.submitting': string;
 
   // Inline <od-card> memory cards (display-only siblings of question-form)
   'artifact.odCardTaskBriefChip': string;

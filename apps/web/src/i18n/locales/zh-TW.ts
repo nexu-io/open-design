@@ -3360,6 +3360,7 @@ export const zhTW: Dict = {
   "questions.generating": "正在產生問題…",
   "questions.skipAll": "全部略過",
   "questions.autoSkipHint": "計時器結束時自動繼續",
+  "questions.submitting": "正在提交…",
   "sketch.toolSelect": "選擇（佔位）",
   "sketch.toolPen": "鋼筆",
   "sketch.toolText": "文字",

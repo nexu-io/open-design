@@ -1432,10 +1432,25 @@
   cursor: default;
 }
 .questions-continue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   border: 1px solid transparent;
   color: #fff;
   background: var(--accent);
   box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+.questions-continue-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, #fff 45%, transparent);
+  border-top-color: #fff;
+  animation: icon-spin 0.7s linear infinite;
+}
+.questions-continue[aria-busy='true'] {
+  cursor: progress;
 }
 .questions-continue:hover:not(:disabled) {
   transform: translateY(-1px);
