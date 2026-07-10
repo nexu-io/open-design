@@ -89,6 +89,8 @@ export interface ManualEditStyles {
   top: string;
   right: string;
   bottom: string;
+  zIndex: string;
+  boxShadow: string;
 }
 
 export interface ManualEditTarget {
@@ -129,6 +131,7 @@ export type ManualEditPatch =
       top: string;
       width: string;
       height: string;
+      transform?: string;
     };
 
 export interface ManualEditHistoryEntry {
@@ -264,7 +267,7 @@ export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
   'border', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
   'borderStyle', 'borderColor', 'borderRadius',
-  'transform', 'display', 'position', 'left', 'top', 'right', 'bottom',
+  'transform', 'display', 'position', 'left', 'top', 'right', 'bottom', 'zIndex', 'boxShadow',
 ];
 
 export function emptyManualEditStyles(): ManualEditStyles {
