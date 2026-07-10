@@ -565,6 +565,103 @@ describe('preview comment agent payload', () => {
     expect(hint).toContain('marked region');
     expect(hint).not.toContain('selector: ');
   });
+
+  // Issue #4084: when the preview screenshot cannot be captured (#4080), the
+  // degraded send still carries the mark's position/markKind metadata. The
+  // normalizer must keep such attachments and the prompt hint must point the
+  // agent at position/currentText instead of a screenshot that does not exist.
+  it('keeps a visual annotation without a screenshot and renders a screenshot-free hint', () => {
+    const normalized = normalizeCommentAttachments([
+      commentAttachment({
+        id: 'visual-noshot-1',
+        elementId: 'visual-mark-2',
+        selector: '',
+        label: 'Marked region',
+        comment: 'Make this part bigger',
+        selectionKind: 'visual',
+        markKind: 'stroke',
+        pagePosition: { x: 120, y: 300, width: 400, height: 250 },
+      }),
+    ]);
+
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0]).toMatchObject({
+      selectionKind: 'visual',
+      markKind: 'stroke',
+      comment: 'Make this part bigger',
+    });
+    expect(normalized[0]?.screenshotPath).toBeUndefined();
+
+    const hint = renderCommentAttachmentHint(normalized);
+    expect(hint).toContain('targetKind: visual');
+    expect(hint).toContain('markKind: stroke');
+    expect(hint).not.toContain('screenshot:');
+    // The agent is told there is no screenshot and to locate the region from
+    // the structured fields instead.
+    expect(hint).toContain('no screenshot');
+  });
+
+  it('still drops visual annotations that carry no location data at all', () => {
+    const normalized = normalizeCommentAttachments([
+      commentAttachment({
+        id: 'visual-empty',
+        elementId: '',
+        filePath: '',
+        selector: '',
+        selectionKind: 'visual',
+        markKind: 'stroke',
+      }),
+    ]);
+
+    expect(normalized).toHaveLength(0);
+  });
+
+  // PR #4105 QA: /api/runs accepts commentAttachments from any client, so a
+  // screenshot-less visual attachment with filePath/elementId but no usable
+  // anchor (pagePosition collapses to 0,0,0x0; no selector) must be dropped —
+  // rendering it would hard-scope the agent onto fields that identify no
+  // region, steering it to edit an arbitrary part of the file.
+  it('drops a screenshot-less visual annotation whose position is missing or zero-size', () => {
+    const normalized = normalizeCommentAttachments([
+      commentAttachment({
+        id: 'visual-no-anchor-1',
+        elementId: 'visual-mark-3',
+        selector: '',
+        selectionKind: 'visual',
+        markKind: 'stroke',
+        pagePosition: undefined,
+      }),
+      commentAttachment({
+        id: 'visual-no-anchor-2',
+        elementId: 'visual-mark-4',
+        selector: '',
+        selectionKind: 'visual',
+        markKind: 'stroke',
+        pagePosition: { x: 120, y: 40, width: 0, height: 0 },
+      }),
+    ]);
+
+    expect(normalized).toHaveLength(0);
+  });
+
+  it('keeps a screenshot-less visual annotation anchored by a selector alone', () => {
+    const normalized = normalizeCommentAttachments([
+      commentAttachment({
+        id: 'visual-selector-anchor',
+        elementId: 'visual-mark-5',
+        selector: '[data-od-id="chart"]',
+        selectionKind: 'visual',
+        markKind: 'stroke',
+        pagePosition: undefined,
+      }),
+    ]);
+
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0]).toMatchObject({
+      selectionKind: 'visual',
+      selector: '[data-od-id="chart"]',
+    });
+  });
 });
 
 function seededDb() {

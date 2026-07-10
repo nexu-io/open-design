@@ -1844,31 +1844,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               const result = await uploadProjectFiles(id, annotationFiles);
               if (result.uploaded.length > 0) {
                 uploaded = assignChatAttachmentOrders(result.uploaded, orderStart);
-                const screenshot = detail.file ? uploaded[0] : null;
-                if (screenshot && detail.markKind && detail.bounds) {
-                  visualAttachmentInput = {
-                    order: isFiniteAttachmentOrder(screenshot.order) ? screenshot.order : orderStart,
-                    idSeed: screenshot.path,
-                    screenshotPath: screenshot.path,
-                    markKind: detail.markKind,
-                    note: detail.note,
-                    bounds: detail.bounds,
-                    target: detail.target
-                      ? {
-                          filePath: detail.target.filePath || detail.filePath || screenshot.path,
-                          elementId: detail.target.elementId,
-                          selector: detail.target.selector,
-                          label: detail.target.label,
-                          text: detail.target.text,
-                          position: detail.target.position,
-                          htmlHint: detail.target.htmlHint,
-                        }
-                      : {
-                          filePath: detail.filePath || screenshot.path,
-                          position: detail.bounds,
-                        },
-                  };
-                }
               }
               if (result.failed.length > 0) {
                 const detailText = result.error ? ` (${result.error})` : '';
@@ -1878,6 +1853,38 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   return;
                 }
               }
+            }
+            // The structured visual comment is built whenever the mark has a
+            // location, with or without the screenshot upload. When the
+            // preview capture failed (#4080) the screenshot is absent, but
+            // file/bounds/markKind still anchor the marked region for the
+            // agent (#4084) — dropping them would reduce the send to bare
+            // prose and force the agent to guess what "this part" means.
+            if (detail.markKind && detail.bounds) {
+              const screenshot = detail.file && uploaded.length > 0 ? uploaded[0] : null;
+              visualAttachmentInput = {
+                order: screenshot && isFiniteAttachmentOrder(screenshot.order) ? screenshot.order : 1,
+                idSeed: screenshot?.path
+                  ?? `${detail.filePath || 'preview'}-${detail.markKind}-${Math.round(detail.bounds.x * 1000)}-${Math.round(detail.bounds.y * 1000)}`,
+                ...(screenshot ? { screenshotPath: screenshot.path } : {}),
+                markKind: detail.markKind,
+                note: detail.note,
+                bounds: detail.bounds,
+                target: detail.target
+                  ? {
+                      filePath: detail.target.filePath || detail.filePath || screenshot?.path || '',
+                      elementId: detail.target.elementId,
+                      selector: detail.target.selector,
+                      label: detail.target.label,
+                      text: detail.target.text,
+                      position: detail.target.position,
+                      htmlHint: detail.target.htmlHint,
+                    }
+                  : {
+                      filePath: detail.filePath || screenshot?.path || '',
+                      position: detail.bounds,
+                    },
+              };
             }
             setUploading(false);
 
