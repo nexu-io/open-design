@@ -111,7 +111,7 @@ Constraints: no text, no letters, no numbers, no watermark, no photorealistic
 ## 예외 경로 — 캐릭터 포함 통짜 컴포지션
 
 기본은 레이어 합성(캐릭터 `library` 컷 + 오브제 `generate` + 장식 `css`)이다.
-캐릭터와 오브제의 **물리 상호작용**(안기·끌기·올라타기 등)이 메시지에 필수할 때만
+캐릭터와 오브제의 **물리 상호작용**(안기·끌기·올라타기 등)이 메시지에 필수일 때만
 통짜 생성을 쓴다:
 
 - `{anchor_paths}` = **캐릭터 시트 통째 1장 우선** (브랜드 에셋 라이브러리 등재
