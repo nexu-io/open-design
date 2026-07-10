@@ -1111,6 +1111,41 @@ export function buildManualEditBridge(enabled: boolean): string {
     postHoverTarget(el);
   }, true);
   window.addEventListener('resize', postTargets);
+  // ── Z-index keyboard shortcuts ──
+  document.addEventListener('keydown', function(ev){
+    if (!enabled || !selectedElForHandles) return;
+    if (activeTextEdit) return;
+    if (!ev.ctrlKey && !ev.metaKey) return;
+    var el = selectedElForHandles;
+    var cur = parseInt(el.style.zIndex || '', 10) || 0;
+    if (ev.key === ']'){
+      ev.preventDefault();
+      el.style.zIndex = String(cur + 1);
+      commitStyle(selectedElForHandles, 'zIndex', String(cur + 1));
+    } else if (ev.key === '['){
+      ev.preventDefault();
+      el.style.zIndex = String(Math.max(0, cur - 1));
+      commitStyle(selectedElForHandles, 'zIndex', String(Math.max(0, cur - 1)));
+    } else if (ev.key === ']' && ev.shiftKey){
+      ev.preventDefault();
+      el.style.zIndex = '9999';
+      commitStyle(selectedElForHandles, 'zIndex', '9999');
+    }
+  }, true);
+
+  function commitStyle(el, prop, value){
+    window.parent.postMessage({
+      type: 'od-edit-preview-style-applied',
+      id: stableId(el), version: (Date.now() % 100000), ok: true,
+    }, '*');
+    // Defer actual commit via set-style
+    var target = el ? targetFrom(el, false) : null;
+    if (!target) return;
+    var patch = { id: stableId(el), kind: 'set-style', styles: {} };
+    patch.styles[prop] = value;
+    window.parent.postMessage({ type: 'od-edit-style-commit', id: stableId(el), prop: prop, value: value }, '*');
+  }
+
   function bootEditBridge(){
     annotateBrandKitRuntimeTargets();
     postTargets();

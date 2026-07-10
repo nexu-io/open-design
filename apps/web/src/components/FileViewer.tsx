@@ -6314,6 +6314,18 @@ function HtmlViewer({
       if (data.type === 'od-edit-drag-start') {
         return;
       }
+      if (data.type === 'od-edit-style-commit') {
+        var sk = String(data.prop || '');
+        var sv = String(data.value || '');
+        if (sk && data.id) {
+          void applyManualEdit({
+            id: String(data.id),
+            kind: 'set-style',
+            styles: { [sk]: sv } as Partial<ManualEditStyles>,
+          }, 'Style: ' + sk);
+        }
+        return;
+      }
       if (data.type === 'od-edit-drag-end') {
         return;
       }
